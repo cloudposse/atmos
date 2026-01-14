@@ -1,0 +1,65 @@
+# Test fixture for toolchain registry configuration.
+# Tests inline atmos registry with all supported package types and features.
+#
+# Supported types:
+#   - github_release: Asset from GitHub releases (uses owner/repo + asset template)
+#   - http: Direct URL download (uses full URL template)
+#
+# Supported formats:
+#   - tar.gz (default), zip, pkg, raw
+#
+# Supported features:
+#   - overrides: Platform-specific (goos/goarch) asset/format overrides
+#   - files: Extract specific files from archives with renamed destinations
+#   - replacements: OS/arch string mappings (e.g., amd64 -> x86_64)
+#   - binary_name: Override the binary name
+#   - format: Archive format (tar.gz, zip, pkg, raw)
+#
+# Usage:
+#   ./build/atmos --chdir tests/fixtures/scenarios/toolchain-registry toolchain install replicatedhq/replicated@v0.124.1
+#   ./build/atmos --chdir tests/fixtures/scenarios/toolchain-registry toolchain install aws/aws-cli@2.15.0
+
+toolchain:
+  registries:
+    - name: custom-tools
+      type: atmos
+      priority: 100
+      tools:
+        # Type: github_release with platform overrides.
+        # Tests: asset template, goos override for darwin (uses "all" arch).
+        replicatedhq/replicated:
+          type: github_release
+          asset: "replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+          overrides:
+            - goos: darwin
+              asset: "replicated_{{trimV .Version}}_{{.OS}}_all.tar.gz"
+
+        # Type: http with format, overrides, files, and replacements.
+        # Tests: Full AWS CLI pattern - zip on Linux, pkg on macOS with nested extraction.
+        aws/aws-cli:
+          type: http
+          url: "https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip"
+          format: zip
+          overrides:
+            - goos: darwin
+              format: pkg
+          binary_name: aws
+
+        # Type: github_release with tar.gz format (default).
+        # Tests: Simple tar.gz extraction.
+        junegunn/fzf:
+          type: github_release
+          asset: "fzf-{{.Version}}-{{.OS}}_{{.Arch}}.tar.gz"
+          format: tar.gz
+
+        # Type: http with raw format (no extraction).
+        # Tests: Direct binary download without archive extraction.
+        jqlang/jq:
+          type: http
+          url: "https://github.com/jqlang/jq/releases/download/jq-{{.Version}}/jq-{{.OS}}-{{.Arch}}"
+          format: raw
+          binary_name: jq
+
+    - name: aqua
+      type: aqua
+      priority: 10

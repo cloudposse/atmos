@@ -1402,6 +1402,7 @@ func processBaseComponentConfigInternal(
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[string]any
 	var baseComponentSourceSection map[string]any
+	var baseComponentProvisionSection map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -1594,6 +1595,17 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		// Base component provision (when source inheritance is enabled).
+		// Provision follows the same inheritance rules as source.
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			if i, ok2 := baseComponentMap[cfg.ProvisionSectionName]; ok2 {
+				baseComponentProvisionSection, ok = i.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w '%s.provision' in the stack '%s'", errUtils.ErrInvalidComponentProvision, baseComponent, stack)
+				}
+			}
+		}
+
 		// Base component `command`
 		if baseComponentCommandSection, baseComponentCommandSectionExist := baseComponentMap[cfg.CommandSectionName]; baseComponentCommandSectionExist {
 			baseComponentCommand, ok = baseComponentCommandSection.(string)
@@ -1723,6 +1735,16 @@ func processBaseComponentConfigInternal(
 				return err
 			}
 			baseComponentConfig.BaseComponentSourceSection = merged
+		}
+
+		// Base component `provision` (when source inheritance is enabled).
+		// Provision follows the same inheritance rules as source.
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentProvisionSection = merged
 		}
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))

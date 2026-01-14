@@ -1,0 +1,20 @@
+✗ Install failed non-existent/tool@1.0.0 mailto:non-existent/tool@1.0.0: tool not
+  in
+  registry
+# Error
+
+**Error:** tool not in registry
+
+## Explanation
+
+Tool non-existent/tool@1.0.0 was not found in any configured registry. Atmos
+searches registries in priority order: Atmos registry → Aqua registry → custom
+registries.
+
+## Hints
+
+💡 Run atmos toolchain registry search to browse available tools
+
+💡 Verify network connectivity to registries
+
+💡 Check registry configuration in atmos.yaml

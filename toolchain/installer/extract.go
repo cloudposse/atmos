@@ -1,4 +1,4 @@
-package toolchain
+package installer
 
 import (
 	"archive/tar"
@@ -8,7 +8,9 @@ import (
 	"io"
 	"math"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	log "github.com/charmbracelet/log"
@@ -86,6 +88,9 @@ func (i *Installer) extractByExtension(assetPath, binaryPath string, tool *regis
 	if strings.HasSuffix(assetPath, ".gz") {
 		return i.extractGzip(assetPath, binaryPath)
 	}
+	if strings.HasSuffix(assetPath, ".pkg") {
+		return i.extractPkg(assetPath, binaryPath, tool)
+	}
 	log.Debug("Unknown file type, copying as binary", filenameKey, filepath.Base(assetPath))
 	return i.copyFile(assetPath, binaryPath)
 }
@@ -105,6 +110,12 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 		return fmt.Errorf("%w: failed to extract ZIP: %w", ErrFileOperation, err)
 	}
 
+	// If Files config is provided, use the Src path to find the binary.
+	if len(tool.Files) > 0 {
+		return i.extractFilesFromDir(tempDir, binaryPath, tool)
+	}
+
+	// Otherwise, fall back to searching for the binary by name.
 	binaryName := resolveBinaryName(tool)
 	found, err := findBinaryInDir(tempDir, binaryName)
 	if err != nil {
@@ -156,6 +167,68 @@ func installExtractedBinary(src, dst string) error {
 
 	if err := MoveFile(src, dst); err != nil {
 		return fmt.Errorf("%w: failed to move extracted binary: %w", ErrFileOperation, err)
+	}
+
+	return nil
+}
+
+// extractFilesFromDir extracts files from the extracted archive using the Files config.
+// The binaryPath parameter specifies the destination for the primary binary.
+//
+// File placement convention:
+//   - The FIRST file in tool.Files is treated as the primary binary and is installed
+//     to binaryPath. This matches the Aqua registry convention where the first file
+//     entry represents the main executable.
+//   - ADDITIONAL files (index > 0) are placed in the same directory as the primary
+//     binary, using their configured Name as the filename.
+//
+// This convention allows tools with multiple binaries (e.g., a main CLI plus helpers)
+// to be installed correctly while maintaining a consistent installation path.
+func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool) error {
+	if len(tool.Files) == 0 {
+		return fmt.Errorf("%w: no files configured for extraction", ErrFileOperation)
+	}
+
+	destDir := filepath.Dir(binaryPath)
+	if err := os.MkdirAll(destDir, defaultMkdirPermissions); err != nil {
+		return fmt.Errorf("%w: failed to create destination directory: %w", ErrFileOperation, err)
+	}
+
+	// Extract all configured files.
+	for idx, file := range tool.Files {
+		srcPath := file.Src
+		if srcPath == "" {
+			srcPath = file.Name // Default src to name if not specified.
+		}
+
+		src := filepath.Join(tempDir, srcPath)
+		var dst string
+		if idx == 0 {
+			// First file is the primary binary - use the specified binaryPath.
+			dst = binaryPath
+		} else {
+			// Additional files go into the same directory with their specified name.
+			dst = filepath.Join(destDir, file.Name)
+		}
+
+		log.Debug("Extracting file from archive",
+			"src", srcPath,
+			"dst", dst,
+			"isPrimary", idx == 0)
+
+		// Check if source file exists.
+		if _, err := os.Stat(src); os.IsNotExist(err) {
+			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, srcPath)
+		}
+
+		if err := MoveFile(src, dst); err != nil {
+			return fmt.Errorf("%w: failed to extract file %s: %w", ErrFileOperation, file.Name, err)
+		}
+
+		// Make the file executable.
+		if err := os.Chmod(dst, defaultMkdirPermissions); err != nil {
+			return fmt.Errorf("%w: failed to make file executable: %w", ErrFileOperation, err)
+		}
 	}
 
 	return nil
@@ -352,6 +425,50 @@ func (i *Installer) extractTarGz(tarPath, binaryPath string, tool *registry.Tool
 		return fmt.Errorf("%w: failed to extract tar.gz: %w", ErrFileOperation, err)
 	}
 
+	// If Files config is provided, use the Src path to find the binary.
+	if len(tool.Files) > 0 {
+		return i.extractFilesFromDir(tempDir, binaryPath, tool)
+	}
+
+	// Otherwise, fall back to searching for the binary by name.
+	binaryName := resolveBinaryName(tool)
+	found, err := findBinaryInDir(tempDir, binaryName)
+	if err != nil {
+		return err
+	}
+
+	return installExtractedBinary(found, binaryPath)
+}
+
+// extractPkg extracts a macOS .pkg file using pkgutil.
+// This is only supported on macOS. The tool's Files config specifies
+// the paths to extract from within the expanded package.
+func (i *Installer) extractPkg(pkgPath, binaryPath string, tool *registry.Tool) error {
+	if runtime.GOOS != "darwin" {
+		return fmt.Errorf("%w: .pkg extraction is only supported on macOS", ErrUnsupportedFormat)
+	}
+
+	log.Debug("Extracting macOS .pkg file", filenameKey, filepath.Base(pkgPath))
+
+	tempDir, err := os.MkdirTemp("", "installer-pkg-")
+	if err != nil {
+		return fmt.Errorf("%w: failed to create temp dir: %w", ErrFileOperation, err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Use pkgutil to expand the .pkg file.
+	// #nosec G204 -- pkgPath is from internal download, not user input.
+	cmd := exec.Command("pkgutil", "--expand-full", pkgPath, tempDir)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: pkgutil failed: %w\nOutput: %s", ErrFileOperation, err, string(output))
+	}
+
+	// If Files config is provided, use it to find binaries.
+	if len(tool.Files) > 0 {
+		return i.extractFilesFromDir(tempDir, binaryPath, tool)
+	}
+
+	// Otherwise, fall back to searching for the binary by name.
 	binaryName := resolveBinaryName(tool)
 	found, err := findBinaryInDir(tempDir, binaryName)
 	if err != nil {

@@ -10,16 +10,6 @@ import (
 )
 
 func TestProcessTagCwd(t *testing.T) {
-	// Save and restore original working directory.
-	originalDir, err := os.Getwd()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		err := os.Chdir(originalDir)
-		if err != nil {
-			t.Errorf("failed to restore original directory: %v", err)
-		}
-	})
-
 	tests := []struct {
 		name     string
 		input    string
@@ -228,16 +218,6 @@ func TestProcessTagGitRoot_RealGitRepo(t *testing.T) {
 	// Skip if TEST_GIT_ROOT is already set (test isolation mode).
 
 	t.Run("Detects real Git root without TEST_GIT_ROOT override", func(t *testing.T) {
-		// Save and check if we're in a git repo.
-		originalDir, err := os.Getwd()
-		require.NoError(t, err)
-		t.Cleanup(func() {
-			err := os.Chdir(originalDir)
-			if err != nil {
-				t.Errorf("failed to restore original directory: %v", err)
-			}
-		})
-
 		// The atmos repo root should be detected.
 		result, err := ProcessTagGitRoot("!repo-root")
 		require.NoError(t, err)

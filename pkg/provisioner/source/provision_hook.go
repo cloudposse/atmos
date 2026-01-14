@@ -12,7 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // HookEventBeforeTerraformInit is the hook event for before terraform init.
@@ -123,29 +123,31 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 
 // vendorToTarget creates the target directory and vendors the source.
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, targetDir, component string) error {
-	_ = ui.Info(fmt.Sprintf("Auto-provisioning source for component '%s'", component))
+	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", component)
+	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
 
-	if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to create target directory").
-			WithContext("path", targetDir).
-			Err()
-	}
+	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
+			return errUtils.Build(errUtils.ErrSourceProvision).
+				WithCause(err).
+				WithExplanation("Failed to create target directory").
+				WithContext("path", targetDir).
+				Err()
+		}
 
-	if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to auto-provision component source").
-			WithContext("component", component).
-			WithContext("source", sourceSpec.Uri).
-			WithContext("target", targetDir).
-			WithHint("Verify source URI is accessible and credentials are valid").
-			Err()
-	}
+		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
+			return errUtils.Build(errUtils.ErrSourceProvision).
+				WithCause(err).
+				WithExplanation("Failed to auto-provision component source").
+				WithContext("component", component).
+				WithContext("source", sourceSpec.Uri).
+				WithContext("target", targetDir).
+				WithHint("Verify source URI is accessible and credentials are valid").
+				Err()
+		}
 
-	_ = ui.Success(fmt.Sprintf("Auto-provisioned source to %s", targetDir))
-	return nil
+		return nil
+	})
 }
 
 // wrapProvisionError wraps an error with provision context.

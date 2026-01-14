@@ -1026,6 +1026,7 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
+	BaseComponentProvisionSection          AtmosSectionMapType
 	ComponentInheritanceChain              []string
 }
 

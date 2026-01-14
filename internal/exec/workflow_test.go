@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -236,6 +237,76 @@ func TestExecuteWorkflow(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
+		})
+	}
+}
+
+// TestShellFieldsQuoteParsing verifies that shell.Fields correctly parses quoted arguments.
+// This test documents the fix for the issue where -var="key=value" was incorrectly parsed.
+func TestShellFieldsQuoteParsing(t *testing.T) {
+	tests := []struct {
+		name     string
+		command  string
+		expected []string
+	}{
+		{
+			name:    "double quoted var flag",
+			command: `terraform plan mock -var="enabled=false" -s nonprod`,
+			expected: []string{
+				"terraform", "plan", "mock", "-var=enabled=false", "-s", "nonprod",
+			},
+		},
+		{
+			name:    "single quoted var flag",
+			command: `terraform plan mock -var='enabled=false' -s nonprod`,
+			expected: []string{
+				"terraform", "plan", "mock", "-var=enabled=false", "-s", "nonprod",
+			},
+		},
+		{
+			name:    "multiple var flags with different quote styles",
+			command: `terraform plan mock -var="enabled=false" -var='foo=bar' -s nonprod`,
+			expected: []string{
+				"terraform", "plan", "mock", "-var=enabled=false", "-var=foo=bar", "-s", "nonprod",
+			},
+		},
+		{
+			name:    "var with spaces in value",
+			command: `terraform plan mock -var="message=hello world" -s nonprod`,
+			expected: []string{
+				"terraform", "plan", "mock", "-var=message=hello world", "-s", "nonprod",
+			},
+		},
+		{
+			name:    "var with equals in value",
+			command: `terraform plan mock -var="message=key=value" -s nonprod`,
+			expected: []string{
+				"terraform", "plan", "mock", "-var=message=key=value", "-s", "nonprod",
+			},
+		},
+		{
+			name:    "query flag with quoted expression",
+			command: `terraform plan --query '.settings.enabled == true' -s nonprod`,
+			expected: []string{
+				"terraform", "plan", "--query", ".settings.enabled == true", "-s", "nonprod",
+			},
+		},
+		{
+			name:    "complex auto-generate-backend-file flag",
+			command: `terraform deploy tfstate-backend -var="access_roles_enabled=false" --stack core-usw1-root --auto-generate-backend-file=false`,
+			expected: []string{
+				"terraform", "deploy", "tfstate-backend", "-var=access_roles_enabled=false",
+				"--stack", "core-usw1-root", "--auto-generate-backend-file=false",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use shell.Fields which is what the fixed code uses
+			args, err := shell.Fields(tt.command, nil)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expected, args, "shell.Fields should correctly parse quoted arguments")
 		})
 	}
 }

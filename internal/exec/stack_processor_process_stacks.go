@@ -300,6 +300,16 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Global provision.
+	globalProvisionSection := map[string]any{}
+
+	if i, ok := globalTerraformSection[cfg.ProvisionSectionName]; ok {
+		globalProvisionSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformProvision, stackName)
+		}
+	}
+
 	// Helmfile section.
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
@@ -463,6 +473,7 @@ func ProcessStackConfig(
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
 					GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
 					GlobalSourceSection:             globalSourceSection,
+					GlobalProvisionSection:          globalProvisionSection,
 					AtmosConfig:                     atmosConfig,
 				}, nil
 			}

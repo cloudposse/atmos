@@ -1,0 +1,17 @@
+# Error
+
+**Error:** failed to find tool non-existent/tool: tool not in registry
+
+## Explanation
+
+Tool non-existent/tool@latest was not found in any configured registry. Atmos
+searches registries in priority order: Atmos registry → Aqua registry → custom
+registries.
+
+## Hints
+
+💡 Run atmos toolchain registry search to browse available tools
+
+💡 Verify network connectivity to registries
+
+💡 Check registry configuration in atmos.yaml

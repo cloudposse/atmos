@@ -41,6 +41,7 @@ type ComponentProcessorOptions struct {
 	GlobalRemoteStateBackendType    string
 	GlobalRemoteStateBackendSection map[string]any
 	GlobalSourceSection             map[string]any
+	GlobalProvisionSection          map[string]any
 
 	// Atmos configuration.
 	AtmosConfig *schema.AtmosConfiguration
@@ -96,6 +97,7 @@ type ComponentProcessorResult struct {
 	BaseComponentRemoteStateBackendSection map[string]any
 	ComponentSourceSection                 map[string]any
 	BaseComponentSourceSection             map[string]any
+	BaseComponentProvisionSection          map[string]any
 }
 
 // processComponent processes a component extracting common configuration sections.

@@ -475,3 +475,114 @@ func TestAtmosRegistry_GetLatestVersion(t *testing.T) {
 	assert.Empty(t, version)
 	assert.ErrorIs(t, err, registry.ErrNoVersionsFound)
 }
+
+// TestAtmosRegistry_OverridesSupport tests platform-specific override parsing.
+func TestAtmosRegistry_OverridesSupport(t *testing.T) {
+	t.Run("parses overrides correctly", func(t *testing.T) {
+		toolsConfig := map[string]any{
+			"replicatedhq/replicated": map[string]any{
+				"type":  "github_release",
+				"asset": "replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+				"overrides": []any{
+					map[string]any{
+						"goos":  "darwin",
+						"asset": "replicated_{{trimV .Version}}_{{.OS}}_all.tar.gz",
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("replicatedhq", "replicated")
+		require.NoError(t, err)
+		require.NotNil(t, tool)
+
+		// Verify overrides were parsed.
+		require.Len(t, tool.Overrides, 1)
+		assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+		assert.Equal(t, "", tool.Overrides[0].GOARCH)
+		assert.Equal(t, "replicated_{{trimV .Version}}_{{.OS}}_all.tar.gz", tool.Overrides[0].Asset)
+	})
+
+	t.Run("parses multiple overrides", func(t *testing.T) {
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":  "github_release",
+				"asset": "tool-{{.OS}}-{{.Arch}}.tar.gz",
+				"overrides": []any{
+					map[string]any{
+						"goos":   "darwin",
+						"goarch": "arm64",
+						"asset":  "tool-macos-arm64.tar.gz",
+						"format": "tar.gz",
+					},
+					map[string]any{
+						"goos":   "windows",
+						"asset":  "tool-windows.zip",
+						"format": "zip",
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+		require.Len(t, tool.Overrides, 2)
+
+		// First override.
+		assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+		assert.Equal(t, "arm64", tool.Overrides[0].GOARCH)
+		assert.Equal(t, "tool-macos-arm64.tar.gz", tool.Overrides[0].Asset)
+		assert.Equal(t, "tar.gz", tool.Overrides[0].Format)
+
+		// Second override.
+		assert.Equal(t, "windows", tool.Overrides[1].GOOS)
+		assert.Equal(t, "tool-windows.zip", tool.Overrides[1].Asset)
+		assert.Equal(t, "zip", tool.Overrides[1].Format)
+	})
+
+	t.Run("tool without overrides has empty slice", func(t *testing.T) {
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":  "github_release",
+				"asset": "tool-{{.OS}}-{{.Arch}}.tar.gz",
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+		assert.Empty(t, tool.Overrides)
+	})
+
+	t.Run("malformed override entries are silently skipped", func(t *testing.T) {
+		// Test that malformed override entries (non-map) are skipped without error.
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":  "github_release",
+				"asset": "tool-{{.OS}}-{{.Arch}}.tar.gz",
+				"overrides": []any{
+					"not-a-map",                      // Invalid: string instead of map.
+					123,                              // Invalid: int instead of map.
+					map[string]any{"goos": "darwin"}, // Valid override.
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+		// Only the valid override should be parsed.
+		require.Len(t, tool.Overrides, 1)
+		assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+	})
+}
