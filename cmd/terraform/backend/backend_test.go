@@ -43,9 +43,10 @@ func TestGetBackendCommand(t *testing.T) {
 	}
 
 	// Verify we have the expected commands by their Use patterns.
-	assert.True(t, subcommandUses["create <component>"], "should have create subcommand")
+	// Commands use [component] syntax to indicate prompts handle missing values.
+	assert.True(t, subcommandUses["create [component]"], "should have create subcommand")
 	assert.True(t, subcommandUses["list"], "should have list subcommand")
-	assert.True(t, subcommandUses["describe <component>"], "should have describe subcommand")
-	assert.True(t, subcommandUses["update <component>"], "should have update subcommand")
-	assert.True(t, subcommandUses["delete <component>"], "should have delete subcommand")
+	assert.True(t, subcommandUses["describe [component]"], "should have describe subcommand")
+	assert.True(t, subcommandUses["update [component]"], "should have update subcommand")
+	assert.True(t, subcommandUses["delete [component]"], "should have delete subcommand")
 }
