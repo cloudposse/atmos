@@ -121,11 +121,16 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 //   - Hints from cause are preserved via GetAllHints()
 func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 	if cause != nil {
-		// Use cockroachdb/errors.Wrap to preserve hints from the cause.
-		// The sentinel is marked later in Err() via errors.Mark().
-		// This ensures hints propagate through GetAllHints() while
-		// maintaining errors.Is() compatibility for both sentinel and cause.
-		b.err = errors.Wrap(cause, b.err.Error())
+		// Guard against nil b.err - if no sentinel was provided, use cause directly.
+		if b.err == nil {
+			b.err = cause
+		} else {
+			// Use cockroachdb/errors.Wrap to preserve hints from the cause.
+			// The sentinel is marked later in Err() via errors.Mark().
+			// This ensures hints propagate through GetAllHints() while
+			// maintaining errors.Is() compatibility for both sentinel and cause.
+			b.err = errors.Wrap(cause, b.err.Error())
+		}
 	}
 	return b
 }
