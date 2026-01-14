@@ -639,3 +639,159 @@ func TestInstallMultipleTools_InvalidSpecs(t *testing.T) {
 	err := installMultipleTools([]string{"invalid-spec-no-version", "another-bad-spec"}, false)
 	assert.NoError(t, err)
 }
+
+// TestSpinnerModel tests the spinnerModel Bubble Tea model.
+func TestSpinnerModel(t *testing.T) {
+	t.Run("initialSpinnerModel", func(t *testing.T) {
+		model := initialSpinnerModel("Test message")
+		assert.NotNil(t, model)
+		assert.Equal(t, "Test message", model.message)
+		assert.False(t, model.done)
+	})
+
+	t.Run("Init returns tick command", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		cmd := model.Init()
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("View returns message when not done", func(t *testing.T) {
+		model := initialSpinnerModel("Test message")
+		view := model.View()
+		assert.Contains(t, view, "Test message")
+	})
+
+	t.Run("View returns empty when done", func(t *testing.T) {
+		model := initialSpinnerModel("Test message")
+		model.done = true
+		view := model.View()
+		assert.Empty(t, view)
+	})
+
+	t.Run("Update handles installDoneMsg", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		updated, cmd := model.Update(installDoneMsg{})
+		updatedModel := updated.(*spinnerModel)
+		assert.True(t, updatedModel.done)
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("Update handles bspinner.TickMsg", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		_, cmd := model.Update(bspinner.TickMsg{})
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("Update returns nil cmd for unknown msg", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		_, cmd := model.Update("unknown message type")
+		assert.Nil(t, cmd)
+	})
+}
+
+// TestRunBubbleTeaSpinner tests the runBubbleTeaSpinner function.
+func TestRunBubbleTeaSpinner(t *testing.T) {
+	program := runBubbleTeaSpinner("Test message")
+	assert.NotNil(t, program)
+}
+
+// TestInstallOrSkipTool tests the installOrSkipTool function.
+func TestInstallOrSkipTool(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create mock resolver.
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform":           {"hashicorp", "terraform"},
+			"hashicorp/terraform": {"hashicorp", "terraform"},
+		},
+	}
+
+	binDir := filepath.Join(tempDir, ".atmos", "tools", "bin")
+	installer := NewInstallerWithResolver(mockResolver, binDir)
+
+	tests := []struct {
+		name           string
+		tool           toolInfo
+		reinstallFlag  bool
+		setupBinary    bool
+		expectedResult string
+	}{
+		{
+			name:           "tool not installed - installs",
+			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			reinstallFlag:  false,
+			setupBinary:    false,
+			expectedResult: resultInstalled,
+		},
+		{
+			name:           "tool already installed - skips",
+			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			reinstallFlag:  false,
+			setupBinary:    true,
+			expectedResult: resultSkipped,
+		},
+		{
+			name:           "tool already installed with reinstall flag - reinstalls",
+			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			reinstallFlag:  true,
+			setupBinary:    true,
+			expectedResult: resultInstalled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupBinary {
+				// Create a mock binary.
+				binaryPath := installer.GetBinaryPath(tt.tool.owner, tt.tool.repo, tt.tool.version, "")
+				err := os.MkdirAll(filepath.Dir(binaryPath), 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(binaryPath, []byte("mock binary"), 0o755)
+				require.NoError(t, err)
+			}
+
+			result, _ := installOrSkipTool(installer, tt.tool, tt.reinstallFlag, false)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+// TestInstallFromToolVersions_EmptyFile tests installFromToolVersions with an empty file.
+func TestInstallFromToolVersions_EmptyFile(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create an empty .tool-versions file.
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	err := os.WriteFile(toolVersionsPath, []byte(""), 0o644)
+	require.NoError(t, err)
+
+	// Should not error when file is empty.
+	err = installFromToolVersions(toolVersionsPath, false, false)
+	assert.NoError(t, err)
+}
+
+// TestInstallFromToolVersions_InvalidPath tests installFromToolVersions with invalid path.
+func TestInstallFromToolVersions_InvalidPath(t *testing.T) {
+	err := installFromToolVersions("/nonexistent/path/.tool-versions", false, false)
+	assert.Error(t, err)
+}
+
+// TestInstallOptions tests the InstallOptions struct.
+func TestInstallOptions(t *testing.T) {
+	opts := InstallOptions{
+		IsLatest:               true,
+		ShowProgressBar:        true,
+		ShowInstallDetails:     true,
+		ShowHint:               true,
+		SkipToolVersionsUpdate: true,
+	}
+
+	assert.True(t, opts.IsLatest)
+	assert.True(t, opts.ShowProgressBar)
+	assert.True(t, opts.ShowInstallDetails)
+	assert.True(t, opts.ShowHint)
+	assert.True(t, opts.SkipToolVersionsUpdate)
+}
