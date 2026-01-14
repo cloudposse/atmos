@@ -241,11 +241,11 @@ Registries are checked in order. If a high-priority registry is unavailable, low
 
 ## Toolchain Integration with Custom Commands and Workflows
 
-Tools defined in `.tool-versions` are automatically available in custom commands and workflows. This example includes working demonstrations.
+Tools defined in `.tool-versions` are automatically available in custom commands and workflows. This example demonstrates four different integration patterns.
 
 ### The `.tool-versions` File
 
-This example includes a `.tool-versions` file with `jq` and `yq`:
+This example includes a `.tool-versions` file defining project-wide tool defaults:
 
 ```
 jq 1.7.1
@@ -254,84 +254,55 @@ yq 4.45.1
 
 ### Custom Commands Demo
 
-Custom commands in `atmos.yaml` automatically have access to toolchain tools:
+Each example demonstrates a different toolchain feature:
 
 ```bash
-# Show which jq binary is being used (should be from .tools/)
-atmos toolchain-demo which-jq
+# 1. Implicit dependencies - uses tools from .tool-versions
+atmos toolchain-demo which
 
-# Show which yq binary is being used
-atmos toolchain-demo which-yq
+# 2. Exact version pinning - override with specific version
+atmos toolchain-demo pinned
 
-# Show versions of both tools
-atmos toolchain-demo versions
+# 3. SemVer constraints - allow compatible version ranges
+atmos toolchain-demo constrained
 
-# Demonstrate jq processing JSON
-atmos toolchain-demo jq-demo
-
-# Demonstrate yq processing YAML
-atmos toolchain-demo yq-demo
+# 4. Multi-tool pipeline - combine tools together
+atmos toolchain-demo convert
 ```
 
 ### Workflows Demo
 
-Workflows in `stacks/workflows/toolchain-demo.yaml` also have automatic access:
+Workflows demonstrate the same patterns:
 
 ```bash
-# Show paths to toolchain binaries
-atmos workflow which-tools -f toolchain-demo
+# 1. Implicit dependencies - uses tools from .tool-versions
+atmos workflow which -f toolchain-demo
 
-# Show tool versions
-atmos workflow tool-versions -f toolchain-demo
+# 2. Exact version pinning
+atmos workflow pinned -f toolchain-demo
 
-# Run jq demo
-atmos workflow jq-demo -f toolchain-demo
+# 3. SemVer constraints
+atmos workflow constrained -f toolchain-demo
 
-# Run yq demo
-atmos workflow yq-demo -f toolchain-demo
-
-# Run complete integration demo
-atmos workflow full-demo -f toolchain-demo
-
-# Workflow with explicit dependencies
-atmos workflow with-dependencies -f toolchain-demo
+# 4. Multi-tool pipeline
+atmos workflow convert -f toolchain-demo
 ```
+
+### Version Constraint Patterns
+
+| Pattern | Example | Meaning |
+|---------|---------|---------|
+| Exact | `1.7.1` | Only version 1.7.1 |
+| Caret | `^1.7.0` | Any 1.x.x (compatible) |
+| Tilde | `~> 4.40.0` | Any 4.40.x (patch only) |
+| Latest | `latest` | Most recent version |
 
 ### How It Works
 
-1. **Automatic Tool Discovery**: When a custom command or workflow runs, Atmos reads `.tool-versions`
-2. **Tool Installation**: Missing tools are automatically installed to `.tools/`
-3. **PATH Update**: The `.tools/bin/` directories are prepended to PATH
-4. **Execution**: Commands and workflow steps execute with toolchain tools available
-
-### Explicit Dependencies
-
-You can also declare explicit dependencies that override `.tool-versions`:
-
-**Custom Command:**
-```yaml
-commands:
-  - name: my-command
-    dependencies:
-      tools:
-        jq: "^1.7.0"
-        terraform: "~> 1.10.0"
-    steps:
-      - jq --version
-```
-
-**Workflow:**
-```yaml
-workflows:
-  my-workflow:
-    dependencies:
-      tools:
-        jq: "1.7.1"
-    steps:
-      - name: check-jq
-        command: jq --version
-        type: shell
-```
+1. **Automatic Tool Discovery**: Atmos reads `.tool-versions` when commands/workflows run
+2. **Dependency Merging**: Explicit `dependencies` override `.tool-versions`
+3. **Tool Installation**: Missing tools are automatically installed to `.tools/`
+4. **PATH Update**: Toolchain binaries are prepended to PATH
 
 ## Related Documentation
 

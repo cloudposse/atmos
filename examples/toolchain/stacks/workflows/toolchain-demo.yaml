@@ -1,84 +1,51 @@
 # Toolchain Integration Demo Workflows
 #
-# These workflows demonstrate how tools from .tool-versions are automatically
-# available in workflow steps without explicit dependencies declaration.
+# These workflows demonstrate different ways to use toolchain-managed tools.
+# Each workflow shows a distinct feature of toolchain integration.
 
 name: Toolchain Demo
-description: Workflows demonstrating automatic toolchain integration
+description: Workflows demonstrating different toolchain integration patterns
 
 workflows:
-  # Show which binaries are being used
-  which-tools:
-    description: Show paths to toolchain-managed binaries
+  # Example 1: Implicit dependencies from .tool-versions
+  # No dependencies declared - uses tools from .tool-versions automatically
+  which:
+    description: Verify toolchain tools are in PATH (uses .tool-versions)
     steps:
-      - name: which-jq
-        command: which jq
-        type: shell
-      - name: which-yq
-        command: which yq
+      - name: show-paths
+        command: "echo 'jq:' && which jq && echo 'yq:' && which yq"
         type: shell
 
-  # Show tool versions
-  tool-versions:
-    description: Show versions of toolchain-managed tools
-    steps:
-      - name: jq-version
-        command: jq --version
-        type: shell
-      - name: yq-version
-        command: yq --version
-        type: shell
-
-  # Demonstrate jq processing
-  jq-demo:
-    description: Demonstrate jq processing JSON data
-    steps:
-      - name: parse-json
-        command: echo '{"tool":"atmos","feature":"toolchain"}' | jq -r '.tool'
-        type: shell
-
-  # Demonstrate yq processing
-  yq-demo:
-    description: Demonstrate yq processing YAML data
-    steps:
-      - name: parse-yaml
-        command: "echo 'tool: atmos' | yq -r '.tool'"
-        type: shell
-
-  # Combined demo showing full toolchain integration
-  full-demo:
-    description: Complete toolchain integration demonstration
-    steps:
-      - name: intro
-        command: echo "=== Toolchain Integration Demo ==="
-        type: shell
-      - name: show-jq-path
-        command: "echo 'jq path:' && which jq"
-        type: shell
-      - name: show-yq-path
-        command: "echo 'yq path:' && which yq"
-        type: shell
-      - name: jq-version
-        command: "echo 'jq version:' && jq --version"
-        type: shell
-      - name: yq-version
-        command: "echo 'yq version:' && yq --version"
-        type: shell
-      - name: jq-demo
-        command: "echo 'jq demo:' && echo '{\"status\":\"success\"}' | jq -r '.status'"
-        type: shell
-      - name: yq-demo
-        command: "echo 'yq demo:' && echo 'status: success' | yq -r '.status'"
-        type: shell
-
-  # Example with explicit dependencies (overrides .tool-versions)
-  with-dependencies:
-    description: Workflow with explicit tool dependencies
+  # Example 2: Exact version pinning
+  # Override .tool-versions with specific versions
+  pinned:
+    description: Use exact pinned versions (overrides .tool-versions)
     dependencies:
       tools:
         jq: "1.7.1"
-        yq: "4.45.1"
+    steps:
+      - name: verify-version
+        command: "echo 'Using pinned jq 1.7.1:' && jq --version"
+        type: shell
+
+  # Example 3: SemVer constraints
+  # Allow compatible versions within a range
+  constrained:
+    description: Use SemVer version constraints
+    dependencies:
+      tools:
+        jq: "^1.7.0"
+        yq: "~> 4.40.0"
     steps:
       - name: show-versions
-        command: "echo 'jq:' && jq --version && echo 'yq:' && yq --version"
+        command: "echo 'jq (^1.7.0):' && jq --version && echo 'yq (~> 4.40.0):' && yq --version"
+        type: shell
+
+  # Example 4: Multi-tool pipeline
+  # Use multiple tools together to convert YAML to formatted JSON
+  convert:
+    description: Convert YAML to JSON using yq and jq together
+    steps:
+      - name: yaml-to-json
+        command: "echo 'name: atmos\nversion: 1.0' | yq -o json | jq ."
         type: shell

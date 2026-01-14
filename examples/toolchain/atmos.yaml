@@ -89,42 +89,46 @@ workflows:
   base_path: "stacks/workflows"
 
 # Custom Commands
-# These commands demonstrate automatic toolchain integration.
-# Tools from .tool-versions are available without explicit dependencies declaration.
+# These commands demonstrate different ways to use toolchain integration.
 commands:
   - name: toolchain-demo
     description: Demonstrate toolchain integration with custom commands
     commands:
-      # Show which jq is being used (should be from .tools/)
-      - name: which-jq
-        description: Show the path to the toolchain-managed jq binary
+      # Example 1: Implicit dependencies from .tool-versions
+      # No dependencies declared - uses tools from .tool-versions automatically
+      - name: which
+        description: Verify toolchain tools are in PATH (uses .tool-versions)
         steps:
-          - which jq
+          - "echo 'jq:' && which jq"
+          - "echo 'yq:' && which yq"
 
-      # Show which yq is being used (should be from .tools/)
-      - name: which-yq
-        description: Show the path to the toolchain-managed yq binary
+      # Example 2: Exact version pinning
+      # Override .tool-versions with a specific version
+      - name: pinned
+        description: Use exact pinned versions (overrides .tool-versions)
+        dependencies:
+          tools:
+            jq: "1.7.1"
         steps:
-          - which yq
-
-      # Show versions of installed tools
-      - name: versions
-        description: Show versions of toolchain-managed tools
-        steps:
-          - echo "jq version:"
+          - echo "Using pinned jq 1.7.1"
           - jq --version
-          - echo ""
-          - echo "yq version:"
-          - yq --version
 
-      # Use jq to process JSON (demonstrates tool actually works)
-      - name: jq-demo
-        description: Demonstrate jq processing JSON data
+      # Example 3: SemVer constraints
+      # Allow compatible versions within a range
+      - name: constrained
+        description: Use SemVer version constraints
+        dependencies:
+          tools:
+            jq: "^1.7.0"
+            yq: "~> 4.40.0"
         steps:
-          - echo '{"name":"atmos","version":"1.0"}' | jq -r '.name'
+          - "echo 'jq (^1.7.0):' && jq --version"
+          - "echo 'yq (~> 4.40.0):' && yq --version"
 
-      # Use yq to process YAML (demonstrates tool actually works)
-      - name: yq-demo
-        description: Demonstrate yq processing YAML data
+      # Example 4: Multi-tool pipeline
+      # Use multiple tools together
+      - name: convert
+        description: Convert YAML to JSON using yq and jq together
         steps:
-          - echo 'name: atmos' | yq -r '.name'
+          - echo "Converting YAML to formatted JSON"
+          - "echo 'name: atmos' | yq -o json | jq ."
