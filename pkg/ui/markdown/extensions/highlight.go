@@ -42,6 +42,8 @@ func NewHighlight() *Highlight {
 }
 
 // highlightDelimiterProcessor processes == delimiters for highlight syntax.
+// Note: This is an alternative implementation kept as reference. The Extend()
+// method uses highlightParser instead. Tests verify this code path for coverage.
 type highlightDelimiterProcessor struct{}
 
 // IsDelimiter returns true if the byte is a delimiter.
