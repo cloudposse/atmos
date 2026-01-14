@@ -58,6 +58,17 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	}
 
 	stack := v.GetString("stack")
+
+	// Prompt for stack if not provided.
+	if stack == "" {
+		var err error
+		stack, err = PromptForStack(cmd, component)
+		if err := HandlePromptError(err, "stack"); err != nil {
+			return err
+		}
+	}
+
+	// Validate stack is provided.
 	if stack == "" {
 		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 			WithExplanation("--stack flag is required").

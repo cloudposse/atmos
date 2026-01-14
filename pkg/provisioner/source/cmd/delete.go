@@ -62,8 +62,8 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 
 	component := args[0]
 
-	// Parse flags and get delete options.
-	deleteOpts, err := parseDeleteFlags(cmd, parser)
+	// Parse flags and get delete options (with prompting).
+	deleteOpts, err := parseDeleteFlags(cmd, parser, component)
 	if err != nil {
 		return err
 	}
@@ -79,7 +79,7 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 }
 
 // parseDeleteFlags parses delete command flags and validates them.
-func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser) (*deleteOptions, error) {
+func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser, component string) (*deleteOptions, error) {
 	v := viper.GetViper()
 	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return nil, err
@@ -87,6 +87,17 @@ func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser) (*delete
 
 	globalFlags := flags.ParseGlobalFlags(cmd, v)
 	stack := v.GetString("stack")
+
+	// Prompt for stack if not provided.
+	if stack == "" {
+		var err error
+		stack, err = PromptForStack(cmd, component)
+		if err := HandlePromptError(err, "stack"); err != nil {
+			return nil, err
+		}
+	}
+
+	// Validate stack is provided.
 	if stack == "" {
 		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 			WithExplanation("--stack flag is required").

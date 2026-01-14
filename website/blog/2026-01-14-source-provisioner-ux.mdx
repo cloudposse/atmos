@@ -5,17 +5,18 @@ authors: [osterman]
 tags: [enhancement, dx]
 ---
 
-The source provisioner now provides better visual feedback with spinners during auto-provisioning and interactive confirmation prompts for delete operations.
+The source provisioner now provides better visual feedback with spinners during auto-provisioning, interactive confirmation prompts for delete operations, and interactive stack selection when `--stack` is omitted.
 
 <!--truncate-->
 
 ## What Changed
 
-Three UX improvements to the source provisioner:
+Four UX improvements to the source provisioner:
 
 1. **Auto-provisioning spinner**: When components are automatically vendored on first use, you now see a spinner with progress instead of static messages
 2. **Interactive delete confirmation**: Running `atmos terraform source delete` without `--force` now prompts for confirmation instead of erroring
 3. **Delete operation spinner**: Deletion shows a spinner during the operation for consistent feedback
+4. **Interactive stack selection**: All source commands (pull, delete, describe, list) now prompt for stack selection when `--stack` is omitted
 
 ## Why This Matters
 
@@ -41,6 +42,22 @@ $ atmos terraform source delete myapp --stack dev
 ? Delete directory: .workdir/terraform/dev-myapp? [Yes!/No.]
 ⠋ Deleting .workdir/terraform/dev-myapp
 ✓ Deleted .workdir/terraform/dev-myapp
+```
+
+```shell
+# Before: Required --stack flag or error
+$ atmos terraform source pull myapp
+Error: --stack flag is required
+
+# After: Interactive stack selection when --stack omitted
+$ atmos terraform source pull myapp
+? Choose a stack
+  dev
+> prod
+  staging
+ℹ Selected stack `prod`
+⠋ Provisioning source for 'myapp'
+✓ Provisioned source to components/terraform/myapp
 ```
 
 ## How to Use It

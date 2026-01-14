@@ -38,7 +38,7 @@ func TestParseDeleteFlags_MissingStack(t *testing.T) {
 	)
 	parser.RegisterFlags(cmd)
 
-	opts, err := parseDeleteFlags(cmd, parser)
+	opts, err := parseDeleteFlags(cmd, parser, "vpc")
 
 	require.Error(t, err)
 	assert.Nil(t, opts)
@@ -58,7 +58,7 @@ func TestParseDeleteFlags_ForceDefault(t *testing.T) {
 	err := cmd.ParseFlags([]string{"--stack", "dev"})
 	require.NoError(t, err)
 
-	opts, err := parseDeleteFlags(cmd, parser)
+	opts, err := parseDeleteFlags(cmd, parser, "vpc")
 
 	require.NoError(t, err)
 	require.NotNil(t, opts)
@@ -79,7 +79,7 @@ func TestParseDeleteFlags_Success(t *testing.T) {
 	err := cmd.ParseFlags([]string{"--stack", "dev", "--force"})
 	require.NoError(t, err)
 
-	opts, err := parseDeleteFlags(cmd, parser)
+	opts, err := parseDeleteFlags(cmd, parser, "vpc")
 
 	require.NoError(t, err)
 	require.NotNil(t, opts)

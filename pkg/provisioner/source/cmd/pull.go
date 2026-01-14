@@ -56,10 +56,35 @@ func executePull(cmd *cobra.Command, args []string, cfg *Config, parser *flags.S
 
 	component := args[0]
 
-	// Parse common flags.
-	opts, err := ParseCommonFlags(cmd, parser)
-	if err != nil {
+	// Parse flags without validation.
+	v := viper.GetViper()
+	if err := parser.BindFlagsToViper(cmd, v); err != nil {
 		return err
+	}
+
+	stack := v.GetString("stack")
+
+	// Prompt for stack if not provided.
+	if stack == "" {
+		var err error
+		stack, err = PromptForStack(cmd, component)
+		if err := HandlePromptError(err, "stack"); err != nil {
+			return err
+		}
+	}
+
+	// Validate stack is provided.
+	if stack == "" {
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			Err()
+	}
+
+	opts := &CommonOptions{
+		Flags:    flags.ParseGlobalFlags(cmd, v),
+		Stack:    stack,
+		Identity: v.GetString("identity"),
+		Force:    v.GetBool("force"),
 	}
 
 	// Initialize config and auth with global flags.
