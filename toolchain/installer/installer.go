@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -486,7 +487,16 @@ func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) strin
 			}
 			entryPath := filepath.Join(versionDir, entry.Name())
 			info, err := os.Stat(entryPath)
-			if err == nil && info.Mode()&executablePermissionMask != 0 {
+			if err != nil {
+				continue
+			}
+			// On Unix, check executable permission bits.
+			// On Windows, check for .exe extension (permission bits don't apply).
+			isExec := info.Mode()&executablePermissionMask != 0
+			if runtime.GOOS == "windows" {
+				isExec = strings.HasSuffix(strings.ToLower(entry.Name()), ".exe")
+			}
+			if isExec {
 				// Found an executable.
 				return entryPath
 			}
