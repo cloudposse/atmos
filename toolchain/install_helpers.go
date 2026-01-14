@@ -19,13 +19,14 @@ type spinnerControl struct {
 
 // installResult holds information about a successful tool installation.
 type installResult struct {
-	owner       string
-	repo        string
-	version     string
-	binaryPath  string
-	isLatest    bool
-	showMessage bool
-	showHint    bool // Controls PATH export hint display.
+	owner                  string
+	repo                   string
+	version                string
+	binaryPath             string
+	isLatest               bool
+	showMessage            bool
+	showHint               bool // Controls PATH export hint display.
+	skipToolVersionsUpdate bool // Skip .tool-versions update (caller handles it).
 }
 
 // startSpinner starts a spinner with the given message.
@@ -122,7 +123,15 @@ func handleInstallSuccess(result installResult, installer *Installer) {
 	}
 	_ = ui.Successf("Installed `%s/%s@%s` to `%s`%s", result.owner, result.repo, result.version, result.binaryPath, sizeStr)
 
-	// Register in .tool-versions.
+	// Register in .tool-versions (unless caller handles it separately).
+	if result.skipToolVersionsUpdate {
+		// Only show PATH hint when running toolchain install directly, not for dependency installs.
+		if result.showHint {
+			_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+		}
+		return
+	}
+
 	if err := AddToolToVersions(DefaultToolVersionsFilePath, result.repo, result.version); err == nil {
 		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", result.repo, result.version)
 		// Only show PATH hint when running toolchain install directly, not for dependency installs.

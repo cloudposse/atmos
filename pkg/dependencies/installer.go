@@ -17,6 +17,10 @@ import (
 // The showProgressBar parameter controls whether to show spinner and success messages.
 type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error
 
+// BatchInstallFunc is the function signature for batch installing multiple tools.
+// Shows status messages scrolling up with a single progress bar at bottom.
+type BatchInstallFunc func(toolSpecs []string, reinstallFlag bool) error
+
 // BinaryPathFinder finds installed tool binaries.
 // This interface allows testing without the full toolchain installer.
 type BinaryPathFinder interface {
@@ -28,6 +32,7 @@ type Installer struct {
 	atmosConfig      *schema.AtmosConfiguration
 	resolver         toolchain.ToolResolver
 	installFunc      InstallFunc
+	batchInstallFunc BatchInstallFunc
 	fileExistsFunc   func(path string) bool
 	binaryPathFinder BinaryPathFinder
 }
@@ -50,6 +55,15 @@ func WithInstallFunc(fn InstallFunc) InstallerOption {
 
 	return func(i *Installer) {
 		i.installFunc = fn
+	}
+}
+
+// WithBatchInstallFunc sets a custom batch install function (for testing).
+func WithBatchInstallFunc(fn BatchInstallFunc) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithBatchInstallFunc")()
+
+	return func(i *Installer) {
+		i.batchInstallFunc = fn
 	}
 }
 
@@ -89,6 +103,7 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 		atmosConfig:      atmosConfig,
 		resolver:         tcInstaller.GetResolver(),
 		installFunc:      toolchain.RunInstall,
+		batchInstallFunc: toolchain.RunInstallBatch,
 		fileExistsFunc:   fileExists,
 		binaryPathFinder: tcInstaller, // Uses FindBinaryPath() for proper binary detection.
 	}
@@ -102,7 +117,7 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 }
 
 // EnsureTools ensures all required tools are installed.
-// Installs missing tools automatically.
+// Installs missing tools automatically using batch install with progress bar.
 func (i *Installer) EnsureTools(dependencies map[string]string) error {
 	defer perf.Track(i.atmosConfig, "dependencies.EnsureTools")()
 
@@ -110,10 +125,24 @@ func (i *Installer) EnsureTools(dependencies map[string]string) error {
 		return nil
 	}
 
+	// Collect missing tools.
+	var missingTools []string
 	for tool, version := range dependencies {
-		if err := i.ensureTool(tool, version); err != nil {
-			return err
+		if !i.isToolInstalled(tool, version) {
+			missingTools = append(missingTools, fmt.Sprintf("%s@%s", tool, version))
 		}
+	}
+
+	if len(missingTools) == 0 {
+		return nil
+	}
+
+	// Batch install all missing tools with progress bar.
+	if err := i.batchInstallFunc(missingTools, false); err != nil {
+		return errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanation("Failed to install dependencies").
+			Err()
 	}
 
 	return nil

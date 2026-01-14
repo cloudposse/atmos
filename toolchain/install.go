@@ -18,13 +18,19 @@ import (
 
 const (
 	spinnerAnimationFrames = 5 // Number of animation frames for progress spinner.
+
+	// Install result status constants.
+	resultInstalled = "installed"
+	resultFailed    = "failed"
+	resultSkipped   = "skipped"
 )
 
 // InstallOptions configures the behavior of InstallSingleTool.
 type InstallOptions struct {
-	IsLatest        bool // Whether this is a "latest" version install.
-	ShowProgressBar bool // Whether to show progress during install.
-	ShowHint        bool // Whether to show PATH export hint after install.
+	IsLatest               bool // Whether this is a "latest" version install.
+	ShowProgressBar        bool // Whether to show progress during install.
+	ShowHint               bool // Whether to show PATH export hint after install.
+	SkipToolVersionsUpdate bool // Skip .tool-versions update (caller handles it).
 }
 
 // Bubble Tea spinner model.
@@ -140,10 +146,12 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 	}
 
 	// Handle "latest" keyword - pass it to InstallSingleTool which will resolve it.
+	// Skip .tool-versions update here; updateToolVersionsFile handles it below with the original tool name.
 	err = InstallSingleTool(owner, repo, version, InstallOptions{
-		IsLatest:        version == "latest",
-		ShowProgressBar: showProgressBar,
-		ShowHint:        showHint,
+		IsLatest:               version == "latest",
+		ShowProgressBar:        showProgressBar,
+		ShowHint:               showHint,
+		SkipToolVersionsUpdate: true,
 	})
 	if err != nil {
 		return err
@@ -186,13 +194,14 @@ func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 
 	// Handle post-installation tasks.
 	handleInstallSuccess(installResult{
-		owner:       owner,
-		repo:        repo,
-		version:     version,
-		binaryPath:  binaryPath,
-		isLatest:    opts.IsLatest,
-		showMessage: opts.ShowProgressBar,
-		showHint:    opts.ShowHint,
+		owner:                  owner,
+		repo:                   repo,
+		version:                version,
+		binaryPath:             binaryPath,
+		isLatest:               opts.IsLatest,
+		showMessage:            opts.ShowProgressBar,
+		showHint:               opts.ShowHint,
+		skipToolVersionsUpdate: opts.SkipToolVersionsUpdate,
 	}, installer)
 	return nil
 }
@@ -222,11 +231,11 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 	for i, tool := range toolList {
 		result, err := installOrSkipTool(installer, tool, reinstallFlag, showHint)
 		switch result {
-		case "installed":
+		case resultInstalled:
 			installedCount++
-		case "failed":
+		case resultFailed:
 			failedCount++
-		case "skipped":
+		case resultSkipped:
 			alreadyInstalledCount++
 		}
 		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
@@ -253,18 +262,18 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo 
 func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showHint bool) (string, error) {
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err == nil && !reinstallFlag {
-		return "skipped", nil
+		return resultSkipped, nil
 	}
 
 	err = InstallSingleTool(tool.owner, tool.repo, tool.version, InstallOptions{
 		IsLatest:        tool.version == "latest",
-		ShowProgressBar: false,
+		ShowProgressBar: true,
 		ShowHint:        showHint,
 	})
 	if err != nil {
-		return "failed", err
+		return resultFailed, err
 	}
-	return "installed", nil
+	return resultInstalled, nil
 }
 
 type toolInfo struct {
@@ -287,11 +296,11 @@ func showProgress(
 	resetLine()
 
 	switch state.result {
-	case "skipped":
+	case resultSkipped:
 		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
-	case "installed":
+	case resultInstalled:
 		_ = ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
-	case "failed":
+	case resultFailed:
 		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
@@ -343,4 +352,86 @@ func printSuccessSummary(installed, skipped int, showHint bool) {
 	if showHint {
 		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	}
+}
+
+// RunInstallBatch installs multiple tools with batch progress display.
+// Shows status messages scrolling up with a single progress bar at bottom.
+// For single tools, delegates to RunInstall for simpler output.
+func RunInstallBatch(toolSpecs []string, reinstallFlag bool) error {
+	defer perf.Track(nil, "toolchain.RunInstallBatch")()
+
+	if len(toolSpecs) == 0 {
+		return nil
+	}
+
+	// Single tool: delegate to single-tool flow for simpler output.
+	if len(toolSpecs) == 1 {
+		return RunInstall(toolSpecs[0], false, reinstallFlag, false, true)
+	}
+
+	// Multiple tools: batch install with progress bar.
+	return installMultipleTools(toolSpecs, reinstallFlag)
+}
+
+// installMultipleTools handles batch installation with progress bar.
+func installMultipleTools(toolSpecs []string, reinstallFlag bool) error {
+	defer perf.Track(nil, "toolchain.installMultipleTools")()
+
+	installer := NewInstaller()
+
+	// Parse all tool specs first.
+	var toolList []toolInfo
+	for _, spec := range toolSpecs {
+		tool, version, err := ParseToolVersionArg(spec)
+		if err != nil {
+			_ = ui.Errorf("Invalid tool spec `%s`: %v", spec, err)
+			continue
+		}
+
+		owner, repo, err := installer.ParseToolSpec(tool)
+		if err != nil {
+			_ = ui.Errorf("Invalid tool `%s`: %v", tool, err)
+			continue
+		}
+
+		toolList = append(toolList, toolInfo{
+			version: version,
+			owner:   owner,
+			repo:    repo,
+		})
+	}
+
+	if len(toolList) == 0 {
+		return nil
+	}
+
+	// Set up progress display.
+	spinner := bspinner.New()
+	spinner.Spinner = bspinner.Dot
+	styles := theme.GetCurrentStyles()
+	spinner.Style = styles.Spinner
+	progressBar := progress.New(progress.WithDefaultGradient())
+
+	var installedCount, failedCount, skippedCount int
+
+	for i, tool := range toolList {
+		result, err := installOrSkipTool(installer, tool, reinstallFlag, false)
+		switch result {
+		case resultInstalled:
+			installedCount++
+		case resultFailed:
+			failedCount++
+		case resultSkipped:
+			skippedCount++
+		}
+		showProgress(&spinner, &progressBar, tool, progressState{
+			index:  i,
+			total:  len(toolList),
+			result: result,
+			err:    err,
+		})
+	}
+
+	printSummary(installedCount, failedCount, skippedCount, len(toolList), false)
+	return nil
 }

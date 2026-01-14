@@ -61,6 +61,7 @@ func TestNewInstaller(t *testing.T) {
 		assert.Nil(t, inst.atmosConfig)
 		assert.NotNil(t, inst.resolver)
 		assert.NotNil(t, inst.installFunc)
+		assert.NotNil(t, inst.batchInstallFunc)
 		assert.NotNil(t, inst.fileExistsFunc)
 	})
 
@@ -95,14 +96,14 @@ func TestEnsureTools(t *testing.T) {
 	tests := []struct {
 		name         string
 		dependencies map[string]string
-		setupMock    func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool)
+		setupMock    func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool)
 		wantErr      bool
 		errIs        error
 	}{
 		{
 			name:         "empty dependencies returns nil",
 			dependencies: map[string]string{},
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				return &mockResolver{}, nil, nil, nil
 			},
 			wantErr: false,
@@ -110,7 +111,7 @@ func TestEnsureTools(t *testing.T) {
 		{
 			name:         "nil dependencies returns nil",
 			dependencies: nil,
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				return &mockResolver{}, nil, nil, nil
 			},
 			wantErr: false,
@@ -120,14 +121,14 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
 					},
 				}
 				installCalled := false
-				installFunc := func(string, bool, bool, bool, bool) error {
+				batchInstallFunc := func([]string, bool) error {
 					installCalled = true
 					return nil
 				}
@@ -138,25 +139,24 @@ func TestEnsureTools(t *testing.T) {
 				}
 				// Verifier returns true if install was NOT called (expected behavior).
 				verifier := func() bool { return !installCalled }
-				return resolver, installFunc, finder, verifier
+				return resolver, batchInstallFunc, finder, verifier
 			},
 			wantErr: false,
 		},
 		{
-			name: "tool not installed - install called",
+			name: "tool not installed - batch install called",
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				installFunc := func(toolSpec string, _, _, _, _ bool) error {
-					if toolSpec != "hashicorp/terraform@1.10.0" {
-						return errUnexpectedToolSpec
-					}
+				var receivedSpecs []string
+				batchInstallFunc := func(toolSpecs []string, _ bool) error {
+					receivedSpecs = toolSpecs
 					return nil
 				}
 				finder := &mockBinaryPathFinder{
@@ -164,7 +164,11 @@ func TestEnsureTools(t *testing.T) {
 						return "", errToolNotFound // Tool does not exist.
 					},
 				}
-				return resolver, installFunc, finder, nil
+				// Verifier checks the batch received the correct tool spec.
+				verifier := func() bool {
+					return len(receivedSpecs) == 1 && receivedSpecs[0] == "hashicorp/terraform@1.10.0"
+				}
+				return resolver, batchInstallFunc, finder, verifier
 			},
 			wantErr: false,
 		},
@@ -173,13 +177,13 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				installFunc := func(string, bool, bool, bool, bool) error {
+				batchInstallFunc := func([]string, bool) error {
 					return errInstallFailed
 				}
 				finder := &mockBinaryPathFinder{
@@ -187,18 +191,18 @@ func TestEnsureTools(t *testing.T) {
 						return "", errToolNotFound
 					},
 				}
-				return resolver, installFunc, finder, nil
+				return resolver, batchInstallFunc, finder, nil
 			},
 			wantErr: true,
 			errIs:   errUtils.ErrToolInstall,
 		},
 		{
-			name: "multiple tools - all installed",
+			name: "multiple tools - batch install called once with all tools",
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 				"cloudposse/atmos":    "1.0.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						parts := strings.Split(toolName, "/")
@@ -208,9 +212,11 @@ func TestEnsureTools(t *testing.T) {
 						return "", "", errInvalidTool
 					},
 				}
-				installCount := 0
-				installFunc := func(string, bool, bool, bool, bool) error {
-					installCount++
+				batchCallCount := 0
+				var receivedSpecs []string
+				batchInstallFunc := func(toolSpecs []string, _ bool) error {
+					batchCallCount++
+					receivedSpecs = toolSpecs
 					return nil
 				}
 				finder := &mockBinaryPathFinder{
@@ -218,19 +224,21 @@ func TestEnsureTools(t *testing.T) {
 						return "", errToolNotFound // All tools need install.
 					},
 				}
-				// Verifier returns true if install was called exactly twice (once per tool).
-				verifier := func() bool { return installCount == 2 }
-				return resolver, installFunc, finder, verifier
+				// Verifier: batch install called once with 2 tools.
+				verifier := func() bool {
+					return batchCallCount == 1 && len(receivedSpecs) == 2
+				}
+				return resolver, batchInstallFunc, finder, verifier
 			},
 			wantErr: false,
 		},
 		{
-			name: "error on first tool stops processing",
+			name: "batch install error returns error",
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 				"cloudposse/atmos":    "1.0.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
+			setupMock: func() (*mockResolver, BatchInstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						parts := strings.Split(toolName, "/")
@@ -240,7 +248,7 @@ func TestEnsureTools(t *testing.T) {
 						return "", "", errInvalidTool
 					},
 				}
-				installFunc := func(string, bool, bool, bool, bool) error {
+				batchInstallFunc := func([]string, bool) error {
 					return errInstallFailed
 				}
 				finder := &mockBinaryPathFinder{
@@ -248,7 +256,7 @@ func TestEnsureTools(t *testing.T) {
 						return "", errToolNotFound
 					},
 				}
-				return resolver, installFunc, finder, nil
+				return resolver, batchInstallFunc, finder, nil
 			},
 			wantErr: true,
 			errIs:   errUtils.ErrToolInstall,
@@ -257,11 +265,11 @@ func TestEnsureTools(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver, installFunc, finder, verifier := tt.setupMock()
+			resolver, batchInstallFunc, finder, verifier := tt.setupMock()
 
 			opts := []InstallerOption{WithResolver(resolver)}
-			if installFunc != nil {
-				opts = append(opts, WithInstallFunc(installFunc))
+			if batchInstallFunc != nil {
+				opts = append(opts, WithBatchInstallFunc(batchInstallFunc))
 			}
 			if finder != nil {
 				opts = append(opts, WithBinaryPathFinder(finder))
@@ -666,7 +674,7 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 	err := os.MkdirAll(binDir, 0o755)
 	require.NoError(t, err)
 
-	installCalls := 0
+	batchCallCount := 0
 
 	resolver := &mockResolver{
 		resolveFunc: func(toolName string) (string, string, error) {
@@ -679,10 +687,16 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 		},
 	}
 
-	installFunc := func(toolSpec string, _, _, _, _ bool) error {
-		installCalls++
-		binaryPath := filepath.Join(binDir, tc.binaryName)
-		return os.WriteFile(binaryPath, []byte("#!/bin/sh\necho "+tc.binaryName), 0o755)
+	batchInstallFunc := func(toolSpecs []string, _ bool) error {
+		batchCallCount++
+		// Simulate installing all tools in the batch.
+		for range toolSpecs {
+			binaryPath := filepath.Join(binDir, tc.binaryName)
+			if writeErr := os.WriteFile(binaryPath, []byte("#!/bin/sh\necho "+tc.binaryName), 0o755); writeErr != nil {
+				return writeErr
+			}
+		}
+		return nil
 	}
 
 	config := &schema.AtmosConfiguration{
@@ -691,7 +705,7 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 
 	inst := NewInstaller(config,
 		WithResolver(resolver),
-		WithInstallFunc(installFunc),
+		WithBatchInstallFunc(batchInstallFunc),
 	)
 
 	deps := make(map[string]string)
@@ -701,7 +715,7 @@ func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
 
 	err = inst.EnsureTools(deps)
 	require.NoError(t, err)
-	assert.Equal(t, tc.wantInstalls, installCalls, tc.wantInstallDesc)
+	assert.Equal(t, tc.wantInstalls, batchCallCount, tc.wantInstallDesc)
 }
 
 func TestEnsureTool(t *testing.T) {
