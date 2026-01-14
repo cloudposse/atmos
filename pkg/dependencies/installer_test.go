@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -588,7 +589,12 @@ func TestIsToolInstalled_DifferentBinaryName(t *testing.T) {
 		require.NoError(t, err)
 
 		// Create binary named 'tofu' (not 'opentofu').
-		binaryPath := filepath.Join(binDir, "tofu")
+		// On Windows, binaries need .exe extension to be recognized as executables.
+		binaryName := "tofu"
+		if runtime.GOOS == "windows" {
+			binaryName = "tofu.exe"
+		}
+		binaryPath := filepath.Join(binDir, binaryName)
 		err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho tofu"), 0o755)
 		require.NoError(t, err)
 
