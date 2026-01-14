@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -76,10 +77,18 @@ func TestSourceProvisionerList(t *testing.T) {
 func TestSourceProvisionerDelete_MissingForce(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/source-provisioner")
 
+	// Create the target directory so delete has something to operate on.
+	targetDir := "components/terraform/vpc-map"
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	t.Cleanup(func() {
+		_ = os.RemoveAll(targetDir)
+	})
+
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "delete", "vpc-map", "--stack", "dev"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force"),
-		"Expected error about missing --force flag")
+	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
+		strings.Contains(err.Error(), "interactive"),
+		"Expected error about missing --force flag or non-interactive mode")
 }

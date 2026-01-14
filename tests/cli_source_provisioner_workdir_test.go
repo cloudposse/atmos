@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -77,10 +78,19 @@ func TestSourceWorkdir_DescribeComponent_LocalWithWorkdir(t *testing.T) {
 func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
 
+	// Create the target directory so delete has something to operate on.
+	// With workdir enabled, the target directory is .workdir/terraform/<stack>-<component>.
+	targetDir := ".workdir/terraform/dev-vpc-remote-workdir"
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "delete", "vpc-remote-workdir", "--stack", "dev"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force"),
-		"Expected error about missing --force flag")
+	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
+		strings.Contains(err.Error(), "interactive"),
+		"Expected error about missing --force flag or non-interactive mode")
 }
