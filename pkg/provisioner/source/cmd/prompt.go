@@ -16,6 +16,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Function variables for dependency injection in tests.
+var (
+	initCliConfigForPrompt    = cfg.InitCliConfig
+	executeDescribeStacksFunc = e.ExecuteDescribeStacks
+)
+
 // PromptForComponent shows an interactive selector for component selection.
 // Lists all terraform components that have source configured.
 func PromptForComponent(cmd *cobra.Command) (string, error) {
@@ -103,12 +109,12 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 // listStacksWithSourceForComponent returns stacks that contain the specified component with source configured.
 func listStacksWithSourceForComponent(component string) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfigForPrompt(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacksFunc(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -152,12 +158,12 @@ func stackContainsComponentWithSource(stackData any, component string) bool {
 // listStacksWithSource returns all stacks that have at least one component with source configured.
 func listStacksWithSource() ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfigForPrompt(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacksFunc(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -202,12 +208,12 @@ func stackHasAnySource(stackData any) bool {
 // listComponentsWithSource returns all terraform components that have source configured in any stack.
 func listComponentsWithSource() ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfigForPrompt(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacksFunc(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
