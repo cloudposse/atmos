@@ -25,7 +25,7 @@
     "@docusaurus/preset-classic": "^3.9.2",
     "@docusaurus/theme-common": "^3.9.2",
     "@docusaurus/theme-mermaid": "^3.9.2",
-    "@excalidraw/excalidraw": "^0.17.6",
+    "@excalidraw/excalidraw": "^0.18.0",
     "@fortawesome/fontawesome-svg-core": "^6.7.2",
     "@fortawesome/free-brands-svg-icons": "^6.7.2",
     "@fortawesome/free-regular-svg-icons": "^6.7.2",
