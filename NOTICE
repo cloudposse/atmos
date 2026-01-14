@@ -31,19 +31,19 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/compute/metadata
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/googleapis/google-cloud-go/blob/compute/metadata/v0.9.0/compute/metadata/LICENSE
 
   - cloud.google.com/go/iam
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/googleapis/google-cloud-go/blob/iam/v1.5.3/iam/LICENSE
 
   - cloud.google.com/go/internal
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/googleapis/google-cloud-go/blob/v0.123.0/LICENSE
 
   - cloud.google.com/go/monitoring
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/googleapis/google-cloud-go/blob/monitoring/v1.24.3/monitoring/LICENSE
 
   - cloud.google.com/go/secretmanager
     License: Apache-2.0
@@ -51,7 +51,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.58.0/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
