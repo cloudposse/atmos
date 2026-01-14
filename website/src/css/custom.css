@@ -279,6 +279,19 @@ article h1 {
     --announcement-bar-text-color: #fff;
 }
 
+/* Fix announcement bar responsive wrapping at mid-range widths */
+/* Override Docusaurus default fixed 30px height on desktop */
+@media (min-width: 997px) {
+    :root {
+        --docusaurus-announcement-bar-height: auto;
+    }
+}
+
+/* Ensure announcement bar content wraps properly */
+div[class*="announcementBarContent"] {
+    line-height: 1.4;
+}
+
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
     --ifm-color-primary: #3578e5;
