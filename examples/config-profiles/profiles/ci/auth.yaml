@@ -1,0 +1,29 @@
+# CI Profile - Authentication
+# GitHub OIDC authentication for CI/CD pipelines
+
+auth:
+  providers:
+    # GitHub OIDC provider for Actions
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+
+  identities:
+    # CI deployment identity
+    ci-deployer:
+      kind: aws/assume-role
+      via:
+        provider: github-oidc
+      principal:
+        # Role trusted by GitHub OIDC
+        assume_role: "arn:aws:iam::123456789012:role/GitHubActionsDeployRole"
+        # Use GitHub run ID for session tracking
+        role_session_name: '{{ env "GITHUB_RUN_ID" }}'
+      session:
+        duration: "1h"  # Short-lived sessions for security
+
+# Note: In CI, you typically want a single, deterministic identity.
+# When the auth defaults PRD is implemented, you can set:
+#   defaults:
+#     identity: ci-deployer
+# This ensures non-interactive selection (no TTY required).

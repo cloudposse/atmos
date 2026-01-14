@@ -7,14 +7,15 @@ id: inspect
 
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
 import useBaseUrl from '@docusaurus/useBaseUrl';
 
 <img width="80" align="right" src={useBaseUrl('/img/hashicorp-packer.svg')} alt="Packer"/>
 
-:::note purpose
+<Intro>
 Use this command to inspect the various components that a Packer template configured for an Atmos component in a stack defines.
 The command will show what variables a template accepts, the builders it defines, the provisioners it defines and the order they'll run, and more.
-:::
+</Intro>
 
 ## Usage
 

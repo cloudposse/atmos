@@ -8,7 +8,7 @@ import Intro from '@site/src/components/Intro'
 import RemoteFile from '@site/src/components/RemoteFile'
 
 <Intro>
-Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to understand exactly what will happen from from the changes in a Pull Request (or any commit) by running a `terraform plan` and surfacing the output as a neatly formatted Job Summary viewable directly within the GitHub UI.
+Simplify provisioning Terraform entirely from within GitHub Action workflows. This action makes it very easy to understand exactly what will happen from the changes in a Pull Request (or any commit) by running a `terraform plan` and surfacing the output as a neatly formatted Job Summary viewable directly within the GitHub UI.
 </Intro>
 
 The Cloud Posse GitHub Action for "Atmos Terraform Plan" simplifies provisioning Terraform from within GitHub using workflows. Understand precisely what to expect from running a `terraform plan` from directly within the GitHub UI for any Pull Request.
@@ -94,7 +94,7 @@ This GitHub Action depends on a few resources:
 
 This action can use any S3 Bucket to keep track of your planfiles. Just ensure the bucket is properly locked down since planfiles may contain secrets.
 
-For example, [vendor in](/core-concepts/vendor/component-manifest) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/core-concepts/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
+For example, [vendor in](/vendor/component-manifest) the [`s3-component`](https://docs.cloudposse.com/components/library/aws/s3-bucket/), then using an [Atmos stack configuration](/learn/stacks/), define a bucket using the [`s3-bucket` component](https://github.com/cloudposse/terraform-aws-components/tree/main/modules/s3-bucket) with this catalog configuration:
 
 ```yaml
 import:

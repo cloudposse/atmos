@@ -62,17 +62,21 @@ const (
 	AtmosVendorConfigFileName     = "vendor"
 
 	ImportSectionName                 = "import"
+	NameSectionName                   = "name"
 	OverridesSectionName              = "overrides"
 	ProvidersSectionName              = "providers"
 	HooksSectionName                  = "hooks"
 	VarsSectionName                   = "vars"
 	SettingsSectionName               = "settings"
+	LocalsSectionName                 = "locals"
 	EnvSectionName                    = "env"
+	DependenciesSectionName           = "dependencies"
 	BackendSectionName                = "backend"
 	BackendTypeSectionName            = "backend_type"
 	RemoteStateBackendSectionName     = "remote_state_backend"
 	RemoteStateBackendTypeSectionName = "remote_state_backend_type"
 	MetadataSectionName               = "metadata"
+	SourceSectionName                 = "source"
 	ComponentSectionName              = "component"
 	ComponentsSectionName             = "components"
 	CommandSectionName                = "command"
@@ -82,6 +86,8 @@ const (
 	PackerTemplateSectionName         = "template"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
+	GenerateSectionName               = "generate"
+	ProvisionSectionName              = "provision"
 	InheritanceSectionName            = "inheritance"
 	IntegrationsSectionName           = "integrations"
 	GithubSectionName                 = "github"
@@ -144,4 +150,10 @@ const (
 	ProfilerTypeFlag    = "--profiler-type"
 	HeatmapFlag         = "--heatmap"
 	HeatmapModeFlag     = "--heatmap-mode"
+
+	// AtmosProfileFlag is the CLI flag for specifying Atmos profiles.
+	AtmosProfileFlag = "--profile"
+
+	// SliceSeparator is the separator used for splitting comma-separated strings into slices.
+	SliceSeparator = ","
 )

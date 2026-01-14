@@ -1,0 +1,425 @@
+package extract
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+func TestMetadata(t *testing.T) {
+	testCases := []struct {
+		name      string
+		instances []schema.Instance
+		expected  []map[string]any
+	}{
+		{
+			name:      "empty instances",
+			instances: []schema.Instance{},
+			expected:  []map[string]any{},
+		},
+		{
+			name: "single instance with metadata",
+			instances: []schema.Instance{
+				{
+					Component:     "vpc",
+					Stack:         "plat-ue2-dev",
+					ComponentType: "terraform",
+					Metadata: map[string]any{
+						"type":        "real",
+						"enabled":     true,
+						"locked":      false,
+						"component":   "vpc-base",
+						"inherits":    []interface{}{"vpc/defaults"},
+						"description": "VPC infrastructure",
+					},
+				},
+			},
+			expected: []map[string]any{
+				{
+					"stack":            "plat-ue2-dev",
+					"component":        "vpc",
+					"component_type":   "terraform",
+					"component_folder": "vpc-base",
+					"type":             "real",
+					"enabled":          true,
+					"locked":           false,
+					"component_base":   "vpc-base",
+					"inherits":         "vpc/defaults",
+					"description":      "VPC infrastructure",
+					"metadata": map[string]any{
+						"type":        "real",
+						"enabled":     true,
+						"locked":      false,
+						"component":   "vpc-base",
+						"inherits":    []interface{}{"vpc/defaults"},
+						"description": "VPC infrastructure",
+					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
+				},
+			},
+		},
+		{
+			name: "instance with multiple inherits",
+			instances: []schema.Instance{
+				{
+					Component:     "eks",
+					Stack:         "plat-ue2-prod",
+					ComponentType: "terraform",
+					Metadata: map[string]any{
+						"type":        "real",
+						"enabled":     true,
+						"locked":      true,
+						"component":   "eks-base",
+						"inherits":    []interface{}{"eks/defaults", "eks/prod-overrides"},
+						"description": "EKS cluster",
+					},
+				},
+			},
+			expected: []map[string]any{
+				{
+					"stack":            "plat-ue2-prod",
+					"component":        "eks",
+					"component_type":   "terraform",
+					"component_folder": "eks-base",
+					"type":             "real",
+					"enabled":          true,
+					"locked":           true,
+					"component_base":   "eks-base",
+					"inherits":         "eks/defaults, eks/prod-overrides",
+					"description":      "EKS cluster",
+					"metadata": map[string]any{
+						"type":        "real",
+						"enabled":     true,
+						"locked":      true,
+						"component":   "eks-base",
+						"inherits":    []interface{}{"eks/defaults", "eks/prod-overrides"},
+						"description": "EKS cluster",
+					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
+				},
+			},
+		},
+		{
+			name: "instance with minimal metadata",
+			instances: []schema.Instance{
+				{
+					Component:     "minimal",
+					Stack:         "test",
+					ComponentType: "terraform",
+					Metadata:      map[string]any{},
+				},
+			},
+			expected: []map[string]any{
+				{
+					"stack":            "test",
+					"component":        "minimal",
+					"component_type":   "terraform",
+					"component_folder": "minimal", // Uses component name when metadata.component is not set.
+					"type":             "real",    // Defaults to "real" since abstract components are filtered.
+					"enabled":          true,      // Defaults to true.
+					"locked":           false,
+					"component_base":   "",
+					"inherits":         "",
+					"description":      "",
+					"metadata":         map[string]any{},
+					"vars":             map[string]any(nil),
+					"settings":         map[string]any(nil),
+					"env":              map[string]any(nil),
+				},
+			},
+		},
+		{
+			name: "multiple instances with mixed metadata",
+			instances: []schema.Instance{
+				{
+					Component:     "vpc",
+					Stack:         "plat-ue2-dev",
+					ComponentType: "terraform",
+					Metadata: map[string]any{
+						"type":        "real",
+						"enabled":     true,
+						"description": "Development VPC",
+					},
+				},
+				{
+					Component:     "eks",
+					Stack:         "plat-ue2-prod",
+					ComponentType: "terraform",
+					Metadata: map[string]any{
+						"type":      "real",
+						"enabled":   true,
+						"locked":    true,
+						"component": "eks-base",
+					},
+				},
+			},
+			expected: []map[string]any{
+				{
+					"stack":            "plat-ue2-dev",
+					"component":        "vpc",
+					"component_type":   "terraform",
+					"component_folder": "vpc", // Uses component name when metadata.component is not set.
+					"type":             "real",
+					"enabled":          true,
+					"locked":           false,
+					"component_base":   "",
+					"inherits":         "",
+					"description":      "Development VPC",
+					"metadata": map[string]any{
+						"type":        "real",
+						"enabled":     true,
+						"description": "Development VPC",
+					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
+				},
+				{
+					"stack":            "plat-ue2-prod",
+					"component":        "eks",
+					"component_type":   "terraform",
+					"component_folder": "eks-base",
+					"type":             "real",
+					"enabled":          true,
+					"locked":           true,
+					"component_base":   "eks-base",
+					"inherits":         "",
+					"description":      "",
+					"metadata": map[string]any{
+						"type":      "real",
+						"enabled":   true,
+						"locked":    true,
+						"component": "eks-base",
+					},
+					"vars":     map[string]any(nil),
+					"settings": map[string]any(nil),
+					"env":      map[string]any(nil),
+				},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := Metadata(tc.instances)
+
+			// Check length matches.
+			assert.Len(t, result, len(tc.expected))
+
+			// Check each item's fields (excluding status which contains ANSI codes).
+			for i := range result {
+				if i < len(tc.expected) {
+					// Verify status field exists and is non-empty (contains ANSI codes for table display).
+					assert.Contains(t, result[i], "status")
+					assert.NotEmpty(t, result[i]["status"])
+
+					// Verify status_text field exists with semantic value (for JSON/YAML/CSV).
+					assert.Contains(t, result[i], "status_text")
+					statusText := result[i]["status_text"].(string)
+					assert.Contains(t, []string{"enabled", "disabled", "locked"}, statusText, "status_text should be a semantic value")
+
+					// Check all other fields match expected.
+					for key, expectedVal := range tc.expected[i] {
+						if key != "status" && key != "status_text" {
+							assert.Equal(t, expectedVal, result[i][key], "mismatch for key %s", key)
+						}
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestMetadata_IncludesVarsSettingsEnv(t *testing.T) {
+	instances := []schema.Instance{
+		{
+			Component:     "vpc",
+			Stack:         "plat-ue2-dev",
+			ComponentType: "terraform",
+			Metadata: map[string]any{
+				"type":        "real",
+				"enabled":     true,
+				"description": "VPC infrastructure",
+			},
+			Vars: map[string]any{
+				"region":      "us-east-2",
+				"environment": "dev",
+				"tags": map[string]string{
+					"Team": "platform",
+					"Env":  "dev",
+				},
+			},
+			Settings: map[string]any{
+				"spacelift": map[string]any{
+					"workspace_enabled": true,
+				},
+			},
+			Env: map[string]any{
+				"AWS_REGION": "us-east-2",
+			},
+		},
+	}
+
+	result := Metadata(instances)
+
+	assert.Len(t, result, 1)
+
+	// Verify status is included (colored dot for table display).
+	assert.Contains(t, result[0], "status")
+	assert.NotEmpty(t, result[0]["status"])
+
+	// Verify status_text is included (semantic value for JSON/YAML/CSV).
+	assert.Contains(t, result[0], "status_text")
+	assert.Equal(t, "enabled", result[0]["status_text"])
+
+	// Verify vars are included
+	assert.Contains(t, result[0], "vars")
+	vars := result[0]["vars"].(map[string]any)
+	assert.Equal(t, "us-east-2", vars["region"])
+	assert.Equal(t, "dev", vars["environment"])
+
+	// Verify settings are included
+	assert.Contains(t, result[0], "settings")
+	settings := result[0]["settings"].(map[string]any)
+	spacelift := settings["spacelift"].(map[string]any)
+	assert.Equal(t, true, spacelift["workspace_enabled"])
+
+	// Verify env is included
+	assert.Contains(t, result[0], "env")
+	env := result[0]["env"].(map[string]any)
+	assert.Equal(t, "us-east-2", env["AWS_REGION"])
+}
+
+func TestGetStatusIndicatorTTY(t *testing.T) {
+	// Test TTY mode: should return colored dot.
+	tests := []struct {
+		name     string
+		enabled  bool
+		locked   bool
+		contains string // The colored dot character
+	}{
+		{
+			name:     "enabled and not locked shows green dot",
+			enabled:  true,
+			locked:   false,
+			contains: "●",
+		},
+		{
+			name:     "locked shows red dot",
+			enabled:  true,
+			locked:   true,
+			contains: "●",
+		},
+		{
+			name:     "disabled shows gray dot",
+			enabled:  false,
+			locked:   false,
+			contains: "●",
+		},
+		{
+			name:     "disabled and locked shows red dot (locked takes precedence)",
+			enabled:  false,
+			locked:   true,
+			contains: "●",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test TTY mode explicitly.
+			result := getStatusIndicatorWithTTY(tt.enabled, tt.locked, true)
+			assert.Contains(t, result, tt.contains, "TTY mode should contain the status dot")
+			assert.NotEmpty(t, result)
+		})
+	}
+}
+
+func TestGetStatusIndicatorNonTTY(t *testing.T) {
+	// Test non-TTY mode: should return semantic text.
+	tests := []struct {
+		name     string
+		enabled  bool
+		locked   bool
+		expected string // The semantic text
+	}{
+		{
+			name:     "enabled and not locked returns enabled text",
+			enabled:  true,
+			locked:   false,
+			expected: "enabled",
+		},
+		{
+			name:     "locked returns locked text",
+			enabled:  true,
+			locked:   true,
+			expected: "locked",
+		},
+		{
+			name:     "disabled returns disabled text",
+			enabled:  false,
+			locked:   false,
+			expected: "disabled",
+		},
+		{
+			name:     "disabled and locked returns locked text (locked takes precedence)",
+			enabled:  false,
+			locked:   true,
+			expected: "locked",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test non-TTY mode explicitly.
+			result := getStatusIndicatorWithTTY(tt.enabled, tt.locked, false)
+			assert.Equal(t, tt.expected, result, "non-TTY mode should return semantic text")
+		})
+	}
+}
+
+func TestGetStatusText(t *testing.T) {
+	tests := []struct {
+		name     string
+		enabled  bool
+		locked   bool
+		expected string
+	}{
+		{
+			name:     "enabled and not locked returns enabled",
+			enabled:  true,
+			locked:   false,
+			expected: "enabled",
+		},
+		{
+			name:     "locked returns locked (takes precedence over enabled)",
+			enabled:  true,
+			locked:   true,
+			expected: "locked",
+		},
+		{
+			name:     "disabled returns disabled",
+			enabled:  false,
+			locked:   false,
+			expected: "disabled",
+		},
+		{
+			name:     "disabled and locked returns locked (locked takes precedence)",
+			enabled:  false,
+			locked:   true,
+			expected: "locked",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getStatusText(tt.enabled, tt.locked)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

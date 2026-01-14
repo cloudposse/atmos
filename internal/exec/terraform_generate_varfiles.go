@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
-	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -18,58 +17,11 @@ import (
 )
 
 // ExecuteTerraformGenerateVarfilesCmd executes `terraform generate varfiles` command.
-func ExecuteTerraformGenerateVarfilesCmd(cmd *cobra.Command, args []string) error {
+// Deprecated: Use ExecuteTerraformGenerateVarfiles with typed parameters instead.
+func ExecuteTerraformGenerateVarfilesCmd(cmd interface{}, args []string) error {
 	defer perf.Track(nil, "exec.ExecuteTerraformGenerateVarfilesCmd")()
 
-	info, err := ProcessCommandLineArgs("terraform", cmd, args, nil)
-	if err != nil {
-		return err
-	}
-
-	info.CliArgs = []string{"terraform", "generate", "varfiles"}
-
-	atmosConfig, err := cfg.InitCliConfig(info, true)
-	if err != nil {
-		return err
-	}
-
-	flags := cmd.Flags()
-
-	fileTemplate, err := flags.GetString("file-template")
-	if err != nil {
-		return err
-	}
-
-	stacksCsv, err := flags.GetString("stacks")
-	if err != nil {
-		return err
-	}
-	var stacks []string
-	if stacksCsv != "" {
-		stacks = strings.Split(stacksCsv, ",")
-	}
-
-	componentsCsv, err := flags.GetString("components")
-	if err != nil {
-		return err
-	}
-	var components []string
-	if componentsCsv != "" {
-		components = strings.Split(componentsCsv, ",")
-	}
-
-	format, err := flags.GetString("format")
-	if err != nil {
-		return err
-	}
-	if format != "" && format != "yaml" && format != "json" && format != "hcl" {
-		return fmt.Errorf("%w: invalid '--format' argument '%s'. Valid values are 'json' (default), 'yaml' and 'hcl'", errUtils.ErrInvalidFlag, format)
-	}
-	if format == "" {
-		format = "json"
-	}
-
-	return ExecuteTerraformGenerateVarfiles(&atmosConfig, fileTemplate, format, stacks, components)
+	return errUtils.ErrDeprecatedCmdNotCallable
 }
 
 // ExecuteTerraformGenerateVarfiles generates varfiles for all terraform components in all stacks.

@@ -231,3 +231,42 @@ settings:
   #            If the source and destination lists have the same length, all items in the destination lists are
   #            deep-merged with all items in the source list.
   list_merge_strategy: replace
+
+# List command configurations
+# Configure output columns and format for different list commands
+list:
+  # Configuration for "atmos list components" command
+  # Shows unique component definitions (deduplicated across stacks)
+  components:
+    format: table
+    columns:
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Stacks
+        value: "{{ .stack_count }}"
+
+  # Configuration for "atmos list instances" command
+  # Shows component instances (one entry per component+stack pair)
+  instances:
+    format: table
+    columns:
+      - name: " "
+        value: "{{ .status }}"
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Component
+        value: "{{ .component }}"
+      - name: Type
+        value: "{{ .type }}"
+      - name: Tenant
+        value: "{{ .vars.tenant }}"
+      - name: Environment
+        value: "{{ .vars.environment }}"
+      - name: Stage
+        value: "{{ .vars.stage }}"
+      - name: Region
+        value: "{{ .vars.region }}"
+      - name: Component Folder
+        value: "{{ .component_folder }}"

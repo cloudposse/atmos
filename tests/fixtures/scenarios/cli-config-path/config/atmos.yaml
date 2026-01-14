@@ -1,0 +1,31 @@
+# This atmos.yaml is in a subdirectory (config/) while stacks/ and components/
+# are at the fixture root level. This tests the scenario where:
+# - ATMOS_CLI_CONFIG_PATH=./config
+# - base_path uses ".." to reference the parent directory (fixture root)
+# - stacks/ and components/ directories are at the fixture root
+#
+# Path Resolution Behavior:
+# - base_path: ".." → resolves relative to config dir (where atmos.yaml is)
+# - stacks.base_path: "stacks" → simple relative, anchored to resolved base_path
+# - components.terraform.base_path: "components/terraform" → same as above
+#
+# This validates that paths starting with ".." or "./" resolve relative to the
+# atmos.yaml location (config-dir-relative), following the convention of
+# tsconfig.json, package.json, etc.
+
+base_path: ".."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

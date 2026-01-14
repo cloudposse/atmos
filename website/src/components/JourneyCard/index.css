@@ -1,0 +1,69 @@
+.journey-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin: 2rem 0;
+}
+
+.journey-card {
+  display: flex;
+  flex-direction: column;
+  background: rgba(0, 0, 0, 0.02);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  padding: 1.5rem;
+  transition: all 0.3s ease;
+}
+
+html[data-theme="dark"] .journey-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.journey-card:hover {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.2);
+  transform: translateY(-4px);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+}
+
+html[data-theme="dark"] .journey-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+}
+
+.journey-card__content {
+  flex: 1;
+}
+
+.journey-card__content h3 {
+  font-size: 1.25rem;
+  margin: 0 0 0.75rem 0;
+  color: #1a1d23;
+}
+
+html[data-theme="dark"] .journey-card__content h3 {
+  color: #fff;
+}
+
+.journey-card__content p {
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #4a5568;
+  margin: 0;
+}
+
+html[data-theme="dark"] .journey-card__content p {
+  color: #ccc;
+}
+
+.journey-card__footer {
+  margin-top: 1.5rem;
+}
+
+.journey-card__footer .button {
+  width: 100%;
+  text-align: center;
+  justify-content: center;
+}

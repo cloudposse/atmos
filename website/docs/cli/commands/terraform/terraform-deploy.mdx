@@ -4,12 +4,13 @@ sidebar_label: deploy
 sidebar_class_name: command
 id: deploy
 ---
+import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 
-:::note purpose
-Use this command to execute `terraform apply -auto-approve` on an Atmos component in an Atmos stack.
-:::
+<Intro>
+Use this command to deploy Terraform changes for an Atmos component in a stack with auto-approval. This combines plan and apply operations in a single command.
+</Intro>
 
 <Screengrab title="atmos terraform deploy --help" slug="atmos-terraform-deploy--help" />
 
@@ -40,6 +41,26 @@ See [all flags](#flags).
 :::tip
 Run `atmos terraform deploy --help` to see all the available options
 :::
+
+## Configuration
+
+Configure default behavior for `terraform deploy` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Run 'terraform init' before deploy
+    deploy_run_init: true
+
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_DEPLOY_RUN_INIT=true
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+```
 
 ## Examples
 
@@ -123,10 +144,10 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
 
     <dt>`--planfile` <em>(optional)</em></dt>
     <dd>
-        The path to a planfile. The `--planfile` flag should be used instead of the planfile argument in the native `terraform apply <planfile>` command .
+        The path to a planfile. The `--planfile` flag should be used instead of the planfile argument in the native `terraform apply <planfile>` command.
 
         ```shell
-        atmos terraform apply <component> -s <stack> --planfile <planfile>
+        atmos terraform deploy <component> -s <stack> --planfile <planfile>
         ```
     </dd>
 
@@ -165,10 +186,106 @@ atmos terraform deploy test/test-component-override-3 -s tenant1-ue2-dev
     </dd>
 </dl>
 
-:::note
+## Native Terraform Flags
 
 The `atmos terraform deploy` command supports all native `terraform apply` options described
 in [Terraform apply options](https://developer.hashicorp.com/terraform/cli/commands/apply#apply-options), with the exception that a planfile argument
-can't be provided on the command line. To use a previously generated planfile, use the `--from-plan` or `--planfile` command-line flags
+can't be provided on the command line. To use a previously generated planfile, use the `--from-plan` or `--planfile` command-line flags.
 
+See [Terraform Planfiles](/components/terraform/planfiles) for a comprehensive guide on working with planfiles in Atmos.
+
+## Multi-Component Operations
+
+Execute `terraform deploy` across multiple components using filtering flags. Since deploy auto-approves, this is particularly powerful for automated deployments. All flags can be combined with `--dry-run` to preview what would be executed.
+
+:::warning
+Multi-component deploy operations will auto-approve all changes. Use `--dry-run` first to verify which components will be affected.
 :::
+
+### Deploy All Components
+
+```shell
+# Deploy all components in all stacks
+atmos terraform deploy --all
+
+# Deploy all components in a specific stack
+atmos terraform deploy --all --stack prod
+atmos terraform deploy --stack prod
+```
+
+### Deploy Affected Components
+
+Deploy only components affected by changes in the current branch (requires git). Components are processed in dependency order:
+
+```shell
+# Deploy affected components in all stacks
+atmos terraform deploy --affected
+
+# Deploy affected components in a specific stack
+atmos terraform deploy --affected --stack prod
+
+# Include dependent components (components that depend on affected components)
+atmos terraform deploy --affected --include-dependents
+
+# Clone the target reference instead of checking it out
+atmos terraform deploy --affected --clone-target-ref=true
+```
+
+### Deploy Specific Components
+
+```shell
+# Deploy specific components in all stacks
+atmos terraform deploy --components vpc,eks
+
+# Deploy specific components in a specific stack
+atmos terraform deploy --components vpc,eks --stack prod
+```
+
+### Deploy Components by Query
+
+Filter components using [YQ](https://mikefarah.gitbook.io/yq) expressions against component configuration:
+
+```shell
+# Deploy components where team tag equals "eks"
+atmos terraform deploy --query '.vars.tags.team == "eks"'
+
+# Deploy components in a specific account
+atmos terraform deploy --query '.settings.context.account_id == 12345'
+
+# Combine with stack filter
+atmos terraform deploy --query '.vars.tags.team == "eks"' --stack prod
+```
+
+### Multi-Component Flags
+
+<dl>
+    <dt>`--all`</dt>
+    <dd>Deploy all components in all stacks (or specified stack with `--stack`).</dd>
+
+    <dt>`--affected`</dt>
+    <dd>Deploy components affected by git changes in dependency order. Supports all flags from [`atmos describe affected`](/cli/commands/describe/affected).</dd>
+
+    <dt>`--components`</dt>
+    <dd>Deploy specific components by name (comma-separated or repeated flag).</dd>
+
+    <dt>`--query`</dt>
+    <dd>Deploy components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
+
+    <dt>`--include-dependents`</dt>
+    <dd>With `--affected`, also deploy components that depend on affected components, recursively.</dd>
+
+    <dt>`--ref`</dt>
+    <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>
+
+    <dt>`--sha`</dt>
+    <dd>Git commit SHA to compare against.</dd>
+
+    <dt>`--clone-target-ref`</dt>
+    <dd>Clone the target reference instead of checking it out locally.</dd>
+</dl>
+
+## Related Commands
+
+- [terraform plan](/cli/commands/terraform/plan) - Generate an execution plan
+- [terraform apply](/cli/commands/terraform/apply) - Apply changes with confirmation
+- [terraform destroy](/cli/commands/terraform/destroy) - Destroy infrastructure

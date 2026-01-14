@@ -3,11 +3,16 @@ title: "atmos list settings"
 sidebar_label: settings
 sidebar_class_name: command
 id: settings
+description: Use this command to list component settings across all stacks
 ---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-# atmos list settings
+<Intro>
+Use this command to list component settings across all stacks in a comparison table. View how settings vary between environments to quickly spot configuration differences and validate consistency.
+</Intro>
 
-The `atmos list settings` command displays component settings across all stacks.
+<Screengrab title="atmos list settings --help" slug="atmos-list-settings--help" />
 
 ## Usage
 
@@ -41,6 +46,8 @@ The command is particularly useful for:
   <dd>Delimiter for csv/tsv output (default: `,` for csv, `\t` for tsv)</dd>
   <dt>`--stack string`</dt>
   <dd>Filter by stack by wildcard pattern (e.g., `*-dev-*`, `prod-*`, `*-{dev,staging}-*`)</dd>
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing settings.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list settings --identity my-aws-identity`<br/><br/>Can also be set via `ATMOS_IDENTITY` environment variable.</dd>
 </dl>
 
 ## Examples

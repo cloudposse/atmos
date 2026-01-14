@@ -6,6 +6,20 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+// CompletionFunc is a type alias for Cobra's ValidArgsFunction.
+// This function provides completion values for flags and positional arguments.
+// It's used both for shell completion and for interactive prompts.
+//
+// Parameters:
+//   - cmd: The cobra command being completed.
+//   - args: Positional arguments provided so far.
+//   - toComplete: Partial string being completed.
+//
+// Returns:
+//   - []string: List of completion options.
+//   - cobra.ShellCompDirective: Directive for shell completion behavior.
+type CompletionFunc func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
+
 // Flag represents a command-line flag configuration.
 // This is used by FlagRegistry to store reusable flag definitions.
 type Flag interface {
@@ -33,18 +47,24 @@ type Flag interface {
 	// GetEnvVars returns the list of environment variable names to bind to this flag.
 	// Returns nil if no env vars.
 	GetEnvVars() []string
+
+	// GetCompletionFunc returns the custom completion function for this flag.
+	// Returns nil if no custom completion is configured.
+	// Custom completions enable dynamic shell completion based on codebase state.
+	GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
 }
 
 // StringFlag represents a string-valued flag.
 type StringFlag struct {
-	Name        string
-	Shorthand   string
-	Default     string
-	Description string
-	Required    bool
-	NoOptDefVal string   // Value when flag used without argument (identity pattern).
-	EnvVars     []string // Environment variables to bind.
-	ValidValues []string // Valid values for this flag (enforced during validation).
+	Name           string
+	Shorthand      string
+	Default        string
+	Description    string
+	Required       bool
+	NoOptDefVal    string   // Value when flag used without argument (identity pattern).
+	EnvVars        []string // Environment variables to bind.
+	ValidValues    []string // Valid values for this flag (enforced during validation).
+	CompletionFunc func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective)
 }
 
 // GetName implements Flag.
@@ -102,6 +122,13 @@ func (f *StringFlag) GetValidValues() []string {
 	defer perf.Track(nil, "flags.StringFlag.GetValidValues")()
 
 	return f.ValidValues
+}
+
+// GetCompletionFunc implements Flag.
+func (f *StringFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "flags.StringFlag.GetCompletionFunc")()
+
+	return f.CompletionFunc
 }
 
 // BoolFlag represents a boolean-valued flag.
@@ -162,6 +189,13 @@ func (f *BoolFlag) GetEnvVars() []string {
 	return f.EnvVars
 }
 
+// GetCompletionFunc implements Flag.
+func (f *BoolFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "flags.BoolFlag.GetCompletionFunc")()
+
+	return nil // Bool flags don't use custom completion.
+}
+
 // IntFlag represents an integer-valued flag.
 type IntFlag struct {
 	Name        string
@@ -219,6 +253,13 @@ func (f *IntFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flags.IntFlag.GetEnvVars")()
 
 	return f.EnvVars
+}
+
+// GetCompletionFunc implements Flag.
+func (f *IntFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "flags.IntFlag.GetCompletionFunc")()
+
+	return nil // Int flags don't use custom completion.
 }
 
 // StringSliceFlag represents a string slice flag.
@@ -285,6 +326,13 @@ func (f *StringSliceFlag) GetEnvVars() []string {
 	defer perf.Track(nil, "flags.StringSliceFlag.GetEnvVars")()
 
 	return f.EnvVars
+}
+
+// GetCompletionFunc implements Flag.
+func (f *StringSliceFlag) GetCompletionFunc() func(*cobra.Command, []string, string) ([]string, cobra.ShellCompDirective) {
+	defer perf.Track(nil, "flags.StringSliceFlag.GetCompletionFunc")()
+
+	return nil // StringSlice flags don't use custom completion.
 }
 
 // positionalArgsConfig stores positional argument configuration.

@@ -64,6 +64,18 @@ atmos auth login -i
 
     **Environment variables:** `ATMOS_IDENTITY` or `IDENTITY` (checked in that order)
   </dd>
+
+  <dt>`--provider` <em>(alias `-p`)</em></dt>
+  <dd>
+    Authenticate directly with a provider (bypassing identity selection). This is useful for:
+
+    - **First-time login** with `auto_provision_identities: true` when no identities exist yet
+    - **Provider-level authentication** without specifying a particular identity
+
+    When no identities are configured and no `--provider` flag is specified, Atmos automatically
+    falls back to provider authentication: a single provider is auto-selected, multiple providers
+    prompt for selection (interactive) or require `--provider` flag (non-interactive).
+  </dd>
 </dl>
 
 ## Interactive Identity Selection
@@ -83,6 +95,38 @@ The interactive selector displays all configured identities with arrow key navig
 - Configure a default identity in your `atmos.yaml`
 - Explicitly specify the identity using `--identity <name>` or environment variable
 
+## Integrations (ECR, EKS)
+
+When you authenticate with an identity, Atmos automatically triggers any **integrations** linked to that identity (when `auto_provision` is enabled, which is the default). Integrations provide client-only credential materializations for services like ECR and EKS.
+
+```yaml
+auth:
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      # ... identity config ...
+
+  integrations:
+    dev/ecr:
+      kind: aws/ecr
+      via:
+        identity: dev-admin    # Links to the identity above
+      spec:
+        registry:
+          account_id: "123456789012"
+          region: us-east-2
+```
+
+```bash
+$ atmos auth login dev-admin
+Successfully authenticated as dev-admin
+✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 11h59m)
+```
+
+Integration failures are non-blocking - your identity authentication succeeds even if an integration fails. You can retry integrations separately using [`atmos auth ecr-login`](/cli/commands/auth/ecr-login).
+
+See [ECR Authentication Tutorial](/tutorials/ecr-authentication) for detailed configuration examples.
+
 ## Notes
 
 - Prints provider, identity, account, region, and expiration when successful.
@@ -93,3 +137,29 @@ The interactive selector displays all configured identities with arrow key navig
   - You want to browse available identities before selecting
   - You're working in a team environment with multiple configured identities
 - For AWS SSO (IAM Identity Center), you will see a **verification code** displayed in the terminal. This is a device authorization user code (e.g., "WDDD-HRQV") that AWS generates for the device flow - **this is NOT an MFA token**. The code is displayed so you can visually verify it matches what AWS shows in the browser. Any MFA prompts will appear in the browser during authentication.
+- For Azure device code authentication, you will see a similar **verification code** and URL to complete browser-based authentication. Atmos writes credentials to the Azure CLI MSAL cache, ensuring full compatibility with Terraform's Azure providers (azurerm, azuread, azapi).
+
+## Authentication Methods
+
+Atmos supports multiple authentication methods for different cloud providers:
+
+### AWS
+- IAM Identity Center (SSO)
+- IAM Roles Anywhere (certificate-based)
+- OIDC (GitHub Actions, GitLab CI)
+- Static credentials
+
+See [Migrating from Leapp](/tutorials/migrating-from-leapp) for AWS examples.
+
+### Azure
+- Device Code Flow (browser-based)
+- OIDC (workload identity for CI/CD)
+- Service Principals (client credentials)
+
+See [Azure Authentication](/tutorials/azure-authentication) for detailed Azure configuration.
+
+## See Also
+
+- [Auth ECR Login Command](/cli/commands/auth/ecr-login) — Login to AWS ECR registries
+- [ECR Authentication Tutorial](/tutorials/ecr-authentication) — Step-by-step ECR setup guide
+- [Auth Providers Configuration](/cli/configuration/auth/providers) — Configure AWS SSO, SAML, and OIDC providers (including IAM permissions for identity provisioning)

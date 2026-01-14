@@ -1,0 +1,74 @@
+package backend
+
+import (
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+var deleteParser *flags.StandardParser
+
+var deleteCmd = &cobra.Command{
+	Use:   "delete <component>",
+	Short: "Delete backend infrastructure",
+	Long: `Permanently delete backend infrastructure.
+
+Requires the --force flag for safety. The backend must be empty
+(no state files) before it can be deleted.`,
+	Example: `  atmos terraform backend delete vpc --stack dev --force`,
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		defer perf.Track(atmosConfigPtr, "backend.delete.RunE")()
+
+		component := args[0]
+
+		v := viper.GetViper()
+		opts, err := ParseCommonFlags(cmd, deleteParser)
+		if err != nil {
+			return err
+		}
+
+		force := v.GetBool("force")
+
+		// Initialize config and auth using injected dependency.
+		atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, opts.Stack, opts.Identity)
+		if err != nil {
+			return err
+		}
+
+		// Create describe component callback.
+		describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth
+
+		// Execute delete command using injected provisioner.
+		return prov.DeleteBackend(&DeleteBackendParams{
+			AtmosConfig:  atmosConfig,
+			Component:    component,
+			Stack:        opts.Stack,
+			Force:        force,
+			DescribeFunc: describeFunc,
+			AuthContext:  authContext,
+		})
+	},
+}
+
+func init() {
+	deleteCmd.DisableFlagParsing = false
+
+	// Create parser with functional options.
+	deleteParser = flags.NewStandardParser(
+		flags.WithStackFlag(),
+		flags.WithIdentityFlag(),
+		flags.WithBoolFlag("force", "", false, "Force deletion without confirmation"),
+		flags.WithEnvVars("force", "ATMOS_FORCE"),
+	)
+
+	// Register flags with the command.
+	deleteParser.RegisterFlags(deleteCmd)
+
+	// Bind flags to Viper.
+	if err := deleteParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+}

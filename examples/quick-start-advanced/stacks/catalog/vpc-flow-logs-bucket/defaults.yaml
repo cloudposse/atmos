@@ -4,6 +4,7 @@ components:
       metadata:
         # Point to the Terraform component
         component: vpc-flow-logs-bucket
+        description: "S3 bucket for VPC Flow Logs storage"
       vars:
         enabled: true
         name: "vpc-flow-logs"

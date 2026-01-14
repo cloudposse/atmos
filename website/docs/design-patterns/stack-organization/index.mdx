@@ -1,0 +1,64 @@
+---
+title: Stack Organization Patterns
+sidebar_position: 1
+sidebar_label: Overview
+description: Design patterns for structuring Atmos stacks
+slug: /design-patterns/stack-organization
+---
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Patterns</PillBox>
+
+<Intro>
+These patterns show how to organize your stack files as your infrastructure grows from simple to complex.
+</Intro>
+
+## Start Here
+
+**New to Atmos?** Start with the simplest pattern that meets your needs:
+
+| Pattern | Best For |
+|---------|----------|
+| [Basic Stack Organization](/design-patterns/stack-organization/basic-stack-organization) | Single region, dev/staging/prod environments |
+| [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) | Deploying to multiple AWS regions |
+| [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) | Enterprise with multiple teams, accounts, regions |
+
+## Building Blocks
+
+These patterns can be combined with the patterns above:
+
+| Pattern | Purpose |
+|---------|---------|
+| [Mixins](/design-patterns/component-catalog/mixins) | Reusable configuration fragments (region defaults, stage defaults) |
+| [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) | Group components by function (network, data, compute) |
+| [_defaults.yaml Convention](/design-patterns/stack-organization/defaults-pattern) | Naming convention for inheritance files |
+
+## Progression Path
+
+Most teams follow this progression as they grow:
+
+```
+Basic (dev/staging/prod)
+    ↓
+Multi-Region (add regions)
+    ↓
+Organizational Hierarchy (add teams/accounts)
+```
+
+Each pattern builds on the previous one. You don't need to start with the most complex pattern—start simple and evolve.
+
+:::tip
+Even if you know you'll need enterprise scale eventually, start with the Basic pattern to learn Atmos concepts, then migrate to more complex patterns as needed.
+:::
+
+## Related Patterns
+
+- [Component Catalog](/design-patterns/component-catalog) - Organize reusable component defaults
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Inherit configuration between components
+
+## References
+
+- [Catalogs](/howto/catalogs)
+- [Mixins](/howto/mixins)
+- [Stack Imports](/stacks/imports)

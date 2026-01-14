@@ -6,6 +6,12 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+const (
+	// ExitCodeSIGINT is the POSIX exit code for SIGINT (Ctrl+C).
+	// Calculated as 128 + signal_number, where SIGINT is signal 2.
+	ExitCodeSIGINT = 130
+)
+
 // exitCoder wraps an error and specifies an exit code.
 type exitCoder struct {
 	cause error

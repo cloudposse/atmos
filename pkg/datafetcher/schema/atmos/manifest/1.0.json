@@ -4,6 +4,10 @@
   "title": "JSON Schema for Atmos Stack Manifest files. Version 1.0. https://atmos.tools",
   "type": "object",
   "properties": {
+    "name": {
+      "type": "string",
+      "description": "Logical name for this stack. Takes precedence over name_template and name_pattern from atmos.yaml."
+    },
     "import": {
       "$ref": "#/definitions/import"
     },
@@ -27,6 +31,9 @@
     },
     "settings": {
       "$ref": "#/definitions/settings"
+    },
+    "locals": {
+      "$ref": "#/definitions/locals"
     },
     "components": {
       "$ref": "#/definitions/components"
@@ -204,6 +211,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -276,6 +286,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             },
@@ -322,6 +335,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -380,6 +396,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             }
@@ -408,6 +427,9 @@
             },
             "settings": {
               "$ref": "#/definitions/settings"
+            },
+            "locals": {
+              "$ref": "#/definitions/locals"
             },
             "command": {
               "$ref": "#/definitions/command"
@@ -466,6 +488,9 @@
             "settings": {
               "$ref": "#/definitions/settings"
             },
+            "locals": {
+              "$ref": "#/definitions/locals"
+            },
             "command": {
               "$ref": "#/definitions/command"
             }
@@ -496,6 +521,10 @@
           "type": "object",
           "additionalProperties": false,
           "properties": {
+            "name": {
+              "type": "string",
+              "description": "Logical component identity used for workspace key prefix auto-generation. Inheritable from base components."
+            },
             "type": {
               "type": "string",
               "enum": [
@@ -674,6 +703,20 @@
     "env": {
       "title": "env",
       "description": "Env section",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": true
+        }
+      ]
+    },
+    "locals": {
+      "title": "locals",
+      "description": "File-scoped local variables for use within templates. Locals are resolved before other sections and can reference each other within the same file. Unlike vars and settings, locals do NOT inherit across file boundaries.",
       "oneOf": [
         {
           "type": "string",

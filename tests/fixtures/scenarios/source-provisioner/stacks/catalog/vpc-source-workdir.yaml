@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Component with source + workdir enabled
+# This tests downloading source directly to workdir
+components:
+  terraform:
+    vpc-workdir:
+      source:
+        uri: "github.com/cloudposse/terraform-null-label//exports"
+        version: "0.25.0"
+        included_paths:
+          - "*.tf"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        environment: "test"

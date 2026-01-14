@@ -3,7 +3,6 @@ package cmd
 import (
 	_ "embed"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -337,7 +336,7 @@ func renderJSON(providers map[string]schema.Provider, identities map[string]sche
 
 	data, err := json.MarshalIndent(output, "", "  ")
 	if err != nil {
-		return "", errors.Join(errUtils.ErrParseFile, fmt.Errorf("failed to marshal JSON: %w", err))
+		return "", fmt.Errorf("%w: failed to marshal JSON: %w", errUtils.ErrParseFile, err)
 	}
 
 	return string(data) + "\n", nil
@@ -359,7 +358,7 @@ func renderYAML(providers map[string]schema.Provider, identities map[string]sche
 
 	data, err := yaml.Marshal(output)
 	if err != nil {
-		return "", errors.Join(errUtils.ErrParseFile, fmt.Errorf("failed to marshal YAML: %w", err))
+		return "", fmt.Errorf("%w: failed to marshal YAML: %w", errUtils.ErrParseFile, err)
 	}
 
 	return string(data), nil
@@ -371,12 +370,12 @@ func loadAuthManagerForList() (authTypes.AuthManager, error) {
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, fmt.Errorf("failed to load atmos config: %w", err))
+		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	manager, err := createAuthManager(&atmosConfig.Auth)
 	if err != nil {
-		return nil, errors.Join(errUtils.ErrInvalidAuthConfig, fmt.Errorf("failed to create auth manager: %w", err))
+		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return manager, nil

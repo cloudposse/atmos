@@ -94,6 +94,7 @@ tests:
       - "--identity"
       - "mock-identity"
     expect:
+      ignore_trailing_whitespace: true  # Lipgloss table padding varies by platform/terminal width
       diff:
         - "Expires"
         - "Last Updated"
@@ -240,6 +241,9 @@ tests:
       - "--"
       - "echo"
       - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
     expect:
       diff: []
       stderr: []

@@ -8,6 +8,7 @@
       "deploy_run_init": true,
       "init_run_reconfigure": true,
       "auto_generate_backend_file": false,
+      "auto_generate_files": false,
       "command": "",
       "shell": {
         "prompt": ""
@@ -17,7 +18,8 @@
       },
       "plan": {
         "skip_planfile": false
-      }
+      },
+      "plugin_cache": true
     },
     "helmfile": {
       "base_path": "",
@@ -31,6 +33,10 @@
       "base_path": "",
       "command": ""
     },
+    "list": {
+      "format": "",
+      "columns": null
+    },
     "Plugins": null
   },
   "stacks": {
@@ -42,7 +48,12 @@
       "**/_defaults.yaml"
     ],
     "name_pattern": "{stage}",
-    "name_template": ""
+    "name_template": "",
+    "list": {
+      "format": "",
+      "columns": null
+    },
+    "inherit": {}
   },
   "workflows": {
     "base_path": "",
@@ -82,7 +93,7 @@
     "list_merge_strategy": "",
     "terminal": {
       "max_width": 0,
-      "pager": "0",
+      "pager": "false",
       "unicode": false,
       "syntax_highlighting": {
         "enabled": false,
@@ -166,6 +177,7 @@
     }
   },
   "initialized": true,
+  "basePathAbsolute": "/absolute/path/to/repo/examples/demo-stacks",
   "stacksBaseAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/stacks",
   "includeStackAbsolutePaths": [
     "/absolute/path/to/repo/examples/demo-stacks/stacks/deploy/**/*"
@@ -178,11 +190,8 @@
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
-    "Check": {
-      "Enabled": false,
-      "Timeout": 0,
-      "Frequency": ""
-    }
+    "check": {},
+    "constraint": {}
   },
   "validate": {
     "editorconfig": {}
@@ -214,5 +223,29 @@
     "host": "",
     "file": "",
     "profile_type": ""
+  },
+  "toolchain": {
+    "install_path": "",
+    "file_path": "",
+    "tools_dir": "",
+    "versions_file": "",
+    "use_tool_versions": false,
+    "use_lock_file": false
+  },
+  "profiles": {},
+  "metadata": {},
+  "list": {
+    "components": {
+      "format": "",
+      "columns": null
+    },
+    "instances": {
+      "format": "",
+      "columns": null
+    },
+    "stacks": {
+      "format": "",
+      "columns": null
+    }
   }
 }

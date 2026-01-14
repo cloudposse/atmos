@@ -129,3 +129,9 @@ func (v *VersionCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArg
 func (v *VersionCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
+
+// GetAliases returns command aliases.
+// Version command has no aliases.
+func (v *VersionCommandProvider) GetAliases() []internal.CommandAlias {
+	return nil
+}

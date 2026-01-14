@@ -1,0 +1,17 @@
+# Developer Profile - Settings
+# Optimized for local development with detailed logging and wide terminal output
+
+settings:
+  terminal:
+    color: true
+    max_width: 120  # Wider output for large monitors
+    unicode: true
+    syntax_highlighting:
+      enabled: true
+      theme: "dracula"  # Popular developer theme
+    title: true
+    alerts: true
+
+logs:
+  level: Debug  # Detailed logging for troubleshooting
+  file: "/dev/stderr"

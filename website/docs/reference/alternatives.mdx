@@ -74,8 +74,8 @@ https://github.com/go-task/task
 Task is a task runner and build tool that aims to be simpler and easier to use than GNU Make.
 
 :::info
-Atmos supports native [workflows](/core-concepts/workflows) that have very similar schema to "Taskfile", only they can be defined together
-with [Stacks](/core-concepts/stacks) or as standalone workflow files.
+Atmos supports native [workflows](/workflows) that have very similar schema to "Taskfile", only they can be defined together
+with [Stacks](/learn/stacks) or as standalone workflow files.
 :::
 
 ### Variant
@@ -87,7 +87,7 @@ Variant lets you wrap all your scripts and CLIs into a modern CLI and a single-e
 
 :::info
 The earliest versions of `atmos` were built on top of [`variant2`](https://github.com/mumoshu/variant2) until we decided to rewrite it from the ground
-up in pure Go. Atmos supports native [workflows](/core-concepts/workflows) which provide similar benefits.
+up in pure Go. Atmos supports native [workflows](/workflows) which provide similar benefits.
 :::
 
 ### AppBuilder by Choria
@@ -98,7 +98,7 @@ AppBuilder is a tool built in Golang to create a friendly CLI command that wraps
 
 :::info
 Atmos is heavily inspired by the excellent schema provided by AppBuilder and has implemented a similar interface as part of
-our [Custom Commands](/core-concepts/custom-commands).
+our [Custom Commands](/cli/configuration/commands).
 :::
 
 ## Terraform-specific Tooling Alternatives
@@ -108,7 +108,7 @@ There are many tools explicitly designed around how to deploy with Terraform.
 The following is a list of tools that only support Terraform.
 
 :::tip Atmos Differentiators
-Atmos supports Terraform and can also be used to manage any command-line tool. For example, by combining [Custom commands](/core-concepts/custom-commands) and [workflows](/core-concepts/workflows), it's possible to support any CLI tool (even the ones listed below) or even reimplement the core functionality of Atmos. That's how extensible it is.
+Atmos supports Terraform and can also be used to manage any command-line tool. For example, by combining [Custom commands](/cli/configuration/commands) and [workflows](/workflows), it's possible to support any CLI tool (even the ones listed below) or even reimplement the core functionality of Atmos. That's how extensible it is.
 :::
 
 ### Terragrunt by Gruntwork

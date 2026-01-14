@@ -1,0 +1,547 @@
+---
+title: atmos terraform backend
+sidebar_label: backend
+sidebar_class_name: command
+id: terraform-backend
+description: Manage Terraform state backend infrastructure
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use these commands to manage Terraform state backend infrastructure. This solves the Terraform bootstrap problem by automatically provisioning backend storage with secure defaults, making it compatible with any Terraform-managed backend.
+</Intro>
+
+<Screengrab title="atmos terraform backend --help" slug="atmos-terraform-backend--help" />
+
+## Usage
+
+```shell
+atmos terraform backend <subcommand> [options]
+```
+
+## Available Subcommands
+
+<dl>
+  <dt>`create <component>`</dt>
+  <dd>Provision backend infrastructure for a component</dd>
+
+  <dt>`list`</dt>
+  <dd>List all backends in a stack</dd>
+
+  <dt>`describe <component>`</dt>
+  <dd>Show backend configuration from stack</dd>
+
+  <dt>`update <component>`</dt>
+  <dd>Update backend configuration (idempotent)</dd>
+
+  <dt>`delete <component>`</dt>
+  <dd>Delete backend infrastructure (requires --force)</dd>
+</dl>
+
+## Creating Backends
+
+Provision backend infrastructure for a component in a specific stack:
+
+```shell
+atmos terraform backend create <component> --stack <stack>
+```
+
+The backend must have `provision.backend.enabled: true` in its stack configuration.
+
+## Examples
+
+### Create Backend
+
+Provision an S3 bucket with secure defaults:
+
+```shell
+atmos terraform backend create vpc --stack dev
+```
+
+This creates an S3 bucket (if it doesn't exist) with:
+- Versioning enabled
+- AES-256 encryption
+- Public access blocked
+- Resource tags applied
+
+### List Backends
+
+Show all backend configurations in a stack:
+
+```shell
+atmos terraform backend list --stack dev
+```
+
+### Describe Backend Configuration
+
+View a component's backend configuration from the stack:
+
+```shell
+atmos terraform backend describe vpc --stack dev
+atmos terraform backend describe vpc --stack dev --format json
+```
+
+### Update Backend
+
+Apply configuration changes to existing backend (idempotent):
+
+```shell
+atmos terraform backend update vpc --stack dev
+```
+
+### Delete Backend
+
+Remove backend infrastructure (requires --force for safety):
+
+```shell
+atmos terraform backend delete vpc --stack dev --force
+```
+
+### Provision Multiple Backends
+
+```shell
+atmos terraform backend create vpc --stack dev
+atmos terraform backend create eks --stack dev
+atmos terraform backend create rds --stack dev
+```
+
+## Arguments
+
+<dl>
+  <dt>`component`</dt>
+  <dd>The Atmos component name (required for create, describe, update, delete)</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s`</dt>
+  <dd>Atmos stack name (required). Can also be set via `ATMOS_STACK` environment variable</dd>
+
+  <dt>`--identity` / `-i`</dt>
+  <dd>Identity to use for authentication. Overrides component's default identity. Use without value to select interactively</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format for list and describe commands: `table`, `yaml`, `json` (default: varies by command)</dd>
+
+  <dt>`--force`</dt>
+  <dd>Force deletion without confirmation (delete command only)</dd>
+</dl>
+
+## Authentication
+
+Backend commands support both global and component-level authentication, consistent with regular Terraform commands.
+
+### Component-Level Identity
+
+Components can specify their own authentication identity with a default:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      # Component-level auth configuration
+      auth:
+        identities:
+          vpc-deployer:
+            default: true  # Used automatically for this component
+            kind: aws/permission-set
+            via:
+              provider: aws-sso
+            principal:
+              name: "NetworkAdmin"
+              account:
+                name: "network-dev"
+```
+
+With this configuration, backend commands automatically use the `vpc-deployer` identity:
+
+```shell
+# Automatically uses vpc-deployer identity
+atmos terraform backend create vpc --stack dev
+atmos terraform backend delete vpc --stack dev --force
+```
+
+### Identity Flag Override
+
+The `--identity` flag overrides the component's default identity:
+
+```shell
+# Override component default with admin identity
+atmos terraform backend create vpc --stack dev --identity admin
+```
+
+### Global Identity
+
+Without component-level auth, backend commands use global auth configuration from `atmos.yaml` or the `--identity` flag.
+
+See [Authentication and Identity](/cli/commands/auth/usage) for complete auth configuration details.
+
+## How It Works
+
+### Manual Provisioning
+
+When you run `atmos terraform backend create`:
+
+1. **Load Configuration** - Atmos loads the component's stack configuration
+2. **Check Provisioning** - Verifies `provision.backend.enabled: true` is set
+3. **Select Provisioner** - Chooses provisioner based on `backend_type` (s3, gcs, azurerm)
+4. **Check Existence** - Verifies if backend already exists (idempotent)
+5. **Provision** - Creates backend with hardcoded security defaults if needed
+6. **Apply Settings** - Configures versioning, encryption, access controls, and tags
+
+### Automatic Provisioning
+
+Backends are also provisioned **automatically** when running Terraform commands if `provision.backend.enabled: true`:
+
+```shell
+# Backend provisioned automatically before terraform init
+atmos terraform plan vpc --stack dev
+atmos terraform apply vpc --stack dev
+```
+
+The automatic flow:
+
+```
+Auth Setup (TerraformPreHook)
+  ↓
+Backend Provisioning (if enabled)
+  ↓
+Terraform Init
+  ↓
+Terraform Command
+```
+
+### Solving the Terraform Bootstrap Problem
+
+Terraform has a chicken-and-egg problem: you need infrastructure to store state, but you need state to manage infrastructure. Atmos solves this by:
+
+1. **Automatic Detection** - Reads backend configuration from stack manifests
+2. **Secure Defaults** - Creates backend with hardcoded security settings
+3. **Idempotent Operations** - Safe to run multiple times
+4. **Terraform Compatible** - Works with any Terraform-managed backend
+
+This eliminates manual backend setup and makes Terraform backends work like any other infrastructure resource.
+
+## Configuration
+
+Enable backend provisioning in your stack manifest:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      backend_type: s3  # Must be at component level
+
+      backend:
+        bucket: acme-ue1-dev-tfstate
+        key: vpc/terraform.tfstate
+        region: us-east-1
+        use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
+
+      provision:
+        backend:
+          enabled: true  # Enable automatic provisioning
+```
+
+## Configuration Hierarchy
+
+The `provision.backend` configuration supports Atmos's deep-merge system and can be specified at multiple levels in the stack hierarchy. This provides flexibility to set defaults at high levels and override at component level.
+
+### Global Default (Organization-Level)
+
+Enable provisioning for all components in an organization:
+
+```yaml
+# stacks/orgs/acme/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true
+```
+
+All components in this organization will inherit `provision.backend.enabled: true` unless explicitly overridden.
+
+### Environment-Level Configuration
+
+Set different provisioning policies per environment:
+
+```yaml
+# stacks/orgs/acme/plat/dev/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: true  # Auto-provision in dev
+
+# stacks/orgs/acme/plat/prod/_defaults.yaml
+terraform:
+  provision:
+    backend:
+      enabled: false  # Pre-provisioned backends in prod
+```
+
+### Component Inheritance
+
+Use `metadata.inherits` to share provision configuration:
+
+```yaml
+# stacks/catalog/vpc/defaults.yaml
+components:
+  terraform:
+    vpc/defaults:
+      provision:
+        backend:
+          enabled: true
+
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+      # Inherits provision.backend.enabled: true
+```
+
+### Component-Level Override
+
+Override inherited settings per component:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      provision:
+        backend:
+          enabled: false  # Disable for this specific component
+```
+
+**Deep-Merge Behavior:** Atmos combines configurations from all levels, giving you maximum flexibility:
+- Set defaults at organization or environment level
+- Override per component when needed
+- Use catalog inheritance for reusable patterns
+- Component-level configuration has highest precedence
+
+## Supported Backend Types
+
+### S3 (AWS)
+
+**Hardcoded Defaults:**
+- Versioning: Enabled
+- Encryption: AES-256 (AWS-managed keys)
+- Public Access: Blocked (all 4 settings)
+- Locking: Native S3 locking (Terraform 1.10+)
+- Tags: `Name`, `ManagedBy=Atmos`
+
+**Required Configuration:**
+```yaml
+backend_type: s3  # Must be at component level
+
+backend:
+  bucket: my-terraform-state     # Required
+  key: component/terraform.tfstate
+  region: us-east-1              # Required
+  use_lockfile: true             # Enable native S3 locking (Terraform 1.10+)
+```
+
+**Cross-Account Support:**
+```yaml
+backend:
+  bucket: my-terraform-state
+  region: us-east-1
+  use_lockfile: true  # Enable native S3 locking (Terraform 1.10+)
+  assume_role:
+    role_arn: arn:aws:iam::999999999999:role/TerraformStateAdmin
+```
+
+The provisioner assumes the role to create the bucket in the target account.
+
+## Error Handling
+
+### Exit Codes
+
+| Exit Code | Error Type | Action |
+|-----------|------------|--------|
+| 0 | Success | Backend created or already exists |
+| 1 | General error | Check error message for details |
+| 2 | Configuration error | Fix `provision.backend` configuration |
+| 3 | Permission error | Grant required IAM permissions |
+| 4 | Resource conflict | Change bucket name (globally unique) |
+| 5 | Network error | Check network connectivity to cloud provider |
+
+### Example Errors
+
+**Missing Configuration:**
+```
+Error: backend.bucket is required in backend configuration
+
+Hint: Add bucket name to stack manifest
+Example:
+  backend:
+    bucket: my-terraform-state
+    region: us-east-1
+```
+
+**Permission Denied:**
+```
+Error: failed to create bucket: AccessDenied
+
+Hint: Verify AWS credentials have s3:CreateBucket permission
+Required IAM permissions:
+  - s3:CreateBucket
+  - s3:HeadBucket
+  - s3:PutBucketVersioning
+  - s3:PutBucketEncryption
+  - s3:PutBucketPublicAccessBlock
+  - s3:PutBucketTagging
+```
+
+**Bucket Name Conflict:**
+```
+Error: failed to create bucket: BucketAlreadyExists
+
+Hint: S3 bucket names are globally unique across all AWS accounts
+Try a different bucket name:
+  - acme-ue1-dev-tfstate-123456789012 (add account ID)
+  - acme-ue1-dev-tfstate-randomsuffix (add random suffix)
+```
+
+## Required IAM Permissions
+
+### S3 Backend
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:HeadBucket",
+        "s3:PutBucketVersioning",
+        "s3:PutBucketEncryption",
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutBucketTagging"
+      ],
+      "Resource": "arn:aws:s3:::my-terraform-state*"
+    }
+  ]
+}
+```
+
+For cross-account provisioning, also add:
+
+```json
+{
+  "Effect": "Allow",
+  "Action": "sts:AssumeRole",
+  "Resource": "arn:aws:iam::999999999999:role/TerraformStateAdmin"
+}
+```
+
+## Migrating to Terraform-Managed Backends
+
+Once your backend is provisioned, you can import it into Terraform for advanced management:
+
+### Step 1: Provision the Backend
+
+Use Atmos to create the backend with secure defaults:
+
+```shell
+atmos terraform backend create vpc --stack prod
+```
+
+### Step 2: Import into Terraform
+
+Add the backend to your Terraform configuration and import it:
+
+```hcl
+# Import the provisioned backend
+import {
+  to = aws_s3_bucket.terraform_state
+  id = "acme-ue1-prod-tfstate"
+}
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "acme-ue1-prod-tfstate"
+}
+```
+
+### Step 3: Add Advanced Features
+
+Extend the backend with production-specific features:
+
+```hcl
+# Add lifecycle rules
+resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+
+# Add replication
+resource "aws_s3_bucket_replication_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+  role   = aws_iam_role.replication.arn
+
+  rule {
+    id     = "replicate-state"
+    status = "Enabled"
+
+    destination {
+      bucket        = aws_s3_bucket.terraform_state_replica.arn
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+```
+
+### Step 4: Disable Automatic Provisioning
+
+Once Terraform manages the backend, disable automatic provisioning:
+
+```yaml
+provision:
+  backend:
+    enabled: false  # Backend now managed by Terraform
+```
+
+See the [Automatic Backend Provisioning](/components/terraform/backend-provisioning) docs for more migration patterns.
+
+## Idempotent Operations
+
+The provision command is **idempotent**—running it multiple times is safe:
+
+```shell
+$ atmos terraform backend create vpc --stack dev
+Running backend provisioner...
+Creating S3 bucket 'acme-ue1-dev-tfstate'...
+✓ Successfully provisioned backend
+
+$ atmos terraform backend create vpc --stack dev
+Running backend provisioner...
+S3 bucket 'acme-ue1-dev-tfstate' already exists (idempotent)
+✓ Backend provisioning completed
+```
+
+## Related Commands
+
+- [`atmos terraform init`](/cli/commands/terraform/usage) - Initialize Terraform (auto-provisions if enabled)
+- [`atmos terraform plan`](/cli/commands/terraform/usage) - Plan Terraform changes (auto-provisions if enabled)
+- [`atmos terraform apply`](/cli/commands/terraform/usage) - Apply Terraform changes (auto-provisions if enabled)
+
+## Related Concepts
+
+- [Stack Configuration](/learn/stacks)
+- [Backend Configuration](/components/terraform/backends)
+- [Authentication and Identity](/cli/commands/auth/usage)

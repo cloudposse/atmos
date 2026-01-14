@@ -1,0 +1,100 @@
+---
+title: atmos terraform workdir
+sidebar_label: workdir
+sidebar_class_name: command
+id: workdir
+description: Manage component workdirs for isolated Terraform execution
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import DocCardList from '@theme/DocCardList'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use these commands to manage component workdirs—isolated directories where Terraform commands execute. Workdirs enable concurrent component execution and just-in-time source provisioning.
+</Intro>
+
+<ActionCard title="Component Workdir Isolation">
+    Learn how workdirs provide isolated execution environments for each component instance.
+    <div>
+      <PrimaryCTA to="/cli/commands/terraform/source">Source Provisioning</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos terraform workdir --help" slug="atmos-terraform-workdir--help" />
+
+## Usage
+
+```shell
+atmos terraform workdir <subcommand> [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`subcommand`</dt>
+  <dd>
+    The workdir operation to perform. See subcommands below.
+  </dd>
+</dl>
+
+## Flags
+
+This command inherits all [global flags](/cli/configuration). Specific flags are available for each subcommand.
+
+## Subcommands
+
+<DocCardList />
+
+## Overview
+
+The `workdir` commands help you manage component workdirs. A workdir is an isolated directory created for each component-stack combination, containing:
+
+- A copy of the component source code
+- Generated configuration files (varfiles, backend config)
+- Terraform state files and provider plugins
+
+This isolation enables:
+
+- **Concurrent execution** - Multiple components can run simultaneously without conflicts
+- **Just-in-time provisioning** - Components are fetched and prepared on demand
+- **Clean separation** - Each stack's component instance has its own working directory
+
+## Examples
+
+### List All Workdirs
+
+```shell
+# List all workdirs in the project
+atmos terraform workdir list
+```
+
+### Show Workdir Details
+
+```shell
+# Show details for a specific component's workdir
+atmos terraform workdir show vpc --stack dev
+```
+
+### Clean Workdirs
+
+```shell
+# Clean all workdirs to free disk space
+atmos terraform workdir clean --all
+
+# Clean a specific workdir
+atmos terraform workdir clean vpc --stack dev
+```
+
+### Describe Workdir Configuration
+
+```shell
+# Output workdir config as stack manifest snippet
+atmos terraform workdir describe vpc --stack dev
+```
+
+## Related
+
+- [Source Provisioning](/cli/commands/terraform/source) - Just-in-time component fetching
+- [Terraform Clean](/cli/commands/terraform/clean) - Clean component directories

@@ -1,0 +1,204 @@
+---
+title: Docs
+sidebar_label: docs
+sidebar_class_name: command
+description: Configure documentation generation for READMEs, release notes, and other artifacts.
+id: docs
+slug: /cli/configuration/docs
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Configure documentation generation for READMEs, release notes, and other artifacts. Define multiple named documentation generators that can be invoked via `atmos docs generate <name>`.
+</Intro>
+
+## Configuration
+
+Documentation generation is configured in the `docs.generate` section:
+
+<File title="atmos.yaml">
+```yaml
+docs:
+  generate:
+    readme:
+      base-dir: .
+      input:
+        - "./README.yaml"
+      template: "https://raw.githubusercontent.com/cloudposse/terraform-null-label/main/README.md.gotmpl"
+      output: "./README.md"
+      terraform:
+        source: src/
+        enabled: false
+        format: "markdown"
+        show_providers: false
+        show_inputs: true
+        show_outputs: true
+        sort_by: "name"
+        hide_empty: false
+        indent_level: 2
+
+    release-notes:
+      base-dir: .
+      input:
+        - "./CHANGELOG.yaml"
+      template: "./release-notes.gotmpl"
+      output: "./RELEASE_NOTES.md"
+```
+</File>
+
+## Configuration Options
+
+Each named section under `docs.generate` supports the following options:
+
+<dl>
+  <dt>`base-dir`</dt>
+  <dd>Base directory for resolving relative paths. Defaults to current working directory.</dd>
+
+  <dt>`input`</dt>
+  <dd>List of YAML input files to combine. Supports local paths and remote URLs via go-getter.</dd>
+
+  <dt>`template`</dt>
+  <dd>Path or URL to the Go template file used to generate the output.</dd>
+
+  <dt>`output`</dt>
+  <dd>Path where the generated documentation will be written.</dd>
+
+  <dt>`terraform`</dt>
+  <dd>Optional terraform-docs configuration for including Terraform documentation in the output.</dd>
+</dl>
+
+### Terraform Documentation Options
+
+When `terraform` is configured, Atmos can include Terraform module documentation in your generated files:
+
+<dl>
+  <dt>`terraform.source`</dt>
+  <dd>Path to the Terraform module source directory.</dd>
+
+  <dt>`terraform.enabled`</dt>
+  <dd>Whether to generate Terraform documentation. Default: `false`.</dd>
+
+  <dt>`terraform.format`</dt>
+  <dd>Output format for Terraform docs. Options: `markdown`, `markdown table`, `tfvars hcl`, `tfvars json`. Default: `markdown table`.</dd>
+
+  <dt>`terraform.show_providers`</dt>
+  <dd>Include provider information in the output. Default: `false`.</dd>
+
+  <dt>`terraform.show_inputs`</dt>
+  <dd>Include input variables in the output. Default: `true`.</dd>
+
+  <dt>`terraform.show_outputs`</dt>
+  <dd>Include outputs in the output. Default: `true`.</dd>
+
+  <dt>`terraform.sort_by`</dt>
+  <dd>How to sort inputs/outputs. Options: `name`, `required`, `type`. Default: `name`.</dd>
+
+  <dt>`terraform.hide_empty`</dt>
+  <dd>Hide sections with no content. Default: `false`.</dd>
+
+  <dt>`terraform.indent_level`</dt>
+  <dd>Indentation level for nested content. Default: `2`.</dd>
+</dl>
+
+## Multiple Documentation Generators
+
+You can define as many documentation generators as needed. Each top-level key under `docs.generate` becomes a CLI argument:
+
+<File title="atmos.yaml">
+```yaml
+docs:
+  generate:
+    # Generate project README
+    readme:
+      input:
+        - "./README.yaml"
+      template: "./templates/README.md.gotmpl"
+      output: "./README.md"
+
+    # Generate release notes
+    release-notes:
+      input:
+        - "./CHANGELOG.yaml"
+      template: "./templates/release-notes.gotmpl"
+      output: "./RELEASE_NOTES.md"
+
+    # Generate component documentation
+    component-docs:
+      input:
+        - "./docs/components.yaml"
+      template: "./templates/components.md.gotmpl"
+      output: "./docs/COMPONENTS.md"
+```
+</File>
+
+Then invoke each generator by name:
+
+```bash
+atmos docs generate readme
+atmos docs generate release-notes
+atmos docs generate component-docs
+```
+
+## Template Example
+
+Templates use Go templating with Gomplate functions:
+
+<File title="templates/README.md.gotmpl">
+```gotmpl
+{{- $data := (ds "config") -}}
+
+# {{ $data.name | default "Project Title" }}
+
+{{ $data.description | default "No description provided." }}
+
+{{ if has $data "extra_info" }}
+## Additional Information
+
+{{ $data.extra_info }}
+{{ end }}
+
+{{ if has $data "terraform_docs" }}
+## Terraform Documentation
+
+{{ $data.terraform_docs }}
+{{ end }}
+```
+</File>
+
+## Input File Sources
+
+### Local Sources
+
+Supports absolute paths, relative paths, and paths relative to `base-dir`:
+
+```yaml
+docs:
+  generate:
+    readme:
+      input:
+        # Absolute path
+        - "/Users/me/Documents/README.yaml"
+        # Relative to current directory
+        - "./README.yaml"
+        # Relative to base-dir
+        - "terraform/README.yaml"
+```
+
+### Remote Sources
+
+Atmos uses [go-getter](https://github.com/hashicorp/go-getter) for downloading remote files:
+
+```yaml
+docs:
+  generate:
+    readme:
+      input:
+        - "https://raw.githubusercontent.com/org/repo/main/README.yaml"
+      template: "https://raw.githubusercontent.com/org/repo/main/README.md.gotmpl"
+```
+
+## Related Commands
+
+- [`atmos docs generate`](/cli/commands/docs/generate) — Generate documentation artifacts
+- [`atmos docs`](/cli/commands/docs/usage) — Open Atmos documentation

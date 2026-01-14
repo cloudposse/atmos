@@ -2,14 +2,12 @@ package exec
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/go-git/go-git/v5/plumbing/transport/ssh"
-	cp "github.com/otiai10/copy"
 
 	g "github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -182,8 +180,10 @@ func ExecuteDescribeAffectedWithTargetRefClone(
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
 }
 
-// ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference,
+// ExecuteDescribeAffectedWithTargetRefCheckout checks out the target reference using git worktree,
 // processes stack configs, and returns a list of the affected Atmos components and stacks given two Git commits.
+// This approach uses `git worktree add` to create an isolated worktree that shares the repository's
+// object database but has its own HEAD, allowing checkout operations without affecting the main worktree.
 func ExecuteDescribeAffectedWithTargetRefCheckout(
 	atmosConfig *schema.AtmosConfiguration,
 	ref string,
@@ -208,116 +208,45 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	// Create a temp dir for the target ref
-	tempDir, err := os.MkdirTemp("", "")
+	// Determine the target commit for the worktree.
+	var targetCommit string
+	if sha != "" {
+		targetCommit = sha
+		log.Debug("Creating worktree at commit", shaString, sha)
+	} else {
+		// If `ref` is not provided, use the HEAD of the remote origin.
+		if ref == "" {
+			ref = "refs/remotes/origin/HEAD"
+		}
+		targetCommit = ref
+		log.Debug("Creating worktree at", refString, ref)
+	}
+
+	// Create an isolated worktree for the target ref.
+	worktreePath, err := g.CreateWorktree(localRepoInfo.LocalWorktreePath, targetCommit)
 	if err != nil {
 		return nil, nil, nil, "", err
 	}
 
-	// Copy the local repo into the temp directory
-	log.Debug("Copying the local repo into temp directory", "dir", tempDir)
+	// Deferred cleanup ensures worktree is always removed.
+	defer cleanupWorktree(localRepoInfo.LocalWorktreePath, worktreePath)
 
-	copyOptions := cp.Options{
-		PreserveTimes: false,
-		PreserveOwner: false,
-		// Skip specifies which files should be skipped
-		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-			if strings.Contains(src, "node_modules") {
-				return true, nil
-			}
-
-			// Check if the file is a socket and skip it
-			isSocket, err := u.IsSocket(src)
-			if err != nil {
-				return true, err
-			}
-			if isSocket {
-				return true, nil
-			}
-
-			return false, nil
-		},
-	}
-
-	if err = cp.Copy(localRepoInfo.LocalWorktreePath, tempDir, copyOptions); err != nil {
-		return nil, nil, nil, "", err
-	}
-
-	log.Debug("Copied the local repo into temp directory", "dir", tempDir)
-
-	remoteRepo, err := git.PlainOpenWithOptions(tempDir, &git.PlainOpenOptions{
-		DetectDotGit:          false,
-		EnableDotGitCommonDir: false,
-	})
+	// Open the worktree as a git repository.
+	remoteRepo, err := g.OpenWorktreeAwareRepo(worktreePath)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
-	// Check the Git config of the target ref
+	// Check the Git config of the target ref.
 	_, err = g.GetRepoConfig(remoteRepo)
 	if err != nil {
 		return nil, nil, nil, "", errors.Join(err, RemoteRepoIsNotGitRepoError)
 	}
 
-	if sha != "" {
-		log.Debug("Checking out commit", shaString, sha)
-
-		w, err := remoteRepo.Worktree()
-		if err != nil {
-			return nil, nil, nil, "", err
-		}
-
-		checkoutOptions := git.CheckoutOptions{
-			Hash:   plumbing.NewHash(sha),
-			Create: false,
-			Force:  true,
-			Keep:   false,
-		}
-
-		err = w.Checkout(&checkoutOptions)
-		if err != nil {
-			return nil, nil, nil, "", err
-		}
-
-		log.Debug("Checked out commit", shaString, sha)
-	} else {
-		// If `ref` is not provided, use the HEAD of the remote origin
-		if ref == "" {
-			ref = "refs/remotes/origin/HEAD"
-		}
-
-		log.Debug("Checking out Git", refString, ref)
-
-		w, err := remoteRepo.Worktree()
-		if err != nil {
-			return nil, nil, nil, "", err
-		}
-
-		checkoutOptions := git.CheckoutOptions{
-			Branch: plumbing.ReferenceName(ref),
-			Create: false,
-			Force:  true,
-			Keep:   false,
-		}
-
-		err = w.Checkout(&checkoutOptions)
-		if err != nil {
-			if errors.Is(err, plumbing.ErrReferenceNotFound) {
-				errorMessage := fmt.Sprintf("the Git ref '%s' does not exist on the local filesystem"+
-					"\nmake sure it's correct and was cloned by Git from the remote, or use the '--clone-target-ref=true' flag to clone it"+
-					"\nrefer to https://atmos.tools/cli/commands/describe/affected for more details", ref)
-				err = errors.New(errorMessage)
-			}
-			return nil, nil, nil, "", err
-		}
-
-		log.Debug("Checked out Git", refString, ref)
-	}
-
 	affected, localRepoHead, remoteRepoHead, err := executeDescribeAffected(
 		atmosConfig,
 		localRepoInfo.LocalWorktreePath,
-		tempDir,
+		worktreePath,
 		localRepo,
 		remoteRepo,
 		includeSpaceliftAdminStacks,
@@ -332,18 +261,13 @@ func ExecuteDescribeAffectedWithTargetRefCheckout(
 		return nil, nil, nil, "", err
 	}
 
-	/*
-		Do not use `defer removeTempDir(tempDir)` right after the temp dir is created, instead call `removeTempDir(tempDir)` at the end of the main function:
-		 - On Windows, there are race conditions when using `defer` and goroutines
-		 - We defer removeTempDir(tempDir) right after creating the temp dir
-		 - We `git clone` a repo into it
-		 - We then start goroutines that read files from the temp dir
-		 - Meanwhile, when the main function exits, defer removeTempDir(...) runs
-		 - On Windows, open file handles in goroutines make directory deletion flaky or fail entirely (and possibly prematurely delete files while goroutines are mid-read)
-	*/
-	removeTempDir(tempDir)
-
 	return affected, localRepoHead, remoteRepoHead, localRepoInfo.RepoUrl, nil
+}
+
+// cleanupWorktree removes a git worktree and its parent temp directory.
+func cleanupWorktree(repoPath, worktreePath string) {
+	g.RemoveWorktree(repoPath, worktreePath)
+	removeTempDir(g.GetWorktreeParentDir(worktreePath))
 }
 
 // ExecuteDescribeAffectedWithTargetRepoPath uses `repo-path` to access the target repo, and processes stack configs

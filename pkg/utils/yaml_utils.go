@@ -12,6 +12,7 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -19,16 +20,23 @@ import (
 
 const (
 	// Atmos YAML functions.
-	AtmosYamlFuncExec            = "!exec"
-	AtmosYamlFuncStore           = "!store"
-	AtmosYamlFuncStoreGet        = "!store.get"
-	AtmosYamlFuncTemplate        = "!template"
-	AtmosYamlFuncTerraformOutput = "!terraform.output"
-	AtmosYamlFuncTerraformState  = "!terraform.state"
-	AtmosYamlFuncEnv             = "!env"
-	AtmosYamlFuncInclude         = "!include"
-	AtmosYamlFuncIncludeRaw      = "!include.raw"
-	AtmosYamlFuncGitRoot         = "!repo-root"
+	AtmosYamlFuncExec                    = "!exec"
+	AtmosYamlFuncStore                   = "!store"
+	AtmosYamlFuncStoreGet                = "!store.get"
+	AtmosYamlFuncTemplate                = "!template"
+	AtmosYamlFuncTerraformOutput         = "!terraform.output"
+	AtmosYamlFuncTerraformState          = "!terraform.state"
+	AtmosYamlFuncEnv                     = "!env"
+	AtmosYamlFuncInclude                 = "!include"
+	AtmosYamlFuncIncludeRaw              = "!include.raw"
+	AtmosYamlFuncGitRoot                 = "!repo-root"
+	AtmosYamlFuncCwd                     = "!cwd"
+	AtmosYamlFuncRandom                  = "!random"
+	AtmosYamlFuncLiteral                 = "!literal"
+	AtmosYamlFuncAwsAccountID            = "!aws.account_id"
+	AtmosYamlFuncAwsCallerIdentityArn    = "!aws.caller_identity_arn"
+	AtmosYamlFuncAwsCallerIdentityUserID = "!aws.caller_identity_user_id"
+	AtmosYamlFuncAwsRegion               = "!aws.region"
 
 	DefaultYAMLIndent = 2
 
@@ -46,19 +54,33 @@ var (
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCwd,
+		AtmosYamlFuncRandom,
+		AtmosYamlFuncLiteral,
+		AtmosYamlFuncAwsAccountID,
+		AtmosYamlFuncAwsCallerIdentityArn,
+		AtmosYamlFuncAwsCallerIdentityUserID,
+		AtmosYamlFuncAwsRegion,
 	}
 
 	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
 	// This optimization replaces the O(n) SliceContainsString calls that were previously
 	// called 75M+ times, causing significant performance overhead.
 	atmosYamlTagsMap = map[string]bool{
-		AtmosYamlFuncExec:            true,
-		AtmosYamlFuncStore:           true,
-		AtmosYamlFuncStoreGet:        true,
-		AtmosYamlFuncTemplate:        true,
-		AtmosYamlFuncTerraformOutput: true,
-		AtmosYamlFuncTerraformState:  true,
-		AtmosYamlFuncEnv:             true,
+		AtmosYamlFuncExec:                    true,
+		AtmosYamlFuncStore:                   true,
+		AtmosYamlFuncStoreGet:                true,
+		AtmosYamlFuncTemplate:                true,
+		AtmosYamlFuncTerraformOutput:         true,
+		AtmosYamlFuncTerraformState:          true,
+		AtmosYamlFuncEnv:                     true,
+		AtmosYamlFuncCwd:                     true,
+		AtmosYamlFuncRandom:                  true,
+		AtmosYamlFuncLiteral:                 true,
+		AtmosYamlFuncAwsAccountID:            true,
+		AtmosYamlFuncAwsCallerIdentityArn:    true,
+		AtmosYamlFuncAwsCallerIdentityUserID: true,
+		AtmosYamlFuncAwsRegion:               true,
 	}
 
 	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
@@ -248,7 +270,7 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 
 	// Extract positions if provenance tracking is enabled.
 	var positions PositionMap
-	if atmosConfig.TrackProvenance {
+	if atmosConfig != nil && atmosConfig.TrackProvenance {
 		positions = ExtractYAMLPositions(&parsedNode, true)
 	}
 
@@ -274,14 +296,20 @@ func handleCacheMiss(atmosConfig *schema.AtmosConfiguration, file string, input 
 	// Double-check: another goroutine may have cached it while we waited for the lock.
 	node, positions, found := getCachedParsedYAML(file, input)
 	if found {
-		// Another goroutine cached it while we waited - cache hit!
-		parsedYAMLCacheStats.Lock()
-		parsedYAMLCacheStats.hits++
-		parsedYAMLCacheStats.Unlock()
-		return node, positions, nil
+		// Check if we need positions but the cached entry lacks them.
+		// This can happen if the file was first parsed without provenance tracking.
+		needsPositions := atmosConfig != nil && atmosConfig.TrackProvenance && len(positions) == 0
+		if !needsPositions {
+			// Another goroutine cached it while we waited - valid cache hit!
+			parsedYAMLCacheStats.Lock()
+			parsedYAMLCacheStats.hits++
+			parsedYAMLCacheStats.Unlock()
+			return node, positions, nil
+		}
+		// Fall through to re-parse with position tracking.
 	}
 
-	// Still not in cache - we're the first goroutine to parse this file.
+	// Still not in cache (or needs re-parsing for positions).
 	// Track cache miss.
 	parsedYAMLCacheStats.Lock()
 	parsedYAMLCacheStats.misses++
@@ -543,6 +571,44 @@ func WrapLongStrings(data any, maxLength int) any {
 	}
 }
 
+// GetUserHomeDir returns the current user's home directory or empty string if unavailable.
+func GetUserHomeDir() string {
+	defer perf.Track(nil, "utils.GetUserHomeDir")()
+
+	hd, err := homedir.Dir()
+	if err != nil {
+		return ""
+	}
+	return hd
+}
+
+// ObfuscateSensitivePaths walks any data structure (maps, slices, etc), and in any string which starts with the specified homeDir, replaces it with "~".
+func ObfuscateSensitivePaths(data any, homeDir string) any {
+	defer perf.Track(nil, "utils.ObfuscateSensitivePaths")()
+
+	switch v := data.(type) {
+	case map[string]any:
+		res := make(map[string]any, len(v))
+		for k, val := range v {
+			res[k] = ObfuscateSensitivePaths(val, homeDir)
+		}
+		return res
+	case []any:
+		res := make([]any, len(v))
+		for i, val := range v {
+			res[i] = ObfuscateSensitivePaths(val, homeDir)
+		}
+		return res
+	case string:
+		if homeDir != "" && strings.HasPrefix(v, homeDir) {
+			return "~" + v[len(homeDir):]
+		}
+		return v
+	default:
+		return v
+	}
+}
+
 func ConvertToYAML(data any, opts ...YAMLOptions) (string, error) {
 	defer perf.Track(nil, "utils.ConvertToYAML")()
 
@@ -589,6 +655,16 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 	for _, n := range node.Content {
 		tag := strings.TrimSpace(n.Tag)
 		val := strings.TrimSpace(n.Value)
+
+		// Handle !literal tag - preserve value exactly as-is, bypass all template processing.
+		// This is processed early (like !include) so the value is never sent through
+		// Go template or Gomplate evaluation.
+		if tag == AtmosYamlFuncLiteral {
+			// Just clear the tag and keep the value unchanged.
+			// The value will pass through without any template processing.
+			n.Tag = ""
+			continue
+		}
 
 		// Use O(1) map lookup instead of O(n) slice search for performance.
 		// This optimization reduces 75M+ linear searches to constant-time lookups.
@@ -720,11 +796,22 @@ func UnmarshalYAMLFromFileWithPositions[T any](atmosConfig *schema.AtmosConfigur
 	// Try to get cached parsed YAML first (fast path with read lock).
 	node, positions, found := getCachedParsedYAML(file, input)
 	if found {
-		// Cache hit on first check.
-		parsedYAMLCacheStats.Lock()
-		parsedYAMLCacheStats.hits++
-		parsedYAMLCacheStats.Unlock()
-	} else {
+		// Cache hit - but check if we need positions and don't have them.
+		// This can happen if the file was first parsed without provenance tracking,
+		// then later requested with provenance enabled.
+		if atmosConfig.TrackProvenance && len(positions) == 0 {
+			// Need to re-parse with position tracking.
+			// Force a cache miss to re-parse and update the cache with positions.
+			found = false
+		} else {
+			// Valid cache hit.
+			parsedYAMLCacheStats.Lock()
+			parsedYAMLCacheStats.hits++
+			parsedYAMLCacheStats.Unlock()
+		}
+	}
+
+	if !found {
 		// Cache miss - use per-key locking to prevent multiple goroutines
 		// from parsing the same file simultaneously.
 		var err error

@@ -1,0 +1,77 @@
+---
+slug: metadata-name-workspace-keys
+title: "Stable Workspace Keys with metadata.name"
+authors: [osterman]
+tags: [feature]
+---
+
+New `metadata.name` field provides stable Terraform state paths when using versioned component folders.
+
+<!--truncate-->
+
+## The Problem
+
+Atmos uses [Terraform workspaces](https://developer.hashicorp.com/terraform/language/state/workspaces) to isolate state for the same component deployed across different stacks. For remote backends like S3, state files are organized in a two-level hierarchy:
+
+```
+s3://bucket/
+  └── {workspace_key_prefix}/      # Component identity (e.g., "vpc")
+      └── {workspace}/             # Stack context (e.g., "ue2-dev")
+          └── terraform.tfstate
+```
+
+The `workspace_key_prefix` groups all deployments of a component together—your VPC in dev, staging, and prod all share the same prefix. The workspace name (derived from the stack) keeps each environment's state separate.
+
+**The problem:** Atmos auto-generated `workspace_key_prefix` from `metadata.component`, which includes the folder path. When you organize components in versioned folders (`vpc/v1`, `vpc/v2`), upgrading to `vpc/v3` changed the workspace key prefix from `vpc-v2` to `vpc-v3`. Terraform couldn't find your existing state—your infrastructure looked like it was never created.
+
+You could always work around this by explicitly setting `backend.s3.workspace_key_prefix` in a base component (backend config is inherited). But this approach had drawbacks:
+- Backend-specific: you'd set `workspace_key_prefix` for S3, `prefix` for GCS, or `key` for Azure.
+- Intent unclear: nothing indicated this was the component's logical name.
+- Easy to forget when creating new components.
+
+## The Solution
+
+`metadata.name` provides a semantic way to declare a component's logical name. Atmos uses it to auto-generate the appropriate backend setting (`workspace_key_prefix`, `prefix`, or `key`) for any backend type:
+
+Set it once in your base component:
+
+```yaml
+# stacks/catalog/vpc.yaml
+vpc/defaults:
+  metadata:
+    type: abstract
+    name: vpc           # Logical name (excludes version)
+    component: vpc/v2   # Physical path (includes version)
+
+# stacks/prod.yaml
+vpc-prod:
+  metadata:
+    inherits: [vpc/defaults]
+    # State path stays at "vpc/" regardless of version
+```
+
+Upgrade by changing one line in the catalog:
+
+```yaml
+vpc/defaults:
+  metadata:
+    name: vpc           # Unchanged - state path stable
+    component: vpc/v3   # New version
+```
+
+All environments inherit the change. No state migration needed.
+
+## Convention
+
+By convention, `metadata.name` should be the **component name without version or release channel prefixes**:
+
+| Component Path | `metadata.name` | Version/Channel |
+|----------------|-----------------|-----------------|
+| `vpc/v2/` | `vpc` | `v2` (suffix) |
+| `v2/vpc/` | `vpc` | `v2` (prefix) |
+| `2024/vpc/` | `vpc` | `2024` (prefix) |
+| `stable/vpc/` | `vpc` | `stable` (prefix) |
+
+The logical name is the component itself—strip the version or release channel whether it appears before or after.
+
+See [folder-based versioning](/design-patterns/version-management/folder-based-versioning) for the complete pattern.

@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"errors"
 	"fmt"
 
 	"github.com/charmbracelet/huh"
@@ -33,7 +32,7 @@ var authUserConfigureCmd = &cobra.Command{
 		// Load atmos config
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 		if err != nil {
-			return errors.Join(errUtils.ErrInvalidAuthConfig, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrInvalidAuthConfig, err)
 		}
 
 		// Select aws/user identities
@@ -133,7 +132,7 @@ var authUserConfigureCmd = &cobra.Command{
 
 		// Store the credentials
 		if err := store.Store(alias, creds); err != nil {
-			return errors.Join(errUtils.ErrAwsAuth, err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsAuth, err)
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "✓ Saved credentials to keyring: %s\n", alias)
 		if sessionDuration != "" {

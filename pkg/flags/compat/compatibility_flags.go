@@ -31,8 +31,9 @@ const (
 
 // CompatibilityFlag defines how a single compatibility flag should be handled.
 type CompatibilityFlag struct {
-	Behavior CompatibilityBehavior
-	Target   string // Target flag name (for MapToAtmosFlag) or empty (for AppendToSeparated)
+	Behavior    CompatibilityBehavior
+	Target      string // Target flag name (for MapToAtmosFlag) or empty (for AppendToSeparated).
+	Description string // Human-readable description for help output.
 }
 
 // CompatibilityFlagTranslator translates legacy flag syntax to modern Cobra-compatible format.

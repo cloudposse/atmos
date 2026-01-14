@@ -10,12 +10,23 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// getBasePathToUse returns the appropriate base path for file resolution.
+// It prefers BasePathAbsolute for correct resolution when base_path is relative
+// (e.g., when using ATMOS_CLI_CONFIG_PATH), falling back to BasePath for backward compatibility.
+func getBasePathToUse(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.BasePathAbsolute != "" {
+		return atmosConfig.BasePathAbsolute
+	}
+	return atmosConfig.BasePath
+}
 
 // ExecuteValidateComponentCmd executes `validate component` command.
 func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, string, error) {
@@ -38,47 +49,47 @@ func ExecuteValidateComponentCmd(cmd *cobra.Command, args []string) (string, str
 	componentName := args[0]
 
 	// Initialize spinner.
-	message := fmt.Sprintf("Validating Atmos Component: %s", componentName)
-	p := NewSpinner(message)
-	spinnerDone := make(chan struct{})
-	// Run spinner in a goroutine
-	RunSpinner(p, spinnerDone, message)
-	// Ensure the spinner is stopped before returning
-	defer StopSpinner(p, spinnerDone)
+	s := spinner.New(fmt.Sprintf("Validating Atmos Component: %s", componentName))
+	s.Start()
 
 	flags := cmd.Flags()
 
 	stack, err := flags.GetString("stack")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	schemaPath, err := flags.GetString("schema-path")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	schemaType, err := flags.GetString("schema-type")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	modulePaths, err := flags.GetStringSlice("module-paths")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	timeout, err := flags.GetInt("timeout")
 	if err != nil {
+		s.Stop()
 		return "", "", err
 	}
 
 	_, err = ExecuteValidateComponent(&atmosConfig, info, componentName, stack, schemaPath, schemaType, modulePaths, timeout)
 	if err != nil {
-		u.PrintfMessageToTUI("\r%s Component validation failed\n", theme.Styles.XMark)
+		s.Error("Component validation failed")
 		return "", "", err
 	}
-	u.PrintfMessageToTUI("\r%s Component validated successfully\n", theme.Styles.Checkmark)
+	s.Success("Component validated successfully")
 	log.Debug("Component validation completed", "component", componentName, "stack", stack)
 
 	return componentName, stack, nil
@@ -214,19 +225,20 @@ func validateComponentInternal(
 	}
 
 	// Check if the file pointed to by 'schemaPath' exists.
-	// If not, join it with the schemas `base_path` from the CLI config
+	// If not, join it with the schemas `base_path` from the CLI config.
 	var filePath string
 	if u.FileExists(schemaPath) {
 		filePath = schemaPath
 	} else {
+		basePathToUse := getBasePathToUse(atmosConfig)
 		switch schemaType {
 		case "jsonschema":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("jsonschema").BasePath, schemaPath)
 			}
 		case "opa":
 			{
-				filePath = filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
+				filePath = filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath, schemaPath)
 			}
 		}
 
@@ -244,7 +256,7 @@ func validateComponentInternal(
 	var ok bool
 
 	// Add the process environment variables to the component section.
-	componentSection[cfg.ProcessEnvSectionName] = u.EnvironToMap()
+	componentSection[cfg.ProcessEnvSectionName] = env.EnvironToMap()
 
 	switch schemaType {
 	case "jsonschema":
@@ -256,7 +268,8 @@ func validateComponentInternal(
 		}
 	case "opa":
 		{
-			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(atmosConfig.BasePath, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
+			basePathToUse := getBasePathToUse(atmosConfig)
+			modulePathsAbsolute, err := u.JoinPaths(filepath.Join(basePathToUse, atmosConfig.GetResourcePath("opa").BasePath), modulePaths)
 			if err != nil {
 				return false, err
 			}

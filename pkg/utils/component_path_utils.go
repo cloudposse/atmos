@@ -62,6 +62,14 @@ func preserveVolume(cleanedPath, volume, originalPath string) string {
 		return handleUNCPath(cleanedPath, volume)
 	}
 
+	// For regular volumes (like C:), strip the volume from cleanedPath if present
+	// to avoid duplication when reconstructing
+	if strings.HasPrefix(cleanedPath, volume) {
+		cleanedPath = strings.TrimPrefix(cleanedPath, volume)
+		// Also trim any leading separator after the volume
+		cleanedPath = strings.TrimPrefix(cleanedPath, string(filepath.Separator))
+	}
+
 	// For regular volumes (like C:), ensure proper Windows drive-root style path
 	if cleanedPath == "" {
 		return volume + string(filepath.Separator)
@@ -101,6 +109,13 @@ func handleUNCPath(cleanedPath, volume string) string {
 	return volume + windowsPathSeparator + remainder
 }
 
+// CleanDuplicatedPath removes duplicate path segments that sometimes occur due to
+// symlink resolution or path joining issues.
+// For example: /foo/bar/foo/bar/baz becomes /foo/bar/baz.
+func CleanDuplicatedPath(path string) string {
+	return cleanDuplicatedPath(path)
+}
+
 // cleanDuplicatedPath detects and removes path duplication patterns.
 // For example: /path/to/base/.//path/to/base/components -> /path/to/base/components
 // This only removes duplications when a significant path segment is duplicated,
@@ -124,8 +139,20 @@ func cleanDuplicatedPath(path string) string {
 		startIdx = 1
 	}
 
-	// Only look for duplications of sequences that are at least 3 parts long
-	minLength := 3
+	// Special case: Check for Windows volume duplication (e.g., D:/D:/...)
+	// This handles cases where a drive letter appears twice at the start
+	if len(parts) >= 2 && isWindowsVolume(parts[0]) && parts[0] == parts[1] {
+		// Remove the duplicate volume
+		newParts := append([]string{parts[0]}, parts[2:]...)
+		cleanedPath = strings.Join(newParts, string(filepath.Separator))
+		volume := filepath.VolumeName(path)
+		cleanedPath = preserveVolume(cleanedPath, volume, path)
+		return cleanDuplicatedPath(cleanedPath)
+	}
+
+	// Only look for duplications of sequences that are at least 2 parts long.
+	// This catches patterns like /tests/fixtures/tests/fixtures (2-part duplication).
+	minLength := 2
 	if len(parts)-startIdx < minLength*2 {
 		return cleanedPath
 	}
@@ -142,6 +169,11 @@ func cleanDuplicatedPath(path string) string {
 	}
 
 	return cleanedPath
+}
+
+// isWindowsVolume checks if a path part looks like a Windows volume (e.g., "C:", "D:").
+func isWindowsVolume(part string) bool {
+	return len(part) == 2 && part[1] == ':' && ((part[0] >= 'A' && part[0] <= 'Z') || (part[0] >= 'a' && part[0] <= 'z'))
 }
 
 // buildComponentPath builds the component path handling absolute vs relative cases.

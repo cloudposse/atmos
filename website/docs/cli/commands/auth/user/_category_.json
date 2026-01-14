@@ -1,0 +1,9 @@
+{
+  "label": "user",
+  "className": "command",
+  "position": 5,
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/auth/user/index"
+  }
+}

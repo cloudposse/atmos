@@ -15,6 +15,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// stepsFromStrings is a helper to convert []string to schema.Tasks for tests.
+func stepsFromStrings(commands ...string) schema.Tasks {
+	tasks := make(schema.Tasks, len(commands))
+	for i, cmd := range commands {
+		tasks[i] = schema.Task{Command: cmd, Type: "shell"}
+	}
+	return tasks
+}
+
 // TestCustomCommandIntegration_MockProviderEnvironment tests that custom commands with mock provider
 // actually set the correct environment variables for subprocesses.
 func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
@@ -51,7 +60,7 @@ func TestCustomCommandIntegration_MockProviderEnvironment(t *testing.T) {
 		Name:        "test-env-capture",
 		Description: "Capture environment variables",
 		Identity:    "mock-identity",
-		Steps:       []string{dumpEnvCmd},
+		Steps:       stepsFromStrings(dumpEnvCmd),
 	}
 
 	// Add the test command to the config.
@@ -122,7 +131,7 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 		Name:        "test-identity-override",
 		Description: "Test identity override with flag",
 		Identity:    "mock-identity", // This should be overridden by --identity flag
-		Steps:       []string{dumpEnvCmd},
+		Steps:       stepsFromStrings(dumpEnvCmd),
 	}
 
 	// Add the test command to the config.
@@ -157,8 +166,9 @@ func TestCustomCommandIntegration_IdentityFlagOverride(t *testing.T) {
 	t.Logf("Captured environment variables with --identity flag:\n%s", envVars)
 
 	// Verify that the flag override worked (should see mock-identity-2, not mock-identity).
-	assert.Contains(t, envVars, "ATMOS_IDENTITY=mock-identity-2", "Should use identity from --identity flag (mock-identity-2)")
-	assert.NotContains(t, envVars, "ATMOS_IDENTITY=mock-identity\n", "Should NOT use identity from config (mock-identity)")
+	// Use extractEnvVar for exact line matching to avoid substring false positives.
+	identityValue := extractEnvVar(envVars, "ATMOS_IDENTITY")
+	assert.Equal(t, "mock-identity-2", identityValue, "Should use identity from --identity flag, not the config value")
 }
 
 // TestCustomCommandIntegration_MultipleSteps tests that all steps in a custom command
@@ -198,10 +208,7 @@ func TestCustomCommandIntegration_MultipleSteps(t *testing.T) {
 		Name:        "test-multi-step",
 		Description: "Test multiple steps share identity",
 		Identity:    "mock-identity-2",
-		Steps: []string{
-			getDumpCmd(envOutput1),
-			getDumpCmd(envOutput2),
-		},
+		Steps:       stepsFromStrings(getDumpCmd(envOutput1), getDumpCmd(envOutput2)),
 	}
 
 	// Add the test command to the config.
@@ -257,6 +264,310 @@ func extractEnvVar(envOutput, varName string) string {
 	return ""
 }
 
+// TestCustomCommandIntegration_BooleanFlagDefaults tests that boolean flags with default values
+// are correctly registered and accessible in custom commands.
+//
+// Note: This test uses camelCase flag names (e.g., customDebug) to avoid conflicts with global
+// flags and to allow simple .Flags.name template syntax. For user-facing commands with kebab-case
+// flags (e.g., custom-debug), users can use {{ index .Flags "custom-debug" }} template syntax.
+func TestCustomCommandIntegration_BooleanFlagDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a temporary file to capture output.
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "bool-flag-output.txt")
+
+	// Create a custom command with boolean flags that have various default values.
+	// Note: Using "customDebug" instead of "verbose" since "verbose" is a global flag.
+	testCommand := schema.Command{
+		Name:        "test-bool-defaults",
+		Description: "Test boolean flag defaults",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "customDebug",
+				Shorthand: "d",
+				Type:      "bool",
+				Usage:     "Enable customDebug output",
+				Default:   false, // Explicit false default.
+			},
+			{
+				Name:      "force",
+				Shorthand: "f",
+				Type:      "bool",
+				Usage:     "Force the operation",
+				Default:   true, // Default to true.
+			},
+			{
+				Name:  "dryrun",
+				Type:  "bool",
+				Usage: "Perform dry run",
+				// No default - should default to false.
+			},
+		},
+		Steps: stepsFromStrings(
+			"echo customDebug={{ .Flags.customDebug }} force={{ .Flags.force }} dryrun={{ .Flags.dryrun }} > " + outputFile,
+		),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands to register them with RootCmd.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err)
+
+	// Find the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-bool-defaults" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify flags are registered with correct defaults.
+	customDebugFlag := customCmd.PersistentFlags().Lookup("customDebug")
+	require.NotNil(t, customDebugFlag, "customDebug flag should be registered")
+	assert.Equal(t, "false", customDebugFlag.DefValue, "customDebug should default to false")
+
+	forceFlag := customCmd.PersistentFlags().Lookup("force")
+	require.NotNil(t, forceFlag, "force flag should be registered")
+	assert.Equal(t, "true", forceFlag.DefValue, "force should default to true")
+
+	dryrunFlag := customCmd.PersistentFlags().Lookup("dryrun")
+	require.NotNil(t, dryrunFlag, "dryrun flag should be registered")
+	assert.Equal(t, "false", dryrunFlag.DefValue, "dryrun should default to false when no default specified")
+}
+
+// TestCustomCommandIntegration_BooleanFlagTemplatePatterns tests that boolean flags
+// work correctly with various Go template patterns in step execution.
+func TestCustomCommandIntegration_BooleanFlagTemplatePatterns(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a temporary file to capture output from all patterns.
+	tmpDir := t.TempDir()
+	outputFile := filepath.Join(tmpDir, "template-patterns-output.txt")
+
+	// Create a custom command that tests various template patterns with boolean flags.
+	// Note: Using "customDebug" instead of "verbose" since "verbose" is a global flag.
+	testCommand := schema.Command{
+		Name:        "test-template-patterns",
+		Description: "Test boolean flag template patterns",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "customDebug",
+				Shorthand: "d",
+				Type:      "bool",
+				Usage:     "Enable customDebug output",
+				Default:   false,
+			},
+			{
+				Name:    "clean",
+				Type:    "bool",
+				Usage:   "Clean before building",
+				Default: true,
+			},
+		},
+		Steps: stepsFromStrings(
+			// Test multiple patterns in a single step that writes to file.
+			// Using .Flags.customDebug (no hyphens) so we can use simple dot notation.
+			`echo "PATTERN1={{ if .Flags.customDebug }}DEBUG_ON{{ end }}" >> `+outputFile,
+			`echo "PATTERN2=Building{{ if .Flags.customDebug }} with debug{{ end }}" >> `+outputFile,
+			`echo "PATTERN3={{ if .Flags.clean }}CLEAN_ON{{ else }}CLEAN_OFF{{ end }}" >> `+outputFile,
+			`echo "PATTERN4={{ if not .Flags.customDebug }}QUIET_MODE{{ end }}" >> `+outputFile,
+			`echo "PATTERN5=customDebug={{ .Flags.customDebug }}" >> `+outputFile,
+			"echo \"PATTERN6=clean={{ printf \"%t\" .Flags.clean }}\" >> "+outputFile,
+		),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands to register them with RootCmd.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err)
+
+	// Verify the command is registered.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-template-patterns" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Test 1: Execute with default values (customDebug=false, clean=true).
+	// IMPORTANT: Must use RootCmd.SetArgs() + Execute() to properly initialize Cobra's flag merging.
+	// Calling cmd.Run() directly bypasses flag initialization and causes "flag not defined" errors.
+	RootCmd.SetArgs([]string{"test-template-patterns"})
+	err = RootCmd.Execute()
+	require.NoError(t, err, "Custom command execution should succeed")
+
+	// Read and verify output.
+	output, err := os.ReadFile(outputFile)
+	require.NoError(t, err, "Should be able to read output file")
+	outputStr := string(output)
+	t.Logf("Output with defaults (customDebug=false, clean=true):\n%s", outputStr)
+
+	// Pattern 1: {{ if .Flags.customDebug }} - should be empty since customDebug=false.
+	assert.Contains(t, outputStr, "PATTERN1=\n", "Pattern 1: if should produce empty when customDebug=false")
+
+	// Pattern 2: Inline conditional - should not have "with customDebug".
+	assert.Contains(t, outputStr, "PATTERN2=Building\n", "Pattern 2: inline if should not append when customDebug=false")
+
+	// Pattern 3: if/else - clean=true so should be CLEAN_ON.
+	assert.Contains(t, outputStr, "PATTERN3=CLEAN_ON", "Pattern 3: if/else should produce CLEAN_ON when clean=true")
+
+	// Pattern 4: if not - customDebug=false so "not .Flags.customDebug" is true.
+	assert.Contains(t, outputStr, "PATTERN4=QUIET_MODE", "Pattern 4: if not should produce QUIET_MODE when customDebug=false")
+
+	// Pattern 5: Direct boolean value - should be "false".
+	assert.Contains(t, outputStr, "PATTERN5=customDebug=false", "Pattern 5: direct value should render as 'false'")
+
+	// Pattern 6: printf %t - should be "true".
+	assert.Contains(t, outputStr, "PATTERN6=clean=true", "Pattern 6: printf should render as 'true'")
+
+	// Clear output file for next test.
+	err = os.WriteFile(outputFile, []byte{}, 0o644)
+	require.NoError(t, err)
+
+	// Test 2: Execute with customDebug=true and clean=false (via flags).
+	RootCmd.SetArgs([]string{"test-template-patterns", "--customDebug", "--clean=false"})
+	err = RootCmd.Execute()
+	require.NoError(t, err, "Custom command execution with flags should succeed")
+
+	// Read and verify output with customDebug=true, clean=false.
+	output, err = os.ReadFile(outputFile)
+	require.NoError(t, err)
+	outputStr = string(output)
+	t.Logf("Output with flags (customDebug=true, clean=false):\n%s", outputStr)
+
+	// Pattern 1: {{ if .Flags.customDebug }} - should have DEBUG_ON.
+	assert.Contains(t, outputStr, "PATTERN1=DEBUG_ON", "Pattern 1: if should produce DEBUG_ON when customDebug=true")
+
+	// Pattern 2: Inline conditional - should have "with debug".
+	assert.Contains(t, outputStr, "PATTERN2=Building with debug", "Pattern 2: inline if should append when customDebug=true")
+
+	// Pattern 3: if/else - clean=false so should be CLEAN_OFF.
+	assert.Contains(t, outputStr, "PATTERN3=CLEAN_OFF", "Pattern 3: if/else should produce CLEAN_OFF when clean=false")
+
+	// Pattern 4: if not - customDebug=true so "not .Flags.customDebug" is false.
+	assert.Contains(t, outputStr, "PATTERN4=\n", "Pattern 4: if not should produce empty when customDebug=true")
+
+	// Pattern 5: Direct boolean value - should be "true".
+	assert.Contains(t, outputStr, "PATTERN5=customDebug=true", "Pattern 5: direct value should render as 'true'")
+
+	// Pattern 6: printf %t - should be "false".
+	assert.Contains(t, outputStr, "PATTERN6=clean=false", "Pattern 6: printf should render as 'false'")
+}
+
+// TestCustomCommandIntegration_StringFlagDefaults tests that string flags with default values
+// are correctly registered and accessible in custom commands.
+func TestCustomCommandIntegration_StringFlagDefaults(t *testing.T) {
+	if testing.Short() {
+		t.Skipf("Skipping integration test in short mode")
+	}
+
+	// Set up test fixture.
+	testDir := "../tests/fixtures/scenarios/complete"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", testDir)
+	t.Setenv("ATMOS_BASE_PATH", testDir)
+
+	// Create a test kit to ensure clean RootCmd state.
+	_ = NewTestKit(t)
+
+	// Load atmos configuration.
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Create a custom command with string flags that have default values.
+	testCommand := schema.Command{
+		Name:        "test-string-defaults",
+		Description: "Test string flag defaults",
+		Flags: []schema.CommandFlag{
+			{
+				Name:      "environment",
+				Shorthand: "e",
+				Usage:     "Target environment",
+				Default:   "development",
+			},
+			{
+				Name:  "region",
+				Usage: "AWS region",
+				// No default - should be empty string.
+			},
+			{
+				Name:    "format",
+				Usage:   "Output format",
+				Default: "json",
+			},
+		},
+		Steps: stepsFromStrings(
+			"echo environment={{ .Flags.environment }} region={{ .Flags.region }} format={{ .Flags.format }}",
+		),
+	}
+
+	// Add the test command to the config.
+	atmosConfig.Commands = []schema.Command{testCommand}
+
+	// Process custom commands to register them with RootCmd.
+	err = processCustomCommands(atmosConfig, atmosConfig.Commands, RootCmd, true)
+	require.NoError(t, err)
+
+	// Find the custom command.
+	var customCmd *cobra.Command
+	for _, cmd := range RootCmd.Commands() {
+		if cmd.Name() == "test-string-defaults" {
+			customCmd = cmd
+			break
+		}
+	}
+	require.NotNil(t, customCmd, "Custom command should be registered")
+
+	// Verify flags are registered with correct defaults.
+	envFlag := customCmd.PersistentFlags().Lookup("environment")
+	require.NotNil(t, envFlag, "environment flag should be registered")
+	assert.Equal(t, "development", envFlag.DefValue, "environment should default to 'development'")
+
+	regionFlag := customCmd.PersistentFlags().Lookup("region")
+	require.NotNil(t, regionFlag, "region flag should be registered")
+	assert.Equal(t, "", regionFlag.DefValue, "region should default to empty string when no default specified")
+
+	formatFlag := customCmd.PersistentFlags().Lookup("format")
+	require.NotNil(t, formatFlag, "format flag should be registered")
+	assert.Equal(t, "json", formatFlag.DefValue, "format should default to 'json'")
+}
+
 // TestCustomCommandIntegration_NoIdentity tests that custom commands without identity
 // work correctly and don't set authentication environment variables.
 func TestCustomCommandIntegration_NoIdentity(t *testing.T) {
@@ -293,7 +604,7 @@ func TestCustomCommandIntegration_NoIdentity(t *testing.T) {
 		Name:        "test-no-identity",
 		Description: "Test command without identity",
 		// No Identity field
-		Steps: []string{dumpEnvCmd},
+		Steps: stepsFromStrings(dumpEnvCmd),
 	}
 
 	// Add the test command to the config.

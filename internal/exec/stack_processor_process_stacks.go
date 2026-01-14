@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -48,10 +49,19 @@ func ProcessStackConfig(
 		".yml",
 	)
 
+	// Extract the stack-level 'name' field (logical name override) if present.
+	var stackManifestName string
+	if i, ok := config[cfg.NameSectionName]; ok {
+		if name, ok := i.(string); ok {
+			stackManifestName = name
+		}
+	}
+
 	globalVarsSection := map[string]any{}
 	globalHooksSection := map[string]any{}
 	globalSettingsSection := map[string]any{}
 	globalEnvSection := map[string]any{}
+	globalGenerateSection := map[string]any{}
 	globalTerraformSection := map[string]any{}
 	globalHelmfileSection := map[string]any{}
 	globalPackerSection := map[string]any{}
@@ -64,6 +74,7 @@ func ProcessStackConfig(
 	terraformCommand := ""
 	terraformProviders := map[string]any{}
 	terraformHooks := map[string]any{}
+	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
 
 	helmfileVars := map[string]any{}
@@ -109,6 +120,13 @@ func ProcessStackConfig(
 		globalEnvSection, ok = i.(map[string]any)
 		if !ok {
 			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidEnvSection, stackName)
+		}
+	}
+
+	if i, ok := config[cfg.GenerateSectionName]; ok {
+		globalGenerateSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidGenerateSection, stackName)
 		}
 	}
 
@@ -179,6 +197,18 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalTerraformSection[cfg.GenerateSectionName]; ok {
+		terraformGenerate, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformGenerateSection, stackName)
+		}
+	}
+
+	globalAndTerraformGenerate, err := m.Merge(atmosConfig, []map[string]any{globalGenerateSection, terraformGenerate})
+	if err != nil {
+		return nil, err
+	}
+
 	if i, ok := globalTerraformSection[cfg.SettingsSectionName]; ok {
 		terraformSettings, ok = i.(map[string]any)
 		if !ok {
@@ -198,7 +228,9 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, terraformEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	atmosConfigEnv := envpkg.ConvertMapStringToAny(atmosConfig.Env)
+	globalAndTerraformEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, terraformEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -258,6 +290,16 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Global source.
+	globalSourceSection := map[string]any{}
+
+	if i, ok := globalTerraformSection[cfg.SourceSectionName]; ok {
+		globalSourceSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformSource, stackName)
+		}
+	}
+
 	// Helmfile section.
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
@@ -297,7 +339,8 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, helmfileEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndHelmfileEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, helmfileEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -353,7 +396,8 @@ func ProcessStackConfig(
 		}
 	}
 
-	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{globalEnvSection, packerEnv})
+	// Include atmos.yaml global env as lowest priority in the merge chain.
+	globalAndPackerEnv, err := m.Merge(atmosConfig, []map[string]any{atmosConfigEnv, globalEnvSection, packerEnv})
 	if err != nil {
 		return nil, err
 	}
@@ -413,10 +457,12 @@ func ProcessStackConfig(
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
 					GlobalAndTerraformHooks:         globalAndTerraformHooks,
+					GlobalAndTerraformGenerate:      globalAndTerraformGenerate,
 					GlobalBackendType:               globalBackendType,
 					GlobalBackendSection:            globalBackendSection,
 					GlobalRemoteStateBackendType:    globalRemoteStateBackendType,
 					GlobalRemoteStateBackendSection: globalRemoteStateBackendSection,
+					GlobalSourceSection:             globalSourceSection,
 					AtmosConfig:                     atmosConfig,
 				}, nil
 			}
@@ -509,6 +555,11 @@ func ProcessStackConfig(
 
 	result := map[string]any{
 		cfg.ComponentsSectionName: allComponents,
+	}
+
+	// Include the stack-level 'name' field if it was set.
+	if stackManifestName != "" {
+		result[cfg.NameSectionName] = stackManifestName
 	}
 
 	return result, nil

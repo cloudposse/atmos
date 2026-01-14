@@ -1,0 +1,35 @@
+# Developer Profile - Authentication
+# Local development authentication using AWS SSO
+
+auth:
+  providers:
+    # AWS SSO for development account
+    aws-sso-dev:
+      kind: aws/sso
+      region: us-east-2
+      start_url: https://my-company.awsapps.com/start
+
+    # AWS SSO for staging account
+    aws-sso-staging:
+      kind: aws/sso
+      region: us-east-2
+      start_url: https://my-company.awsapps.com/start
+
+  identities:
+    # Development account with full access
+    dev-full-access:
+      via:
+        provider: aws-sso-dev
+      principal:
+        account_id: "999888777666"
+        permission_set: DeveloperAccess
+      default: true  # Favorite for quick selection
+
+    # Staging account with read access
+    staging-readonly:
+      via:
+        provider: aws-sso-staging
+      principal:
+        account_id: "888777666555"
+        permission_set: ReadOnlyAccess
+      default: true  # Favorite for quick selection

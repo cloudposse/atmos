@@ -1,6 +1,6 @@
 {
   "label": "validate",
-  "position": 10,
+  "position": 17,
   "className": "command",
   "collapsible": true,
   "collapsed": true,

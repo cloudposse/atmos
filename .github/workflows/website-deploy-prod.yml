@@ -50,12 +50,17 @@ jobs:
         with:
           node-version-file: "website/.nvmrc"
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
       - name: Install Dependencies and Build Website
         run: |
           node --version
           cd website
-          npm install --only=production
-          npm run build:site
+          pnpm install --frozen-lockfile
+          pnpm run build:site
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -66,11 +71,14 @@ jobs:
           aws s3 sync . s3://${{ env.S3_BUCKET_NAME }} --delete
           aws s3 ls s3://${{ env.S3_BUCKET_NAME }} --recursive --human-readable --summarize
 
-      - name: ReIndex with Algolia
-        env:
-          ALGOLIA_SCRAPER_API_KEY: ${{ secrets.ALGOLIA_SCRAPER_API_KEY }}
-        run: |
-          ./website/algolia/reindex.sh
+      - name: Trigger Algolia Crawler
+        uses: algolia/algoliasearch-crawler-github-actions@v1
+        with:
+          crawler-user-id: ${{ secrets.ALGOLIA_CRAWLER_USER_ID }}
+          crawler-api-key: ${{ secrets.ALGOLIA_CRAWLER_API_KEY }}
+          algolia-app-id: ${{ env.ALGOLIA_APP_ID }}
+          algolia-api-key: ${{ secrets.ALGOLIA_API_KEY }}
+          site-url: 'https://${{ env.DEPLOYMENT_HOST }}'
 
       - name: Trigger ReIndexing of atmos.tools and docs.cloudposse.com Docs
         run: |

@@ -1,0 +1,55 @@
+---
+title: Version
+sidebar_position: 90
+sidebar_label: version
+sidebar_class_name: command
+description: Configure version checking, update notifications, and version constraints for Atmos CLI.
+id: version
+slug: /cli/configuration/version
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+The `version` section configures how Atmos handles version management, including automatic update checking and version constraint enforcement to ensure consistent behavior across teams and environments.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+version:
+  # Automatic update checking
+  check:
+    enabled: true
+    frequency: daily
+
+  # Version constraint enforcement
+  constraint:
+    require: ">=1.100.0"
+    enforcement: fatal
+    message: "Please upgrade Atmos to use this configuration."
+```
+</File>
+
+## Version Sections
+
+| Section | Description |
+|---------|-------------|
+| [Check](/cli/configuration/version/check) | Automatic version checking and update notifications |
+| [Constraint](/cli/configuration/version/constraint) | Enforce Atmos version requirements for your configuration |
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_VERSION_CHECK_ENABLED`</dt>
+  <dd>Enable or disable automatic version checking.</dd>
+
+  <dt>`ATMOS_VERSION_ENFORCEMENT`</dt>
+  <dd>Override version constraint enforcement level: `fatal`, `warn`, or `silent`.</dd>
+</dl>
+
+## See Also
+
+- [CLI Configuration](/cli/configuration) — Overview of CLI configuration
+- [`atmos version`](/cli/commands/version/usage) — Display version and check for updates

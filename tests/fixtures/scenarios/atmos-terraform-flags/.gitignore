@@ -1,0 +1,8 @@
+# Ignore terraform state and generated files
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+backend.tf.json
+*.auto.tfvars.json
+terraform.tfstate.d/

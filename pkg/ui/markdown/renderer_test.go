@@ -221,3 +221,47 @@ func TestRenderer_AllMethodsTrimTrailingSpaces(t *testing.T) {
 		})
 	}
 }
+
+func TestNewHelpRenderer(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig *schema.AtmosConfiguration
+		expectError bool
+	}{
+		{
+			name: "creates help renderer successfully",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						NoColor: false,
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "creates help renderer with no color",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					Terminal: schema.Terminal{
+						NoColor: true,
+					},
+				},
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			renderer, err := NewHelpRenderer(tt.atmosConfig)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.NotNil(t, renderer)
+			}
+		})
+	}
+}

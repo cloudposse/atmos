@@ -10,16 +10,18 @@ import (
 )
 
 // applyGitRootBasePath automatically sets the base path to the Git repository root
-// when using the default configuration and no local Atmos config exists.
+// when base_path is empty or set to the default value.
 //
 // This function implements smart defaults:
-// - Only applies to default config (no explicit atmos.yaml path provided).
-// - Skips if local Atmos configuration exists (atmos.yaml, .atmos/, etc.).
+// - Skips if local Atmos configuration exists in CWD (atmos.yaml, .atmos/, etc.).
 // - Skips if base_path is explicitly set to a non-default value.
 // - Can be disabled via ATMOS_GIT_ROOT_BASEPATH=false.
 //
 // This allows users to run `atmos` from anywhere in a Git repository
 // without needing to specify --config-dir or base_path.
+//
+// Note: Git root discovery now also happens in resolveAbsolutePath() for path resolution.
+// This function primarily handles the case where we want to set BasePath before path resolution.
 func applyGitRootBasePath(atmosConfig *schema.AtmosConfiguration) error {
 	// Bootstrap configuration: Read directly because this controls git root discovery during
 	// config loading itself, before processEnvVars() populates the Settings struct.
@@ -46,12 +48,8 @@ func applyGitRootBasePath(atmosConfig *schema.AtmosConfiguration) error {
 		return nil
 	}
 
-	// Only apply to default config with default base path.
-	if !atmosConfig.Default {
-		log.Trace("Skipping git root base path (not default config)")
-		return nil
-	}
-
+	// Skip if base_path is explicitly set to a non-default value.
+	// Empty string and "." are considered default values.
 	if atmosConfig.BasePath != "." && atmosConfig.BasePath != "" {
 		log.Trace("Skipping git root base path (explicit base_path set)", "base_path", atmosConfig.BasePath)
 		return nil

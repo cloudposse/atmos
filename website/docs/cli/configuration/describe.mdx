@@ -1,0 +1,76 @@
+---
+title: Describe Settings
+sidebar_label: describe
+sidebar_class_name: command
+id: describe
+description: Configure the describe command output behavior in your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+The `describe` section of the `atmos.yaml` configures the behavior of the `atmos describe` command output.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+describe:
+  settings:
+    # Include empty values in the describe output
+    include_empty: false
+```
+</File>
+
+## Fields
+
+<dl>
+  <dt>`settings.include_empty`</dt>
+  <dd>
+    When set to `true`, includes fields with empty values (empty strings, empty arrays, null values) in the describe command output.
+    Default: `false` (empty values are omitted for cleaner output).
+  </dd>
+</dl>
+
+## Examples
+
+### Show All Fields Including Empty
+
+To see all configuration fields even when they have no value:
+
+<File title="atmos.yaml">
+```yaml
+describe:
+  settings:
+    include_empty: true
+```
+</File>
+
+This is useful for:
+- Understanding the full schema of component configurations
+- Debugging why a field might not be set
+- Documentation purposes
+
+### Default Behavior (Cleaner Output)
+
+By default, empty values are omitted:
+
+<File title="atmos.yaml">
+```yaml
+describe:
+  settings:
+    include_empty: false
+```
+</File>
+
+This produces cleaner, more readable output focused on the values that are actually configured.
+
+<ActionCard title="Describe Components and Stacks">
+    Use the describe commands to inspect your component and stack configurations.
+    <div>
+      <PrimaryCTA to="/cli/commands/describe/usage">Describe Commands</PrimaryCTA>
+    </div>
+</ActionCard>

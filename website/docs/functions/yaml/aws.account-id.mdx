@@ -1,0 +1,166 @@
+---
+title: "!aws.account_id"
+sidebar_position: 11
+sidebar_label: "!aws.account_id"
+sidebar_class_name: command
+description: Retrieve the AWS account ID of the current caller identity
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!aws.account_id` YAML function retrieves the AWS account ID of the current caller identity
+by calling the AWS STS `GetCallerIdentity` API.
+</Intro>
+
+## Usage
+
+The `!aws.account_id` function takes no parameters:
+
+```yaml
+  # Get the AWS account ID of the current caller identity
+  account_id: !aws.account_id
+```
+
+## Arguments
+
+This function takes no arguments. It uses the AWS credentials from the environment or the
+Atmos authentication context if configured.
+
+## How It Works
+
+When processing the `!aws.account_id` YAML function, Atmos:
+
+1. **Loads AWS Configuration** - Uses the standard AWS SDK credential resolution chain:
+   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+   - Shared credentials file (`~/.aws/credentials`)
+   - Shared config file (`~/.aws/config`)
+   - EC2 Instance Metadata Service (IMDS)
+   - ECS Task credentials
+   - Web Identity Token credentials
+
+2. **Calls STS GetCallerIdentity** - Makes an API call to retrieve the caller identity
+
+3. **Returns Account ID** - Extracts and returns the 12-digit AWS account ID as a string
+
+:::note Atmos Auth Integration
+When using [Atmos Authentication](/cli/commands/auth/usage), the function automatically uses credentials
+from the active identity. This enables seamless integration with SSO, assume role chains, and other
+authentication methods configured in your `atmos.yaml`.
+:::
+
+## Caching
+
+The `!aws.account_id` function caches its results in memory for the duration of the CLI invocation.
+This means:
+
+- Multiple uses of `!aws.account_id` in the same command only make one STS API call
+- Different authentication contexts (e.g., different profiles) get separate cache entries
+- Each new CLI command starts with a fresh cache
+
+This caching significantly improves performance when the function is used in multiple places
+across your stack manifests.
+
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
+## Examples
+
+### Basic Usage
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my-component:
+      vars:
+        # Inject the AWS account ID into Terraform variables
+        aws_account_id: !aws.account_id
+```
+</File>
+
+### Use in Backend Configuration
+
+<File title="stack.yaml">
+```yaml
+terraform:
+  backend:
+    s3:
+      # Pass account ID to Terraform for constructing bucket names
+      account_id: !aws.account_id
+```
+</File>
+
+### Conditional Logic with Account ID
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    security-baseline:
+      vars:
+        # Pass account ID for resource naming
+        account_id: !aws.account_id
+
+        # Use in tags
+        tags:
+          AccountId: !aws.account_id
+          ManagedBy: "atmos"
+```
+</File>
+
+### Multiple Components Using Account ID
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    # Account ID is fetched once and cached
+    vpc:
+      vars:
+        account_id: !aws.account_id
+
+    eks:
+      vars:
+        account_id: !aws.account_id  # Uses cached value
+
+    rds:
+      vars:
+        account_id: !aws.account_id  # Uses cached value
+```
+</File>
+
+## Comparison with Terragrunt
+
+This function is equivalent to Terragrunt's `get_aws_account_id()` function:
+
+| Terragrunt | Atmos |
+|------------|-------|
+| `get_aws_account_id()` | `!aws.account_id` |
+
+## Error Handling
+
+If the function fails to retrieve the AWS caller identity (e.g., no credentials available,
+network issues, or insufficient permissions), Atmos will log an error and exit.
+
+Common error scenarios:
+- No AWS credentials configured
+- Expired credentials
+- Network connectivity issues
+- Missing STS permissions
+
+## Considerations
+
+- **Requires valid AWS credentials** - The function will fail if no valid credentials are available
+- **Network dependency** - Requires connectivity to AWS STS endpoint
+- **Performance** - Results are cached per CLI invocation, so there's minimal overhead when used multiple times
+- **IAM permissions** - Requires `sts:GetCallerIdentity` permission (usually available to all authenticated principals)
+
+## Related Functions
+
+- [!aws.caller_identity_arn](/functions/yaml/aws.caller-identity-arn) - Get the full ARN of the caller identity
+- [!aws.caller_identity_user_id](/functions/yaml/aws.caller-identity-user-id) - Get the unique user ID
+- [!aws.region](/functions/yaml/aws.region) - Get the AWS region

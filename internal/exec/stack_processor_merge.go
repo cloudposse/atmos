@@ -16,8 +16,8 @@ import (
 func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *ComponentProcessorOptions, result *ComponentProcessorResult) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.mergeComponentConfigurations")()
 
-	// Merge vars.
-	finalComponentVars, err := m.Merge(
+	// Merge vars using deferred merge to handle YAML functions.
+	finalComponentVars, varsCtx, err := m.MergeWithDeferred(
 		atmosConfig,
 		[]map[string]any{
 			opts.GlobalVars,
@@ -29,8 +29,13 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Merge settings.
-	finalComponentSettings, err := m.Merge(
+	// Apply deferred merges for vars (without YAML processing - already done earlier).
+	if err := m.ApplyDeferredMerges(varsCtx, finalComponentVars, atmosConfig, nil); err != nil {
+		return nil, err
+	}
+
+	// Merge settings using deferred merge to handle YAML functions.
+	finalComponentSettings, settingsCtx, err := m.MergeWithDeferred(
 		atmosConfig,
 		[]map[string]any{
 			opts.GlobalSettings,
@@ -42,8 +47,13 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Merge env.
-	finalComponentEnv, err := m.Merge(
+	// Apply deferred merges for settings (without YAML processing - already done earlier).
+	if err := m.ApplyDeferredMerges(settingsCtx, finalComponentSettings, atmosConfig, nil); err != nil {
+		return nil, err
+	}
+
+	// Merge env using deferred merge to handle YAML functions.
+	finalComponentEnv, envCtx, err := m.MergeWithDeferred(
 		atmosConfig,
 		[]map[string]any{
 			opts.GlobalEnv,
@@ -55,8 +65,13 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Merge auth.
-	finalComponentAuth, err := m.Merge(
+	// Apply deferred merges for env (without YAML processing - already done earlier).
+	if err := m.ApplyDeferredMerges(envCtx, finalComponentEnv, atmosConfig, nil); err != nil {
+		return nil, err
+	}
+
+	// Merge auth using deferred merge to handle YAML functions.
+	finalComponentAuth, authCtx, err := m.MergeWithDeferred(
 		atmosConfig,
 		[]map[string]any{
 			opts.GlobalAuth,
@@ -68,10 +83,16 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
-	// Terraform-specific: merge providers.
+	// Apply deferred merges for auth (without YAML processing - already done earlier).
+	if err := m.ApplyDeferredMerges(authCtx, finalComponentAuth, atmosConfig, nil); err != nil {
+		return nil, err
+	}
+
+	// Terraform-specific: merge providers using deferred merge.
 	var finalComponentProviders map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
-		finalComponentProviders, err = m.Merge(
+		var providersCtx *m.DeferredMergeContext
+		finalComponentProviders, providersCtx, err = m.MergeWithDeferred(
 			atmosConfig,
 			[]map[string]any{
 				opts.TerraformProviders,
@@ -82,12 +103,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		if err != nil {
 			return nil, err
 		}
+
+		// Apply deferred merges for providers (without YAML processing - already done earlier).
+		if err := m.ApplyDeferredMerges(providersCtx, finalComponentProviders, atmosConfig, nil); err != nil {
+			return nil, err
+		}
 	}
 
-	// Terraform-specific: merge hooks.
+	// Terraform-specific: merge hooks using deferred merge.
 	var finalComponentHooks map[string]any
 	if opts.ComponentType == cfg.TerraformComponentType {
-		finalComponentHooks, err = m.Merge(
+		var hooksCtx *m.DeferredMergeContext
+		finalComponentHooks, hooksCtx, err = m.MergeWithDeferred(
 			atmosConfig,
 			[]map[string]any{
 				opts.GlobalAndTerraformHooks,
@@ -96,6 +123,38 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				result.ComponentOverridesHooks,
 			})
 		if err != nil {
+			return nil, err
+		}
+
+		// Apply deferred merges for hooks (without YAML processing - already done earlier).
+		if err := m.ApplyDeferredMerges(hooksCtx, finalComponentHooks, atmosConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
+	// Terraform-specific: merge generate section using deferred merge.
+	// Merge order (lowest to highest priority):
+	// 1. Global + Terraform-level generate (stack-level `generate:` + `terraform.generate:`)
+	// 2. Base component generate (from metadata.inherits)
+	// 3. Component generate (component-specific generate section)
+	// 4. Component overrides generate (from overrides section)
+	var finalComponentGenerate map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var generateCtx *m.DeferredMergeContext
+		finalComponentGenerate, generateCtx, err = m.MergeWithDeferred(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalAndTerraformGenerate,
+				result.BaseComponentGenerate,
+				result.ComponentGenerate,
+				result.ComponentOverridesGenerate,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		// Apply deferred merges for generate (without YAML processing - already done earlier).
+		if err := m.ApplyDeferredMerges(generateCtx, finalComponentGenerate, atmosConfig, nil); err != nil {
 			return nil, err
 		}
 	}
@@ -133,6 +192,55 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		return nil, err
 	}
 
+	// Merge metadata when inheritance is enabled.
+	// Base component metadata is merged with component metadata.
+	// Excluded from inheritance: 'inherits' and 'type' (already excluded during collection).
+	finalComponentMetadata := result.ComponentMetadata
+	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
+		// Create a copy of base metadata excluding 'inherits' and 'type' (already excluded during collection).
+		// Then merge with component metadata (component metadata wins on conflicts).
+		finalComponentMetadata, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentMetadata,
+				result.ComponentMetadata,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Merge dependencies (base component dependencies + component dependencies).
+	// Component dependencies take precedence over base component dependencies.
+	var finalComponentDependencies map[string]any
+	if len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
+		finalComponentDependencies, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentDependencies,
+				result.ComponentDependencies,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Merge locals (base component locals + component locals).
+	// Component locals take precedence over base component locals.
+	// Note: Locals are used for template processing, not passed to terraform/helmfile.
+	var finalComponentLocals map[string]any
+	if len(result.BaseComponentLocals) > 0 || len(result.ComponentLocals) > 0 {
+		finalComponentLocals, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentLocals,
+				result.ComponentLocals,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -141,8 +249,18 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		cfg.AuthSectionName:        finalComponentAuth,
 		cfg.CommandSectionName:     finalComponentCommand,
 		cfg.InheritanceSectionName: result.ComponentInheritanceChain,
-		cfg.MetadataSectionName:    result.ComponentMetadata,
+		cfg.MetadataSectionName:    finalComponentMetadata,
 		cfg.OverridesSectionName:   result.ComponentOverrides,
+	}
+
+	// Add dependencies if present.
+	if len(finalComponentDependencies) > 0 {
+		comp[cfg.DependenciesSectionName] = finalComponentDependencies
+	}
+
+	// Add locals if present (for template processing, not passed to terraform/helmfile).
+	if len(finalComponentLocals) > 0 {
+		comp[cfg.LocalsSectionName] = finalComponentLocals
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
@@ -153,6 +271,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 				atmosConfig:                 atmosConfig,
 				component:                   opts.Component,
 				baseComponentName:           result.BaseComponentName,
+				componentMetadata:           finalComponentMetadata,
 				globalBackendType:           opts.GlobalBackendType,
 				globalBackendSection:        opts.GlobalBackendSection,
 				baseComponentBackendType:    result.BaseComponentBackendType,
@@ -210,11 +329,30 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		// Add Terraform-specific fields to component map.
 		comp[cfg.ProvidersSectionName] = finalComponentProviders
 		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
 		comp[cfg.RemoteStateBackendSectionName] = finalComponentRemoteStateBackend
 		comp[cfg.AuthSectionName] = mergedAuth
+	}
+
+	// Process source and provision configuration for terraform, helmfile, and packer components.
+	if opts.ComponentType == cfg.TerraformComponentType ||
+		opts.ComponentType == cfg.HelmfileComponentType ||
+		opts.ComponentType == cfg.PackerComponentType {
+		finalComponentSource, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalSourceSection,
+				result.BaseComponentSourceSection,
+				result.ComponentSourceSection,
+			})
+		if err != nil {
+			return nil, err
+		}
+		comp[cfg.SourceSectionName] = finalComponentSource
+		comp[cfg.ProvisionSectionName] = result.ComponentProvision
 	}
 
 	// Add base component name if present.
@@ -229,14 +367,19 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 func processAuthConfig(atmosConfig *schema.AtmosConfiguration, globalAuthConfig map[string]any, authConfig map[string]any) (map[string]any, error) {
 	// Use the pre-converted global auth config to avoid race conditions.
 	// The globalAuthConfig parameter is pre-converted from atmosConfig.Auth before parallel processing starts.
-	mergedAuthConfig, err := m.Merge(
+	mergedAuthConfig, mergeCtx, err := m.MergeWithDeferred(
 		atmosConfig,
 		[]map[string]any{
 			globalAuthConfig,
 			authConfig,
 		})
 	if err != nil {
-		return nil, fmt.Errorf("%w: merge auth config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: merge auth config: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	// Apply deferred merges (without YAML processing - already done earlier).
+	if err := m.ApplyDeferredMerges(mergeCtx, mergedAuthConfig, atmosConfig, nil); err != nil {
+		return nil, fmt.Errorf("%w: apply deferred merges for auth config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	return mergedAuthConfig, nil

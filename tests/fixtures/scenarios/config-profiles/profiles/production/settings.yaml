@@ -1,0 +1,7 @@
+# Production profile settings
+logs:
+  level: Warning
+
+settings:
+  terminal:
+    max_width: 100

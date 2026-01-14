@@ -1,0 +1,70 @@
+---
+title: atmos devcontainer start
+sidebar_label: start
+sidebar_class_name: command
+id: start
+description: Start a devcontainer
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to start a devcontainer. If the container doesn't exist, it will be created. If it exists but is stopped, it will be started.
+</Intro>
+
+<Screengrab title="atmos devcontainer start --help" slug="atmos-devcontainer-start--help" />
+
+## Usage
+
+```shell
+atmos devcontainer start <name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`name`</dt>
+  <dd>Name of the devcontainer to start (from `atmos.yaml` configuration)</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--instance string`</dt>
+  <dd>Instance name for this devcontainer (default: `default`). Use this to run multiple instances of the same devcontainer configuration.</dd>
+
+  <dt>`--attach`</dt>
+  <dd>Attach to the container after starting it. This immediately opens an interactive shell in the container.</dd>
+</dl>
+
+## Examples
+
+```shell
+# Start a devcontainer
+atmos devcontainer start geodesic
+
+# Start and immediately attach
+atmos devcontainer start geodesic --attach
+
+# Start a specific instance
+atmos devcontainer start terraform --instance project-a
+
+# Start with custom runtime (via environment variable)
+export ATMOS_CONTAINER_RUNTIME=podman
+atmos devcontainer start geodesic
+```
+
+## Behavior
+
+1. **Container doesn't exist**: Creates a new container with the configured image, mounts, ports, and environment variables, then starts it
+2. **Container exists but stopped**: Starts the existing container
+3. **Container already running**: Reports that the container is already running
+
+The container name follows the pattern: `atmos-devcontainer-<name>-<instance>`
+
+## See Also
+
+- [Devcontainer Configuration](/cli/configuration/devcontainer) — Configure devcontainers in `atmos.yaml`
+- [`atmos devcontainer attach`](/cli/commands/devcontainer/attach)
+- [`atmos devcontainer stop`](/cli/commands/devcontainer/stop)
+- [`atmos devcontainer list`](/cli/commands/devcontainer/list)

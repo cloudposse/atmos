@@ -1,0 +1,226 @@
+---
+title: atmos toolchain info
+sidebar_label: info
+sidebar_class_name: command
+id: info
+description: Display detailed registry information about a toolchain tool.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Display detailed information about a toolchain tool from the registry, including download sources, available versions, and package metadata. This helps you verify tool configuration and understand how tools are resolved.
+</Intro>
+
+<Screengrab title="atmos toolchain info --help" slug="atmos-toolchain-info--help" />
+
+## Usage
+
+Execute the `atmos toolchain info` command like this:
+
+```shell
+atmos toolchain info <tool>
+```
+
+## Examples
+
+### View Tool Information
+
+```shell
+atmos toolchain info terraform
+```
+
+Example output:
+```
+Tool Information: hashicorp/terraform
+
+  Name:         terraform
+  Owner:        hashicorp
+  Repository:   terraform
+  Type:         github_release
+  Registry:     aqua-public
+
+  Description:  Terraform enables you to safely and predictably create,
+                change, and improve infrastructure.
+
+  Source URL:   https://releases.hashicorp.com/terraform/{{.Version}}/
+                terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip
+
+  Latest Versions:
+    1.9.8 (latest)
+    1.9.7
+    1.9.6
+    1.9.5
+    1.9.4
+
+  Installed Versions:
+    ● 1.9.8 (default)
+    ● 1.8.5
+
+  Configured Version: 1.9.8 (from .tool-versions)
+```
+
+### View with JSON Output
+
+```shell
+atmos toolchain info terraform --format json
+```
+
+Example output:
+```json
+{
+  "name": "terraform",
+  "owner": "hashicorp",
+  "repo": "terraform",
+  "type": "github_release",
+  "registry": "aqua-public",
+  "description": "Terraform enables you to safely and predictably create, change, and improve infrastructure.",
+  "url_template": "https://releases.hashicorp.com/terraform/{{.Version}}/terraform_{{.Version}}_{{.OS}}_{{.Arch}}.zip",
+  "latest_version": "1.9.8",
+  "installed_versions": ["1.9.8", "1.8.5"],
+  "configured_version": "1.9.8"
+}
+```
+
+### View Using Alias
+
+```shell
+atmos toolchain info tf
+atmos toolchain info tofu
+```
+
+### View Using Full Path
+
+```shell
+atmos toolchain info hashicorp/terraform
+atmos toolchain info kubernetes-sigs/kubectl
+```
+
+## Arguments
+
+<dl>
+    <dt>`tool` <em>(required)</em></dt>
+    <dd>
+        Tool to display information about. Can be a short name (alias) or full `owner/repo` format.
+
+        Examples: `terraform`, `tf`, `hashicorp/terraform`, `kubectl`
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--format` <em>(optional)</em></dt>
+    <dd>
+        Output format: `table`, `json`, or `yaml`. Default: `table`
+
+        Environment variable: `ATMOS_TOOLCHAIN_FORMAT`
+    </dd>
+
+    <dt>`--show-versions` <em>(optional)</em></dt>
+    <dd>
+        Number of latest versions to display. Default: `5`
+
+        Environment variable: `ATMOS_TOOLCHAIN_SHOW_VERSIONS`
+    </dd>
+</dl>
+
+## Information Displayed
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Tool name (repository name) |
+| **Owner** | GitHub organization or user |
+| **Repository** | Full `owner/repo` path |
+| **Type** | Package type (`github_release`, `http`) |
+| **Registry** | Source registry name |
+| **Description** | Tool description from registry |
+| **Source URL** | Download URL template |
+| **Latest Versions** | Recent versions available |
+| **Installed Versions** | Versions installed locally |
+| **Configured Version** | Version from `.tool-versions` |
+
+## Use Cases
+
+### Verify Tool Configuration
+
+Check how a tool is configured before installing:
+
+```shell
+# View tool details
+atmos toolchain info terraform
+
+# Check download URL
+atmos toolchain info kubectl --format json | jq '.url_template'
+```
+
+### Check Available Versions
+
+See what versions are available:
+
+```shell
+# Show more versions
+atmos toolchain info terraform --show-versions 20
+
+# Get latest version programmatically
+atmos toolchain info terraform --format json | jq -r '.latest_version'
+```
+
+### Debug Installation Issues
+
+Understand why a tool might not be found:
+
+```shell
+# Check registry and type
+atmos toolchain info unknown-tool
+# Error: tool 'unknown-tool' not found in any registry
+
+# Verify alias resolution
+atmos toolchain info tf
+# Shows: hashicorp/terraform (resolved from alias)
+```
+
+### Compare Tool Sources
+
+Understand where tools come from:
+
+```shell
+# HashiCorp uses their own CDN
+atmos toolchain info terraform
+
+# Most tools use GitHub releases
+atmos toolchain info tflint
+```
+
+### Export for Documentation
+
+Generate tool documentation:
+
+```shell
+# Export as YAML
+atmos toolchain info terraform --format yaml > docs/terraform-info.yaml
+
+# Export as JSON for automation
+atmos toolchain info kubectl --format json > kubectl-metadata.json
+```
+
+## Notes
+
+- Tool information comes from the configured registries
+- Aliases are automatically resolved to full `owner/repo` format
+- Version availability depends on what the registry provides
+- Installed versions are checked from the local toolchain directory
+
+## Related Commands
+
+- [`atmos toolchain versions`](/cli/commands/toolchain/versions) - List all available versions
+- [`atmos toolchain list`](/cli/commands/toolchain/list) - View installed tools
+- [`atmos toolchain registry search`](/cli/commands/toolchain/registry/registry-search) - Search for tools
+- [`atmos toolchain aliases`](/cli/commands/toolchain/aliases) - View configured aliases
+
+## Related Documentation
+
+- [Toolchain Overview](/cli/commands/toolchain/usage) - Complete toolchain documentation
+- [Registry Configuration](/cli/commands/toolchain/usage#custom-registries) - Configure tool registries
+- [Aqua Registry](https://github.com/aquaproj/aqua-registry) - Browse the official registry

@@ -2,22 +2,103 @@
 set -e
 export TERM=xterm-256color
 
+# Check for required dependencies
+MISSING_DEPS=()
+
+if ! command -v aha &> /dev/null; then
+    MISSING_DEPS+=("aha")
+fi
+
+if ! command -v atmos &> /dev/null; then
+    MISSING_DEPS+=("atmos")
+fi
+
+if ! command -v bat &> /dev/null; then
+    MISSING_DEPS+=("bat")
+fi
+
+if ! command -v tree &> /dev/null; then
+    MISSING_DEPS+=("tree")
+fi
+
+if ! command -v terraform &> /dev/null; then
+    MISSING_DEPS+=("terraform")
+fi
+
+if [ ${#MISSING_DEPS[@]} -ne 0 ]; then
+    echo "ERROR: Missing required dependencies: ${MISSING_DEPS[*]}" >&2
+    echo "" >&2
+    echo "Please install the missing dependencies:" >&2
+    for dep in "${MISSING_DEPS[@]}"; do
+        case "$dep" in
+            aha)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - aha: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - aha: Install with 'apt-get install aha' (Debian/Ubuntu)" >&2
+                    echo "    See: https://github.com/theZiz/aha" >&2
+                fi
+                ;;
+            atmos)
+                echo "  - atmos: Build with 'make build' from the repository root" >&2
+                echo "    Or install from: https://atmos.tools/install" >&2
+                ;;
+            bat)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - bat: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - bat: Install with 'apt-get install bat' (Debian/Ubuntu)" >&2
+                    echo "    See: https://github.com/sharkdp/bat" >&2
+                fi
+                ;;
+            tree)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - tree: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - tree: Install with 'apt-get install tree' (Debian/Ubuntu)" >&2
+                fi
+                ;;
+            terraform)
+                if [ "$(uname)" = "Darwin" ]; then
+                    echo "  - terraform: Run 'brew bundle' in demo/screengrabs directory" >&2
+                else
+                    echo "  - terraform: Install from https://www.terraform.io/downloads" >&2
+                fi
+                ;;
+        esac
+    done
+    echo "" >&2
+    echo "Alternatively, use Docker to generate screengrabs:" >&2
+    echo "  make -C demo/screengrabs docker-all" >&2
+    exit 1
+fi
+
+# Force color output for screengrabs
+export ATMOS_FORCE_COLOR=true
+export FORCE_COLOR=1
+export CLICOLOR_FORCE=1
+
 # Ensure that the output is not paginated
 export LESS=-X
+export ATMOS_PAGER=false
 
 # Determine the correct sed syntax based on the operating system
-if [ "$(uname)" = "Darwin" ]; then
-		SED="$SED" # macOS requires '' for in-place editing
-else
-		SED="sed -i"    # Linux does not require ''
-fi
+# Function to call sed with proper in-place editing syntax
+function sed_inplace() {
+	if [ "$(uname)" = "Darwin" ]; then
+		sed -i '' "$@"  # macOS requires '' for in-place editing
+	else
+		sed -i "$@"     # Linux does not require ''
+	fi
+}
 
 function record() {
     local demo=$1
     local command=$2
-    local extension="${command##*.}" # if any...
+    local first_word="${command%% *}"
+    local extension="${first_word##*.}" # if any...
     local demo_path=../../examples/$demo
-    local output_base_file=artifacts/$(echo "$command" | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
+    local output_base_file=artifacts/$(echo "$command" | sed -E 's/ --charset=UTF-8//g' | sed -E 's/ -/-/g' | sed -E 's/ +/-/g' | sed 's/---/--/g' | sed 's/scripts\///' | sed 's/\.sh$//')
     local output_html=${output_base_file}.html
     local output_ansi=${output_base_file}.ansi
     local output_dir=$(dirname $output_base_file)
@@ -25,56 +106,60 @@ function record() {
     echo "Screengrabbing $command → $output_html"
     mkdir -p "$output_dir"
     rm -f $output_ansi
-    if [ "$(uname)" = "Darwin" ]; then
-        # macOS-specific syntax
-        if [ "${extension}" == "sh" ]; then
-            script -q $output_ansi command $command > /dev/null
-        else
-            script -q $output_ansi bash -c "cd $demo_path && ($command)" > /dev/null
-        fi
+
+    # Direct command execution with ATMOS_FORCE_COLOR (no need for script command)
+    if [ "${extension}" = "sh" ]; then
+        $command > $output_ansi 2>&1
     else
-        # Linux-specific syntax
-        if [ "${extension}" = "sh" ]; then
-            script -q -a $output_ansi -c "$command" > /dev/null
-        else
-            script -q -a $output_ansi -c "cd $demo_path && ($command)" > /dev/null
-        fi
+        (cd $demo_path && $command > "$OLDPWD/$output_ansi" 2>&1)
     fi
+
     postprocess_ansi $output_ansi
     aha --no-header < $output_ansi > $output_html
     postprocess_html $output_html
     rm -f $output_ansi
     if [ -n "$CI" ]; then
-        sed -i -e '1,1d' -e '$d' $output_html
+        sed_inplace -e '1,1d' -e '$d' $output_html
     fi
 }
 
 postprocess_ansi() {
   local file=$1
-  # Remove noise and clean up the output
-  $SED '/- Finding latest version of/d' $file
-  $SED '/- Installed hashicorp/d' $file
-  $SED '/- Installing hashicorp/d' $file
-  $SED '/Terraform has created a lock file/d' $file
-  $SED '/Include this file in your version control repository/d' $file
-  $SED '/guarantee to make the same selections by default when/d' $file
-  $SED '/you run "terraform init" in the future/d' $file
-  $SED 's/Resource actions are indicated with the following symbols.*//' $file
-	$SED '/Workspace .* doesn.t exist./d' $file
-	$SED '/You can create this workspace with the .* subcommand/d' $file
-	$SED '/or include the .* flag with the .* subcommand./d' $file
+  # Remove terminal escape sequences (OSC, cursor position queries, etc.)
+  local esc=$'\033'
+  local bel=$'\007'
+  sed_inplace -E "s/${esc}\\]([0-9]+;[^${esc}]*)(${bel}|${esc}\\\\)//g" "$file"
+  sed_inplace -E "s/${esc}\\[[0-9;]+R//g" "$file"
 
-  $SED 's/^ *EOT/\n/g' $file
-  $SED 's/ *<<EOT/\n/g' $file
-  $SED 's/ *<<-EOT/\n/g' $file
-  $SED -E 's/\[id=[a-f0-9]+\]//g' $file
-  $SED -E 's/(\[id=http)/\n    \1/g' $file
+  # Remove noise and clean up the output
+  sed_inplace '/- Finding latest version of/d' $file
+  sed_inplace '/- Installed hashicorp/d' $file
+  sed_inplace '/- Installing hashicorp/d' $file
+  sed_inplace '/Terraform has created a lock file/d' $file
+  sed_inplace '/Include this file in your version control repository/d' $file
+  sed_inplace '/guarantee to make the same selections by default when/d' $file
+  sed_inplace '/you run "terraform init" in the future/d' $file
+  sed_inplace 's/Resource actions are indicated with the following symbols.*//' $file
+	sed_inplace '/Workspace .* doesn.t exist./d' $file
+	sed_inplace '/You can create this workspace with the .* subcommand/d' $file
+	sed_inplace '/or include the .* flag with the .* subcommand./d' $file
+
+  sed_inplace 's/^ *EOT/\n/g' $file
+  sed_inplace 's/ *<<EOT/\n/g' $file
+  sed_inplace 's/ *<<-EOT/\n/g' $file
+  sed_inplace -E 's/\[id=[a-f0-9]+\]//g' $file
+  sed_inplace -E 's/(\[id=http)/\n    \1/g' $file
 }
 
 postprocess_html() {
   local file=$1
-  $SED 's/color:blue/color:#005f87/g' $file
-	$SED 's/color:#183691/color:#005f87/g' $file
+  # Replace blue colors with Atmos blue.
+  sed_inplace 's/color:blue/color:#005f87/g' $file
+	sed_inplace 's/color:#183691/color:#005f87/g' $file
+
+	# Strip all background colors - they cause visibility issues.
+	# aha adds background-color to code blocks which makes text invisible when colors match.
+	sed_inplace 's/background-color:[^;]*;//g' $file
 }
 
 manifest=$1

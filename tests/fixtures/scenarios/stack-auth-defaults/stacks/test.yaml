@@ -1,0 +1,14 @@
+# Test stack that imports the defaults with stack-level auth default
+import:
+  - _defaults
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    test-component:
+      metadata:
+        component: test-component
+      vars:
+        enabled: true

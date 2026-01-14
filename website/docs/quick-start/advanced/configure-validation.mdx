@@ -4,7 +4,7 @@ sidebar_position: 7
 sidebar_label: Validation Configurations
 ---
 
-Atmos supports [Stack Schema Validation](/cli/schemas) and [Custom Policy Validation](/core-concepts/validate)
+Atmos supports [Stack Schema Validation](/cli/configuration/schemas) and [Custom Policy Validation](/validation/validating)
 using [JSON Schema](https://json-schema.org/) and [OPA Policies](https://www.openpolicyagent.org/).
 
 :::tip
@@ -41,7 +41,7 @@ schemas:
     # Supports both absolute and relative paths
     base_path: "stacks/schemas/opa"
   # JSON Schema to validate Atmos manifests
-  # https://atmos.tools/cli/schemas/
+  # https://atmos.tools/cli/configuration/schemas/
   # https://atmos.tools/cli/commands/validate/stacks/
   # https://atmos.tools/quick-start/advanced/configure-validation/
   # https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
@@ -72,7 +72,7 @@ Complete the following steps to configure Atmos manifest validation:
   in  [`stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json`](https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json)
 
 - Configure the `schemas.atmos.manifest` section in the `atmos.yaml` [CLI config file](/cli/configuration) as described
-  in [Atmos Manifests Validation using JSON Schema](/cli/schemas)
+  in [Atmos Manifests Validation using JSON Schema](/cli/configuration/schemas)
 
   ```yaml title="atmos.yaml"
   # Validation schemas (for validating atmos stacks and components)
@@ -98,7 +98,7 @@ Complete the following steps to configure Atmos manifest validation:
 
 For more information, refer to:
 
-- [Atmos Manifests Validation using JSON Schema](/cli/schemas)
+- [Atmos Manifests Validation using JSON Schema](/cli/configuration/schemas)
 - [atmos validate stacks](/cli/commands/validate/stacks)
 
 :::
@@ -112,13 +112,13 @@ Atmos component validation allows:
 * Check if the component config (including relations between different component variables) is correct to allow or deny component provisioning using
   [OPA Policies](https://www.openpolicyagent.org/)
 
-To configure Atmos components validation, complete the steps described in [Custom Policy Validation](/core-concepts/validate).
+To configure Atmos components validation, complete the steps described in [Custom Policy Validation](/validation/validating).
 
 :::tip
 
 For more information, refer to:
 
-- [Custom Policy Validation](/core-concepts/validate)
+- [Custom Policy Validation](/validation/validating)
 - Command: [`atmos validate component`](/cli/commands/validate/component)
 
 :::

@@ -1,0 +1,34 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+    - "**/mixins/**"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Enable Go templates for locals resolution.
+templates:
+  settings:
+    enabled: true
+    evaluations: 1
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 10
+      datasources: {}

@@ -39,10 +39,10 @@ func TestProcessInstancesWithDeps_Success(t *testing.T) {
 	}
 
 	mockStacksProcessor.EXPECT().
-		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil).
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 2)
@@ -63,10 +63,10 @@ func TestProcessInstancesWithDeps_ExecuteDescribeStacksError(t *testing.T) {
 	expectedErr := errors.New("failed to read stack files")
 
 	mockStacksProcessor.EXPECT().
-		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil).
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(nil, expectedErr)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
 
 	assert.Error(t, err)
 	assert.Nil(t, instances)
@@ -84,10 +84,10 @@ func TestProcessInstancesWithDeps_EmptyStacksMap(t *testing.T) {
 	stacksMap := map[string]interface{}{}
 
 	mockStacksProcessor.EXPECT().
-		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil).
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
 
 	assert.NoError(t, err)
 	assert.Empty(t, instances)
@@ -133,10 +133,10 @@ func TestProcessInstancesWithDeps_MultipleStacks(t *testing.T) {
 	}
 
 	mockStacksProcessor.EXPECT().
-		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil).
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 3)
@@ -174,10 +174,10 @@ func TestProcessInstancesWithDeps_AbstractComponentsFiltered(t *testing.T) {
 	}
 
 	mockStacksProcessor.EXPECT().
-		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil).
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 1)
@@ -210,10 +210,10 @@ func TestProcessInstancesWithDeps_InvalidStackStructure(t *testing.T) {
 	}
 
 	mockStacksProcessor.EXPECT().
-		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil).
+		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
 
 	assert.NoError(t, err)
 	// Only prod stack should be processed successfully.

@@ -221,6 +221,10 @@ func (m *mockIdentityForShellEnv) CredentialsExist() (bool, error) {
 	return false, nil
 }
 
+func (m *mockIdentityForShellEnv) Paths() ([]types.Path, error) {
+	return []types.Path{}, nil
+}
+
 // TestPrepareShellEnvironment_Success tests successful environment preparation.
 func TestPrepareShellEnvironment_Success(t *testing.T) {
 	// Create mock identity that implements PrepareEnvironment.

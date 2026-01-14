@@ -1,0 +1,13 @@
+# Required dependencies for generating screengrabs
+
+# ANSI HTML Adapter - converts ANSI terminal output to HTML
+brew "aha"
+
+# Bat - cat clone with syntax highlighting (aliased as cat in demo scripts)
+brew "bat"
+
+# Tree - displays directory structure with UTF-8 box-drawing characters
+brew "tree"
+
+# Terraform - required for demo deployment scripts
+brew "terraform"

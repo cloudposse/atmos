@@ -253,6 +253,8 @@ func ReadTerraformBackendAzurermInternal(
 				time.Sleep(backoff)
 				continue
 			}
+			// Retries exhausted - log warning with error details to help diagnose the issue.
+			logAzureRetryExhausted(err, tfStateFilePath, containerName, maxRetryCountAzure)
 			cancel()
 			return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
 		}
@@ -269,4 +271,34 @@ func ReadTerraformBackendAzurermInternal(
 	}
 
 	return nil, fmt.Errorf(errWrapFormat, errUtils.ErrGetBlobFromAzure, lastErr)
+}
+
+// logAzureRetryExhausted logs a warning when all retries are exhausted for Azure Blob operations.
+// This helps users report issues by providing the HTTP status code and details.
+func logAzureRetryExhausted(err error, tfStateFilePath, containerName string, maxRetries int) {
+	defer perf.Track(nil, "terraform_backend.logAzureRetryExhausted")()
+
+	// Extract Azure HTTP status code if available.
+	statusCode := 0
+	errorCode := "unknown"
+	var respErr *azcore.ResponseError
+	if errors.As(err, &respErr) {
+		statusCode = respErr.StatusCode
+		errorCode = fmt.Sprintf("HTTP_%d", statusCode)
+	}
+
+	// Check for context timeout.
+	if errors.Is(err, context.DeadlineExceeded) {
+		errorCode = "timeout"
+	}
+
+	log.Warn(
+		"Failed to read Terraform state after all retries exhausted",
+		"file", tfStateFilePath,
+		"container", containerName,
+		"attempts", maxRetries+1,
+		"error_code", errorCode,
+		"status_code", statusCode,
+		"error", err,
+	)
 }

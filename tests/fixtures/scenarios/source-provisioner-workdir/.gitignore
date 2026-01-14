@@ -1,0 +1,17 @@
+# Ignore vendored components (created by source provisioner)
+# Terraform
+components/terraform/vpc-remote/
+components/terraform/vpc-remote-workdir/
+# Helmfile
+components/helmfile/nginx-workdir/
+# Packer
+components/packer/ami-workdir/
+
+# Ignore workdir directories (created by workdir provisioner)
+.workdir/
+
+# Terraform files
+**/.terraform/
+**/*.tfstate
+**/*.tfstate.backup
+**/.terraform.lock.hcl

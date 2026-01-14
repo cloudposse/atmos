@@ -288,14 +288,16 @@ func TestDescribeDependentsExec_Execute_DifferentFormatsAndFiles(t *testing.T) {
 
 func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 	// Environment isolation
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
-	t.Setenv("ATMOS_BASE_PATH", "")
-
-	// Working directory isolation
+	// Working directory isolation.
 	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-template"
 	t.Chdir(workDir)
 
-	// Init Atmos config
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
+
+	// Init Atmos config.
 	configInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := cfg.InitCliConfig(configInfo, true)
 	require.NoError(t, err, "InitCliConfig failed")
@@ -468,13 +470,14 @@ func TestDescribeDependents_WithStacksNameTemplate(t *testing.T) {
 }
 
 func TestDescribeDependents_WithStacksNamePattern(t *testing.T) {
-	// Environment isolation
-	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
-	t.Setenv("ATMOS_BASE_PATH", "")
-
-	// Working directory isolation
+	// Working directory isolation.
 	workDir := "../../tests/fixtures/scenarios/depends-on-with-stacks-name-pattern"
 	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Init Atmos config
 	configInfo := schema.ConfigAndStacksInfo{}

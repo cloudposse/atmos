@@ -10,12 +10,16 @@ import (
 	"github.com/spf13/viper"
 )
 
+// DefaultCacheDirPerm is the default permission for cache directories.
+const DefaultCacheDirPerm = 0o755
+
 func init() {
 	// Override adrg/xdg defaults for macOS to follow CLI tool conventions.
 	// This must happen in init() to ensure it runs before any code uses xdg.ConfigHome, etc.
 	// CLI tools use ~/.config on all platforms for consistency, while GUI apps use
 	// platform-specific locations like ~/Library/Application Support on macOS.
 	if runtime.GOOS == "darwin" {
+		//nolint:forbidigo // os.UserHomeDir() needed here to override adrg/xdg library defaults in init()
 		homeDir, err := os.UserHomeDir()
 		if err == nil {
 			// Override macOS defaults to use CLI tool conventions.

@@ -1,0 +1,11 @@
+:global(.contains-task-list) > :global(.task-list-item) > :global(.task-list-checkbox) {
+  margin-right: 0.5em;
+}
+
+.taskList {
+  margin-left: 0;
+}
+
+:global(li.task-list-item) > input {
+  transform: scale(1.25);
+}

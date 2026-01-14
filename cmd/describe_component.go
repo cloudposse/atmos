@@ -8,6 +8,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -21,7 +23,9 @@ var describeComponentCmd = &cobra.Command{
 	Args:               cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Check Atmos configuration
-		checkAtmosConfig()
+		if err := checkAtmosConfigE(); err != nil {
+			return err
+		}
 
 		if len(args) != 1 {
 			return errors.New("invalid arguments. The command requires one argument `component`")
@@ -71,18 +75,88 @@ var describeComponentCmd = &cobra.Command{
 
 		component := args[0]
 
-		// Load atmos configuration to get auth config.
+		// Determine if we need path resolution.
+		// Only resolve as a filesystem path if the argument explicitly indicates a path.
+		// Otherwise, treat it as a component name (even if it contains slashes).
+		needsPathResolution := comp.IsExplicitComponentPath(component)
+
+		// Load atmos configuration. Use processStacks=true when path resolution is needed
+		// because the resolver needs StackConfigFilesAbsolutePaths to find stacks and
+		// detect ambiguity.
 		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
 			ComponentFromArg: component,
 			Stack:            stack,
-		}, false)
+		}, needsPathResolution)
 		if err != nil {
+			// If config loading failed and we're trying to resolve a path,
+			// try to give a more specific error about the path.
+			if needsPathResolution {
+				// Try to determine if the path is outside component directories.
+				// Since we don't have config, we can't determine base paths,
+				// so we just indicate that path resolution requires valid config.
+				pathErr := errUtils.Build(errUtils.ErrPathResolutionFailed).
+					WithHintf("Failed to initialize config for path: `%s`\n\nPath resolution requires valid Atmos configuration", component).
+					WithHint("Verify `atmos.yaml` exists in your repository root or `.atmos/` directory\nRun `atmos describe config` to validate your configuration").
+					WithContext("component_arg", component).
+					WithContext("stack", stack).
+					WithCause(err).
+					WithExitCode(2).
+					Err()
+				return pathErr
+			}
 			return errors.Join(errUtils.ErrFailedToInitConfig, err)
 		}
 
-		// Get identity from flag and create AuthManager if provided.
+		// Resolve path-based component arguments to component names.
+		if needsPathResolution {
+			// We don't know the component type yet - describe component detects it.
+			// Use the full resolver with stack validation to:
+			// 1. Extract the component name from the path.
+			// 2. Look up which Atmos components reference this terraform folder in the stack.
+			// 3. If multiple components reference the same folder, return an ambiguous path error.
+			resolvedComponent, err := e.ResolveComponentFromPathWithoutTypeCheck(&atmosConfig, component, stack)
+			if err != nil {
+				// Return the error directly to preserve detailed hints and exit codes.
+				return err
+			}
+			component = resolvedComponent
+		}
+
+		// Get identity flag value.
 		identityName := GetIdentityFromFlags(cmd, os.Args)
-		authManager, err := CreateAuthManagerFromIdentity(identityName, &atmosConfig.Auth)
+
+		// Get component-specific auth config and merge with global auth config.
+		// This follows the same pattern as terraform.go to handle stack-level default identities.
+		// Start with global config.
+		mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+
+		// Get component config to extract auth section (without processing YAML functions to avoid circular dependency).
+		componentConfig, componentErr := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+			Component:            component,
+			Stack:                stack,
+			ProcessTemplates:     false,
+			ProcessYamlFunctions: false, // Avoid circular dependency with YAML functions that need auth.
+			Skip:                 nil,
+			AuthManager:          nil, // No auth manager yet - we're determining which identity to use.
+		})
+		if componentErr != nil {
+			// If component doesn't exist, exit immediately before attempting authentication.
+			// This prevents prompting for identity when the component is invalid.
+			if errors.Is(componentErr, errUtils.ErrInvalidComponent) {
+				return componentErr
+			}
+			// For other errors (e.g., permission issues), continue with global auth config.
+		} else {
+			// Merge component-specific auth with global auth.
+			mergedAuthConfig, err = auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, &atmosConfig, cfg.AuthSectionName)
+			if err != nil {
+				return err
+			}
+		}
+
+		// Create and authenticate AuthManager using merged auth config.
+		// This enables stack-level default identity to be recognized.
+		authManager, err := CreateAuthManagerFromIdentity(identityName, mergedAuthConfig)
 		if err != nil {
 			return err
 		}

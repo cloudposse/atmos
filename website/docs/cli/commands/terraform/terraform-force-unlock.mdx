@@ -1,0 +1,109 @@
+---
+title: atmos terraform force-unlock
+sidebar_label: force-unlock
+sidebar_class_name: command
+id: force-unlock
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to manually unlock the Terraform state for an Atmos component in a stack when automatic unlocking fails.
+</Intro>
+
+<Screengrab title="atmos terraform force-unlock --help" slug="atmos-terraform-force-unlock--help" />
+
+## Usage
+
+Execute the `terraform force-unlock` command like this:
+
+```shell
+atmos terraform force-unlock <component> <lock-id> -s <stack> [options]
+```
+
+This command manually unlocks the state for the defined configuration. This is useful when automatic unlocking fails due to a process crash or network issue. Use with caution as it can cause state corruption if another process is actually using the state.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The unlock operation itself is handled by native Terraform.
+:::
+## Examples
+
+### Force Unlock State
+
+```shell
+# Unlock using a specific lock ID
+atmos terraform force-unlock vpc -s dev abc123-lock-id
+```
+
+### Example Lock Error and Resolution
+
+```shell
+# When you see an error like:
+# Error: Error acquiring the state lock
+# Lock Info:
+#   ID:        abc123-xyz789
+#   Path:      s3://bucket/terraform.tfstate
+#   Operation: OperationTypePlan
+#   Who:       user@machine
+#   Version:   1.0.0
+#   Created:   2024-01-15 10:00:00 +0000 UTC
+
+# Force unlock with the lock ID:
+atmos terraform force-unlock vpc -s dev abc123-xyz789
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+
+    <dt>`lock-id` <em>(required)</em></dt>
+    <dd>
+        The Terraform state lock ID to force unlock. This ID is displayed in the error message when a lock conflict occurs. Example format: `abc123-xyz789-def456`.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform force-unlock vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform force-unlock vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The lock ID is a required positional argument. To pass native Terraform flags like `-force` to skip confirmation, use a double-dash separator:
+
+```shell
+atmos terraform force-unlock vpc abc123-lock-id -s dev -- -force
+```
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

@@ -1,4 +1,3 @@
-
 # Incorrect Usage
 
 **Error:** Unknown command non-existent for atmos
@@ -11,17 +10,22 @@ Valid subcommands are:
 • aws
 • completion
 • describe
+• devcontainer
 • docs
+• env
 • helmfile
 • help
 • list
 • packer
 • pro
+• profile
 • show
 • support
 • terraform
 • tf
+• tf-custom
 • theme
+• toolchain
 • validate
 • vendor
 • version
@@ -30,5 +34,3 @@ Valid subcommands are:
 ## Hints
 
 💡 Run atmos --help for usage
-
-

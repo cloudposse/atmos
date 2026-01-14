@@ -1,0 +1,221 @@
+---
+title: atmos profile show
+sidebar_label: show
+sidebar_class_name: command
+description: "Show detailed information about a configuration profile"
+---
+
+import Screengrab from '@site/src/components/Screengrab';
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+Use this command to display detailed information about a specific configuration profile, including its metadata, configuration files, and usage instructions.
+</Intro>
+
+<Screengrab title="atmos profile show developer" slug="atmos-profile-show" />
+
+## Usage
+
+```bash
+atmos profile show <profile-name> [flags]
+```
+
+## Arguments
+
+<dl>
+  <dt>`profile-name`</dt>
+  <dd>
+    **Required.** The name of the profile to inspect.
+
+    Use `atmos profile list` to see available profiles.
+  </dd>
+</dl>
+
+## Description
+
+Show detailed information about a specific configuration profile.
+
+The output includes:
+- **Profile location and type**: Where the profile is defined and whether it's inline or directory-based
+- **Metadata**: Name, description, version, and tags
+- **Configuration files**: List of YAML files that make up the profile
+- **Usage instructions**: How to activate the profile
+
+## Flags
+
+<dl>
+  <dt>`-f, --format`</dt>
+  <dd>
+    Output format. Options: `text`, `json`, `yaml`
+
+    **Default:** `text`
+  </dd>
+</dl>
+
+## Examples
+
+### Show Profile Details
+
+```bash
+# Show details of the 'developer' profile
+atmos profile show developer
+```
+
+**Example output:**
+
+```
+Profile: developer
+══════════════════════════════════════════════════════════════════════════════
+
+Location:    profiles/developer
+Type:        directory
+Description: Development environment with debug logging
+
+Metadata
+────────────────────────────────────────────────────────────────────────────────
+  Version:  1.0.0
+  Tags:     dev, local, debug
+
+Configuration Files
+────────────────────────────────────────────────────────────────────────────────
+  • atmos.yaml
+  • auth.yaml
+
+Usage
+────────────────────────────────────────────────────────────────────────────────
+  atmos --profile developer <command>
+  ATMOS_PROFILE=developer atmos <command>
+```
+
+### Output as JSON
+
+```bash
+# Show profile details in JSON format
+atmos profile show developer --format json
+```
+
+**Example output:**
+
+```json
+{
+  "name": "developer",
+  "type": "directory",
+  "source": "profiles/developer",
+  "description": "Development environment with debug logging",
+  "version": "1.0.0",
+  "tags": ["dev", "local", "debug"],
+  "files": [
+    "atmos.yaml",
+    "auth.yaml"
+  ]
+}
+```
+
+### Output as YAML
+
+```bash
+# Show profile details in YAML format
+atmos profile show developer --format yaml
+```
+
+**Example output:**
+
+```yaml
+name: developer
+type: directory
+source: profiles/developer
+description: Development environment with debug logging
+version: "1.0.0"
+tags:
+  - dev
+  - local
+  - debug
+files:
+  - atmos.yaml
+  - auth.yaml
+```
+
+### Show Inline Profile
+
+```bash
+# Show an inline profile defined in atmos.yaml
+atmos profile show production
+```
+
+**Example output:**
+
+```
+Profile: production
+══════════════════════════════════════════════════════════════════════════════
+
+Location:    atmos.yaml
+Type:        inline
+Description: Production configuration
+
+Configuration
+────────────────────────────────────────────────────────────────────────────────
+  logs:
+    level: Warning
+  settings:
+    terminal:
+      color: false
+
+Usage
+────────────────────────────────────────────────────────────────────────────────
+  atmos --profile production <command>
+  ATMOS_PROFILE=production atmos <command>
+```
+
+## Error Handling
+
+### Profile Not Found
+
+If the specified profile doesn't exist, you'll see a helpful error message:
+
+```bash
+atmos profile show nonexistent
+```
+
+```
+Error: Profile not found
+
+Profile 'nonexistent' does not exist in any configured location.
+
+Hints:
+  • Run 'atmos profile list' to see all available profiles
+  • Check the spelling of the profile name
+  • Verify 'profiles.base_path' in 'atmos.yaml' if using custom location
+
+Context:
+  profile: nonexistent
+  command: profile show
+```
+
+## Scripting Examples
+
+### Get Profile Description
+
+```bash
+# Extract just the description
+atmos profile show developer --format json | jq -r '.description'
+```
+
+### Check Profile Version
+
+```bash
+# Get the version of a profile
+atmos profile show developer --format json | jq -r '.version // "not specified"'
+```
+
+### List Configuration Files
+
+```bash
+# Get list of files in a profile
+atmos profile show developer --format json | jq -r '.files[]'
+```
+
+## See Also
+
+- [`atmos profile`](/cli/commands/profile/usage) - Profile management overview
+- [`atmos profile list`](/cli/commands/profile/profile-list) - List available profiles
+- [Global Flags](/cli/global-flags) - Using the `--profile` flag

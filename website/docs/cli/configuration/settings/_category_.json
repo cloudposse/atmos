@@ -1,0 +1,10 @@
+{
+  "label": "settings",
+  "position": 25,
+  "collapsed": false,
+  "link": {
+    "type": "doc",
+    "id": "settings"
+  },
+  "className": "command"
+}

@@ -17,6 +17,11 @@ const (
 	escBEL = "\007"  // Bell/Alert character
 	escOSC = "\033]" // Operating System Command
 	escST  = "\007"  // String Terminator (can also be "\033\\")
+
+	// ANSI cursor control sequences.
+	EscCarriageReturn = "\r"       // Return cursor to start of line
+	EscClearLine      = "\x1b[K"   // Clear from cursor to end of line
+	EscResetLine      = "\r\x1b[K" // Return to start and clear entire line
 )
 
 // IOWriter is the interface for writing to I/O streams.
@@ -416,7 +421,7 @@ func buildConfig() *Config {
 //
 //nolint:revive // Cyclomatic complexity acceptable for priority-based configuration logic.
 func (c *Config) ShouldUseColor(isTTY bool) bool {
-	// 1. NO_COLOR always wins
+	// 1. NO_COLOR env var always wins
 	if c.EnvNoColor {
 		return false
 	}
@@ -426,7 +431,7 @@ func (c *Config) ShouldUseColor(isTTY bool) bool {
 		return false
 	}
 
-	// 3. CLICOLOR_FORCE overrides TTY detection
+	// 3. CLICOLOR_FORCE env var overrides TTY detection
 	if c.EnvCLIColorForce {
 		return true
 	}

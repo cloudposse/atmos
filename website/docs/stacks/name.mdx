@@ -1,0 +1,213 @@
+---
+title: Stack Names
+sidebar_position: 2
+sidebar_label: name
+sidebar_class_name: command
+description: Use the name field to explicitly set a stack's logical name, or use name_template for programmatic naming.
+id: name
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Every stack in Atmos has a logical name used for identification, the `-s` flag, dependencies, and Terraform workspaces.
+You can either set this name explicitly using the `name` field in your stack manifest, or compute it programmatically
+using `name_template` in `atmos.yaml`.
+</Intro>
+
+## Choosing Your Approach
+
+Atmos offers two approaches for stack naming. Choose based on your infrastructure's consistency:
+
+| Approach | Where | When to Use |
+|----------|-------|-------------|
+| `name_template` | `atmos.yaml` | Consistent context variables across all stacks |
+| `name` | Stack manifest | Inconsistent naming, migrations, or legacy infrastructure |
+
+### Use `name_template` When
+
+You should use `name_template` in `atmos.yaml` when:
+
+- You have consistent context variables (like `namespace`, `tenant`, `environment`, `stage`) across all stacks
+- All your root modules use these variables deterministically
+- You want programmatic, convention-based naming (e.g., following the [null-label](https://github.com/cloudposse/terraform-null-label) pattern)
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+```
+</File>
+
+With this configuration, a stack with `vars.tenant: acme`, `vars.environment: ue1`, and `vars.stage: prod` will automatically be named `acme-ue1-prod`.
+
+### Use `name` When
+
+You should use the `name` field in your stack manifest when:
+
+- You're migrating from Terragrunt or another tool and need to preserve existing workspace names
+- Your infrastructure has inconsistent naming that doesn't follow a pattern
+- You have legacy stacks that predate your naming conventions
+- You need to match existing Terraform workspace names exactly
+- Any inconsistency in your vars would break a deterministic template
+
+<File title="stacks/legacy-prod.yaml">
+```yaml
+name: "my-legacy-prod-stack"
+
+import:
+  - catalog/defaults
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+With this configuration, the stack is identified as `my-legacy-prod-stack` regardless of the filename or any `name_template` in `atmos.yaml`.
+
+## Precedence Order
+
+When determining a stack's name, Atmos uses this precedence order:
+
+1. **`name`** (highest) - Explicit name from stack manifest
+2. **`name_template`** - Go template from `atmos.yaml`
+3. **`name_pattern`** - Token-based pattern from `atmos.yaml`
+4. **Default** - Basename of the stack file (e.g., `prod.yaml` → `prod`)
+
+This means the `name` field always wins, allowing you to override programmatic naming for specific stacks.
+
+## Configuration
+
+The `name` field is a top-level key in stack manifests, at the same level as `import`, `vars`, and `components`:
+
+```yaml
+name: "explicit-stack-name"
+
+import:
+  - catalog/base
+
+vars:
+  environment: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+## Examples
+
+### Migrating from Terragrunt
+
+When migrating from Terragrunt, your existing Terraform state is tied to specific workspace names. Use `name` to preserve these:
+
+<File title="stacks/us-east-1/prod/vpc.yaml">
+```yaml
+name: "prod-us-east-1-vpc"  # Matches existing Terraform workspace
+
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+This ensures `atmos terraform apply vpc -s prod-us-east-1-vpc` uses the existing state without requiring state migrations.
+
+### Legacy Infrastructure
+
+For infrastructure that predates your naming standards:
+
+<File title="stacks/old-datacenter.yaml">
+```yaml
+name: "dc1-legacy-infra"  # Historical name that must be preserved
+
+components:
+  terraform:
+    network:
+      vars:
+        vpc_id: "vpc-abc123"
+```
+</File>
+
+### Mixed Approach
+
+You can use `name_template` for most stacks while overriding specific ones with `name`:
+
+<File title="atmos.yaml">
+```yaml
+stacks:
+  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
+```
+</File>
+
+<File title="stacks/acme/prod/us-east-1.yaml">
+```yaml
+# Uses name_template: acme-prod-ue1
+vars:
+  tenant: acme
+  environment: prod
+  stage: ue1
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+</File>
+
+<File title="stacks/legacy-acquisition.yaml">
+```yaml
+name: "acquired-company-prod"  # Overrides name_template for this stack
+
+vars:
+  tenant: acquired
+  environment: prod
+  stage: main
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.1.0.0/16"
+```
+</File>
+
+## How Stack Names Are Used
+
+Stack names appear throughout Atmos:
+
+- **CLI**: `atmos terraform apply vpc -s my-stack-name`
+- **Listing**: `atmos list stacks` shows stack names
+- **Dependencies**: Reference stacks by name in `settings.depends_on`
+- **Terraform Workspaces**: Workspace names derive from stack names
+- **Describe Commands**: `atmos describe stacks` uses stack names as keys
+
+## Best Practices
+
+1. **Prefer `name_template` for new projects** - Programmatic naming ensures consistency and reduces manual effort.
+
+2. **Use `name` as an escape hatch** - Reserve explicit names for migrations, legacy systems, or acquisitions.
+
+3. **Document your naming convention** - Whether using `name_template` or explicit names, document the pattern for your team.
+
+4. **Consider Terraform state implications** - Changing a stack's name changes its workspace, which affects state file location.
+
+5. **Keep names meaningful** - Stack names should convey environment, region, and purpose at a glance.
+
+## Related
+
+- [Stack Configuration](/stacks)
+- [Imports](/stacks/imports)
+- [Variables (vars)](/stacks/vars)
+- [Terraform Workspaces](/components/terraform/workspaces)
+- [Migrating from Terragrunt](/migration/terragrunt)

@@ -1,0 +1,99 @@
+---
+title: atmos terraform console
+sidebar_label: console
+sidebar_class_name: command
+id: console
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to open an interactive Terraform console for an Atmos component in a stack, with all component variables and configuration pre-loaded.
+</Intro>
+
+<Screengrab title="atmos terraform console --help" slug="atmos-terraform-console--help" />
+
+## Usage
+
+Execute the `terraform console` command like this:
+
+```shell
+atmos terraform console <component> -s <stack> [options]
+```
+
+This command opens an interactive console for experimenting with Terraform expressions. You can use it to test interpolations, explore data from providers, and debug complex expressions.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. The console itself operates as native Terraform.
+:::
+## Examples
+
+### Open Console
+
+```shell
+# Open an interactive console
+atmos terraform console vpc -s dev
+```
+
+### Example Console Usage
+
+```hcl
+# Once in the console, you can evaluate expressions:
+> var.instance_type
+"t3.micro"
+
+> length(var.availability_zones)
+3
+
+> [for az in var.availability_zones : upper(az)]
+["US-EAST-1A", "US-EAST-1B", "US-EAST-1C"]
+
+> exit
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform console vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform console vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform console` flags such as `-state` to specify state file path, `-var` to set variables, `-var-file` to specify variable files.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

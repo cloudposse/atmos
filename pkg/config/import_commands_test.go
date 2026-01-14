@@ -13,6 +13,8 @@ import (
 // TestImportCommandMerging tests various scenarios of command merging through imports.
 // This addresses the issue where imported commands should be merged (not replaced).
 func TestImportCommandMerging(t *testing.T) {
+	setupTestAdapters()
+
 	tests := []struct {
 		name             string
 		setupFiles       map[string]string
@@ -258,6 +260,8 @@ commands:
 
 // TestImportCommandMergingEdgeCases tests edge cases in command merging.
 func TestImportCommandMergingEdgeCases(t *testing.T) {
+	setupTestAdapters()
+
 	tests := []struct {
 		name             string
 		setupFiles       map[string]string

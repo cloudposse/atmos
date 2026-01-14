@@ -680,11 +680,36 @@ func TestCommandWithTheme(t *testing.T) {
 }
 ```
 
+## Specialized Agent: tui-list
+
+For implementing list commands specifically (list components, list stacks, list workflows, etc.), delegate to the **`tui-list` agent** which specializes in:
+
+- List command architecture and rendering pipeline (filter → column → sort → format → output)
+- Column configuration via Go templates and atmos.yaml
+- Filter/sort implementation patterns
+- Table rendering with lipgloss
+- Multi-format output (table, JSON, YAML, CSV, TSV, tree)
+- Dynamic tab completion for --columns flag
+
+**When to use tui-list:**
+- Creating new list commands
+- Adding columns or filters to existing lists
+- Implementing sorting functionality
+- Troubleshooting list rendering or column issues
+- Working with the renderer pipeline (`pkg/list/renderer/`, `pkg/list/format/`, `pkg/list/column/`)
+
+**When to stay with tui-expert:**
+- General TUI components (pager, help, interactive forms)
+- Theme integration and styling
+- Non-list UI elements (status messages, markdown, logs)
+- Refactoring hard-coded colors to theme-aware patterns
+
 ## File Organization
 
 **Core:** `pkg/ui/theme/` - theme.go (349 themes), registry.go, scheme.go, styles.go, table.go, converter.go, log_styles.go
 **Integration:** pkg/ui/theme/colors.go, pkg/ui/markdown/styles.go, cmd/root.go
 **Commands:** cmd/theme/ (theme.go, list.go, show.go)
+**List Commands:** `pkg/list/` (renderer/, format/, column/, filter/, sort/) - See `tui-list` agent
 
 ## Error Handling
 

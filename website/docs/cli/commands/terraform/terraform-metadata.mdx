@@ -1,0 +1,83 @@
+---
+title: atmos terraform metadata
+sidebar_label: metadata
+sidebar_class_name: command
+id: metadata
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to retrieve Terraform metadata functions for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform metadata --help" slug="atmos-terraform-metadata--help" />
+
+## Usage
+
+Execute the `terraform metadata` command like this:
+
+```shell
+atmos terraform metadata <component> -s <stack> [options]
+```
+
+This command provides metadata functions for Terraform configurations. This is primarily used for advanced Terraform Cloud operations.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The metadata operations are handled by native Terraform.
+:::
+## Examples
+
+### Metadata Functions
+
+```shell
+# Access metadata functions
+atmos terraform metadata vpc -s dev functions
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform metadata vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform metadata vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform metadata` flags such as Subcommands include `functions` for function metadata..
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

@@ -9,14 +9,23 @@ description: Use this command to validate all Stack configurations.
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
 Use this command to validate Atmos stack manifest configurations.
 </Intro>
 
-<Screengrab title="atmos validate stacks --help" slug="atmos-validate-stacks--help" />
+<ActionCard title="Configure Schema Validation">
+    Learn how to configure JSON Schema and OPA policy paths for validating Atmos stack manifests.
+    <div>
+      <PrimaryCTA to="/cli/configuration/schemas">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 ## Usage
+
+<Screengrab title="atmos validate stacks --help" slug="atmos-validate-stacks--help" />
 
 Execute the `validate stacks` command like this:
 
@@ -67,7 +76,7 @@ This command validates Atmos stack manifests and checks the following:
           ensure each has a unique name
 
         - Use multiple-inheritance to combine multiple configurations together
-          (refer to https://atmos.tools/core-concepts/stacks/inheritance)
+          (refer to https://atmos.tools/howto/inheritance)
         ```
     </Terminal>
 

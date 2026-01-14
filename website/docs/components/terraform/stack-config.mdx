@@ -1,0 +1,203 @@
+---
+title: Terraform Stack Configuration
+sidebar_position: 1
+sidebar_label: Stack Configuration
+id: stack-config
+description: Complete reference for configuring Terraform components in Atmos stacks
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+This reference documents the complete stack configuration schema for Terraform components in Atmos. Use this to configure variables, metadata, settings, and environment variables for your Terraform root modules.
+</Intro>
+
+## Schema
+
+The schema of an Atmos Terraform Component in an Atmos Stack is as follows:
+
+```yaml
+components:
+  terraform:
+    # the slug of the component
+    example:
+
+      # configuration specific to atmos
+      metadata:
+        # Components can be of type "real" (default) or "abstract"
+        type: real
+        # This is the directory path of the component.
+        # In this example, we're referencing a component in the `components/terraform/stable/example` folder.
+        component: stable/example
+
+        # We can leverage multiple inheritance to sequentially deep merge multiple configurations
+        inherits:
+          - example-defaults
+
+      # Settings are where we store configuration related to integrations.
+      # It's a freeform map; anything can be placed here.
+      settings:
+        spacelift: {}
+
+      # Define the terraform variables, which will get deep-merged and exported to a `.tfvars` file by atmos.
+      vars:
+        enabled: true
+        name: superduper
+        nodes: 10
+
+      # Environment variables to set when running Terraform
+      env:
+        TF_LOG: DEBUG
+```
+
+## Attributes
+
+<dl>
+  <dt>`vars` (optional)</dt>
+  <dd>
+  The `vars` section is a free-form map of Terraform variables. These are deep-merged and exported to a `.tfvars` file by Atmos. Use [component validation](/validation/validating) to enforce policies.
+
+  **Example:**
+  ```yaml
+  vars:
+    enabled: true
+    name: my-vpc
+    cidr_block: "10.0.0.0/16"
+  ```
+  </dd>
+
+  <dt>`metadata` (optional)</dt>
+  <dd>
+  The `metadata` section extends functionality of the component. See [Common Component Attributes](/stacks/components#metadata-attributes) for details on `type`, `enabled`, `locked`, and `component`.
+
+  **Terraform-specific metadata:**
+  - `metadata.inherits` - List of component configurations to inherit from
+  - `metadata.component` - Path to the Terraform root module (relative to `components.terraform.base_path`)
+
+  **Example:**
+  ```yaml
+  metadata:
+    type: real
+    component: vpc/v2
+    inherits:
+      - vpc-defaults
+  ```
+  </dd>
+
+  <dt>`settings` (optional)</dt>
+  <dd>
+  The `settings` block is a free-form map used to pass configuration information to [integrations](/integrations/github-actions) like Spacelift, Atlantis, or GitHub Actions.
+
+  **Example:**
+  ```yaml
+  settings:
+    spacelift:
+      workspace_enabled: true
+      stack_destructor_enabled: false
+    atlantis:
+      enabled: true
+  ```
+  </dd>
+
+  <dt>`env` (optional)</dt>
+  <dd>
+  Environment variables to set when running Terraform commands. Useful for configuring Terraform behavior or passing credentials.
+
+  **Example:**
+  ```yaml
+  env:
+    TF_LOG: DEBUG
+    AWS_PROFILE: production
+  ```
+  </dd>
+</dl>
+
+## Context Variables
+
+These are [Cloud Posse's `terraform-null-label`](https://github.com/cloudposse/terraform-null-label) conventions for organizing infrastructure:
+
+<dl>
+  <dt>`vars.namespace` (optional)</dt>
+  <dd>
+  The namespace of all stacks. Typically, there will be one namespace for the organization.
+
+  **Example:**
+  ```yaml
+  vars:
+    namespace: acme
+  ```
+  </dd>
+
+  <dt>`vars.tenant` (optional)</dt>
+  <dd>
+  In a multi-tenant configuration, the tenant represents a single tenant. By convention, we typically recommend that every tenant have its own Organizational Unit (OU).
+
+  **Example:**
+  ```yaml
+  vars:
+    tenant: platform
+  ```
+  </dd>
+
+  <dt>`vars.stage` (optional)</dt>
+  <dd>
+  The `stage` is where workloads run. See our [glossary](/terms) for disambiguation.
+
+  **Example:**
+  ```yaml
+  vars:
+    stage: prod
+  ```
+  </dd>
+
+  <dt>`vars.environment` (optional)</dt>
+  <dd>
+  The `environment` is used for location where things run. See our [glossary](/terms) for disambiguation.
+
+  **Example:**
+  ```yaml
+  vars:
+    environment: ue1  # us-east-1
+  ```
+  </dd>
+</dl>
+
+## Complete Example
+
+```yaml
+# stacks/prod/us-east-1/vpc.yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        type: real
+        component: vpc
+        inherits:
+          - vpc-defaults
+      settings:
+        spacelift:
+          workspace_enabled: true
+      vars:
+        namespace: acme
+        tenant: platform
+        environment: ue1
+        stage: prod
+        name: primary
+        cidr_block: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+      env:
+        TF_LOG: INFO
+```
+
+## Related Documentation
+
+- [Terraform/OpenTofu](/components/terraform) - Overview of Terraform components in Atmos
+- [Root Modules](/components/terraform/root-modules) - Understanding Terraform root modules
+- [State Backends](/components/terraform/backends) - Configure state storage
+- [Provider Generation](/components/terraform/providers) - Provider configuration and overrides
+- [Common Component Attributes](/stacks/components) - Attributes shared across all component types

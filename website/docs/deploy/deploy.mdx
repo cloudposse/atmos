@@ -1,0 +1,44 @@
+---
+title: Deploy Components
+sidebar_position: 6
+sidebar_label: Deploy Components
+description: Deploy components with a single command or in a CI/CD pipeline.
+id: deploy
+---
+import Intro from '@site/src/components/Intro';
+
+<Intro>
+    Once you're done developing your components and configuring them with stacks, you can deploy them with a single command or in a CI/CD pipeline.
+</Intro>
+
+In Atmos, when we talk about "Deployment," it refers to taking the [fully rendered and deep-merged configuration](/cli/commands/describe/config) of a [stack](/learn/stacks) and provisioning an instance of one of the components. We call this a "component instance," and it's simply a component that has been deployed in a specific stack.
+
+### Deployment in Atmos
+
+Deployment in Atmos can be approached in several ways.
+
+1. **Command Line Deployment**: You can always deploy on the command line using Atmos, which is particularly useful for local development or in environments that are less mature and do not yet have CI/CD capabilities. For more complicated deployments, you can leverage [workflows](/workflows) to orchestrate multiple deployments in a specific order or run other commands, including [custom commands](/cli/configuration/commands).
+
+2. **CI/CD Integrations**: Atmos supports several common methods for CI/CD, with [GitHub Actions](/integrations/github-actions) being the recommended method. We maintain and invest the most time and effort into GitHub Actions. However, we also support integrations with [Spacelift](/cli/configuration/integrations/spacelift) and [Atlantis](/cli/configuration/integrations/atlantis).
+
+### Configuring Dependencies Between Components
+
+When deploying components, it's important to consider the dependencies between components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
+
+Make sure to [configure dependencies](/stacks/settings/depends_on) between components using the `settings.depends_on` section.
+
+### Managing Dependency Order Between Components
+
+Sometimes, components have dependencies on other components. For example, a database component might depend on a network component. When this happens, it's important to ensure that the network component is deployed before the database component.
+
+In Atmos, support of ordered dependencies is reliant on the integration and not all integrations support ordered dependencies.
+
+All configurations in Atmos are defined in YAML. If you can write a Terraform module, you can essentially Terraform anything based on the stack configuration. It's important to be aware of dependencies between your components. Depending on the integration mechanism or deployment approach you choose, handling these dependencies can be either built-in or more manual.
+
+- [GitHub Actions](/integrations/github-actions): Currently, our GitHub Actions do not support dependency order application.
+- [Spacelift](/cli/configuration/integrations/spacelift): Our Spacelift integrations support dependency order application.
+- [Atlantis](/cli/configuration/integrations/atlantis): By customizing the template generated for Atlantis, similar dependency handling can probably be achieved, although we do not have any documentation on this.
+
+### Automate Cold Starts
+
+Atmos supports [workflows](/workflows), which provide a convenient way to automate deployments, especially for cold starts. A cold start is when you go from zero to a full deployment, typically occurring on day zero in the life cycle of your resources.

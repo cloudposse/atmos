@@ -1,0 +1,200 @@
+---
+title: State Backends
+sidebar_position: 3
+sidebar_label: State Backends
+description: Configure Terraform/OpenTofu state backends.
+id: backends
+---
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Backends define where [Terraform](https://developer.hashicorp.com/terraform/language/state) and
+[OpenTofu](https://opentofu.org/docs/language/state/) store their state.
+</Intro>
+
+:::tip Configuration Reference
+For detailed backend configuration syntax and all supported backend types,
+see [Backend Configuration](/stacks/components/terraform/backend).
+:::
+
+## Supported Backends
+
+<Tabs>
+  <TabItem value="terraform" label="Terraform" default>
+    Atmos supports all the backends supported by Terraform:
+
+    - [local](https://developer.hashicorp.com/terraform/language/settings/backends/local)
+    - [s3](https://developer.hashicorp.com/terraform/language/settings/backends/s3)
+    - [azurerm](https://developer.hashicorp.com/terraform/language/settings/backends/azurerm)
+    - [gcs](https://developer.hashicorp.com/terraform/language/settings/backends/gcs)
+    - [remote](https://developer.hashicorp.com/terraform/language/settings/backends/remote)
+    - [consul](https://developer.hashicorp.com/terraform/language/settings/backends/consul)
+    - [cos](https://developer.hashicorp.com/terraform/language/settings/backends/cos)
+    - [http](https://developer.hashicorp.com/terraform/language/settings/backends/http)
+    - [kubernetes](https://developer.hashicorp.com/terraform/language/settings/backends/kubernetes)
+    - [oss](https://developer.hashicorp.com/terraform/language/settings/backends/oss)
+    - [pg](https://developer.hashicorp.com/terraform/language/settings/backends/pg)
+    - [cloud](https://developer.hashicorp.com/terraform/cli/cloud/settings)
+  </TabItem>
+  <TabItem value="opentofu" label="OpenTofu">
+    Atmos supports all the backends supported by OpenTofu:
+
+    - [local](https://opentofu.org/docs/language/settings/backends/local)
+    - [s3](https://opentofu.org/docs/language/settings/backends/s3)
+    - [azurerm](https://opentofu.org/docs/language/settings/backends/azurerm)
+    - [gcs](https://opentofu.org/docs/language/settings/backends/gcs)
+    - [remote](https://opentofu.org/docs/language/settings/backends/remote)
+    - [consul](https://opentofu.org/docs/language/settings/backends/consul)
+    - [cos](https://opentofu.org/docs/language/settings/backends/cos)
+    - [http](https://opentofu.org/docs/language/settings/backends/http)
+    - [kubernetes](https://opentofu.org/docs/language/settings/backends/kubernetes)
+    - [oss](https://opentofu.org/docs/language/settings/backends/oss)
+    - [pg](https://opentofu.org/docs/language/settings/backends/pg)
+  </TabItem>
+</Tabs>
+
+## Why Use Atmos for Backend Configuration?
+
+Atmos provides **one consistent way to manage backends**—both configuration AND provisioning.
+
+### Configure Backends
+
+Atmos generates `backend.tf.json` dynamically from your stack manifests:
+
+- **DRY Configuration**: Define backend defaults once at the org level, override per environment using [inheritance](#backend-inheritance)
+- **Reuse Root Modules Across Environments**: Deploy the same module to dev, staging, and prod with different backend configurations
+- **Use ANY Module as a Root Module**: Your Terraform modules don't need `backend.tf` files—Atmos generates them
+- **Works with Terraform AND OpenTofu**: Same stack configuration works with either runtime
+
+### Provision Backends
+
+Atmos can create backend infrastructure automatically. Currently supports S3 (AWS), with more backends planned:
+
+- **Solves the Bootstrap Problem**: No chicken-and-egg with state storage
+- **Secure Defaults**: Versioning, encryption, public access blocked
+- **Cross-Account Support**: Use nested `assume_role.role_arn` to provision backends in different AWS accounts
+
+See [Backend Provisioning](/components/terraform/backend-provisioning) for details.
+
+:::note Backend Configuration vs. Provisioning
+The examples below show **backend configuration** using root-level `role_arn`—this is the role Terraform assumes to *access* state. For **backend provisioning** (creating the bucket), use the nested `assume_role.role_arn` format shown in [Backend Provisioning](/components/terraform/backend-provisioning#cross-account-provisioning).
+:::
+
+## Backend Inheritance
+
+Atmos supports deep-merging of backend configuration across stack manifests, enabling you to define defaults at higher levels and override per environment.
+
+Suppose you want different backends for `dev`, `staging`, and `prod`—each with separate S3 buckets and IAM roles for security and audit purposes.
+
+### Organization-Level Defaults
+
+Define common settings at the organization level:
+
+<Terminal title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      acl: "bucket-owner-full-control"
+      encrypt: true
+      key: "terraform.tfstate"
+      region: us-east-1
+```
+</Terminal>
+
+### Environment-Level Overrides
+
+Override bucket and credentials per environment:
+
+<Terminal title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+terraform:
+  backend:
+    s3:
+      bucket: acme-ue1-dev-tfstate
+      use_lockfile: true
+      role_arn: "arn:aws:iam::111111111111:role/TerraformStateDev"
+```
+</Terminal>
+
+<Terminal title="stacks/orgs/acme/plat/prod/_defaults.yaml">
+```yaml
+terraform:
+  backend:
+    s3:
+      bucket: acme-ue1-prod-tfstate
+      use_lockfile: true
+      role_arn: "arn:aws:iam::222222222222:role/TerraformStateProd"
+```
+</Terminal>
+
+### Deep-Merged Result
+
+When you run `atmos terraform apply vpc -s plat-ue1-dev`, Atmos deep-merges all configurations:
+
+<Terminal title="Generated backend.tf.json">
+```json
+{
+  "terraform": {
+    "backend": {
+      "s3": {
+        "acl": "bucket-owner-full-control",
+        "bucket": "acme-ue1-dev-tfstate",
+        "encrypt": true,
+        "key": "terraform.tfstate",
+        "region": "us-east-1",
+        "role_arn": "arn:aws:iam::111111111111:role/TerraformStateDev",
+        "use_lockfile": true,
+        "workspace_key_prefix": "vpc"
+      }
+    }
+  }
+}
+```
+</Terminal>
+
+You can create different backends per Organizational Unit, region, account group (e.g., `prod` vs `non-prod`), or even per component. Atmos deep-merges all parts from different scopes into the final backend config.
+
+## Multiple Component Instances
+
+When you deploy multiple instances of the same Terraform component to the same environment, each instance needs its own state. Atmos handles this automatically by using the Atmos component name as the `workspace_key_prefix`.
+
+<Terminal>
+```yaml
+components:
+  terraform:
+    # First VPC instance
+    vpc/1:
+      metadata:
+        component: vpc
+      vars:
+        name: vpc-1
+        ipv4_primary_cidr_block: 10.9.0.0/18
+
+    # Second VPC instance
+    vpc/2:
+      metadata:
+        component: vpc
+      vars:
+        name: vpc-2
+        ipv4_primary_cidr_block: 10.10.0.0/18
+```
+</Terminal>
+
+Atmos generates separate `workspace_key_prefix` values (`vpc-1` and `vpc-2`), ensuring each instance has its own state file.
+
+:::tip
+For more patterns on multiple component instances, see [Multiple Component Instances](/design-patterns/inheritance-patterns/multiple-component-instances).
+:::
+
+## Related
+
+- [Backend Configuration](/stacks/backend) - Detailed configuration reference
+- [Terraform Backend Configuration](/stacks/components/terraform/backend) - Component-level backend defaults
+- [Backend Provisioning](/components/terraform/backend-provisioning) - Automatic backend creation
+- [Remote State](/components/terraform/remote-state) - Read other components' state
+- [Terraform Workspaces](/components/terraform/workspaces)

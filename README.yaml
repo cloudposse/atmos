@@ -39,6 +39,8 @@ screenshots:
     url: "docs/demo.gif"
 
 description: |-
+  Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
+
   ## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/core-concepts/components) that you implement using [Terraform "root modules"](https://atmos.tools/core-concepts/components/terraform). Then tie everything together using [Stack](https://atmos.tools/core-concepts/stacks) configurations defined in YAML.
 
   Atmos can change how you think about the Terraform code you write to build your infrastructure. Atmos is a framework that simplifies complex cloud architectures and DevOps workflows into intuitive CLI commands.

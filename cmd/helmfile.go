@@ -3,6 +3,7 @@ package cmd
 import (
 	"github.com/spf13/cobra"
 
+	helmfilesource "github.com/cloudposse/atmos/cmd/helmfile/source"
 	e "github.com/cloudposse/atmos/internal/exec"
 )
 
@@ -22,6 +23,9 @@ func init() {
 	helmfileCmd.PersistentFlags().Bool("", false, doubleDashHint)
 	AddStackCompletion(helmfileCmd)
 	RootCmd.AddCommand(helmfileCmd)
+
+	// Add source subcommand from the source subpackage.
+	helmfileCmd.AddCommand(helmfilesource.GetSourceCommand())
 }
 
 func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
@@ -31,8 +35,11 @@ func helmfileRun(cmd *cobra.Command, commandName string, args []string) error {
 	enableHeatmapIfRequested()
 	diffArgs := []string{commandName}
 	diffArgs = append(diffArgs, args...)
-	info := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	info, err := getConfigAndStacksInfo("helmfile", cmd, diffArgs)
+	if err != nil {
+		return err
+	}
 	info.CliArgs = []string{"helmfile", commandName}
-	err := e.ExecuteHelmfile(info)
+	err = e.ExecuteHelmfile(info)
 	return err
 }

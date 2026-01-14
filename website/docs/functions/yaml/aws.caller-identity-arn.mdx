@@ -1,0 +1,187 @@
+---
+title: "!aws.caller_identity_arn"
+sidebar_position: 12
+sidebar_label: "!aws.caller_identity_arn"
+sidebar_class_name: command
+description: Retrieve the ARN of the current AWS caller identity
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!aws.caller_identity_arn` YAML function retrieves the Amazon Resource Name (ARN) of the current
+caller identity by calling the AWS STS `GetCallerIdentity` API.
+</Intro>
+
+## Usage
+
+The `!aws.caller_identity_arn` function takes no parameters:
+
+```yaml
+  # Get the ARN of the current AWS caller identity
+  caller_arn: !aws.caller_identity_arn
+```
+
+## Arguments
+
+This function takes no arguments. It uses the AWS credentials from the environment or the
+Atmos authentication context if configured.
+
+## How It Works
+
+When processing the `!aws.caller_identity_arn` YAML function, Atmos:
+
+1. **Loads AWS Configuration** - Uses the standard AWS SDK credential resolution chain:
+   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+   - Shared credentials file (`~/.aws/credentials`)
+   - Shared config file (`~/.aws/config`)
+   - EC2 Instance Metadata Service (IMDS)
+   - ECS Task credentials
+   - Web Identity Token credentials
+
+2. **Calls STS GetCallerIdentity** - Makes an API call to retrieve the caller identity
+
+3. **Returns ARN** - Extracts and returns the full ARN of the calling identity
+
+The returned ARN format depends on the type of identity:
+
+| Identity Type | ARN Format |
+|--------------|------------|
+| IAM User | `arn:aws:iam::123456789012:user/username` |
+| IAM Role (assumed) | `arn:aws:sts::123456789012:assumed-role/RoleName/session-name` |
+| Root Account | `arn:aws:iam::123456789012:root` |
+| Federated User | `arn:aws:sts::123456789012:federated-user/username` |
+
+:::note Atmos Auth Integration
+When using [Atmos Authentication](/cli/commands/auth/usage), the function automatically uses credentials
+from the active identity. This enables seamless integration with SSO, assume role chains, and other
+authentication methods configured in your `atmos.yaml`.
+:::
+
+## Caching
+
+The `!aws.caller_identity_arn` function caches its results in memory for the duration of the CLI invocation.
+This means:
+
+- Multiple uses of `!aws.caller_identity_arn` in the same command only make one STS API call
+- Different authentication contexts (e.g., different profiles) get separate cache entries
+- Each new CLI command starts with a fresh cache
+
+The cache is shared with `!aws.account_id`, so using both functions only makes one STS API call.
+
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
+## Examples
+
+### Basic Usage
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my-component:
+      vars:
+        # Inject the caller ARN into Terraform variables
+        caller_arn: !aws.caller_identity_arn
+```
+</File>
+
+### Audit and Tagging
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    infrastructure:
+      vars:
+        tags:
+          # Track who provisioned the resources
+          ProvisionedBy: !aws.caller_identity_arn
+          ManagedBy: "atmos"
+```
+</File>
+
+### IAM Policy Configuration
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    s3-bucket:
+      vars:
+        # Allow the current identity to access the bucket
+        allowed_principals:
+          - !aws.caller_identity_arn
+```
+</File>
+
+### Combined with Account ID
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    security-config:
+      vars:
+        # Both functions use the same cached STS call
+        aws_account_id: !aws.account_id
+        caller_arn: !aws.caller_identity_arn
+
+        # Useful for logging and auditing
+        deployment_context:
+          account: !aws.account_id
+          identity: !aws.caller_identity_arn
+```
+</File>
+
+### Debugging and Troubleshooting
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    debug-component:
+      vars:
+        # Verify which identity Atmos is using
+        debug_info:
+          current_identity_arn: !aws.caller_identity_arn
+          current_account_id: !aws.account_id
+```
+</File>
+
+## Comparison with Terragrunt
+
+This function is equivalent to Terragrunt's `get_aws_caller_identity_arn()` function:
+
+| Terragrunt | Atmos |
+|------------|-------|
+| `get_aws_caller_identity_arn()` | `!aws.caller_identity_arn` |
+
+## Error Handling
+
+If the function fails to retrieve the AWS caller identity (e.g., no credentials available,
+network issues, or insufficient permissions), Atmos will log an error and exit.
+
+Common error scenarios:
+- No AWS credentials configured
+- Expired credentials
+- Network connectivity issues
+- Missing STS permissions
+
+## Considerations
+
+- **Requires valid AWS credentials** - The function will fail if no valid credentials are available
+- **Network dependency** - Requires connectivity to AWS STS endpoint
+- **Performance** - Results are cached per CLI invocation, so there's minimal overhead when used multiple times
+- **IAM permissions** - Requires `sts:GetCallerIdentity` permission (usually available to all authenticated principals)
+- **ARN format varies** - The format differs based on identity type (user, assumed role, etc.)
+
+## Related Functions
+
+- [!aws.account_id](/functions/yaml/aws.account-id) - Get the AWS account ID
+- [!aws.caller_identity_user_id](/functions/yaml/aws.caller-identity-user-id) - Get the unique user ID
+- [!aws.region](/functions/yaml/aws.region) - Get the AWS region

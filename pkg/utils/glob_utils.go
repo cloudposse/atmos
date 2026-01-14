@@ -51,12 +51,12 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	}
 
 	if matches == nil {
-		return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
+		return nil, fmt.Errorf("%w: '%s'\n('%s' + '%s')", errUtils.ErrFailedToFindImport, pattern, base, cleanPattern)
 	}
 
 	var fullMatches []string
 	for _, match := range matches {
-		fullMatches = append(fullMatches, filepath.Join(base, match))
+		fullMatches = append(fullMatches, filepath.Join(filepath.FromSlash(base), match))
 	}
 
 	getGlobMatchesSyncMap.Store(pattern, strings.Join(fullMatches, ","))

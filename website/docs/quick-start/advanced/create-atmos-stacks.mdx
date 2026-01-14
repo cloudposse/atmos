@@ -7,16 +7,16 @@ import File from '@site/src/components/File'
 
 In the previous step, we've configured the Terraform components and described how they can be vendored into the repository.
 
-Next step is to create and configure [Atmos stacks](/core-concepts/stacks).
+Next step is to create and configure [Atmos stacks](/learn/stacks).
 
 ## Create Catalog for Components
 
-Atmos supports the [Catalog](/core-concepts/stacks/catalogs) pattern to configure default settings for Atmos components.
+Atmos supports the [Catalog](/howto/catalogs) pattern to configure default settings for Atmos components.
 All the common default settings for each Atmos component should be in a separate file in the `stacks/catalog` directory.
 The file then gets imported into the parent Atmos stacks.
 This makes the stack configurations DRY by reusing the component's config that is common for all environments.
 
-Refer to [Stack Imports](/core-concepts/stacks/imports) for more details on Atmos imports.
+Refer to [Stack Imports](/stacks/imports) for more details on Atmos imports.
 
 In the `stacks/catalog/vpc-flow-logs-bucket/defaults.yaml` file, add the following manifest for the `vpc-flow-logs-bucket` Atmos component:
 
@@ -167,7 +167,7 @@ components:
 </File>
 
 These Atmos component manifests will be imported into the top-level Atmos stacks. The default variables (in the `vars` sections)
-can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/core-concepts/stacks/inheritance).
+can be overridden in the derived Atmos components by using [Atmos Component Inheritance](/howto/inheritance).
 
 ## Atmos Top-level Stacks
 
@@ -291,7 +291,7 @@ Create the following filesystem layout (which will be the final layout for this 
 
 ### Configure Region and Stage Mixins
 
-[Mixins](/core-concepts/stacks/inheritance/mixins) are a special kind of "[import](/core-concepts/stacks/imports)".
+[Mixins](/howto/mixins) are a special kind of "[import](/stacks/imports)".
 It's simply a convention we recommend to distribute reusable snippets of configuration that alter the behavior in some deliberate way.
 Mixins are not handled in any special way. They are technically identical to all other imports.
 
@@ -396,7 +396,7 @@ The `_defaults.yaml` stack manifests contain the default settings for the Organi
 
 :::info
 The `_defaults.yaml` stack manifests are not imported into other Atmos manifests automatically.
-You need to explicitly import them using [imports](/core-concepts/stacks/imports).
+You need to explicitly import them using [imports](/stacks/imports).
 :::
 
 In `stacks/orgs/acme/_defaults.yaml`, add the following config:

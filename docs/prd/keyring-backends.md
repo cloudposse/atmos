@@ -145,8 +145,7 @@ auth:
 **XDG Compliance**:
 ```go
 // Default location follows XDG Base Directory Specification
-// $XDG_DATA_HOME/atmos/keyring (typically ~/.local/share/atmos/keyring on Linux)
-// ~/Library/Application Support/atmos/keyring on macOS
+// $XDG_DATA_HOME/atmos/keyring (typically ~/.local/share/atmos/keyring on Linux/macOS)
 // %LOCALAPPDATA%/atmos/keyring on Windows
 
 // Environment variable precedence:
@@ -383,8 +382,7 @@ func getDefaultKeyringPath() (string, error) {
 ```
 
 **Platform Defaults**:
-- **Linux**: `~/.local/share/atmos/keyring`
-- **macOS**: `~/Library/Application Support/atmos/keyring`
+- **Linux/macOS**: `~/.local/share/atmos/keyring`
 - **Windows**: `%LOCALAPPDATA%\atmos\keyring`
 
 ### Testing Strategy

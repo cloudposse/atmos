@@ -348,11 +348,38 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return "", errors.New("failed to determine repository root")
 	}
 
-	// 2. Normalize the repository root:
+	// 2. Pre-process: Join word-wrapped paths that were broken by terminal width wrapping.
+	// Glamour/terminal rendering may wrap long paths at arbitrary positions, breaking paths like:
+	//   "/Users/erik/conductor/atmos/.conductor/da-\nnang/tests/..." (broken mid-word)
+	// This regex finds the repo root path broken across lines and rejoins it.
+	// We need to handle this BEFORE normalizing because the repo root regex won't match split paths.
+	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
+
+	// Build a pattern that matches the repo root potentially split by newlines anywhere.
+	// For path "/a/b/c", create pattern that allows optional \n between characters.
+	// We need to handle escape sequences from QuoteMeta carefully - don't insert [\n]?
+	// between \ and the character it escapes (like \. for literal dot).
+	var wrappedRootPattern strings.Builder
+	runes := []rune(normalizedRepoRoot)
+	for i, r := range runes {
+		if i > 0 {
+			// Insert optional newline between characters (not at start).
+			wrappedRootPattern.WriteString("[\n]?")
+		}
+		// Escape the rune for regex.
+		escaped := regexp.QuoteMeta(string(r))
+		wrappedRootPattern.WriteString(escaped)
+	}
+	wrappedRootRegex, err := regexp.Compile(wrappedRootPattern.String())
+	if err == nil {
+		// Replace any wrapped occurrences with the normalized (unwrapped) version.
+		output = wrappedRootRegex.ReplaceAllString(output, normalizedRepoRoot)
+	}
+
+	// 3. Normalize the repository root:
 	//    - Clean the path (which may not collapse all extra slashes after the drive letter, etc.)
 	//    - Convert to forward slashes,
 	//    - And explicitly collapse extra slashes.
-	normalizedRepoRoot := collapseExtraSlashes(filepath.ToSlash(filepath.Clean(repoRoot)))
 	// Also normalize the output to use forward slashes.
 	// Note: filepath.ToSlash() on Windows converts path separators; on Unix it does nothing.
 	// We also need to handle Windows-style paths that may appear in test output even on Unix (for testing).
@@ -397,6 +424,21 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		return groups[1] + fixedRemainder
 	})
 
+	// 5b. Join hint paths that may be split across lines due to terminal width wrapping.
+	// This ensures consistent snapshots across platforms with different terminal widths.
+	// Example:
+	//   Input:  "💡 Path points to the stacks configuration directory, not a component:\n/absolute/path/to/repo/..."
+	//   Output: "💡 Path points to the stacks configuration directory, not a component: /absolute/path/to/repo/..."
+	hintPathRegex := regexp.MustCompile(`(💡[^:]+:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = hintPathRegex.ReplaceAllString(result, "$1 $2")
+
+	// Also handle "Stacks directory:" and "Workflows directory:" patterns.
+	// Example:
+	//   Input:  "Stacks directory:\n/absolute/path/to/repo/..."
+	//   Output: "Stacks directory: /absolute/path/to/repo/..."
+	dirPathRegex := regexp.MustCompile(`((?:Stacks|Workflows) directory:)\s*\n+(/absolute/path/to/repo[^\n]*)`)
+	result = dirPathRegex.ReplaceAllString(result, "$1 $2")
+
 	// 6. Handle URLs in the output to ensure they are normalized.
 	//    Use a regex to find URLs and collapse extra slashes while preserving the protocol.
 	urlRegex := regexp.MustCompile(`(https?:/+[^\s]+)`)
@@ -430,8 +472,35 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 	debugTimestampRegex := regexp.MustCompile(`expiration="[^"]+\s+[+-]\d{4}\s+[A-Z]{3,4}\s+m=[+-][\d.]+`)
 	result = debugTimestampRegex.ReplaceAllString(result, `expiration="2025-01-01 12:00:00.000000 +0000 UTC m=+3600.000000000`)
 
-	// 11. Apply custom replacements if provided.
+	// 11. Normalize external absolute paths to avoid environment-specific paths in snapshots.
+	// Replace common absolute path prefixes with generic placeholders.
+	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
+	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
+	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
+	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+
+	// 12. Normalize "Last Updated" timestamps in auth whoami output.
+	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
+	// Replace with a fixed timestamp to avoid snapshot mismatches.
+	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
+	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+
+	// 13. Normalize credential expiration durations in auth list output.
+	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
+	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
+	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
+	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
+	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+
+	// 14. Normalize credential_store values in error messages.
+	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
+	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
+	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
+	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+
+	// 15. Apply custom replacements if provided.
 	// These are test-specific patterns that don't need to be part of the global sanitization.
+	// IMPORTANT: This must run LAST so it can override any built-in sanitization results.
 	for pattern, replacement := range config.customReplacements {
 		customRegex, err := regexp.Compile(pattern)
 		if err != nil {
@@ -440,31 +509,37 @@ func sanitizeOutput(output string, opts ...sanitizeOption) (string, error) {
 		result = customRegex.ReplaceAllString(result, replacement)
 	}
 
-	// 12. Normalize external absolute paths to avoid environment-specific paths in snapshots.
-	// Replace common absolute path prefixes with generic placeholders.
-	// This handles paths outside the repo (e.g., /Users/username/other-projects/).
-	// Match Unix-style absolute paths (/Users/, /home/, /opt/, etc.) and Windows paths (C:\Users\, etc.).
-	externalPathRegex := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^/\s":]+|/home/[^/]+/[^/]+/[^/]+/[^/\s":]+|C:\\Users\\[^\\]+\\[^\\]+\\[^\\]+\\[^\\\s":]+)`)
-	result = externalPathRegex.ReplaceAllString(result, "/absolute/path/to/external")
+	// 15a. Normalize temporary directory paths from TEST_GIT_ROOT and other test fixtures.
+	// These appear in trace logs as path=/var/folders/.../mock-git-root or path=/absolute/path/to/repo/mock-git-root.
+	// Replace with a stable placeholder since these are test-specific paths.
+	// Matches both raw paths and already-sanitized repo paths.
+	tempGitRootRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/mock-git-root|/tmp/[^\s]+/mock-git-root|/Users/[^\s]+/mock-git-root|/home/[^\s]+/mock-git-root|[A-Z]:/[^\s]+/mock-git-root|/absolute/path/to/repo/mock-git-root|/absolute/path/to/external/mock-git-root)`)
+	result = tempGitRootRegex.ReplaceAllString(result, "path=/mock-git-root")
 
-	// 13. Normalize "Last Updated" timestamps in auth whoami output.
-	// These appear as "Last Updated  2025-10-28 13:10:27 CDT" in table output.
-	// Replace with a fixed timestamp to avoid snapshot mismatches.
-	lastUpdatedRegex := regexp.MustCompile(`Last Updated\s+\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}\s+[A-Z]{3,4}`)
-	result = lastUpdatedRegex.ReplaceAllString(result, "Last Updated  2025-01-01 12:00:00 UTC")
+	// 15b. Normalize temp home directory paths in trace logs (e.g., path=/var/folders/.../T/TestCLI.../.atmos).
+	// These are used for home directory mocking in tests.
+	// Matches both raw paths and already-sanitized repo paths.
+	tempHomeDirRegex := regexp.MustCompile(`path=(/var/folders/[^\s]+/\.atmos|/tmp/[^\s]+/\.atmos|/Users/[^\s]+/\.atmos|/home/[^\s]+/\.atmos|[A-Z]:/[^\s]+/\.atmos|/absolute/path/to/repo/[^\s]+/\.atmos)`)
+	result = tempHomeDirRegex.ReplaceAllString(result, "path=/mock-home/.atmos")
 
-	// 14. Normalize credential expiration durations in auth list output.
-	// These appear as "● mock-identity (mock) [DEFAULT] 650202h14m" in tree output.
-	// The duration changes every minute, so normalize to "1h 0m" like other duration normalizations.
-	// Matches patterns like "650202h14m", "650194h", "1h30m", "45m", etc. at the end of identity lines.
-	expirationDurationRegex := regexp.MustCompile(`(\(mock\)(?:\s+\[DEFAULT\])?)\s+\d+h(?:\d+m)?\b`)
-	result = expirationDurationRegex.ReplaceAllString(result, "$1 1h 0m")
+	// 15c. Normalize external absolute paths (additional pattern with forward slashes for Windows).
+	// Note: Windows paths use forward slashes here because filepath.ToSlash normalizes them earlier.
+	// The pattern matches the entire path including subdirectories by not excluding slashes in the final segment.
+	externalPathRegex2 := regexp.MustCompile(`(/Users/[^/]+/[^/]+/[^/]+/[^\s":]+|/home/[^/]+/[^/]+/[^/]+/[^\s":]+|C:/Users/[^/]+/[^/]+/[^/]+/[^\s":]+)`)
+	result = externalPathRegex2.ReplaceAllString(result, "/absolute/path/to/external")
 
-	// 15. Normalize credential_store values in error messages.
-	// The keyring backend varies by platform: "system-keyring" (Mac/Windows) vs "noop" (Linux CI).
-	// Replace with a stable placeholder to avoid platform-specific snapshot differences.
-	credentialStoreRegex := regexp.MustCompile(`credential_store=(system-keyring|noop|file)`)
-	result = credentialStoreRegex.ReplaceAllString(result, "credential_store=keyring-placeholder")
+	// 16. Normalize provisioned_by_user values in component output.
+	// This field shows the current username, which varies by environment (erik, runner, etc.).
+	// Replace with a generic placeholder.
+	provisionedByUserRegex := regexp.MustCompile(`provisioned_by_user: [^\s]+`)
+	result = provisionedByUserRegex.ReplaceAllString(result, "provisioned_by_user: user")
+
+	// 17. Join hint messages where the sanitized path ended up on the next line.
+	// This must run AFTER path sanitization because it matches the sanitized path pattern.
+	// E.g., "💡 Stacks directory not found:\n/absolute/path" vs "💡 Stacks directory not found: /absolute/path"
+	// Also handles plain labels like "Stacks directory:\n/path"
+	hintPathRegex2 := regexp.MustCompile(`(?m)(💡[^\n]{0,200}?:|^[A-Z][^\n]{0,200}?directory:)\s*\n(/absolute/path/to/repo[^\s\n]*)`)
+	result = hintPathRegex2.ReplaceAllString(result, "$1 $2")
 
 	return result, nil
 }
@@ -768,7 +843,13 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 
 			if _, err := os.Stat(src); err == nil { // Check if the file/directory exists
 				// t.Logf("Copying %s to %s\n", src, dest)
-				if err := copy.Copy(src, dest); err != nil {
+				// Skip socket files (e.g., SSH agent sockets) that cannot be copied.
+				copyOpts := copy.Options{
+					Skip: func(info os.FileInfo, src, dest string) (bool, error) {
+						return info.Mode()&os.ModeSocket != 0, nil
+					},
+				}
+				if err := copy.Copy(src, dest, copyOpts); err != nil {
 					t.Fatalf("Failed to copy %s to test folder: %v", src, err)
 				}
 			}
@@ -1341,6 +1422,43 @@ func max(a, b int) int {
 	return b
 }
 
+// validateYAMLFormatSilent checks YAML validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateYAMLFormatSilent(output string) bool {
+	var data interface{}
+	err := yaml.Unmarshal([]byte(output), &data)
+	return err == nil
+}
+
+// validateJSONFormatSilent checks JSON validity without logging errors.
+// Used in tests that expect validation to fail.
+func validateJSONFormatSilent(output string) bool {
+	var data interface{}
+	err := json.Unmarshal([]byte(output), &data)
+	return err == nil
+}
+
+// validateFormatValidationSilent checks if output is valid in any of the specified formats.
+// Used in tests that expect validation to fail.
+func validateFormatValidationSilent(output string, formats []string) bool {
+	for _, format := range formats {
+		switch format {
+		case "json":
+			if !validateJSONFormatSilent(output) {
+				return false
+			}
+		case "yaml":
+			if !validateYAMLFormatSilent(output) {
+				return false
+			}
+		default:
+			// Unknown format - return false without logging.
+			return false
+		}
+	}
+	return true
+}
+
 func updateSnapshot(fullPath, output string) {
 	err := os.MkdirAll(filepath.Dir(fullPath), 0o755) // Ensure parent directories exist
 	if err != nil {
@@ -1619,7 +1737,7 @@ $ go test -run=%q -regenerate-snapshots`, stderrPath, t.Name())
 			// Generate a colorized diff for better readability
 			diff = colorizeDiffWithThreshold(filteredStderrActual, filteredStderrExpected, 10)
 		}
-		t.Errorf("Stderr diff mismatch for %q:\n%s", stdoutPath, diff)
+		t.Errorf("Stderr diff mismatch for %q:\n%s", stderrPath, diff)
 	}
 
 	return true

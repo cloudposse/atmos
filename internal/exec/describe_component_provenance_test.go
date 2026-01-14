@@ -20,16 +20,20 @@ func TestDescribeComponent_NestedImportProvenance(t *testing.T) {
 	ClearLastMergeContext()
 	ClearFileContentCache()
 
-	// Skip if not in repo root or examples directory doesn't exist
+	// Skip if not in repo root or examples directory doesn't exist.
 	examplesPath := "../../examples/quick-start-advanced"
 	if _, err := os.Stat(examplesPath); os.IsNotExist(err) {
 		t.Skipf("Skipping test: examples/quick-start-advanced directory not found")
 	}
 
-	// Change to the quick-start-advanced directory
+	// Change to the quick-start-advanced directory.
 	t.Chdir(examplesPath)
 
-	// Initialize config
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize config.
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = "vpc-flow-logs-bucket"
 	configAndStacksInfo.Stack = "plat-ue2-dev"
@@ -185,16 +189,20 @@ func TestDescribeComponent_DirectImportProvenance(t *testing.T) {
 	ClearLastMergeContext()
 	ClearFileContentCache()
 
-	// Skip if not in repo root or examples directory doesn't exist
+	// Skip if not in repo root or examples directory doesn't exist.
 	examplesPath := "../../examples/quick-start-advanced"
 	if _, err := os.Stat(examplesPath); os.IsNotExist(err) {
 		t.Skipf("Skipping test: examples/quick-start-advanced directory not found")
 	}
 
-	// Change to the quick-start-advanced directory
+	// Change to the quick-start-advanced directory.
 	t.Chdir(examplesPath)
 
-	// Initialize config
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	// This also disables parent directory search and git root discovery.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize config.
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = "vpc"
 	configAndStacksInfo.Stack = "plat-ue2-dev"

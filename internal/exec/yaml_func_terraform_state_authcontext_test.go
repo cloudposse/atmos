@@ -60,6 +60,7 @@ func TestAuthContextReachesGetTerraformState(t *testing.T) {
 			"bucket_name",
 			false,
 			gomock.Eq(expectedAuthContext), // This is the critical assertion!
+			gomock.Any(),                   // authManager parameter
 		).
 		Return("test-bucket-name", nil).
 		Times(1)
@@ -108,6 +109,7 @@ func TestAuthContextNilWhenStackInfoNil(t *testing.T) {
 			"bucket_name",
 			false,
 			gomock.Nil(), // Should be nil when stackInfo is nil
+			gomock.Any(), // authManager parameter
 		).
 		Return("test-bucket-name", nil).
 		Times(1)
@@ -190,6 +192,7 @@ func TestAuthContextWithDifferentConfigurations(t *testing.T) {
 					gomock.Any(),
 					gomock.Any(),
 					gomock.Eq(tt.authContext),
+					gomock.Any(), // authManager parameter
 				).
 				Return("result", nil).
 				Times(1)

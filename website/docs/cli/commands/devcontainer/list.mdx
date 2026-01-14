@@ -1,0 +1,51 @@
+---
+title: atmos devcontainer list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List available devcontainers
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to list all devcontainers configured in your Atmos project.
+</Intro>
+
+<Screengrab title="atmos devcontainer list --help" slug="atmos-devcontainer-list--help" />
+
+## Usage
+
+```shell
+atmos devcontainer list
+```
+
+This command displays all devcontainers defined in your `atmos.yaml` configuration along with their current status (running, stopped, or not created).
+
+## Output
+
+The command shows:
+- **Name**: The devcontainer name from your configuration
+- **Status**: Current state (running, stopped, or `-` if not created)
+- **Runtime**: Container runtime being used (docker or podman)
+- **Image**: The container image specified in the configuration
+
+## Examples
+
+```shell
+# List all devcontainers
+atmos devcontainer list
+```
+
+Example output:
+```
+NAME        STATUS    RUNTIME   IMAGE
+geodesic    running   podman    cloudposse/geodesic:latest
+terraform   stopped   podman    hashicorp/terraform:1.6
+python      -         podman    python:3.11-slim
+```
+
+## See Also
+
+- [`atmos devcontainer start`](/cli/commands/devcontainer/start)
+- [`atmos devcontainer config`](/cli/commands/devcontainer/config)

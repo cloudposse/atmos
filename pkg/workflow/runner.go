@@ -1,0 +1,56 @@
+package workflow
+
+import (
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+// ShellExecutor is a function type for executing shell commands.
+// This type allows injecting the actual shell execution function.
+type ShellExecutor func(command, name, dir string, env []string, dryRun bool) error
+
+// AtmosExecutor is a function type for executing atmos commands.
+// This type allows injecting the actual atmos execution function.
+type AtmosExecutor func(params *AtmosExecParams) error
+
+// DefaultCommandRunner is the default implementation of CommandRunner
+// that delegates to the provided shell and atmos execution functions.
+// This is designed for dependency injection - the actual execution functions
+// must be provided by the caller (typically from internal/exec).
+type DefaultCommandRunner struct {
+	shellExecutor ShellExecutor
+	atmosExecutor AtmosExecutor
+}
+
+// NewDefaultCommandRunner creates a new DefaultCommandRunner with the given executors.
+// Both executors should be provided - nil executors will result in ErrNilParam being returned.
+func NewDefaultCommandRunner(shellExec ShellExecutor, atmosExec AtmosExecutor) *DefaultCommandRunner {
+	return &DefaultCommandRunner{
+		shellExecutor: shellExec,
+		atmosExecutor: atmosExec,
+	}
+}
+
+// RunShell executes a shell command using the configured shell executor.
+func (r *DefaultCommandRunner) RunShell(command, name, dir string, env []string, dryRun bool) error {
+	defer perf.Track(nil, "workflow.DefaultCommandRunner.RunShell")()
+
+	if r.shellExecutor == nil {
+		return errUtils.ErrNilParam
+	}
+	return r.shellExecutor(command, name, dir, env, dryRun)
+}
+
+// RunAtmos executes an atmos command using the configured atmos executor.
+func (r *DefaultCommandRunner) RunAtmos(params *AtmosExecParams) error {
+	defer perf.Track(nil, "workflow.DefaultCommandRunner.RunAtmos")()
+
+	if params == nil || params.AtmosConfig == nil {
+		return errUtils.ErrNilParam
+	}
+
+	if r.atmosExecutor == nil {
+		return errUtils.ErrNilParam
+	}
+	return r.atmosExecutor(params)
+}

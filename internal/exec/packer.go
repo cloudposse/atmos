@@ -1,15 +1,20 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -75,19 +80,43 @@ func ExecutePacker(
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for the error message, respecting the user's actual config.
-		basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
-		return fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
-			errUtils.ErrInvalidComponent,
-			info.ComponentFromArg,
-			info.FinalComponent,
-			basePath,
-		)
+		// Check if component has source configured for JIT provisioning.
+		if provSource.HasSource(info.ComponentSection) {
+			// Run JIT source provisioning before path validation.
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+			defer cancel()
+			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext); err != nil {
+				return fmt.Errorf("failed to auto-provision component source: %w", err)
+			}
+
+			// Check if source provisioner set a workdir path (source + workdir case).
+			// If so, use that path instead of the component path.
+			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+				componentPath = workdirPath
+				componentPathExists = true
+				err = nil // Clear any previous error since we have a valid workdir path.
+			} else {
+				// Re-check if component path now exists after provisioning (source only case).
+				componentPathExists, err = u.IsDirectory(componentPath)
+			}
+		}
+
+		// If still doesn't exist, return the error.
+		if err != nil || !componentPathExists {
+			// Get the base path for the error message, respecting the user's actual config.
+			basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
+			return fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
+				errUtils.ErrInvalidComponent,
+				info.ComponentFromArg,
+				info.FinalComponent,
+				basePath,
+			)
+		}
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
 	if (info.SubCommand == "build") && info.ComponentIsAbstract {
-		return fmt.Errorf("%w: component `%s` is abstract and cannot be provisioned (`metadata.type = abstract`)",
+		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
@@ -97,10 +126,35 @@ func ExecutePacker(
 		// Allow read-only commands, block modification commands.
 		switch info.SubCommand {
 		case "build":
-			return fmt.Errorf("%w: component `%s` is locked and cannot be modified (`metadata.locked = true`)",
+			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
 		}
+	}
+
+	// Resolve and install component dependencies.
+	resolver := dependencies.NewResolver(&atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("packer", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+	}
+
+	if len(deps) > 0 {
+		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+		installer := dependencies.NewInstaller(&atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return fmt.Errorf("failed to install component dependencies: %w", err)
+		}
+
+		// Build PATH with toolchain binaries and add to component environment.
+		// This does NOT modify the global process environment - only the subprocess environment.
+		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
+		if err != nil {
+			return fmt.Errorf("failed to build toolchain PATH: %w", err)
+		}
+
+		// Propagate toolchain PATH into environment for subprocess.
+		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component.

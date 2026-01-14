@@ -1,0 +1,73 @@
+---
+slug: documentation-reorganization
+title: "Documentation Reorganization: Learn, Reference, How-To"
+authors: [osterman]
+tags: [documentation, dx]
+---
+
+We've reorganized the Atmos documentation to better serve both newcomers and experienced users. Here's what changed and why.
+
+<!--truncate-->
+
+## The Problem
+
+As Atmos has grown, so has its documentation. But growth without organization leads to confusion. New users struggled to find the right starting point, while experienced users had trouble locating specific configuration references.
+
+## Our Approach
+
+We restructured the documentation around three user journeys:
+
+### 1. Learn Atmos (Early Learning Journey)
+
+The "Learn Atmos" and "Your First Stack" sections focus exclusively on getting started. These pages introduce concepts progressively, avoiding information overload. When you're learning, you need just enough to be productive—not every edge case.
+
+### 2. Reference Documentation (Advanced Usage)
+
+For experienced users, we've created comprehensive reference sections that document every configuration option:
+
+**CLI Configuration (`atmos.yaml`)**: Every section of `atmos.yaml` now has its own dedicated page:
+- `components` (with sub-pages for terraform, helmfile, packer)
+- `stacks`
+- `logs`
+- `settings` (with sub-pages for terminal, mask, markdown-styling, pro)
+- `workflows`
+- `vendor`
+- `schemas`
+- And more...
+
+**Stack Configuration**: Every section of stack YAML files is documented:
+- `import`
+- `vars`
+- `env`
+- `settings` (with `depends_on`)
+- `metadata`
+- `hooks`
+- `overrides`
+- `command`
+- `backend`
+- `providers`
+- `auth`
+- `components` (with terraform, helmfile, packer)
+
+This convention—documenting every single YAML section—makes it easy to find exactly what you need.
+
+### 3. How-To Guides
+
+We introduced a dedicated How-To Guides section for task-oriented documentation:
+- Service Catalogs
+- Inheritance
+- Mixins
+
+These guides answer "How do I...?" questions with practical examples.
+
+## The Convention
+
+Going forward, our documentation follows this principle:
+
+> Every section of YAML configuration—whether in `atmos.yaml` or stack files—gets its own dedicated documentation page.
+
+This makes the docs predictable. Looking for `settings.terminal.mask`? Check the mask page under settings. Looking for `components.terraform.backend`? Check the backend page under Stack Configuration.
+
+## What's Next
+
+We'll continue refining based on feedback. If you find gaps or have suggestions, [open an issue](https://github.com/cloudposse/atmos/issues) or join us in [Slack](https://slack.cloudposse.com).

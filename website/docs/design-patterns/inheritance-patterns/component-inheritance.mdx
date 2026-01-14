@@ -1,0 +1,79 @@
+---
+title: Component Inheritance
+sidebar_position: 8
+sidebar_label: Component Inheritance
+description: Component Inheritance Atmos Design Pattern
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Component Inheritance** pattern allows an Atmos component to inherit configuration from a base component, then override specific values. This creates DRY configurations where common settings are defined once and reused.
+</Intro>
+
+## Use-cases
+
+Use the **Component Inheritance** pattern when:
+
+- Multiple components share common configuration
+
+- You want to define defaults once and override only what differs
+
+## How It Works
+
+A component inherits from a base component using `metadata.inherits`:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      vars:
+        enabled: true
+        nat_gateway_enabled: true
+        max_subnet_count: 3
+```
+</File>
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+        inherits:
+          - vpc/defaults
+      vars:
+        # Override only what's different
+        max_subnet_count: 2
+```
+</File>
+
+The `vpc` component inherits all vars from `vpc/defaults`, then overrides `max_subnet_count`.
+
+## Inheritance Order
+
+When multiple sources define the same value, later sources win:
+
+```
+base component → inherited components (in order) → inline vars
+```
+
+This allows progressive specialization from general defaults to specific overrides.
+
+## Related Patterns
+
+- [Multiple Inheritance](/design-patterns/inheritance-patterns/multiple-inheritance) - Inherit from multiple base components
+- [Abstract Component](/design-patterns/inheritance-patterns/abstract-component) - Prevent base components from being deployed
+- [Multiple Component Instances](/design-patterns/inheritance-patterns/multiple-component-instances) - Deploy multiple instances of the same component
+
+## References
+
+- [Component Inheritance](/howto/inheritance)

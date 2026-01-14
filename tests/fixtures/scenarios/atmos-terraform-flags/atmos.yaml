@@ -1,0 +1,23 @@
+# Fixture for testing terraform CLI flags
+# Tests: --skip-init, --auto-generate-backend-file, --init-run-reconfigure,
+#        --init-pass-vars, --planfile, --skip-planfile, --deploy-run-init
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: false
+    auto_generate_backend_file: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info

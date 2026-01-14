@@ -1,0 +1,174 @@
+---
+title: atmos toolchain env
+sidebar_label: env
+sidebar_class_name: command
+id: env
+description: Export PATH environment variable for toolchain tools in shell-specific formats.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Export the PATH environment variable for your toolchain tools in shell-specific formats. This command makes it easy to integrate toolchain paths into different shell environments (Bash, Fish, PowerShell) and configuration files (.env, JSON).
+</Intro>
+
+<Screengrab title="atmos toolchain env --help" slug="atmos-toolchain-env--help" />
+
+## Usage
+
+Execute the `atmos toolchain env` command like this:
+
+```shell
+atmos toolchain env
+```
+
+By default, the command outputs in Bash/Zsh export format. You can specify different output formats using the `--format` flag.
+
+## Examples
+
+### Bash/Zsh (default)
+
+```shell
+atmos toolchain env
+# Output: export PATH='/path/to/tools/bin:/usr/local/bin:/usr/bin:/bin'
+```
+
+Source it directly in your shell:
+```shell
+eval "$(atmos toolchain env)"
+```
+
+### Fish Shell
+
+```shell
+atmos toolchain env --format fish
+# Output: set -gx PATH '/path/to/tools/bin' '/usr/local/bin' '/usr/bin' '/bin'
+```
+
+Source it in Fish:
+```shell
+atmos toolchain env --format fish | source
+```
+
+### PowerShell
+
+```shell
+atmos toolchain env --format powershell
+# Output: $env:PATH = "/path/to/tools/bin;C:\Windows\System32"
+```
+
+Execute it in PowerShell:
+```powershell
+Invoke-Expression (atmos toolchain env --format powershell)
+```
+
+### Dotenv Format
+
+```shell
+atmos toolchain env --format dotenv > .env
+# Creates .env file with: PATH='/path/to/tools/bin:/usr/local/bin:/usr/bin:/bin'
+```
+
+### JSON Format
+
+```shell
+atmos toolchain env --format json
+```
+
+Example output:
+```json
+{
+  "tools": [
+    {
+      "tool": "terraform",
+      "version": "1.5.0",
+      "path": "/home/user/.tools/terraform/1.5.0/bin"
+    }
+  ],
+  "final_path": "/home/user/.tools/terraform/1.5.0/bin:/usr/local/bin:/usr/bin:/bin",
+  "count": 1
+}
+```
+
+### Relative Paths
+
+```shell
+atmos toolchain env --relative
+# Uses relative paths instead of absolute
+```
+
+## Flags
+
+<dl>
+    <dt>`--format`, `-f`  <em>(optional)</em></dt>
+    <dd>
+        Output format: `bash`, `fish`, `powershell`, `json`, `dotenv`
+
+        Default: `bash`
+
+        Environment variable: `ATMOS_TOOLCHAIN_ENV_FORMAT`
+    </dd>
+    <dt>`--relative`  <em>(optional)</em></dt>
+    <dd>
+        Use relative paths instead of absolute paths
+
+        Environment variable: `ATMOS_TOOLCHAIN_RELATIVE`
+    </dd>
+</dl>
+
+## Common Use Cases
+
+### Shell Integration
+
+Add to your shell profile to automatically use toolchain tools:
+
+**Bash/Zsh** (`~/.bashrc` or `~/.zshrc`):
+```bash
+eval "$(atmos toolchain env)"
+```
+
+**Fish** (`~/.config/fish/config.fish`):
+```fish
+atmos toolchain env --format fish | source
+```
+
+**PowerShell** (`$PROFILE`):
+```powershell
+Invoke-Expression (atmos toolchain env --format powershell)
+```
+
+### CI/CD Integration
+
+**GitHub Actions**:
+```yaml
+- name: Setup Atmos Toolchain
+  run: |
+    eval "$(atmos toolchain env)"
+    terraform version  # Uses toolchain version
+```
+
+**GitLab CI**:
+```yaml
+before_script:
+  - eval "$(atmos toolchain env)"
+```
+
+### Docker Integration
+
+```dockerfile
+RUN atmos toolchain env --format dotenv >> /etc/environment
+```
+
+## Notes
+
+- The command reads tools from your `.tool-versions` file
+- Only installed tools are included in the PATH
+- The generated PATH prepends toolchain paths to your existing PATH
+- Each output format is optimized for its target environment:
+  - **bash**: Single-quoted export statement with proper escaping
+  - **fish**: Space-separated paths with `set -gx` syntax
+  - **powershell**: Double-quoted assignment with PowerShell escaping
+  - **dotenv**: Compatible with `.env` file parsers
+  - **json**: Structured data for programmatic use
+- The command respects the `--toolchain-path` flag and `ATMOS_TOOLCHAIN_PATH` environment variable

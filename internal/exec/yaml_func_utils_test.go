@@ -279,13 +279,16 @@ func TestProcessCustomYamlTags(t *testing.T) {
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	assert.NoError(t, err)
 
-	d := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
+	d, err := processTagTerraformState(&atmosConfig, "!terraform.state component-1 foo", stack, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack, nil)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 bar", stack, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "", nil)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-1 nonprod baz", "", nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "component-1-c", d)
 
 	res, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -320,13 +323,16 @@ func TestProcessCustomYamlTags(t *testing.T) {
 		t.Fatalf("Failed to execute 'ExecuteTerraform': %v", err)
 	}
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack, nil)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-2 foo", stack, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "component-1-a", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack, nil)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod bar", stack, nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "component-1-b", d)
 
-	d = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "", nil)
+	d, err = processTagTerraformState(&atmosConfig, "!terraform.state component-2 nonprod baz", "", nil)
+	assert.NoError(t, err)
 	assert.Equal(t, "component-1-c", d)
 
 	res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
@@ -471,6 +477,7 @@ func TestProcessCustomYamlTagsStackInfoThreading(t *testing.T) {
 	// The real test: Verify that when we process nodes, the stackInfo
 	// is available for YAML function processing.
 	// This is a white-box test that ensures the parameter flows through.
-	processedNodes := processNodes(atmosConfig, input, "test-stack", nil, stackInfo)
+	processedNodes, err := processNodes(atmosConfig, input, "test-stack", nil, stackInfo)
+	assert.NoError(t, err)
 	assert.NotNil(t, processedNodes)
 }

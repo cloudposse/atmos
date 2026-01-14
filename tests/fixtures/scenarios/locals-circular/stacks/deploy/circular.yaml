@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# This file contains circular dependency in locals for testing error detection.
+locals:
+  a: "{{ .locals.b }}"
+  b: "{{ .locals.c }}"
+  c: "{{ .locals.a }}"
+
+vars:
+  stage: "dev"
+
+components:
+  terraform:
+    mock:
+      metadata:
+        component: mock
+      vars:
+        foo: "bar"

@@ -1,0 +1,17 @@
+# Production stack for component path resolution testing
+vars:
+  stage: "prod"
+
+components:
+  terraform:
+    # Simple component in production
+    simple-component:
+      vars:
+        environment: "production"
+        enabled: true
+
+    # Nested component in production
+    nested/component:
+      vars:
+        environment: "production"
+        enabled: true

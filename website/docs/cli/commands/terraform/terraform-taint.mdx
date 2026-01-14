@@ -1,0 +1,97 @@
+---
+title: atmos terraform taint
+sidebar_label: taint
+sidebar_class_name: command
+id: taint
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to mark a Terraform resource for recreation in an Atmos component's next apply operation. Note: This command is deprecated in Terraform v1.0+.
+</Intro>
+
+<Screengrab title="atmos terraform taint --help" slug="atmos-terraform-taint--help" />
+
+## Usage
+
+Execute the `terraform taint` command like this:
+
+```shell
+atmos terraform taint <component> -s <stack> [options]
+```
+
+This command marks a resource as tainted in the Terraform state. Tainted resources will be destroyed and recreated on the next apply. Note: This command is deprecated in Terraform v1.0+ in favor of `terraform apply -replace`.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init`, workspace selection, and variable file generation. Additionally, Atmos blocks this operation if the component is locked (`metadata.locked: true`). The taint operation itself is handled by native Terraform.
+:::
+## Examples
+
+### Taint a Resource
+
+```shell
+# Mark a resource as tainted
+atmos terraform taint vpc -s dev aws_instance.web
+```
+
+### Taint with Module Path
+
+```shell
+# Taint a resource in a module
+atmos terraform taint app -s dev module.vpc.aws_subnet.private[0]
+```
+
+:::note
+In Terraform v1.0+, use `terraform apply -replace` instead:
+```shell
+atmos terraform apply vpc -s dev -replace=aws_instance.web
+```
+:::
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform taint vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform taint vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+This command supports native `terraform taint` flags such as `-lock=false` to disable state locking, `-lock-timeout` to override lock timeout.
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

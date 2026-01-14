@@ -14,7 +14,6 @@ import (
 func TestExecutePackerOutput(t *testing.T) {
 	workDir := "../../tests/fixtures/scenarios/packer"
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
-	t.Setenv("ATMOS_BASE_PATH", workDir)
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 
 	// Test successful case (original test)
@@ -109,7 +108,6 @@ func TestExecutePackerOutput(t *testing.T) {
 		require.NoError(t, err)
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
-		t.Setenv("ATMOS_BASE_PATH", tempDir)
 
 		info := schema.ConfigAndStacksInfo{
 			StackFromArg:     "",

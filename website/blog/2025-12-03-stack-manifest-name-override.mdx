@@ -1,0 +1,143 @@
+---
+slug: stack-manifest-name-override
+title: Explicit Stack Names in Stack Manifests
+authors:
+  - osterman
+tags:
+  - feature
+date: 2025-12-03T00:00:00.000Z
+---
+
+You can now specify an explicit `name` field in stack manifests to override the logical stack name. This is especially useful when migrating from other tools like Terragrunt, or when your infrastructure doesn't follow a strict naming convention.
+
+<!--truncate-->
+
+## What's New
+
+Stack manifests now support a top-level `name` field that explicitly sets the logical stack name. This takes precedence over `name_template` and `name_pattern` configured in `atmos.yaml`, giving you imperative control over stack naming when you need it.
+
+## The Problem
+
+Atmos typically derives stack names from either:
+- **`name_template`** - A Go template that computes the name from context variables
+- **`name_pattern`** - A token-based pattern like `{tenant}-{environment}-{stage}`
+- **Default** - The basename of the stack file (zero-config)
+
+These declarative approaches work well for greenfield projects with consistent naming conventions. However, they can be challenging when:
+
+- Migrating legacy infrastructure that predates your naming conventions
+- Adopting infrastructure from acquisitions with different naming schemes
+- Migrating from tools like Terragrunt where stack organization differs
+- Working with infrastructure that simply doesn't fit a pattern
+
+## The Solution
+
+Add a `name` field to any stack manifest to explicitly set its logical name:
+
+```yaml
+# stacks/legacy-prod.yaml
+name: "my-legacy-prod-stack"
+
+import:
+  - catalog/base
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+With this configuration, the stack is identified as `my-legacy-prod-stack` regardless of the filename or any naming patterns configured in `atmos.yaml`. The Terraform workspace will also use this name.
+
+## Precedence Order
+
+Stack names are now resolved in this order:
+
+1. **`name`** (highest) - Explicit name from stack manifest
+2. **`name_template`** - Go template from `atmos.yaml`
+3. **`name_pattern`** - Token pattern from `atmos.yaml`
+4. **Default** - Basename of the stack file
+
+This means you can still use `name_template` or `name_pattern` for most stacks while selectively overriding specific stacks that don't fit the pattern.
+
+## Use Cases
+
+### Migrating from Terragrunt
+
+When migrating from Terragrunt, your existing state files are tied to specific workspace names that may not match Atmos naming conventions:
+
+```yaml
+# stacks/us-east-1/prod/vpc.yaml
+name: "prod-us-east-1-vpc"  # Matches existing Terraform workspace
+
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+### Legacy Infrastructure
+
+For infrastructure that predates your naming standards:
+
+```yaml
+# stacks/old-datacenter.yaml
+name: "dc1-legacy-infra"  # Historical name that must be preserved
+
+components:
+  terraform:
+    network:
+      vars:
+        vpc_id: "vpc-abc123"
+```
+
+### Acquisitions
+
+When integrating acquired infrastructure:
+
+```yaml
+# stacks/acme-corp-prod.yaml
+name: "acme-production"  # Keep their original naming
+
+import:
+  - catalog/base
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+```
+
+## How It Works
+
+The `name` field is extracted during stack processing and used wherever the logical stack name is needed:
+
+- **Stack identification** - `atmos describe stacks` shows the custom name
+- **Stack selection** - Use `-s my-legacy-prod-stack` on the command line
+- **Terraform workspace** - Workspace name derives from the stack name
+- **Dependencies** - Reference stacks by their logical name in `depends_on`
+
+## Comparison with Component metadata.name
+
+This feature is analogous to `metadata.name` for components, which allows renaming component instances. Just as `metadata.name` lets you control how a component is identified, the stack-level `name` field lets you control how a stack is identified.
+
+| Level | Field | Purpose |
+|-------|-------|---------|
+| Component | `metadata.name` | Override component instance name |
+| Stack | `name` | Override logical stack name |
+
+## Related Documentation
+
+- [Stack Names](/stacks/name)
+- [Stack Configuration](/stacks)
+- [Terraform Workspaces](/components/terraform/workspaces)
+
+## Get Started
+
+Add a `name` field to any stack manifest that needs an explicit name. This feature is fully backward compatible - stacks without a `name` field continue to use `name_template`, `name_pattern`, or the filename as before.

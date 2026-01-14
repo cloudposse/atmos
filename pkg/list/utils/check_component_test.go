@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -23,9 +24,9 @@ func TestCheckComponentExists_EmptyComponentName(t *testing.T) {
 func TestCheckComponentExists_ExecuteDescribeStacksError(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return an error
+	// Mock ExecuteDescribeStacks to return an error.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return nil, errors.New("simulated ExecuteDescribeStacks error")
 		})
 	defer patches.Reset()
@@ -38,9 +39,9 @@ func TestCheckComponentExists_ExecuteDescribeStacksError(t *testing.T) {
 func TestCheckComponentExists_EmptyStacksMap(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return empty map
+	// Mock ExecuteDescribeStacks to return empty map.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return map[string]any{}, nil
 		})
 	defer patches.Reset()
@@ -53,9 +54,9 @@ func TestCheckComponentExists_EmptyStacksMap(t *testing.T) {
 func TestCheckComponentExists_InvalidStackData(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return invalid stack data
+	// Mock ExecuteDescribeStacks to return invalid stack data.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return map[string]any{
 				"stack1": "invalid-not-a-map", // Invalid type
 			}, nil
@@ -70,9 +71,9 @@ func TestCheckComponentExists_InvalidStackData(t *testing.T) {
 func TestCheckComponentExists_NoComponentsKey(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return stack without components key
+	// Mock ExecuteDescribeStacks to return stack without components key.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return map[string]any{
 				"stack1": map[string]interface{}{
 					"other_key": "value",
@@ -90,9 +91,9 @@ func TestCheckComponentExists_NoComponentsKey(t *testing.T) {
 func TestCheckComponentExists_InvalidComponentsType(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return invalid components type
+	// Mock ExecuteDescribeStacks to return invalid components type.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return map[string]any{
 				"stack1": map[string]interface{}{
 					"components": "invalid-not-a-map",
@@ -109,9 +110,9 @@ func TestCheckComponentExists_InvalidComponentsType(t *testing.T) {
 func TestCheckComponentExists_InvalidComponentTypeMap(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return invalid component type map
+	// Mock ExecuteDescribeStacks to return invalid component type map.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return map[string]any{
 				"stack1": map[string]interface{}{
 					"components": map[string]interface{}{
@@ -130,9 +131,9 @@ func TestCheckComponentExists_InvalidComponentTypeMap(t *testing.T) {
 func TestCheckComponentExists_ComponentNotFound(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	// Mock ExecuteDescribeStacks to return stacks without the target component
+	// Mock ExecuteDescribeStacks to return stacks without the target component.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
 			return map[string]any{
 				"stack1": map[string]interface{}{
 					"components": map[string]interface{}{
@@ -172,10 +173,10 @@ func TestCheckComponentExists_EmptyComponentName_NilConfig(t *testing.T) {
 
 // TestCheckComponentExists_RealComponentName_NilConfig tests nil config handling.
 func TestCheckComponentExists_RealComponentName_NilConfig(t *testing.T) {
-	// Mock ExecuteDescribeStacks to handle nil config gracefully
+	// Mock ExecuteDescribeStacks to handle nil config gracefully.
 	patches := gomonkey.ApplyFunc(e.ExecuteDescribeStacks,
-		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string) (map[string]any, error) {
-			// ExecuteDescribeStacks might handle nil config
+		func(*schema.AtmosConfiguration, string, []string, []string, []string, bool, bool, bool, bool, []string, auth.AuthManager) (map[string]any, error) {
+			// ExecuteDescribeStacks might handle nil config.
 			return map[string]any{}, nil
 		})
 	defer patches.Reset()

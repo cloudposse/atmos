@@ -5,6 +5,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.yaml.in/yaml/v3"
+
+	"github.com/cloudposse/atmos/pkg/config/casemap"
 )
 
 func TestAtmosConfigurationWorksWithOpa(t *testing.T) {
@@ -131,4 +133,51 @@ func TestAtmosConfigurationWithTabWidthAndDescribeSettings(t *testing.T) {
 	assert.Equal(t, tabWidth, atmosConfig.Settings.Terminal.TabWidth)
 	assert.NotNil(t, atmosConfig.Describe.Settings.IncludeEmpty)
 	assert.True(t, *atmosConfig.Describe.Settings.IncludeEmpty)
+}
+
+func TestGetCaseSensitiveMap(t *testing.T) {
+	t.Run("returns nil for unsupported path", func(t *testing.T) {
+		atmosConfig := &AtmosConfiguration{}
+		result := atmosConfig.GetCaseSensitiveMap("unsupported")
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns env map when no CaseMaps", func(t *testing.T) {
+		atmosConfig := &AtmosConfiguration{
+			Env: map[string]string{
+				"foo": "bar",
+			},
+		}
+		result := atmosConfig.GetCaseSensitiveMap("env")
+		assert.Equal(t, map[string]string{"foo": "bar"}, result)
+	})
+
+	t.Run("returns env map with case restored when CaseMaps present", func(t *testing.T) {
+		cm := casemap.New()
+		cm.Set("env", casemap.CaseMap{
+			"github_token": "GITHUB_TOKEN",
+			"aws_region":   "AWS_REGION",
+		})
+
+		atmosConfig := &AtmosConfiguration{
+			Env: map[string]string{
+				"github_token": "secret123",
+				"aws_region":   "us-east-1",
+			},
+			CaseMaps: cm,
+		}
+		result := atmosConfig.GetCaseSensitiveMap("env")
+		assert.Equal(t, map[string]string{
+			"GITHUB_TOKEN": "secret123",
+			"AWS_REGION":   "us-east-1",
+		}, result)
+	})
+
+	t.Run("returns empty map when env is nil and CaseMaps is nil", func(t *testing.T) {
+		atmosConfig := &AtmosConfiguration{
+			Env: nil,
+		}
+		result := atmosConfig.GetCaseSensitiveMap("env")
+		assert.Nil(t, result)
+	})
 }

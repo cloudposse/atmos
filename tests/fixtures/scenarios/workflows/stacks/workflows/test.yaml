@@ -26,6 +26,7 @@ workflows:
           echo "This should fail"
           exit 1
         type: shell
+
   shell-command-not-found:
     description: |
       Run a shell command that doesn't exist.
@@ -57,4 +58,101 @@ workflows:
       Run a shell command that requires PATH to be set.
     steps:
       - command: env | grep PATH
+        type: shell
+
+  # Test cases for multi-component operations with quoted arguments
+  # These test the issue where strings.Fields() incorrectly splits quoted arguments
+
+  # This workflow tests the --query flag with a quoted expression
+  # The query contains spaces and special characters that should be preserved
+  multi-component-query:
+    description: |
+      Test multi-component operation with --query flag containing quoted expression.
+      This reproduces the issue where strings.Fields() splits the quoted query.
+    steps:
+      # This command should be parsed as a single query argument:
+      #   ["terraform", "plan", "--query", ".settings.enabled == true", "-s", "nonprod"]
+      # But strings.Fields() incorrectly splits the quoted query into multiple tokens:
+      #   ["terraform", "plan", "--query", "'.settings.enabled", "==", "true'", "-s", "nonprod"]
+      # which causes the CLI to interpret "'.settings.enabled" as a component argument.
+      - command: terraform plan --query '.settings.enabled == true' -s nonprod
+
+  # This workflow tests the --components flag with comma-separated values
+  multi-component-list:
+    description: |
+      Test multi-component operation with --components flag.
+    steps:
+      - command: terraform plan --components mock -s nonprod
+
+  # This workflow tests the --all flag
+  multi-component-all:
+    description: |
+      Test multi-component operation with --all flag.
+    steps:
+      - command: terraform plan --all -s nonprod
+
+  # Shell command that echoes back arguments to verify parsing
+  shell-echo-args:
+    description: |
+      Echo back arguments to verify shell parsing of quoted strings.
+    steps:
+      - command: echo "argument with spaces" 'single quoted' "double quoted"
+        type: shell
+
+  # Test double-quoted query expression
+  multi-component-query-double-quotes:
+    description: |
+      Test multi-component with double-quoted query expression.
+    steps:
+      - command: terraform plan --query ".metadata.component == \"mock\"" -s nonprod
+
+  # Test cases for -var flag with quoted values
+  # This reproduces the issue reported by users where -var="key=value" is incorrectly parsed
+  # Fixed in PR #1961
+
+  # Test -var with double quotes (the exact pattern from user report)
+  terraform-var-double-quotes:
+    description: |
+      Test terraform -var flag with double-quoted value.
+      This reproduces the issue where strings.Fields() keeps quotes as literal characters,
+      causing Terraform to see the variable name as "enabled instead of enabled.
+    steps:
+      # The command should pass -var=enabled=false to terraform
+      # But with strings.Fields(), it passes -var="enabled=false" (with literal quotes)
+      - command: terraform plan mock -var="enabled=false" -s nonprod
+
+  # Test -var with single quotes
+  terraform-var-single-quotes:
+    description: |
+      Test terraform -var flag with single-quoted value.
+    steps:
+      - command: terraform plan mock -var='enabled=false' -s nonprod
+
+  # Test multiple -var flags with different quote styles
+  terraform-var-multiple:
+    description: |
+      Test multiple -var flags with various quote styles.
+    steps:
+      - command: terraform plan mock -var="enabled=false" -var='foo=bar' -s nonprod
+
+  # Test -var with value containing spaces (must be quoted)
+  terraform-var-with-spaces:
+    description: |
+      Test terraform -var flag with value containing spaces.
+    steps:
+      - command: terraform plan mock -var="message=hello world" -s nonprod
+
+  # Test -var with equals sign in value
+  terraform-var-equals-in-value:
+    description: |
+      Test terraform -var flag with equals sign in the value.
+    steps:
+      - command: terraform plan mock -var="message=key=value" -s nonprod
+
+  # Test shell command to verify quote parsing
+  shell-var-echo:
+    description: |
+      Shell command to verify quote parsing produces correct arguments.
+    steps:
+      - command: echo -var="enabled=false" -var='foo=bar'
         type: shell

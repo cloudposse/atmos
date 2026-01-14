@@ -1,0 +1,12 @@
+# Valid YAML but invalid aliases - references non-existent commands
+components:
+  terraform:
+    base_path: "components/terraform"
+
+# Invalid command aliases - reference commands that don't exist
+command_aliases:
+  tf: terraform
+  foo: "nonexistent command"
+  bar: "another fake command"
+  circular1: "circular2"
+  circular2: "circular1"

@@ -1,0 +1,281 @@
+tests:
+  # Test generating files for a single component in a stack
+  - name: "terraform generate files for single component"
+    enabled: true
+    tty: false
+    description: "Generate files for vpc component in dev stack"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stderr:
+        - "locals.tf"
+        - "metadata.json"
+        - "README.md"
+
+  # Test dry-run mode
+  - name: "terraform generate files dry-run"
+    enabled: true
+    tty: false
+    description: "Test dry-run mode shows what would be generated without writing"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "locals.tf"
+
+  # Test --all flag generates files for all components (dry-run to avoid file conflicts)
+  - name: "terraform generate files --all dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for all components in all stacks (dry-run)"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "--all"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "Processing component"
+
+  # Test --all with --stacks filter
+  - name: "terraform generate files --all with stacks filter"
+    enabled: true
+    tty: false
+    description: "Generate files for all components filtered by stack pattern"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "--all"
+      - "--stacks=deploy/dev"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "deploy/dev"
+
+  # Test --all with --components filter
+  - name: "terraform generate files --all with components filter"
+    enabled: true
+    tty: false
+    description: "Generate files for specific components only"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "--all"
+      - "--components=vpc"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "component=vpc"
+
+  # Test --clean flag removes generated files
+  - name: "terraform generate files --clean"
+    enabled: true
+    tty: false
+    description: "Clean removes previously generated files"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc"
+      - "-s"
+      - "dev"
+      - "--clean"
+    expect:
+      exit_code: 0
+
+  # Test s3-logs component with YAML and HCL generation
+  - name: "terraform generate files for s3-logs component"
+    enabled: true
+    tty: false
+    description: "Generate YAML and HCL files for s3-logs component"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "s3-logs"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "config.yaml"
+
+  # Test error when component is missing required stack flag
+  - name: "terraform generate files missing stack"
+    enabled: true
+    tty: false
+    description: "Error when component specified without stack"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc"
+    expect:
+      exit_code: 1
+      stderr:
+        - "stack"
+
+  # Test error when using --all with component argument
+  - name: "terraform generate files --all with component error"
+    enabled: true
+    tty: false
+    description: "Error when --all is used with a component argument"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc"
+      - "--all"
+    expect:
+      exit_code: 1
+      stderr:
+        - "cannot"
+
+  # Test production stack file generation
+  - name: "terraform generate files for prod stack"
+    enabled: true
+    tty: false
+    description: "Generate files for vpc component in prod stack"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "locals.tf"
+
+  # Test component with its own generate section that inherits from base
+  - name: "terraform generate files for vpc-override component"
+    enabled: true
+    tty: false
+    description: "Generate files for vpc-override which has its own generate section"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc-override"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "locals.tf"
+        - "README.md"
+
+  # Test inheritance levels - vpc-inherited should inherit from global, terraform, and base component
+  - name: "terraform generate files vpc-inherited inherits from all levels"
+    enabled: true
+    tty: false
+    description: "Test that vpc-inherited inherits generate section from global, terraform-level, and base component"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "vpc-inherited"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        # From global level
+        - "global-context.json"
+        # From terraform level
+        - "terraform-context.json"
+        # From base component (vpc-defaults)
+        - "locals.tf"
+        - "metadata.json"
+        # From overrides level
+        - "override-context.json"
+
+  # Test s3-data component which only has global and terraform-level generate
+  - name: "terraform generate files s3-data inherits global and terraform levels"
+    enabled: true
+    tty: false
+    description: "Test that s3-data inherits generate section from global and terraform-level"
+    workdir: "fixtures/scenarios/terraform-generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "s3-data"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        # From global level
+        - "global-context.json"
+        # From terraform level
+        - "terraform-context.json"
+        # From overrides level
+        - "override-context.json"

@@ -13,10 +13,10 @@ import Step from '@site/src/components/Step'
 import StepNumber from '@site/src/components/StepNumber'
 
 <Intro>
-Keep your infrastructure repositories current with the latest versions of [vendored components](/core-concepts/vendor) using the [Atmos Component Updater GitHub Action](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates across repositories by using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
+Keep your infrastructure repositories current with the latest versions of [vendored components](/vendor/) using the [Atmos Component Updater GitHub Action](https://github.com/cloudposse/github-action-atmos-component-updater). This powerful action simplifies and accelerates the management of component updates across repositories by using pull requests, ensuring that updates are processed quickly, accurately, and without hassle.
 </Intro>
 
-Use Cloud Posse's GitHub Action for updating [Atmos components](/core-concepts/components/) (e.g. [like the ones provided by Cloud Posse](https://github.com/cloudposse/terraform-aws-components/)) to streamline your infrastructure management.
+Use Cloud Posse's GitHub Action for updating [Atmos components](/components) (e.g. [like the ones provided by Cloud Posse](https://github.com/cloudposse/terraform-aws-components/)) to streamline your infrastructure management.
 
 
 
@@ -142,7 +142,7 @@ Now the Atmos Component Updater workflow will create a new Deployment in the `at
 
 ### Using a Custom Atmos CLI Config Path (`atmos.yaml`)
 
-If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not located in the root of the infrastructure repository, you can specify the path to it using [`ATMOS_CLI_CONFIG_PATH` env variable](https://atmos.tools/cli/configuration/#environment-variables).
+If your [`atmos.yaml` file](https://atmos.tools/cli/configuration) is not located in the root of the infrastructure repository, you can specify the path to it using [`ATMOS_CLI_CONFIG_PATH` env variable](https://atmos.tools/cli/environment-variables).
 
 <File title=".github/workflows/atmos-component-updater.yaml">
 ```yaml

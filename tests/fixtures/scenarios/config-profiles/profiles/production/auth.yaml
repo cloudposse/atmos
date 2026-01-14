@@ -1,0 +1,5 @@
+# Production profile authentication settings
+auth:
+  aws:
+    role_arn: arn:aws:iam::999999999999:role/ProductionRole
+    region: us-west-2

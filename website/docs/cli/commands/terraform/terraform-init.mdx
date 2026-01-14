@@ -1,0 +1,372 @@
+---
+title: atmos terraform init
+sidebar_label: init
+sidebar_class_name: command
+id: init
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to initialize the Terraform working directory for an Atmos component in a stack. This prepares the component for other Terraform operations.
+</Intro>
+
+<Screengrab title="atmos terraform init --help" slug="atmos-terraform-init--help" />
+
+## Usage
+
+Execute the `terraform init` command like this:
+
+```shell
+atmos terraform init <component> -s <stack> [options]
+```
+
+This command performs several initialization steps:
+- Downloads and installs provider plugins
+- Initializes the backend configuration
+- Downloads modules referenced in the configuration
+- Creates or updates the `.terraform` directory
+
+:::info Atmos Enhancements
+Atmos enhances the init command with:
+- Cleans `.terraform/environment` file before running
+- Can add `-reconfigure` flag based on configuration
+- Supports passing varfile to init (OpenTofu feature) via `--init-pass-vars` flag
+- Can be skipped with `--skip-init` flag for other commands
+- Automatically runs before plan/apply/destroy commands unless skipped
+:::
+
+:::tip
+Atmos automatically runs `terraform init` before executing `plan` and `apply` commands, so you typically don't need to run this manually unless you want to reinitialize with different options.
+:::
+
+## Examples
+
+### Basic Initialization
+
+Initialize a component in a stack:
+
+```shell
+atmos terraform init vpc -s dev
+```
+
+### Reconfigure Backend
+
+Force reconfiguration of the backend:
+
+```shell
+atmos terraform init vpc -s dev -reconfigure
+```
+
+### Upgrade Providers
+
+Upgrade provider plugins to the latest allowed versions:
+
+```shell
+atmos terraform init vpc -s dev -upgrade
+```
+
+### Backend Migration
+
+Migrate from one backend to another:
+
+```shell
+atmos terraform init vpc -s dev -migrate-state
+```
+
+### Skip Backend Initialization
+
+Initialize without configuring the backend (useful for syntax validation):
+
+```shell
+atmos terraform init vpc -s dev -backend=false
+```
+
+## Automatic Initialization
+
+Atmos automatically runs `terraform init` in these scenarios:
+
+1. **Before `terraform plan`** - Ensures the working directory is initialized
+2. **Before `terraform apply`** - Ensures providers and modules are available
+3. **Before `terraform deploy`** - Part of the deployment process
+
+You can skip automatic initialization using the `--skip-init` flag:
+
+```shell
+atmos terraform plan vpc -s dev --skip-init
+```
+
+## Backend Configuration
+
+Atmos can automatically generate backend configuration files. When `auto_generate_backend_file` is enabled in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    auto_generate_backend_file: true
+```
+
+Atmos will:
+1. Generate a `backend.tf.json` file with the appropriate backend configuration
+2. Initialize Terraform with this backend configuration
+3. Ensure state is stored in the correct location
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name to initialize.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform init vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        This flag doesn't apply to the `init` command itself, but when used with other commands, it skips the automatic `terraform init`.
+
+        ```shell
+        atmos terraform plan vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--init-pass-vars` <em>(optional)</em></dt>
+    <dd>
+        Pass the generated varfile to `terraform init` using the `--var-file` flag. This is useful with OpenTofu which supports passing a varfile to `init` to dynamically configure backends.
+
+        ```shell
+        atmos terraform init vpc -s dev --init-pass-vars
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform init` command supports all native `terraform init` flags. To pass native Terraform flags, you have two options:
+
+1. **Direct flags** - Pass Terraform flags directly if they don't conflict with Atmos flags
+2. **Double-dash separator** - Use `--` to explicitly separate Atmos flags from Terraform flags
+
+:::tip Using the Double-Dash Separator
+The `--` separator is a common Unix convention that indicates "end of options". Everything after `--` is passed directly to Terraform without interpretation by Atmos. This is useful when:
+- You want to ensure a flag is passed to Terraform, not Atmos
+- You're using flags that might conflict with Atmos flags
+- You want to be explicit about which tool receives which flags
+
+**Example:**
+```shell
+atmos terraform init vpc -s dev -- -backend-config="key=value" -upgrade
+```
+:::
+
+Native `terraform init` flags include:
+
+<dl>
+    <dt>`-backend=false`</dt>
+    <dd>
+        Disable backend initialization.
+
+        ```shell
+        atmos terraform init vpc -s dev -backend=false
+        ```
+    </dd>
+
+    <dt>`-backend-config=PATH`</dt>
+    <dd>
+        Path to backend configuration file or key=value pairs.
+
+        ```shell
+        atmos terraform init vpc -s dev -backend-config="key=value"
+        ```
+    </dd>
+
+    <dt>`-force-copy`</dt>
+    <dd>
+        Suppress prompts about copying state data when initiating migration.
+
+        ```shell
+        atmos terraform init vpc -s dev -force-copy
+        ```
+    </dd>
+
+    <dt>`-from-module=SOURCE`</dt>
+    <dd>
+        Copy contents of module SOURCE into the current directory before initialization.
+
+        ```shell
+        atmos terraform init vpc -s dev -from-module=git::https://example.com/module.git
+        ```
+    </dd>
+
+    <dt>`-get=false`</dt>
+    <dd>
+        Disable downloading modules for this configuration.
+
+        ```shell
+        atmos terraform init vpc -s dev -get=false
+        ```
+    </dd>
+
+    <dt>`-input=false`</dt>
+    <dd>
+        Disable interactive prompts.
+
+        ```shell
+        atmos terraform init vpc -s dev -input=false
+        ```
+    </dd>
+
+    <dt>`-lock=false`</dt>
+    <dd>
+        Don't hold a state lock during backend migration.
+
+        ```shell
+        atmos terraform init vpc -s dev -lock=false -force-copy
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Override the time Terraform will wait to acquire a state lock (default: 0s).
+
+        ```shell
+        atmos terraform init vpc -s dev -lock-timeout=60s
+        ```
+    </dd>
+
+    <dt>`-migrate-state`</dt>
+    <dd>
+        Reconfigure the backend and migrate any existing state.
+
+        ```shell
+        atmos terraform init vpc -s dev -migrate-state
+        ```
+    </dd>
+
+    <dt>`-no-color`</dt>
+    <dd>
+        Disable color codes in command output.
+
+        ```shell
+        atmos terraform init vpc -s dev -no-color
+        ```
+    </dd>
+
+    <dt>`-plugin-dir=PATH`</dt>
+    <dd>
+        Directory containing plugin binaries.
+
+        ```shell
+        atmos terraform init vpc -s dev -plugin-dir=/usr/local/terraform/plugins
+        ```
+    </dd>
+
+    <dt>`-reconfigure`</dt>
+    <dd>
+        Reconfigure the backend, ignoring any saved configuration.
+
+        ```shell
+        atmos terraform init vpc -s dev -reconfigure
+        ```
+    </dd>
+
+    <dt>`-upgrade`</dt>
+    <dd>
+        Upgrade modules and plugins as part of initialization.
+
+        ```shell
+        atmos terraform init vpc -s dev -upgrade
+        ```
+    </dd>
+</dl>
+
+## Configuration
+
+Configure default behavior for `terraform init` in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Run 'terraform init -reconfigure' by default
+    init_run_reconfigure: true
+
+    # Pass varfile to init (OpenTofu feature)
+    init:
+      pass_vars: true
+
+    # Auto-generate backend configuration
+    auto_generate_backend_file: true
+```
+
+These settings can also be controlled via environment variables:
+```shell
+export ATMOS_COMPONENTS_TERRAFORM_INIT_RUN_RECONFIGURE=true
+export ATMOS_COMPONENTS_TERRAFORM_INIT_PASS_VARS=true
+export ATMOS_COMPONENTS_TERRAFORM_AUTO_GENERATE_BACKEND_FILE=true
+```
+
+## Common Use Cases
+
+### Switching Between Backends
+
+When migrating from local to remote state:
+
+```shell
+# First, update your backend configuration in the component
+# Then migrate the state
+atmos terraform init vpc -s dev -migrate-state
+```
+
+### Upgrading Provider Versions
+
+After updating provider version constraints:
+
+```shell
+# Upgrade to latest allowed versions
+atmos terraform init vpc -s dev -upgrade
+
+# Or clean and reinitialize
+atmos terraform clean vpc -s dev
+atmos terraform init vpc -s dev
+```
+
+### CI/CD Initialization
+
+For CI/CD pipelines, disable interactive prompts:
+
+```shell
+atmos terraform init vpc -s dev -input=false -no-color
+```
+
+### Debugging Initialization Issues
+
+Enable detailed logging:
+
+```shell
+export TF_LOG=DEBUG
+atmos terraform init vpc -s dev
+```
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform apply`](/cli/commands/terraform/apply) - Apply changes
+- [`atmos terraform clean`](/cli/commands/terraform/clean) - Clean terraform files
+- [`atmos terraform workspace`](/cli/commands/terraform/workspace) - Manage workspaces

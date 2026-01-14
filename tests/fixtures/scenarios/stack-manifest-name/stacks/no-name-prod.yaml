@@ -1,0 +1,13 @@
+# This stack has no name override - should use filename as default
+import:
+  - catalog/base
+
+vars:
+  environment: prod
+  stage: new
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr: "10.1.0.0/16"

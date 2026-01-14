@@ -10,10 +10,27 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const commandStr = "command"
+
+// shouldProcessStacks determines whether to process stacks and check stack configuration.
+// Based on the command type and provided arguments.
+func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (shouldProcess bool, shouldCheckStack bool) {
+	// For clean command, special logic applies.
+	if info.SubCommand == "clean" {
+		// Only process if component is provided.
+		shouldProcess = info.ComponentFromArg != ""
+		// Only check stack if stack is provided.
+		shouldCheckStack = info.Stack != ""
+		return shouldProcess, shouldCheckStack
+	}
+
+	// For all other commands, always process and check stack.
+	return true, true
+}
 
 func checkTerraformConfig(atmosConfig schema.AtmosConfiguration) error {
 	if len(atmosConfig.Components.Terraform.BasePath) < 1 {
@@ -52,7 +69,7 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		// Use retry logic on Windows to handle file locking
-		deleteErr := retryOnWindows(func() error {
+		deleteErr := tfoutput.RetryOnWindows(func() error {
 			return os.Remove(filePath)
 		})
 
@@ -68,21 +85,6 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 	}
 }
 
-func shouldProcessStacks(info *schema.ConfigAndStacksInfo) (bool, bool) {
-	shouldProcessStacks := true
-	shouldCheckStack := true
-
-	if info.SubCommand == "clean" {
-		if info.ComponentFromArg == "" {
-			shouldProcessStacks = false
-		}
-		shouldCheckStack = info.Stack != ""
-
-	}
-
-	return shouldProcessStacks, shouldCheckStack
-}
-
 func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	// Auto-generate backend file
 	if atmosConfig.Components.Terraform.AutoGenerateBackendFile {
@@ -91,7 +93,7 @@ func generateBackendConfig(atmosConfig *schema.AtmosConfiguration, info *schema.
 		log.Debug("Writing the backend config to file.", "file", backendFileName)
 
 		if !info.DryRun {
-			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace)
+			componentBackendConfig, err := generateComponentBackendConfig(info.ComponentBackendType, info.ComponentBackendSection, info.TerraformWorkspace, info.AuthContext)
 			if err != nil {
 				return err
 			}
@@ -114,7 +116,7 @@ func generateProviderOverrides(atmosConfig *schema.AtmosConfiguration, info *sch
 		log.Debug("Writing the provider overrides to file.", "file", providerOverrideFileName)
 
 		if !info.DryRun {
-			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection)
+			providerOverrides := generateComponentProviderOverrides(info.ComponentProvidersSection, info.AuthContext)
 			err := u.WriteToFileAsJSON(providerOverrideFileName, providerOverrides, 0o600)
 			return err
 		}

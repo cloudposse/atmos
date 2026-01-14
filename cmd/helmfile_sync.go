@@ -4,9 +4,9 @@ import "github.com/spf13/cobra"
 
 // Command: atmos helmfile sync
 var (
-	helmfileSyncShort = "Synchronize the state of Helm releases with the desired state without making changes."
+	helmfileSyncShort = "Synchronize the state of Helm releases by reconciling the actual state with the desired state (applies changes as needed)."
 	helmfileSyncLong  = `This command ensures that the actual state of Helm releases in the cluster matches the desired
-state defined in your configurations without performing destructive actions.
+state defined in your configurations by applying any necessary changes.
 
 Example usage:
   atmos helmfile sync echo-server --stack tenant1-ue2-dev

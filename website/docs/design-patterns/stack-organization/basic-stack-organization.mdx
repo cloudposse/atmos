@@ -1,0 +1,161 @@
+---
+title: Basic Stack Organization
+sidebar_position: 1
+sidebar_label: Basic Stack Organization
+description: Simple dev/staging/prod stack organization pattern
+id: basic-stack-organization
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Basic Stack Organization** pattern shows the simplest way to organize stacks: one file per environment (dev, staging, prod). This is how most teams start with Atmos.
+</Intro>
+
+## Use-cases
+
+Use the **Basic Stack Organization** pattern when:
+
+- You have a single AWS account per environment (dev, staging, prod)
+
+- You're deploying to one region
+
+- You want the simplest possible setup to get started
+
+## Directory Structure
+
+```console
+   ├── stacks
+   │   ├── catalog  # component defaults
+   │   │   └── vpc
+   │   │       └── defaults.yaml
+   │   └── deploy
+   │       ├── dev.yaml
+   │       ├── staging.yaml
+   │       └── prod.yaml
+   │
+   └── components
+       └── terraform
+           └── vpc
+```
+
+## Configure atmos.yaml
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{.vars.stage}}"
+```
+</File>
+
+## Configure Component Defaults
+
+Define shared configuration in the catalog:
+
+<File title="stacks/catalog/vpc/defaults.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        enabled: true
+        nat_gateway_enabled: true
+        max_subnet_count: 3
+```
+</File>
+
+## Configure Environment Stacks
+
+Each environment imports the defaults and sets environment-specific values:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+vars:
+  stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Dev-specific: smaller, cheaper
+        nat_gateway_enabled: false
+        max_subnet_count: 2
+```
+</File>
+
+<File title="stacks/deploy/staging.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+vars:
+  stage: staging
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Staging mirrors prod but smaller
+        max_subnet_count: 2
+```
+</File>
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+
+vars:
+  stage: prod
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Prod: full configuration
+        map_public_ip_on_launch: false
+```
+</File>
+
+## Deploy
+
+```shell
+atmos terraform apply vpc -s dev
+atmos terraform apply vpc -s staging
+atmos terraform apply vpc -s prod
+```
+
+## Growing Beyond Basic
+
+As your infrastructure grows, you'll likely need:
+
+| Need | Pattern |
+|------|---------|
+| Multiple regions | [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) |
+| Multiple teams/tenants | [Organizational Hierarchy](/design-patterns/stack-organization/organizational-hierarchy-configuration) |
+| Reusable region settings | [Mixins](/design-patterns/component-catalog/mixins) |
+| Many components | [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) |
+
+## Related Patterns
+
+- [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) - Add regions to this structure
+- [Component Catalog](/design-patterns/component-catalog) - Organize component defaults
+- [Inline Component Configuration](/design-patterns/inline-component-configuration) - Even simpler, single-file approach
+
+## References
+
+- [Catalogs](/howto/catalogs)
+- [Stack Imports](/stacks/imports)

@@ -1,0 +1,209 @@
+---
+title: "atmos list vendor"
+id: "list-vendor"
+sidebar_label: vendor
+sidebar_class_name: command
+description: Use this command to list all vendored components and modules
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to list all components and modules configured for vendoring in your Atmos project. View vendor sources, types, and target folders to understand what external dependencies are managed by Atmos vendoring.
+</Intro>
+
+<Screengrab title="atmos list vendor --help" slug="atmos-list-vendor--help" />
+
+## Usage
+
+```shell
+atmos list vendor [flags]
+```
+
+## Description
+
+The `atmos list vendor` command displays all vendored components and modules defined in your vendor configuration files (`vendor.yaml`). It provides a tabular view where each row represents a vendored item with information about:
+
+- Component/module name
+- Source location (GitHub, local, HTTP, etc.)
+- Version or Git reference
+- Target destination path
+- Vendor configuration file
+
+This command is useful for:
+- Getting an overview of all vendored dependencies
+- Verifying vendoring configuration before running `atmos vendor pull`
+- Finding specific vendored components
+- Auditing external dependencies in your infrastructure
+
+## Flags
+
+<dl>
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`. Overrides `vendor.list.format` configuration in atmos.yaml (default: `table`)</dd>
+
+  <dt>`--delimiter`</dt>
+  <dd>Delimiter for CSV/TSV output (default: tab for tsv, comma for csv)</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display (comma-separated). Overrides `vendor.list.columns` configuration in atmos.yaml</dd>
+
+  <dt>`--stack` / `-s`</dt>
+  <dd>Filter by stack pattern (supports glob patterns)</dd>
+
+  <dt>`--filter`</dt>
+  <dd>Filter expression using YQ syntax</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `component:asc,source:desc`)</dd>
+</dl>
+
+## Examples
+
+List all vendored items:
+```shell
+atmos list vendor
+```
+
+Output in different formats:
+```shell
+# JSON format for machine processing
+atmos list vendor --format json
+
+# YAML format for configuration review
+atmos list vendor --format yaml
+
+# CSV format for dependency auditing
+atmos list vendor --format csv
+```
+
+Filter vendored items:
+```shell
+# Filter by specific source pattern
+atmos list vendor --filter '.source | contains("github.com/cloudposse")'
+
+# Find specific component
+atmos list vendor --filter '.component == "vpc"'
+```
+
+Sort vendored items:
+```shell
+# Sort by component name
+atmos list vendor --sort component:asc
+
+# Multi-column sort
+atmos list vendor --sort "source:asc,component:asc"
+```
+
+## Configuration
+
+You can customize the default output format and columns displayed by `atmos list vendor` in your `atmos.yaml`:
+
+### Default Format
+
+```yaml
+# atmos.yaml
+vendor:
+  list:
+    format: table  # Default format: table, json, yaml, csv, tsv
+```
+
+**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+
+### Custom Columns
+
+```yaml
+# atmos.yaml
+vendor:
+  list:
+    format: table
+    columns:
+      - name: Component
+        value: "{{ .component }}"
+      - name: Source
+        value: "{{ .source }}"
+      - name: Version
+        value: "{{ .version }}"
+      - name: Target
+        value: "{{ .targets | join \", \" }}"
+      - name: File
+        value: "{{ .atmos_vendor_file }}"
+```
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.component` - Component/module name
+- `.source` - Source URL or path (GitHub, HTTP, local, etc.)
+- `.version` - Version, tag, or Git ref to vendor
+- `.targets` - Array of target destination paths
+- `.included_paths` - Glob patterns for files to include
+- `.excluded_paths` - Glob patterns for files to exclude
+- `.tags` - Array of tags associated with the vendored item
+- `.atmos_vendor_file` - Path to vendor.yaml file containing this item
+- `.atmos_vendor_type` - Type of vendor source (git, http, local, etc.)
+- `.atmos_vendor_target` - Primary target path
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
+vendor:
+  list:
+    columns:
+      - name: Component (Upper)
+        value: "{{ .component | upper }}"
+      - name: Short Source
+        value: "{{ .source | truncate 50 }}"
+      - name: Target Count
+        value: "{{ .targets | len }}"
+      - name: Has Tags
+        value: "{{ if .tags }}Yes{{ else }}No{{ end }}"
+```
+
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `join` - Join array elements with delimiter
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag:
+
+```shell
+# Display only component and source columns
+atmos list vendor --columns component,source
+
+# Display custom subset
+atmos list vendor --columns "component,source,version,atmos_vendor_file"
+```
+
+## Example Output
+
+```shell
+> atmos list vendor
+┌────────────────┬─────────────────────────────────────────┬─────────┬──────────────────────┬─────────────────┐
+│   Component    │                 Source                  │ Version │       Target         │      File       │
+├────────────────┼─────────────────────────────────────────┼─────────┼──────────────────────┼─────────────────┤
+│ vpc            │ github.com/cloudposse/terraform-aws-vpc │ 1.5.0   │ components/vpc       │ vendor.yaml     │
+│ eks            │ github.com/cloudposse/terraform-aws-eks │ 2.0.0   │ components/eks       │ vendor.yaml     │
+│ rds            │ github.com/cloudposse/terraform-aws-rds │ 0.45.0  │ components/rds       │ vendor.yaml     │
+└────────────────┴─────────────────────────────────────────┴─────────┴──────────────────────┴─────────────────┘
+```
+
+:::tip
+- Use `atmos vendor pull` to download vendored components after reviewing the list
+- The `--filter` flag supports full YQ syntax for complex queries
+- Use `--format json` to pipe vendor information to other tools for analysis
+- Vendor configuration files can be split across multiple `vendor.yaml` files in `vendor.d/` directory
+:::
+
+## Related Commands
+
+- [`atmos vendor pull`](/cli/commands/vendor/pull) - Download vendored components
+- [`atmos list components`](/cli/commands/list/components) - List all components (including vendored)

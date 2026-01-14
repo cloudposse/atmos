@@ -1,0 +1,8 @@
+{
+  "label": "workdir",
+  "className": "command",
+  "link": {
+    "type": "doc",
+    "id": "cli/commands/terraform/workdir/workdir"
+  }
+}

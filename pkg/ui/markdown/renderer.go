@@ -10,6 +10,7 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -95,6 +96,69 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 	return r, nil
 }
 
+// NewHelpRenderer creates a new Markdown renderer specifically for command help text.
+// This uses the Cloud Posse color scheme (grayscale + purple) with transparent backgrounds.
+func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
+
+	r := &Renderer{
+		width:                 defaultWidth,           // default width
+		profile:               termenv.ColorProfile(), // default color profile
+		isTTYSupportForStdout: term.IsTTYSupportForStdout,
+		isTTYSupportForStderr: term.IsTTYSupportForStderr,
+		atmosConfig:           atmosConfig,
+	}
+
+	// Apply options
+	for _, opt := range opts {
+		opt(r)
+	}
+
+	// Convert width safely from uint to int.
+	width := r.width
+	maxInt := ^uint(0) >> 1
+	if width > maxInt {
+		width = maxInt
+	}
+	wordWrap := int(width) // #nosec G115 -- width is validated above
+
+	if atmosConfig.Settings.Terminal.NoColor {
+		renderer, err := glamour.NewTermRenderer(
+			glamour.WithStandardStyle(styles.AsciiStyle),
+			glamour.WithWordWrap(wordWrap),
+			glamour.WithColorProfile(r.profile),
+			glamour.WithEmoji(),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		r.renderer = renderer
+		return r, nil
+	}
+
+	// Get help-specific style.
+	style, err := GetHelpStyle()
+	if err != nil {
+		return nil, err
+	}
+
+	// Initialize glamour renderer with help style.
+	// Note: Do NOT use WithAutoStyle() as it overrides our custom styles.
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithWordWrap(wordWrap),
+		glamour.WithStylesFromJSONBytes(style),
+		glamour.WithColorProfile(r.profile),
+		glamour.WithEmoji(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	r.renderer = renderer
+	return r, nil
+}
+
 func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 	// Render without line wrapping
 	var out *glamour.TermRenderer
@@ -134,6 +198,9 @@ func (r *Renderer) RenderWithoutWordWrap(content string) (string, error) {
 		result, err = r.RenderAsciiWithoutWordWrap(content)
 	}
 	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
@@ -167,7 +234,8 @@ func (r *Renderer) Render(content string) (string, error) {
 			result = append(result, " "+styled)
 		} else {
 			// Keep all lines including blank lines for proper markdown paragraph spacing.
-			result = append(result, line)
+			// But remove trailing whitespace that glamour adds for padding.
+			result = append(result, strings.TrimRight(line, " \t"))
 		}
 	}
 
@@ -193,6 +261,9 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 	}
 	result, err := renderer.Render(content)
 	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
 		result = trimTrailingSpaces(result)
 	}
 	return result, err
@@ -210,6 +281,9 @@ func (r *Renderer) RenderAscii(content string) (string, error) {
 	}
 	result, err := renderer.Render(content)
 	if err == nil {
+		// Glamour adds leading/trailing newlines; trim them to prevent flag descriptions
+		// from appearing on a new line instead of inline or having trailing blank lines.
+		result = strings.Trim(result, "\n")
 		result = trimTrailingSpaces(result)
 	}
 	return result, err

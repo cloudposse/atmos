@@ -1,0 +1,13 @@
+{
+  "name": "docusaurus-plugin-llms-txt",
+  "version": "1.0.0",
+  "description": "Custom Docusaurus plugin to generate llms.txt files using resolved routes",
+  "main": "src/index.js",
+  "keywords": [
+    "docusaurus",
+    "llms",
+    "documentation"
+  ],
+  "author": "Cloud Posse",
+  "license": "Apache-2.0"
+}

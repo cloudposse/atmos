@@ -1,0 +1,146 @@
+---
+title: "!aws.caller_identity_user_id"
+sidebar_position: 13
+sidebar_label: "!aws.caller_identity_user_id"
+sidebar_class_name: command
+description: Retrieve the unique user ID of the current AWS caller identity
+---
+
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+The `!aws.caller_identity_user_id` YAML function retrieves the unique user ID of the current
+caller identity by calling the AWS STS `GetCallerIdentity` API.
+</Intro>
+
+## Usage
+
+The `!aws.caller_identity_user_id` function takes no parameters:
+
+```yaml
+  # Get the user ID of the current AWS caller identity
+  user_id: !aws.caller_identity_user_id
+```
+
+## Arguments
+
+This function takes no arguments. It uses the AWS credentials from the environment or the
+Atmos authentication context if configured.
+
+## How It Works
+
+When processing the `!aws.caller_identity_user_id` YAML function, Atmos:
+
+1. **Loads AWS Configuration** - Uses the standard AWS SDK credential resolution chain:
+   - Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`)
+   - Shared credentials file (`~/.aws/credentials`)
+   - Shared config file (`~/.aws/config`)
+   - EC2 Instance Metadata Service (IMDS)
+   - ECS Task credentials
+   - Web Identity Token credentials
+
+2. **Calls STS GetCallerIdentity** - Makes an API call to retrieve the caller identity
+
+3. **Returns User ID** - Extracts and returns the unique user ID
+
+The returned user ID format depends on the type of identity:
+
+| Identity Type | User ID Format |
+|--------------|----------------|
+| IAM User | `AIDAXXXXXXXXXXEXAMPLE` (21 character unique ID) |
+| IAM Role (assumed) | `AROAXXXXXXXXXXEXAMPLE:session-name` |
+| Root Account | The account ID (e.g., `123456789012`) |
+| Federated User | `account-id:caller-specified-name` |
+
+:::note Atmos Auth Integration
+When using [Atmos Authentication](/cli/commands/auth/usage), the function automatically uses credentials
+from the active identity. This enables seamless integration with SSO, assume role chains, and other
+authentication methods configured in your `atmos.yaml`.
+:::
+
+## Caching
+
+The `!aws.caller_identity_user_id` function shares its cache with other AWS identity functions
+(`!aws.account_id`, `!aws.caller_identity_arn`, `!aws.region`). This means:
+
+- All AWS identity functions share a single STS API call
+- Results are cached per CLI invocation
+- Different authentication contexts get separate cache entries
+
+:::note Type-Aware Merging
+Atmos supports type-aware merging of YAML functions and concrete values, allowing them to coexist in the inheritance chain without type conflicts.
+See the full explanation: [YAML Function Merging](/reference/yaml-function-merging)
+:::
+
+## Examples
+
+### Basic Usage
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my-component:
+      vars:
+        # Inject the caller user ID into Terraform variables
+        caller_user_id: !aws.caller_identity_user_id
+```
+</File>
+
+### Audit Trail
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    infrastructure:
+      vars:
+        tags:
+          # Track unique user ID for audit purposes
+          ProvisionedByUserID: !aws.caller_identity_user_id
+          ManagedBy: "atmos"
+```
+</File>
+
+### Combined with Other AWS Functions
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    audit-config:
+      vars:
+        # All AWS functions share the same cached STS call
+        aws_account_id: !aws.account_id
+        caller_arn: !aws.caller_identity_arn
+        caller_user_id: !aws.caller_identity_user_id
+        aws_region: !aws.region
+```
+</File>
+
+## Comparison with Terragrunt
+
+This function is equivalent to Terragrunt's `get_aws_caller_identity_user_id()` function:
+
+| Terragrunt | Atmos |
+|------------|-------|
+| `get_aws_caller_identity_user_id()` | `!aws.caller_identity_user_id` |
+
+## Error Handling
+
+If the function fails to retrieve the AWS caller identity (e.g., no credentials available,
+network issues, or insufficient permissions), Atmos will log an error and exit.
+
+## Considerations
+
+- **Requires valid AWS credentials** - The function will fail if no valid credentials are available
+- **Network dependency** - Requires connectivity to AWS STS endpoint
+- **Performance** - Results are cached and shared with other AWS identity functions
+- **IAM permissions** - Requires `sts:GetCallerIdentity` permission
+
+## Related Functions
+
+- [!aws.account_id](/functions/yaml/aws.account-id) - Get the AWS account ID
+- [!aws.caller_identity_arn](/functions/yaml/aws.caller-identity-arn) - Get the full ARN
+- [!aws.region](/functions/yaml/aws.region) - Get the AWS region

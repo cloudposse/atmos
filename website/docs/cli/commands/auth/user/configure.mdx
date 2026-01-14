@@ -1,0 +1,152 @@
+---
+title: atmos auth user configure
+sidebar_label: configure
+sidebar_class_name: command
+id: configure
+slug: /cli/commands/auth/user/configure
+description: Configure static AWS user credentials and store them securely in your system keychain.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Note from '@site/src/components/Note'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command whenever an identity is backed by a **user** credential source and you need to configure those credentials interactively. The values are stored securely in your OS keychain and can be referenced by other `atmos auth` commands (`login`, `env`, `exec`).
+</Intro>
+
+<Note>Currently, only **AWS IAM users** (`kind: aws/user`) are supported. You'll be prompted for the AWS Access Key ID, Secret Access Key, and an optional MFA device ARN, which will be stored securely in your system keychain.</Note>
+
+<Screengrab title="atmos auth user configure --help" slug="atmos-auth-user-configure--help" />
+
+## Usage
+
+```shell
+atmos auth user configure
+```
+
+## Description
+
+This command provides an interactive way to configure AWS IAM user credentials and store them securely in your system keychain.
+
+**What it prompts for:**
+
+- **AWS Access Key ID** (required) - Your IAM user's access key identifier
+- **AWS Secret Access Key** (required, masked input) - Your IAM user's secret key
+- **AWS User MFA ARN** (optional) - Your MFA device ARN for enhanced security
+- **Session Duration** (optional, default: 12h) - How long session tokens remain valid
+
+**Storage:**
+
+- Credentials are stored in your OS keychain (macOS Keychain, GNOME Keyring, Windows Credential Manager)
+- The storage key matches your `aws/user` identity name from `atmos.yaml`
+- Only identities with `kind: aws/user` are selectable
+
+## Examples
+
+```shell
+# Configure credentials for an aws/user identity
+atmos auth user configure
+
+# Example interactive session:
+? Choose an identity to configure: emergency-user
+? AWS Access Key ID: AKIAIOSFODNN7EXAMPLE
+? AWS Secret Access Key: ****************************************
+? AWS User MFA ARN (optional): arn:aws:iam::123456789012:mfa/username
+? Session Duration (optional, default: 12h): 24h
+✔ Saved credentials to keyring
+✔ Session duration configured: 24h
+```
+
+## Multi-Factor Authentication (MFA) for AWS
+
+:::note
+This section describes MFA implementation for AWS IAM users. Other cloud providers will have their own MFA implementations in future releases.
+:::
+
+### Why Configure MFA ARN?
+
+When you configure an AWS MFA device ARN, Atmos will require a time-based one-time password (TOTP) during authentication. This provides:
+
+- **Enhanced security** - Two-factor authentication for privileged access
+- **Compliance** - Meet security requirements for production access
+- **Defense-in-depth** - Protection against compromised credentials
+
+### Finding Your MFA Device ARN
+
+1. Log into the AWS Console
+2. Navigate to **IAM** → **Users** → **[Your Username]**
+3. Click the **"Security credentials"** tab
+4. In the **"Assigned MFA device"** section, copy the ARN
+5. The ARN format is: `arn:aws:iam::ACCOUNT_ID:mfa/USERNAME`
+
+### Authentication Flow with MFA
+
+After configuring an MFA device ARN, when you authenticate:
+
+```bash
+$ atmos auth login --identity emergency-user
+╭─────────────────────────────────────────────────────╮
+│ Enter MFA Token                                     │
+├─────────────────────────────────────────────────────┤
+│ MFA Device: arn:aws:iam::123456789012:mfa/user     │
+│                                                     │
+│ ┌──────────────────────────────────────────────┐   │
+│ │ 123456                                       │   │
+│ └──────────────────────────────────────────────┘   │
+╰─────────────────────────────────────────────────────╯
+```
+
+Atmos will:
+1. Retrieve your long-lived credentials from the keychain
+2. Prompt for a 6-digit TOTP code from your authenticator app (Google Authenticator, Authy, etc.)
+3. Call AWS STS `GetSessionToken` with your credentials, MFA ARN, and TOTP code
+4. Store temporary session credentials (valid for configured duration, default: 12 hours)
+
+### Security Considerations
+
+- **MFA ARN is not a secret** - It's an identifier, not a credential
+- **TOTP codes are never stored** - You must enter them for each authentication session
+- **Session tokens are cached** - Valid for configured duration (default: 12h, max: 36h with MFA)
+- **Long-lived credentials stay in keychain** - Never written to plain text files
+
+### Alternative: MFA ARN in YAML
+
+Instead of storing the MFA ARN in the keychain, you can configure it in `atmos.yaml`:
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      credentials:
+        # Omit access_key_id and secret_access_key to use keychain
+        mfa_arn: arn:aws:iam::123456789012:mfa/username
+        # OR use environment variable
+        mfa_arn: !env AWS_MFA_ARN
+        region: us-east-1
+```
+
+This is useful when:
+- Multiple team members share the same identity configuration
+- MFA device ARN is organization-standard
+- You want version-controlled authentication configuration
+
+## Session Duration Configuration
+
+The interactive command prompts for session duration, or you can configure it in YAML:
+
+```yaml
+auth:
+  identities:
+    emergency-user:
+      kind: aws/user
+      session:
+        duration: "24h"  # Formats: integers (seconds), Go durations ("1h"), or days ("1d")
+```
+
+**AWS limits**: 15m-12h (no MFA) or 15m-36h (with MFA). Default: 12h. YAML configuration takes precedence over keyring.
+
+## Notes
+
+- Learn how to [configure an `aws/user` identity](/cli/configuration/auth/identities#aws-user-break-glass) in `atmos.yaml` before running this command
+- See the [AWS User configuration](/cli/configuration/auth/identities#aws-user-break-glass) for MFA configuration and usage details

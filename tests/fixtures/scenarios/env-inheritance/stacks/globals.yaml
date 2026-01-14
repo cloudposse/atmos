@@ -1,0 +1,15 @@
+# Global env variables that should be inherited by all components
+env:
+  GLOBAL_ENV_VAR: "global-value"
+  GLOBAL_OVERRIDE_TEST: "from-global"
+  FOO: "bar"
+
+terraform:
+  env:
+    TF_GLOBAL_VAR: "terraform-global"
+    TF_OVERRIDE_TEST: "from-terraform-global"
+
+helmfile:
+  env:
+    HF_GLOBAL_VAR: "helmfile-global"
+    HF_OVERRIDE_TEST: "from-helmfile-global"

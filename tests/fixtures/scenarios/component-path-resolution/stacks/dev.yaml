@@ -1,0 +1,35 @@
+# Development stack for component path resolution testing
+vars:
+  stage: "dev"
+
+components:
+  terraform:
+    # Simple component - matches terraform folder name directly
+    simple-component:
+      vars:
+        environment: "development"
+        enabled: true
+
+    # Nested component - tests nested path resolution
+    nested/component:
+      vars:
+        environment: "development"
+        enabled: true
+
+    # First component referencing ambiguous-component folder
+    # Used to test ambiguous path detection
+    ambiguous-alpha:
+      metadata:
+        component: ambiguous-component
+      vars:
+        environment: "development"
+        variant: "alpha"
+
+    # Second component referencing ambiguous-component folder
+    # Together with ambiguous-alpha, tests ambiguous path detection
+    ambiguous-beta:
+      metadata:
+        component: ambiguous-component
+      vars:
+        environment: "development"
+        variant: "beta"

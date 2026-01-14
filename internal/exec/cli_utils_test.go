@@ -8,8 +8,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// newTestCommandWithGlobalFlags creates a test command with all global flags registered
+// using the flag registry pattern. This ensures test commands have the same flags as
+// production commands that inherit from RootCmd.
+func newTestCommandWithGlobalFlags(use string) *cobra.Command {
+	cmd := &cobra.Command{Use: use}
+
+	// Register global flags using the same pattern as cmd/root.go.
+	globalParser := flags.NewGlobalOptionsBuilder().Build()
+	globalParser.RegisterPersistentFlags(cmd)
+
+	return cmd
+}
 
 func Test_processArgsAndFlags(t *testing.T) {
 	inputArgsAndFlags := []string{
@@ -59,12 +74,12 @@ func Test_processArgsAndFlags2(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:              "help for single command",
+			name:              "single subcommand allows interactive prompts",
 			componentType:     "terraform",
 			inputArgsAndFlags: []string{"plan"},
 			want: schema.ArgsAndFlagsInfo{
 				SubCommand: "plan",
-				NeedHelp:   true,
+				NeedHelp:   false, // Don't auto-show help; allow interactive prompts.
 			},
 			wantErr: false,
 		},
@@ -605,6 +620,47 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 			expectedResult: "test-identity-from-flag-equals",
 			description:    "--identity=value syntax should override ATMOS_IDENTITY env var",
 		},
+		// Test cases for ATMOS_IDENTITY=false (issue #1931).
+		{
+			name:           "ATMOS_IDENTITY=false disables authentication",
+			envValue:       "false",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=false should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=FALSE disables authentication",
+			envValue:       "FALSE",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=FALSE should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=0 disables authentication",
+			envValue:       "0",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=0 should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=no disables authentication",
+			envValue:       "no",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=no should be normalized to __DISABLED__",
+		},
+		{
+			name:           "ATMOS_IDENTITY=off disables authentication",
+			envValue:       "off",
+			flagValue:      "",
+			args:           []string{"plan", "component", "--stack", "stack"},
+			expectedResult: cfg.IdentityFlagDisabledValue,
+			description:    "ATMOS_IDENTITY=off should be normalized to __DISABLED__",
+		},
 	}
 
 	for _, tt := range tests {
@@ -614,15 +670,10 @@ func TestProcessCommandLineArgs_IdentityFromEnvironmentVariable(t *testing.T) {
 				t.Setenv("ATMOS_IDENTITY", tt.envValue)
 			}
 
-			// Create a minimal cobra command for testing with required flags.
-			cmd := &cobra.Command{
-				Use: "terraform",
-			}
+			// Create a test command with global flags registered via flag registry.
+			cmd := newTestCommandWithGlobalFlags("terraform")
 			cmd.Flags().String("stack", "", "stack name")
 			cmd.Flags().String("identity", "", "identity name")
-			cmd.Flags().String("base-path", "", "base path")
-			cmd.Flags().StringSlice("config", []string{}, "config files")
-			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -666,15 +717,10 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a minimal cobra command for testing with required flags.
-			cmd := &cobra.Command{
-				Use: "terraform",
-			}
+			// Create a test command with global flags registered via flag registry.
+			cmd := newTestCommandWithGlobalFlags("terraform")
 			cmd.Flags().String("stack", "", "stack name")
 			cmd.Flags().String("identity", "", "identity name")
-			cmd.Flags().String("base-path", "", "base path")
-			cmd.Flags().StringSlice("config", []string{}, "config files")
-			cmd.Flags().StringSlice("config-path", []string{}, "config paths")
 
 			// Process the command-line arguments.
 			result, err := ProcessCommandLineArgs("terraform", cmd, tt.args, []string{})
@@ -684,4 +730,112 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should match expected value")
 		})
 	}
+}
+
+func TestProcessCommandLineArgs_ProfileFromEnvironmentVariable(t *testing.T) {
+	tests := []struct {
+		name           string
+		envValue       string
+		expectedResult []string
+	}{
+		{
+			name:           "single profile from environment variable",
+			envValue:       "production",
+			expectedResult: []string{"production"},
+		},
+		{
+			name:           "multiple profiles from environment variable",
+			envValue:       "dev,staging,prod",
+			expectedResult: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:           "profiles with empty entries",
+			envValue:       "dev,,prod",
+			expectedResult: []string{"dev", "prod"},
+		},
+		{
+			name:           "profiles with spaces",
+			envValue:       "dev, staging , prod",
+			expectedResult: []string{"dev", "staging", "prod"},
+		},
+		{
+			name:           "profiles with leading/trailing commas",
+			envValue:       ",dev,staging,",
+			expectedResult: []string{"dev", "staging"},
+		},
+		{
+			name:           "only whitespace and commas",
+			envValue:       " , , ",
+			expectedResult: []string{},
+		},
+		{
+			name:           "empty environment variable",
+			envValue:       "",
+			expectedResult: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Set environment variable.
+			if tt.envValue != "" {
+				t.Setenv("ATMOS_PROFILE", tt.envValue)
+			}
+
+			// Create test command with global flags (including profile flag).
+			cmd := newTestCommandWithGlobalFlags("test")
+			cmd.Flags().String("stack", "", "stack name")
+
+			// Process with no --profile flag in args (should use env var).
+			result, err := ProcessCommandLineArgs("terraform", cmd, []string{}, []string{})
+
+			// Verify results.
+			require.NoError(t, err, "ProcessCommandLineArgs should not return error")
+			assert.Equal(t, tt.expectedResult, result.ProfilesFromArg, "Profiles should match expected value")
+		})
+	}
+}
+
+func TestProcessCommandLineArgs_ProfileFlagTakesPrecedenceOverEnv(t *testing.T) {
+	// Set environment variable.
+	t.Setenv("ATMOS_PROFILE", "env-profile")
+
+	// Create test command with global flags.
+	cmd := newTestCommandWithGlobalFlags("test")
+	cmd.Flags().String("stack", "", "stack name")
+
+	// Set profile flag directly (simulating --profile flag).
+	// Profile is a persistent flag, so use PersistentFlags().
+	err := cmd.PersistentFlags().Set("profile", "flag-profile")
+	require.NoError(t, err)
+
+	// Process command line args.
+	result, err := ProcessCommandLineArgs("terraform", cmd, []string{}, []string{})
+
+	// Verify that flag takes precedence.
+	require.NoError(t, err)
+	assert.Equal(t, []string{"flag-profile"}, result.ProfilesFromArg, "Flag should take precedence over env var")
+}
+
+// TestProcessCommandLineArgs_FromPlanBeforeComponent verifies that placing --from-plan
+// before the component name results in an error rather than silent misinterpretation.
+// This tests the edge case where --from-plan is misplaced in the argument order.
+//
+// Correct usage: atmos terraform apply <component> -s <stack> --from-plan.
+// Incorrect usage: atmos terraform apply --from-plan <component> -s <stack>.
+func TestProcessCommandLineArgs_FromPlanBeforeComponent(t *testing.T) {
+	// Create a test command simulating terraform apply with global flags.
+	cmd := newTestCommandWithGlobalFlags("terraform")
+	cmd.Flags().String("stack", "", "stack name")
+
+	// Test case: --from-plan before component name should result in an error.
+	// The flag parser sees --from-plan as an unknown flag because it's processed
+	// before the flag handling code recognizes it in the proper position.
+	args := []string{"apply", "--from-plan", "component-name", "-s", "test-stack"}
+
+	_, err := ProcessCommandLineArgs("terraform", cmd, args, []string{})
+
+	// The function should return an error - this prevents silent misinterpretation
+	// where the component name could be mistakenly used as the plan file path.
+	require.Error(t, err, "ProcessCommandLineArgs should return error when --from-plan precedes component name")
 }

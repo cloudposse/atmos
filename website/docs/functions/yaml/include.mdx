@@ -90,7 +90,7 @@ The `!include` function supports the following local file sources:
     vars: !include ../config/vars.yaml
     ```
 
-  - Paths relative to the [`base_path`](/cli/configuration/#base-path) defined in `atmos.yaml` CLI config file
+  - Paths relative to the [`base_path`](/cli/configuration#base-path) defined in `atmos.yaml` CLI config file
     ```yaml
     vars: !include stacks/catalog/vpc/vars.yaml
     ```
@@ -104,6 +104,29 @@ To download remote files, Atmos uses [`go-getter`](https://github.com/hashicorp/
   ```yaml
   vars: !include https://raw.githubusercontent.com/org/repo/main/path/to/vars.yaml
   ```
+
+- **github://** - GitHub URLs are automatically converted to raw content URLs
+  ```yaml
+  # Standard GitHub blob URL (automatically converted to raw URL)
+  vars: !include https://github.com/org/repo/blob/main/path/to/vars.yaml
+
+  # GitHub tree URL (automatically converted to raw URL)
+  config: !include https://github.com/org/repo/tree/main/path/to/config.json
+
+  # GitHub shorthand syntax
+  settings: !include github://org/repo/main/path/to/settings.yaml
+
+  # Already raw URLs work as-is (no conversion needed)
+  data: !include https://raw.githubusercontent.com/org/repo/main/path/to/data.yaml
+  ```
+
+  <Note>
+    When using standard GitHub URLs (with `/blob/` or `/tree/`), Atmos automatically converts them to raw content URLs
+    (`raw.githubusercontent.com`) before downloading. This means you can copy URLs directly from GitHub's web interface
+    without manually converting them to raw format.
+
+    If the URL doesn't include a branch/tag/commit reference, Atmos defaults to the `main` branch.
+  </Note>
 
 - **s3** (Amazon S3) - requires the correct AWS permissions and credentials configured
   ```yaml
@@ -138,7 +161,7 @@ This has several important implications:
    files and reused across multiple stacks or components. You can use it in place of YAML anchors, which don't work across files.
 
 - **Preprocessing for Inheritance**
-  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/core-concepts/stacks/inheritance/) and deep-merging
+  Includes are resolved *before* Atmos processes stacks and components, enabling powerful [inheritance](/howto/inheritance) and deep-merging
   behaviors using fully expanded configuration data.
 
 - **Adopting Existing Terraform/OpenTofu Root Modules as Atmos Components**
@@ -148,7 +171,7 @@ This has several important implications:
 
 ### Example: Referencing Different TFVAR Files Per Environment
 
-For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is into your [Stacks](/core-concepts/stacks/).
+For example, instead of rewriting existing `.tfvars` varfiles into inline YAML, Atmos lets you bring them in as-is into your [Stacks](/learn/stacks/).
 You can continue managing your root modules as you always have, while gaining Atmos features like stack inheritance,
 environment promotion, and deep-merging.
 
@@ -189,7 +212,7 @@ components:
 
 This pattern allows you to plug Atmos into your existing Terraform/OpenTofu root modules with minimal changes — no need to
 duplicate or reformat your varfiles. You also unlock additional capabilities like [listing all your stacks](/cli/commands/list/stacks)
-and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/core-concepts/stacks/imports),
+and [components](/cli/commands/list/components), leveraging layered configurations, [stack inheritance with imports](/stacks/imports),
 and consistent promotion of settings across environments.
 
 ## Usage
@@ -305,9 +328,13 @@ components:
         tests: !include '"~/My Documents/dev/tests.yaml" .config.tests'
         # Download and include a remote YAML file using HTTPS protocol, and query the `vars` section from the file
         region_values: !include https://raw.githubusercontent.com/cloudposse/atmos/refs/heads/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        # Download from GitHub using standard GitHub URL (automatically converted to raw URL)
+        github_vars: !include https://github.com/cloudposse/atmos/blob/main/examples/quick-start-advanced/stacks/mixins/region/us-east-2.yaml .vars
+        # Download using GitHub shorthand syntax
+        github_config: !include github://cloudposse/atmos/main/examples/quick-start-advanced/atmos.yaml
         # Download and include a remote JSON file from a URL with .json extension
         # Note: For URLs without extensions, save locally first or use a URL with .json extension
-        github_config: !include ./github-meta.json .api
+        api_config: !include ./github-meta.json .api
 ```
 </File>
 

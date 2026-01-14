@@ -1,0 +1,105 @@
+---
+title: Vendoring
+description: Use Atmos vendoring to make copies of 3rd-party components, stacks, and other artifacts in your own repo.
+sidebar_position: 1
+sidebar_label: vendor
+sidebar_class_name: hidden
+id: vendor
+---
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+When your infrastructure depends on external modules, you're at the mercy of upstream changes, network availability, and release schedules you don't control. Vendoring brings that code in-house, giving you full control over when and how dependencies change.
+</Intro>
+
+With Atmos vendoring, you copy external components into your repository where you can review changes via `git diff`, maintain an immutable audit trail, and apply emergency patches without waiting for upstream releases. Your deployments become predictable—no surprises from unexpected upstream changes or network outages.
+
+## Why Vendor?
+
+While Terraform [child modules](https://developer.hashicorp.com/terraform/language/modules/sources) can pull from remote sources, [root modules](/components/terraform/root-modules) have no such capability—they must exist locally. This means every Terraform project needs a way to get root module code onto disk. Most tools do "just-in-time vendoring" behind the scenes: cloning to a temp folder, running it, then cleaning up. Atmos makes this process explicit: you vendor once, commit the code, and control when updates happen.
+
+**This approach provides:**
+
+- **Visibility**: See actual code changes via `git diff`, not just version bumps
+- **Audit Trail**: Every update is a commit—complete, immutable compliance records
+- **Emergency Agility**: Patch vulnerabilities immediately without waiting for upstream
+- **Developer Experience**: IDE navigation, `grep` across all code, better onboarding
+
+:::tip Deep Dive
+For the full philosophy and detailed benefits, see [Vendoring Component Versions](/design-patterns/version-management/vendoring-components).
+:::
+
+### Vendoring and Version Management
+
+Vendoring is a foundational technique that works with any [version management strategy](/design-patterns/version-management). Whether you use folder-based versioning (`vpc/v1`, `vpc/v2`), release tracks (`alpha/vpc`, `beta/vpc`), or continuous deployment, vendoring gives you local control over when components update.
+
+Common patterns:
+- **Vendor + Folder Versioning**: Vendor upstream modules to versioned folders for explicit version control
+- **Vendor + Release Tracks**: Vendor to track folders (`prod/vpc`, `staging/vpc`) that environments subscribe to
+- **Vendor + Continuous Deployment**: Vendor to a single folder and let CI/CD control progressive rollout
+
+See [Version Management Patterns](/design-patterns/version-management) for strategies that build on vendoring.
+
+## Use Cases
+
+Use vendoring when you need to:
+
+- **Control Update Timing**: Your compliance process requires reviewing all code changes before deployment. Vendoring lets you update on your schedule, not when upstream pushes changes.
+
+- **Ensure Deployment Reliability**: Network issues or upstream outages shouldn't block your deployments. Vendored code is always available in your repository.
+
+- **Apply Custom Patches**: Security vulnerabilities can't wait for upstream PRs. Vendor the code, patch it immediately, deploy, then reconcile with upstream later.
+
+- **Manage Multiple Versions**: Different teams or environments need different versions. Vendor to `vpc/v1` and `vpc/v2` folders for maximum flexibility.
+
+- **Meet Compliance Requirements**: Auditors need to see exactly what code ran and when. Every vendor update is a git commit with full history.
+
+- **Share Components Across Teams**: Maintain a centralized component library that teams can vendor into their own repositories, enabling customization and independent version control.
+
+## Types of Vendoring
+
+Atmos supports two different ways of vendoring components:
+
+- [**Vendor Configuration**](/vendor/vendor-config) Using `vendor.yaml` vendoring manifest file containing a list of all dependencies. **This is the recommended approach.**
+- [**Component Manifest**](/vendor/component-manifest) (Legacy) Using `component.yaml` manifest file inside of a component directory.
+
+The `vendor.yaml` vendoring manifest describes the vendoring config for all components, stacks and other artifacts for the entire infrastructure.
+The file is placed into the directory from which the `atmos vendor pull` command is executed. It's the recommended way to describe vendoring
+configurations.
+
+:::tip Recommended Approach
+Use the `vendor.yaml` [Vendor Configuration](/vendor/vendor-config) approach for centralized dependency management. The component manifest approach is considered legacy and should only be used for specific use cases.
+:::
+
+:::tip Alternative: Stack-Native Source Configuration
+For just-in-time vendoring without managing separate vendor manifests, you can use the top-level `source` field directly in stack configuration. This approach vendors components on-demand during execution and supports per-environment version pinning.
+
+See [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) for the design pattern and [atmos terraform source](/cli/commands/terraform/source) for CLI usage.
+:::
+
+The `component.yaml` vendoring manifest is used to vendor components from remote repositories.
+A `component.yaml` file placed into a component's directory is used to describe the vendoring config for one component only.
+
+
+:::tip Pro Tip! Use GitOps
+Vendoring plays nicely with GitOps practices, especially when leveraging [GitHub Actions](/integrations/github-actions/).
+Use a workflow that automatically updates the vendor manifest and opens a pull request (PR) with all the changes.
+This allows you to inspect and precisely assess the impact of any upgrades before merging by reviewing the job summary of the PR.
+:::
+
+## Features
+
+With Atmos vendoring, you can copy components and other artifacts from the following sources:
+
+- Copy all files from an [OCI Registry](https://opencontainers.org) into a local folder
+- Copy all files from Git, Mercurial, Amazon S3, Google GCP into a local folder
+- Copy all files from an HTTP/HTTPS endpoint into a local folder
+- Copy a single file from an HTTP/HTTPS endpoint to a local file
+- Copy a local file into a local folder (keeping the same file name)
+- Copy a local file to a local file with a different file name
+- Copy a local folder (all files) into a local folder
+
+Our implementation is primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir).
+While Atmos does not call `vendir`, it functions and supports a subset of the configuration that is very similar.

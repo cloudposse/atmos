@@ -1,0 +1,3 @@
+# Minimal atmos.yaml for testing pager behavior without full config loading.
+stacks:
+  base_path: "stacks"

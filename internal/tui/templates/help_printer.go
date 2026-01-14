@@ -122,18 +122,18 @@ func (p *HelpFlagPrinter) PrintHelpFlag(flag *pflag.Flag) {
 	}
 	wrapped = strings.TrimSuffix(wrapped, "\n\n")
 	lines := strings.Split(wrapped, "\n")
+
+	// Check if there are any lines to print.
 	if len(lines) > 0 {
-		lines = lines[1:]
-	}
-
-	if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
-		return
-	}
-
-	// Print remaining lines with proper indentation
-	for _, line := range lines[1:] {
-		if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line); err != nil {
+		if _, err := fmt.Fprintf(p.out, "%-*s%s\n", descIndent, flagSection, lines[0]); err != nil {
 			return
+		}
+
+		// Print remaining lines with proper indentation.
+		for _, line := range lines[1:] {
+			if _, err := fmt.Fprintf(p.out, "%s%s\n", strings.Repeat(" ", descIndent), line); err != nil {
+				return
+			}
 		}
 	}
 

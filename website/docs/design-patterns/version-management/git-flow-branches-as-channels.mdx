@@ -1,0 +1,365 @@
+---
+title: Git Flow - Branches as Channels
+sidebar_position: 7
+sidebar_label: Git Flow - Branches as Channels
+description: Git Flow - The branch-based deployment strategy alternative to Continuous Version Deployment
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<PillBox>Atmos Design Pattern</PillBox>
+<Intro>
+**Git Flow: Branches as Channels** is the branch-based deployment strategy alternative to [Continuous Version Deployment](/design-patterns/version-management/continuous-version-deployment). Instead of trunk-based deployment, long-lived branches map to release channels with environments tracking specific branches and promotions happening through merges. Uses simple [Folder-Based Versioning](/design-patterns/version-management/folder-based-versioning) since branches serve as the versioning mechanism.
+</Intro>
+
+:::info Idiomatic Versioning for Git Flow
+Git Flow idiomatically uses **[Environment Names](/design-patterns/version-management/versioning-schemes#environment-names)** because **branches ARE the environments** (`channels/dev`, `channels/staging`, `channels/prod`).
+
+It doesn't make sense to use number-based schemes (SemVer, CalVer) or other label-based schemes (Maturity Levels) with Git Flow—branches carry the version semantics through the merge/promotion flow. The branch name itself indicates which stage a version is in.
+:::
+
+## Understanding Git Flow
+
+Git Flow is a branching model introduced by Vincent Driessen in 2010 that has become widely adopted in software development. It defines a strict branching structure designed around project releases, using multiple parallel long-lived branches.
+
+### Conventional Git Flow Structure
+
+In traditional Git Flow:
+- **main/master**: Production-ready code
+- **develop**: Integration branch for features
+- **feature/\***: Individual feature development
+- **release/\***: Release preparation branches
+
+Changes flow through a defined path:
+1. Features are developed in feature branches
+2. Features merge into develop
+3. Release branches are created from develop
+4. After testing, releases merge into main and back to develop
+
+### Git Flow for Infrastructure
+
+When applied to infrastructure-as-code, Git Flow needs adaptation because:
+- Infrastructure has **persistent state** that doesn't reset between branches
+- You can't easily **test infrastructure in isolation** like application code
+- **Merge conflicts** in infrastructure often have wider implications
+- **Rollback** means reverting infrastructure, not just code
+
+This pattern adapts Git Flow by using branches as deployment channels that environments subscribe to, rather than following the strict feature → develop → release → main flow.
+
+<KeyPoints>
+- How Git branches can serve as release channels for infrastructure
+- Why merge-based promotion provides clear audit trails
+- The trade-offs of long-lived branches for infrastructure code
+- Strategies for managing branch divergence and merge conflicts
+</KeyPoints>
+
+## Use Cases
+
+Use the **Git Flow: Branches as Channels** pattern when:
+
+- Your team is **already familiar with Git Flow** workflows
+- You want **centralized promotion control** through pull requests
+- You need **clear audit trails** of what was promoted when
+- Your organization requires **approval gates** for promotions
+- You prefer **merge-based deployment** workflows
+- You have strong **CI/CD integration** with Git events
+- You want to **decouple promotion velocity** between environments
+
+## Problem
+
+Traditional Git Flow works well for application development but needs adaptation for infrastructure:
+
+- **State Management**: Infrastructure has persistent state that doesn't reset between branches
+- **Testing Challenges**: Can't easily test infrastructure changes in isolation
+- **Merge Conflicts**: Infrastructure code often has more structural conflicts
+- **Drift Potential**: Long-lived branches can diverge significantly
+- **Rollback Complexity**: Reverting merges affects all environments on that branch
+
+Despite these challenges, many teams prefer Git Flow because it provides familiar workflows and strong tooling support.
+
+## Solution
+
+Adapt Git Flow for infrastructure by using branches as release channels that environments subscribe to. Each branch represents a promotion stage, and changes flow through branches via merges.
+
+### Branch Structure
+
+```text
+main (or master)
+  │
+  ├── channels/prod        # Production channel
+  │     │
+  │     ├── channels/staging   # Staging channel
+  │           │
+  │           └── channels/dev     # Development channel
+  │                 │
+  │                 └── feature/*  # Feature branches
+```
+
+:::info Singleton Infrastructure
+Not all infrastructure concepts map to SDLC environments. Many things are singletons - for example, in AWS, there can only be one organization, one organizational CloudTrail, one Control Tower setup, etc.
+
+For singleton infrastructure that doesn't have environment-specific deployments, a single release channel such as `main` or `channels/main` makes sense as the default, rather than trying to force these into development/staging/production paradigms.
+:::
+
+### Channel Branch Strategy
+
+1. **Long-lived Channel Branches**: Create persistent branches for each environment tier
+2. **Feature Branches**: Short-lived branches for individual changes
+3. **Promotion via Merges**: Advance versions by merging between channel branches
+4. **Environment Subscription**: Environments reference channel branches, not tags
+
+## Implementation
+
+### Basic Git Flow Setup
+
+<File title="Branch Structure">
+```text
+Repository Structure:
+├── channels/
+│   ├── dev         # Development channel (latest changes)
+│   ├── staging     # Staging channel (pre-production)
+│   └── prod        # Production channel (stable)
+├── feature/        # Feature development
+└── main           # Integration branch (not used for deployments)
+```
+</File>
+
+### Component Vendoring from Branches
+
+With Git Flow, components are vendored from specific branches using `vendor.yaml`. **Each channel must be vendored to a distinct path** so that different environments can reference different versions of the component:
+
+<File title="vendor.yaml">
+```yaml
+spec:
+  sources:
+    # Vendor VPC from dev channel to dev-specific path
+    - component: vpc-dev
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/dev"
+      targets:
+        - "components/terraform/channels/dev/vpc"
+
+    # Vendor VPC from staging channel to staging-specific path
+    - component: vpc-staging
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/staging"
+      targets:
+        - "components/terraform/channels/staging/vpc"
+
+    # Vendor VPC from production channel to prod-specific path
+    - component: vpc-prod
+      source: "git::https://github.com/acme/infrastructure.git//components/terraform/vpc?ref=channels/prod"
+      targets:
+        - "components/terraform/channels/prod/vpc"
+```
+</File>
+
+:::warning Critical: Distinct Vendoring Paths Required
+Each channel **must** be vendored to a unique path. If all channels vendor to the same path (e.g., `components/terraform/vpc`), the last vendored channel will overwrite the others, and all environments will end up using the same code regardless of stack configuration.
+:::
+
+### Stack Configuration
+
+After vendoring components from the appropriate branches to distinct paths, define a base component in your catalog with `metadata.name` for stable workspace keys, then have stacks inherit and override the channel-specific path:
+
+<File title="stacks/catalog/vpc.yaml">
+```yaml
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        name: vpc  # Stable identity - convention: top-level folder
+        # Each environment overrides 'component' to point to its channel
+```
+</File>
+
+<Tabs>
+<TabItem value="dev" label="Development" default>
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: channels/dev/vpc  # Point to dev channel vendored path
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
+      vars:
+        name: "dev-use1-vpc"
+        cidr_block: "10.0.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="staging" label="Staging">
+<File title="stacks/staging/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: channels/staging/vpc  # Point to staging channel vendored path
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
+      vars:
+        name: "staging-use1-vpc"
+        cidr_block: "10.1.0.0/16"
+```
+</File>
+</TabItem>
+
+<TabItem value="prod" label="Production">
+<File title="stacks/prod/us-east-1.yaml">
+```yaml
+import:
+  - catalog/vpc
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        inherits: [vpc/defaults]
+        component: channels/prod/vpc  # Point to prod channel vendored path
+        # Inherits name: vpc → workspace_key_prefix: "vpc"
+      vars:
+        name: "prod-use1-vpc"
+        cidr_block: "10.2.0.0/16"
+```
+</File>
+</TabItem>
+</Tabs>
+
+## Rollback Strategy
+
+Rolling back in Git Flow involves reverting merges or resetting branches:
+
+### Option 1: Revert the Merge Commit
+
+```bash
+# Find the merge commit to revert
+git log --oneline --merges channels/prod
+
+# Create a revert branch
+git checkout -b revert-deployment channels/prod
+git revert -m 1 <merge-commit-hash>
+
+# Push and create PR
+git push origin revert-deployment
+```
+
+### Option 2: Reset Branch (Requires Force Push)
+
+```bash
+# Reset to previous known good state
+git checkout channels/prod
+git reset --hard <previous-good-commit>
+
+# Force push (requires permissions)
+git push --force-with-lease origin channels/prod
+```
+
+### Option 3: Fast-Forward to Previous State
+
+```bash
+# If the previous state is tagged
+git checkout channels/prod
+git merge --ff-only <previous-version-tag>
+git push origin channels/prod
+```
+
+:::warning
+Rolling back a branch affects all environments subscribed to that branch. Consider the impact carefully.
+:::
+
+## Benefits
+
+The **Git Flow: Branches as Channels** pattern provides:
+
+- **Familiar Workflow**: Leverages well-understood Git Flow concepts
+- **Centralized Control**: Promotions happen through reviewed pull requests
+- **Clear Audit Trail**: Git history shows what was promoted when
+- **Flexible Velocity**: Different channels can move at different speeds
+- **Strong Tooling**: Excellent CI/CD and GitHub/GitLab integration
+- **Approval Gates**: Native support for review requirements
+
+## Drawbacks
+
+The pattern has significant trade-offs to consider:
+
+- **Branch Divergence**: Long-lived branches naturally drift apart
+- **Merge Conflicts**: Infrastructure code often has structural conflicts
+- **Complex Rollbacks**: Rolling back after multiple changes have merged is complicated - cherry-picking individual commits is non-trivial and error-prone
+- **Testing Limitations**: Can't fully test infrastructure in isolated branches
+- **State Confusion**: Branch switches don't affect Terraform state
+- **Delayed Visibility**: Pinning stages to release tracks means you can't observe the future impact of changes on other environments until opening PRs to those environments
+- **Larger Releases**: The pattern often leads to batched, larger releases rather than smaller incremental updates
+- **Promotion Overhead**: Every change requires multiple merges through the branch hierarchy
+
+## Best Practices
+
+- **Use Configuration for Environment-Specific Behavior:** Use Terraform variables and environment-specific configuration to control behavior per channel. While runtime feature flags can help in application code, they're less natural in infrastructure-as-code and add operational complexity.
+
+  <File title="components/terraform/vpc/variables.tf">
+  ```hcl
+  variable "enable_experimental_features" {
+    description = "Enable experimental VPC features"
+    type        = bool
+    default     = false
+  }
+
+  variable "channel" {
+    description = "Deployment channel (dev/staging/prod)"
+    type        = string
+  }
+
+  locals {
+    # Enable features based on channel
+    enable_flow_logs = var.channel != "dev" ? true : var.enable_experimental_features
+    enable_ipv6      = var.channel == "dev" ? true : false
+  }
+  ```
+  </File>
+
+- **Document Channel Policies:** Maintain clear channel policies documenting channel definitions, promotion rules, and approval requirements to ensure consistent promotion practices across the team.
+
+  <File title="docs/channel-policy.md">
+  ```markdown
+  # Channel Branch Policy
+
+  ## Channel Definitions
+  - **channels/dev**: Latest development, updated continuously
+  - **channels/staging**: Pre-production validation, updated daily
+  - **channels/prod**: Production stable, updated weekly
+
+  ## Promotion Rules
+  1. All changes must enter through channels/dev
+  2. Automated tests must pass before promotion
+  3. Staging requires soak time before prod promotion
+  4. Production promotions require approvals
+  ```
+  </File>
+
+## Summary
+
+Git Flow: Branches as Channels adapts the familiar Git Flow model for infrastructure management. It provides strong control through pull requests, clear audit trails, and excellent tooling integration. While it requires discipline to manage branch divergence and handle merge conflicts, teams already comfortable with Git Flow often find this pattern intuitive and powerful. The key to success is maintaining synchronization between channels and having clear policies for promotion and rollback.
+
+:::tip Key Takeaway
+Git Flow for infrastructure works best when you have strong CI/CD practices and can manage branch divergence effectively. It's ideal for teams that want centralized control with familiar Git workflows.
+:::
+
+## Related Patterns
+
+- [Versioning Schemes](./versioning-schemes) - Environment Names are idiomatic for Git Flow
+- [Release Tracks/Channels](./release-tracks-channels) - Configuration-based channel management
+- [Strict Version Pinning](./strict-version-pinning) - Tag-based version control
+- [Folder-Based Versioning](./folder-based-versioning) - File system-based versioning
+- [Component Inheritance](/design-patterns/inheritance-patterns/component-inheritance) - Extending components across branches

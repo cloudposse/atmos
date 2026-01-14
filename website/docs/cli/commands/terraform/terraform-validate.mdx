@@ -1,0 +1,285 @@
+---
+title: atmos terraform validate
+sidebar_label: validate
+sidebar_class_name: command
+id: validate
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+
+<Intro>
+Use this command to validate the Terraform HCL configuration files (`.tf` files) for an Atmos component in a stack, checking for syntax and consistency errors. This validates Terraform code, not Atmos stack YAML configurations.
+</Intro>
+
+<Screengrab title="atmos terraform validate --help" slug="atmos-terraform-validate--help" />
+
+## Usage
+
+Execute the `terraform validate` command like this:
+
+```shell
+atmos terraform validate <component> -s <stack> [options]
+```
+
+This command validates the Terraform HCL configuration files in a component directory, referring only to the configuration and not accessing any remote services such as remote state, provider APIs, etc.
+
+:::info Atmos Behavior
+Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The validation itself is performed by native Terraform.
+:::
+
+## Configuration
+
+Configure validation behavior in your `atmos.yaml`:
+
+```yaml
+components:
+  terraform:
+    # Always run init before validate
+    init_run_reconfigure: false
+
+    # Auto-generate backend file for validation
+    auto_generate_backend_file: true
+```
+
+Validation includes:
+- Checking for syntax errors
+- Verifying internal consistency
+- Ensuring all required arguments are specified
+- Checking that all variables are declared
+- Validating output value expressions
+- Ensuring resource configurations are complete
+
+## Examples
+
+### Basic Validation
+
+Validate a component in a stack:
+
+```shell
+atmos terraform validate vpc -s dev
+```
+
+### Validation with JSON Output
+
+Get validation results in JSON format for parsing:
+
+```shell
+atmos terraform validate vpc -s dev -json
+```
+
+### Skip Initialization
+
+Validate without running `terraform init` first:
+
+```shell
+atmos terraform validate vpc -s dev --skip-init
+```
+
+## When to Use Validate
+
+### Pre-Deployment Checks
+
+Run validation before planning or applying:
+
+```shell
+# Validate first
+atmos terraform validate app -s prod
+
+# Then plan if validation succeeds
+atmos terraform plan app -s prod
+```
+
+### After Configuration Changes
+
+Always validate after modifying Terraform configurations:
+
+```shell
+# After editing *.tf files
+atmos terraform validate component -s stack
+
+# After updating module versions
+atmos terraform validate component -s stack
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos component name to validate.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` / `-s` <em>(required)</em></dt>
+    <dd>
+        Atmos stack name where the component is defined.
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before validation. Use this when you know the working directory is already initialized.
+
+        ```shell
+        atmos terraform validate vpc -s dev --skip-init
+        ```
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform validate vpc -s dev --dry-run
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform validate` command supports all native `terraform validate` flags:
+
+<dl>
+    <dt>`-json`</dt>
+    <dd>
+        Output the validation result in JSON format. This is useful for programmatic processing of validation results.
+
+        ```shell
+        atmos terraform validate vpc -s dev -json
+        ```
+
+        Example JSON output:
+        ```json
+        {
+          "valid": true,
+          "error_count": 0,
+          "warning_count": 0,
+          "diagnostics": []
+        }
+        ```
+    </dd>
+
+    <dt>`-no-color`</dt>
+    <dd>
+        Disable color codes in the output.
+
+        ```shell
+        atmos terraform validate vpc -s dev -no-color
+        ```
+    </dd>
+</dl>
+
+## Common Validation Errors
+
+### Missing Required Arguments
+
+```console
+Error: Missing required argument
+
+The argument "vpc_id" is required, but no definition was found.
+```
+
+**Solution**: Add the missing argument to your configuration or variables.
+
+### Undeclared Variables
+
+```console
+Error: Reference to undeclared variable
+
+A variable named "instance_type" is not declared.
+```
+
+**Solution**: Declare the variable in a `variables.tf` file or in your Atmos stack configuration.
+
+### Invalid Resource Configuration
+
+```console
+Error: Invalid resource type
+
+The resource type "aws_not_real" is not supported by provider "aws".
+```
+
+**Solution**: Check the resource type name and ensure you're using valid resource types.
+
+### Syntax Errors
+
+```console
+Error: Argument or block definition required
+
+An argument or block definition is required here. To set an argument, use the
+equals sign "=" to introduce the argument value.
+```
+
+**Solution**: Fix the syntax error in your Terraform configuration files.
+
+## Best Practices
+
+### 1. Validate Early and Often
+
+Run validation:
+- After every configuration change
+- Before running `plan` or `apply`
+- As part of your CI/CD pipeline
+- During code reviews
+
+### 2. Use in Pre-Commit Hooks
+
+Add validation to your pre-commit hooks:
+
+```yaml
+# .pre-commit-config.yaml
+- repo: local
+  hooks:
+    - id: terraform-validate
+      name: Terraform Validate
+      entry: atmos terraform validate
+      language: system
+      files: \.tf$
+```
+
+### 3. Combine with Other Checks
+
+Use validation alongside other quality checks. For security scanning with tools like `tfsec`, `checkov`, or `terrascan`, use JSON planfiles generated with `atmos terraform generate planfile` for more accurate analysis.
+
+This integration is best implemented using [Atmos custom commands](/cli/configuration/commands) with embedded shell scripts:
+
+```yaml
+# atmos.yaml
+commands:
+  - name: security-scan
+    description: Run security checks on component
+    steps:
+      - atmos terraform fmt {component} -s {stack} -check
+      - atmos terraform validate {component} -s {stack}
+      - atmos terraform generate planfile {component} -s {stack}
+      - checkov -f ./{component}-{stack}.planfile.json
+```
+
+### 4. Parse JSON Output
+
+Use JSON output for automated processing:
+
+```bash
+# Check validation status
+result=$(atmos terraform validate vpc -s dev -json)
+valid=$(echo $result | jq -r '.valid')
+
+if [ "$valid" = "false" ]; then
+    echo "Validation failed!"
+    echo $result | jq -r '.diagnostics[]'
+    exit 1
+fi
+```
+
+## Related Commands
+
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate execution plan
+- [`atmos terraform fmt`](/cli/commands/terraform/fmt) - Format configuration files
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory
+
+:::tip
+Use `terraform validate` as the first step in your deployment pipeline to catch configuration errors early before they can affect your infrastructure.
+:::

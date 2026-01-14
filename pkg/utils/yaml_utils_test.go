@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -762,6 +764,13 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncCwd,
+		AtmosYamlFuncRandom,
+		AtmosYamlFuncLiteral,
+		AtmosYamlFuncAwsAccountID,
+		AtmosYamlFuncAwsCallerIdentityArn,
+		AtmosYamlFuncAwsCallerIdentityUserID,
+		AtmosYamlFuncAwsRegion,
 	}
 
 	for _, tag := range expectedTags {
@@ -789,6 +798,7 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 		{AtmosYamlFuncTerraformOutput, true},
 		{AtmosYamlFuncTerraformState, true},
 		{AtmosYamlFuncEnv, true},
+		{AtmosYamlFuncRandom, true},
 		{"!unknown", false},
 		{"!invalid", false},
 		{"", false},
@@ -980,4 +990,640 @@ func TestPrintParsedYAMLCacheStats_NoDivideByZero(t *testing.T) {
 	parsedYAMLCacheStats.uniqueFiles = savedFiles
 	parsedYAMLCacheStats.uniqueHashes = savedHashes
 	parsedYAMLCacheStats.Unlock()
+}
+
+// TestLiteralTag_PreservesTemplateSyntax tests that !literal preserves template-like syntax.
+// This is the primary use case: passing {{...}} to downstream tools without Atmos processing.
+func TestLiteralTag_PreservesTemplateSyntax(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+email: !literal "{{external.email}}"
+config: !literal "{{ .Values.ingress.class }}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal.yaml")
+	require.NoError(t, err)
+
+	// Values should be preserved exactly as written (without the !literal tag).
+	assert.Equal(t, "{{external.email}}", result["email"])
+	assert.Equal(t, "{{ .Values.ingress.class }}", result["config"])
+}
+
+// TestLiteralTag_InList tests !literal in list contexts.
+func TestLiteralTag_InList(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+db_users:
+  - !literal "{{external.email}}"
+  - !literal "{{external.admin}}"
+  - regular_user
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-list.yaml")
+	require.NoError(t, err)
+
+	users, ok := result["db_users"].([]any)
+	require.True(t, ok, "db_users should be a list")
+	require.Len(t, users, 3)
+
+	assert.Equal(t, "{{external.email}}", users[0])
+	assert.Equal(t, "{{external.admin}}", users[1])
+	assert.Equal(t, "regular_user", users[2])
+}
+
+// TestLiteralTag_MultilineValue tests !literal with multiline values.
+func TestLiteralTag_MultilineValue(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+script: !literal |
+  #!/bin/bash
+  echo "Hello ${USER}"
+  export VAR={{value}}
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-multiline.yaml")
+	require.NoError(t, err)
+
+	script := result["script"].(string)
+	assert.Contains(t, script, "${USER}")
+	assert.Contains(t, script, "{{value}}")
+}
+
+// TestLiteralTag_PreservesSpecialCharacters tests that !literal preserves special characters.
+func TestLiteralTag_PreservesSpecialCharacters(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+pattern: !literal "user_{id}_{timestamp}"
+regex: !literal "^[a-z]+\\d{3}$"
+terraform: !literal "${var.hostname}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-special.yaml")
+	require.NoError(t, err)
+
+	assert.Equal(t, "user_{id}_{timestamp}", result["pattern"])
+	assert.Equal(t, "^[a-z]+\\d{3}$", result["regex"])
+	assert.Equal(t, "${var.hostname}", result["terraform"])
+}
+
+// TestLiteralTag_MixedWithOtherTags tests !literal alongside other YAML tags.
+func TestLiteralTag_MixedWithOtherTags(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+literal_value: !literal "{{template.syntax}}"
+regular_value: "plain string"
+random_value: !random 100
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-mixed.yaml")
+	require.NoError(t, err)
+
+	// Literal should be preserved.
+	assert.Equal(t, "{{template.syntax}}", result["literal_value"])
+
+	// Regular value should be unchanged.
+	assert.Equal(t, "plain string", result["regular_value"])
+
+	// Random tag is preserved for later processing (at this stage it's stored as "!random 100").
+	// We just verify the key is present in the result.
+	assert.Contains(t, result, "random_value")
+}
+
+// TestLiteralTag_EmptyValue tests !literal with empty value.
+func TestLiteralTag_EmptyValue(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+empty: !literal ""
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-empty.yaml")
+	require.NoError(t, err)
+
+	assert.Equal(t, "", result["empty"])
+}
+
+// TestLiteralTag_NestedInMap tests !literal in nested map structures.
+func TestLiteralTag_NestedInMap(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+vars:
+  terraform:
+    user_data: !literal "#!/bin/bash\necho ${hostname}"
+  helm:
+    annotations: !literal "{{ .Values.ingress.class }}"
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-nested.yaml")
+	require.NoError(t, err)
+
+	vars := result["vars"].(map[string]any)
+	terraform := vars["terraform"].(map[string]any)
+	helm := vars["helm"].(map[string]any)
+
+	assert.Equal(t, "#!/bin/bash\necho ${hostname}", terraform["user_data"])
+	assert.Equal(t, "{{ .Values.ingress.class }}", helm["annotations"])
+}
+
+// TestLiteralTag_InlineArray tests !literal in inline array syntax [!literal "value"].
+func TestLiteralTag_InlineArray(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	input := `
+db_users: [!literal "{{external.email}}", !literal "{{external.admin}}", regular_user]
+`
+
+	result, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](atmosConfig, input, "test-literal-inline.yaml")
+	require.NoError(t, err)
+
+	users, ok := result["db_users"].([]any)
+	require.True(t, ok, "db_users should be a list")
+	require.Len(t, users, 3)
+
+	assert.Equal(t, "{{external.email}}", users[0])
+	assert.Equal(t, "{{external.admin}}", users[1])
+	assert.Equal(t, "regular_user", users[2])
+}
+
+// TestGetUserHomeDir tests that GetUserHomeDir returns a valid home directory.
+func TestGetUserHomeDir(t *testing.T) {
+	homeDir := GetUserHomeDir()
+
+	// Should return a non-empty string on all platforms.
+	assert.NotEmpty(t, homeDir, "GetUserHomeDir should return non-empty home directory")
+
+	// The returned path should be an absolute path.
+	assert.True(t, filepath.IsAbs(homeDir), "Home directory should be an absolute path")
+
+	// The directory should exist.
+	info, err := os.Stat(homeDir)
+	require.NoError(t, err, "Home directory should exist")
+	assert.True(t, info.IsDir(), "Home directory should be a directory")
+}
+
+// TestObfuscateSensitivePaths_Map tests obfuscation of paths in maps.
+func TestObfuscateSensitivePaths_Map(t *testing.T) {
+	homeDir := "/Users/testuser"
+
+	data := map[string]any{
+		"path":       "/Users/testuser/projects/atmos",
+		"other":      "some value",
+		"number":     42,
+		"nested_dir": "/Users/testuser/.config/atmos.yaml",
+	}
+
+	result := ObfuscateSensitivePaths(data, homeDir)
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok, "Result should be a map")
+
+	assert.Equal(t, "~/projects/atmos", resultMap["path"], "Path should be obfuscated with ~")
+	assert.Equal(t, "some value", resultMap["other"], "Non-path values should be unchanged")
+	assert.Equal(t, 42, resultMap["number"], "Number values should be unchanged")
+	assert.Equal(t, "~/.config/atmos.yaml", resultMap["nested_dir"], "Nested dir path should be obfuscated")
+}
+
+// TestObfuscateSensitivePaths_Slice tests obfuscation of paths in slices.
+func TestObfuscateSensitivePaths_Slice(t *testing.T) {
+	homeDir := "/home/user"
+
+	data := []any{
+		"/home/user/file1.txt",
+		"/home/user/dir/file2.txt",
+		"not a path",
+		123,
+		"/other/path",
+	}
+
+	result := ObfuscateSensitivePaths(data, homeDir)
+
+	resultSlice, ok := result.([]any)
+	require.True(t, ok, "Result should be a slice")
+
+	assert.Equal(t, "~/file1.txt", resultSlice[0], "First path should be obfuscated")
+	assert.Equal(t, "~/dir/file2.txt", resultSlice[1], "Second path should be obfuscated")
+	assert.Equal(t, "not a path", resultSlice[2], "Non-path strings should be unchanged")
+	assert.Equal(t, 123, resultSlice[3], "Numbers should be unchanged")
+	assert.Equal(t, "/other/path", resultSlice[4], "Paths not starting with homeDir should be unchanged")
+}
+
+// TestObfuscateSensitivePaths_Nested tests obfuscation of paths in nested structures.
+func TestObfuscateSensitivePaths_Nested(t *testing.T) {
+	homeDir := "/Users/dev"
+
+	data := map[string]any{
+		"config": map[string]any{
+			"base_path": "/Users/dev/atmos",
+			"files": []any{
+				"/Users/dev/stack1.yaml",
+				"/Users/dev/stack2.yaml",
+			},
+		},
+		"metadata": map[string]any{
+			"author":  "John Doe",
+			"version": 1,
+			"paths": map[string]any{
+				"source": "/Users/dev/src",
+				"build":  "/tmp/build",
+			},
+		},
+	}
+
+	result := ObfuscateSensitivePaths(data, homeDir)
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	config := resultMap["config"].(map[string]any)
+	assert.Equal(t, "~/atmos", config["base_path"])
+
+	files := config["files"].([]any)
+	assert.Equal(t, "~/stack1.yaml", files[0])
+	assert.Equal(t, "~/stack2.yaml", files[1])
+
+	metadata := resultMap["metadata"].(map[string]any)
+	assert.Equal(t, "John Doe", metadata["author"])
+	assert.Equal(t, 1, metadata["version"])
+
+	paths := metadata["paths"].(map[string]any)
+	assert.Equal(t, "~/src", paths["source"])
+	assert.Equal(t, "/tmp/build", paths["build"], "Non-matching paths should be unchanged")
+}
+
+// TestObfuscateSensitivePaths_EmptyHomeDir tests that empty homeDir returns data unchanged.
+func TestObfuscateSensitivePaths_EmptyHomeDir(t *testing.T) {
+	data := map[string]any{
+		"path": "/Users/testuser/projects",
+	}
+
+	result := ObfuscateSensitivePaths(data, "")
+
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok)
+
+	// With empty homeDir, paths should not be changed.
+	assert.Equal(t, "/Users/testuser/projects", resultMap["path"], "Path should be unchanged when homeDir is empty")
+}
+
+// TestObfuscateSensitivePaths_NilData tests that nil data is handled gracefully.
+func TestObfuscateSensitivePaths_NilData(t *testing.T) {
+	result := ObfuscateSensitivePaths(nil, "/Users/test")
+	assert.Nil(t, result, "Nil input should return nil")
+}
+
+// TestObfuscateSensitivePaths_StringInput tests direct string input.
+func TestObfuscateSensitivePaths_StringInput(t *testing.T) {
+	homeDir := "/Users/testuser"
+
+	// String that starts with homeDir.
+	result1 := ObfuscateSensitivePaths("/Users/testuser/file.txt", homeDir)
+	assert.Equal(t, "~/file.txt", result1)
+
+	// String that doesn't start with homeDir.
+	result2 := ObfuscateSensitivePaths("/other/path/file.txt", homeDir)
+	assert.Equal(t, "/other/path/file.txt", result2)
+}
+
+// TestWriteToFileAsYAML tests writing YAML to a file.
+func TestWriteToFileAsYAML(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "test.yaml")
+
+	data := map[string]any{
+		"key":    "value",
+		"number": 42,
+		"nested": map[string]any{
+			"inner": "data",
+		},
+	}
+
+	err := WriteToFileAsYAML(filePath, data, 0o644)
+	require.NoError(t, err)
+
+	// Verify file was created.
+	info, err := os.Stat(filePath)
+	require.NoError(t, err)
+	assert.False(t, info.IsDir())
+
+	// Read and verify content.
+	content, err := os.ReadFile(filePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "key: value")
+	assert.Contains(t, string(content), "number: 42")
+	assert.Contains(t, string(content), "inner: data")
+}
+
+// TestWriteToFileAsYAML_InvalidPath tests writing to an invalid path.
+func TestWriteToFileAsYAML_InvalidPath(t *testing.T) {
+	// Try to write to a non-existent directory.
+	invalidPath := filepath.Join(string(filepath.Separator), "nonexistent", "directory", "that", "does", "not", "exist", "test.yaml")
+
+	data := map[string]any{"key": "value"}
+
+	err := WriteToFileAsYAML(invalidPath, data, 0o644)
+	assert.Error(t, err, "Writing to invalid path should return an error")
+}
+
+// TestWriteToFileAsYAMLWithConfig tests writing YAML with config-based indentation.
+func TestWriteToFileAsYAMLWithConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "config-test.yaml")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				TabWidth: 4,
+			},
+		},
+	}
+
+	data := map[string]any{
+		"key": "value",
+	}
+
+	err := WriteToFileAsYAMLWithConfig(atmosConfig, filePath, data, 0o644)
+	require.NoError(t, err)
+
+	// Verify file was created.
+	_, err = os.Stat(filePath)
+	require.NoError(t, err)
+}
+
+// TestWriteToFileAsYAMLWithConfig_NilConfig tests nil config handling.
+func TestWriteToFileAsYAMLWithConfig_NilConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	filePath := filepath.Join(tempDir, "nil-config-test.yaml")
+
+	data := map[string]any{"key": "value"}
+
+	err := WriteToFileAsYAMLWithConfig(nil, filePath, data, 0o644)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "atmosConfig cannot be nil")
+}
+
+// TestWrapLongStrings tests wrapping of long strings.
+func TestWrapLongStrings(t *testing.T) {
+	// Short string should not be wrapped.
+	shortData := map[string]any{
+		"short": "hello",
+	}
+	result := WrapLongStrings(shortData, 100)
+	resultMap := result.(map[string]any)
+	_, isLongString := resultMap["short"].(LongString)
+	assert.False(t, isLongString, "Short string should not be wrapped")
+
+	// Long string should be wrapped.
+	longString := "This is a very long string that exceeds the maximum length specified for wrapping purposes"
+	longData := map[string]any{
+		"long": longString,
+	}
+	result = WrapLongStrings(longData, 50)
+	resultMap = result.(map[string]any)
+	_, isLongString = resultMap["long"].(LongString)
+	assert.True(t, isLongString, "Long string should be wrapped as LongString")
+}
+
+// TestWrapLongStrings_Nested tests wrapping in nested structures.
+func TestWrapLongStrings_Nested(t *testing.T) {
+	longString := "This is a long string that should be wrapped because it exceeds the max length"
+	data := map[string]any{
+		"short": "hi",
+		"nested": map[string]any{
+			"long": longString,
+		},
+		"list": []any{
+			"short",
+			longString,
+		},
+	}
+
+	result := WrapLongStrings(data, 30)
+	resultMap := result.(map[string]any)
+
+	// Short string should not be wrapped.
+	_, isLongString := resultMap["short"].(LongString)
+	assert.False(t, isLongString)
+
+	// Nested long string should be wrapped.
+	nested := resultMap["nested"].(map[string]any)
+	_, isLongString = nested["long"].(LongString)
+	assert.True(t, isLongString)
+
+	// Long string in list should be wrapped.
+	list := resultMap["list"].([]any)
+	_, isLongString = list[0].(LongString)
+	assert.False(t, isLongString, "Short string in list should not be wrapped")
+	_, isLongString = list[1].(LongString)
+	assert.True(t, isLongString, "Long string in list should be wrapped")
+}
+
+// TestWrapLongStrings_ZeroMaxLength tests that zero maxLength returns data unchanged.
+func TestWrapLongStrings_ZeroMaxLength(t *testing.T) {
+	data := map[string]any{
+		"key": "This is a string that would normally be wrapped",
+	}
+
+	result := WrapLongStrings(data, 0)
+	resultMap := result.(map[string]any)
+
+	_, isLongString := resultMap["key"].(LongString)
+	assert.False(t, isLongString, "With maxLength=0, no wrapping should occur")
+}
+
+// TestWrapLongStrings_MultilineString tests that multiline strings are not wrapped.
+func TestWrapLongStrings_MultilineString(t *testing.T) {
+	multilineString := "Line 1\nLine 2\nLine 3"
+	data := map[string]any{
+		"multiline": multilineString,
+	}
+
+	result := WrapLongStrings(data, 10)
+	resultMap := result.(map[string]any)
+
+	// Multiline strings should not be wrapped even if long.
+	_, isLongString := resultMap["multiline"].(LongString)
+	assert.False(t, isLongString, "Multiline strings should not be wrapped")
+}
+
+// TestLongString_MarshalYAML tests LongString YAML marshaling.
+func TestLongString_MarshalYAML(t *testing.T) {
+	ls := LongString("This is a long string that will be marshaled as a folded scalar")
+
+	node, err := ls.MarshalYAML()
+	require.NoError(t, err)
+
+	// The result should be a yaml.Node with FoldedStyle.
+	require.NotNil(t, node)
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_ProvenanceReparse tests that when a file
+// is first cached without provenance tracking, then requested with provenance enabled,
+// the file is re-parsed to extract position information.
+func TestUnmarshalYAMLFromFileWithPositions_ProvenanceReparse(t *testing.T) {
+	yamlContent := `name: test
+value: 42
+nested:
+  key: value`
+	fileName := "test-provenance-reparse.yaml"
+
+	// Capture old cache state and restore after test.
+	parsedYAMLCacheMu.Lock()
+	oldCache := parsedYAMLCache
+	parsedYAMLCacheMu.Unlock()
+	t.Cleanup(func() {
+		parsedYAMLCacheMu.Lock()
+		parsedYAMLCache = oldCache
+		parsedYAMLCacheMu.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	parsedYAMLCacheMu.Lock()
+	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu.Unlock()
+
+	// First parse WITHOUT provenance tracking.
+	configNoProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: false,
+	}
+
+	result1, positions1, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configNoProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	assert.Equal(t, "test", result1["name"])
+
+	// Positions should be empty when provenance is disabled.
+	assert.Empty(t, positions1, "Positions should be empty when provenance is disabled")
+
+	// Second parse WITH provenance tracking - should re-parse to get positions.
+	configWithProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: true,
+	}
+
+	result2, positions2, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.Equal(t, "test", result2["name"])
+
+	// Positions should now be populated.
+	assert.NotEmpty(t, positions2, "Positions should be populated when provenance is enabled and file is re-parsed")
+
+	// Verify positions contain expected keys.
+	assert.Contains(t, positions2, "name", "Positions should contain 'name' key")
+	assert.Contains(t, positions2, "value", "Positions should contain 'value' key")
+	assert.Contains(t, positions2, "nested", "Positions should contain 'nested' key")
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError tests that nil atmosConfig
+// returns an error (by design - config is required).
+func TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError(t *testing.T) {
+	yamlContent := `name: test`
+	fileName := "test-nil-config-error.yaml"
+
+	// Call with nil config - should return error (not panic).
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](nil, yamlContent, fileName)
+	require.Error(t, err, "Nil config should return an error")
+	assert.Contains(t, err.Error(), "nil", "Error should mention nil config")
+}
+
+// TestHandleCacheMiss_NilConfigSafe tests that handleCacheMiss handles nil atmosConfig safely.
+// This tests the nil checks we added to prevent panics.
+func TestHandleCacheMiss_NilConfigSafe(t *testing.T) {
+	// Capture old cache state and restore after test.
+	parsedYAMLCacheMu.Lock()
+	oldCache := parsedYAMLCache
+	parsedYAMLCacheMu.Unlock()
+	t.Cleanup(func() {
+		parsedYAMLCacheMu.Lock()
+		parsedYAMLCache = oldCache
+		parsedYAMLCacheMu.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	parsedYAMLCacheMu.Lock()
+	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu.Unlock()
+
+	yamlContent := `name: test`
+
+	// Call handleCacheMiss with nil config - should NOT panic.
+	// This tests the nil check we added in parseAndCacheYAML.
+	node, positions, err := handleCacheMiss(nil, "test-file.yaml", yamlContent)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+
+	// Positions should be empty since config is nil (TrackProvenance defaults to false).
+	assert.Empty(t, positions, "Positions should be empty when config is nil")
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance tests that
+// a cache hit with provenance already populated doesn't re-parse.
+func TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance(t *testing.T) {
+	yamlContent := `name: cached
+value: 123`
+	fileName := "test-cache-hit-provenance.yaml"
+
+	// Capture old cache state and restore after test.
+	// Note: Only capture values, not the struct containing the mutex.
+	parsedYAMLCacheMu.Lock()
+	oldCache := parsedYAMLCache
+	parsedYAMLCacheMu.Unlock()
+	parsedYAMLCacheStats.Lock()
+	oldHits := parsedYAMLCacheStats.hits
+	oldMisses := parsedYAMLCacheStats.misses
+	parsedYAMLCacheStats.Unlock()
+	t.Cleanup(func() {
+		parsedYAMLCacheMu.Lock()
+		parsedYAMLCache = oldCache
+		parsedYAMLCacheMu.Unlock()
+		parsedYAMLCacheStats.Lock()
+		parsedYAMLCacheStats.hits = oldHits
+		parsedYAMLCacheStats.misses = oldMisses
+		parsedYAMLCacheStats.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	parsedYAMLCacheMu.Lock()
+	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu.Unlock()
+
+	// Reset stats.
+	parsedYAMLCacheStats.Lock()
+	parsedYAMLCacheStats.hits = 0
+	parsedYAMLCacheStats.misses = 0
+	parsedYAMLCacheStats.Unlock()
+
+	// First parse WITH provenance tracking.
+	configWithProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: true,
+	}
+
+	result1, positions1, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	assert.NotEmpty(t, positions1, "First call should have positions")
+
+	// Get cache stats before second call.
+	parsedYAMLCacheStats.RLock()
+	hitsBefore := parsedYAMLCacheStats.hits
+	parsedYAMLCacheStats.RUnlock()
+
+	// Second parse WITH provenance - should be a cache HIT (not re-parsed).
+	result2, positions2, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.NotEmpty(t, positions2, "Second call should also have positions")
+
+	// Get cache stats after second call.
+	parsedYAMLCacheStats.RLock()
+	hitsAfter := parsedYAMLCacheStats.hits
+	parsedYAMLCacheStats.RUnlock()
+
+	// Verify cache hit (hits should increase).
+	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
 }

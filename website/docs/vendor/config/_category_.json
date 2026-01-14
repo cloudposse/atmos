@@ -1,0 +1,9 @@
+{
+  "label": "Vendor Configuration",
+  "position": 2,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "vendor/config/index"
+  }
+}

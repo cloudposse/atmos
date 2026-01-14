@@ -3,11 +3,16 @@ title: "atmos list workflows"
 id: "list-workflows"
 sidebar_label: workflows
 sidebar_class_name: command
+description: Use this command to list all workflows defined in your Atmos project
 ---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
 
-# atmos list workflows
+<Intro>
+Use this command to list all workflows defined in your project's workflow manifests. View workflow names, descriptions, and source files to discover automation available for your infrastructure.
+</Intro>
 
-The `atmos list workflows` command displays all Atmos workflows defined in your project.
+<Screengrab title="atmos list workflows --help" slug="atmos-list-workflows--help" />
 
 ## Usage
 
@@ -33,9 +38,13 @@ This command is useful for:
   <dt>`--file, -f string`</dt>
   <dd>Filter workflows by file (e.g., `atmos list workflows -f workflow1`)</dd>
   <dt>`--format string`</dt>
-  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`)</dd>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`. Overrides `workflows.list.format` configuration in atmos.yaml (default: `table`)</dd>
   <dt>`--delimiter string`</dt>
   <dd>Delimiter for csv/tsv output (default: `\t`)</dd>
+  <dt>`--columns string`</dt>
+  <dd>Columns to display (comma-separated). Overrides `workflows.list.columns` configuration in atmos.yaml</dd>
+  <dt>`--sort string`</dt>
+  <dd>Sort by column:order (e.g., `name:asc,file:desc`)</dd>
 </dl>
 
 ## Examples
@@ -90,42 +99,83 @@ atmos list workflows --format csv --delimiter ','
 :::
 
 
-## Examples
+## Configuration
 
-### Custom Columns for Workflows
+You can customize the default output format and columns displayed by `atmos list workflows` in your `atmos.yaml`:
 
-This configuration customizes the output of `atmos list workflows`:
+### Default Format
 
 ```yaml
-# In atmos.yaml
+# atmos.yaml
+workflows:
+  list:
+    format: table  # Default format: table, json, yaml, csv, tsv
+```
+
+**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+
+### Custom Columns
+
+```yaml
+# atmos.yaml
+workflows:
+  list:
+    format: table
+    columns:
+      - name: Workflow
+        value: "{{ .name }}"
+      - name: File
+        value: "{{ .file }}"
+      - name: Description
+        value: "{{ .description }}"
+      - name: Steps
+        value: "{{ .steps | len }} steps"
+```
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.name` - Workflow name
+- `.file` - Workflow definition file path
+- `.description` - Workflow description
+- `.steps` - Array of workflow steps
+- `.stack` - Stack name (if workflow is stack-specific)
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
 workflows:
   list:
     columns:
-      - name: Workflow
-        value: "{{ .workflow_name }}"
-      - name: Definition File
-        value: "{{ .workflow_file }}"
-      - name: Description
-        value: "{{ .workflow_description }}"
+      - name: Workflow (Upper)
+        value: "{{ .name | upper }}"
+      - name: Short File
+        value: "{{ .file | truncate 30 }}"
+      - name: Step Count
+        value: "{{ .steps | len }}"
+      - name: Has Description
+        value: "{{ if .description }}Yes{{ else }}No{{ end }}"
 ```
-Running `atmos list workflows` will display these columns.
 
-## Examples
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `join` - Join array elements with delimiter
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
 
-### Custom Columns for Workflows
+### Override Columns via CLI
 
-This configuration customizes the output of `atmos list workflows`:
+Override configured columns using the `--columns` flag:
 
-```yaml
-# In atmos.yaml
-workflows:
-  list:
-    columns:
-      - name: Workflow
-        value: "{{ .workflow_name }}"
-      - name: Definition File
-        value: "{{ .workflow_file }}"
-      - name: Description
-        value: "{{ .workflow_description }}"
+```shell
+# Display only name and file columns
+atmos list workflows --columns name,file
+
+# Display custom subset
+atmos list workflows --columns "name,file,description"
 ```
-Running `atmos list workflows` will display these columns.

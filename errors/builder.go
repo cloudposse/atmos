@@ -10,16 +10,30 @@ import (
 
 // ErrorBuilder provides a fluent API for constructing enriched errors.
 type ErrorBuilder struct {
-	err      error
-	title    *string
-	hints    []string
-	context  map[string]interface{}
-	exitCode *int
+	err       error
+	title     *string
+	hints     []string
+	context   map[string]interface{}
+	exitCode  *int
+	sentinels []error // Sentinel errors to mark with errors.Mark()
 }
 
 // Build creates a new ErrorBuilder from a base error.
+// If the error is a sentinel error (simple errors.New() with no wrapping),
+// If the provided error is non-nil and has no wrapped cause, it is recorded as a sentinel so it will be considered by errors.Is checks.
 func Build(err error) *ErrorBuilder {
-	return &ErrorBuilder{err: err}
+	builder := &ErrorBuilder{err: err}
+
+	// If this looks like a sentinel error (simple error with no cause),
+	// automatically mark it as a sentinel for errors.Is() checks.
+	if err != nil && errors.UnwrapOnce(err) == nil {
+		// This is a leaf error (no wrapped cause), likely a sentinel.
+		// Check if it's one of our package-level sentinels by comparing the error text.
+		// We'll mark it automatically so errors.Is() works.
+		builder.sentinels = append(builder.sentinels, err)
+	}
+
+	return builder
 }
 
 // WithHint adds a user-facing hint to the error.
@@ -64,7 +78,7 @@ func (b *ErrorBuilder) WithExample(example string) *ErrorBuilder {
 
 // WithContext adds safe structured context to the error.
 // This is PII-safe and will be included in error reporting.
-// Context is displayed in verbose mode and sent to Sentry.
+// Context is displayed only in verbose mode (--verbose flag) and sent to Sentry.
 func (b *ErrorBuilder) WithContext(key string, value interface{}) *ErrorBuilder {
 	if b.context == nil {
 		b.context = make(map[string]interface{})
@@ -84,6 +98,31 @@ func (b *ErrorBuilder) WithTitle(title string) *ErrorBuilder {
 // WithExitCode attaches an exit code to the error.
 func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 	b.exitCode = &code
+	return b
+}
+
+// WithCause wraps the builder's error with an underlying cause error.
+// This preserves the original error message while allowing errors.Is() to match the sentinel.
+// The resulting error will match both the sentinel (passed to Build) and the cause.
+//
+// Example:
+//
+//	err := runtime.Start(ctx, containerID) // returns "container already running"
+//	return errUtils.Build(errUtils.ErrContainerRuntimeOperation).
+//	    WithCause(err).
+//	    WithExplanation("Failed to start container").
+//	    Err()
+//
+// This creates an error chain where:
+//   - errors.Is(result, ErrContainerRuntimeOperation) returns true
+//   - errors.Is(result, err) returns true
+//   - Error message includes "container already running"
+func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
+	if cause != nil {
+		// Wrap sentinel with the actual cause using double %w.
+		// This ensures both errors are in the chain for errors.Is() checks.
+		b.err = fmt.Errorf("%w: %w", b.err, cause)
+	}
 	return b
 }
 
@@ -124,6 +163,12 @@ func (b *ErrorBuilder) Err() error {
 		}
 
 		err = errors.WithSafeDetails(err, strings.Join(formatParts, " "), safeValues...)
+	}
+
+	// Mark with sentinel errors for errors.Is() checks.
+	// This must be done AFTER all other wrapping to ensure sentinels are at the top level.
+	for _, sentinel := range b.sentinels {
+		err = errors.Mark(err, sentinel)
 	}
 
 	// Add exit code if specified.

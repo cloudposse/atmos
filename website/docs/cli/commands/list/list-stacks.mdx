@@ -3,14 +3,14 @@ title: atmos list stacks
 sidebar_label: stacks
 sidebar_class_name: command
 id: stacks
-description: Use this command to list all Stack configurations or a stack of a specified component.
+description: Use this command to list all Stack configurations or stacks for a specified component
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Use this command to list Atmos stacks.
+Use this command to list all stacks in your Atmos configuration, optionally filtering by component. View stacks in multiple formats including tables, JSON, YAML, or hierarchical trees with import provenance to understand configuration inheritance.
 </Intro>
 
 <Screengrab title="atmos list stacks --help" slug="atmos-list-stacks--help" />
@@ -35,32 +35,228 @@ Run `atmos list stacks --help` to see all the available options
 
 ## Examples
 
+List all stacks:
 ```shell
 atmos list stacks
+```
+
+List stacks for a specific component:
+```shell
 atmos list stacks -c vpc
+atmos list stacks --component eks
 ```
 
-### Customizing Output Columns
+Output in different formats:
+```shell
+# JSON format
+atmos list stacks --format json
 
-This configuration customizes the output of `atmos list stacks`:
+# YAML format
+atmos list stacks --format yaml
 
-```yaml
-# In atmos.yaml
-stacks:
-  list:
-    format: table
-    columns:
-      - name: Stack Name
-        value: "{{ .stack_name }}"
-      - name: Configuration Path
-        value: "{{ .stack_path }}"
+# CSV format
+atmos list stacks --format csv
 ```
 
-When you run `atmos list stacks`, the output table will have columns titled "Stack Name" and "Configuration Path".
+Sort stacks:
+```shell
+# Sort by stack name ascending
+atmos list stacks --sort stack:asc
+
+# Sort by component name descending
+atmos list stacks --component vpc --sort component:desc
+```
+
+Custom columns:
+```shell
+# Simple field names (auto-generates templates)
+atmos list stacks --columns stack
+
+# Named columns with custom templates
+atmos list stacks --columns "Name={{ .stack }}"
+
+# When filtering by component, show both stack and component
+atmos list stacks --component vpc --columns stack,component
+```
+
+View stacks in tree format:
+```shell
+# Tree view without import details
+atmos list stacks --format tree
+
+# Tree view with import provenance (shows inheritance chain)
+atmos list stacks --format tree --provenance
+
+# Tree view with provenance for a specific component
+atmos list stacks --component vpc --format tree --provenance
+```
 
 ## Flags
 
 <dl>
-  <dt>`--component` / `-c` <em>(optional)</em></dt>
-  <dd>Atmos component.</dd>
+  <dt>`--component` / `-c`</dt>
+  <dd>Filter stacks by component name.<br/>Environment variable: `ATMOS_COMPONENT`</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv`, `tree`. Overrides `stacks.list.format` configuration in atmos.yaml (default: `table`).<br/>Environment variable: `ATMOS_LIST_FORMAT`</dd>
+
+  <dt>`--columns`</dt>
+  <dd>Columns to display. Supports simple field names (e.g., `stack`), named columns with templates (e.g., `"Name={{ .stack }}"`), or named with field reference (e.g., `"MyStack=stack"`). Overrides `stacks.list.columns` configuration in atmos.yaml. Environment variable: `ATMOS_LIST_COLUMNS`</dd>
+
+  <dt>`--sort`</dt>
+  <dd>Sort by column:order (e.g., `stack:asc,component:desc`). Multiple sort columns separated by comma.<br/>Environment variable: `ATMOS_LIST_SORT`</dd>
+
+  <dt>`--provenance`</dt>
+  <dd>Show import provenance in tree format. Only works with `--format=tree`. Displays the import hierarchy showing which files each stack inherits from.<br/>Environment variable: `ATMOS_PROVENANCE`</dd>
+
+  <dt>`--identity` / `-i` <em>(optional)</em></dt>
+  <dd>Authenticate with a specific identity before listing stacks.<br/>This is required when stack configurations use YAML template functions<br/>(e.g., `!terraform.state`, `!terraform.output`) that require authentication.<br/>`atmos list stacks --identity my-aws-identity`<br/><br/>Environment variable: `ATMOS_IDENTITY`</dd>
 </dl>
+
+## Tree Format with Import Provenance
+
+The `tree` format provides a hierarchical view of your stacks. When combined with the `--provenance` flag, it shows the complete import chain for each stack, making it easy to understand configuration inheritance.
+
+### Tree Format Structure
+
+The tree format displays:
+- **Stack names** as top-level nodes
+- **Import hierarchy** (when `--provenance` is enabled) showing the chain of stack configuration files that each stack imports
+
+### Import Provenance
+
+When you enable `--provenance`, each stack shows its import chain - the sequence of stack configuration files it inherits from. This is particularly useful for:
+
+- **Debugging configuration** - See exactly where each stack's configuration comes from
+- **Understanding inheritance** - Visualize the complete import chain
+- **Auditing changes** - Track which base configurations affect which stacks
+- **Documentation** - Generate visual representations of stack dependencies
+
+Example tree output with provenance:
+```
+Stacks
+│
+├── tenant1-ue2-dev
+│   ├── stacks/tenant1/ue2/dev
+│   ├── stacks/tenant1/ue2/_defaults
+│   ├── stacks/tenant1/_defaults
+│   └── stacks/_defaults
+│
+├── tenant1-ue2-staging
+│   ├── stacks/tenant1/ue2/staging
+│   ├── stacks/tenant1/ue2/_defaults
+│   ├── stacks/tenant1/_defaults
+│   └── stacks/_defaults
+```
+
+The import chain is shown from most specific (top) to most general (bottom), reflecting how Atmos merges configurations.
+
+When used with `--component`, the tree shows only stacks that contain the specified component:
+
+```shell
+atmos list stacks --component vpc --format tree --provenance
+```
+
+This filters the output to show only stacks where the `vpc` component is defined, along with their import chains.
+
+## Configuration
+
+You can customize the default output format and columns displayed by `atmos list stacks` in your `atmos.yaml`:
+
+### Default Format
+
+```yaml
+# atmos.yaml
+stacks:
+  list:
+    format: tree  # Default format: table, json, yaml, csv, tsv, tree
+```
+
+**Precedence**: CLI `--format` flag > Config file > Environment variable `ATMOS_LIST_FORMAT` > Default (`table`)
+
+### Custom Columns
+
+```yaml
+# atmos.yaml
+stacks:
+  list:
+    format: table
+    columns:
+      - name: Stack
+        value: "{{ .stack }}"
+      - name: Components
+        value: "{{ .components | len }} components"
+      - name: File
+        value: "{{ .file }}"
+```
+
+:::note
+Column configuration for stacks is under the `stacks.list.columns` section in atmos.yaml, not `components.list.columns`.
+:::
+
+### Available Template Fields
+
+Column `value` fields support Go template syntax with access to:
+
+- `.stack` - Stack name
+- `.components` - Array of components in the stack
+- `.file` - Stack configuration file path
+- `.vars` - Stack-level variables (if available)
+
+### Template Functions
+
+Columns support template functions for data transformation:
+
+```yaml
+stacks:
+  list:
+    columns:
+      - name: Stack (Upper)
+        value: "{{ .stack | upper }}"
+      - name: Component Count
+        value: "{{ .components | len }}"
+      - name: Short File
+        value: "{{ .file | truncate 40 }}"
+```
+
+Available functions:
+- `upper`, `lower` - String case conversion
+- `truncate` - Truncate string with ellipsis
+- `len` - Length of arrays/strings
+- `join` - Join array elements with delimiter
+- `toString` - Convert value to string
+- `ternary` - Conditional expression
+
+### Override Columns via CLI
+
+Override configured columns using the `--columns` flag. The flag supports multiple formats:
+
+**Simple field names** (auto-generates templates and title-case names):
+```shell
+# Display only stack column
+atmos list stacks --columns stack
+
+# When filtering by component, show both
+atmos list stacks --component vpc --columns stack,component
+```
+
+**Named columns with templates** (full control over display name and value):
+```shell
+# Custom column names with templates
+atmos list stacks --columns "StackName={{ .stack }}"
+
+# Multiple named columns
+atmos list stacks --columns "Name={{ .stack }},Components={{ .components | len }}"
+```
+
+**Named columns with field reference** (auto-wraps field in template):
+```shell
+# Shorthand: Name=field becomes Name={{ .field }}
+atmos list stacks --columns "MyStack=stack"
+```
+
+## Related Commands
+
+- [`atmos list components`](/cli/commands/list/components) - List all components
+- [`atmos list instances`](/cli/commands/list/list-instances) - List all component instances across stacks
+- [`atmos describe stacks`](/cli/commands/describe/stacks) - Get detailed stack configuration

@@ -1,0 +1,208 @@
+---
+slug: automatic-backend-provisioning
+title: "Solving the Terraform Bootstrap Problem with Automatic Backend Provisioning"
+authors: [osterman]
+tags: [feature, dx]
+---
+
+We're excited to introduce **automatic backend provisioning** in Atmos, a feature that solves the Terraform bootstrap problem. No more manual S3 bucket creation, no more chicken-and-egg workarounds—Atmos provisions your state backend automatically with secure defaults, making it fully compatible with Terraform-managed infrastructure.
+
+<!--truncate-->
+
+## The Problem: State Backend Bootstrapping
+
+Every Terraform project faces the same bootstrapping challenge: before you can manage infrastructure, you need somewhere to store your state. The typical workflow looks like this:
+
+1. Manually create an S3 bucket via AWS Console or CLI
+2. Configure bucket versioning, encryption, and public access blocking
+3. Set up DynamoDB table for state locking (optional with Terraform 1.10+)
+4. Finally, start using Terraform
+
+This creates friction for new projects, complicates CI/CD pipelines, and introduces manual steps that conflict with infrastructure-as-code principles.
+
+## The Solution: Automatic Provisioning
+
+Atmos now provisions backends automatically when needed. Just enable it in your stack configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      backend_type: s3  # Must be at component level
+
+      backend:
+        bucket: my-terraform-state
+        key: vpc/terraform.tfstate
+        region: us-east-1
+
+      provision:
+        backend:
+          enabled: true  # That's it!
+```
+
+When you run `atmos terraform plan vpc -s dev`, Atmos:
+
+1. **Checks** if the backend exists
+2. **Provisions** it if needed (with secure defaults)
+3. **Initializes** Terraform
+4. **Continues** with your command
+
+All automatically. No manual intervention required.
+
+## Configuration Flexibility
+
+The `provision.backend` configuration works with Atmos's inheritance system, allowing you to set defaults at any level (organization, environment, component) and override when needed.
+
+## Secure by Default
+
+The S3 backend provisioner applies hardcoded security best practices:
+
+- ✅ **Versioning enabled** - Protect against accidental deletions
+- ✅ **AES-256 encryption** - AWS-managed keys, always enabled
+- ✅ **Public access blocked** - All four block settings enabled
+- ✅ **Native S3 locking** - Terraform 1.10+ support (no DynamoDB needed)
+- ✅ **Resource tags** - Automatic tagging for cost allocation
+
+These settings aren't configurable—they're opinionated defaults that follow AWS security best practices.
+
+## Solves the Terraform Bootstrap Problem
+
+Automatic provisioning is **fully compatible with Terraform-managed backends**. In fact, it solves a classic chicken-and-egg problem: "How do I manage my state backend with Terraform when I need that backend to exist before Terraform can run?"
+
+**The traditional workaround:**
+1. Use local state temporarily
+2. Create S3 bucket with Terraform using local state
+3. Switch backend configuration to S3
+4. Import the bucket into the S3-backed state
+5. Delete local state files
+
+**With Atmos automatic provisioning:**
+1. Enable `provision.backend.enabled: true`
+2. Run `atmos terraform plan` - bucket auto-created with secure defaults
+3. Import the bucket into Terraform (no local state dance needed)
+4. Done - everything managed by Terraform
+
+**Import the provisioned backend:**
+
+```hcl
+import {
+  to = aws_s3_bucket.terraform_state
+  id = "my-terraform-state"
+}
+
+resource "aws_s3_bucket" "terraform_state" {
+  bucket = "my-terraform-state"
+}
+
+# Add any additional configuration
+resource "aws_s3_bucket_lifecycle_configuration" "terraform_state" {
+  bucket = aws_s3_bucket.terraform_state.id
+
+  rule {
+    id     = "delete-old-versions"
+    status = "Enabled"
+
+    noncurrent_version_expiration {
+      noncurrent_days = 90
+    }
+  }
+}
+```
+
+This **eliminates the bootstrap hack** and makes it easier to manage everything with Terraform, not harder. The provisioner creates standard AWS resources that Terraform can import and manage - no special handling required.
+
+**Note:** You can leave `provision.backend.enabled: true` even after importing to Terraform. The provisioner is idempotent - it will detect the bucket exists and skip creation, causing no conflicts with Terraform management.
+
+## Cross-Account Support
+
+Provisioners integrate with Atmos AuthManager for cross-account operations:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      backend_type: s3  # Must be at component level
+
+      backend:
+        bucket: my-terraform-state
+        region: us-east-1
+        assume_role:
+          role_arn: arn:aws:iam::999999999999:role/TerraformStateAdmin
+
+      provision:
+        backend:
+          enabled: true
+```
+
+The provisioner automatically assumes the role to create the bucket in the target account.
+
+## CLI Command
+
+For manual provisioning or CI/CD pipelines, use the `atmos terraform backend` command:
+
+```bash
+# Provision backend explicitly
+atmos terraform backend create vpc --stack dev
+
+# Automatic in CI/CD
+atmos terraform backend create vpc --stack dev
+atmos terraform backend create eks --stack dev
+atmos terraform apply vpc --stack dev  # Only runs if provisioning succeeded
+```
+
+Provisioning failures return non-zero exit codes, ensuring CI/CD pipelines fail fast.
+
+## Extensible Architecture
+
+The provisioner system is built on a **self-registering architecture** that makes it easy to add support for additional backend types and provisioner types in the future
+
+Backend provisioners register themselves and declare when they should run via hook events:
+
+```go
+// Register S3 backend provisioner
+provisioner.RegisterProvisioner(provisioner.Provisioner{
+    Type:      "backend",
+    HookEvent: "before.terraform.init",
+    Func:      ProvisionS3Backend,
+})
+```
+
+## Getting Started
+
+Enable automatic backend provisioning in your stack configuration:
+
+```yaml
+# stacks/dev.yaml
+components:
+  terraform:
+    vpc:
+      backend_type: s3  # Must be at component level
+
+      backend:
+        bucket: acme-terraform-state-dev
+        key: vpc/terraform.tfstate
+        region: us-east-1
+
+      provision:
+        backend:
+          enabled: true
+```
+
+Then run your Terraform commands as usual:
+
+```bash
+atmos terraform plan vpc -s dev
+# Backend provisioned automatically if needed
+```
+
+For more information:
+- [CLI Documentation](/cli/commands/terraform/terraform-backend)
+- [Backend Configuration](/components/terraform/backends)
+
+## Community Feedback
+
+We'd love to hear how you're using automatic backend provisioning! Share your experience in [GitHub Discussions](https://github.com/cloudposse/atmos/discussions) or report any issues in our [issue tracker](https://github.com/cloudposse/atmos/issues).
+
+---
+
+**Try it today** and simplify your Terraform state management workflow!

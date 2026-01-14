@@ -13,6 +13,18 @@
     border: 1px solid #67ffded2;
 }
 
+[data-theme='dark'] .key-points strong {
+    color: inherit;
+}
+
+[data-theme='dark'] .key-points a {
+    color: inherit;
+}
+
+.key-points a {
+    color: inherit;
+}
+
 .key-points h2 {
   margin-top: 0; /* Remove top margin */
   font-size: 1.5em; /* Adjust font size */

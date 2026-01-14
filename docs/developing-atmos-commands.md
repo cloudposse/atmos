@@ -67,6 +67,10 @@ func (m *MyCommandProvider) GetName() string {
 func (m *MyCommandProvider) GetGroup() string {
     return "Other Commands" // See "Command Groups" section
 }
+
+func (m *MyCommandProvider) GetAliases() []internal.CommandAlias {
+    return nil // No aliases (see "Adding Command Aliases" section)
+}
 ```
 
 **Step 3: Add the business logic**
@@ -450,6 +454,135 @@ Use these standard groups for `GetGroup()`:
 
 ---
 
+## Adding Command Aliases
+
+Command aliases allow your command to be accessible under different parent commands, improving discoverability without code duplication.
+
+### When to Use Aliases
+
+Use aliases when:
+- **Improved UX**: A command makes more sense under multiple parents (e.g., `profile list` and `list profiles`)
+- **Discoverability**: Users might naturally look for a command in different locations
+- **Grouping**: Want to group related operations (e.g., all list operations under `atmos list`)
+- **Migration**: Maintaining backwards compatibility while reorganizing commands
+
+### How to Add an Alias
+
+Implement the `GetAliases()` method in your CommandProvider:
+
+```go
+// cmd/profile/profile.go
+package profile
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/cloudposse/atmos/cmd/internal"
+)
+
+type ProfileCommandProvider struct{}
+
+func (p *ProfileCommandProvider) GetCommand() *cobra.Command {
+    return profileCmd
+}
+
+func (p *ProfileCommandProvider) GetName() string {
+    return "profile"
+}
+
+func (p *ProfileCommandProvider) GetGroup() string {
+    return "Configuration Management"
+}
+
+// GetAliases creates "atmos list profiles" as an alias for "atmos profile list".
+func (p *ProfileCommandProvider) GetAliases() []internal.CommandAlias {
+    return []internal.CommandAlias{
+        {
+            Subcommand:    "list",           // Which subcommand to alias
+            ParentCommand: "list",           // Under which parent
+            Name:          "profiles",       // Alias name
+            Short:         "List available configuration profiles",
+            Long:          `This is an alias for "atmos profile list".`,
+            Example: `# List all available profiles
+atmos list profiles
+
+# List profiles in JSON format
+atmos list profiles --format json`,
+        },
+    }
+}
+```
+
+### Alias Configuration Fields
+
+| Field | Description | Example |
+|-------|-------------|---------|
+| `Subcommand` | Name of subcommand to alias (empty string for parent) | `"list"` |
+| `ParentCommand` | Parent command to add alias under | `"list"` |
+| `Name` | Alias command name | `"profiles"` |
+| `Short` | Short description | `"List available configuration profiles"` |
+| `Long` | Detailed description | `This is an alias for "atmos profile list".` |
+| `Example` | Usage examples | Multi-line example string |
+
+### How Aliases Work
+
+Aliases provide **true delegation** to the source command:
+
+1. **Flag Sharing**: Uses `AddFlag` to share the same flag instance
+   - Flag values set on alias are visible to source's RunE function
+   - No manual flag copying needed
+   - Validation happens naturally through shared state
+
+2. **Execution Delegation**:
+   - **Args**: Same argument validation
+   - **RunE**: Executes same business logic
+   - **Completion**: Same shell completion
+
+3. **No Code Duplication**:
+   - All logic stays in source command
+   - Changes to source automatically apply to aliases
+
+### Examples
+
+**Aliasing a Subcommand:**
+```go
+// Makes "atmos list profiles" an alias for "atmos profile list"
+{
+    Subcommand:    "list",
+    ParentCommand: "list",
+    Name:          "profiles",
+    Short:         "List available configuration profiles",
+}
+```
+
+**Aliasing a Parent Command:**
+```go
+// Makes "atmos help" an alias for "atmos about"
+{
+    Subcommand:    "",  // Empty = alias the parent command itself
+    ParentCommand: "help",
+    Name:          "about",
+    Short:         "Show information about Atmos",
+}
+```
+
+**No Aliases:**
+```go
+// Most commands don't need aliases
+func (m *MyCommandProvider) GetAliases() []internal.CommandAlias {
+    return nil
+}
+```
+
+### Best Practices for Aliases
+
+- **Clear documentation**: Always indicate it's an alias in Long description
+- **Consistent naming**: Use plural for collections (`profiles`, `stacks`)
+- **Limit aliases**: Don't create too many paths to the same command
+- **Test both paths**: Ensure both source and alias work identically
+- **Update examples**: Include examples for the alias command
+
+---
+
 ## Best Practices
 
 ### 1. Command Naming
@@ -578,12 +711,14 @@ commands:
 
 - [ ] Create package directory: `cmd/[command]/`
 - [ ] Implement command with RunE function
-- [ ] Implement CommandProvider interface
+- [ ] Implement CommandProvider interface (including `GetAliases()`)
 - [ ] Register with `internal.Register()`
 - [ ] Add blank import to `cmd/root.go`
 - [ ] Add business logic to `internal/exec/`
+- [ ] Add command aliases if needed (see "Adding Command Aliases" section)
 - [ ] Write unit tests
 - [ ] Write integration tests (in `tests/`)
+- [ ] Test aliases if added (verify both source and alias paths work)
 - [ ] Add Docusaurus documentation in `website/docs/cli/commands/`
 - [ ] Build website to verify docs: `cd website && npm run build`
 - [ ] Test with custom commands from `atmos.yaml`
@@ -657,9 +792,188 @@ See these commands for reference:
 
 ---
 
+## Interactive Prompts (Recommended)
+
+**We recommend using interactive prompts** to make commands more user-friendly. Similar to shell autocomplete, prompts help users discover available options without memorizing values or checking documentation.
+
+Atmos provides built-in interactive selection menus for missing required flags and positional arguments using the Charmbracelet Huh library. This creates a better user experience by:
+
+- **Reducing cognitive load** - Users don't need to remember exact names
+- **Preventing typos** - Selection from a list eliminates spelling errors
+- **Improving discoverability** - Users see what options are available
+- **Graceful degradation** - Automatically disabled in CI/non-TTY environments
+
+Prompts automatically appear when:
+
+1. **TTY is available** (stdin is a terminal)
+2. **Not running in CI** (detected automatically)
+3. **`--interactive` flag is true** (default: `true`, can be disabled with `--interactive=false` or `ATMOS_INTERACTIVE=false`)
+
+When disabled or unavailable, commands fall back to standard validation errors with helpful hints.
+
+### Use Case 1: Missing Required Positional Arguments
+
+When a command has a required positional argument with completion options, you can configure an interactive prompt:
+
+```go
+// cmd/theme/show.go
+func init() {
+    // Build positional args with prompt
+    builder := flags.NewPositionalArgsBuilder()
+    builder.AddArg(&flags.PositionalArgSpec{
+        Name:           "theme-name",
+        Description:    "Theme name to preview",
+        Required:       true,
+        TargetField:    "ThemeName",
+        CompletionFunc: ThemesArgCompletion,  // Provides options
+    })
+    specs, validator, usage := builder.Build()
+
+    // Create parser with interactive prompt
+    themeShowParser = flags.NewStandardFlagParser(
+        flags.WithPositionalArgPrompt(
+            "theme-name",                      // Arg name
+            "Choose a theme to preview",       // Prompt title
+            ThemesArgCompletion,               // Completion function
+        ),
+    )
+
+    // Set positional args
+    themeShowParser.SetPositionalArgs(specs, validator, usage)
+    themeShowCmd.Use = "show " + usage
+
+    // Register flags (sets prompt-aware validator)
+    themeShowParser.RegisterFlags(themeShowCmd)
+}
+```
+
+**Behavior:**
+- `atmos theme show` → Shows interactive selector
+- `atmos theme show dracula` → Uses provided value directly
+- `atmos theme show --interactive=false` → Shows error if missing
+
+### Use Case 2: Optional Value Flags (Sentinel Pattern)
+
+For flags like `--identity` that can be provided with or without a value:
+
+```go
+parser := flags.NewStandardFlagParser(
+    flags.WithStringFlag("identity", "i", "", "Identity name (use --identity to select interactively)"),
+    flags.WithNoOptDefVal("identity", cfg.IdentityFlagSelectValue),  // Sentinel value
+    flags.WithOptionalValuePrompt(
+        "identity",
+        "Choose an identity",
+        IdentitiesCompletion,  // Function that returns available identities
+    ),
+)
+```
+
+**Behavior:**
+- `atmos cmd --identity` → Shows interactive selector (flag set to sentinel)
+- `atmos cmd --identity=admin` → Uses "admin" directly
+- `atmos cmd` → Uses empty/default value
+
+### Use Case 3: Missing Required Flags
+
+For required flags with completion options:
+
+```go
+parser := flags.NewStandardFlagParser(
+    flags.WithStackFlag(true),  // Required
+    flags.WithCompletionPrompt(
+        "stack",
+        "Choose a stack",
+        StacksCompletion,  // Function that returns available stacks
+    ),
+)
+```
+
+**Behavior:**
+- `atmos cmd` → Shows interactive selector if no stack provided
+- `atmos cmd --stack=prod` → Uses provided value directly
+- `ATMOS_STACK=prod atmos cmd` → Uses environment variable
+
+### Completion Functions
+
+Completion functions must match the `CompletionFunc` signature:
+
+```go
+type CompletionFunc func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective)
+```
+
+**Example:**
+```go
+func ThemesArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+    themes := theme.GetRegisteredThemeNames()
+    return themes, cobra.ShellCompDirectiveNoFileComp
+}
+```
+
+### Disabling Interactive Mode
+
+Users can disable interactive prompts:
+
+**Via flag:**
+```bash
+atmos theme show --interactive=false
+```
+
+**Via environment variable:**
+```bash
+ATMOS_INTERACTIVE=false atmos theme show
+```
+
+**In configuration:**
+```yaml
+# atmos.yaml
+interactive: false
+```
+
+### Error Handling
+
+When users abort a prompt (Ctrl-C), the error is propagated:
+
+```bash
+$ atmos theme show
+? Choose a theme to preview
+^C
+# Error: prompt failed: user aborted
+```
+
+When not interactive (CI, piped, disabled), standard validation errors appear:
+
+```bash
+$ echo "" | atmos theme show
+# Error: invalid positional arguments
+## Explanation
+Theme name is required
+## Hints
+💡 Run `atmos list themes` to see all available themes
+💡 Browse themes at https://atmos.tools/cli/commands/theme/browse
+```
+
+### Best Practices
+
+1. **Always provide completion functions** - Prompts need options to display
+2. **Use descriptive prompt titles** - "Choose a theme to preview" not "Select theme"
+3. **Handle empty results gracefully** - If completion returns no options, prompt is skipped
+4. **Test non-interactive scenarios** - Ensure commands work in CI/pipelines
+5. **Document the feature** - Update command help text to mention interactive selection
+
+### Example Commands
+
+See these commands for reference implementations:
+
+- **Positional args**: `cmd/theme/show.go` - Interactive theme selection
+- **Optional value flags**: Auth commands with `--identity` flag
+- **Required flags**: Commands using `WithCompletionPrompt`
+
+---
+
 ## Further Reading
 
 - [I/O and UI Output Guide](io-and-ui-output.md) - **How to handle output in commands**
+- [Flag Handler Documentation](../.claude/agents/flag-handler.md) - **Complete flag handler guide**
 - [Command Registry Pattern PRD](prd/command-registry-pattern.md)
 - [Cobra Documentation](https://github.com/spf13/cobra)
 - [Atmos Custom Commands](/core-concepts/custom-commands)

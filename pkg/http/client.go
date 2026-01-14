@@ -1,4 +1,4 @@
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=client.go -destination=mock_client.go -package=http
+//go:generate go run go.uber.org/mock/mockgen@latest -source=client.go -destination=mock_client.go -package=http
 
 package http
 
@@ -8,10 +8,25 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"time"
+
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// UserAgent is the User-Agent header value for HTTP requests.
+	userAgent = "atmos-toolchain/1.0"
+
+	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
+	// This prevents log pollution and potential exposure of large sensitive payloads.
+	maxErrorBodySize = 64 * 1024 // 64 KB
+
+	// DefaultTimeoutSeconds is the default HTTP client timeout.
+	defaultTimeoutSeconds = 30
 )
 
 // Client defines the interface for making HTTP requests.
@@ -21,20 +36,126 @@ type Client interface {
 	Do(req *http.Request) (*http.Response, error)
 }
 
+// ClientOption is a functional option for configuring the DefaultClient.
+type ClientOption func(*DefaultClient)
+
+// WithTimeout sets the HTTP client timeout.
+func WithTimeout(timeout time.Duration) ClientOption {
+	defer perf.Track(nil, "http.WithTimeout")()
+
+	return func(c *DefaultClient) {
+		c.client.Timeout = timeout
+	}
+}
+
+// WithGitHubToken sets the GitHub token for authenticated requests.
+// Wraps the existing transport instead of replacing it to allow composition with WithTransport.
+func WithGitHubToken(token string) ClientOption {
+	defer perf.Track(nil, "http.WithGitHubToken")()
+
+	return func(c *DefaultClient) {
+		if token != "" {
+			// Wrap existing transport (or use default if none set).
+			base := c.client.Transport
+			if base == nil {
+				base = http.DefaultTransport
+			}
+			c.client.Transport = &GitHubAuthenticatedTransport{
+				Base:        base,
+				GitHubToken: token,
+			}
+		}
+	}
+}
+
+// WithTransport sets a custom HTTP transport.
+func WithTransport(transport http.RoundTripper) ClientOption {
+	defer perf.Track(nil, "http.WithTransport")()
+
+	return func(c *DefaultClient) {
+		c.client.Transport = transport
+	}
+}
+
 // DefaultClient is the default HTTP client implementation.
 type DefaultClient struct {
 	client *http.Client
 }
 
-// NewDefaultClient creates a new DefaultClient with the specified timeout.
-func NewDefaultClient(timeout time.Duration) *DefaultClient {
+// NewDefaultClient creates a new DefaultClient with optional configuration.
+func NewDefaultClient(opts ...ClientOption) *DefaultClient {
 	defer perf.Track(nil, "http.NewDefaultClient")()
 
-	return &DefaultClient{
+	client := &DefaultClient{
 		client: &http.Client{
-			Timeout: timeout,
+			Timeout: defaultTimeoutSeconds * time.Second,
 		},
 	}
+
+	for _, opt := range opts {
+		opt(client)
+	}
+
+	return client
+}
+
+// GitHubAuthenticatedTransport wraps an http.Transport to add GitHub token authentication.
+type GitHubAuthenticatedTransport struct {
+	Base        http.RoundTripper
+	GitHubToken string
+}
+
+// RoundTrip implements http.RoundTripper interface.
+func (t *GitHubAuthenticatedTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	defer perf.Track(nil, "http.GitHubAuthenticatedTransport.RoundTrip")()
+
+	// Clone request to avoid mutating caller's request.
+	reqClone := req.Clone(req.Context())
+
+	host := reqClone.URL.Hostname()
+	if (host == "api.github.com" || host == "raw.githubusercontent.com") && t.GitHubToken != "" {
+		reqClone.Header.Set("Authorization", "Bearer "+t.GitHubToken)
+		reqClone.Header.Set("User-Agent", userAgent)
+	}
+
+	base := t.Base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+
+	resp, err := base.RoundTrip(reqClone)
+	if err != nil {
+		return nil, fmt.Errorf("GitHub transport roundtrip: %w", err)
+	}
+
+	return resp, nil
+}
+
+// GetGitHubTokenFromEnv retrieves GitHub token from the global configuration.
+// This function respects the standard Atmos precedence order:
+//  1. --github-token CLI flag (via viper, only available for toolchain commands)
+//  2. ATMOS_GITHUB_TOKEN environment variable
+//  3. GITHUB_TOKEN environment variable
+//
+// The viper binding is configured in cmd/toolchain/toolchain.go for toolchain commands.
+// For non-toolchain commands, we fall back to direct environment variable lookup.
+func GetGitHubTokenFromEnv() string {
+	defer perf.Track(nil, "http.GetGitHubTokenFromEnv")()
+
+	// First try viper (for toolchain commands with --github-token flag).
+	if token := viper.GetString("github-token"); token != "" {
+		return token
+	}
+
+	// Fall back to direct environment variable lookup for non-toolchain commands.
+	// Check ATMOS_GITHUB_TOKEN first (Atmos-specific), then GITHUB_TOKEN (standard).
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
+	if token := os.Getenv("ATMOS_GITHUB_TOKEN"); token != "" {
+		return token
+	}
+
+	//nolint:forbidigo // Direct env lookup required for non-toolchain commands.
+	return os.Getenv("GITHUB_TOKEN")
 }
 
 // Do implements Client.Do.
@@ -43,12 +164,6 @@ func (c *DefaultClient) Do(req *http.Request) (*http.Response, error) {
 
 	return c.client.Do(req)
 }
-
-const (
-	// MaxErrorBodySize limits how much of an HTTP error response body to include in error messages.
-	// This prevents log pollution and potential exposure of large sensitive payloads.
-	maxErrorBodySize = 64 * 1024 // 64 KB
-)
 
 // Get performs an HTTP GET request with context using the provided client.
 func Get(ctx context.Context, url string, client Client) ([]byte, error) {

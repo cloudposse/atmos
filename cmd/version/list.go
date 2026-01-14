@@ -15,6 +15,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
+	pkgversion "github.com/cloudposse/atmos/pkg/version"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 //go:embed markdown/atmos_version_list_usage.md
@@ -31,6 +34,7 @@ var (
 	listSince              string
 	listIncludePrereleases bool
 	listFormat             string
+	listInstalled          bool
 )
 
 type listModel struct {
@@ -88,7 +92,9 @@ func fetchReleasesCmd(client GitHubClient, opts ReleaseOptions) tea.Cmd {
 	}
 }
 
-// fetchReleasesWithSpinner fetches releases with a spinner if TTY is available.
+// fetchReleasesWithSpinner fetches releases for the cloudposse/atmos repository and displays a spinner on stderr when a TTY is available.
+// If a TTY is present, an interactive spinner is shown while fetching; any error from the spinner runtime or the fetch is returned.
+// If no TTY is present, releases are fetched directly via the provided client and any client error is returned.
 func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*github.RepositoryRelease, error) {
 	defer perf.Track(nil, "version.fetchReleasesWithSpinner")()
 
@@ -98,6 +104,7 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 		// Create spinner model.
 		s := spinner.New()
 		s.Spinner = spinner.Dot
+		s.Style = theme.GetCurrentStyles().Spinner
 
 		// Fetch releases with spinner.
 		m := &listModel{spinner: s, client: client, opts: opts}
@@ -134,10 +141,15 @@ func fetchReleasesWithSpinner(client GitHubClient, opts ReleaseOptions) ([]*gith
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List Atmos releases",
-	Long:    `List available Atmos releases from GitHub with pagination and filtering options.`,
+	Long:    `List available Atmos releases from GitHub with pagination and filtering options, or list locally installed versions with --installed.`,
 	Example: listUsageMarkdown,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "version.list.RunE")()
+
+		// Handle --installed flag.
+		if listInstalled {
+			return listInstalledVersions()
+		}
 
 		// Validate limit.
 		if listLimit < 1 || listLimit > listMaxLimit {
@@ -152,7 +164,7 @@ var listCmd = &cobra.Command{
 		// Validate format.
 		normalizedFormat := strings.ToLower(listFormat)
 		if normalizedFormat != "table" && normalizedFormat != "json" && normalizedFormat != "yaml" {
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, listFormat)
 		}
 
 		// Parse since date if provided.
@@ -188,9 +200,16 @@ var listCmd = &cobra.Command{
 		case "yaml":
 			return formatReleaseListYAML(releases)
 		default:
-			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrUnsupportedOutputFormat, listFormat)
+			return fmt.Errorf("%w: %s (supported: table, json, yaml)", errUtils.ErrInvalidFormat, listFormat)
 		}
 	},
+}
+
+// listInstalledVersions lists locally installed versions of Atmos using the toolchain table renderer.
+func listInstalledVersions() error {
+	defer perf.Track(nil, "version.listInstalledVersions")()
+
+	return toolchain.RunListInstalledAtmosVersions(pkgversion.Version)
 }
 
 func init() {
@@ -199,6 +218,7 @@ func init() {
 	listCmd.Flags().StringVar(&listSince, "since", "", "Only show releases published after this date (ISO 8601 format: YYYY-MM-DD)")
 	listCmd.Flags().BoolVar(&listIncludePrereleases, "include-prereleases", false, "Include pre-release versions")
 	listCmd.Flags().StringVar(&listFormat, "format", "table", "Output format: table, json, yaml")
+	listCmd.Flags().BoolVar(&listInstalled, "installed", false, "List locally installed versions instead of GitHub releases")
 
 	versionCmd.AddCommand(listCmd)
 }

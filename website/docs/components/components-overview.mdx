@@ -1,0 +1,192 @@
+---
+title: Component Library
+sidebar_position: 0
+sidebar_label: Overview
+sidebar_class_name: hidden
+id: components-overview
+description: Introduction to Atmos components - the building blocks of your infrastructure
+---
+import Intro from '@site/src/components/Intro'
+import File from '@site/src/components/File'
+
+<Intro>
+Components are the building blocks of your infrastructure. They are opinionated, reusable units of infrastructure-as-code that solve specific problems—Terraform root modules, Helmfiles, or Packer templates.
+</Intro>
+
+## What are Components?
+
+In Atmos, a **component** consists of two parts:
+
+1. **Implementation** — The infrastructure code itself (a Terraform root module, Helmfile, or Packer template)
+2. **Configuration** — The settings that customize how the component is deployed in each environment
+
+This separation of concerns is fundamental to Atmos. You write the implementation once, then configure it differently for each environment through [stacks](/stacks).
+
+## Component Configuration
+
+Components are configured in the `components` section of stack files. Here's what component configuration looks like:
+
+<File title="stacks/deploy/prod/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc           # Points to components/terraform/vpc/
+      vars:
+        cidr_block: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+      settings:
+        spacelift:
+          workspace_enabled: true
+
+    eks-cluster:
+      metadata:
+        component: eks/cluster   # Points to components/terraform/eks/cluster/
+      vars:
+        cluster_name: prod-eks
+        kubernetes_version: "1.28"
+```
+</File>
+
+Each component configuration includes:
+
+| Section | Purpose |
+|---------|---------|
+| `metadata` | Component location, inheritance, and Atmos behavior |
+| `vars` | Input variables passed to the component |
+| `settings` | Atmos and integration settings (not passed to the component) |
+
+## Component Instances
+
+A **component instance** is a specific deployment of a component in a stack. The same component implementation can have many instances across your infrastructure:
+
+```yaml
+# Same "vpc" component, different instances
+components:
+  terraform:
+    # Instance: "vpc" in prod/us-east-1
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+
+    # Instance: "vpc-secondary" in prod/us-east-1 (using same component)
+    vpc-secondary:
+      metadata:
+        component: vpc           # Same implementation
+      vars:
+        cidr_block: "10.1.0.0/16"
+```
+
+Each instance:
+- Has its own Terraform state (or Helmfile release, Packer build)
+- Can have different variable values
+- Is independently deployable
+
+## Implementation vs Configuration
+
+| Aspect | Implementation | Configuration |
+|--------|---------------|---------------|
+| **Location** | `components/terraform/vpc/` | `stacks/prod/us-east-1.yaml` |
+| **Contains** | Terraform code, resources, modules | Variables, settings, metadata |
+| **Changes** | When infrastructure logic changes | When environment needs differ |
+| **Reuse** | Single implementation | Many configurations |
+
+This separation allows you to:
+- Write a component once and deploy it across many environments
+- Customize behavior through configuration, not code duplication
+- Maintain consistency while supporting environment-specific requirements
+- Update all instances by changing the implementation
+
+## Component Types
+
+Atmos natively supports three component types:
+
+| Type | Implementation | Description |
+|------|----------------|-------------|
+| **[Terraform/OpenTofu](/components/terraform)** | Terraform root modules | Provision cloud infrastructure |
+| **[Helmfile](/components/helmfile)** | Helmfile configurations | Deploy Helm charts to Kubernetes |
+| **[Packer](/components/packer)** | Packer templates | Build machine images |
+
+Each type has its own configuration schema, but they share common patterns for `metadata` and `settings`.
+
+## Directory Structure
+
+Components are stored in your project's `components/` directory:
+
+```
+components/
+├── terraform/           # Terraform root modules
+│   ├── vpc/
+│   ├── eks/
+│   │   └── cluster/
+│   └── rds/
+├── helmfile/            # Helmfile configurations
+│   ├── nginx-ingress/
+│   └── cert-manager/
+└── packer/              # Packer templates
+    └── ubuntu-base/
+```
+
+:::tip
+Get a head start by utilizing Cloud Posse's free [Terraform components for AWS](https://github.com/cloudposse/terraform-aws-components), available on GitHub.
+:::
+
+## Use-cases
+
+- **Developer Productivity** Create a component library of vetted terraform root modules that should be used by teams anytime they need to spin
+  up infrastructure for VPCs, clusters, and databases.
+- **Compliance and Governance:** Establish a component library to enforce infrastructure standards, security policies, and compliance requirements.
+  By using pre-approved modules, organizations can maintain control over their infrastructure's configuration, reducing the risk of non-compliance.
+- **Rapid Prototyping and Scalability:** Utilize a component library to quickly prototype and scale applications. Pre-built modules for common
+  infrastructure patterns allow teams to focus on application development rather than infrastructure setup, accelerating time-to-market and ensuring scalability from the outset.
+
+## Organizing Components
+
+There's no "one way" to organize your components—it's configurable based on your needs. Here's a simple example organizing by toolchain:
+
+```console
+└── components/
+    ├── helmfile/
+    │   └── example-app/
+    │       └── helmfile.yaml
+    └── terraform/
+        └── vpc/
+            ├── main.tf
+            ├── outputs.tf
+            └── variables.tf
+```
+
+For detailed guidance on folder structure including multi-cloud layouts, version management strategies, and enterprise patterns, see [Project Layout](/projects/layout).
+
+## Terraform Conventions
+
+For terraform, we recommend placing the terraform "root" modules in the `components/terraform` folder. If the root modules depend on other child modules that are not hosted by a registry, we recommend placing them in a subfolder called `modules/`.
+
+Make your Terraform components small, so they are easily reusable, but not so small that they only do to provide a single resource, which results in large, complicated configurations. A good rule of thumb is they should do one thing well. For example, provision a VPC along with all the subnets, NAT gateways, Internet gateways, NACLs, etc.
+
+Use multiple component to break infrastructure apart into smaller pieces based on how their lifecycles are connected. For example, a single component seldom provides a VPC and a Kubernetes cluster. That's because we should be able to destroy the Kubernetes cluster without destroying the VPC and all the other resources provisioned inside of the VPC (e.g. databases). The VPC, Kubernetes cluster and Databases all have different lifecycles. Similarly, we should be able to deploy a database and destroy it without also destroying all associated backups. Therefore the backups of a database should be a separate component from the database itself.
+
+## Describing Components
+
+When working with complex configurations that use [imports](/stacks/imports) and [inheritance](/howto/inheritance), it can be challenging to understand the final deep-merged configuration for a component. Use the [`atmos describe component`](/cli/commands/describe/component) command to view the fully resolved configuration:
+
+```shell
+atmos describe component vpc -s ue2-prod
+```
+
+This is especially helpful when:
+- Debugging configuration issues
+- Understanding inherited values
+- Developing [validation policies](/validation/validating)
+- Verifying the final configuration before deployment
+
+For more powerful filtering options, consider [describing stacks](/describe/stacks) instead.
+
+## Next Steps
+
+- [Terraform Components](/components/terraform) — Terraform root modules
+- [Helmfile Components](/components/helmfile) — Helmfile configurations
+- [Packer Components](/components/packer) — Packer templates

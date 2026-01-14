@@ -10,7 +10,7 @@ This document describes the command registry pattern for Atmos, which provides a
 
 Atmos has 116+ Go files in a flat `cmd/` directory structure:
 
-```
+```text
 cmd/
 ├── about.go
 ├── atlantis.go
@@ -123,6 +123,29 @@ package internal
 
 import "github.com/spf13/cobra"
 
+// CommandAlias represents an alias for a command or subcommand under a different parent.
+type CommandAlias struct {
+    // Subcommand is the name of the subcommand to alias (empty string for the parent command).
+    // For example, "list" to alias "atmos profile list" as "atmos list profiles".
+    Subcommand string
+
+    // ParentCommand is the name of the parent command to add the alias under.
+    // For example, "list" to create "atmos list profiles" as an alias for "atmos profile list".
+    ParentCommand string
+
+    // Name is the alias command name (e.g., "profiles" for "atmos list profiles").
+    Name string
+
+    // Short is the short description for the alias command.
+    Short string
+
+    // Long is the long description for the alias command.
+    Long string
+
+    // Example is the usage example for the alias command.
+    Example string
+}
+
 // CommandProvider is the interface that built-in command packages implement
 // to register themselves with the Atmos command registry.
 type CommandProvider interface {
@@ -136,6 +159,11 @@ type CommandProvider interface {
     // Examples: "Core Stack Commands", "Stack Introspection",
     //          "Configuration Management", "Cloud Integration"
     GetGroup() string
+
+    // GetAliases returns a list of command aliases to register.
+    // Aliases allow the same command to be accessible under different parent commands.
+    // Return nil or an empty slice if the command has no aliases.
+    GetAliases() []CommandAlias
 }
 ```
 
@@ -184,17 +212,89 @@ func Register(provider CommandProvider) {
 }
 
 // RegisterAll registers all built-in commands with the root command.
-// Custom commands are processed separately via processCustomCommands().
+//
+// This function performs registration in two phases:
+// 1. Register all primary commands to the root command
+// 2. Register command aliases to their respective parent commands
+//
+// Custom commands from atmos.yaml are processed AFTER this function
+// via processCustomCommands(), allowing custom commands to extend or
+// override built-in commands.
 func RegisterAll(root *cobra.Command) error {
     registry.mu.RLock()
     defer registry.mu.RUnlock()
 
+    // Phase 1: Register all primary commands.
     for name, provider := range registry.providers {
         cmd := provider.GetCommand()
         if cmd == nil {
             return fmt.Errorf("command provider %s returned nil command", name)
         }
         root.AddCommand(cmd)
+    }
+
+    // Phase 2: Register command aliases.
+    // This must happen after phase 1 to ensure parent commands exist.
+    for name, provider := range registry.providers {
+        aliases := provider.GetAliases()
+        if len(aliases) == 0 {
+            continue
+        }
+
+        originalCmd := provider.GetCommand()
+        if originalCmd == nil {
+            return fmt.Errorf("command provider %s returned nil command", name)
+        }
+
+        for _, alias := range aliases {
+            // Find the parent command to add the alias under.
+            parentCmd, _, err := root.Find([]string{alias.ParentCommand})
+            if err != nil {
+                return fmt.Errorf("failed to find parent command %q for alias %q: %w",
+                    alias.ParentCommand, alias.Name, err)
+            }
+
+            // Determine which command to alias (parent or subcommand).
+            var sourceCmd *cobra.Command
+            if alias.Subcommand == "" {
+                sourceCmd = originalCmd
+            } else {
+                sourceCmd, _, err = originalCmd.Find([]string{alias.Subcommand})
+                if err != nil {
+                    return fmt.Errorf("failed to find subcommand %q for alias %q: %w",
+                        alias.Subcommand, alias.Name, err)
+                }
+            }
+
+            // Create an alias command that delegates to the source command.
+            aliasCmd := &cobra.Command{
+                Use:                alias.Name,
+                Short:              alias.Short,
+                Long:               alias.Long,
+                Example:            alias.Example,
+                Args:               sourceCmd.Args,
+                RunE:               sourceCmd.RunE,
+                FParseErrWhitelist: sourceCmd.FParseErrWhitelist,
+                ValidArgsFunction:  sourceCmd.ValidArgsFunction,
+            }
+
+            // Share flags with the source command using AddFlag.
+            // This shares the same flag instance, ensuring flag values
+            // set on the alias are visible to the source's RunE function.
+            sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+                aliasCmd.Flags().AddFlag(flag)
+            })
+
+            // Share flag completion functions.
+            sourceCmd.Flags().VisitAll(func(flag *pflag.Flag) {
+                if completionFunc, _ := sourceCmd.GetFlagCompletionFunc(flag.Name); completionFunc != nil {
+                    _ = aliasCmd.RegisterFlagCompletionFunc(flag.Name, completionFunc)
+                }
+            })
+
+            // Add the alias command to the parent.
+            parentCmd.AddCommand(aliasCmd)
+        }
     }
 
     return nil
@@ -284,6 +384,10 @@ func (a *AboutCommandProvider) GetName() string {
 func (a *AboutCommandProvider) GetGroup() string {
     return "Other Commands"
 }
+
+func (a *AboutCommandProvider) GetAliases() []internal.CommandAlias {
+    return nil // No aliases for this command
+}
 ```
 
 ### 4. Markdown Content Management
@@ -339,7 +443,97 @@ var aboutCmd = &cobra.Command{
 - ✅ Compatible with Go's embed restrictions
 - ✅ Easy to maintain and update content
 
-### 5. Updated Root Command
+### 5. Command Aliases
+
+The command registry supports **first-class command aliases**, allowing commands to be accessible under different parent commands. This provides better discoverability and UX without code duplication.
+
+**Example: Profile Command Alias**
+
+```go
+// cmd/profile/profile.go
+package profile
+
+import (
+    "github.com/spf13/cobra"
+    "github.com/cloudposse/atmos/cmd/internal"
+)
+
+var profileCmd = &cobra.Command{
+    Use:   "profile",
+    Short: "Manage configuration profiles",
+}
+
+type ProfileCommandProvider struct{}
+
+func (p *ProfileCommandProvider) GetCommand() *cobra.Command {
+    return profileCmd
+}
+
+func (p *ProfileCommandProvider) GetName() string {
+    return "profile"
+}
+
+func (p *ProfileCommandProvider) GetGroup() string {
+    return "Configuration Management"
+}
+
+// GetAliases creates "atmos list profiles" as an alias for "atmos profile list".
+func (p *ProfileCommandProvider) GetAliases() []internal.CommandAlias {
+    return []internal.CommandAlias{
+        {
+            Subcommand:    "list",           // Alias "profile list" subcommand
+            ParentCommand: "list",           // Under "list" parent
+            Name:          "profiles",       // As "list profiles"
+            Short:         "List available configuration profiles",
+            Long:          `This is an alias for "atmos profile list".`,
+            Example: `# List all available profiles
+atmos list profiles
+
+# List profiles in JSON format
+atmos list profiles --format json`,
+        },
+    }
+}
+```
+
+**How It Works:**
+
+1. **Declaration**: Commands define aliases via `GetAliases()` method
+2. **Registration**: `RegisterAll()` creates alias commands in phase 2
+3. **Delegation**: Alias commands delegate to source commands:
+   - **Args**: Shares argument validation
+   - **RunE**: Executes the same business logic
+   - **Flags**: Shares the same flag instances via `AddFlag`
+   - **Completion**: Shares shell completion functions
+4. **True Delegation**: Flag values set on alias are visible to source's RunE
+
+**Key Design Decisions:**
+
+- **Flag Sharing**: Uses `AddFlag` to share the same flag instance between alias and source
+  - Ensures flag values set on the alias are visible to the source's RunE function
+  - No need to manually copy flag values between commands
+  - Validation happens naturally through shared state
+
+- **No Code Duplication**: All logic remains in the source command
+  - Alias is purely a routing mechanism
+  - Changes to source command automatically apply to aliases
+
+- **Declarative Definition**: Aliases defined where the command is defined
+  - Easy to discover what aliases exist for a command
+  - No separate alias configuration files
+
+- **Subcommand Support**: Can alias either parent commands or specific subcommands
+  - `Subcommand: ""` aliases the parent command
+  - `Subcommand: "list"` aliases a specific subcommand
+
+**Use Cases:**
+
+- **Improved Discoverability**: `atmos list profiles` is more intuitive than `atmos profile list`
+- **Grouping Related Commands**: Group related list operations under `atmos list`
+- **Backwards Compatibility**: Keep old command paths while introducing new organization
+- **User Experience**: Provide multiple paths to the same functionality
+
+### 6. Updated Root Command
 
 ```go
 // cmd/root.go
@@ -1277,70 +1471,96 @@ func TestDeeplyNestedCommandExecution(t *testing.T) {
 }
 ```
 
-## Business Logic Organization: `internal/exec/` vs `cmd/`
+## Business Logic Organization: `pkg/` vs `cmd/` vs `internal/exec/` (Legacy)
 
-### When to Use `internal/exec/`
+### Modern Architecture: Prefer `pkg/` Packages
 
-The `internal/exec/` package **emerged organically** as Atmos grew, but it is **NOT a Go convention** and should be used sparingly. Understanding when logic belongs in `internal/exec/` versus `cmd/` packages is critical for maintaining a clean architecture.
+**The preferred pattern is now to create focused packages in `pkg/` rather than adding to `internal/exec/`.** This supports a plugin-ready architecture where business logic is reusable and importable.
 
 ### Decision Framework
 
-**Use `internal/exec/` for:**
-- ✅ **Cross-command orchestration logic** - Functions used by multiple unrelated commands
-- ✅ **Core Atmos operations** - Stack processing, component resolution, template rendering
-- ✅ **Tool integrations** - Terraform execution, Helmfile execution, OPA validation
-- ✅ **Shared utilities** - Functions that don't fit in `pkg/` but are needed across commands
+**Use `pkg/[feature]/` for:** (PREFERRED)
+- ✅ **Domain-specific business logic** - Self-contained feature implementations (e.g., `pkg/devcontainer/`, `pkg/store/`, `pkg/auth/`)
+- ✅ **Reusable operations** - Logic that could be imported by other packages or future plugins
+- ✅ **Well-defined interfaces** - Clear contracts between components
+- ✅ **Testable units** - Isolated logic with mock-friendly interfaces
 
 **Use `cmd/[command]/` for:**
-- ✅ **Command-specific business logic** - Logic used only by one command family
-- ✅ **Command-specific formatters** - Output formatting for a specific command
-- ✅ **Command-specific validation** - Input validation unique to one command
-- ✅ **Command-specific models** - Data structures used only by one command
+- ✅ **CLI wrappers only** - Thin layer for flag parsing, argument validation, command registration
+- ✅ **Command delegation** - Call into `pkg/` for business logic
+- ✅ **Command-specific helpers** - Shell completion, interactive prompts (if not reusable)
+
+**Avoid `internal/exec/`:** (LEGACY - being phased out)
+- ❌ **Do not add new code** - Existing code is being migrated to `pkg/`
+- ⚠️ **Legacy orchestration** - Some complex cross-command logic remains here temporarily
+- 📝 **Migration target** - Move logic to `pkg/` when touching these files
 
 ### Examples
 
-#### ❌ **Bad: Command-Specific Logic in `internal/exec/`**
+#### ❌ **Bad: Business Logic in `internal/exec/`**
 
 ```go
-// internal/exec/version_list.go - DON'T DO THIS
+// internal/exec/devcontainer.go - DON'T DO THIS (legacy pattern)
 package exec
 
-// This function is ONLY used by `atmos version list`
-// It should live in cmd/version/ instead
-func ExecuteVersionList(
+// This function is ONLY used by devcontainer commands
+// Should be in pkg/devcontainer instead
+func ExecuteDevcontainerStart(
     atmosConfig *schema.AtmosConfiguration,
-    limit int,
-    offset int,
-    since string,
-    includePrereleases bool,
-    format string,
+    name, instance, identityName string,
 ) error {
-    // Business logic for version list command...
+    // Hundreds of lines of devcontainer-specific logic...
 }
 ```
 
-**Problem:** This creates unnecessary coupling between the command layer and execution layer for logic that's only used by one command.
-
-**Solution:** Move to self-contained package:
-```go
-// cmd/version/list.go - CORRECT
-package version
-
-// All logic for version list lives in the version package
-func (cmd *listCmd) RunE(cmd *cobra.Command, args []string) error {
-    // Business logic inline or in helper functions in this package
-}
-```
+**Problem:** Business logic trapped in `internal/exec/` is not reusable by other packages or future plugins.
 
 ---
 
-#### ✅ **Good: Shared Orchestration in `internal/exec/`**
+#### ✅ **Good: Business Logic in `pkg/` + Thin CLI Wrapper**
 
 ```go
-// internal/exec/stack_processor.go - CORRECT
+// pkg/devcontainer/lifecycle.go - CORRECT (new pattern)
+package devcontainer
+
+// Reusable business logic in pkg/
+func Start(
+    atmosConfig *schema.AtmosConfiguration,
+    name, instance, identityName string,
+) error {
+    // Business logic for starting devcontainer...
+    // This can be imported and reused by other packages
+}
+
+// cmd/devcontainer/start.go - CORRECT (thin wrapper)
+package devcontainer
+
+var startCmd = &cobra.Command{
+    RunE: func(cmd *cobra.Command, args []string) error {
+        // Parse flags
+        name := args[0]
+
+        // Delegate to pkg/ for business logic
+        return devcontainer.Start(atmosConfigPtr, name, opts.Instance, opts.Identity)
+    },
+}
+```
+
+**Why this is correct:**
+- Business logic in `pkg/devcontainer/` is reusable and testable
+- CLI wrapper in `cmd/devcontainer/` is thin and focused on CLI concerns
+- Supports future plugin architecture where other packages can import `pkg/devcontainer`
+
+---
+
+#### ⚠️ **Acceptable: Legacy Shared Logic in `internal/exec/`**
+
+```go
+// internal/exec/stack_processor.go - OK (legacy, being refactored)
 package exec
 
 // This function is used by describe, terraform, helmfile, validate, etc.
+// TODO: Consider migrating to pkg/stack/ or pkg/component/
 func ProcessComponentInStack(
     atmosConfig schema.AtmosConfiguration,
     component string,
@@ -1350,40 +1570,10 @@ func ProcessComponentInStack(
 }
 ```
 
-**Why this is correct:** Multiple unrelated commands need this logic (terraform, helmfile, describe, validate), so it belongs in a shared location.
-
----
-
-#### ✅ **Good: Self-Contained Command Package**
-
-```go
-// cmd/version/github.go - Interface for GitHub API
-package version
-
-type GitHubClient interface {
-    GetReleases(owner, repo string, opts ReleaseOptions) ([]*github.RepositoryRelease, error)
-}
-
-// cmd/version/formatters.go - Formatting logic
-package version
-
-func formatReleaseListText(releases []*github.RepositoryRelease) {
-    // Formatting specific to version command
-}
-
-// cmd/version/list.go - Command implementation
-package version
-
-var listCmd = &cobra.Command{
-    RunE: func(cmd *cobra.Command, args []string) error {
-        // Uses helpers from same package
-        releases, err := fetchReleases(...)
-        formatReleaseListText(releases)
-    },
-}
-```
-
-**Why this is correct:** All version-related logic lives together in one package, making it easy to understand, test, and maintain.
+**Why this is acceptable (temporarily):**
+- Multiple unrelated commands need this logic
+- Migration to `pkg/` requires careful refactoring
+- Don't add new code here - migrate when touching this file
 
 ---
 
@@ -1394,37 +1584,59 @@ When you find command-specific functions in `internal/exec/`:
 1. **Identify command-specific functions:**
    ```bash
    # Look for functions only called from one command
-   git grep -l "ExecuteVersionList" | grep -v "_test.go"
-   # If only cmd/version/ files import it → move to cmd/version/
+   git grep -l "ExecuteDevcontainerStart" | grep -v "_test.go"
+   # If git is not available (CI, detached HEAD), use: grep -r "ExecuteDevcontainerStart" . --include="*.go" | grep -v "_test.go"
+   # If only cmd/devcontainer/ files import it → move to pkg/devcontainer/
    ```
 
-2. **Move to command package:**
+2. **Create focused package in pkg/:**
    ```bash
-   # Move the function to the command package
-   # Update from: internal/exec/version_list.go
-   # To:         cmd/version/list.go
+   # Create business logic package
+   mkdir -p pkg/devcontainer
+
+   # Move the business logic to the package
+   # Update from: internal/exec/devcontainer.go
+   # To:         pkg/devcontainer/lifecycle.go
+   #             pkg/devcontainer/operations.go
+   #             pkg/devcontainer/identity.go
    ```
 
-3. **Refactor to self-contained:**
+3. **Refactor to reusable functions:**
    ```go
-   // Before: Function called from command
-   func ExecuteVersionList(...) error {
+   // Before: Execute* wrapper called from command
+   func ExecuteDevcontainerStart(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string) error {
        // Logic
    }
 
-   // After: Logic in command package
-   func (cmd *listCmd) RunE(cmd *cobra.Command, args []string) error {
-       // Logic inline or in package-private helpers
+   // After: Direct business logic function in pkg/
+   package devcontainer
+
+   func Start(atmosConfig *schema.AtmosConfiguration, name, instance, identityName string) error {
+       // Same logic, but now importable and reusable
    }
    ```
 
-4. **Delete old `internal/exec/` file:**
-   ```bash
-   rm internal/exec/version_list.go
-   rm internal/exec/version_show.go
+4. **Update command to call pkg/ function:**
+   ```go
+   // cmd/devcontainer/start.go
+   package devcontainer
+
+   import "github.com/cloudposse/atmos/pkg/devcontainer"
+
+   RunE: func(cmd *cobra.Command, args []string) error {
+       name := args[0]
+       return devcontainer.Start(atmosConfigPtr, name, opts.Instance, opts.Identity)
+   }
    ```
 
-5. **Keep truly shared functions:**
+5. **Delete old `internal/exec/` file:**
+   ```bash
+   rm internal/exec/devcontainer.go
+   rm internal/exec/devcontainer_helpers.go
+   rm internal/exec/devcontainer_identity.go
+   ```
+
+6. **Keep truly shared functions:**
    ```go
    // internal/exec/terraform.go - KEEP THIS
    // Used by: terraform command, helmfile command, describe affected
@@ -1433,64 +1645,75 @@ When you find command-specific functions in `internal/exec/`:
 
 ### Red Flags: When to Refactor
 
-🚩 **These patterns indicate a function should move to `cmd/`:**
+🚩 **These patterns indicate a function should move to `pkg/`:**
 
-- Function name matches command name: `ExecuteVersionList` → probably cmd/version-specific
+- Function name starts with `Execute*`: `ExecuteDevcontainerStart` → extract to `pkg/devcontainer.Start`
 - Function only called from one command package
 - Function has 5+ parameters that are all CLI flags
 - Function exists just to call other functions in the same package
 - Test file only has one test that calls the command
+- Function contains reusable business logic that could be imported elsewhere
 
-### Benefits of Self-Contained Command Packages
+### Benefits of Plugin-Ready Architecture
 
 **Before (scattered logic):**
-```
-cmd/version.go           # Cobra command definition
-cmd/version_list.go      # Cobra subcommand
-cmd/version_show.go      # Cobra subcommand
-internal/exec/version.go       # Some logic
-internal/exec/version_list.go  # More logic
-internal/exec/version_show.go  # Even more logic
+```text
+cmd/devcontainer/start.go           # Cobra command definition
+cmd/devcontainer/stop.go            # Cobra command definition
+cmd/devcontainer/attach.go          # Cobra command definition
+internal/exec/devcontainer.go       # Business logic (~900 lines)
+internal/exec/devcontainer_helpers.go  # Helper operations (~268 lines)
+internal/exec/devcontainer_identity.go # Identity logic (~214 lines)
 ```
 
-**After (self-contained):**
-```
-cmd/version/
-├── version.go        # Main command + provider
-├── list.go          # List command + logic
-├── show.go          # Show command + logic
-├── github.go        # GitHub API interface
-├── formatters.go    # Output formatting
-└── *_test.go        # Tests for all of the above
+**After (plugin-ready with pkg/):**
+```text
+pkg/devcontainer/
+├── lifecycle.go      # Reusable business logic (Start, Stop, Attach, etc.)
+├── operations.go     # Helper operations (container management)
+├── identity.go       # Identity injection logic
+└── *_test.go         # Tests for all of the above
+
+cmd/devcontainer/
+├── devcontainer.go   # Main command + CommandProvider
+├── start.go          # Thin wrapper → calls pkg/devcontainer.Start()
+├── stop.go           # Thin wrapper → calls pkg/devcontainer.Stop()
+└── attach.go         # Thin wrapper → calls pkg/devcontainer.Attach()
 ```
 
 **Advantages:**
-- ✅ All related code in one place
-- ✅ Easier to understand and modify
-- ✅ Better testability with interfaces
+- ✅ Business logic is **importable** and **reusable** from other packages
+- ✅ Commands are **thin wrappers** handling only CLI concerns
+- ✅ **Plugin-ready**: `pkg/devcontainer` can be imported by external plugins
+- ✅ Better testability with clear separation of concerns
 - ✅ Clear ownership and boundaries
 - ✅ Reduced coupling between packages
 - ✅ Follows Go idiom of small, focused packages
 
-### Example: Version Command Migration
+### Example: Devcontainer Command Migration
 
-The `version` command was successfully migrated from scattered logic to self-contained:
+The `devcontainer` command was successfully migrated from scattered `internal/exec/` logic to plugin-ready architecture:
 
 **Before:**
-- `cmd/version.go` - Main command
-- `cmd/version_list.go` - List subcommand (just cobra definition)
-- `cmd/version_show.go` - Show subcommand (just cobra definition)
-- `internal/exec/version_list.go` - Business logic
-- `internal/exec/version_show.go` - Business logic
+- `cmd/devcontainer/start.go` - Cobra command → calls `e.ExecuteDevcontainerStart()`
+- `cmd/devcontainer/stop.go` - Cobra command → calls `e.ExecuteDevcontainerStop()`
+- `internal/exec/devcontainer.go` - All business logic (~900 lines)
+- `internal/exec/devcontainer_helpers.go` - Helper operations (~268 lines)
+- `internal/exec/devcontainer_identity.go` - Identity logic (~214 lines)
 
 **After:**
-- `cmd/version/version.go` - Main command + CommandProvider
-- `cmd/version/list.go` - List command + all logic + spinner
-- `cmd/version/show.go` - Show command + all logic + spinner
-- `cmd/version/github.go` - GitHub client interface + mocks
-- `cmd/version/formatters.go` - All formatting logic
+- `pkg/devcontainer/lifecycle.go` - Reusable `Start()`, `Stop()`, `Attach()`, etc.
+- `pkg/devcontainer/operations.go` - Helper operations (container management)
+- `pkg/devcontainer/identity.go` - Identity injection logic
+- `cmd/devcontainer/start.go` - Thin wrapper: `devcontainer.Start(atmosConfigPtr, name, opts.Instance, opts.Identity)`
+- `cmd/devcontainer/stop.go` - Thin wrapper: `devcontainer.Stop(atmosConfigPtr, name, opts.Instance)`
 
-**Result:** Self-contained package with 100% of version-related code in one place, fully testable with mocks, no dependencies on `internal/exec/`.
+**Result:**
+- 3,149 lines of production code in `pkg/devcontainer/` (11,811 total including 8,662 lines of tests)
+- Commands are now simple wrappers (5-10 lines of actual logic)
+- Business logic can be imported by external tools or future plugins
+- No dependencies on `internal/exec/` for devcontainer functionality
+- Comprehensive test coverage with table-driven tests and mocks
 
 ---
 

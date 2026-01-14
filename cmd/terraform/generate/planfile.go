@@ -1,0 +1,123 @@
+package generate
+
+import (
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
+	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// planfileParser handles flag parsing for planfile command.
+var planfileParser *flags.StandardParser
+
+// planfileCmd generates planfile for a terraform component.
+var planfileCmd = &cobra.Command{
+	Use:                "planfile [component]",
+	Short:              "Generate a planfile for a Terraform component",
+	Long:               "This command generates a `planfile` for a specified Atmos Terraform component.",
+	Args:               cobra.MaximumNArgs(1),
+	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
+	RunE: func(cmd *cobra.Command, args []string) error {
+		var component string
+		if len(args) > 0 {
+			component = args[0]
+		}
+
+		// Use Viper to respect precedence (flag > env > config > default)
+		v := viper.GetViper()
+
+		// Bind planfile-specific flags to Viper.
+		if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Prompt for component if missing.
+		if component == "" {
+			prompted, err := shared.PromptForComponent(cmd)
+			if err = shared.HandlePromptError(err, "component"); err != nil {
+				return err
+			}
+			component = prompted
+		}
+
+		// Validate component after prompting.
+		if component == "" {
+			return errUtils.ErrMissingComponent
+		}
+
+		// Get flag values from Viper.
+		stack := v.GetString("stack")
+		file := v.GetString("file")
+		format := v.GetString("format")
+		processTemplates := v.GetBool("process-templates")
+		processFunctions := v.GetBool("process-functions")
+		skip := v.GetStringSlice("skip")
+
+		// Prompt for stack if missing.
+		if stack == "" {
+			prompted, err := shared.PromptForStack(cmd, component)
+			if err = shared.HandlePromptError(err, "stack"); err != nil {
+				return err
+			}
+			stack = prompted
+		}
+
+		// Validate stack after prompting.
+		if stack == "" {
+			return errUtils.ErrMissingStack
+		}
+
+		// Initialize Atmos configuration
+		atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+		if err != nil {
+			return err
+		}
+
+		opts := &e.PlanfileOptions{
+			Component:            component,
+			Stack:                stack,
+			File:                 file,
+			Format:               format,
+			ProcessTemplates:     processTemplates,
+			ProcessYamlFunctions: processFunctions,
+			Skip:                 skip,
+		}
+		return e.ExecuteGeneratePlanfile(opts, &atmosConfig)
+	},
+}
+
+func init() {
+	// Create parser with planfile-specific flags using functional options.
+	planfileParser = flags.NewStandardParser(
+		flags.WithStringFlag("stack", "s", "", "Atmos stack (required)"),
+		flags.WithStringFlag("file", "f", "", "Planfile name"),
+		flags.WithStringFlag("format", "", "json", "Output format: json or yaml"),
+		flags.WithBoolFlag("process-templates", "", true, "Enable Go template processing in Atmos stack manifests"),
+		flags.WithBoolFlag("process-functions", "", true, "Enable YAML functions processing in Atmos stack manifests"),
+		flags.WithStringSliceFlag("skip", "", []string{}, "Skip processing specific Atmos YAML functions"),
+		flags.WithEnvVars("stack", "ATMOS_STACK"),
+		flags.WithEnvVars("file", "ATMOS_FILE"),
+		flags.WithEnvVars("format", "ATMOS_FORMAT"),
+		flags.WithEnvVars("process-templates", "ATMOS_PROCESS_TEMPLATES"),
+		flags.WithEnvVars("process-functions", "ATMOS_PROCESS_FUNCTIONS"),
+		flags.WithEnvVars("skip", "ATMOS_SKIP"),
+	)
+
+	// Register flags with the command.
+	planfileParser.RegisterFlags(planfileCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := planfileParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	// Register shell completion for component.
+	planfileCmd.ValidArgsFunction = shared.ComponentsArgCompletion
+
+	GenerateCmd.AddCommand(planfileCmd)
+}

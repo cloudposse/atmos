@@ -1,0 +1,185 @@
+---
+title: Component Overrides
+sidebar_position: 14
+sidebar_label: Component Overrides
+description: Use overrides to apply configuration to a specific group of components without affecting others
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+The **Component Overrides** pattern lets you apply configuration to a specific group of components without affecting other components in the same stack.
+</Intro>
+
+## The Problem
+
+When you set `vars` at the stack level, it applies to **every component** in the final merged stack:
+
+```yaml title="stacks/deploy/prod.yaml"
+import:
+  - teams/platform    # imports: vpc, eks, rds
+  - teams/security    # imports: waf, security-groups
+
+vars:
+  environment: prod
+  # This tag applies to ALL components (vpc, eks, rds, waf, security-groups)
+  tags:
+    Team: Platform
+```
+
+But what if the Platform team and Security team each want their own `Team` tag? You can't use regular `vars` because it applies globally.
+
+## The Solution: Overrides
+
+The `overrides` section is **scoped to the current file** and its imports. It doesn't leak into sibling imports or get inherited by files that import this one.
+
+:::tip Key Insight
+**Overrides are file-scoped and don't get inherited.** They only apply to components visible from that file's import tree.
+:::
+
+<File title="stacks/teams/platform.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+  - catalog/eks/defaults
+  - catalog/rds/defaults
+
+# Only applies to vpc, eks, rds (not security team's components)
+terraform:
+  overrides:
+    vars:
+      tags:
+        Team: Platform
+```
+</File>
+
+<File title="stacks/teams/security.yaml">
+```yaml
+import:
+  - catalog/waf/defaults
+  - catalog/security-groups/defaults
+
+# Only applies to waf, security-groups (not platform team's components)
+terraform:
+  overrides:
+    vars:
+      tags:
+        Team: Security
+```
+</File>
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+import:
+  - teams/platform   # vpc, eks, rds get Team: Platform
+  - teams/security   # waf, security-groups get Team: Security
+  - mixins/stage/prod
+
+vars:
+  environment: prod
+```
+</File>
+
+Now each team's components get their own `Team` tag, even though they're all in the same final stack.
+
+## When to Use Overrides
+
+| Scenario | Use `vars` | Use `overrides` |
+|----------|-----------|-----------------|
+| Setting values for ALL components | ✓ | |
+| Setting values for a SUBSET of components | | ✓ |
+| Team-specific configuration | | ✓ |
+| Layer-specific settings (network, data, compute) | | ✓ |
+
+## Overrides vs Vars
+
+| Aspect | `vars` | `overrides` |
+|--------|--------|-------------|
+| **Scope** | Final merged stack (global) | Current file + its imports only |
+| **Inheritance** | Gets inherited by importing files | Does NOT get inherited |
+| **Visibility** | Affects ALL components | Only affects components "visible" from this file |
+
+Think of it this way:
+- `vars` = "Apply this to the final result"
+- `overrides` = "Apply this only to what I can see from here"
+
+```
+platform.yaml
+├── imports: vpc, eks, rds
+├── overrides: Team=Platform  ← only sees vpc, eks, rds
+│
+security.yaml
+├── imports: waf, firewall
+├── overrides: Team=Security  ← only sees waf, firewall
+│
+prod.yaml
+├── imports: platform.yaml, security.yaml
+├── vars: env=prod  ← sees ALL components (vpc, eks, rds, waf, firewall)
+```
+
+## Example: Layer-Based Overrides
+
+When using [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration), overrides let each layer tag its components:
+
+<File title="stacks/layers/network.yaml">
+```yaml
+import:
+  - catalog/vpc/defaults
+  - catalog/transit-gateway/defaults
+
+terraform:
+  overrides:
+    vars:
+      tags:
+        Layer: network
+```
+</File>
+
+<File title="stacks/layers/data.yaml">
+```yaml
+import:
+  - catalog/rds/defaults
+  - catalog/elasticache/defaults
+
+terraform:
+  overrides:
+    vars:
+      tags:
+        Layer: data
+```
+</File>
+
+## What You Can Override
+
+The `overrides` section supports:
+
+- `vars` - Input variables
+- `env` - Environment variables
+- `settings` - Component settings
+- `command` - The executable to use (e.g., `tofu` instead of `terraform`)
+- `providers` - Terraform provider configuration
+- `hooks` - Lifecycle hooks
+
+```yaml
+terraform:
+  overrides:
+    vars:
+      tags:
+        Team: Platform
+    settings:
+      spacelift:
+        autodeploy: true
+    command: tofu  # Use OpenTofu for these components
+```
+
+## Related Patterns
+
+- [Layered Stack Configuration](/design-patterns/stack-organization/layered-stack-configuration) - Group components by function
+- [Component Catalog](/design-patterns/component-catalog) - Define component defaults
+
+## References
+
+- [Overrides Configuration](/stacks/overrides) - Complete reference documentation

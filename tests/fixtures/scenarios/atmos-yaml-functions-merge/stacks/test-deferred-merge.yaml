@@ -1,0 +1,75 @@
+# Test stack for deferred YAML function merge
+# Demonstrates scenarios where YAML functions and concrete values are merged
+
+import:
+  - catalog/base
+
+vars:
+  stage: test
+
+components:
+  terraform:
+    # Test Case 1: Override YAML function with concrete value
+    # Without deferred merge, this would fail if !template returns a different type
+    test-yaml-to-concrete:
+      component: base-component
+      vars:
+        # Override !template with concrete map
+        template_config:
+          custom_key: "custom_value"
+          enabled: false
+
+    # Test Case 2: Override YAML function with another YAML function
+    test-yaml-to-yaml:
+      component: base-component
+      vars:
+        # Override !template with different !template
+        template_config: !template '{{ toJson .settings.override_config }}'
+
+      settings:
+        override_config:
+          enabled: false
+          timeout: 60
+          custom: "override"
+
+    # Test Case 3: Override list YAML function with concrete list
+    test-list-yaml-to-concrete:
+      component: base-component
+      vars:
+        # Override !terraform.output list with concrete list
+        vpc_ids:
+          - "vpc-custom-1"
+          - "vpc-custom-2"
+
+    # Test Case 4: Override map YAML function with concrete map
+    test-map-yaml-to-concrete:
+      component: base-component
+      vars:
+        # Override !terraform.state map with concrete map
+        network_config:
+          vpc_id: "vpc-override"
+          subnet_ids:
+            - "subnet-1"
+            - "subnet-2"
+
+    # Test Case 5: Deep merge with YAML functions
+    # Tests that YAML function results are deep-merged with overrides
+    test-deep-merge:
+      component: base-component
+      vars:
+        # This will be deep-merged with the result of !template
+        template_config:
+          # Add new keys
+          new_key: "new_value"
+          # Override existing keys
+          enabled: false
+
+    # Test Case 6: Multiple YAML functions of same type
+    # Tests precedence handling when multiple YAML functions merge
+    test-multiple-yaml-functions:
+      metadata:
+        component: yaml-function-test
+      vars:
+        # Multiple !env functions in import chain
+        stage: !env ATMOS_STAGE
+        region: "us-west-2"

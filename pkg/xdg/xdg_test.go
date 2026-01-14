@@ -151,9 +151,8 @@ func TestGetXDGConfigDir_PlatformDefaults(t *testing.T) {
 
 	// Verify the path contains the expected platform-specific components.
 	// We test for path segments that should be present on each platform.
-	// Platform-specific defaults from github.com/adrg/xdg:
-	// - Linux/Unix: ~/.config/atmos/aws/test-provider
-	// - macOS: ~/Library/Application Support/atmos/aws/test-provider
+	// Platform-specific defaults (overridden for CLI conventions):
+	// - Linux/Unix/macOS: ~/.config/atmos/aws/test-provider
 	// - Windows: %APPDATA%\atmos\aws\test-provider
 
 	// All platforms should have "atmos/aws/test-provider" in the path.

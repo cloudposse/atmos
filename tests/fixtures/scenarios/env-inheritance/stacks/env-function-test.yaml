@@ -1,0 +1,22 @@
+# Stack that tests !env YAML function with inherited env variables
+import:
+  - globals
+  - catalog/test-component
+
+vars:
+  stage: env-function-test
+
+components:
+  terraform:
+    test-component-env-function:
+      metadata:
+        component: test-component
+      env:
+        # BAZ should reference FOO which is defined in globals.yaml
+        BAZ: !env FOO
+        # Test referencing terraform-specific env var
+        TF_VAR_FROM_GLOBAL: !env TF_GLOBAL_VAR
+      vars:
+        stage: "env-function-test"
+        # Also test !env in vars section
+        foo_value: !env FOO

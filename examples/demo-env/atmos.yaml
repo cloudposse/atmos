@@ -1,0 +1,27 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}"
+
+# Global environment variables
+# These are exported to all Terraform commands via `atmos env`
+env:
+  # GitHub token for the GitHub provider (retrieved dynamically)
+  GITHUB_TOKEN: !exec gh auth token
+
+logs:
+  level: Info
+  file: "/dev/stderr"

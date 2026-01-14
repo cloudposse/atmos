@@ -1,0 +1,35 @@
+# Production Profile - Authentication
+# Production AWS account authentication with strict controls
+
+auth:
+  providers:
+    # AWS SSO for production account
+    aws-sso-prod:
+      kind: aws/sso
+      region: us-east-1
+      start_url: https://my-company.awsapps.com/start
+
+  identities:
+    # Production deployment with restricted permissions
+    prod-deployer:
+      via:
+        provider: aws-sso-prod
+      principal:
+        account_id: "123456789012"
+        permission_set: ProductionDeployAccess
+      session:
+        duration: "2h"  # Reasonable duration for production changes
+
+    # Production read-only for verification
+    prod-readonly:
+      via:
+        provider: aws-sso-prod
+      principal:
+        account_id: "123456789012"
+        permission_set: ReadOnlyAccess
+      default: true  # Default to read-only for safety
+
+# Production profile emphasizes safety:
+# - No auto-approval
+# - Limited session duration
+# - Read-only default identity

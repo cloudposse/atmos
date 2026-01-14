@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	comp "github.com/cloudposse/atmos/pkg/component"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/filetype"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -72,6 +73,7 @@ var commonFlags = []string{
 	cfg.ProfilerTypeFlag,
 	cfg.HeatmapFlag,
 	cfg.HeatmapModeFlag,
+	cfg.AtmosProfileFlag,
 }
 
 // ProcessCommandLineArgs processes command-line args.
@@ -116,6 +118,25 @@ func ProcessCommandLineArgs(
 	if err != nil {
 		return configAndStacksInfo, err
 	}
+	// Read profile flag and env var.
+	// Check flag first, then fall back to ATMOS_PROFILE env var if flag not set.
+	profiles, err := cmd.Flags().GetStringSlice("profile")
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if len(profiles) == 0 {
+		//nolint:forbidigo // Must use os.Getenv: profile is processed before Viper configuration loads.
+		if envProfiles := os.Getenv("ATMOS_PROFILE"); envProfiles != "" {
+			// Split comma-separated profiles from env var and filter out empty entries.
+			raw := strings.Split(envProfiles, ",")
+			for _, p := range raw {
+				if v := strings.TrimSpace(p); v != "" {
+					profiles = append(profiles, v)
+				}
+			}
+		}
+	}
+	configAndStacksInfo.ProfilesFromArg = profiles
 	finalAdditionalArgsAndFlags := argsAndFlagsInfo.AdditionalArgsAndFlags
 	if len(additionalArgsAndFlags) > 0 {
 		finalAdditionalArgsAndFlags = append(finalAdditionalArgsAndFlags, additionalArgsAndFlags...)
@@ -154,12 +175,14 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.SettingsListMergeStrategy = argsAndFlagsInfo.SettingsListMergeStrategy
 	configAndStacksInfo.Query = argsAndFlagsInfo.Query
 	configAndStacksInfo.Identity = argsAndFlagsInfo.Identity
+	configAndStacksInfo.NeedsPathResolution = argsAndFlagsInfo.NeedsPathResolution
 
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
 	// Use os.Getenv directly to avoid polluting viper config with temporary binding.
+	// Normalize the value to handle boolean false representations (false, 0, no, off).
 	if configAndStacksInfo.Identity == "" {
 		if envIdentity := os.Getenv("ATMOS_IDENTITY"); envIdentity != "" { //nolint:forbidigo // Direct env var read to avoid viper config pollution
-			configAndStacksInfo.Identity = envIdentity
+			configAndStacksInfo.Identity = cfg.NormalizeIdentityValue(envIdentity)
 		}
 	}
 
@@ -191,18 +214,11 @@ func processArgsAndFlags(
 	var globalOptions []string
 	var indexesToRemove []int
 
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "clean" {
-		info.SubCommand = inputArgsAndFlags[0]
-	}
-
-	// For commands like `atmos terraform plan`, show the command help
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] != "version" && info.SubCommand == "" {
-		info.SubCommand = inputArgsAndFlags[0]
-		info.NeedHelp = true
-		return info, nil
-	}
-
-	if len(inputArgsAndFlags) == 1 && inputArgsAndFlags[0] == "version" {
+	// For commands with only the subcommand (e.g., `atmos terraform plan`),
+	// just set the subcommand and return - don't auto-show help.
+	// Interactive prompts will handle missing args if available,
+	// otherwise validation will show appropriate errors.
+	if len(inputArgsAndFlags) == 1 && info.SubCommand == "" {
 		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
 	}
@@ -566,8 +582,22 @@ func processArgsAndFlags(
 			}
 		}
 
+		// Handle --from-plan with optional planfile path.
+		// --from-plan (no value): uses deterministic location.
+		// --from-plan=<path>: uses specified planfile.
+		// --from-plan <path>: uses specified planfile (if next arg doesn't start with -).
 		if arg == cfg.FromPlanFlag {
 			info.UseTerraformPlan = true
+			// Check if next argument is the planfile path (not another flag).
+			if len(inputArgsAndFlags) > (i+1) && !strings.HasPrefix(inputArgsAndFlags[i+1], "-") {
+				info.PlanFile = inputArgsAndFlags[i+1]
+			}
+		} else if strings.HasPrefix(arg, cfg.FromPlanFlag+"=") {
+			info.UseTerraformPlan = true
+			planFilePath := strings.TrimPrefix(arg, cfg.FromPlanFlag+"=")
+			if planFilePath != "" {
+				info.PlanFile = planFilePath
+			}
 		}
 
 		if arg == cfg.DryRunFlag {
@@ -690,6 +720,15 @@ func processArgsAndFlags(
 					info.AdditionalArgsAndFlags = []string{secondArg}
 				} else {
 					info.ComponentFromArg = secondArg
+					// Check if argument is an explicit path that needs resolution.
+					// Only resolve as a filesystem path if the argument explicitly indicates a path:
+					// - "." (current directory).
+					// - Starts with "./" or "../" (relative path).
+					// - Starts with "/" (absolute path).
+					// Otherwise, treat it as a component name (even if it contains slashes).
+					if comp.IsExplicitComponentPath(secondArg) {
+						info.NeedsPathResolution = true
+					}
 				}
 			}
 			if len(additionalArgsAndFlags) > 2 {

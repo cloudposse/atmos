@@ -1,0 +1,52 @@
+---
+slug: global-env-section
+title: "Global Environment Variables in atmos.yaml"
+authors:
+  - osterman
+tags:
+  - feature
+date: 2025-12-02T00:00:00.000Z
+---
+
+Atmos now supports a global `env` section in `atmos.yaml` that applies environment variables to all subprocesses spawned by Atmos, including Terraform, Helmfile, Packer, workflows, and custom commands.
+
+<!--truncate-->
+
+## What's New
+
+You can now define environment variables at the root level of your `atmos.yaml` configuration:
+
+```yaml
+# atmos.yaml
+env:
+  AWS_DEFAULT_REGION: "us-east-1"
+  TF_PLUGIN_CACHE_DIR: "/path/to/cache"
+  MY_CUSTOM_VAR: "value"
+```
+
+These variables are automatically injected into every subprocess that Atmos spawns, providing a single place to configure environment-wide settings.
+
+## Precedence
+
+Global env variables have the lowest priority and can be overridden at any level:
+
+1. `atmos.yaml` global `env:` section (lowest priority)
+2. Stack manifest global `env:` section
+3. Component-type env (`terraform.env`/`helmfile.env`)
+4. Component `env:` section
+5. Component `overrides.env:` section (highest priority)
+
+## Visibility
+
+The global env section is visible via `atmos describe config`:
+
+```bash
+atmos describe config | grep -A5 '"env"'
+```
+
+## Use Cases
+
+- Set default AWS regions across all operations
+- Configure Terraform plugin cache directories
+- Define organization-wide proxy settings
+- Set logging or debugging flags for all tools
