@@ -527,3 +527,73 @@ func TestCustomRenderer_EdgeCases(t *testing.T) {
 		})
 	}
 }
+
+// TestCustomRenderer_PackageReferences verifies that package references like
+// foo/bar@1.2.3 are NOT converted to mailto: links while real emails still work.
+// This tests the StrictLinkifyExtension through the full glamour rendering pipeline.
+func TestCustomRenderer_PackageReferences(t *testing.T) {
+	renderer, err := NewCustomRenderer(WithColorProfile(termenv.TrueColor))
+	require.NoError(t, err)
+
+	tests := []struct {
+		name           string
+		input          string
+		mustContain    string
+		mustNotContain string
+	}{
+		{
+			name:           "package reference stays plain text",
+			input:          "Install replicatedhq/replicated@0.124.1",
+			mustContain:    "replicatedhq/replicated@0.124.1",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "simple package reference",
+			input:          "Use foo/bar@1.0.0",
+			mustContain:    "foo/bar@1.0.0",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "npm scoped package",
+			input:          "Install @scope/package@2.0.0",
+			mustContain:    "@scope/package@2.0.0",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "go module path",
+			input:          "Use github.com/user/repo@v1.2.3",
+			mustContain:    "github.com/user/repo@v1.2.3",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:           "k9s style package",
+			input:          "Installed derailed/k9s@0.32.7",
+			mustContain:    "derailed/k9s@0.32.7",
+			mustNotContain: "mailto:",
+		},
+		{
+			name:        "valid email still gets mailto link",
+			input:       "Contact user@example.com",
+			mustContain: "mailto:user@example.com",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			output, err := renderer.Render(tt.input)
+			assert.NoError(t, err)
+
+			// Strip ANSI for easier content checking.
+			stripped := stripANSIForTest(output)
+			assert.Contains(t, stripped, tt.mustContain, "output: %s", stripped)
+
+			if tt.mustNotContain != "" {
+				// Check raw output for mailto: links (they appear in raw ANSI output).
+				assert.NotContains(t, output, tt.mustNotContain, "output should not contain %s", tt.mustNotContain)
+			}
+
+			// Verify no "unhandled element" warnings appear in output.
+			assert.NotContains(t, output, "unhandled element", "output should not have unhandled element warnings")
+		})
+	}
+}
