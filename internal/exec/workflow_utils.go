@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/samber/lo"
+	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -332,7 +333,13 @@ func ExecuteWorkflow(
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
 		case "atmos":
-			args := strings.Fields(command)
+			// Parse command using shell.Fields for proper quote handling.
+			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
+			args, parseErr := shell.Fields(command, nil)
+			if parseErr != nil {
+				log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
+				args = strings.Fields(command)
+			}
 
 			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
 			stepStack := strings.TrimSpace(step.Stack)
