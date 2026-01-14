@@ -430,6 +430,7 @@ var (
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
+	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")

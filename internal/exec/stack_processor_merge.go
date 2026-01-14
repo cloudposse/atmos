@@ -352,7 +352,20 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			return nil, err
 		}
 		comp[cfg.SourceSectionName] = finalComponentSource
-		comp[cfg.ProvisionSectionName] = result.ComponentProvision
+
+		// Merge provision from global, base component, and component levels.
+		// Priority (lowest to highest): global → base component → component.
+		finalComponentProvision, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalProvisionSection,
+				result.BaseComponentProvisionSection,
+				result.ComponentProvision,
+			})
+		if err != nil {
+			return nil, err
+		}
+		comp[cfg.ProvisionSectionName] = finalComponentProvision
 	}
 
 	// Add base component name if present.
