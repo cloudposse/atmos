@@ -22,6 +22,9 @@ import (
 // workflowErrorTitle is the standard title for workflow errors.
 const workflowErrorTitle = "Workflow Error"
 
+// toolchainDocsURL is the documentation URL for toolchain configuration.
+const toolchainDocsURL = "https://atmos.tools/cli/commands/toolchain/"
+
 // Executor handles workflow execution with dependency injection for testing.
 type Executor struct {
 	runner       CommandRunner
@@ -242,50 +245,50 @@ func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
 	// Load project-wide tools from .tool-versions.
 	toolVersionsDeps, err := provider.LoadToolVersionsDependencies()
 	if err != nil {
-		return errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
 			WithExplanation("Failed to load .tool-versions file").
-			Err()
+			WithHint("Check that .tool-versions file exists and is readable").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
 	}
 
 	// Get workflow-specific dependencies.
 	workflowDeps, err := provider.ResolveWorkflowDependencies(params.WorkflowDefinition)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
 			WithExplanationf("Failed to resolve dependencies for workflow '%s'", params.Workflow).
-			Err()
+			WithHint("Check the workflow's dependencies section for valid tool specifications").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
 	}
 
 	// Merge: .tool-versions as base, workflow deps override.
 	deps, err := provider.MergeDependencies(toolVersionsDeps, workflowDeps)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
 			WithExplanationf("Failed to merge dependencies for workflow '%s'", params.Workflow).
-			Err()
+			WithHint("Check that workflow dependency versions satisfy constraints from .tool-versions").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
 	}
 
 	if len(deps) == 0 {
 		return nil
 	}
-
 	log.Debug("Installing workflow dependencies", "workflow", params.Workflow, "tools", deps)
 
 	// Install missing tools.
 	if err := provider.EnsureTools(deps); err != nil {
-		return errUtils.Build(errUtils.ErrToolInstall).
-			WithCause(err).
+		return errUtils.Build(errUtils.ErrToolInstall).WithCause(err).
 			WithExplanationf("Failed to install dependencies for workflow '%s'", params.Workflow).
-			Err()
+			WithHint("Check that required tools are available in configured registries").
+			WithHint("Verify network connectivity for downloading tools").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
 	}
 
 	// Update PATH to include installed tools.
 	if err := provider.UpdatePathForTools(deps); err != nil {
-		return errUtils.Build(errUtils.ErrDependencyResolution).
-			WithCause(err).
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
 			WithExplanationf("Failed to update PATH for workflow '%s'", params.Workflow).
-			Err()
+			WithHint("Check that toolchain install_path is writable").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
 	}
 
 	return nil

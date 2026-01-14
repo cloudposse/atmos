@@ -115,7 +115,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	installer := NewInstaller()
 	owner, repo, err := installer.ParseToolSpec(tool)
 	if err != nil {
-		return fmt.Errorf("%w: %s. Expected format: owner/repo or tool name", ErrInvalidToolSpec, tool)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo or tool alias", ErrInvalidToolSpec, tool)
 	}
 
 	// Handle "latest" keyword - pass it to InstallSingleTool which will resolve it.
