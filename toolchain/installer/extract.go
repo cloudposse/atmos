@@ -3,6 +3,7 @@ package installer
 import (
 	"archive/tar"
 	"archive/zip"
+	"bytes"
 	"compress/gzip"
 	"fmt"
 	"io"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"text/template"
 
 	log "github.com/charmbracelet/log"
 	"github.com/gabriel-vasile/mimetype"
@@ -126,9 +128,17 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 }
 
 // resolveBinaryName determines the binary name from tool metadata.
+// Priority: BinaryName > Files[0].Name > Name > RepoName.
+// When Files is configured, the first file's Name represents the primary binary
+// (matching Aqua registry convention).
 func resolveBinaryName(tool *registry.Tool) string {
 	if tool.BinaryName != "" {
 		return tool.BinaryName
+	}
+	// When Files is configured, use the first file's Name as the binary name.
+	// This matches Aqua convention where Files[0] is the primary binary.
+	if len(tool.Files) > 0 && tool.Files[0].Name != "" {
+		return tool.Files[0].Name
 	}
 	if tool.Name != "" {
 		return tool.Name
@@ -182,6 +192,9 @@ func installExtractedBinary(src, dst string) error {
 //   - ADDITIONAL files (index > 0) are placed in the same directory as the primary
 //     binary, using their configured Name as the filename.
 //
+// Template variables in file.Src (e.g., {{.OS}}-{{.Arch}}/helm) are expanded using
+// the same template data as asset URLs.
+//
 // This convention allows tools with multiple binaries (e.g., a main CLI plus helpers)
 // to be installed correctly while maintaining a consistent installation path.
 func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *registry.Tool) error {
@@ -201,7 +214,13 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 			srcPath = file.Name // Default src to name if not specified.
 		}
 
-		src := filepath.Join(tempDir, srcPath)
+		// Expand template variables in srcPath (e.g., {{.OS}}-{{.Arch}}/helm).
+		expandedSrcPath, err := i.expandFileSrcTemplate(srcPath, tool)
+		if err != nil {
+			return fmt.Errorf("%w: failed to expand file src template: %w", ErrFileOperation, err)
+		}
+
+		src := filepath.Join(tempDir, expandedSrcPath)
 		var dst string
 		if idx == 0 {
 			// First file is the primary binary - use the specified binaryPath.
@@ -212,13 +231,13 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 		}
 
 		log.Debug("Extracting file from archive",
-			"src", srcPath,
+			"src", expandedSrcPath,
 			"dst", dst,
 			"isPrimary", idx == 0)
 
 		// Check if source file exists.
 		if _, err := os.Stat(src); os.IsNotExist(err) {
-			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, srcPath)
+			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
 		}
 
 		if err := MoveFile(src, dst); err != nil {
@@ -232,6 +251,30 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 	}
 
 	return nil
+}
+
+// expandFileSrcTemplate expands template variables in a file source path.
+// This handles patterns like "{{.OS}}-{{.Arch}}/helm" in Aqua registry files.
+func (i *Installer) expandFileSrcTemplate(srcPath string, tool *registry.Tool) (string, error) {
+	// If no template syntax, return as-is.
+	if !strings.Contains(srcPath, "{{") {
+		return srcPath, nil
+	}
+
+	// Build template data using the same function as asset URL templates.
+	data := buildTemplateData(tool, tool.Version)
+
+	tmpl, err := template.New("filesrc").Funcs(assetTemplateFuncs()).Parse(srcPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse file src template: %w", err)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("failed to execute file src template: %w", err)
+	}
+
+	return buf.String(), nil
 }
 
 // Unzip extracts a zip archive to a destination directory.
@@ -450,11 +493,16 @@ func (i *Installer) extractPkg(pkgPath, binaryPath string, tool *registry.Tool) 
 
 	log.Debug("Extracting macOS .pkg file", filenameKey, filepath.Base(pkgPath))
 
-	tempDir, err := os.MkdirTemp("", "installer-pkg-")
+	// Create a parent temp directory for cleanup.
+	parentDir, err := os.MkdirTemp("", "installer-pkg-")
 	if err != nil {
 		return fmt.Errorf("%w: failed to create temp dir: %w", ErrFileOperation, err)
 	}
-	defer os.RemoveAll(tempDir)
+	defer os.RemoveAll(parentDir)
+
+	// pkgutil --expand-full requires the target directory to NOT exist (it creates it).
+	// Use a subdirectory path that doesn't exist yet.
+	tempDir := filepath.Join(parentDir, "expanded")
 
 	// Use pkgutil to expand the .pkg file.
 	// #nosec G204 -- pkgPath is from internal download, not user input.

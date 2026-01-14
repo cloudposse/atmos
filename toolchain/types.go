@@ -8,6 +8,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/toolchain/installer"
 	"github.com/cloudposse/atmos/toolchain/registry"
 )
@@ -68,6 +69,8 @@ func NewInstaller(opts ...Option) *Installer {
 	if config := GetAtmosConfig(); config != nil {
 		log.Debug("Loading toolchain registries from atmos.yaml",
 			"registryCount", len(config.Toolchain.Registries))
+		// Pass AtmosConfig to resolver for alias resolution.
+		baseOpts = append(baseOpts, WithAtmosConfig(config))
 		if reg, err := NewRegistry(config); err != nil {
 			log.Warn("Failed to load configured registry from atmos.yaml", "error", err)
 		} else if reg != nil {
@@ -114,6 +117,13 @@ func WithResolver(resolver ToolResolver) Option {
 	defer perf.Track(nil, "toolchain.WithResolver")()
 
 	return installer.WithResolver(resolver)
+}
+
+// WithAtmosConfig sets the AtmosConfig for alias resolution.
+func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
+	defer perf.Track(nil, "toolchain.WithAtmosConfig")()
+
+	return installer.WithAtmosConfig(config)
 }
 
 // WithConfiguredRegistry sets a pre-configured registry.
