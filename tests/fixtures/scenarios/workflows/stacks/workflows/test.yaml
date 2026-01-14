@@ -108,7 +108,7 @@ workflows:
 
   # Test cases for -var flag with quoted values
   # This reproduces the issue reported by users where -var="key=value" is incorrectly parsed
-  # https://github.com/cloudposse/atmos/issues/XXXX
+  # Fixed in PR #1961
 
   # Test -var with double quotes (the exact pattern from user report)
   terraform-var-double-quotes:

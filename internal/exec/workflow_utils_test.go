@@ -974,43 +974,36 @@ func TestPrepareStepEnvironment_EmptyGlobalEnv(t *testing.T) {
 	assert.NotEmpty(t, env)
 }
 
-// TestShellFieldsFallback tests that the shell.Fields fallback to strings.Fields works.
-func TestShellFieldsFallback(t *testing.T) {
-	// Test cases that shell.Fields can parse correctly.
+// TestShellFieldsParsing tests that shell.Fields correctly parses various command patterns.
+func TestShellFieldsParsing(t *testing.T) {
 	tests := []struct {
 		name         string
 		command      string
-		shouldParse  bool
 		expectedArgs int
 	}{
 		{
 			name:         "simple command",
 			command:      "terraform plan vpc",
-			shouldParse:  true,
 			expectedArgs: 3,
 		},
 		{
 			name:         "command with flags",
 			command:      "terraform plan vpc -auto-approve",
-			shouldParse:  true,
 			expectedArgs: 4,
 		},
 		{
 			name:         "command with quoted arg",
 			command:      `terraform plan -var="foo=bar"`,
-			shouldParse:  true,
 			expectedArgs: 3, // ["terraform", "plan", "-var=foo=bar"]
 		},
 		{
 			name:         "command with single quoted arg",
 			command:      `terraform plan -var='foo=bar'`,
-			shouldParse:  true,
 			expectedArgs: 3,
 		},
 		{
 			name:         "command with spaces in quoted arg",
 			command:      `echo "hello world"`,
-			shouldParse:  true,
 			expectedArgs: 2, // ["echo", "hello world"]
 		},
 	}
@@ -1018,13 +1011,8 @@ func TestShellFieldsFallback(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args, err := shell.Fields(tt.command, nil)
-
-			if tt.shouldParse {
-				assert.NoError(t, err)
-				assert.Len(t, args, tt.expectedArgs)
-			} else {
-				assert.Error(t, err)
-			}
+			assert.NoError(t, err)
+			assert.Len(t, args, tt.expectedArgs)
 		})
 	}
 }
