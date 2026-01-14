@@ -207,7 +207,30 @@ func TestResolveBinaryName(t *testing.T) {
 			expected: "custom-binary",
 		},
 		{
-			name: "Name as fallback",
+			name: "Files[0].Name takes precedence over Name and RepoName",
+			tool: &registry.Tool{
+				Name:     "tool-name",
+				RepoName: "repo-name",
+				Files: []registry.File{
+					{Name: "aws", Src: "aws/dist/aws"},
+				},
+			},
+			expected: "aws",
+		},
+		{
+			name: "BinaryName takes precedence over Files[0].Name",
+			tool: &registry.Tool{
+				BinaryName: "explicit-binary",
+				Name:       "tool-name",
+				RepoName:   "repo-name",
+				Files: []registry.File{
+					{Name: "aws", Src: "aws/dist/aws"},
+				},
+			},
+			expected: "explicit-binary",
+		},
+		{
+			name: "Name as fallback when no Files configured",
 			tool: &registry.Tool{
 				Name:     "tool-name",
 				RepoName: "repo-name",

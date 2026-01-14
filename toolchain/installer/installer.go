@@ -439,14 +439,8 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 		return "", fmt.Errorf("%w: failed to create version directory: %w", ErrFileOperation, err)
 	}
 
-	// Determine the binary name
-	binaryName := tool.BinaryName
-	if binaryName == "" {
-		binaryName = tool.Name
-	}
-	if binaryName == "" {
-		binaryName = tool.RepoName
-	}
+	// Determine the binary name using shared resolution logic.
+	binaryName := resolveBinaryName(tool)
 
 	binaryPath := filepath.Join(versionDir, binaryName)
 

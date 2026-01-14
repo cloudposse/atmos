@@ -128,9 +128,17 @@ func (i *Installer) extractZip(zipPath, binaryPath string, tool *registry.Tool) 
 }
 
 // resolveBinaryName determines the binary name from tool metadata.
+// Priority: BinaryName > Files[0].Name > Name > RepoName.
+// When Files is configured, the first file's Name represents the primary binary
+// (matching Aqua registry convention).
 func resolveBinaryName(tool *registry.Tool) string {
 	if tool.BinaryName != "" {
 		return tool.BinaryName
+	}
+	// When Files is configured, use the first file's Name as the binary name.
+	// This matches Aqua convention where Files[0] is the primary binary.
+	if len(tool.Files) > 0 && tool.Files[0].Name != "" {
+		return tool.Files[0].Name
 	}
 	if tool.Name != "" {
 		return tool.Name
