@@ -104,7 +104,7 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
-// Hints from the cause error are preserved and will appear in GetAllHints().
+// Hints from the cause error are extracted and preserved in the final error.
 //
 // Example:
 //
@@ -125,11 +125,16 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 		if b.err == nil {
 			b.err = cause
 		} else {
-			// Use cockroachdb/errors.Wrap to preserve hints from the cause.
-			// The sentinel is marked later in Err() via errors.Mark().
-			// This ensures hints propagate through GetAllHints() while
-			// maintaining errors.Is() compatibility for both sentinel and cause.
-			b.err = errors.Wrap(cause, b.err.Error())
+			// Extract hints from cause before wrapping, since fmt.Errorf
+			// doesn't preserve cockroachdb hint metadata.
+			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
+				b.hints = append(b.hints, causeHints...)
+			}
+			// Use fmt.Errorf with double %w to maintain both errors in chain.
+			// This is compatible with std errors.Is() used by testify's assert.ErrorIs().
+			// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
+			// not the standard library's, which breaks test assertions.
+			b.err = fmt.Errorf("%w: %w", b.err, cause)
 		}
 	}
 	return b
