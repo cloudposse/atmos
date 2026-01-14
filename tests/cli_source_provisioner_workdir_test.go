@@ -5,11 +5,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
 )
+
+// resetWorkdirViperState resets global Viper state to prevent test pollution.
+// This is needed because tests in this package use cmd.Execute() which
+// binds flags to the global Viper instance. Without this reset, flag
+// values from previous tests can leak and cause unexpected behavior.
+func resetWorkdirViperState() {
+	viper.Reset()
+}
 
 // TestSourceWorkdir_SourceOnly tests source describe for component with source but no workdir.
 func TestSourceWorkdir_SourceOnly(t *testing.T) {
@@ -76,6 +85,7 @@ func TestSourceWorkdir_DescribeComponent_LocalWithWorkdir(t *testing.T) {
 
 // TestSourceWorkdir_DeleteMissingForce tests that delete requires --force flag.
 func TestSourceWorkdir_DeleteMissingForce(t *testing.T) {
+	resetWorkdirViperState() // Prevent flag leakage from previous tests
 	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
 
 	// Create the target directory so delete has something to operate on.

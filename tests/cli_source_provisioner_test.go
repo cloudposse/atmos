@@ -5,11 +5,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
 )
+
+// resetViperState resets global Viper state to prevent test pollution.
+// This is needed because tests in this package use cmd.Execute() which
+// binds flags to the global Viper instance. Without this reset, flag
+// values from previous tests can leak and cause unexpected behavior.
+func resetViperState() {
+	viper.Reset()
+}
 
 // TestSourceProvisionerDescribe_Success tests the `atmos terraform source describe` command.
 func TestSourceProvisionerDescribe_Success(t *testing.T) {
@@ -75,6 +84,7 @@ func TestSourceProvisionerList(t *testing.T) {
 
 // TestSourceProvisionerDelete_MissingForce tests that delete requires --force flag.
 func TestSourceProvisionerDelete_MissingForce(t *testing.T) {
+	resetViperState() // Prevent flag leakage from previous tests
 	t.Chdir("./fixtures/scenarios/source-provisioner")
 
 	// Create the target directory so delete has something to operate on.
