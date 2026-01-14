@@ -1,6 +1,6 @@
 # Toolchain Configuration Example
 
-This example demonstrates how to configure Atmos toolchain with tool registries.
+This example demonstrates how to configure Atmos toolchain with tool registries, and how toolchain-managed tools integrate automatically with custom commands and workflows.
 
 ## Overview
 
@@ -9,6 +9,7 @@ The toolchain system enables:
 - **Air-Gapped Deployments**: Mirror registries for offline environments
 - **Security & Compliance**: Control tool sources and versions
 - **Registry Precedence**: Local/corporate registries override public ones
+- **Automatic Integration**: Tools from `.tool-versions` are available in custom commands and workflows
 
 ## Configuration
 
@@ -238,7 +239,103 @@ If a tool is not found:
 
 Registries are checked in order. If a high-priority registry is unavailable, lower-priority registries will be tried automatically.
 
+## Toolchain Integration with Custom Commands and Workflows
+
+Tools defined in `.tool-versions` are automatically available in custom commands and workflows. This example includes working demonstrations.
+
+### The `.tool-versions` File
+
+This example includes a `.tool-versions` file with `jq` and `yq`:
+
+```
+jq 1.7.1
+yq 4.45.1
+```
+
+### Custom Commands Demo
+
+Custom commands in `atmos.yaml` automatically have access to toolchain tools:
+
+```bash
+# Show which jq binary is being used (should be from .tools/)
+atmos toolchain-demo which-jq
+
+# Show which yq binary is being used
+atmos toolchain-demo which-yq
+
+# Show versions of both tools
+atmos toolchain-demo versions
+
+# Demonstrate jq processing JSON
+atmos toolchain-demo jq-demo
+
+# Demonstrate yq processing YAML
+atmos toolchain-demo yq-demo
+```
+
+### Workflows Demo
+
+Workflows in `stacks/workflows/toolchain-demo.yaml` also have automatic access:
+
+```bash
+# Show paths to toolchain binaries
+atmos workflow which-tools -f toolchain-demo
+
+# Show tool versions
+atmos workflow tool-versions -f toolchain-demo
+
+# Run jq demo
+atmos workflow jq-demo -f toolchain-demo
+
+# Run yq demo
+atmos workflow yq-demo -f toolchain-demo
+
+# Run complete integration demo
+atmos workflow full-demo -f toolchain-demo
+
+# Workflow with explicit dependencies
+atmos workflow with-dependencies -f toolchain-demo
+```
+
+### How It Works
+
+1. **Automatic Tool Discovery**: When a custom command or workflow runs, Atmos reads `.tool-versions`
+2. **Tool Installation**: Missing tools are automatically installed to `.tools/`
+3. **PATH Update**: The `.tools/bin/` directories are prepended to PATH
+4. **Execution**: Commands and workflow steps execute with toolchain tools available
+
+### Explicit Dependencies
+
+You can also declare explicit dependencies that override `.tool-versions`:
+
+**Custom Command:**
+```yaml
+commands:
+  - name: my-command
+    dependencies:
+      tools:
+        jq: "^1.7.0"
+        terraform: "~> 1.10.0"
+    steps:
+      - jq --version
+```
+
+**Workflow:**
+```yaml
+workflows:
+  my-workflow:
+    dependencies:
+      tools:
+        jq: "1.7.1"
+    steps:
+      - name: check-jq
+        command: jq --version
+        type: shell
+```
+
 ## Related Documentation
 
 - [Aqua Registry Documentation](https://aquaproj.github.io/docs/reference/registry/)
 - [Atmos Toolchain Documentation](https://atmos.tools/cli/commands/toolchain/)
+- [Custom Commands Documentation](https://atmos.tools/cli/configuration/commands/)
+- [Workflows Documentation](https://atmos.tools/workflows/)

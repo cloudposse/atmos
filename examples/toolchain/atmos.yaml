@@ -82,3 +82,49 @@ toolchain:
 # - tools:        - Map of tool definitions (for atmos type)
 # - priority:     - Higher numbers checked first
 # - GitHub URLs:  - Automatically converted (tree → raw, blob → raw)
+
+# Workflows configuration
+# Workflows demonstrate how toolchain tools are automatically available
+workflows:
+  base_path: "stacks/workflows"
+
+# Custom Commands
+# These commands demonstrate automatic toolchain integration.
+# Tools from .tool-versions are available without explicit dependencies declaration.
+commands:
+  - name: toolchain-demo
+    description: Demonstrate toolchain integration with custom commands
+    commands:
+      # Show which jq is being used (should be from .tools/)
+      - name: which-jq
+        description: Show the path to the toolchain-managed jq binary
+        steps:
+          - which jq
+
+      # Show which yq is being used (should be from .tools/)
+      - name: which-yq
+        description: Show the path to the toolchain-managed yq binary
+        steps:
+          - which yq
+
+      # Show versions of installed tools
+      - name: versions
+        description: Show versions of toolchain-managed tools
+        steps:
+          - echo "jq version:"
+          - jq --version
+          - echo ""
+          - echo "yq version:"
+          - yq --version
+
+      # Use jq to process JSON (demonstrates tool actually works)
+      - name: jq-demo
+        description: Demonstrate jq processing JSON data
+        steps:
+          - echo '{"name":"atmos","version":"1.0"}' | jq -r '.name'
+
+      # Use yq to process YAML (demonstrates tool actually works)
+      - name: yq-demo
+        description: Demonstrate yq processing YAML data
+        steps:
+          - echo 'name: atmos' | yq -r '.name'
