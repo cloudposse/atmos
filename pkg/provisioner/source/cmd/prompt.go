@@ -107,6 +107,9 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 }
 
 // listStacksWithSourceForComponent returns stacks that contain the specified component with source configured.
+// TODO: Consider caching ExecuteDescribeStacks results for shell completion performance.
+// Each list function initializes config and calls ExecuteDescribeStacks independently,
+// which can be slow when called repeatedly during tab completion.
 func listStacksWithSourceForComponent(component string) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
 	atmosConfig, err := initCliConfigForPrompt(configAndStacksInfo, true)

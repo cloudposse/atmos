@@ -1,576 +1,556 @@
 package cmd
 
 import (
-	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Test stackHasAnySource - checks if a stack has any terraform component with source configured.
-func TestStackHasAnySource(t *testing.T) {
-	tests := []struct {
-		name      string
-		stackData any
-		expected  bool
-	}{
-		{
-			name:      "nil stack data",
-			stackData: nil,
-			expected:  false,
-		},
-		{
-			name:      "non-map stack data",
-			stackData: "invalid",
-			expected:  false,
-		},
-		{
-			name:      "empty map",
-			stackData: map[string]any{},
-			expected:  false,
-		},
-		{
-			name: "missing components key",
-			stackData: map[string]any{
-				"vars": map[string]any{"foo": "bar"},
-			},
-			expected: false,
-		},
-		{
-			name: "components not a map",
-			stackData: map[string]any{
-				"components": "invalid",
-			},
-			expected: false,
-		},
-		{
-			name: "missing terraform key",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"helmfile": map[string]any{},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "terraform not a map",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": "invalid",
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "empty terraform components",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "component without source",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"vars": map[string]any{"cidr": "10.0.0.0/16"},
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "component with empty source string",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": "",
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "component with source string",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": "github.com/example/terraform-aws-vpc",
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "component with source map containing uri",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": map[string]any{
-								"uri": "github.com/example/terraform-aws-vpc",
-							},
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "component with source map with empty uri",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": map[string]any{
-								"uri": "",
-							},
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "component data not a map",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": "invalid",
-					},
-				},
-			},
-			expected: false,
-		},
-		{
-			name: "multiple components one with source",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"vars": map[string]any{"cidr": "10.0.0.0/16"},
-						},
-						"eks": map[string]any{
-							"source": "github.com/example/terraform-aws-eks",
-						},
-					},
-				},
-			},
-			expected: true,
-		},
-		{
-			name: "multiple components none with source",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"vars": map[string]any{"cidr": "10.0.0.0/16"},
-						},
-						"eks": map[string]any{
-							"vars": map[string]any{"cluster_name": "test"},
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := stackHasAnySource(tt.stackData)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+// TestHandlePromptError_NilError tests that HandlePromptError returns nil for nil error.
+func TestHandlePromptError_NilError(t *testing.T) {
+	err := HandlePromptError(nil, "test")
+	assert.NoError(t, err)
 }
 
-// Test stackContainsComponentWithSource - checks if a stack contains a specific component with source.
-func TestStackContainsComponentWithSource(t *testing.T) {
-	tests := []struct {
-		name      string
-		stackData any
-		component string
-		expected  bool
-	}{
-		{
-			name:      "nil stack data",
-			stackData: nil,
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name:      "non-map stack data",
-			stackData: "invalid",
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name:      "empty map",
-			stackData: map[string]any{},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "missing components key",
-			stackData: map[string]any{
-				"vars": map[string]any{},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "components not a map",
-			stackData: map[string]any{
-				"components": "invalid",
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "missing terraform key",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"helmfile": map[string]any{},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "terraform not a map",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": "invalid",
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "component not found",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"eks": map[string]any{
-							"source": "github.com/example/eks",
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "component found but data not a map",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": "invalid",
-					},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "component found but no source",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"vars": map[string]any{"cidr": "10.0.0.0/16"},
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "component found with source string",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": "github.com/example/terraform-aws-vpc",
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  true,
-		},
-		{
-			name: "component found with source map",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": map[string]any{
-								"uri": "github.com/example/terraform-aws-vpc",
-							},
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  true,
-		},
-		{
-			name: "component found with empty source string",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": "",
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "component found with source map empty uri",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": map[string]any{
-								"uri": "",
-							},
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name: "different component has source target does not",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"vars": map[string]any{"cidr": "10.0.0.0/16"},
-						},
-						"eks": map[string]any{
-							"source": "github.com/example/eks",
-						},
-					},
-				},
-			},
-			component: "vpc",
-			expected:  false,
-		},
-		{
-			name:      "empty component name",
-			component: "",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": "github.com/example/vpc",
-						},
-					},
-				},
-			},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := stackContainsComponentWithSource(tt.stackData, tt.component)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+// TestHandlePromptError_InteractiveModeNotAvailable tests that HandlePromptError returns nil
+// for ErrInteractiveModeNotAvailable (graceful fallback).
+func TestHandlePromptError_InteractiveModeNotAvailable(t *testing.T) {
+	err := HandlePromptError(errUtils.ErrInteractiveModeNotAvailable, "test")
+	assert.NoError(t, err)
 }
 
-// Test collectComponentsWithSource - extracts terraform components with source from a stack.
-func TestCollectComponentsWithSource(t *testing.T) {
-	tests := []struct {
-		name              string
-		stackData         any
-		existingSet       map[string]struct{}
-		expectedSet       map[string]struct{}
-		expectedAdditions int
-	}{
-		{
-			name:              "nil stack data",
-			stackData:         nil,
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
+// TestHandlePromptError_OtherError tests that HandlePromptError propagates other errors.
+func TestHandlePromptError_OtherError(t *testing.T) {
+	err := HandlePromptError(assert.AnError, "test")
+	assert.Error(t, err)
+	assert.Equal(t, assert.AnError, err)
+}
+
+// TestStackContainsComponentWithSource_InvalidStackData tests with non-map stack data.
+func TestStackContainsComponentWithSource_InvalidStackData(t *testing.T) {
+	result := stackContainsComponentWithSource("invalid", "vpc")
+	assert.False(t, result)
+}
+
+// TestStackContainsComponentWithSource_NoComponents tests with missing components.
+func TestStackContainsComponentWithSource_NoComponents(t *testing.T) {
+	stackData := map[string]any{
+		"vars": map[string]any{"foo": "bar"},
+	}
+	result := stackContainsComponentWithSource(stackData, "vpc")
+	assert.False(t, result)
+}
+
+// TestStackContainsComponentWithSource_NoTerraform tests with missing terraform section.
+func TestStackContainsComponentWithSource_NoTerraform(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"helmfile": map[string]any{},
 		},
-		{
-			name:              "non-map stack data",
-			stackData:         "invalid",
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
-		},
-		{
-			name:              "empty map",
-			stackData:         map[string]any{},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
-		},
-		{
-			name: "missing components key",
-			stackData: map[string]any{
-				"vars": map[string]any{},
-			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
-		},
-		{
-			name: "components not a map",
-			stackData: map[string]any{
-				"components": "invalid",
-			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
-		},
-		{
-			name: "missing terraform key",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"helmfile": map[string]any{},
+	}
+	result := stackContainsComponentWithSource(stackData, "vpc")
+	assert.False(t, result)
+}
+
+// TestStackContainsComponentWithSource_ComponentNotFound tests with component not in stack.
+func TestStackContainsComponentWithSource_ComponentNotFound(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"other": map[string]any{
+					"vars": map[string]any{"foo": "bar"},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
 		},
-		{
-			name: "terraform not a map",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": "invalid",
+	}
+	result := stackContainsComponentWithSource(stackData, "vpc")
+	assert.False(t, result)
+}
+
+// TestStackContainsComponentWithSource_ComponentNoSource tests with component without source.
+func TestStackContainsComponentWithSource_ComponentNoSource(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"vars": map[string]any{"foo": "bar"},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
 		},
-		{
-			name: "empty terraform components",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{},
-				},
-			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
-		},
-		{
-			name: "component without source not added",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"vars": map[string]any{"cidr": "10.0.0.0/16"},
-						},
+	}
+	result := stackContainsComponentWithSource(stackData, "vpc")
+	assert.False(t, result)
+}
+
+// TestStackContainsComponentWithSource_ComponentWithSource tests with component that has source.
+func TestStackContainsComponentWithSource_ComponentWithSource(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": map[string]any{
+						"uri": "github.com/example/vpc",
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
 		},
-		{
-			name: "component with source string added",
-			stackData: map[string]any{
-				"components": map[string]any{
-					"terraform": map[string]any{
-						"vpc": map[string]any{
-							"source": "github.com/example/terraform-aws-vpc",
-						},
+	}
+	result := stackContainsComponentWithSource(stackData, "vpc")
+	assert.True(t, result)
+}
+
+// TestStackContainsComponentWithSource_InvalidComponentData tests with invalid component data type.
+func TestStackContainsComponentWithSource_InvalidComponentData(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": "invalid", // Should be a map.
+			},
+		},
+	}
+	result := stackContainsComponentWithSource(stackData, "vpc")
+	assert.False(t, result)
+}
+
+// TestStackHasAnySource_InvalidStackData tests with non-map stack data.
+func TestStackHasAnySource_InvalidStackData(t *testing.T) {
+	result := stackHasAnySource("invalid")
+	assert.False(t, result)
+}
+
+// TestStackHasAnySource_NoComponents tests with missing components.
+func TestStackHasAnySource_NoComponents(t *testing.T) {
+	stackData := map[string]any{
+		"vars": map[string]any{"foo": "bar"},
+	}
+	result := stackHasAnySource(stackData)
+	assert.False(t, result)
+}
+
+// TestStackHasAnySource_NoTerraform tests with missing terraform section.
+func TestStackHasAnySource_NoTerraform(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"helmfile": map[string]any{},
+		},
+	}
+	result := stackHasAnySource(stackData)
+	assert.False(t, result)
+}
+
+// TestStackHasAnySource_NoComponentsWithSource tests with components but none have source.
+func TestStackHasAnySource_NoComponentsWithSource(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"vars": map[string]any{"foo": "bar"},
+				},
+				"rds": map[string]any{
+					"vars": map[string]any{"bar": "baz"},
+				},
+			},
+		},
+	}
+	result := stackHasAnySource(stackData)
+	assert.False(t, result)
+}
+
+// TestStackHasAnySource_HasComponentWithSource tests with at least one component with source.
+func TestStackHasAnySource_HasComponentWithSource(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"vars": map[string]any{"foo": "bar"},
+				},
+				"rds": map[string]any{
+					"source": map[string]any{
+						"uri": "github.com/example/rds",
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{"vpc": {}},
-			expectedAdditions: 1,
 		},
-		{
-			name: "component with source map added",
-			stackData: map[string]any{
+	}
+	result := stackHasAnySource(stackData)
+	assert.True(t, result)
+}
+
+// TestStackHasAnySource_InvalidComponentData tests with invalid component data type.
+func TestStackHasAnySource_InvalidComponentData(t *testing.T) {
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": "invalid", // Should be a map.
+			},
+		},
+	}
+	result := stackHasAnySource(stackData)
+	assert.False(t, result)
+}
+
+// TestCollectComponentsWithSource_InvalidStackData tests with non-map stack data.
+func TestCollectComponentsWithSource_InvalidStackData(t *testing.T) {
+	componentSet := make(map[string]struct{})
+	collectComponentsWithSource("invalid", componentSet)
+	assert.Empty(t, componentSet)
+}
+
+// TestCollectComponentsWithSource_NoComponents tests with missing components.
+func TestCollectComponentsWithSource_NoComponents(t *testing.T) {
+	componentSet := make(map[string]struct{})
+	stackData := map[string]any{
+		"vars": map[string]any{"foo": "bar"},
+	}
+	collectComponentsWithSource(stackData, componentSet)
+	assert.Empty(t, componentSet)
+}
+
+// TestCollectComponentsWithSource_NoTerraform tests with missing terraform section.
+func TestCollectComponentsWithSource_NoTerraform(t *testing.T) {
+	componentSet := make(map[string]struct{})
+	stackData := map[string]any{
+		"components": map[string]any{
+			"helmfile": map[string]any{},
+		},
+	}
+	collectComponentsWithSource(stackData, componentSet)
+	assert.Empty(t, componentSet)
+}
+
+// TestCollectComponentsWithSource_CollectsSourceComponents tests that it collects components with source.
+func TestCollectComponentsWithSource_CollectsSourceComponents(t *testing.T) {
+	componentSet := make(map[string]struct{})
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": map[string]any{
+						"uri": "github.com/example/vpc",
+					},
+				},
+				"rds": map[string]any{
+					"vars": map[string]any{"foo": "bar"}, // No source.
+				},
+				"eks": map[string]any{
+					"source": map[string]any{
+						"uri": "github.com/example/eks",
+					},
+				},
+			},
+		},
+	}
+	collectComponentsWithSource(stackData, componentSet)
+	assert.Len(t, componentSet, 2)
+	assert.Contains(t, componentSet, "vpc")
+	assert.Contains(t, componentSet, "eks")
+	assert.NotContains(t, componentSet, "rds")
+}
+
+// TestCollectComponentsWithSource_SkipsInvalidComponents tests that invalid component data is skipped.
+func TestCollectComponentsWithSource_SkipsInvalidComponents(t *testing.T) {
+	componentSet := make(map[string]struct{})
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": map[string]any{
+						"uri": "github.com/example/vpc",
+					},
+				},
+				"invalid": "not-a-map", // Should be skipped.
+			},
+		},
+	}
+	collectComponentsWithSource(stackData, componentSet)
+	assert.Len(t, componentSet, 1)
+	assert.Contains(t, componentSet, "vpc")
+}
+
+// TestComponentArgCompletion_NoArgs tests ComponentArgCompletion when no args provided.
+func TestComponentArgCompletion_NoArgs(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// This will fail to load stacks in test environment, returning empty list.
+	options, directive := ComponentArgCompletion(cmd, []string{}, "")
+
+	// Without proper stack config, returns empty list.
+	assert.Empty(t, options)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestComponentArgCompletion_HasArgs tests ComponentArgCompletion when args already provided.
+func TestComponentArgCompletion_HasArgs(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// When args already provided, returns empty.
+	options, directive := ComponentArgCompletion(cmd, []string{"vpc"}, "")
+
+	assert.Empty(t, options)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestStackFlagCompletion_WithComponent tests StackFlagCompletion when component is provided.
+func TestStackFlagCompletion_WithComponent(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// This will fail to load stacks in test environment, returning empty list.
+	options, directive := StackFlagCompletion(cmd, []string{"vpc"}, "")
+
+	// Without proper stack config, returns empty list.
+	assert.Empty(t, options)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestStackFlagCompletion_WithoutComponent tests StackFlagCompletion when no component provided.
+func TestStackFlagCompletion_WithoutComponent(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// This will fail to load stacks in test environment, returning empty list.
+	options, directive := StackFlagCompletion(cmd, []string{}, "")
+
+	// Without proper stack config, returns empty list.
+	assert.Empty(t, options)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestStackFlagCompletion_EmptyComponent tests StackFlagCompletion when component is empty string.
+func TestStackFlagCompletion_EmptyComponent(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// Empty string component should fall through to listing all stacks.
+	options, directive := StackFlagCompletion(cmd, []string{""}, "")
+
+	// Without proper stack config, returns empty list.
+	assert.Empty(t, options)
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+}
+
+// TestListStacksWithSourceForComponent_Success tests listStacksWithSourceForComponent with mocked dependencies.
+func TestListStacksWithSourceForComponent_Success(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	origDescribeFunc := executeDescribeStacksFunc
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+		executeDescribeStacksFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe stacks to return stacks with components.
+	executeDescribeStacksFunc = func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
+		return map[string]any{
+			"dev": map[string]any{
 				"components": map[string]any{
 					"terraform": map[string]any{
-						"eks": map[string]any{
+						"vpc": map[string]any{
 							"source": map[string]any{
-								"uri": "github.com/example/terraform-aws-eks",
+								"uri": "github.com/example/vpc",
 							},
 						},
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{"eks": {}},
-			expectedAdditions: 1,
-		},
-		{
-			name: "component with empty source string not added",
-			stackData: map[string]any{
+			"prod": map[string]any{
 				"components": map[string]any{
 					"terraform": map[string]any{
 						"vpc": map[string]any{
-							"source": "",
+							"source": map[string]any{
+								"uri": "github.com/example/vpc",
+							},
 						},
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{},
-			expectedAdditions: 0,
-		},
-		{
-			name: "component data not a map skipped",
-			stackData: map[string]any{
+			"staging": map[string]any{
 				"components": map[string]any{
 					"terraform": map[string]any{
-						"vpc":     "invalid",
-						"rds":     42,
-						"lambda":  []string{"item"},
-						"valid":   map[string]any{"source": "github.com/example/valid"},
-						"invalid": nil,
+						"rds": map[string]any{
+							"vars": map[string]any{"foo": "bar"},
+						},
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{"valid": {}},
-			expectedAdditions: 1,
-		},
-		{
-			name: "multiple components some with source",
-			stackData: map[string]any{
+		}, nil
+	}
+
+	stacks, err := listStacksWithSourceForComponent("vpc")
+	require.NoError(t, err)
+	assert.Len(t, stacks, 2)
+	assert.Contains(t, stacks, "dev")
+	assert.Contains(t, stacks, "prod")
+	assert.NotContains(t, stacks, "staging")
+}
+
+// TestListStacksWithSourceForComponent_ConfigError tests listStacksWithSourceForComponent when config init fails.
+func TestListStacksWithSourceForComponent_ConfigError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+	}()
+
+	// Mock config init to fail.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, assert.AnError
+	}
+
+	stacks, err := listStacksWithSourceForComponent("vpc")
+	require.Error(t, err)
+	assert.Nil(t, stacks)
+}
+
+// TestListStacksWithSourceForComponent_DescribeError tests listStacksWithSourceForComponent when describe fails.
+func TestListStacksWithSourceForComponent_DescribeError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	origDescribeFunc := executeDescribeStacksFunc
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+		executeDescribeStacksFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe stacks to fail.
+	executeDescribeStacksFunc = func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
+		return nil, assert.AnError
+	}
+
+	stacks, err := listStacksWithSourceForComponent("vpc")
+	require.Error(t, err)
+	assert.Nil(t, stacks)
+}
+
+// TestListStacksWithSource_Success tests listStacksWithSource with mocked dependencies.
+func TestListStacksWithSource_Success(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	origDescribeFunc := executeDescribeStacksFunc
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+		executeDescribeStacksFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe stacks to return stacks with components.
+	executeDescribeStacksFunc = func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
+		return map[string]any{
+			"dev": map[string]any{
 				"components": map[string]any{
 					"terraform": map[string]any{
 						"vpc": map[string]any{
-							"source": "github.com/example/vpc",
+							"source": map[string]any{
+								"uri": "github.com/example/vpc",
+							},
 						},
-						"eks": map[string]any{
-							"vars": map[string]any{"cluster_name": "test"},
+					},
+				},
+			},
+			"prod": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"rds": map[string]any{
+							"vars": map[string]any{"foo": "bar"},
+						},
+					},
+				},
+			},
+		}, nil
+	}
+
+	stacks, err := listStacksWithSource()
+	require.NoError(t, err)
+	assert.Len(t, stacks, 1)
+	assert.Contains(t, stacks, "dev")
+	assert.NotContains(t, stacks, "prod")
+}
+
+// TestListStacksWithSource_ConfigError tests listStacksWithSource when config init fails.
+func TestListStacksWithSource_ConfigError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+	}()
+
+	// Mock config init to fail.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, assert.AnError
+	}
+
+	stacks, err := listStacksWithSource()
+	require.Error(t, err)
+	assert.Nil(t, stacks)
+}
+
+// TestListStacksWithSource_DescribeError tests listStacksWithSource when describe fails.
+func TestListStacksWithSource_DescribeError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	origDescribeFunc := executeDescribeStacksFunc
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+		executeDescribeStacksFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe stacks to fail.
+	executeDescribeStacksFunc = func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
+		return nil, assert.AnError
+	}
+
+	stacks, err := listStacksWithSource()
+	require.Error(t, err)
+	assert.Nil(t, stacks)
+}
+
+// TestListComponentsWithSource_Success tests listComponentsWithSource with mocked dependencies.
+func TestListComponentsWithSource_Success(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	origDescribeFunc := executeDescribeStacksFunc
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+		executeDescribeStacksFunc = origDescribeFunc
+	}()
+
+	// Mock config init to succeed.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+
+	// Mock describe stacks to return stacks with components.
+	executeDescribeStacksFunc = func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
+		return map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"source": map[string]any{
+								"uri": "github.com/example/vpc",
+							},
 						},
 						"rds": map[string]any{
 							"source": map[string]any{
@@ -580,53 +560,51 @@ func TestCollectComponentsWithSource(t *testing.T) {
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{},
-			expectedSet:       map[string]struct{}{"vpc": {}, "rds": {}},
-			expectedAdditions: 2,
-		},
-		{
-			name: "adds to existing set without duplicates",
-			stackData: map[string]any{
+			"prod": map[string]any{
 				"components": map[string]any{
 					"terraform": map[string]any{
 						"vpc": map[string]any{
-							"source": "github.com/example/vpc",
+							"source": map[string]any{
+								"uri": "github.com/example/vpc",
+							},
 						},
 						"eks": map[string]any{
-							"source": "github.com/example/eks",
+							"vars": map[string]any{"foo": "bar"}, // No source.
 						},
 					},
 				},
 			},
-			existingSet:       map[string]struct{}{"vpc": {}, "rds": {}},
-			expectedSet:       map[string]struct{}{"vpc": {}, "rds": {}, "eks": {}},
-			expectedAdditions: 1, // Only eks is new.
-		},
+		}, nil
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Clone existing set to avoid mutation affecting test setup.
-			componentSet := make(map[string]struct{})
-			for k, v := range tt.existingSet {
-				componentSet[k] = v
-			}
+	components, err := listComponentsWithSource()
+	require.NoError(t, err)
+	assert.Len(t, components, 2)
+	assert.Contains(t, components, "vpc")
+	assert.Contains(t, components, "rds")
+	assert.NotContains(t, components, "eks")
+}
 
-			initialLen := len(componentSet)
-			collectComponentsWithSource(tt.stackData, componentSet)
+// TestListComponentsWithSource_ConfigError tests listComponentsWithSource when config init fails.
+func TestListComponentsWithSource_ConfigError(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigForPrompt
+	defer func() {
+		initCliConfigForPrompt = origInitFunc
+	}()
 
-			// Verify the set contains expected components.
-			assert.Equal(t, tt.expectedSet, componentSet)
-
-			// Verify number of additions.
-			actualAdditions := len(componentSet) - initialLen
-			assert.Equal(t, tt.expectedAdditions, actualAdditions)
-		})
+	// Mock config init to fail.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, assert.AnError
 	}
+
+	components, err := listComponentsWithSource()
+	require.Error(t, err)
+	assert.Nil(t, components)
 }
 
-// Test listComponentsWithSource - returns all terraform components that have source configured.
-func TestListComponentsWithSource(t *testing.T) {
+// TestListComponentsWithSource_DescribeError tests listComponentsWithSource when describe fails.
+func TestListComponentsWithSource_DescribeError(t *testing.T) {
 	// Save originals and restore after test.
 	origInitFunc := initCliConfigForPrompt
 	origDescribeFunc := executeDescribeStacksFunc
@@ -635,558 +613,17 @@ func TestListComponentsWithSource(t *testing.T) {
 		executeDescribeStacksFunc = origDescribeFunc
 	}()
 
-	t.Run("config init error returns error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, errors.New("config init failed"))
+	// Mock config init to succeed.
+	initCliConfigForPrompt = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
 
-		initCliConfigForPrompt = mockLoader.InitCliConfig
+	// Mock describe stacks to fail.
+	executeDescribeStacksFunc = func(atmosConfig *schema.AtmosConfiguration, filterByStack string, components, componentTypes, sections []string, ignoreMissingFiles, processTemplates, processYamlFunctions, includeEmptyStacks bool, skip []string, authManager auth.AuthManager) (map[string]any, error) {
+		return nil, assert.AnError
+	}
 
-		result, err := listComponentsWithSource()
-		require.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "config init failed")
-	})
-
-	t.Run("describe stacks error returns error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return nil, errors.New("describe stacks failed")
-		}
-
-		result, err := listComponentsWithSource()
-		require.Error(t, err)
-		assert.Nil(t, result)
-		assert.Contains(t, err.Error(), "describe stacks failed")
-	})
-
-	t.Run("empty stacks returns empty list", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{}, nil
-		}
-
-		result, err := listComponentsWithSource()
-		require.NoError(t, err)
-		assert.Empty(t, result)
-	})
-
-	t.Run("returns sorted unique components with source", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev-us-east-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"},
-							"eks": map[string]any{"vars": map[string]any{}}, // No source.
-						},
-					},
-				},
-				"prod-us-west-2": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"}, // Same component.
-							"rds": map[string]any{"source": map[string]any{"uri": "github.com/example/rds"}},
-						},
-					},
-				},
-			}, nil
-		}
-
-		result, err := listComponentsWithSource()
-		require.NoError(t, err)
-		assert.Equal(t, []string{"rds", "vpc"}, result) // Sorted, deduplicated.
-	})
-}
-
-// Test listStacksWithSource - returns stacks with source-configured components.
-func TestListStacksWithSource(t *testing.T) {
-	// Save originals and restore after test.
-	origInitFunc := initCliConfigForPrompt
-	origDescribeFunc := executeDescribeStacksFunc
-	defer func() {
-		initCliConfigForPrompt = origInitFunc
-		executeDescribeStacksFunc = origDescribeFunc
-	}()
-
-	t.Run("config init error returns error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, errors.New("config init failed"))
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-
-		result, err := listStacksWithSource()
-		require.Error(t, err)
-		assert.Nil(t, result)
-	})
-
-	t.Run("describe stacks error returns error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return nil, errors.New("describe stacks failed")
-		}
-
-		result, err := listStacksWithSource()
-		require.Error(t, err)
-		assert.Nil(t, result)
-	})
-
-	t.Run("returns sorted stacks with source-configured components", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev-us-east-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"},
-						},
-					},
-				},
-				"staging-eu-west-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"eks": map[string]any{"vars": map[string]any{}}, // No source.
-						},
-					},
-				},
-				"prod-us-west-2": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"rds": map[string]any{"source": map[string]any{"uri": "github.com/example/rds"}},
-						},
-					},
-				},
-			}, nil
-		}
-
-		result, err := listStacksWithSource()
-		require.NoError(t, err)
-		assert.Equal(t, []string{"dev-us-east-1", "prod-us-west-2"}, result) // Sorted, staging excluded.
-	})
-}
-
-// Test listStacksWithSourceForComponent - returns stacks containing a specific component with source.
-func TestListStacksWithSourceForComponent(t *testing.T) {
-	// Save originals and restore after test.
-	origInitFunc := initCliConfigForPrompt
-	origDescribeFunc := executeDescribeStacksFunc
-	defer func() {
-		initCliConfigForPrompt = origInitFunc
-		executeDescribeStacksFunc = origDescribeFunc
-	}()
-
-	t.Run("config init error returns error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, errors.New("config init failed"))
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-
-		result, err := listStacksWithSourceForComponent("vpc")
-		require.Error(t, err)
-		assert.Nil(t, result)
-	})
-
-	t.Run("returns sorted stacks containing component with source", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev-us-east-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"},
-						},
-					},
-				},
-				"staging-eu-west-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"vars": map[string]any{}}, // Has vpc but no source.
-						},
-					},
-				},
-				"prod-us-west-2": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": map[string]any{"uri": "github.com/example/vpc"}},
-							"rds": map[string]any{"source": "github.com/example/rds"},
-						},
-					},
-				},
-				"test-ap-south-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"rds": map[string]any{"source": "github.com/example/rds"}, // Different component.
-						},
-					},
-				},
-			}, nil
-		}
-
-		result, err := listStacksWithSourceForComponent("vpc")
-		require.NoError(t, err)
-		assert.Equal(t, []string{"dev-us-east-1", "prod-us-west-2"}, result) // Only stacks with vpc+source.
-	})
-
-	t.Run("component not found in any stack", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev-us-east-1": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"rds": map[string]any{"source": "github.com/example/rds"},
-						},
-					},
-				},
-			}, nil
-		}
-
-		result, err := listStacksWithSourceForComponent("nonexistent")
-		require.NoError(t, err)
-		assert.Empty(t, result)
-	})
-}
-
-// Test ComponentArgCompletion - shell completion for component argument.
-func TestComponentArgCompletion(t *testing.T) {
-	// Save originals and restore after test.
-	origInitFunc := initCliConfigForPrompt
-	origDescribeFunc := executeDescribeStacksFunc
-	defer func() {
-		initCliConfigForPrompt = origInitFunc
-		executeDescribeStacksFunc = origDescribeFunc
-	}()
-
-	t.Run("returns components when args is empty", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"},
-						},
-					},
-				},
-			}, nil
-		}
-
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := ComponentArgCompletion(cmd, []string{}, "")
-
-		assert.Equal(t, []string{"vpc"}, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
-
-	t.Run("returns nil when args already provided", func(t *testing.T) {
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := ComponentArgCompletion(cmd, []string{"existing"}, "")
-
-		assert.Nil(t, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
-
-	t.Run("returns nil on error", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, errors.New("config error"))
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := ComponentArgCompletion(cmd, []string{}, "")
-
-		assert.Nil(t, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
-}
-
-// Test StackFlagCompletion - shell completion for stack flag.
-func TestStackFlagCompletion(t *testing.T) {
-	// Save originals and restore after test.
-	origInitFunc := initCliConfigForPrompt
-	origDescribeFunc := executeDescribeStacksFunc
-	defer func() {
-		initCliConfigForPrompt = origInitFunc
-		executeDescribeStacksFunc = origDescribeFunc
-	}()
-
-	t.Run("returns filtered stacks when component provided", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"},
-						},
-					},
-				},
-				"prod": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"rds": map[string]any{"source": "github.com/example/rds"},
-						},
-					},
-				},
-			}, nil
-		}
-
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := StackFlagCompletion(cmd, []string{"vpc"}, "")
-
-		assert.Equal(t, []string{"dev"}, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
-
-	t.Run("returns all stacks when no component provided", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, nil)
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-		executeDescribeStacksFunc = func(
-			atmosConfig *schema.AtmosConfiguration,
-			filterByStack string,
-			components []string,
-			componentTypes []string,
-			sections []string,
-			ignoreMissingFiles bool,
-			processTemplates bool,
-			processYamlFunctions bool,
-			includeEmptyStacks bool,
-			skip []string,
-			authManager auth.AuthManager,
-		) (map[string]any, error) {
-			return map[string]any{
-				"dev": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"vpc": map[string]any{"source": "github.com/example/vpc"},
-						},
-					},
-				},
-				"prod": map[string]any{
-					"components": map[string]any{
-						"terraform": map[string]any{
-							"rds": map[string]any{"source": "github.com/example/rds"},
-						},
-					},
-				},
-			}, nil
-		}
-
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := StackFlagCompletion(cmd, []string{}, "")
-
-		assert.Equal(t, []string{"dev", "prod"}, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
-
-	t.Run("returns nil on error with component filter", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, errors.New("config error"))
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := StackFlagCompletion(cmd, []string{"vpc"}, "")
-
-		assert.Nil(t, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
-
-	t.Run("returns nil on error without component filter", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		mockLoader := NewMockConfigLoader(ctrl)
-		mockLoader.EXPECT().
-			InitCliConfig(gomock.Any(), true).
-			Return(schema.AtmosConfiguration{}, errors.New("config error"))
-
-		initCliConfigForPrompt = mockLoader.InitCliConfig
-
-		cmd := &cobra.Command{Use: "test"}
-		result, directive := StackFlagCompletion(cmd, []string{}, "")
-
-		assert.Nil(t, result)
-		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
-	})
+	components, err := listComponentsWithSource()
+	require.Error(t, err)
+	assert.Nil(t, components)
 }

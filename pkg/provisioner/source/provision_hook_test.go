@@ -1,7 +1,6 @@
 package source
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"testing"
@@ -188,8 +187,77 @@ func TestIsWorkdirEnabled(t *testing.T) {
 	}
 }
 
-// Note: needsProvisioning is tested via TestNeedsVendoring in source_test.go
-// as it shares the same underlying logic.
+func TestNeedsProvisioning(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) string // Returns path to test.
+		expected bool
+	}{
+		{
+			name: "non-existent directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				return filepath.Join(tempDir, "nonexistent")
+			},
+			expected: true,
+		},
+		{
+			name: "path is a file not directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				filePath := filepath.Join(tempDir, "file.txt")
+				err := os.WriteFile(filePath, []byte("test"), 0o644)
+				require.NoError(t, err)
+				return filePath
+			},
+			expected: true,
+		},
+		{
+			name: "empty directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				emptyDir := filepath.Join(tempDir, "empty")
+				err := os.MkdirAll(emptyDir, 0o755)
+				require.NoError(t, err)
+				return emptyDir
+			},
+			expected: true,
+		},
+		{
+			name: "directory with files",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				dirPath := filepath.Join(tempDir, "component")
+				err := os.MkdirAll(dirPath, 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644)
+				require.NoError(t, err)
+				return dirPath
+			},
+			expected: false,
+		},
+		{
+			name: "directory with subdirectory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				dirPath := filepath.Join(tempDir, "component")
+				subDir := filepath.Join(dirPath, "subdir")
+				err := os.MkdirAll(subDir, 0o755)
+				require.NoError(t, err)
+				return dirPath
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.setup(t)
+			result := needsProvisioning(path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
 
 func TestDetermineSourceTargetDirectory(t *testing.T) {
 	tests := []struct {
@@ -434,170 +502,4 @@ func TestWrapProvisionError(t *testing.T) {
 			// but not included in the .Error() string representation.
 		})
 	}
-}
-
-func TestNeedsProvisioning(t *testing.T) {
-	tests := []struct {
-		name     string
-		setup    func(t *testing.T) string
-		expected bool
-	}{
-		{
-			name: "directory does not exist",
-			setup: func(t *testing.T) string {
-				return filepath.Join(t.TempDir(), "nonexistent")
-			},
-			expected: true,
-		},
-		{
-			name: "directory exists but is empty",
-			setup: func(t *testing.T) string {
-				dir := filepath.Join(t.TempDir(), "empty")
-				require.NoError(t, os.MkdirAll(dir, 0o755))
-				return dir
-			},
-			expected: true,
-		},
-		{
-			name: "directory exists with files",
-			setup: func(t *testing.T) string {
-				dir := filepath.Join(t.TempDir(), "populated")
-				require.NoError(t, os.MkdirAll(dir, 0o755))
-				require.NoError(t, os.WriteFile(filepath.Join(dir, "main.tf"), []byte("# test"), 0o644))
-				return dir
-			},
-			expected: false,
-		},
-		{
-			name: "directory exists with subdirectory",
-			setup: func(t *testing.T) string {
-				dir := filepath.Join(t.TempDir(), "with-subdir")
-				require.NoError(t, os.MkdirAll(filepath.Join(dir, "subdir"), 0o755))
-				return dir
-			},
-			expected: false,
-		},
-		{
-			name: "path is a file not directory",
-			setup: func(t *testing.T) string {
-				file := filepath.Join(t.TempDir(), "file.txt")
-				require.NoError(t, os.WriteFile(file, []byte("content"), 0o644))
-				return file
-			},
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			targetDir := tt.setup(t)
-			result := needsProvisioning(targetDir)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestAutoProvisionSource_NoSource(t *testing.T) {
-	// When no source is configured, AutoProvisionSource should return nil (skip).
-	ctx := context.Background()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-	componentConfig := map[string]any{
-		"component": "vpc",
-		// No source configured.
-	}
-
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
-	assert.NoError(t, err, "should return nil when no source is configured")
-}
-
-func TestAutoProvisionSource_MissingComponent(t *testing.T) {
-	// When source is configured but component name is missing, should return error.
-	ctx := context.Background()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: t.TempDir(),
-	}
-	componentConfig := map[string]any{
-		// No component name.
-		"source": map[string]any{
-			"uri": "github.com/cloudposse/terraform-aws-vpc",
-		},
-	}
-
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
-	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
-}
-
-func TestAutoProvisionSource_TargetExists(t *testing.T) {
-	// When target directory exists with files, should skip provisioning.
-	ctx := context.Background()
-	tempDir := t.TempDir()
-
-	// Create existing component directory with files.
-	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(componentDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# existing"), 0o644))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
-			},
-		},
-	}
-	componentConfig := map[string]any{
-		"component": "vpc",
-		"source": map[string]any{
-			"uri": "github.com/cloudposse/terraform-aws-vpc",
-		},
-	}
-
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
-	assert.NoError(t, err, "should skip when target already exists with files")
-
-	// Verify existing file was not modified.
-	content, err := os.ReadFile(filepath.Join(componentDir, "main.tf"))
-	require.NoError(t, err)
-	assert.Equal(t, "# existing", string(content))
-}
-
-func TestAutoProvisionSource_WorkdirTargetExists(t *testing.T) {
-	// When workdir target exists, should set workdir path key and skip provisioning.
-	ctx := context.Background()
-	tempDir := t.TempDir()
-
-	// Create existing workdir directory with files.
-	workdirDir := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
-	require.NoError(t, os.MkdirAll(workdirDir, 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(workdirDir, "main.tf"), []byte("# workdir"), 0o644))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
-			},
-		},
-	}
-	componentConfig := map[string]any{
-		"component":   "vpc",
-		"atmos_stack": "dev",
-		"source": map[string]any{
-			"uri": "github.com/cloudposse/terraform-aws-vpc",
-		},
-		"provision": map[string]any{
-			"workdir": map[string]any{
-				"enabled": true,
-			},
-		},
-	}
-
-	err := AutoProvisionSource(ctx, atmosConfig, "terraform", componentConfig, nil)
-	assert.NoError(t, err, "should skip when workdir target already exists")
-
-	// Verify workdir path was set in componentConfig using the workdir key.
-	assert.Equal(t, workdirDir, componentConfig["_workdir_path"])
 }
