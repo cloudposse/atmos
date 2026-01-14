@@ -1626,6 +1626,11 @@ func TestFilterChdirEnv(t *testing.T) {
 			input:    []string{"ATMOS_CHDIR_OTHER=/path", "NOT_ATMOS_CHDIR=/other"},
 			expected: []string{"ATMOS_CHDIR_OTHER=/path", "NOT_ATMOS_CHDIR=/other"},
 		},
+		{
+			name:     "duplicate ATMOS_CHDIR entries",
+			input:    []string{"PATH=/usr/bin", "ATMOS_CHDIR=/first", "HOME=/home", "ATMOS_CHDIR=/second"},
+			expected: []string{"PATH=/usr/bin", "HOME=/home", "ATMOS_CHDIR="},
+		},
 	}
 
 	for _, tt := range tests {

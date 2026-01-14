@@ -1468,6 +1468,7 @@ func TestEnsureWorkflowToolchainDependencies_NoDependencies(t *testing.T) {
 func TestEnsureWorkflowToolchainDependencies_WithWorkflowDeps(t *testing.T) {
 	tempDir := t.TempDir()
 	t.Setenv("HOME", tempDir)
+	t.Chdir(tempDir) // Isolate from project .tool-versions.
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tempDir,

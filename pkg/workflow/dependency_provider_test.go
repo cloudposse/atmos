@@ -38,19 +38,19 @@ func TestDefaultDependencyProvider_LoadToolVersionsDependencies(t *testing.T) {
 	provider := NewDefaultDependencyProvider(atmosConfig)
 	deps, err := provider.LoadToolVersionsDependencies()
 
-	// Should not error (returns empty map if file doesn't exist or is empty).
+	// Should not error and should parse the file we just wrote.
 	assert.NoError(t, err)
 	assert.NotNil(t, deps)
-	// Verify parsed content if file was found.
-	if len(deps) > 0 {
-		assert.Equal(t, "1.11.4", deps["terraform"])
-		assert.Equal(t, "1.10.0", deps["opentofu"])
-	}
+	assert.Equal(t, map[string]string{
+		"terraform": "1.11.4",
+		"opentofu":  "1.10.0",
+	}, deps)
 }
 
 // TestDefaultDependencyProvider_LoadToolVersionsDependencies_NoFile tests when .tool-versions doesn't exist.
 func TestDefaultDependencyProvider_LoadToolVersionsDependencies_NoFile(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Chdir(tempDir) // Ensure we don't pick up a repo-level .tool-versions.
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tempDir,
@@ -62,6 +62,7 @@ func TestDefaultDependencyProvider_LoadToolVersionsDependencies_NoFile(t *testin
 	// Should not error - returns empty map when file doesn't exist.
 	assert.NoError(t, err)
 	assert.NotNil(t, deps)
+	assert.Empty(t, deps)
 }
 
 // TestDefaultDependencyProvider_ResolveWorkflowDependencies tests resolving workflow dependencies.
@@ -204,6 +205,7 @@ func TestDefaultDependencyProvider_EnsureTools(t *testing.T) {
 // TestDefaultDependencyProvider_UpdatePathForTools tests the UpdatePathForTools method.
 func TestDefaultDependencyProvider_UpdatePathForTools(t *testing.T) {
 	tempDir := t.TempDir()
+	t.Setenv("PATH", "test-path") // Prevent leakage and make expectations explicit.
 
 	atmosConfig := &schema.AtmosConfiguration{
 		BasePath: tempDir,
@@ -217,8 +219,10 @@ func TestDefaultDependencyProvider_UpdatePathForTools(t *testing.T) {
 	// Test with empty dependencies - should succeed.
 	err := provider.UpdatePathForTools(map[string]string{})
 	assert.NoError(t, err)
+	assert.Equal(t, "test-path", os.Getenv("PATH"))
 
 	// Test with nil dependencies - should succeed.
 	err = provider.UpdatePathForTools(nil)
 	assert.NoError(t, err)
+	assert.Equal(t, "test-path", os.Getenv("PATH"))
 }
