@@ -176,7 +176,8 @@ func TestProvisionWithParams_BackendProvisioningFailure(t *testing.T) {
 
 	err := ProvisionWithParams(params)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "backend provisioning failed")
+	// The spinner passes through the original error from the backend provisioner.
+	assert.Contains(t, err.Error(), "provisioning failed")
 	assert.Contains(t, err.Error(), "bucket already exists in another account")
 }
 
@@ -312,6 +313,11 @@ func TestProvisionWithParams_BackendTypeValidation(t *testing.T) {
 					"backend": map[string]any{
 						"bucket": "test-bucket",
 						"region": "us-west-2",
+					},
+					"provision": map[string]any{
+						"backend": map[string]any{
+							"enabled": true,
+						},
 					},
 				}, nil
 			}

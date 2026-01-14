@@ -29,6 +29,7 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentProvisionSection = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	var baseComponentConfig schema.BaseComponentConfig
@@ -206,7 +207,7 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
-	// Terraform-specific: extract base component providers, hooks, generate, backend, and source.
+	// Terraform-specific: extract base component providers, hooks, generate, backend, source, and provision.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
 		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
@@ -216,5 +217,6 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
 		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection
+		result.BaseComponentProvisionSection = baseComponentConfig.BaseComponentProvisionSection
 	}
 }
