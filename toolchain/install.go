@@ -28,7 +28,8 @@ const (
 // InstallOptions configures the behavior of InstallSingleTool.
 type InstallOptions struct {
 	IsLatest               bool // Whether this is a "latest" version install.
-	ShowProgressBar        bool // Whether to show progress during install.
+	ShowProgressBar        bool // Whether to show spinner during install.
+	ShowInstallDetails     bool // Whether to show detailed install messages (path, size, registered).
 	ShowHint               bool // Whether to show PATH export hint after install.
 	SkipToolVersionsUpdate bool // Skip .tool-versions update (caller handles it).
 }
@@ -150,6 +151,7 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 	err = InstallSingleTool(owner, repo, version, InstallOptions{
 		IsLatest:               version == "latest",
 		ShowProgressBar:        showProgressBar,
+		ShowInstallDetails:     showProgressBar, // Single-tool mode shows verbose output.
 		ShowHint:               showHint,
 		SkipToolVersionsUpdate: true,
 	})
@@ -199,7 +201,7 @@ func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 		version:                version,
 		binaryPath:             binaryPath,
 		isLatest:               opts.IsLatest,
-		showMessage:            opts.ShowProgressBar,
+		showMessage:            opts.ShowInstallDetails,
 		showHint:               opts.ShowHint,
 		skipToolVersionsUpdate: opts.SkipToolVersionsUpdate,
 	}, installer)
@@ -266,9 +268,10 @@ func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showH
 	}
 
 	err = InstallSingleTool(tool.owner, tool.repo, tool.version, InstallOptions{
-		IsLatest:        tool.version == "latest",
-		ShowProgressBar: true,
-		ShowHint:        showHint,
+		IsLatest:           tool.version == "latest",
+		ShowProgressBar:    true,
+		ShowInstallDetails: false, // Batch mode - showProgress handles the simple message.
+		ShowHint:           showHint,
 	})
 	if err != nil {
 		return resultFailed, err
