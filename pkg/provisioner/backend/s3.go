@@ -37,6 +37,40 @@ type S3ClientAPI interface {
 	DeleteBucket(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error)
 }
 
+// s3ClientFactory creates S3 clients from AWS config.
+// Override in tests to inject fake S3 clients.
+var s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
+	return s3.NewFromConfig(cfg)
+}
+
+// SetS3ClientFactory sets a custom S3 client factory for testing.
+func SetS3ClientFactory(f func(aws.Config) S3ClientAPI) {
+	defer perf.Track(nil, "backend.SetS3ClientFactory")()
+
+	s3ClientFactory = f
+}
+
+// ResetS3ClientFactory resets the S3 client factory to default.
+func ResetS3ClientFactory() {
+	defer perf.Track(nil, "backend.ResetS3ClientFactory")()
+
+	s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
+		return s3.NewFromConfig(cfg)
+	}
+}
+
+// s3SkipUnsupportedTestOps skips S3 operations not supported by gofakes3.
+// Test-only. Not exposed in configuration.
+var s3SkipUnsupportedTestOps = false
+
+// SetS3SkipUnsupportedTestOps sets whether to skip unsupported S3 operations.
+// This should only be called in tests using gofakes3.
+func SetS3SkipUnsupportedTestOps(skip bool) {
+	defer perf.Track(nil, "backend.SetS3SkipUnsupportedTestOps")()
+
+	s3SkipUnsupportedTestOps = skip
+}
+
 // s3Config holds S3 backend configuration.
 type s3Config struct {
 	bucket  string
@@ -90,8 +124,8 @@ func CreateS3Backend(
 			Err()
 	}
 
-	// Create S3 client.
-	client := s3.NewFromConfig(awsConfig)
+	// Create S3 client using factory (allows test injection).
+	client := s3ClientFactory(awsConfig)
 
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
@@ -276,6 +310,12 @@ func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket strin
 	// 1. Enable versioning (ALWAYS).
 	if err := enableVersioning(ctx, client, bucket); err != nil {
 		return fmt.Errorf(errFormat, errUtils.ErrEnableVersioning, err)
+	}
+
+	// Skip operations not supported by gofakes3 during testing.
+	// These are tested separately with mocks in s3_test.go.
+	if s3SkipUnsupportedTestOps {
+		return nil
 	}
 
 	// 2. Enable encryption with AES-256 (ALWAYS).
