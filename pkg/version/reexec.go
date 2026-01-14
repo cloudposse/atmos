@@ -82,8 +82,8 @@ type defaultInstaller struct{}
 func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool) error {
 	defer perf.Track(nil, "version.defaultInstaller.Install")()
 
-	// Show hint when installing via version command.
-	return toolchain.RunInstall(toolSpec, force, allowPrereleases, true)
+	// Suppress PATH hint for --use-version installs (automatic version switching).
+	return toolchain.RunInstall(toolSpec, force, allowPrereleases, false)
 }
 
 // CheckAndReexec checks if version.use is configured and re-executes with the specified version.

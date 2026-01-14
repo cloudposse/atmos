@@ -41,6 +41,18 @@ func (m *mockResolver) Resolve(toolName string) (string, string, error) {
 	return "", "", errToolNotFound
 }
 
+// mockBinaryPathFinder is a mock implementation of BinaryPathFinder for testing.
+type mockBinaryPathFinder struct {
+	findBinaryPathFunc func(owner, repo, version string, binaryName ...string) (string, error)
+}
+
+func (m *mockBinaryPathFinder) FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error) {
+	if m.findBinaryPathFunc != nil {
+		return m.findBinaryPathFunc(owner, repo, version, binaryName...)
+	}
+	return "", errToolNotFound
+}
+
 func TestNewInstaller(t *testing.T) {
 	t.Run("creates installer with nil config", func(t *testing.T) {
 		inst := NewInstaller(nil)
@@ -82,14 +94,14 @@ func TestEnsureTools(t *testing.T) {
 	tests := []struct {
 		name         string
 		dependencies map[string]string
-		setupMock    func() (*mockResolver, InstallFunc, func(string) bool, func() bool)
+		setupMock    func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool)
 		wantErr      bool
 		errIs        error
 	}{
 		{
 			name:         "empty dependencies returns nil",
 			dependencies: map[string]string{},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				return &mockResolver{}, nil, nil, nil
 			},
 			wantErr: false,
@@ -97,7 +109,7 @@ func TestEnsureTools(t *testing.T) {
 		{
 			name:         "nil dependencies returns nil",
 			dependencies: nil,
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				return &mockResolver{}, nil, nil, nil
 			},
 			wantErr: false,
@@ -107,7 +119,7 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
@@ -118,12 +130,14 @@ func TestEnsureTools(t *testing.T) {
 					installCalled = true
 					return nil
 				}
-				fileExists := func(path string) bool {
-					return true // Tool exists.
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "/path/to/terraform", nil // Tool exists.
+					},
 				}
 				// Verifier returns true if install was NOT called (expected behavior).
 				verifier := func() bool { return !installCalled }
-				return resolver, installFunc, fileExists, verifier
+				return resolver, installFunc, finder, verifier
 			},
 			wantErr: false,
 		},
@@ -132,7 +146,7 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
@@ -144,10 +158,12 @@ func TestEnsureTools(t *testing.T) {
 					}
 					return nil
 				}
-				fileExists := func(path string) bool {
-					return false // Tool does not exist.
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "", errToolNotFound // Tool does not exist.
+					},
 				}
-				return resolver, installFunc, fileExists, nil
+				return resolver, installFunc, finder, nil
 			},
 			wantErr: false,
 		},
@@ -156,7 +172,7 @@ func TestEnsureTools(t *testing.T) {
 			dependencies: map[string]string{
 				"hashicorp/terraform": "1.10.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
@@ -165,10 +181,12 @@ func TestEnsureTools(t *testing.T) {
 				installFunc := func(string, bool, bool, bool) error {
 					return errInstallFailed
 				}
-				fileExists := func(path string) bool {
-					return false
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "", errToolNotFound
+					},
 				}
-				return resolver, installFunc, fileExists, nil
+				return resolver, installFunc, finder, nil
 			},
 			wantErr: true,
 			errIs:   errUtils.ErrToolInstall,
@@ -179,7 +197,7 @@ func TestEnsureTools(t *testing.T) {
 				"hashicorp/terraform": "1.10.0",
 				"cloudposse/atmos":    "1.0.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						parts := strings.Split(toolName, "/")
@@ -194,12 +212,14 @@ func TestEnsureTools(t *testing.T) {
 					installCount++
 					return nil
 				}
-				fileExists := func(path string) bool {
-					return false // All tools need install.
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "", errToolNotFound // All tools need install.
+					},
 				}
 				// Verifier returns true if install was called exactly twice (once per tool).
 				verifier := func() bool { return installCount == 2 }
-				return resolver, installFunc, fileExists, verifier
+				return resolver, installFunc, finder, verifier
 			},
 			wantErr: false,
 		},
@@ -209,7 +229,7 @@ func TestEnsureTools(t *testing.T) {
 				"hashicorp/terraform": "1.10.0",
 				"cloudposse/atmos":    "1.0.0",
 			},
-			setupMock: func() (*mockResolver, InstallFunc, func(string) bool, func() bool) {
+			setupMock: func() (*mockResolver, InstallFunc, *mockBinaryPathFinder, func() bool) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						parts := strings.Split(toolName, "/")
@@ -222,10 +242,12 @@ func TestEnsureTools(t *testing.T) {
 				installFunc := func(string, bool, bool, bool) error {
 					return errInstallFailed
 				}
-				fileExists := func(path string) bool {
-					return false
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "", errToolNotFound
+					},
 				}
-				return resolver, installFunc, fileExists, nil
+				return resolver, installFunc, finder, nil
 			},
 			wantErr: true,
 			errIs:   errUtils.ErrToolInstall,
@@ -234,14 +256,14 @@ func TestEnsureTools(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver, installFunc, fileExists, verifier := tt.setupMock()
+			resolver, installFunc, finder, verifier := tt.setupMock()
 
 			opts := []InstallerOption{WithResolver(resolver)}
 			if installFunc != nil {
 				opts = append(opts, WithInstallFunc(installFunc))
 			}
-			if fileExists != nil {
-				opts = append(opts, WithFileExistsFunc(fileExists))
+			if finder != nil {
+				opts = append(opts, WithBinaryPathFinder(finder))
 			}
 
 			inst := NewInstaller(nil, opts...)
@@ -266,29 +288,30 @@ func TestEnsureTools(t *testing.T) {
 
 func TestIsToolInstalled(t *testing.T) {
 	tests := []struct {
-		name        string
-		tool        string
-		version     string
-		config      *schema.AtmosConfiguration
-		setupMock   func() (*mockResolver, func(string) bool)
-		want        bool
-		wantPathArg string
+		name      string
+		tool      string
+		version   string
+		config    *schema.AtmosConfiguration
+		setupMock func() (*mockResolver, *mockBinaryPathFinder)
+		want      bool
 	}{
 		{
 			name:    "tool exists - returns true",
 			tool:    "hashicorp/terraform",
 			version: "1.10.0",
 			config:  nil,
-			setupMock: func() (*mockResolver, func(string) bool) {
+			setupMock: func() (*mockResolver, *mockBinaryPathFinder) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				fileExists := func(path string) bool {
-					return true
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "/path/to/terraform", nil
+					},
 				}
-				return resolver, fileExists
+				return resolver, finder
 			},
 			want: true,
 		},
@@ -297,16 +320,18 @@ func TestIsToolInstalled(t *testing.T) {
 			tool:    "hashicorp/terraform",
 			version: "1.10.0",
 			config:  nil,
-			setupMock: func() (*mockResolver, func(string) bool) {
+			setupMock: func() (*mockResolver, *mockBinaryPathFinder) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				fileExists := func(path string) bool {
-					return false
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "", errToolNotFound
+					},
 				}
-				return resolver, fileExists
+				return resolver, finder
 			},
 			want: false,
 		},
@@ -315,59 +340,42 @@ func TestIsToolInstalled(t *testing.T) {
 			tool:    "unknown-tool",
 			version: "1.0.0",
 			config:  nil,
-			setupMock: func() (*mockResolver, func(string) bool) {
+			setupMock: func() (*mockResolver, *mockBinaryPathFinder) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "", "", errToolNotFound
 					},
 				}
-				fileExists := func(path string) bool {
-					return true // Should not be called.
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						return "/path/to/binary", nil // Should not be called due to resolver error.
+					},
 				}
-				return resolver, fileExists
+				return resolver, finder
 			},
 			want: false,
 		},
 		{
-			name:    "custom install path from config",
-			tool:    "hashicorp/terraform",
-			version: "1.10.0",
-			config: &schema.AtmosConfiguration{
-				Toolchain: schema.Toolchain{
-					InstallPath: filepath.Join("custom", "tools"),
-				},
-			},
-			setupMock: func() (*mockResolver, func(string) bool) {
-				resolver := &mockResolver{
-					resolveFunc: func(toolName string) (string, string, error) {
-						return "hashicorp", "terraform", nil
-					},
-				}
-				fileExists := func(path string) bool {
-					// Verify the custom path is used (cross-platform).
-					expectedPrefix := filepath.Join("custom", "tools")
-					return strings.HasPrefix(path, expectedPrefix)
-				}
-				return resolver, fileExists
-			},
-			want: true,
-		},
-		{
-			name:    "default install path when config is nil",
+			name:    "FindBinaryPath receives correct arguments",
 			tool:    "hashicorp/terraform",
 			version: "1.10.0",
 			config:  nil,
-			setupMock: func() (*mockResolver, func(string) bool) {
+			setupMock: func() (*mockResolver, *mockBinaryPathFinder) {
 				resolver := &mockResolver{
 					resolveFunc: func(toolName string) (string, string, error) {
 						return "hashicorp", "terraform", nil
 					},
 				}
-				fileExists := func(path string) bool {
-					// Verify the default path is used.
-					return strings.HasPrefix(path, ".tools")
+				finder := &mockBinaryPathFinder{
+					findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+						// Verify the correct arguments are passed.
+						if owner == "hashicorp" && repo == "terraform" && version == "1.10.0" {
+							return "/path/to/terraform", nil
+						}
+						return "", errToolNotFound
+					},
 				}
-				return resolver, fileExists
+				return resolver, finder
 			},
 			want: true,
 		},
@@ -375,11 +383,11 @@ func TestIsToolInstalled(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resolver, fileExists := tt.setupMock()
+			resolver, finder := tt.setupMock()
 
 			inst := NewInstaller(tt.config,
 				WithResolver(resolver),
-				WithFileExistsFunc(fileExists),
+				WithBinaryPathFinder(finder),
 			)
 
 			got := inst.isToolInstalled(tt.tool, tt.version)
@@ -388,30 +396,35 @@ func TestIsToolInstalled(t *testing.T) {
 	}
 }
 
-func TestIsToolInstalled_PathConstruction(t *testing.T) {
-	t.Run("constructs correct binary path", func(t *testing.T) {
-		var capturedPath string
+func TestIsToolInstalled_FindBinaryPathDelegation(t *testing.T) {
+	t.Run("delegates to FindBinaryPath with correct arguments", func(t *testing.T) {
+		var capturedOwner, capturedRepo, capturedVersion string
 
 		resolver := &mockResolver{
 			resolveFunc: func(toolName string) (string, string, error) {
 				return "hashicorp", "terraform", nil
 			},
 		}
-		fileExists := func(path string) bool {
-			capturedPath = path
-			return true
+		finder := &mockBinaryPathFinder{
+			findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+				capturedOwner = owner
+				capturedRepo = repo
+				capturedVersion = version
+				return "/path/to/terraform", nil
+			},
 		}
 
 		inst := NewInstaller(nil,
 			WithResolver(resolver),
-			WithFileExistsFunc(fileExists),
+			WithBinaryPathFinder(finder),
 		)
 
 		_ = inst.isToolInstalled("terraform", "1.10.0")
 
-		// Expected path: .tools/bin/hashicorp/terraform/1.10.0/terraform.
-		expectedPath := filepath.Join(".tools", "bin", "hashicorp", "terraform", "1.10.0", "terraform")
-		assert.Equal(t, expectedPath, capturedPath)
+		// Verify FindBinaryPath was called with resolved owner/repo and version.
+		assert.Equal(t, "hashicorp", capturedOwner)
+		assert.Equal(t, "terraform", capturedRepo)
+		assert.Equal(t, "1.10.0", capturedVersion)
 	})
 }
 
@@ -550,6 +563,144 @@ func TestGetPathFromEnv(t *testing.T) {
 	})
 }
 
+// TestIsToolInstalled_DifferentBinaryName tests that isToolInstalled correctly
+// detects tools when the binary name differs from the repo name.
+// This test is expected to FAIL with the current implementation because it
+// manually constructs the path using 'repo' as the binary name.
+func TestIsToolInstalled_DifferentBinaryName(t *testing.T) {
+	t.Run("detects tool with different binary name", func(t *testing.T) {
+		// Create temp directory structure with binary named differently than repo.
+		tmpDir := t.TempDir()
+		toolsDir := filepath.Join(tmpDir, "tools")
+		binDir := filepath.Join(toolsDir, "bin", "opentofu", "opentofu", "1.9.0")
+		err := os.MkdirAll(binDir, 0o755)
+		require.NoError(t, err)
+
+		// Create binary named 'tofu' (not 'opentofu').
+		binaryPath := filepath.Join(binDir, "tofu")
+		err = os.WriteFile(binaryPath, []byte("#!/bin/sh\necho tofu"), 0o755)
+		require.NoError(t, err)
+
+		// Set up resolver that maps 'opentofu' to 'opentofu/opentofu'.
+		resolver := &mockResolver{
+			resolveFunc: func(toolName string) (string, string, error) {
+				if toolName == "opentofu" || toolName == "opentofu/opentofu" {
+					return "opentofu", "opentofu", nil
+				}
+				return "", "", errToolNotFound
+			},
+		}
+
+		config := &schema.AtmosConfiguration{
+			Toolchain: schema.Toolchain{
+				InstallPath: toolsDir,
+			},
+		}
+
+		inst := NewInstaller(config, WithResolver(resolver))
+
+		// This should return true because the binary exists (even though named 'tofu' not 'opentofu').
+		// Current implementation: FAILS because it checks for .../opentofu/opentofu/1.9.0/opentofu
+		// Fixed implementation: PASSES because it uses FindBinaryPath() which auto-detects.
+		result := inst.isToolInstalled("opentofu", "1.9.0")
+		assert.True(t, result, "isToolInstalled should detect binary even when named differently than repo")
+	})
+}
+
+// duplicateInstallTestCase defines test parameters for EnsureTools duplicate prevention tests.
+type duplicateInstallTestCase struct {
+	name            string
+	owner           string
+	repo            string
+	version         string
+	binaryName      string // Binary name to create (may differ from repo).
+	aliases         []string
+	wantInstalls    int
+	wantInstallDesc string
+}
+
+// TestEnsureTools_DuplicateAliasAndCanonical tests that EnsureTools doesn't
+// install the same tool twice when both an alias and canonical name are provided.
+// This test exposes the issue where .tool-versions has both 'gum' and 'charmbracelet/gum'.
+func TestEnsureTools_DuplicateAliasAndCanonical(t *testing.T) {
+	tests := []duplicateInstallTestCase{
+		{
+			name:            "installs only once for alias and canonical name with real filesystem",
+			owner:           "charmbracelet",
+			repo:            "gum",
+			version:         "0.17.0",
+			binaryName:      "gum", // Binary name matches repo.
+			aliases:         []string{"gum", "charmbracelet/gum"},
+			wantInstalls:    1,
+			wantInstallDesc: "install should be called exactly once for duplicate alias/canonical entries",
+		},
+		{
+			name:            "installs once when binary name differs from repo",
+			owner:           "opentofu",
+			repo:            "opentofu",
+			version:         "1.9.0",
+			binaryName:      "tofu", // Binary name differs from repo.
+			aliases:         []string{"opentofu", "opentofu/opentofu"},
+			wantInstalls:    1,
+			wantInstallDesc: "install should be called once (FindBinaryPath auto-detects binary)",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			runDuplicateInstallTest(t, &tc)
+		})
+	}
+}
+
+// runDuplicateInstallTest executes a single duplicate install test case.
+func runDuplicateInstallTest(t *testing.T, tc *duplicateInstallTestCase) {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+	toolsDir := filepath.Join(tmpDir, "tools")
+	binDir := filepath.Join(toolsDir, "bin", tc.owner, tc.repo, tc.version)
+	err := os.MkdirAll(binDir, 0o755)
+	require.NoError(t, err)
+
+	installCalls := 0
+
+	resolver := &mockResolver{
+		resolveFunc: func(toolName string) (string, string, error) {
+			for _, alias := range tc.aliases {
+				if toolName == alias {
+					return tc.owner, tc.repo, nil
+				}
+			}
+			return "", "", errToolNotFound
+		},
+	}
+
+	installFunc := func(toolSpec string, _, _, _ bool) error {
+		installCalls++
+		binaryPath := filepath.Join(binDir, tc.binaryName)
+		return os.WriteFile(binaryPath, []byte("#!/bin/sh\necho "+tc.binaryName), 0o755)
+	}
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{InstallPath: toolsDir},
+	}
+
+	inst := NewInstaller(config,
+		WithResolver(resolver),
+		WithInstallFunc(installFunc),
+	)
+
+	deps := make(map[string]string)
+	for _, alias := range tc.aliases {
+		deps[alias] = tc.version
+	}
+
+	err = inst.EnsureTools(deps)
+	require.NoError(t, err)
+	assert.Equal(t, tc.wantInstalls, installCalls, tc.wantInstallDesc)
+}
+
 func TestEnsureTool(t *testing.T) {
 	t.Run("does not install when tool already installed", func(t *testing.T) {
 		installCalled := false
@@ -563,14 +714,16 @@ func TestEnsureTool(t *testing.T) {
 			installCalled = true
 			return nil
 		}
-		fileExists := func(path string) bool {
-			return true // Tool already installed.
+		finder := &mockBinaryPathFinder{
+			findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+				return "/path/to/terraform", nil // Tool already installed.
+			},
 		}
 
 		inst := NewInstaller(nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
-			WithFileExistsFunc(fileExists),
+			WithBinaryPathFinder(finder),
 		)
 
 		err := inst.ensureTool("terraform", "1.10.0")
@@ -590,14 +743,16 @@ func TestEnsureTool(t *testing.T) {
 			installedSpec = toolSpec
 			return nil
 		}
-		fileExists := func(path string) bool {
-			return false // Tool not installed.
+		finder := &mockBinaryPathFinder{
+			findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+				return "", errToolNotFound // Tool not installed.
+			},
 		}
 
 		inst := NewInstaller(nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
-			WithFileExistsFunc(fileExists),
+			WithBinaryPathFinder(finder),
 		)
 
 		err := inst.ensureTool("terraform", "1.10.0")
@@ -617,14 +772,16 @@ func TestEnsureTool(t *testing.T) {
 			calledSpec = toolSpec
 			return errInstallFailed
 		}
-		fileExists := func(path string) bool {
-			return false
+		finder := &mockBinaryPathFinder{
+			findBinaryPathFunc: func(owner, repo, version string, binaryName ...string) (string, error) {
+				return "", errToolNotFound
+			},
 		}
 
 		inst := NewInstaller(nil,
 			WithResolver(resolver),
 			WithInstallFunc(installFunc),
-			WithFileExistsFunc(fileExists),
+			WithBinaryPathFinder(finder),
 		)
 
 		err := inst.ensureTool("terraform", "1.10.0")

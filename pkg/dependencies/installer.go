@@ -16,12 +16,19 @@ import (
 // The showHint parameter controls whether to show the PATH export hint message.
 type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag, showHint bool) error
 
+// BinaryPathFinder finds installed tool binaries.
+// This interface allows testing without the full toolchain installer.
+type BinaryPathFinder interface {
+	FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error)
+}
+
 // Installer handles automatic tool installation.
 type Installer struct {
-	atmosConfig    *schema.AtmosConfiguration
-	resolver       toolchain.ToolResolver
-	installFunc    InstallFunc
-	fileExistsFunc func(path string) bool
+	atmosConfig      *schema.AtmosConfiguration
+	resolver         toolchain.ToolResolver
+	installFunc      InstallFunc
+	fileExistsFunc   func(path string) bool
+	binaryPathFinder BinaryPathFinder
 }
 
 // InstallerOption is a functional option for configuring Installer.
@@ -54,18 +61,35 @@ func WithFileExistsFunc(fn func(path string) bool) InstallerOption {
 	}
 }
 
+// WithBinaryPathFinder sets a custom binary path finder (for testing).
+func WithBinaryPathFinder(finder BinaryPathFinder) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithBinaryPathFinder")()
+
+	return func(i *Installer) {
+		i.binaryPathFinder = finder
+	}
+}
+
 // NewInstaller creates a new tool installer.
 func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOption) *Installer {
 	defer perf.Track(nil, "dependencies.NewInstaller")()
 
-	// Get the resolver from toolchain package for alias and registry resolution.
-	tcInstaller := toolchain.NewInstaller()
+	// Determine binDir based on config or default.
+	toolsDir := ".tools"
+	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
+		toolsDir = atmosConfig.Toolchain.InstallPath
+	}
+	binDir := filepath.Join(toolsDir, "bin")
+
+	// Create toolchain installer with correct binDir for binary path detection.
+	tcInstaller := toolchain.NewInstallerWithBinDir(binDir)
 
 	inst := &Installer{
-		atmosConfig:    atmosConfig,
-		resolver:       tcInstaller.GetResolver(),
-		installFunc:    toolchain.RunInstall,
-		fileExistsFunc: fileExists,
+		atmosConfig:      atmosConfig,
+		resolver:         tcInstaller.GetResolver(),
+		installFunc:      toolchain.RunInstall,
+		fileExistsFunc:   fileExists,
+		binaryPathFinder: tcInstaller, // Uses FindBinaryPath() for proper binary detection.
 	}
 
 	// Apply options.
@@ -106,21 +130,22 @@ func (i *Installer) ensureTool(tool string, version string) error {
 	// Install missing tool. Pass showHint=false to suppress PATH hint for dependency installs.
 	toolSpec := fmt.Sprintf("%s@%s", tool, version)
 	if err := i.installFunc(toolSpec, false, false, false); err != nil {
-		return fmt.Errorf("%w: failed to install %s: %w", errUtils.ErrToolInstall, toolSpec, err)
+		return errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install %s", toolSpec).
+			Err()
 	}
 
 	return nil
 }
 
 // isToolInstalled checks if a tool version is already installed.
+// Uses FindBinaryPath for proper binary detection, which handles:
+// - Binaries with different names than the repo (e.g., opentofu -> tofu)
+// - Files[0].Name from registry configuration
+// - Auto-detection of executables in the version directory.
 func (i *Installer) isToolInstalled(tool string, version string) bool {
 	defer perf.Track(i.atmosConfig, "dependencies.Installer.isToolInstalled")()
-
-	// Get tools directory.
-	toolsDir := ".tools"
-	if i.atmosConfig != nil && i.atmosConfig.Toolchain.InstallPath != "" {
-		toolsDir = i.atmosConfig.Toolchain.InstallPath
-	}
 
 	// Resolve tool to owner/repo using the shared resolver.
 	owner, repo, err := i.resolver.Resolve(tool)
@@ -128,9 +153,10 @@ func (i *Installer) isToolInstalled(tool string, version string) bool {
 		return false
 	}
 
-	// Check if binary exists.
-	binaryPath := filepath.Join(toolsDir, "bin", owner, repo, version, repo)
-	return i.fileExistsFunc(binaryPath)
+	// Use FindBinaryPath for proper binary detection.
+	// This handles tools where binary name differs from repo name.
+	_, err = i.binaryPathFinder.FindBinaryPath(owner, repo, version)
+	return err == nil
 }
 
 // fileExists checks if a file exists.

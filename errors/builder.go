@@ -104,6 +104,7 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
+// Hints from the cause error are preserved and will appear in GetAllHints().
 //
 // Example:
 //
@@ -117,11 +118,14 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 //   - errors.Is(result, ErrContainerRuntimeOperation) returns true
 //   - errors.Is(result, err) returns true
 //   - Error message includes "container already running"
+//   - Hints from cause are preserved via GetAllHints()
 func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 	if cause != nil {
-		// Wrap sentinel with the actual cause using double %w.
-		// This ensures both errors are in the chain for errors.Is() checks.
-		b.err = fmt.Errorf("%w: %w", b.err, cause)
+		// Use cockroachdb/errors.Wrap to preserve hints from the cause.
+		// The sentinel is marked later in Err() via errors.Mark().
+		// This ensures hints propagate through GetAllHints() while
+		// maintaining errors.Is() compatibility for both sentinel and cause.
+		b.err = errors.Wrap(cause, b.err.Error())
 	}
 	return b
 }

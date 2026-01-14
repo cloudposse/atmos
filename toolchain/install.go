@@ -129,8 +129,8 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint bool) err
 		if !strings.Contains(tool, "/") {
 			return errUtils.Build(errUtils.ErrInvalidToolSpec).
 				WithCause(err).
-				WithExplanationf("Tool `%s` is not a valid tool specification", tool).
-				WithHintf("Add an alias in atmos.yaml: toolchain.aliases.%s: owner/repo", tool).
+				WithExplanationf("Tool '%s' is not a valid tool specification", tool).
+				WithHintf("Add an alias in atmos.yaml:\n```yaml\ntoolchain:\n  aliases:\n    %s: owner/repo\n```", tool).
 				WithHint("Or use full format: owner/repo (e.g., hashicorp/terraform)").
 				WithHint("See https://atmos.tools/cli/commands/toolchain/aliases for configuring aliases").
 				Err()

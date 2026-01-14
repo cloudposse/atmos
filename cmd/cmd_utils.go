@@ -586,9 +586,6 @@ func executeCustomCommand(
 			err = errUtils.Build(errUtils.ErrToolInstall).
 				WithCause(err).
 				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
-				WithHint("Check that required tools are available in configured registries").
-				WithHint("Verify network connectivity for downloading tools").
-				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 				Err()
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}

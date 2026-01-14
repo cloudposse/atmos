@@ -86,10 +86,10 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 		return owner, repo, nil
 	}
 	return "", "", errUtils.Build(errUtils.ErrToolNotInRegistry).
-		WithExplanationf("Tool `%s` not found in Aqua registry", toolName).
-		WithHintf("Add an alias in atmos.yaml: toolchain.aliases.%s: owner/repo", toolName).
+		WithExplanationf("Tool '%s' not found in Aqua registry", toolName).
+		WithHintf("Add an alias in atmos.yaml:\n```yaml\ntoolchain:\n  aliases:\n    %s: owner/repo\n```", toolName).
 		WithHint("Or use full format: owner/repo (e.g., hashicorp/terraform)").
-		WithHint("Run `atmos toolchain registry search` to browse available tools").
+		WithHint("Run 'atmos toolchain registry search' to browse available tools").
 		WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 		WithContext("tool", toolName).
 		WithExitCode(2).
