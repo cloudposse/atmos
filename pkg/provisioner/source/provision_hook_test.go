@@ -1,6 +1,7 @@
 package source
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -186,8 +187,77 @@ func TestIsWorkdirEnabled(t *testing.T) {
 	}
 }
 
-// Note: needsProvisioning is tested via TestNeedsVendoring in source_test.go
-// as it shares the same underlying logic.
+func TestNeedsProvisioning(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func(t *testing.T) string // Returns path to test.
+		expected bool
+	}{
+		{
+			name: "non-existent directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				return filepath.Join(tempDir, "nonexistent")
+			},
+			expected: true,
+		},
+		{
+			name: "path is a file not directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				filePath := filepath.Join(tempDir, "file.txt")
+				err := os.WriteFile(filePath, []byte("test"), 0o644)
+				require.NoError(t, err)
+				return filePath
+			},
+			expected: true,
+		},
+		{
+			name: "empty directory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				emptyDir := filepath.Join(tempDir, "empty")
+				err := os.MkdirAll(emptyDir, 0o755)
+				require.NoError(t, err)
+				return emptyDir
+			},
+			expected: true,
+		},
+		{
+			name: "directory with files",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				dirPath := filepath.Join(tempDir, "component")
+				err := os.MkdirAll(dirPath, 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644)
+				require.NoError(t, err)
+				return dirPath
+			},
+			expected: false,
+		},
+		{
+			name: "directory with subdirectory",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				dirPath := filepath.Join(tempDir, "component")
+				subDir := filepath.Join(dirPath, "subdir")
+				err := os.MkdirAll(subDir, 0o755)
+				require.NoError(t, err)
+				return dirPath
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			path := tt.setup(t)
+			result := needsProvisioning(path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
 
 func TestDetermineSourceTargetDirectory(t *testing.T) {
 	tests := []struct {

@@ -193,3 +193,49 @@ func PromptForPositionalArg(argName, promptTitle string, completionFunc Completi
 
 	return PromptForValue(argName, promptTitle, options)
 }
+
+// PromptForConfirmation prompts for yes/no confirmation on destructive actions.
+// This is Use Case 4: Destructive Action Confirmation.
+//
+// Returns true if:
+// - force is true (bypass confirmation).
+// - user confirms in interactive TTY.
+//
+// Returns false with nil error if user declines.
+// Returns false with ErrInteractiveNotAvailable if not TTY and not forced.
+// Returns false with ErrUserAborted if user presses Ctrl+C/ESC.
+//
+// Example:
+//
+//	confirmed, err := flags.PromptForConfirmation("Delete directory: /path/to/dir?", force)
+//	if err != nil { return err }
+//	if !confirmed { return nil }
+func PromptForConfirmation(title string, force bool) (bool, error) {
+	defer perf.Track(nil, "flags.PromptForConfirmation")()
+
+	if force {
+		return true, nil
+	}
+
+	// Check if stdin is a TTY.
+	if !atmosterm.IsTTYSupportForStdin() {
+		return false, errUtils.ErrInteractiveNotAvailable
+	}
+
+	var confirmed bool
+	prompt := huh.NewConfirm().
+		Title(title).
+		Affirmative("Yes!").
+		Negative("No.").
+		Value(&confirmed).
+		WithTheme(uiutils.NewAtmosHuhTheme())
+
+	if err := prompt.Run(); err != nil {
+		if errors.Is(err, huh.ErrUserAborted) {
+			return false, errUtils.ErrUserAborted
+		}
+		return false, fmt.Errorf("confirmation prompt failed: %w", err)
+	}
+
+	return confirmed, nil
+}
