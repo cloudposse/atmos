@@ -22,6 +22,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -280,6 +281,12 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Ensure toolchain dependencies are installed and build PATH for workflow steps.
+	toolchainPATH, err := ensureWorkflowToolchainDependencies(&atmosConfig, workflowDefinition)
+	if err != nil {
+		return err
+	}
+
 	// Create auth manager if any step has an identity or if command-line identity is specified.
 	// We check once upfront to avoid repeated initialization.
 	var authManager auth.AuthManager
@@ -327,6 +334,12 @@ func ExecuteWorkflow(
 		if err != nil {
 			return err
 		}
+
+		// Add toolchain PATH if dependencies were installed.
+		if toolchainPATH != "" {
+			stepEnv = append(stepEnv, fmt.Sprintf("PATH=%s", toolchainPATH))
+		}
+
 		switch commandType {
 		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
@@ -601,6 +614,70 @@ func checkAndGenerateWorkflowStepNames(workflowDefinition *schema.WorkflowDefini
 			steps[index].Name = fmt.Sprintf("step%d", index+1)
 		}
 	}
+}
+
+// ensureWorkflowToolchainDependencies loads and installs toolchain dependencies for a workflow.
+// It loads tools from .tool-versions, merges with workflow-specific dependencies, installs missing
+// tools, and returns the PATH string with toolchain binaries prepended.
+func ensureWorkflowToolchainDependencies(
+	atmosConfig *schema.AtmosConfiguration,
+	workflowDefinition *schema.WorkflowDefinition,
+) (string, error) {
+	defer perf.Track(atmosConfig, "exec.ensureWorkflowToolchainDependencies")()
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(atmosConfig)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanation("Failed to load .tool-versions file").
+			Err()
+	}
+
+	// Get workflow-specific dependencies.
+	resolver := dependencies.NewResolver(atmosConfig)
+	workflowDeps, err := resolver.ResolveWorkflowDependencies(workflowDefinition)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanation("Failed to resolve workflow dependencies").
+			Err()
+	}
+
+	// Merge: .tool-versions as base, workflow deps override.
+	deps, err := dependencies.MergeDependencies(toolVersionsDeps, workflowDeps)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanation("Failed to merge dependencies").
+			Err()
+	}
+
+	if len(deps) == 0 {
+		return "", nil
+	}
+
+	log.Debug("Installing workflow dependencies", "tools", deps)
+
+	// Install missing tools.
+	installer := dependencies.NewInstaller(atmosConfig)
+	if err := installer.EnsureTools(deps); err != nil {
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanation("Failed to install workflow dependencies").
+			Err()
+	}
+
+	// Build PATH with toolchain binaries.
+	toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
+	if err != nil {
+		return "", errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanation("Failed to build toolchain PATH").
+			Err()
+	}
+
+	return toolchainPATH, nil
 }
 
 func ExecuteWorkflowUI(atmosConfig schema.AtmosConfiguration) (string, string, string, error) {
