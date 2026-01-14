@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -76,6 +77,14 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 	// Handle --from-step flag.
 	steps, err := e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
 	if err != nil {
+		return result, err
+	}
+
+	// Ensure toolchain dependencies are installed and PATH is updated.
+	if err := e.ensureToolchainDependencies(params); err != nil {
+		e.printError(err)
+		result.Success = false
+		result.Error = err
 		return result, err
 	}
 
@@ -210,6 +219,66 @@ func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, ste
 		return []string{}, nil
 	}
 	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName)
+}
+
+// ensureToolchainDependencies resolves and installs workflow dependencies and .tool-versions tools.
+// This ensures tools are available in PATH before workflow steps execute.
+func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
+	defer perf.Track(params.AtmosConfig, "workflow.Executor.ensureToolchainDependencies")()
+
+	resolver := dependencies.NewResolver(params.AtmosConfig)
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(params.AtmosConfig)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanation("Failed to load .tool-versions file").
+			Err()
+	}
+
+	// Get workflow-specific dependencies.
+	workflowDeps, err := resolver.ResolveWorkflowDependencies(params.WorkflowDefinition)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve dependencies for workflow '%s'", params.Workflow).
+			Err()
+	}
+
+	// Merge: .tool-versions as base, workflow deps override.
+	deps, err := dependencies.MergeDependencies(toolVersionsDeps, workflowDeps)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to merge dependencies for workflow '%s'", params.Workflow).
+			Err()
+	}
+
+	if len(deps) == 0 {
+		return nil
+	}
+
+	log.Debug("Installing workflow dependencies", "workflow", params.Workflow, "tools", deps)
+
+	// Install missing tools.
+	installer := dependencies.NewInstaller(params.AtmosConfig)
+	if err := installer.EnsureTools(deps); err != nil {
+		return errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install dependencies for workflow '%s'", params.Workflow).
+			Err()
+	}
+
+	// Update PATH to include installed tools.
+	if err := dependencies.UpdatePathForTools(params.AtmosConfig, deps); err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to update PATH for workflow '%s'", params.Workflow).
+			Err()
+	}
+
+	return nil
 }
 
 // runCommandParams holds parameters for command execution.

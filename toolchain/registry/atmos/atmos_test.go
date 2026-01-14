@@ -587,6 +587,153 @@ func TestAtmosRegistry_OverridesSupport(t *testing.T) {
 	})
 }
 
+// TestAtmosRegistry_OverridesFilesReplacements tests that files and replacements are parsed within overrides.
+// REGRESSION TEST: This test ensures inline atmos registries support files/replacements in platform-specific overrides.
+// The Aqua registry correctly handles these (see convertAquaOverrides in aqua.go), but the atmos inline registry
+// was missing this functionality in parseOverrides().
+func TestAtmosRegistry_OverridesFilesReplacements(t *testing.T) {
+	t.Run("parses files in overrides", func(t *testing.T) {
+		// Some tools need different file extraction paths per platform.
+		// For example, a tool might have different binary locations on macOS vs Linux.
+		toolsConfig := map[string]any{
+			"aws/aws-cli": map[string]any{
+				"type":   "http",
+				"url":    "https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip",
+				"format": "zip",
+				"files": []any{
+					map[string]any{
+						"name": "aws",
+						"src":  "aws/dist/aws",
+					},
+				},
+				"overrides": []any{
+					map[string]any{
+						"goos": "darwin",
+						"files": []any{
+							map[string]any{
+								"name": "aws",
+								"src":  "aws-cli/aws", // Different path on macOS.
+							},
+						},
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("aws", "aws-cli")
+		require.NoError(t, err)
+
+		// Verify base files are parsed.
+		require.Len(t, tool.Files, 1, "base files should be parsed")
+		assert.Equal(t, "aws/dist/aws", tool.Files[0].Src)
+
+		// Verify override files are parsed.
+		require.Len(t, tool.Overrides, 1, "overrides should be parsed")
+		require.Len(t, tool.Overrides[0].Files, 1, "files in override should be parsed")
+		assert.Equal(t, "aws", tool.Overrides[0].Files[0].Name)
+		assert.Equal(t, "aws-cli/aws", tool.Overrides[0].Files[0].Src)
+	})
+
+	t.Run("parses replacements in overrides", func(t *testing.T) {
+		// Some tools need different arch/os replacements per platform.
+		toolsConfig := map[string]any{
+			"owner/tool": map[string]any{
+				"type":  "github_release",
+				"asset": "tool_{{.OS}}_{{.Arch}}.tar.gz",
+				"replacements": map[string]any{
+					"amd64": "x86_64",
+				},
+				"overrides": []any{
+					map[string]any{
+						"goos": "darwin",
+						"replacements": map[string]any{
+							"amd64": "universal", // Different replacement for macOS.
+							"arm64": "universal",
+						},
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("owner", "tool")
+		require.NoError(t, err)
+
+		// Verify base replacements are parsed.
+		require.NotNil(t, tool.Replacements, "base replacements should be parsed")
+		assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+
+		// Verify override replacements are parsed.
+		require.Len(t, tool.Overrides, 1, "overrides should be parsed")
+		require.NotNil(t, tool.Overrides[0].Replacements, "replacements in override should be parsed")
+		assert.Equal(t, "universal", tool.Overrides[0].Replacements["amd64"])
+		assert.Equal(t, "universal", tool.Overrides[0].Replacements["arm64"])
+	})
+
+	t.Run("parses both files and replacements in same override", func(t *testing.T) {
+		// Complete scenario: override with all fields including files and replacements.
+		toolsConfig := map[string]any{
+			"replicatedhq/replicated": map[string]any{
+				"type":   "github_release",
+				"asset":  "replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+				"format": "tar.gz",
+				"files": []any{
+					map[string]any{
+						"name": "replicated",
+						"src":  "replicated",
+					},
+				},
+				"overrides": []any{
+					map[string]any{
+						"goos":   "darwin",
+						"asset":  "replicated_{{trimV .Version}}_darwin_all.tar.gz",
+						"format": "tar.gz",
+						"files": []any{
+							map[string]any{
+								"name": "replicated",
+								"src":  "darwin/replicated", // Different location on macOS.
+							},
+						},
+						"replacements": map[string]any{
+							"arm64": "all",
+							"amd64": "all",
+						},
+					},
+				},
+			},
+		}
+
+		reg, err := NewAtmosRegistry(toolsConfig)
+		require.NoError(t, err)
+
+		tool, err := reg.GetTool("replicatedhq", "replicated")
+		require.NoError(t, err)
+
+		// Verify override has all fields.
+		require.Len(t, tool.Overrides, 1)
+		override := tool.Overrides[0]
+
+		assert.Equal(t, "darwin", override.GOOS)
+		assert.Equal(t, "replicated_{{trimV .Version}}_darwin_all.tar.gz", override.Asset)
+		assert.Equal(t, "tar.gz", override.Format)
+
+		// Files in override.
+		require.Len(t, override.Files, 1, "files in override should be parsed")
+		assert.Equal(t, "replicated", override.Files[0].Name)
+		assert.Equal(t, "darwin/replicated", override.Files[0].Src)
+
+		// Replacements in override.
+		require.NotNil(t, override.Replacements, "replacements in override should be parsed")
+		assert.Equal(t, "all", override.Replacements["arm64"])
+		assert.Equal(t, "all", override.Replacements["amd64"])
+	})
+}
+
 // TestAtmosRegistry_FilesReplacementsVersionPrefix tests parsing of files, replacements, and version_prefix.
 // REGRESSION TEST: This test ensures inline atmos registries support all fields needed for tools like replicated.
 func TestAtmosRegistry_FilesReplacementsVersionPrefix(t *testing.T) {

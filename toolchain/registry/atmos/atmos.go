@@ -244,6 +244,14 @@ func parseOverrides(overridesRaw []any) []registry.Override {
 		if format, ok := overrideMap["format"].(string); ok {
 			override.Format = format
 		}
+		// Parse files in override (for platform-specific extraction paths).
+		if filesRaw, ok := overrideMap["files"].([]any); ok {
+			override.Files = parseFiles(filesRaw)
+		}
+		// Parse replacements in override (for platform-specific OS/arch mappings).
+		if replacementsRaw, ok := overrideMap["replacements"].(map[string]any); ok {
+			override.Replacements = parseReplacements(replacementsRaw)
+		}
 		overrides = append(overrides, override)
 	}
 	return overrides
