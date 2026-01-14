@@ -94,6 +94,7 @@ We support the core Aqua registry features needed for infrastructure tooling whi
 - `.tar.gz` - Gzip-compressed tarballs
 - `.zip` - ZIP archives
 - `.gz` - Single gzip-compressed binaries
+- `.pkg` - macOS installer packages (uses `pkgutil --expand-full`)
 - Raw binaries
 
 **Template Functions:**
@@ -108,6 +109,9 @@ We support the core Aqua registry features needed for infrastructure tooling whi
 - Format detection
 - Local tool aliases
 - GitHub token authentication
+- Platform overrides (different URLs/formats per OS/architecture)
+- OS/architecture replacements (e.g., `amd64` → `x86_64`)
+- Nested archive extraction (extract binaries from specific paths within archives)
 
 ### Unsupported Aqua Features
 
@@ -219,6 +223,45 @@ atmos toolchain install opentofu/opentofu@1.10.3
 
 # Install all tools from .tool-versions file
 atmos toolchain install
+```
+
+### Install AWS CLI
+
+The AWS CLI demonstrates Atmos toolchain's advanced features, including platform-specific downloads and nested archive extraction:
+
+```bash
+# Install AWS CLI v2 (example version; adjust as needed)
+atmos toolchain install aws/aws-cli@2.15.0
+
+# Or use the alias (if configured)
+atmos toolchain install awscli@2.15.0
+```
+
+<details>
+<summary>How it works</summary>
+
+The AWS CLI uses different installation methods per platform, which Atmos handles automatically:
+
+- **Linux**: Downloads `awscli-exe-linux-x86_64-{{.Version}}.zip`, extracts the `aws` binary from `aws/dist/aws`
+- **macOS**: Downloads `AWSCLIV2-{{.Version}}.pkg`, uses `pkgutil --expand-full` to extract from `aws-cli.pkg/Payload/aws-cli/aws` (paths may change upstream)
+
+Both `aws` and `aws_completer` binaries are extracted and made available.
+
+This demonstrates Atmos's support for:
+- **Platform overrides** - Different URLs and formats per OS
+- **Architecture replacements** - Mapping `amd64` → `x86_64`, `arm64` → `aarch64`
+- **Nested extraction** - Extracting binaries from specific paths within archives
+- **Multiple binaries** - Installing both `aws` and `aws_completer` from a single package
+
+</details>
+
+```bash
+# Verify installation
+atmos toolchain which aws
+atmos toolchain exec aws -- --version
+
+# Use with Atmos commands
+atmos toolchain exec aws -- s3 ls
 ```
 
 ### Manage Versions

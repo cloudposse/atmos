@@ -22,7 +22,7 @@ func TestDescribeCommand(t *testing.T) {
 	cmd := DescribeCommand(cfg)
 
 	require.NotNil(t, cmd)
-	assert.Equal(t, "describe <component>", cmd.Use)
+	assert.Equal(t, "describe [component]", cmd.Use)
 	assert.Contains(t, cmd.Short, "Terraform")
 }
 
