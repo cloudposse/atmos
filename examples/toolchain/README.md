@@ -23,17 +23,17 @@ The `type` field specifies the **registry format/schema**, not the transport pro
 
 Atmos supports two patterns for Aqua registries:
 
-1. **Single Index File** (like official Aqua registry):
+1. **Single Index File** (all packages in one file):
    ```yaml
    toolchain:
      registries:
        - name: custom
          type: aqua
-         source: file://./custom-registry/registry.yaml  # Points to index file
+         source: file://./registry.yaml  # Points to index file
          priority: 100
    ```
    - Detection: Source ends with `.yaml` or `.yml`
-   - All packages in one file
+   - All packages defined in one file
    - Recommended for custom/corporate registries
 
 2. **Per-Package Directory** (separate file per package):
@@ -42,12 +42,11 @@ Atmos supports two patterns for Aqua registries:
      registries:
        - name: custom
          type: aqua
-         source: file://./custom-registry/pkgs/  # Points to directory
+         source: file://./pkgs/  # Points to directory
          priority: 100
    ```
    - Detection: Source doesn't end with `.yaml`/`.yml`
    - Each package has its own `registry.yaml` at `{source}/{owner}/{repo}/registry.yaml`
-   - Each registry.yaml file contains ONE package definition
    - Used by official Aqua registry for per-tool lookups
 
 **Official Aqua Registry:**
@@ -74,6 +73,10 @@ Define tools directly in `atmos.yaml` without external files:
 
 ```yaml
 toolchain:
+  aliases:
+    jq: jqlang/jq
+    yq: mikefarah/yq
+
   registries:
     - name: my-tools
       type: atmos
@@ -90,7 +93,9 @@ toolchain:
                 darwin: macos
         mikefarah/yq:
           type: github_release
-          url: "yq_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+          url: "yq_{{.OS}}_{{.Arch}}"
+          format: tar.gz
+          binary_name: yq
 ```
 
 **Use Cases**:
@@ -263,16 +268,16 @@ Each example demonstrates a different toolchain feature:
 
 ```bash
 # 1. Implicit dependencies - uses tools from .tool-versions
-atmos toolchain-demo which
+atmos demo which
 
 # 2. Exact version pinning - override with specific version
-atmos toolchain-demo pinned
+atmos demo pinned
 
 # 3. SemVer constraints - allow compatible version ranges
-atmos toolchain-demo constrained
+atmos demo constrained
 
 # 4. Multi-tool pipeline - combine tools together
-atmos toolchain-demo convert
+atmos demo convert
 ```
 
 ### Workflows Demo

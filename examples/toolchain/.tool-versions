@@ -1,7 +1,2 @@
-# Atmos Toolchain Example
-# Tools listed here are automatically available in custom commands and workflows
-# Format: tool-name version [additional-versions...]
-# First version is the default
-
 jq 1.7.1
 yq 4.45.1
