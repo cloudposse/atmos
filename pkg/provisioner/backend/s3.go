@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -37,16 +38,29 @@ type S3ClientAPI interface {
 	DeleteBucket(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error)
 }
 
+// s3TestMu protects test-only variables for concurrent test execution.
+var s3TestMu sync.RWMutex
+
 // s3ClientFactory creates S3 clients from AWS config.
 // Override in tests to inject fake S3 clients.
+// Protected by s3TestMu for thread-safe concurrent test execution.
 var s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
 	return s3.NewFromConfig(cfg)
+}
+
+// getS3ClientFactory returns the current S3 client factory with thread-safe read access.
+func getS3ClientFactory() func(aws.Config) S3ClientAPI {
+	s3TestMu.RLock()
+	defer s3TestMu.RUnlock()
+	return s3ClientFactory
 }
 
 // SetS3ClientFactory sets a custom S3 client factory for testing.
 func SetS3ClientFactory(f func(aws.Config) S3ClientAPI) {
 	defer perf.Track(nil, "backend.SetS3ClientFactory")()
 
+	s3TestMu.Lock()
+	defer s3TestMu.Unlock()
 	s3ClientFactory = f
 }
 
@@ -54,6 +68,8 @@ func SetS3ClientFactory(f func(aws.Config) S3ClientAPI) {
 func ResetS3ClientFactory() {
 	defer perf.Track(nil, "backend.ResetS3ClientFactory")()
 
+	s3TestMu.Lock()
+	defer s3TestMu.Unlock()
 	s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
 		return s3.NewFromConfig(cfg)
 	}
@@ -61,13 +77,23 @@ func ResetS3ClientFactory() {
 
 // s3SkipUnsupportedTestOps skips S3 operations not supported by gofakes3.
 // Test-only. Not exposed in configuration.
+// Protected by s3TestMu for thread-safe concurrent test execution.
 var s3SkipUnsupportedTestOps = false
+
+// getS3SkipUnsupportedTestOps returns whether to skip unsupported operations with thread-safe read access.
+func getS3SkipUnsupportedTestOps() bool {
+	s3TestMu.RLock()
+	defer s3TestMu.RUnlock()
+	return s3SkipUnsupportedTestOps
+}
 
 // SetS3SkipUnsupportedTestOps sets whether to skip unsupported S3 operations.
 // This should only be called in tests using gofakes3.
 func SetS3SkipUnsupportedTestOps(skip bool) {
 	defer perf.Track(nil, "backend.SetS3SkipUnsupportedTestOps")()
 
+	s3TestMu.Lock()
+	defer s3TestMu.Unlock()
 	s3SkipUnsupportedTestOps = skip
 }
 
@@ -125,7 +151,7 @@ func CreateS3Backend(
 	}
 
 	// Create S3 client using factory (allows test injection).
-	client := s3ClientFactory(awsConfig)
+	client := getS3ClientFactory()(awsConfig)
 
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
@@ -314,7 +340,7 @@ func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket strin
 
 	// Skip operations not supported by gofakes3 during testing.
 	// These are tested separately with mocks in s3_test.go.
-	if s3SkipUnsupportedTestOps {
+	if getS3SkipUnsupportedTestOps() {
 		return nil
 	}
 

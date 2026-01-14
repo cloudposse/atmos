@@ -28,6 +28,7 @@ func setupFakeS3Factory(t *testing.T, fake *fakeS3) {
 	SetS3SkipUnsupportedTestOps(true)
 
 	t.Cleanup(func() {
+		ResetS3ClientFactory()
 		SetS3SkipUnsupportedTestOps(false)
 	})
 }
