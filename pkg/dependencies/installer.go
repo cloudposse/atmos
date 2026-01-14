@@ -13,7 +13,8 @@ import (
 )
 
 // InstallFunc is the function signature for installing a tool.
-type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag bool) error
+// The showHint parameter controls whether to show the PATH export hint message.
+type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag, showHint bool) error
 
 // Installer handles automatic tool installation.
 type Installer struct {
@@ -102,9 +103,9 @@ func (i *Installer) ensureTool(tool string, version string) error {
 		return nil
 	}
 
-	// Install missing tool.
+	// Install missing tool. Pass showHint=false to suppress PATH hint for dependency installs.
 	toolSpec := fmt.Sprintf("%s@%s", tool, version)
-	if err := i.installFunc(toolSpec, false, false); err != nil {
+	if err := i.installFunc(toolSpec, false, false, false); err != nil {
 		return fmt.Errorf("%w: failed to install %s: %w", errUtils.ErrToolInstall, toolSpec, err)
 	}
 

@@ -25,6 +25,7 @@ type installResult struct {
 	binaryPath  string
 	isLatest    bool
 	showMessage bool
+	showHint    bool // Controls PATH export hint display.
 }
 
 // startSpinner starts a spinner with the given message.
@@ -124,6 +125,9 @@ func handleInstallSuccess(result installResult, installer *Installer) {
 	// Register in .tool-versions.
 	if err := AddToolToVersions(DefaultToolVersionsFilePath, result.repo, result.version); err == nil {
 		_ = ui.Successf("Registered `%s %s` in `.tool-versions`", result.repo, result.version)
-		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+		// Only show PATH hint when running toolchain install directly, not for dependency installs.
+		if result.showHint {
+			_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+		}
 	}
 }

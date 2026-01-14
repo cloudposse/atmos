@@ -77,7 +77,8 @@ func ensureToolInstalled(_ ToolRunner, tool string) (string, error) {
 	}
 
 	_ = ui.Toastf("🔧", "Tool %s is not installed. Installing automatically...", tool)
-	if installErr := RunInstall(tool, false, true); installErr != nil {
+	// Show hint for manual exec installs (user requested specific tool execution).
+	if installErr := RunInstall(tool, false, true, true); installErr != nil {
 		return "", fmt.Errorf("failed to auto-install %s: %w",
 			tool, installErr)
 	}

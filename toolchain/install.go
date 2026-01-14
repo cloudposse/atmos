@@ -20,6 +20,13 @@ const (
 	spinnerAnimationFrames = 5 // Number of animation frames for progress spinner.
 )
 
+// InstallOptions configures the behavior of InstallSingleTool.
+type InstallOptions struct {
+	IsLatest        bool // Whether this is a "latest" version install.
+	ShowProgressBar bool // Whether to show progress during install.
+	ShowHint        bool // Whether to show PATH export hint after install.
+}
+
 // Bubble Tea spinner model.
 type spinnerModel struct {
 	spinner bspinner.Model
@@ -86,11 +93,12 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 // If toolSpec is empty, installs all tools from .tool-versions file.
 // The setAsDefault parameter controls whether to set the installed version as default.
 // The reinstallFlag parameter forces reinstallation even if already installed.
-func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
+// The showHint parameter controls whether to show the PATH export hint message.
+func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
 	if toolSpec == "" {
-		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag)
+		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
 	}
 
 	tool, version, err := ParseToolVersionArg(toolSpec)
@@ -131,9 +139,11 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	}
 
 	// Handle "latest" keyword - pass it to InstallSingleTool which will resolve it.
-	isLatest := version == "latest"
-
-	err = InstallSingleTool(owner, repo, version, isLatest, true)
+	err = InstallSingleTool(owner, repo, version, InstallOptions{
+		IsLatest:        version == "latest",
+		ShowProgressBar: true,
+		ShowHint:        showHint,
+	})
 	if err != nil {
 		return err
 	}
@@ -142,18 +152,18 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag bool) error {
 	return updateToolVersionsFile(tool, version, setAsDefault)
 }
 
-func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressBar bool) error {
+func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 	defer perf.Track(nil, "toolchain.InstallSingleTool")()
 
 	installer := NewInstaller()
 
 	// Start spinner immediately before any potentially slow operations.
-	spinner := &spinnerControl{showingSpinner: showProgressBar}
+	spinner := &spinnerControl{showingSpinner: opts.ShowProgressBar}
 	message := fmt.Sprintf("Installing %s/%s@%s", owner, repo, version)
 	spinner.start(message)
 
 	// Resolve "latest" version if needed (network call - can be slow).
-	resolvedVersion, err := resolveLatestVersionWithSpinner(owner, repo, version, isLatest, spinner)
+	resolvedVersion, err := resolveLatestVersionWithSpinner(owner, repo, version, opts.IsLatest, spinner)
 	if err != nil {
 		spinner.stop()
 		return err
@@ -167,7 +177,7 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 	spinner.stop()
 
 	if err != nil {
-		if showProgressBar {
+		if opts.ShowProgressBar {
 			_ = ui.Errorf("Install failed %s/%s@%s: %v", owner, repo, version, err)
 		}
 		return err
@@ -179,13 +189,14 @@ func InstallSingleTool(owner, repo, version string, isLatest bool, showProgressB
 		repo:        repo,
 		version:     version,
 		binaryPath:  binaryPath,
-		isLatest:    isLatest,
-		showMessage: showProgressBar,
+		isLatest:    opts.IsLatest,
+		showMessage: opts.ShowProgressBar,
+		showHint:    opts.ShowHint,
 	}, installer)
 	return nil
 }
 
-func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error {
+func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bool) error {
 	installer := NewInstaller()
 
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
@@ -208,7 +219,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 	var installedCount, failedCount, alreadyInstalledCount int
 
 	for i, tool := range toolList {
-		result, err := installOrSkipTool(installer, tool, reinstallFlag)
+		result, err := installOrSkipTool(installer, tool, reinstallFlag, showHint)
 		switch result {
 		case "installed":
 			installedCount++
@@ -220,7 +231,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
 	}
 
-	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList))
+	printSummary(installedCount, failedCount, alreadyInstalledCount, len(toolList), showHint)
 	return nil
 }
 
@@ -238,13 +249,17 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo 
 	return toolList
 }
 
-func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag bool) (string, error) {
+func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag, showHint bool) (string, error) {
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err == nil && !reinstallFlag {
 		return "skipped", nil
 	}
 
-	err = InstallSingleTool(tool.owner, tool.repo, tool.version, tool.version == "latest", false)
+	err = InstallSingleTool(tool.owner, tool.repo, tool.version, InstallOptions{
+		IsLatest:        tool.version == "latest",
+		ShowProgressBar: false,
+		ShowHint:        showHint,
+	})
 	if err != nil {
 		return "failed", err
 	}
@@ -288,21 +303,38 @@ func showProgress(
 	}
 }
 
-func printSummary(installed, failed, skipped, total int) {
+func printSummary(installed, failed, skipped, total int, showHint bool) {
 	_ = ui.Writeln("")
 
-	switch {
-	case total == 0:
+	if total == 0 {
 		_ = ui.Success("No tools to install")
-	case failed == 0 && skipped == 0:
-		_ = ui.Successf("Installed **%d** tools", installed)
-		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
-	case failed == 0 && skipped > 0:
-		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
-		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
-	case failed > 0 && skipped == 0:
+		return
+	}
+
+	// Print result message based on failure/skip counts.
+	if failed > 0 {
+		printFailureSummary(installed, failed, skipped)
+		return
+	}
+
+	printSuccessSummary(installed, skipped, showHint)
+}
+
+func printFailureSummary(installed, failed, skipped int) {
+	if skipped == 0 {
 		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)
-	default:
+	} else {
 		_ = ui.Errorf("Installed %d tools, failed %d, skipped %d", installed, failed, skipped)
+	}
+}
+
+func printSuccessSummary(installed, skipped int, showHint bool) {
+	if skipped == 0 {
+		_ = ui.Successf("Installed **%d** tools", installed)
+	} else {
+		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
+	}
+	if showHint {
+		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	}
 }
