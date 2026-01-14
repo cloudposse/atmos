@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // DeleteCommand creates a delete command for the given component type.
@@ -51,6 +53,7 @@ Requires --force flag for safety.`, config.TypeLabel, config.ComponentType),
 // deleteOptions holds parsed delete command options.
 type deleteOptions struct {
 	Stack       string
+	Force       bool
 	GlobalFlags global.Flags
 }
 
@@ -72,7 +75,7 @@ func executeDelete(cmd *cobra.Command, args []string, config *Config, parser *fl
 	}
 
 	// Determine and delete the target directory.
-	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig)
+	return deleteSourceDirectory(atmosConfig, config.ComponentType, component, componentConfig, deleteOpts.Force)
 }
 
 // parseDeleteFlags parses delete command flags and validates them.
@@ -90,15 +93,11 @@ func parseDeleteFlags(cmd *cobra.Command, parser *flags.StandardParser) (*delete
 			Err()
 	}
 
-	force := v.GetBool("force")
-	if !force {
-		return nil, errUtils.Build(errUtils.ErrForceRequired).
-			WithExplanation("Deletion requires --force flag for safety").
-			WithHint("Use --force to confirm deletion").
-			Err()
-	}
-
-	return &deleteOptions{Stack: stack, GlobalFlags: globalFlags}, nil
+	return &deleteOptions{
+		Stack:       stack,
+		Force:       v.GetBool("force"),
+		GlobalFlags: globalFlags,
+	}, nil
 }
 
 // initDeleteContext initializes config and retrieves component configuration.
@@ -143,12 +142,12 @@ func initDeleteContext(component, stack string, globalFlags *global.Flags) (*sch
 }
 
 // deleteSourceDirectory deletes the vendored source directory.
-func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any) error {
+func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType, component string, componentConfig map[string]any, force bool) error {
 	targetDir, err := source.DetermineTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrSourceProvision).
 			WithCause(err).
-			WithExplanation("Failed to determine target directory").
+			WithContext("component", component).
 			Err()
 	}
 
@@ -157,14 +156,31 @@ func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType
 		return nil
 	}
 
-	_ = ui.Info(fmt.Sprintf("Deleting directory: %s", targetDir))
-	if err := os.RemoveAll(targetDir); err != nil {
-		return errUtils.Build(errUtils.ErrRemoveDirectory).
-			WithCause(err).
-			WithContext("path", targetDir).
-			Err()
+	// Prompt for confirmation unless --force.
+	confirmed, err := flags.PromptForConfirmation(fmt.Sprintf("Delete directory: %s?", targetDir), force)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrInteractiveNotAvailable) {
+			_ = ui.Warning("Use --force to delete in non-interactive mode")
+		}
+		return err
+	}
+	if !confirmed {
+		_ = ui.Info("Deletion cancelled")
+		return nil
 	}
 
-	_ = ui.Success(fmt.Sprintf("Successfully deleted: %s", targetDir))
-	return nil
+	// Delete with spinner.
+	return spinner.ExecWithSpinner(
+		fmt.Sprintf("Deleting %s", targetDir),
+		fmt.Sprintf("Deleted %s", targetDir),
+		func() error {
+			if err := os.RemoveAll(targetDir); err != nil {
+				return errUtils.Build(errUtils.ErrRemoveDirectory).
+					WithCause(err).
+					WithContext("path", targetDir).
+					Err()
+			}
+			return nil
+		},
+	)
 }

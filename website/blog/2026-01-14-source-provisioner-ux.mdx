@@ -1,0 +1,52 @@
+---
+slug: source-provisioner-ux
+title: 'Source Provisioner UX Improvements'
+authors: [osterman]
+tags: [enhancement, dx]
+---
+
+The source provisioner now provides better visual feedback with spinners during auto-provisioning and interactive confirmation prompts for delete operations.
+
+<!--truncate-->
+
+## What Changed
+
+Three UX improvements to the source provisioner:
+
+1. **Auto-provisioning spinner**: When components are automatically vendored on first use, you now see a spinner with progress instead of static messages
+2. **Interactive delete confirmation**: Running `atmos terraform source delete` without `--force` now prompts for confirmation instead of erroring
+3. **Delete operation spinner**: Deletion shows a spinner during the operation for consistent feedback
+
+## Why This Matters
+
+These changes align the source provisioner with UX patterns used elsewhere in Atmos:
+
+```shell
+# Before: Static messages during auto-provisioning
+ℹ Auto-provisioning source for component 'myapp'
+✓ Auto-provisioned source to .workdir/terraform/dev-myapp
+
+# After: Spinner shows progress
+⠋ Auto-provisioning source for 'myapp'
+✓ Auto-provisioned source to .workdir/terraform/dev-myapp
+```
+
+```shell
+# Before: Delete required --force or failed
+$ atmos terraform source delete myapp --stack dev
+Error: --force flag required for safety
+
+# After: Interactive confirmation when --force omitted
+$ atmos terraform source delete myapp --stack dev
+? Delete directory: .workdir/terraform/dev-myapp? [Yes!/No.]
+⠋ Deleting .workdir/terraform/dev-myapp
+✓ Deleted .workdir/terraform/dev-myapp
+```
+
+## How to Use It
+
+No configuration changes needed. The improvements apply automatically:
+
+- **With TTY**: Get interactive prompts and spinners
+- **Without TTY (CI/scripts)**: Use `--force` to skip confirmation, spinners degrade gracefully
+- **Force flag**: Still available for scripted workflows: `atmos terraform source delete myapp --stack dev --force`

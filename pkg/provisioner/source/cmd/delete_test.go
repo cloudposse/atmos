@@ -45,8 +45,8 @@ func TestParseDeleteFlags_MissingStack(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
 
-// TestParseDeleteFlags_MissingForce tests that parseDeleteFlags returns error when --force is not provided.
-func TestParseDeleteFlags_MissingForce(t *testing.T) {
+// TestParseDeleteFlags_ForceDefault tests that parseDeleteFlags correctly parses Force=false when not provided.
+func TestParseDeleteFlags_ForceDefault(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 
 	parser := flags.NewStandardParser(
@@ -60,12 +60,13 @@ func TestParseDeleteFlags_MissingForce(t *testing.T) {
 
 	opts, err := parseDeleteFlags(cmd, parser)
 
-	require.Error(t, err)
-	assert.Nil(t, opts)
-	assert.ErrorIs(t, err, errUtils.ErrForceRequired)
+	require.NoError(t, err)
+	require.NotNil(t, opts)
+	assert.Equal(t, "dev", opts.Stack)
+	assert.False(t, opts.Force)
 }
 
-// TestParseDeleteFlags_Success tests that parseDeleteFlags works with valid flags.
+// TestParseDeleteFlags_Success tests that parseDeleteFlags works with valid flags including Force=true.
 func TestParseDeleteFlags_Success(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 
@@ -83,6 +84,7 @@ func TestParseDeleteFlags_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, opts)
 	assert.Equal(t, "dev", opts.Stack)
+	assert.True(t, opts.Force)
 }
 
 // TestDeleteSourceDirectory_DirectoryNotExist tests that deleteSourceDirectory handles non-existent directory.
@@ -103,8 +105,8 @@ func TestDeleteSourceDirectory_DirectoryNotExist(t *testing.T) {
 		},
 	}
 
-	// Target directory does not exist.
-	err := deleteSourceDirectory(atmosConfig, "terraform", "nonexistent", componentConfig)
+	// Target directory does not exist. Use force=true to skip interactive prompt.
+	err := deleteSourceDirectory(atmosConfig, "terraform", "nonexistent", componentConfig, true)
 
 	// Should return nil (no error, just a warning).
 	assert.NoError(t, err)
@@ -135,7 +137,8 @@ func TestDeleteSourceDirectory_Success(t *testing.T) {
 		},
 	}
 
-	err = deleteSourceDirectory(atmosConfig, "terraform", "vpc", componentConfig)
+	// Use force=true to skip interactive prompt.
+	err = deleteSourceDirectory(atmosConfig, "terraform", "vpc", componentConfig, true)
 
 	require.NoError(t, err)
 
@@ -237,8 +240,41 @@ func TestExecuteDelete_MissingStack(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrRequiredFlagNotProvided)
 }
 
-// TestExecuteDelete_MissingForce tests that executeDelete returns error when --force is not provided.
-func TestExecuteDelete_MissingForce(t *testing.T) {
+// TestExecuteDelete_NoForceNonTTY tests that executeDelete returns ErrInteractiveNotAvailable
+// when --force is not provided and running in non-interactive mode.
+func TestExecuteDelete_NoForceNonTTY(t *testing.T) {
+	// Save originals and restore after test.
+	origInitFunc := initCliConfigFunc
+	origDescribeFunc := describeComponentFunc
+	defer func() {
+		initCliConfigFunc = origInitFunc
+		describeComponentFunc = origDescribeFunc
+	}()
+
+	// Create temp directory with existing component.
+	tempDir := t.TempDir()
+	targetDir := filepath.Join(tempDir, "vpc")
+	err := os.MkdirAll(targetDir, 0o755)
+	require.NoError(t, err)
+
+	// Mock config init.
+	initCliConfigFunc = func(configInfo schema.ConfigAndStacksInfo, validate bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{
+			Components: schema.Components{
+				Terraform: schema.Terraform{BasePath: tempDir},
+			},
+		}, nil
+	}
+
+	// Mock describe component.
+	describeComponentFunc = func(component, stack string) (map[string]any, error) {
+		return map[string]any{
+			"source": map[string]any{
+				"uri": "github.com/example/vpc",
+			},
+		}, nil
+	}
+
 	cfg := &Config{
 		ComponentType: "terraform",
 		TypeLabel:     "Terraform",
@@ -251,15 +287,16 @@ func TestExecuteDelete_MissingForce(t *testing.T) {
 	)
 	parser.RegisterFlags(cmd)
 
-	err := cmd.ParseFlags([]string{"--stack", "dev"})
+	err = cmd.ParseFlags([]string{"--stack", "dev"})
 	require.NoError(t, err)
 
 	args := []string{"vpc"}
 
+	// In non-TTY test environment, should return ErrInteractiveNotAvailable.
 	err = executeDelete(cmd, args, cfg, parser)
 
 	require.Error(t, err)
-	assert.ErrorIs(t, err, errUtils.ErrForceRequired)
+	assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable)
 }
 
 // TestInitDeleteContext_ConfigInitError tests that initDeleteContext returns error when config init fails.
@@ -313,8 +350,8 @@ func TestInitDeleteContext_DescribeComponentError(t *testing.T) {
 
 // TestDeleteSourceDirectory_DetermineTargetError tests that deleteSourceDirectory returns error when target cannot be determined.
 func TestDeleteSourceDirectory_DetermineTargetError(t *testing.T) {
-	// Pass nil atmosConfig to trigger an error.
-	err := deleteSourceDirectory(nil, "terraform", "vpc", map[string]any{})
+	// Pass nil atmosConfig to trigger an error. Use force=true to skip interactive prompt.
+	err := deleteSourceDirectory(nil, "terraform", "vpc", map[string]any{}, true)
 
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
