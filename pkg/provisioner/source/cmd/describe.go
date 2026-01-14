@@ -65,9 +65,9 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	if len(args) > 0 {
 		component = args[0]
 	} else {
-		var err error
-		component, err = PromptForComponent(cmd)
-		if err := HandlePromptError(err, "component"); err != nil {
+		var promptErr error
+		component, promptErr = PromptForComponent(cmd)
+		if err := HandlePromptError(promptErr, "component"); err != nil {
 			return err
 		}
 	}
@@ -83,9 +83,9 @@ func executeDescribe(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 
 	// Prompt for stack if not provided.
 	if stack == "" {
-		var err error
-		stack, err = PromptForStack(cmd, component)
-		if err := HandlePromptError(err, "stack"); err != nil {
+		var promptErr error
+		stack, promptErr = PromptForStack(cmd, component)
+		if err := HandlePromptError(promptErr, "stack"); err != nil {
 			return err
 		}
 	}
