@@ -37,6 +37,14 @@ export interface DirectoryNode {
 export type TreeNode = FileNode | DirectoryNode;
 
 /**
+ * Represents a documentation link.
+ */
+export interface DocLink {
+  label: string;
+  url: string;
+}
+
+/**
  * Represents an example project.
  */
 export interface ExampleProject {
@@ -46,6 +54,7 @@ export interface ExampleProject {
   hasReadme: boolean;
   hasAtmosYaml: boolean;
   tags: string[];
+  docs: DocLink[];
   root: DirectoryNode;
 }
 

@@ -608,6 +608,90 @@
   color: var(--ifm-color-emphasis-500);
 }
 
+/* Related Documentation */
+.relatedDocs {
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, rgba(30, 91, 184, 0.05) 0%, rgba(83, 140, 233, 0.03) 100%);
+  border: 1px solid rgba(30, 91, 184, 0.15);
+  border-radius: 12px;
+}
+
+:global(html[data-theme='dark']) .relatedDocs {
+  background: linear-gradient(135deg, rgba(83, 140, 233, 0.08) 0%, rgba(83, 140, 233, 0.04) 100%);
+  border-color: rgba(83, 140, 233, 0.2);
+}
+
+.relatedDocsTitle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+}
+
+.relatedDocsIcon {
+  color: var(--ifm-color-primary);
+}
+
+.relatedDocsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.relatedDocsItem {
+  margin: 0;
+}
+
+.relatedDocsLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  color: var(--ifm-color-emphasis-700);
+  text-decoration: none;
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+}
+
+.relatedDocsLink:hover {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+  text-decoration: none;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(30, 91, 184, 0.1);
+}
+
+:global(html[data-theme='dark']) .relatedDocsLink {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+:global(html[data-theme='dark']) .relatedDocsLink:hover {
+  border-color: var(--ifm-color-primary);
+  box-shadow: 0 2px 8px rgba(83, 140, 233, 0.2);
+}
+
+.relatedDocsArrow {
+  font-size: 0.75rem;
+  opacity: 0.6;
+  transition: transform 0.15s ease;
+}
+
+.relatedDocsLink:hover .relatedDocsArrow {
+  transform: translateX(2px);
+  opacity: 1;
+}
+
 /* Responsive adjustments */
 @media screen and (max-width: 768px) {
   .indexPage {

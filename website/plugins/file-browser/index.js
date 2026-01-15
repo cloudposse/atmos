@@ -46,6 +46,73 @@ const TAGS_MAP = {
   'demo-helmfile': ['DX'],
 };
 
+// Documentation pages mapping for examples.
+const DOCS_MAP = {
+  'quick-start-simple': [
+    { label: 'Quick Start', url: '/quick-start' },
+    { label: 'Simple Tutorial', url: '/quick-start/simple' },
+  ],
+  'quick-start-advanced': [
+    { label: 'Quick Start', url: '/quick-start' },
+    { label: 'Advanced Tutorial', url: '/quick-start/advanced' },
+  ],
+  'demo-stacks': [
+    { label: 'Stacks', url: '/stacks' },
+  ],
+  'demo-context': [
+    { label: 'Describe Configuration', url: '/cli/commands/describe/config' },
+  ],
+  'demo-env': [
+    { label: 'Environment Variables', url: '/stacks/env' },
+  ],
+  'demo-auth': [
+    { label: 'Authentication', url: '/stacks/auth' },
+    { label: 'Auth Commands', url: '/cli/commands/auth/usage' },
+  ],
+  'demo-schemas': [
+    { label: 'JSON Schema Validation', url: '/validation/json-schema' },
+  ],
+  'demo-vendoring': [
+    { label: 'Vendoring', url: '/vendor/' },
+    { label: 'Vendor Configuration', url: '/vendor/vendor-config' },
+    { label: 'CLI Configuration', url: '/cli/configuration/vendor' },
+  ],
+  'demo-component-versions': [
+    { label: 'Component Versions', url: '/design-patterns/version-management' },
+  ],
+  'source-provisioning': [
+    { label: 'Source Provisioning', url: '/cli/commands/terraform/source' },
+  ],
+  'demo-library': [
+    { label: 'Components', url: '/components' },
+  ],
+  'demo-workflows': [
+    { label: 'Workflows', url: '/workflows' },
+    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
+  ],
+  'demo-atlantis': [
+    { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
+  ],
+  'demo-custom-command': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'config-profiles': [
+    { label: 'CLI Configuration', url: '/cli/configuration' },
+  ],
+  toolchain: [
+    { label: 'Getting Started', url: '/quick-start' },
+  ],
+  devcontainer: [
+    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
+  ],
+  'devcontainer-build': [
+    { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
+  ],
+  'demo-helmfile': [
+    { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+};
+
 // Map file extensions to syntax highlighting languages.
 const LANGUAGE_MAP = {
   yaml: 'yaml',
@@ -306,6 +373,7 @@ function scanExamples(sourceDir, options) {
       hasReadme: !!tree.readme,
       hasAtmosYaml,
       tags: TAGS_MAP[entry.name] || [],
+      docs: DOCS_MAP[entry.name] || [],
       root: tree,
     });
 
@@ -428,8 +496,14 @@ module.exports = function fileBrowserPlugin(context, options) {
     },
 
     async contentLoaded({ content, actions }) {
-      const { createData, addRoute } = actions;
+      const { createData, addRoute, setGlobalData } = actions;
       const { tree, options: pluginOptions } = content;
+
+      // Export examples data globally for use by EmbedExample component.
+      setGlobalData({
+        examples: tree.examples,
+        options: pluginOptions,
+      });
 
       // Create the main tree data file.
       const treeDataPath = await createData(

@@ -7,6 +7,7 @@ import BreadcrumbNav from './BreadcrumbNav';
 import FileTree from './FileTree';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
+import RelatedDocs from './RelatedDocs';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
@@ -62,6 +63,11 @@ export default function DirectoryPage({
           )}
 
           <DirectoryListing directory={dirData} routeBasePath={routeBasePath} />
+
+          {/* Show related documentation */}
+          {example.docs && example.docs.length > 0 && (
+            <RelatedDocs docs={example.docs} />
+          )}
         </main>
       </div>
     </Layout>
