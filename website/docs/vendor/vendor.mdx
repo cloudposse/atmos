@@ -9,6 +9,7 @@ id: vendor
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 When your infrastructure depends on external modules, you're at the mercy of upstream changes, network availability, and release schedules you don't control. Vendoring brings that code in-house, giving you full control over when and how dependencies change.
@@ -107,7 +108,5 @@ While Atmos does not call `vendir`, it functions and supports a subset of the co
 ## Try It
 
 Explore a working example that demonstrates vendoring in action.
-
-import EmbedExample from '@site/src/components/EmbedExample'
 
 <EmbedExample example="demo-vendoring" />

@@ -40,8 +40,26 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
     );
   }
 
-  // Handle missing content.
-  if (!file.content) {
+  // Handle empty files.
+  if (file.content === '') {
+    return (
+      <div className={styles.fileViewer}>
+        <div className={styles.fileHeader}>
+          <div className={styles.fileInfo}>
+            <span className={styles.fileName}>{file.name}</span>
+            <span className={styles.fileSize}>{formatFileSize(file.size)}</span>
+          </div>
+          {showGithubLink && <SourceLink url={file.githubUrl!} />}
+        </div>
+        <div className={styles.binaryFileMessage}>
+          <p>File is empty</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle missing content (file too large to load).
+  if (file.content == null) {
     return (
       <div className={styles.fileViewer}>
         <div className={styles.fileHeader}>
