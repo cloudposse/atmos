@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
@@ -86,7 +87,10 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	progressMsg := fmt.Sprintf("Provisioning %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
 	completedMsg := fmt.Sprintf("Provisioned %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
 
-	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+	// Capture provisioning result to display warnings after spinner completes.
+	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
+	var result *backend.ProvisionResult
+	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		defer cancel()
 
@@ -94,8 +98,24 @@ func ProvisionWithParams(params *ProvisionParams) error {
 		// This enables in-process SDK calls with Atmos-managed credentials.
 		// The AuthContext was populated by the command layer through InitConfigAndAuth,
 		// which merges component-level auth with global auth and respects default identity settings.
-		return backend.ProvisionBackend(ctx, params.AtmosConfig, componentConfig, params.AuthContext)
+		var provErr error
+		result, provErr = backend.ProvisionBackend(ctx, params.AtmosConfig, componentConfig, params.AuthContext)
+		return provErr
 	})
+	if err != nil {
+		return err
+	}
+
+	// Display warnings AFTER spinner completes to avoid concurrent output issues.
+	// The spinner runs operations in a background goroutine while animating on stderr,
+	// so any output during spinner execution would interleave and corrupt the display.
+	if result != nil {
+		for _, warning := range result.Warnings {
+			_ = ui.Warning(warning)
+		}
+	}
+
+	return nil
 }
 
 // ListBackends lists all backends in a stack.
