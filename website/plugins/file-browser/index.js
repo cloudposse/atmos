@@ -22,28 +22,28 @@ const DEFAULT_EXCLUDE_PATTERNS = [
   '**/.envrc',
 ];
 
-// Category mapping for examples.
-const CATEGORY_MAP = {
-  'quick-start-simple': 'Quickstart',
-  'quick-start-advanced': 'Quickstart',
-  'demo-stacks': 'Stacks',
-  'demo-context': 'Stacks',
-  'demo-env': 'Stacks',
-  'config-profiles': 'Stacks',
-  'demo-auth': 'Stacks',
-  'demo-schemas': 'Stacks',
-  'demo-vendoring': 'Components',
-  'demo-component-versions': 'Components',
-  'source-provisioning': 'Components',
-  'demo-library': 'Components',
-  'demo-workflows': 'Automation',
-  'demo-atlantis': 'Automation',
-  'demo-custom-command': 'Automation',
-  toolchain: 'DX',
-  devcontainer: 'DX',
-  'devcontainer-build': 'DX',
-  'demo-localstack': 'DX',
-  'demo-helmfile': 'DX',
+// Tags mapping for examples (an example can have multiple tags).
+const TAGS_MAP = {
+  'quick-start-simple': ['Quickstart'],
+  'quick-start-advanced': ['Quickstart'],
+  'demo-stacks': ['Stacks'],
+  'demo-context': ['Stacks'],
+  'demo-env': ['Stacks'],
+  'config-profiles': ['Stacks'],
+  'demo-auth': ['Stacks'],
+  'demo-schemas': ['Stacks'],
+  'demo-vendoring': ['Components'],
+  'demo-component-versions': ['Components'],
+  'source-provisioning': ['Components'],
+  'demo-library': ['Components'],
+  'demo-workflows': ['Automation'],
+  'demo-atlantis': ['Automation'],
+  'demo-custom-command': ['Automation'],
+  toolchain: ['DX'],
+  devcontainer: ['DX'],
+  'devcontainer-build': ['DX'],
+  'demo-localstack': ['DX'],
+  'demo-helmfile': ['DX'],
 };
 
 // Map file extensions to syntax highlighting languages.
@@ -294,7 +294,7 @@ function scanExamples(sourceDir, options) {
       description,
       hasReadme: !!tree.readme,
       hasAtmosYaml,
-      category: CATEGORY_MAP[entry.name] || 'Other',
+      tags: TAGS_MAP[entry.name] || [],
       root: tree,
     });
 
@@ -304,13 +304,13 @@ function scanExamples(sourceDir, options) {
   // Sort examples alphabetically.
   examples.sort((a, b) => a.name.localeCompare(b.name));
 
-  // Collect unique categories in display order.
-  const categoryOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
-  const categories = categoryOrder.filter((cat) => examples.some((ex) => ex.category === cat));
+  // Collect unique tags in display order.
+  const tagOrder = ['Quickstart', 'Stacks', 'Components', 'Automation', 'DX'];
+  const tags = tagOrder.filter((tag) => examples.some((ex) => ex.tags.includes(tag)));
 
   return {
     examples,
-    categories,
+    tags,
     generatedAt: new Date().toISOString(),
     totalFiles,
     totalExamples: examples.length,

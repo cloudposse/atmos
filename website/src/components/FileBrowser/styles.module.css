@@ -201,16 +201,22 @@
   border-top-color: rgba(255, 255, 255, 0.06);
 }
 
-.categoryBadge {
-  padding: 0.25rem 0.6rem;
+.tagList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tagBadge {
+  padding: 0.2rem 0.5rem;
   background: var(--ifm-color-primary-lightest);
   color: var(--ifm-color-primary-darkest);
   border-radius: 4px;
-  font-size: 0.75rem;
+  font-size: 0.7rem;
   font-weight: 500;
 }
 
-:global(html[data-theme='dark']) .categoryBadge {
+:global(html[data-theme='dark']) .tagBadge {
   background: rgba(83, 140, 233, 0.2);
   color: #538ce9;
 }

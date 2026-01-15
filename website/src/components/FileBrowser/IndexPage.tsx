@@ -1,5 +1,5 @@
 /**
- * IndexPage - Landing page showing all example projects with category filtering.
+ * IndexPage - Landing page showing all example projects with tag filtering.
  */
 import React, { useState } from 'react';
 import Layout from '@theme/Layout';
@@ -15,12 +15,12 @@ interface IndexPageProps {
 }
 
 export default function IndexPage({ treeData, optionsData }: IndexPageProps): JSX.Element {
-  const { examples, categories } = treeData;
+  const { examples, tags } = treeData;
   const { routeBasePath, title, description } = optionsData;
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [activeTag, setActiveTag] = useState<string | null>(null);
 
-  const filteredExamples = activeCategory
-    ? examples.filter((ex) => ex.category === activeCategory)
+  const filteredExamples = activeTag
+    ? examples.filter((ex) => ex.tags.includes(activeTag))
     : examples;
 
   return (
@@ -34,19 +34,19 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
         <div className={styles.filterBar}>
           <button
             type="button"
-            className={`${styles.filterButton} ${activeCategory === null ? styles.filterButtonActive : ''}`}
-            onClick={() => setActiveCategory(null)}
+            className={`${styles.filterButton} ${activeTag === null ? styles.filterButtonActive : ''}`}
+            onClick={() => setActiveTag(null)}
           >
             All
           </button>
-          {categories.map((category) => (
+          {tags.map((tag) => (
             <button
-              key={category}
+              key={tag}
               type="button"
-              className={`${styles.filterButton} ${activeCategory === category ? styles.filterButtonActive : ''}`}
-              onClick={() => setActiveCategory(category)}
+              className={`${styles.filterButton} ${activeTag === tag ? styles.filterButtonActive : ''}`}
+              onClick={() => setActiveTag(tag)}
             >
-              {category}
+              {tag}
             </button>
           ))}
         </div>
@@ -68,7 +68,11 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
                 {example.description || 'Explore this example project'}
               </p>
               <div className={styles.exampleCardFooter}>
-                <span className={styles.categoryBadge}>{example.category}</span>
+                <div className={styles.tagList}>
+                  {example.tags.map((tag) => (
+                    <span key={tag} className={styles.tagBadge}>{tag}</span>
+                  ))}
+                </div>
               </div>
             </Link>
           ))}
