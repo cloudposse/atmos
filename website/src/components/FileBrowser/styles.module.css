@@ -5,8 +5,9 @@
 /* Page Layout */
 .pageLayout {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 2rem;
+  width: 100%;
   max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
@@ -330,6 +331,7 @@
   min-width: 0;
   width: 100%;
   max-width: 100%;
+  overflow-x: auto;
 }
 
 /* Breadcrumb Navigation */
@@ -516,6 +518,8 @@
 
 .markdownContent {
   padding: 1.5rem;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 /* GitHub Button */
