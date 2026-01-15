@@ -1712,6 +1712,163 @@ func TestTrimRight(t *testing.T) {
 	}
 }
 
+//nolint:dupl // Test structure intentionally mirrors TestTrimRight for consistency.
+func TestTrimLeftSpaces(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		desc     string
+	}{
+		{
+			name:     "plain text no leading spaces",
+			input:    "hello world",
+			expected: "hello world",
+			desc:     "Baseline: plain text without leading spaces should be unchanged",
+		},
+		{
+			name:     "plain text with leading spaces",
+			input:    "   hello world",
+			expected: "hello world",
+			desc:     "Plain text with leading spaces should be trimmed",
+		},
+		{
+			name:     "ANSI colored text no leading spaces",
+			input:    "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI colored text without leading spaces should preserve all codes",
+		},
+		{
+			name:     "ANSI colored text with plain leading spaces",
+			input:    "   \x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI colored text with plain leading spaces should trim spaces",
+		},
+		{
+			name:     "ANSI codes before leading spaces (Glamour pattern)",
+			input:    "\x1b[38;2;247;250;252m\x1b[0m\x1b[38;2;247;250;252m\x1b[0m  \x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI codes before leading spaces (Glamour pattern) should be trimmed",
+		},
+		{
+			name:     "ANSI wrapped leading spaces",
+			input:    "\x1b[38;2;247;250;252m   \x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI-wrapped leading spaces should be trimmed (reset code preserved)",
+		},
+		{
+			name:     "mixed ANSI codes and spaces at start",
+			input:    "\x1b[0m\x1b[38;2;247;250;252m\x1b[0m  \x1b[38;2;247;250;252m• Item one\x1b[0m",
+			expected: "\x1b[38;2;247;250;252m• Item one\x1b[0m",
+			desc:     "Mixed ANSI codes and spaces at start should be trimmed correctly",
+		},
+		{
+			name:     "Unicode characters with leading spaces",
+			input:    "  ℹ hello → world",
+			expected: "ℹ hello → world",
+			desc:     "Unicode characters with leading spaces should be trimmed correctly",
+		},
+		{
+			name:     "Unicode with ANSI and leading spaces",
+			input:    "\x1b[38;2;247;250;252m   \x1b[0m\x1b[38;2;247;250;252mℹ hello → world\x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252mℹ hello → world\x1b[0m",
+			desc:     "Unicode with ANSI codes and leading spaces should trim correctly (reset code preserved)",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+			desc:     "Empty string should remain empty",
+		},
+		{
+			name:     "only spaces",
+			input:    "     ",
+			expected: "",
+			desc:     "String with only spaces should become empty",
+		},
+		{
+			name:     "only ANSI wrapped spaces",
+			input:    "\x1b[38;2;247;250;252m     \x1b[0m",
+			expected: "",
+			desc:     "String with only ANSI-wrapped spaces should become empty",
+		},
+		{
+			name:     "preserves trailing spaces",
+			input:    "   hello world   ",
+			expected: "hello world   ",
+			desc:     "Trailing spaces should be preserved, only leading removed",
+		},
+		{
+			name:     "preserves ANSI on trailing spaces",
+			input:    "\x1b[38;2;247;250;252m   \x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			desc:     "ANSI codes on trailing spaces should be preserved (leading reset code after trim)",
+		},
+		{
+			name:     "real Glamour output with bullet",
+			input:    "\x1b[38;2;247;250;252m\x1b[0m\x1b[38;2;247;250;252m\x1b[0m  \x1b[38;2;247;250;252m• \x1b[0m\x1b[38;2;247;250;252mItem one\x1b[0m",
+			expected: "\x1b[38;2;247;250;252m• \x1b[0m\x1b[38;2;247;250;252mItem one\x1b[0m",
+			desc:     "Real Glamour bullet list output should have leading spaces trimmed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimLeftSpaces(tt.input)
+
+			// Compare results.
+			if result != tt.expected {
+				t.Errorf("\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
+					tt.name,
+					tt.desc,
+					tt.input,
+					[]byte(tt.input),
+					tt.input,
+					tt.expected,
+					[]byte(tt.expected),
+					tt.expected,
+					result,
+					[]byte(result),
+					result,
+				)
+			}
+
+			// Additional verification: check visual width.
+			strippedInput := ansi.Strip(tt.input)
+			strippedExpected := ansi.Strip(tt.expected)
+			strippedResult := ansi.Strip(result)
+
+			expectedWidth := ansi.StringWidth(strings.TrimLeft(strippedInput, " "))
+			resultWidth := ansi.StringWidth(strippedResult)
+
+			if resultWidth != expectedWidth {
+				t.Errorf("\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
+					expectedWidth,
+					strings.TrimLeft(strippedInput, " "),
+					resultWidth,
+					strippedResult,
+				)
+			}
+
+			// Verify no leading whitespace in result.
+			if strippedResult != strings.TrimLeft(strippedResult, " ") {
+				t.Errorf("\nResult still has leading whitespace:\n  Stripped result: %q\n  After TrimLeft: %q",
+					strippedResult,
+					strings.TrimLeft(strippedResult, " "),
+				)
+			}
+
+			// Verify expected also matches this property.
+			if strippedExpected != strings.TrimLeft(strippedExpected, " ") {
+				t.Errorf("\nTest case error - expected value has leading whitespace:\n  Stripped expected: %q\n  After TrimLeft: %q",
+					strippedExpected,
+					strings.TrimLeft(strippedExpected, " "),
+				)
+			}
+		})
+	}
+}
+
 func TestReset(t *testing.T) {
 	// Initialize first.
 	ioCtx := createTestIOContext()

@@ -604,6 +604,46 @@ func trimRightSpaces(s string) string {
 	return result.String()
 }
 
+// trimLeftSpaces removes only leading spaces from an ANSI-coded string while
+// preserving all ANSI escape sequences on the remaining content.
+// This is useful for removing Glamour's paragraph indent while preserving styled content.
+func trimLeftSpaces(s string) string {
+	stripped := ansi.Strip(s)
+	trimmed := strings.TrimLeft(stripped, " ")
+
+	if trimmed == stripped {
+		return s // No leading spaces to remove.
+	}
+	if trimmed == "" {
+		return "" // All spaces.
+	}
+
+	// Calculate how many leading spaces to skip.
+	leadingSpaces := len(stripped) - len(trimmed)
+
+	// Walk through original string, skipping ANSI codes and counting spaces.
+	spacesSkipped := 0
+	i := 0
+
+	// Skip leading ANSI codes and spaces until we've skipped the required amount.
+skipLoop:
+	for i < len(s) && spacesSkipped < leadingSpaces {
+		switch {
+		case isANSIStart(s, i):
+			// Skip ANSI sequence (don't output it since it's styling skipped content).
+			i = skipANSISequence(s, i)
+		case s[i] == ' ':
+			spacesSkipped++
+			i++
+		default:
+			break skipLoop // Non-space content found.
+		}
+	}
+
+	// Return remaining content (including any ANSI codes).
+	return s[i:]
+}
+
 // isWhitespace checks if byte b is a space or tab.
 func isWhitespace(b byte) bool {
 	return b == ' ' || b == '\t'
@@ -742,13 +782,15 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 
 	if len(lines) == 1 {
 		// For single line: trim leading spaces from Glamour's paragraph indent
-		// since the icon+space already provides visual separation
-		line := strings.TrimLeft(lines[0], space)
+		// since the icon+space already provides visual separation.
+		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+		line := trimLeftSpaces(lines[0])
 		return fmt.Sprintf(iconMessageFormat, styledIcon, line), nil
 	}
 
-	// Multi-line: trim leading spaces from first line (goes next to icon)
-	lines[0] = strings.TrimLeft(lines[0], space)
+	// Multi-line: trim leading spaces from first line (goes next to icon).
+	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+	lines[0] = trimLeftSpaces(lines[0])
 
 	// Multi-line: first line with icon, rest indented to align under first line's text
 	result := fmt.Sprintf(iconMessageFormat, styledIcon, lines[0])
@@ -759,8 +801,9 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 	indent := strings.Repeat(space, iconWidth+1) // +1 for the space in "%s %s" format
 
 	for i := 1; i < len(lines); i++ {
-		// Glamour already added 2-space paragraph indent, replace with our calculated indent
-		line := strings.TrimLeft(lines[i], space) // Remove Glamour's indent
+		// Glamour already added 2-space paragraph indent, replace with our calculated indent.
+		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+		line := trimLeftSpaces(lines[i])
 		result += newline + indent + line
 	}
 
@@ -906,11 +949,13 @@ func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipglos
 	}
 
 	// For single line, trim leading spaces.
+	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
 	if len(lines) == 1 {
-		rendered = strings.TrimLeft(lines[0], space)
+		rendered = trimLeftSpaces(lines[0])
 	} else {
 		// Multi-line: trim first line and rejoin.
-		lines[0] = strings.TrimLeft(lines[0], space)
+		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
+		lines[0] = trimLeftSpaces(lines[0])
 		rendered = strings.Join(lines, newline)
 	}
 

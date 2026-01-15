@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
@@ -80,12 +81,31 @@ func autoProvisionBackend(
 	progressMsg := fmt.Sprintf("Provisioning %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, component, stack)
 	completedMsg := fmt.Sprintf("Provisioned %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, component, stack)
 
-	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+	// Capture provisioning result to display warnings after spinner completes.
+	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
+	var result *backend.ProvisionResult
+	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 		defer cancel()
 
-		return createFunc(ctx, atmosConfig, backendConfig, authContext)
+		var createErr error
+		result, createErr = createFunc(ctx, atmosConfig, backendConfig, authContext)
+		return createErr
 	})
+	if err != nil {
+		return err
+	}
+
+	// Display warnings AFTER spinner completes to avoid concurrent output issues.
+	// The spinner runs operations in a background goroutine while animating on stderr,
+	// so any output during spinner execution would interleave and corrupt the display.
+	if result != nil {
+		for _, warning := range result.Warnings {
+			_ = ui.Warning(warning)
+		}
+	}
+
+	return nil
 }
 
 // isBackendProvisionEnabled checks if provision.backend.enabled is true.
