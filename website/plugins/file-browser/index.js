@@ -157,14 +157,14 @@ function escapeRegex(str) {
  * @returns {boolean} - True if matches.
  */
 function matchesPattern(filePath, pattern) {
-  // First escape special regex characters (except * and /), then convert glob syntax.
+  // Escape special regex characters first, then convert glob syntax.
+  // Order matters: escape first so placeholders aren't affected.
   const regexPattern = pattern
-    .replace(/\*\*/g, '{{GLOBSTAR}}')
-    .replace(/\*/g, '{{STAR}}')
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/{{STAR}}/g, '[^/]*')
-    .replace(/{{GLOBSTAR}}/g, '.*')
-    .replace(/\//g, '\\/');
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&') // Escape regex metacharacters (not * or /).
+    .replace(/\*\*/g, '{{GLOBSTAR}}') // Placeholder for ** (matches any path depth).
+    .replace(/\*/g, '[^/]*') // Single * matches anything except path separator.
+    .replace(/{{GLOBSTAR}}/g, '.*') // Replace placeholder with .* (any characters).
+    .replace(/\//g, '\\/'); // Escape path separators.
   const regex = new RegExp(`^${regexPattern}$`);
   return regex.test(filePath);
 }
