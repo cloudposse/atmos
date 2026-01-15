@@ -993,6 +993,46 @@ func TestProcessStacks_RejectsGeneratedNameWhenExplicitNameSet_Pattern(t *testin
 	assert.Error(t, err, "ProcessStacks should reject pattern name when explicit name is set")
 }
 
+// TestProcessStacks_ExplicitNameWorksWhenPatternVarsMissing verifies that stacks with
+// explicit name field work even when they don't have vars required by name_pattern.
+//
+// Scenario (regression test for bug where stacks were silently skipped):
+// - name_pattern: "{tenant}-{environment}-{stage}" (requires tenant)
+// - Stack has: name: "my-explicit-stack" but NO tenant var
+// - User runs: atmos tf plan vpc -s my-explicit-stack
+//
+// Expected: SUCCESS - explicit name should bypass pattern validation.
+func TestProcessStacks_ExplicitNameWorksWhenPatternVarsMissing(t *testing.T) {
+	// Change to the test fixture with pattern requiring vars the stack doesn't have.
+	testDir := "../../tests/fixtures/scenarios/stack-name-pattern-missing-vars"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Try to use the explicit name for a stack that doesn't have tenant var.
+	// Before the fix, this would fail because processStackContextPrefix would
+	// try to validate name_pattern requirements before checking the explicit name.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "my-explicit-stack", // Explicit name
+		ComponentType:    cfg.TerraformComponentType,
+	}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NamePattern, "name_pattern should be configured")
+	require.Contains(t, atmosConfig.Stacks.NamePattern, "{tenant}", "pattern should require tenant")
+
+	// ProcessStacks should find the component using the explicit name,
+	// even though the stack doesn't have tenant var required by name_pattern.
+	result, err := ProcessStacks(&atmosConfig, configAndStacksInfo, true, false, false, nil, nil)
+	require.NoError(t, err, "ProcessStacks should succeed for stack with explicit name")
+	assert.Equal(t, "my-explicit-stack", result.Stack)
+	assert.Equal(t, "vpc", result.ComponentFromArg)
+}
+
 // TestDescribeStacks_IncludeEmptyStacks verifies that includeEmptyStacks parameter works.
 func TestDescribeStacks_IncludeEmptyStacks(t *testing.T) {
 	// Change to the test fixture directory.
