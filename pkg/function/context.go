@@ -34,15 +34,6 @@ type ExecutionContext struct {
 
 	// SourceFile is the file containing this function call.
 	SourceFile string
-
-	// Stack is the current stack name being processed.
-	Stack string
-
-	// AtmosConfig is the Atmos configuration.
-	AtmosConfig *schema.AtmosConfiguration
-
-	// StackInfo contains stack processing information including auth context.
-	StackInfo *StackInfo
 }
 
 // StackInfo contains information about the stack being processed.

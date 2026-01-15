@@ -22,18 +22,29 @@ const LogLevelTrace = "Trace"
 
 type logBackend struct{}
 
+// Log implements the logging.Backend interface. It is a no-op logger.
 func (n logBackend) Log(level logging.Level, i int, record *logging.Record) error {
+	defer perf.Track(nil, "yq.logBackend.Log")()
+
 	return nil
 }
 
+// GetLevel implements the logging.Backend interface. Returns ERROR level.
 func (n logBackend) GetLevel(s string) logging.Level {
+	defer perf.Track(nil, "yq.logBackend.GetLevel")()
+
 	return logging.ERROR
 }
 
+// SetLevel implements the logging.Backend interface. It is a no-op.
 func (n logBackend) SetLevel(level logging.Level, s string) {
+	defer perf.Track(nil, "yq.logBackend.SetLevel")()
 }
 
+// IsEnabledFor implements the logging.Backend interface. Always returns false.
 func (n logBackend) IsEnabledFor(level logging.Level, s string) bool {
+	defer perf.Track(nil, "yq.logBackend.IsEnabledFor")()
+
 	return false
 }
 

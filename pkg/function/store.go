@@ -254,7 +254,10 @@ func extractPipeOptions(parts []string) (*string, string, error) {
 }
 
 // retrieveFromStore retrieves a value from the store using storeGetParams.
-func retrieveFromStore(store interface{ Get(string, string, string) (any, error) }, params *storeGetParams) (any, error) {
+func retrieveFromStore(store interface {
+	Get(string, string, string) (any, error)
+}, params *storeGetParams,
+) (any, error) {
 	value, err := store.Get("", "", params.key)
 	if err != nil {
 		if params.defaultValue != nil {

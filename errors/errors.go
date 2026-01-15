@@ -776,9 +776,6 @@ var (
 	// Interactive terminal errors.
 	ErrInteractiveNotAvailable = errors.New("interactive mode not available")
 
-	// Backend configuration errors.
-	ErrBackendTypeRequired = errors.New("backend type is required")
-
 	// Special YAML handling errors.
 	ErrSpecialYAMLHandling = errors.New("special YAML handling required")
 
