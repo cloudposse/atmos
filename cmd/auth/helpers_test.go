@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/flags"
 )
 
 func TestFormatDuration(t *testing.T) {
@@ -167,6 +168,91 @@ func TestBuildConfigAndStacksInfo(t *testing.T) {
 	// Verify it returns a valid ConfigAndStacksInfo struct.
 	// The struct should be empty since we haven't set any flags.
 	assert.NotNil(t, result)
+}
+
+// newTestCommandWithGlobalFlags creates a test command with all global flags registered.
+// This mirrors the pattern used in production where commands inherit global flags from RootCmd.
+func newTestCommandWithGlobalFlags(use string) *cobra.Command {
+	cmd := &cobra.Command{Use: use}
+	globalParser := flags.NewGlobalOptionsBuilder().Build()
+	globalParser.RegisterPersistentFlags(cmd)
+	return cmd
+}
+
+// TestBuildConfigAndStacksInfo_ProfileFlag tests that the --profile global flag
+// is properly extracted into ProfilesFromArg. This is the fix for issue #1973 where
+// --profile didn't work with auth exec and auth shell commands.
+func TestBuildConfigAndStacksInfo_ProfileFlag(t *testing.T) {
+	tests := []struct {
+		name             string
+		profiles         []string
+		expectedProfiles []string
+	}{
+		{
+			name:             "single profile",
+			profiles:         []string{"dev"},
+			expectedProfiles: []string{"dev"},
+		},
+		{
+			name:             "multiple profiles",
+			profiles:         []string{"dev", "staging"},
+			expectedProfiles: []string{"dev", "staging"},
+		},
+		{
+			name:             "no profile",
+			profiles:         nil,
+			expectedProfiles: nil,
+		},
+		{
+			name:             "profile with special characters",
+			profiles:         []string{"us-east-1/prod"},
+			expectedProfiles: []string{"us-east-1/prod"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a command with global flags registered (including --profile).
+			cmd := newTestCommandWithGlobalFlags("test")
+
+			// Create a fresh Viper instance and set profile values.
+			v := viper.New()
+			if tt.profiles != nil {
+				v.Set("profile", tt.profiles)
+			}
+
+			// Call BuildConfigAndStacksInfo which should extract the profile flag.
+			result := BuildConfigAndStacksInfo(cmd, v)
+
+			// Verify ProfilesFromArg contains the expected values.
+			assert.Equal(t, tt.expectedProfiles, result.ProfilesFromArg,
+				"BuildConfigAndStacksInfo should extract --profile flag into ProfilesFromArg")
+		})
+	}
+}
+
+// TestBuildConfigAndStacksInfo_ProfileFlag_EnvironmentVariable tests that ATMOS_PROFILE
+// environment variable is properly extracted. This verifies the workaround mentioned
+// in issue #1973 continues to work.
+func TestBuildConfigAndStacksInfo_ProfileFlag_EnvironmentVariable(t *testing.T) {
+	// Set environment variable.
+	t.Setenv("ATMOS_PROFILE", "env-profile")
+
+	// Create command with global flags.
+	cmd := newTestCommandWithGlobalFlags("test")
+
+	// Create Viper and bind to the global parser (which includes ATMOS_PROFILE binding).
+	v := viper.New()
+	v.AutomaticEnv()
+	v.SetEnvPrefix("ATMOS")
+	_ = v.BindEnv("profile", "ATMOS_PROFILE")
+
+	// Call BuildConfigAndStacksInfo.
+	result := BuildConfigAndStacksInfo(cmd, v)
+
+	// Verify environment variable was picked up.
+	assert.Equal(t, []string{"env-profile"}, result.ProfilesFromArg,
+		"BuildConfigAndStacksInfo should extract ATMOS_PROFILE env var into ProfilesFromArg")
 }
 
 func TestCreateAuthManager(t *testing.T) {
