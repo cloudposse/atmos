@@ -22,18 +22,33 @@ const (
 
 // masker implements the Masker interface.
 type masker struct {
-	mu       sync.RWMutex
-	literals map[string]bool  // Literal values to mask
-	patterns []*regexp.Regexp // Regex patterns to mask
-	enabled  bool
+	mu          sync.RWMutex
+	literals    map[string]bool  // Literal values to mask
+	patterns    []*regexp.Regexp // Regex patterns to mask
+	enabled     bool
+	replacement string // Custom replacement string (default: MaskReplacement)
 }
 
 // newMasker creates a new Masker.
 func newMasker(config *Config) Masker {
+	// Determine replacement string from config or use default.
+	replacement := MaskReplacement
+	if config != nil {
+		if r := config.AtmosConfig.Settings.Terminal.Mask.Replacement; r != "" {
+			replacement = r
+		}
+	}
+
+	enabled := true
+	if config != nil {
+		enabled = !config.DisableMasking
+	}
+
 	m := &masker{
-		literals: make(map[string]bool),
-		patterns: make([]*regexp.Regexp, 0),
-		enabled:  !config.DisableMasking,
+		literals:    make(map[string]bool),
+		patterns:    make([]*regexp.Regexp, 0),
+		enabled:     enabled,
+		replacement: replacement,
 	}
 
 	return m
@@ -157,12 +172,12 @@ func (m *masker) Mask(input string) string {
 
 	// Replace literals in order (longest first)
 	for _, literal := range literals {
-		masked = strings.ReplaceAll(masked, literal, MaskReplacement)
+		masked = strings.ReplaceAll(masked, literal, m.replacement)
 	}
 
 	// Mask regex patterns
 	for _, pattern := range m.patterns {
-		masked = pattern.ReplaceAllString(masked, MaskReplacement)
+		masked = pattern.ReplaceAllString(masked, m.replacement)
 	}
 
 	return masked

@@ -19,6 +19,7 @@ import (
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -198,16 +199,17 @@ func detectColorConfig() colorConfig {
 
 // printColorDebugInfo prints debug information about color detection.
 func printColorDebugInfo(profileDetector *colorprofile.Writer, config colorConfig) {
-	fmt.Fprintf(os.Stderr, "\n[DEBUG] Color Detection:\n")
-	fmt.Fprintf(os.Stderr, "  Detected Profile: %v\n", profileDetector.Profile)
-	fmt.Fprintf(os.Stderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString(envAtmosForceColor))
-	fmt.Fprintf(os.Stderr, "  FORCE_COLOR: %s\n", viper.GetString(envForceColor))
-	fmt.Fprintf(os.Stderr, "  CLICOLOR_FORCE: %s\n", viper.GetString(envCliColorForce))
-	fmt.Fprintf(os.Stderr, "  NO_COLOR: %s\n", viper.GetString(envNoColor))
-	fmt.Fprintf(os.Stderr, "  TERM: %s\n", viper.GetString(envTerm))
-	fmt.Fprintf(os.Stderr, "  COLORTERM: %s\n", viper.GetString(envColorTerm))
-	fmt.Fprintf(os.Stderr, "  forceColor: %v\n", config.forceColor)
-	fmt.Fprintf(os.Stderr, "  explicitlyDisabled: %v\n", config.explicitlyDisabled)
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
+	fmt.Fprintf(maskedStderr, "\n[DEBUG] Color Detection:\n")
+	fmt.Fprintf(maskedStderr, "  Detected Profile: %v\n", profileDetector.Profile)
+	fmt.Fprintf(maskedStderr, "  ATMOS_FORCE_COLOR: %s\n", viper.GetString(envAtmosForceColor))
+	fmt.Fprintf(maskedStderr, "  FORCE_COLOR: %s\n", viper.GetString(envForceColor))
+	fmt.Fprintf(maskedStderr, "  CLICOLOR_FORCE: %s\n", viper.GetString(envCliColorForce))
+	fmt.Fprintf(maskedStderr, "  NO_COLOR: %s\n", viper.GetString(envNoColor))
+	fmt.Fprintf(maskedStderr, "  TERM: %s\n", viper.GetString(envTerm))
+	fmt.Fprintf(maskedStderr, "  COLORTERM: %s\n", viper.GetString(envColorTerm))
+	fmt.Fprintf(maskedStderr, "  forceColor: %v\n", config.forceColor)
+	fmt.Fprintf(maskedStderr, "  explicitlyDisabled: %v\n", config.explicitlyDisabled)
 }
 
 // configureDisabledColorWriter creates a writer with colors explicitly disabled.
@@ -218,8 +220,9 @@ func configureDisabledColorWriter(out io.Writer, debugColors bool) (io.Writer, c
 	renderer.SetColorProfile(termenv.Ascii)
 
 	if debugColors {
-		fmt.Fprintf(os.Stderr, "  Mode: Explicitly Disabled\n")
-		fmt.Fprintf(os.Stderr, "  Final Profile: Ascii\n")
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Mode: Explicitly Disabled\n")
+		fmt.Fprintf(maskedStderr, "  Final Profile: Ascii\n")
 	}
 
 	return colorW, colorprofile.Ascii, renderer
@@ -233,11 +236,12 @@ func configureForcedColorWriter(out io.Writer, debugColors bool) (io.Writer, col
 	renderer := lipgloss.NewRenderer(termOut, termenv.WithProfile(termenv.ANSI256))
 
 	if debugColors {
-		fmt.Fprintf(os.Stderr, "  Mode: Force Color (pipe-safe)\n")
-		fmt.Fprintf(os.Stderr, "  Final Profile: ANSI256 (forced)\n")
-		fmt.Fprintf(os.Stderr, "  Renderer: Created with termenv.Output ANSI256 as writer\n")
-		fmt.Fprintf(os.Stderr, "  Renderer ColorProfile: %v\n", renderer.ColorProfile())
-		fmt.Fprintf(os.Stderr, "  Global termenv DefaultOutput profile: %v\n", termenv.DefaultOutput().ColorProfile())
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Mode: Force Color (pipe-safe)\n")
+		fmt.Fprintf(maskedStderr, "  Final Profile: ANSI256 (forced)\n")
+		fmt.Fprintf(maskedStderr, "  Renderer: Created with termenv.Output ANSI256 as writer\n")
+		fmt.Fprintf(maskedStderr, "  Renderer ColorProfile: %v\n", renderer.ColorProfile())
+		fmt.Fprintf(maskedStderr, "  Global termenv DefaultOutput profile: %v\n", termenv.DefaultOutput().ColorProfile())
 	}
 
 	return out, profile, renderer
@@ -245,26 +249,27 @@ func configureForcedColorWriter(out io.Writer, debugColors bool) (io.Writer, col
 
 // setRendererProfileForAutoDetect configures the renderer based on the detected color profile.
 func setRendererProfileForAutoDetect(renderer *lipgloss.Renderer, profile colorprofile.Profile, debugColors bool) {
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
 	switch profile {
 	case colorprofile.TrueColor:
 		renderer.SetColorProfile(termenv.TrueColor)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to TrueColor\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to TrueColor\n")
 		}
 	case colorprofile.ANSI256:
 		renderer.SetColorProfile(termenv.ANSI256)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI256\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to ANSI256\n")
 		}
 	case colorprofile.ANSI:
 		renderer.SetColorProfile(termenv.ANSI)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to ANSI\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to ANSI\n")
 		}
 	case colorprofile.Ascii:
 		renderer.SetColorProfile(termenv.Ascii)
 		if debugColors {
-			fmt.Fprintf(os.Stderr, "  Renderer: Auto-detect, set to Ascii\n")
+			fmt.Fprintf(maskedStderr, "  Renderer: Auto-detect, set to Ascii\n")
 		}
 	}
 }
@@ -278,8 +283,9 @@ func configureAutoDetectColorWriter(out io.Writer, detectedProfile colorprofile.
 	setRendererProfileForAutoDetect(renderer, colorW.Profile, debugColors)
 
 	if debugColors {
-		fmt.Fprintf(os.Stderr, "  Mode: Auto-detect\n")
-		fmt.Fprintf(os.Stderr, "  Final Profile: %v\n", colorW.Profile)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Mode: Auto-detect\n")
+		fmt.Fprintf(maskedStderr, "  Final Profile: %v\n", colorW.Profile)
 	}
 
 	return colorW, colorW.Profile, renderer
@@ -309,8 +315,9 @@ func configureWriter(cmd *cobra.Command, config colorConfig) writerConfig {
 	}
 
 	if config.debugColors {
-		fmt.Fprintf(os.Stderr, "  Renderer Color Profile: %v\n", renderer.ColorProfile())
-		fmt.Fprintf(os.Stderr, "  Renderer Has Dark Background: %v\n\n", renderer.HasDarkBackground())
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		fmt.Fprintf(maskedStderr, "  Renderer Color Profile: %v\n", renderer.ColorProfile())
+		fmt.Fprintf(maskedStderr, "  Renderer Has Dark Background: %v\n\n", renderer.HasDarkBackground())
 	}
 
 	renderer.SetHasDarkBackground(true)
