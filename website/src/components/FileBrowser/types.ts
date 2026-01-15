@@ -45,6 +45,7 @@ export interface ExampleProject {
   description: string;
   hasReadme: boolean;
   hasAtmosYaml: boolean;
+  category: string;
   root: DirectoryNode;
 }
 
@@ -53,6 +54,7 @@ export interface ExampleProject {
  */
 export interface ExamplesTree {
   examples: ExampleProject[];
+  categories: string[];
   generatedAt: string;
   totalFiles: number;
   totalExamples: number;

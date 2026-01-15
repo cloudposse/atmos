@@ -62,6 +62,47 @@
   gap: 0.5rem;
 }
 
+/* Filter Bar */
+.filterBar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+  margin-bottom: 2rem;
+}
+
+.filterButton {
+  padding: 0.5rem 1rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ifm-color-emphasis-700);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filterButton:hover {
+  border-color: var(--ifm-color-primary);
+  color: var(--ifm-color-primary);
+}
+
+.filterButtonActive {
+  background: var(--ifm-color-primary);
+  border-color: var(--ifm-color-primary);
+  color: white;
+}
+
+.filterButtonActive:hover {
+  background: var(--ifm-color-primary-dark);
+  border-color: var(--ifm-color-primary-dark);
+  color: white;
+}
+
+:global(html[data-theme='dark']) .filterButton {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 /* Examples Grid */
 .examplesGrid {
   display: grid;
@@ -160,20 +201,18 @@
   border-top-color: rgba(255, 255, 255, 0.06);
 }
 
-.exampleCardBadges {
-  display: flex;
-  gap: 0.5rem;
-}
-
-.exampleCardBadge {
-  padding: 0.15rem 0.5rem;
-  background: rgba(0, 0, 0, 0.05);
+.categoryBadge {
+  padding: 0.25rem 0.6rem;
+  background: var(--ifm-color-primary-lightest);
+  color: var(--ifm-color-primary-darkest);
   border-radius: 4px;
   font-size: 0.75rem;
+  font-weight: 500;
 }
 
-:global(html[data-theme='dark']) .exampleCardBadge {
-  background: rgba(255, 255, 255, 0.08);
+:global(html[data-theme='dark']) .categoryBadge {
+  background: rgba(83, 140, 233, 0.2);
+  color: #538ce9;
 }
 
 /* Sidebar / File Tree */
@@ -369,100 +408,60 @@
   font-weight: 500;
 }
 
-/* Directory Table */
-.directoryTable {
-  width: 100%;
-  border-collapse: separate;
-  border-spacing: 0;
+/* File List */
+.fileList {
+  list-style: none;
+  margin: 0 0 1.5rem 0;
+  padding: 0;
   border: 1px solid rgba(0, 0, 0, 0.1);
   border-radius: 8px;
-  margin-bottom: 1.5rem;
+  overflow: hidden;
 }
 
-:global(html[data-theme='dark']) .directoryTable {
+:global(html[data-theme='dark']) .fileList {
   border-color: rgba(255, 255, 255, 0.1);
 }
 
-.directoryTable th,
-.directoryTable td {
-  padding: 0.75rem 1rem;
-  text-align: left;
+.fileListItem {
   border-bottom: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-:global(html[data-theme='dark']) .directoryTable th,
-:global(html[data-theme='dark']) .directoryTable td {
-  border-bottom-color: rgba(255, 255, 255, 0.06);
-}
-
-.directoryTable thead tr:first-child th:first-child {
-  border-top-left-radius: 7px;
-}
-
-.directoryTable thead tr:first-child th:last-child {
-  border-top-right-radius: 7px;
-}
-
-.directoryTable tbody tr:last-child td:first-child {
-  border-bottom-left-radius: 7px;
-}
-
-.directoryTable tbody tr:last-child td:last-child {
-  border-bottom-right-radius: 7px;
-}
-
-.directoryTable thead {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-:global(html[data-theme='dark']) .directoryTable thead {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.directoryTable th {
-  font-weight: 600;
-  font-size: 0.85rem;
-  color: var(--ifm-color-emphasis-600);
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-}
-
-.directoryTable tbody tr:hover {
-  background: rgba(0, 0, 0, 0.02);
-}
-
-:global(html[data-theme='dark']) .directoryTable tbody tr:hover {
-  background: rgba(255, 255, 255, 0.03);
-}
-
-.directoryTable tbody tr:last-child td {
+.fileListItem:last-child {
   border-bottom: none;
 }
 
-.fileLink {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: var(--ifm-color-emphasis-800);
-  text-decoration: none;
-  font-size: 0.9rem;
+:global(html[data-theme='dark']) .fileListItem {
+  border-bottom-color: rgba(255, 255, 255, 0.06);
 }
 
-.fileLink:hover {
+.fileListLink {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  color: var(--ifm-color-emphasis-800);
+  text-decoration: none;
+  transition: background 0.15s ease;
+}
+
+.fileListLink:hover {
+  background: rgba(0, 0, 0, 0.02);
   color: var(--ifm-color-primary);
   text-decoration: none;
 }
 
-.fileLinkIcon {
+:global(html[data-theme='dark']) .fileListLink:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.fileListIcon {
   width: 18px;
   flex-shrink: 0;
   color: var(--ifm-color-emphasis-500);
 }
 
-.sizeCell {
-  font-size: 0.85rem;
-  color: var(--ifm-color-emphasis-500);
-  white-space: nowrap;
+.fileListName {
+  font-size: 0.9rem;
 }
 
 /* File Viewer */
@@ -619,11 +618,6 @@
     flex-direction: column;
     gap: 0.75rem;
     align-items: flex-start;
-  }
-
-  .directoryTable th:nth-child(2),
-  .directoryTable td:nth-child(2) {
-    display: none;
   }
 }
 

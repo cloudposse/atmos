@@ -1,10 +1,10 @@
 /**
- * DirectoryListing - GitHub-style directory file table.
+ * DirectoryListing - Simple file list without size column.
  */
 import React from 'react';
 import Link from '@docusaurus/Link';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { getFileIcon, formatFileSize } from './utils';
+import { getFileIcon } from './utils';
 import type { DirectoryNode, TreeNode } from './types';
 import styles from './styles.module.css';
 
@@ -32,34 +32,21 @@ export default function DirectoryListing({
   }
 
   return (
-    <table className={styles.directoryTable}>
-      <thead>
-        <tr>
-          <th>Name</th>
-          <th>Size</th>
-        </tr>
-      </thead>
-      <tbody>
-        {directory.children.map((item: TreeNode) => (
-          <tr key={item.path}>
-            <td>
-              <Link
-                to={`${routeBasePath}/${item.path}`}
-                className={styles.fileLink}
-              >
-                <FontAwesomeIcon
-                  icon={getFileIcon(item)}
-                  className={styles.fileLinkIcon}
-                />
-                <span>{item.name}</span>
-              </Link>
-            </td>
-            <td className={styles.sizeCell}>
-              {item.type === 'file' ? formatFileSize(item.size) : '-'}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <ul className={styles.fileList}>
+      {directory.children.map((item: TreeNode) => (
+        <li key={item.path} className={styles.fileListItem}>
+          <Link
+            to={`${routeBasePath}/${item.path}`}
+            className={styles.fileListLink}
+          >
+            <FontAwesomeIcon
+              icon={getFileIcon(item)}
+              className={styles.fileListIcon}
+            />
+            <span className={styles.fileListName}>{item.name}</span>
+          </Link>
+        </li>
+      ))}
+    </ul>
   );
 }
