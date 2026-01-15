@@ -369,7 +369,20 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'slide-notes-extractor'), {}
-        ]
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'examples',
+                sourceDir: '../examples',
+                routeBasePath: '/examples',
+                title: 'Examples',
+                description: 'Explore Atmos example projects with stack configurations, components, and workflows',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'examples',
+            },
+        ],
     ],
 
     presets: [
@@ -446,6 +459,11 @@ const config = {
                         to: '/cli',
                         position: 'left',
                         label: 'Reference'
+                    },
+                    {
+                        to: '/examples',
+                        position: 'left',
+                        label: 'Examples'
                     },
                     {
                         label: 'Community',
