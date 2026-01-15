@@ -2,12 +2,12 @@
 
 Pull Terraform modules from GitHub, S3, or OCI registries with pinned versions.
 
-Learn more about [Vendoring](https://atmos.tools/core-concepts/vendoring/).
+Learn more about [Vendoring](https://atmos.tools/vendor/).
 
 ## What You'll See
 
-- [Vendor manifest](https://atmos.tools/core-concepts/vendoring/vendor-manifest/) defining component sources
-- Multiple [vendor sources](https://atmos.tools/core-concepts/vendoring/#sources) from GitHub
+- [Vendor manifest](https://atmos.tools/vendor/component-manifest/) defining component sources
+- Multiple vendor sources from GitHub
 - Version pinning with `ref` parameter
 - Modular vendor configs in `vendor.d/`
 

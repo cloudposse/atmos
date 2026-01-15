@@ -74,6 +74,15 @@ const LANGUAGE_MAP = {
 };
 
 /**
+ * Escapes special regex characters in a string.
+ * @param {string} str - String to escape.
+ * @returns {string} - Escaped string safe for regex.
+ */
+function escapeRegex(str) {
+  return str.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
  * Matches a path against a glob-style pattern.
  * Supports ** (any directories) and * (any characters in segment).
  * @param {string} filePath - Path to test.
@@ -81,10 +90,12 @@ const LANGUAGE_MAP = {
  * @returns {boolean} - True if matches.
  */
 function matchesPattern(filePath, pattern) {
-  // Convert glob pattern to regex.
+  // First escape special regex characters (except * and /), then convert glob syntax.
   const regexPattern = pattern
     .replace(/\*\*/g, '{{GLOBSTAR}}')
-    .replace(/\*/g, '[^/]*')
+    .replace(/\*/g, '{{STAR}}')
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/{{STAR}}/g, '[^/]*')
     .replace(/{{GLOBSTAR}}/g, '.*')
     .replace(/\//g, '\\/');
   const regex = new RegExp(`^${regexPattern}$`);
