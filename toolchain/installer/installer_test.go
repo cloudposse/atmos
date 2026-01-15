@@ -121,14 +121,16 @@ func TestBuildAssetURL(t *testing.T) {
 
 	// Test with SemVer template variable (version without prefix).
 	// This matches Aqua's behavior where .Version = full tag, .SemVer = without prefix.
+	// The VersionPrefix must be explicitly set for .SemVer to strip it.
 	tool := &registry.Tool{
-		Type:      "github_release",
-		RepoOwner: "suzuki-shunsuke",
-		RepoName:  "github-comment",
-		Asset:     "github-comment_{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz",
+		Type:          "github_release",
+		RepoOwner:     "suzuki-shunsuke",
+		RepoName:      "github-comment",
+		Asset:         "github-comment_{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz",
+		VersionPrefix: "v", // Explicitly set so .SemVer strips it.
 	}
 
-	url, err := installer.BuildAssetURL(tool, "v6.3.4")
+	url, err := installer.BuildAssetURL(tool, "6.3.4")
 	if err != nil {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}
@@ -150,15 +152,16 @@ func TestBuildAssetURL_CustomFuncs(t *testing.T) {
 	installer := NewInstallerWithResolver(mockResolver, t.TempDir())
 
 	// Test template functions on both .Version (full tag) and .SemVer (without prefix).
-	// .Version = v1.2.8, .SemVer = 1.2.8
+	// With VersionPrefix: "v", .Version = v1.2.8, .SemVer = 1.2.8
 	tool := &registry.Tool{
-		Type:      "github_release",
-		RepoOwner: "hashicorp",
-		RepoName:  "terraform",
-		Asset:     "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .SemVer}}_{{trimSuffix \".8\" .SemVer}}_{{replace \".\" \"-\" .SemVer}}_{{.OS}}_{{.Arch}}.zip",
+		Type:          "github_release",
+		RepoOwner:     "hashicorp",
+		RepoName:      "terraform",
+		Asset:         "terraform_{{trimV .Version}}_{{trimPrefix \"1.\" .SemVer}}_{{trimSuffix \".8\" .SemVer}}_{{replace \".\" \"-\" .SemVer}}_{{.OS}}_{{.Arch}}.zip",
+		VersionPrefix: "v", // Explicitly set so .SemVer strips it.
 	}
 
-	url, err := installer.BuildAssetURL(tool, "v1.2.8")
+	url, err := installer.BuildAssetURL(tool, "1.2.8")
 	if err != nil {
 		t.Fatalf("buildAssetURL() error: %v", err)
 	}

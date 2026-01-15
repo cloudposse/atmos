@@ -47,7 +47,8 @@ func TestAtmosRegistry_TemplateRendering(t *testing.T) {
 
 		// Verify template was rendered correctly.
 		assert.Contains(t, url, "jq-")
-		assert.Contains(t, url, "https://github.com/stedolan/jq/releases/download/v1.7.1/")
+		// Without version_prefix configured, version is used as-is (no automatic "v" prefix).
+		assert.Contains(t, url, "https://github.com/stedolan/jq/releases/download/1.7.1/")
 		// URL should contain OS and Arch (darwin/linux/windows, amd64/arm64).
 		assert.NotContains(t, url, "{{.OS}}")
 		assert.NotContains(t, url, "{{.Arch}}")

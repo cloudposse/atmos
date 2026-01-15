@@ -702,6 +702,7 @@ When implementing complex commands, coordinate with other agents:
 **Reference Implementations:**
 - `cmd/version/version.go` - Command with flags
 - `cmd/about/about.go` - Simple command
+- `cmd/terraform/backend/backend_create.go` - Command with flag and positional arg prompting
 - `cmd/internal/command.go` - CommandProvider interface
 
 ## Key Principle

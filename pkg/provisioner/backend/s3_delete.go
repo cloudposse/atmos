@@ -82,7 +82,7 @@ func createS3ClientForDeletion(ctx context.Context, config *s3Config, authContex
 			WithHint("Check AWS credentials and region configuration").
 			Err()
 	}
-	return s3.NewFromConfig(awsConfig), nil
+	return getS3ClientFactory()(awsConfig), nil
 }
 
 // validateBucketExistsForDeletion checks if the bucket exists before deletion.

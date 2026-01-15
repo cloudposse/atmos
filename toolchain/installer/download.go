@@ -97,8 +97,24 @@ func writeResponseToCache(body io.Reader, cachePath string) (string, error) {
 }
 
 // buildDownloadError creates a detailed error for failed downloads.
+// For 404 errors, includes ErrHTTP404 so isHTTP404() can detect it for version fallback.
 func buildDownloadError(url string, statusCode int) error {
 	defer perf.Track(nil, "buildDownloadError")()
+
+	// For 404, include ErrHTTP404 so the version fallback mechanism can detect it.
+	if statusCode == http.StatusNotFound {
+		return errors.Join(
+			ErrHTTP404,
+			errUtils.Build(errUtils.ErrDownloadFailed).
+				WithExplanationf("Download failed with HTTP %d", statusCode).
+				WithHint("Asset not found - check tool name and version are correct").
+				WithHint("The tool registry may have a different version format").
+				WithContext("url", url).
+				WithContext("status_code", statusCode).
+				WithExitCode(1).
+				Err(),
+		)
+	}
 
 	builder := errUtils.Build(errUtils.ErrDownloadFailed).
 		WithExplanationf("Download failed with HTTP %d", statusCode).
@@ -107,10 +123,6 @@ func buildDownloadError(url string, statusCode int) error {
 		WithExitCode(1)
 
 	switch statusCode {
-	case http.StatusNotFound:
-		builder.
-			WithHint("Asset not found - check tool name and version are correct").
-			WithHint("Try without `v` prefix: `@1.5.0` instead of `@v1.5.0`")
 	case http.StatusForbidden, http.StatusUnauthorized:
 		builder.
 			WithHint("GitHub API rate limit exceeded or authentication required").

@@ -43,6 +43,7 @@
 
 # Tool version managers
 .tool-versions
+!examples/toolchain/.tool-versions
 
 # Ignore cache files
 **/.atmos/cache.yaml
@@ -126,3 +127,4 @@ TESTABILITY_CHANGES_SUMMARY.md
 *_summary.txt
 reply_to_*.sh
 *.ansi
+.claude-plan.md
