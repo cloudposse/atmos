@@ -159,7 +159,7 @@ variable "data" {
 }
 
 resource "local_file" "output" {
-  filename = "${path.module}/output/${var.stage}.json"
+  filename = "${path.module}/${var.stage}-output.json"
   content  = jsonencode(var.data)
 }
 

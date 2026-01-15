@@ -22,8 +22,11 @@ settings:
       replacement: "[REDACTED]"
       patterns:
         - 'demo-key-[A-Za-z0-9]{16}'
+        - 'internal-[a-f0-9]{32}'
+        - 'tkn_(live|test)_[a-zA-Z0-9]{24}'
       literals:
         - "super-secret-demo-value"
+        - "my-api-key-12345"
 ```
 
 ## Testing the Feature
