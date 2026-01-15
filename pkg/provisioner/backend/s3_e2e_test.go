@@ -84,7 +84,7 @@ func TestE2E_CreateS3Backend_WithMockAWSProvider(t *testing.T) {
 		"bucket": "e2e-test-bucket",
 		"region": "us-east-1",
 	}
-	err = CreateS3Backend(ctx, nil, backendConfig, authContext)
+	_, err = CreateS3Backend(ctx, nil, backendConfig, authContext)
 	require.NoError(t, err, "CreateS3Backend should succeed")
 
 	// Verify bucket was created.
@@ -138,7 +138,7 @@ func TestE2E_DeleteS3Backend_WithMockAWSProvider(t *testing.T) {
 		"bucket": bucketName,
 		"region": "us-east-1",
 	}
-	err = CreateS3Backend(ctx, nil, backendConfig, authContext)
+	_, err = CreateS3Backend(ctx, nil, backendConfig, authContext)
 	require.NoError(t, err, "CreateS3Backend should succeed")
 
 	// Verify bucket exists.
