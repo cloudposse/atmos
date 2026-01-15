@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -19,7 +20,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-const errFormat = "%w: %w"
+const (
+	errFormat     = "%w: %w"
+	backendTypeS3 = "s3"
+)
 
 // S3ClientAPI defines the interface for S3 operations.
 // This interface allows for mocking in tests.
@@ -37,6 +41,65 @@ type S3ClientAPI interface {
 	DeleteBucket(ctx context.Context, params *s3.DeleteBucketInput, optFns ...func(*s3.Options)) (*s3.DeleteBucketOutput, error)
 }
 
+// s3TestMu protects test-only variables for concurrent test execution.
+var s3TestMu sync.RWMutex
+
+// s3ClientFactory creates S3 clients from AWS config.
+// Override in tests to inject fake S3 clients.
+// Protected by s3TestMu for thread-safe concurrent test execution.
+var s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
+	return s3.NewFromConfig(cfg)
+}
+
+// getS3ClientFactory returns the current S3 client factory with thread-safe read access.
+func getS3ClientFactory() func(aws.Config) S3ClientAPI {
+	s3TestMu.RLock()
+	defer s3TestMu.RUnlock()
+	return s3ClientFactory
+}
+
+// SetS3ClientFactory sets a custom S3 client factory for testing.
+func SetS3ClientFactory(f func(aws.Config) S3ClientAPI) {
+	defer perf.Track(nil, "backend.SetS3ClientFactory")()
+
+	s3TestMu.Lock()
+	defer s3TestMu.Unlock()
+	s3ClientFactory = f
+}
+
+// ResetS3ClientFactory resets the S3 client factory to default.
+func ResetS3ClientFactory() {
+	defer perf.Track(nil, "backend.ResetS3ClientFactory")()
+
+	s3TestMu.Lock()
+	defer s3TestMu.Unlock()
+	s3ClientFactory = func(cfg aws.Config) S3ClientAPI {
+		return s3.NewFromConfig(cfg)
+	}
+}
+
+// s3SkipUnsupportedTestOps skips S3 operations not supported by gofakes3.
+// Test-only. Not exposed in configuration.
+// Protected by s3TestMu for thread-safe concurrent test execution.
+var s3SkipUnsupportedTestOps = false
+
+// getS3SkipUnsupportedTestOps returns whether to skip unsupported operations with thread-safe read access.
+func getS3SkipUnsupportedTestOps() bool {
+	s3TestMu.RLock()
+	defer s3TestMu.RUnlock()
+	return s3SkipUnsupportedTestOps
+}
+
+// SetS3SkipUnsupportedTestOps sets whether to skip unsupported S3 operations.
+// This should only be called in tests using gofakes3.
+func SetS3SkipUnsupportedTestOps(skip bool) {
+	defer perf.Track(nil, "backend.SetS3SkipUnsupportedTestOps")()
+
+	s3TestMu.Lock()
+	defer s3TestMu.Unlock()
+	s3SkipUnsupportedTestOps = skip
+}
+
 // s3Config holds S3 backend configuration.
 type s3Config struct {
 	bucket  string
@@ -46,9 +109,23 @@ type s3Config struct {
 
 func init() {
 	// Register S3 backend create function.
-	RegisterBackendCreate("s3", CreateS3Backend)
+	RegisterBackendCreate(backendTypeS3, CreateS3Backend)
 	// Register S3 backend delete function.
-	RegisterBackendDelete("s3", DeleteS3Backend)
+	RegisterBackendDelete(backendTypeS3, DeleteS3Backend)
+	// Register S3 backend exists function.
+	RegisterBackendExists(backendTypeS3, S3BackendExists)
+	// Register S3 backend name function.
+	RegisterBackendName(backendTypeS3, S3BackendName)
+}
+
+// S3BackendName returns the bucket name from S3 backend config.
+func S3BackendName(backendConfig map[string]any) string {
+	defer perf.Track(nil, "backend.S3BackendName")()
+
+	if bucket, ok := backendConfig["bucket"].(string); ok && bucket != "" {
+		return bucket
+	}
+	return ""
 }
 
 // CreateS3Backend creates an S3 backend with opinionated, hardcoded defaults.
@@ -76,8 +153,6 @@ func CreateS3Backend(
 		return err
 	}
 
-	_ = ui.Info(fmt.Sprintf("Provisioning S3 backend: bucket=%s region=%s", config.bucket, config.region))
-
 	// Load AWS configuration with auth context.
 	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
 	if err != nil {
@@ -90,8 +165,8 @@ func CreateS3Backend(
 			Err()
 	}
 
-	// Create S3 client.
-	client := s3.NewFromConfig(awsConfig)
+	// Create S3 client using factory (allows test injection).
+	client := getS3ClientFactory()(awsConfig)
 
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
@@ -105,7 +180,6 @@ func CreateS3Backend(
 		return fmt.Errorf(errFormat, errUtils.ErrApplyBucketDefaults, err)
 	}
 
-	_ = ui.Success(fmt.Sprintf("S3 backend provisioned successfully: %s", config.bucket))
 	return nil
 }
 
@@ -147,7 +221,6 @@ func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string
 	}
 
 	if exists {
-		_ = ui.Info(fmt.Sprintf("S3 bucket %s already exists, skipping creation", bucket))
 		return true, nil
 	}
 
@@ -155,7 +228,6 @@ func ensureBucket(ctx context.Context, client S3ClientAPI, bucket, region string
 	if err := createBucket(ctx, client, bucket, region); err != nil {
 		return false, fmt.Errorf(errFormat, errUtils.ErrCreateBucket, err)
 	}
-	_ = ui.Success(fmt.Sprintf("Created S3 bucket: %s", bucket))
 	return false, nil
 }
 
@@ -236,6 +308,40 @@ func bucketExists(ctx context.Context, client S3ClientAPI, bucket string) (bool,
 	return true, nil
 }
 
+// S3BackendExists checks if an S3 backend bucket exists.
+// This function is registered in the backend registry and called during auto-provisioning
+// to check if the backend already exists before attempting to create it.
+func S3BackendExists(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	backendConfig map[string]any,
+	authContext *schema.AuthContext,
+) (bool, error) {
+	defer perf.Track(atmosConfig, "backend.S3BackendExists")()
+
+	// Extract S3 configuration.
+	config, err := extractS3Config(backendConfig)
+	if err != nil {
+		return false, err
+	}
+
+	// Load AWS configuration with auth context.
+	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
+	if err != nil {
+		return false, errUtils.Build(errUtils.ErrLoadAWSConfig).
+			WithCause(err).
+			WithContext("region", config.region).
+			WithContext("bucket", config.bucket).
+			Err()
+	}
+
+	// Create S3 client using factory (allows test injection).
+	client := getS3ClientFactory()(awsConfig)
+
+	// Check if bucket exists.
+	return bucketExists(ctx, client, config.bucket)
+}
+
 // createBucket creates an S3 bucket.
 func createBucket(ctx context.Context, client S3ClientAPI, bucket, region string) error {
 	input := &s3.CreateBucketInput{
@@ -266,16 +372,22 @@ func createBucket(ctx context.Context, client S3ClientAPI, bucket, region string
 func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket string, alreadyExisted bool) error {
 	// Warn user if modifying pre-existing bucket settings.
 	if alreadyExisted {
-		_ = ui.Warning(fmt.Sprintf("Applying Atmos defaults to existing bucket '%s'", bucket))
-		_ = ui.Write("  - Versioning will be ENABLED")
-		_ = ui.Write("  - Encryption will be set to AES-256 (existing KMS encryption will be replaced)")
-		_ = ui.Write("  - Public access will be BLOCKED (all 4 settings)")
-		_ = ui.Write("  - Tags will be replaced with: Name, ManagedBy=Atmos")
+		_ = ui.Warning(fmt.Sprintf("Applying Atmos defaults to existing bucket `%s`\n\n"+
+			"- Versioning will be ENABLED\n"+
+			"- Encryption will be set to AES-256 (existing KMS encryption will be replaced)\n"+
+			"- Public access will be BLOCKED (all 4 settings)\n"+
+			"- Tags will be replaced with: Name, ManagedBy=Atmos", bucket))
 	}
 
 	// 1. Enable versioning (ALWAYS).
 	if err := enableVersioning(ctx, client, bucket); err != nil {
 		return fmt.Errorf(errFormat, errUtils.ErrEnableVersioning, err)
+	}
+
+	// Skip operations not supported by gofakes3 during testing.
+	// These are tested separately with mocks in s3_test.go.
+	if getS3SkipUnsupportedTestOps() {
+		return nil
 	}
 
 	// 2. Enable encryption with AES-256 (ALWAYS).

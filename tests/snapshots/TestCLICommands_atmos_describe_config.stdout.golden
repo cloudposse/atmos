@@ -235,5 +235,19 @@
     "use_lock_file": false
   },
   "profiles": {},
-  "metadata": {}
+  "metadata": {},
+  "list": {
+    "components": {
+      "format": "",
+      "columns": null
+    },
+    "instances": {
+      "format": "",
+      "columns": null
+    },
+    "stacks": {
+      "format": "",
+      "columns": null
+    }
+  }
 }

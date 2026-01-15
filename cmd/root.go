@@ -1499,6 +1499,12 @@ func init() {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
 
+	// Register --version as a LOCAL flag (not inherited by subcommands).
+	// This allows custom commands to define their own --version flag (e.g., for tool versions).
+	// The flag is only meaningful on the root command and is handled specially in main.go
+	// before Execute() is called.
+	RootCmd.Flags().Bool("version", false, "Display the Atmos CLI version")
+
 	// Register built-in commands from the registry.
 	// This must happen AFTER persistent flags are registered so commands inherit them.
 	// Commands register themselves via init() functions when their packages
@@ -1511,7 +1517,8 @@ func init() {
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
 	// Special handling for version flag: clear DefValue for cleaner --help output.
-	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {
+	// Note: --version is a LOCAL flag (not persistent), so use Flags() not PersistentFlags().
+	if versionFlag := RootCmd.Flags().Lookup("version"); versionFlag != nil {
 		versionFlag.DefValue = ""
 	}
 	// Configure viper for automatic environment variable binding.
