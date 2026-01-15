@@ -12,6 +12,8 @@ import (
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // AdmonitionKind is the kind of Admonition AST node.
@@ -161,7 +163,7 @@ func (r *admonitionHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegi
 }
 
 // admonitionStyles defines the icon and label for each admonition type.
-// Colors are determined dynamically via getAdmonitionStyle() using the theme system.
+// Colors are determined dynamically via getAdmonitionStyle() using pkg/ui/theme.
 var admonitionStyles = map[AdmonitionType]struct {
 	icon  string
 	label string
@@ -173,25 +175,24 @@ var admonitionStyles = map[AdmonitionType]struct {
 	AdmonitionCaution:   {icon: "🔥", label: "Caution"},
 }
 
-// Semantic colors for admonitions using ANSI color numbers.
-// These match the default theme's semantic color mappings to ensure consistency.
-// Using ANSI color numbers allows lipgloss to adapt to the terminal's color profile.
-var admonitionColors = map[AdmonitionType]lipgloss.Color{
-	AdmonitionNote:      lipgloss.Color("12"), // Bright Blue (Info/Link color)
-	AdmonitionWarning:   lipgloss.Color("3"),  // Yellow (Warning color)
-	AdmonitionTip:       lipgloss.Color("2"),  // Green (Success color)
-	AdmonitionImportant: lipgloss.Color("5"),  // Magenta (Notice/Secondary color)
-	AdmonitionCaution:   lipgloss.Color("1"),  // Red (Error color)
-}
-
 // getAdmonitionStyle returns the lipgloss style for an admonition type.
-// Uses semantic ANSI colors that adapt to the terminal's color profile.
+// Uses theme-aware colors that adapt to the user's configured theme.
 func getAdmonitionStyle(admonitionType AdmonitionType) lipgloss.Style {
-	color, ok := admonitionColors[admonitionType]
-	if !ok {
-		color = admonitionColors[AdmonitionNote] // Default to note color.
+	styles := theme.GetCurrentStyles()
+	switch admonitionType {
+	case AdmonitionNote:
+		return styles.Info
+	case AdmonitionWarning:
+		return styles.Warning
+	case AdmonitionTip:
+		return styles.Success
+	case AdmonitionImportant:
+		return styles.Notice
+	case AdmonitionCaution:
+		return styles.Error
+	default:
+		return styles.Info
 	}
-	return lipgloss.NewStyle().Foreground(color)
 }
 
 // renderAdmonition renders the Admonition node.
