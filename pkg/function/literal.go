@@ -8,9 +8,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
-// TagLiteral is the YAML tag for the literal function.
-const TagLiteral = "!literal"
-
 // LiteralFunction implements the literal function for preserving values as-is.
 // This bypasses template processing to preserve template-like syntax ({{...}}, ${...})
 // for downstream tools like Terraform, Helm, and ArgoCD.
