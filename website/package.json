@@ -55,6 +55,7 @@
     "react-player": "^2.16.0",
     "react-social-media-embed": "^2.5.17",
     "react-table": "^7.8.0",
+    "remark-gfm": "^4.0.1",
     "remark-html": "^16.0.1",
     "remark-parse": "^11.0.0",
     "unified": "^11.0.5"

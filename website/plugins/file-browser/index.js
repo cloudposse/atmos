@@ -63,7 +63,7 @@ const LANGUAGE_MAP = {
   tsx: 'tsx',
   py: 'python',
   go: 'go',
-  dockerfile: 'dockerfile',
+  dockerfile: 'docker',
   makefile: 'makefile',
   toml: 'toml',
   ini: 'ini',
@@ -110,7 +110,7 @@ function getLanguageFromFilename(filename) {
   const lowerFilename = filename.toLowerCase();
 
   // Handle special filenames.
-  if (lowerFilename === 'dockerfile') return 'dockerfile';
+  if (lowerFilename === 'dockerfile') return 'docker';
   if (lowerFilename === 'makefile') return 'makefile';
   if (lowerFilename === '.gitignore') return 'text';
   if (lowerFilename === '.editorconfig') return 'ini';

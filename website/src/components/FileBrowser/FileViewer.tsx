@@ -4,6 +4,7 @@
 import React from 'react';
 import CodeBlock from '@theme/CodeBlock';
 import Markdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import SourceLink from './SourceLink';
 import { formatFileSize, isBinaryFile, isMarkdownFile } from './utils';
 import type { FileNode } from './types';
@@ -75,6 +76,7 @@ export default function FileViewer({ file }: FileViewerProps): JSX.Element {
         </div>
         <div className={styles.markdownContent}>
           <Markdown
+            remarkPlugins={[remarkGfm]}
             components={{
               // Render code blocks with syntax highlighting.
               code({ className, children, ...props }) {

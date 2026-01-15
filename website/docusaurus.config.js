@@ -508,7 +508,7 @@ const config = {
                 theme: lightCodeTheme,
                 darkTheme: darkCodeTheme,
                 // https://prismjs.com/#supported-languages
-                additionalLanguages: ['hcl', 'bash']
+                additionalLanguages: ['hcl', 'bash', 'yaml', 'json', 'toml', 'ini', 'docker', 'makefile', 'python', 'go']
             },
             algolia: {
                 appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',

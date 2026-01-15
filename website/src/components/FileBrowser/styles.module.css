@@ -187,6 +187,14 @@
   flex: 1;
 }
 
+.exampleCardDescription code {
+  background: var(--ifm-color-emphasis-200);
+  padding: 0.1em 0.3em;
+  border-radius: 3px;
+  font-size: 0.85em;
+  font-family: var(--ifm-font-family-monospace);
+}
+
 .exampleCardFooter {
   display: flex;
   align-items: center;

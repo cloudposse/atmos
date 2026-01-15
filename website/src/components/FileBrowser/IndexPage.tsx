@@ -4,10 +4,22 @@
 import React, { useState } from 'react';
 import Layout from '@theme/Layout';
 import Link from '@docusaurus/Link';
+import Markdown from 'react-markdown';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faFolder } from '@fortawesome/free-solid-svg-icons';
 import type { ExamplesTree, FileBrowserOptions } from './types';
 import styles from './styles.module.css';
+
+/**
+ * Markdown components for card descriptions.
+ * Links are rendered as plain text to avoid nested <a> tags.
+ */
+const cardMarkdownComponents = {
+  // Render links as plain text since card is already a link.
+  a: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+  // Remove paragraph wrappers for inline rendering.
+  p: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
+};
 
 interface IndexPageProps {
   treeData: ExamplesTree;
@@ -64,9 +76,11 @@ export default function IndexPage({ treeData, optionsData }: IndexPageProps): JS
                 </div>
                 <h2 className={styles.exampleCardTitle}>{example.name}</h2>
               </div>
-              <p className={styles.exampleCardDescription}>
-                {example.description || 'Explore this example project'}
-              </p>
+              <div className={styles.exampleCardDescription}>
+                <Markdown components={cardMarkdownComponents}>
+                  {example.description || 'Explore this example project'}
+                </Markdown>
+              </div>
               <div className={styles.exampleCardFooter}>
                 <div className={styles.tagList}>
                   {example.tags.map((tag) => (
