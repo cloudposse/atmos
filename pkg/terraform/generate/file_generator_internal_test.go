@@ -846,14 +846,14 @@ func TestWriteHCLBlock(t *testing.T) {
 		{
 			name: "nested block creates HCL block",
 			content: map[string]any{
-				"resource": map[string]any{
-					"type": "aws_instance",
+				"terraform": map[string]any{
+					"required_version": ">= 1.0.0",
 				},
 			},
 			validateFn: func(t *testing.T, result []byte) {
 				str := string(result)
-				assert.Contains(t, str, "resource")
-				assert.Contains(t, str, "type")
+				assert.Contains(t, str, "terraform")
+				assert.Contains(t, str, "required_version")
 			},
 			wantErr: false,
 		},

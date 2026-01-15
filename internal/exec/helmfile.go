@@ -19,6 +19,7 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -86,6 +87,25 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 	componentPath, err := u.GetComponentPath(&atmosConfig, componentTypeHelmfile, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
+	}
+
+	// Auto-generate files BEFORE path validation when:
+	// 1. auto_generate_files is enabled
+	// 2. Component has a generate section
+	// This allows generating entire components from stack configuration.
+	if atmosConfig.Components.Helmfile.AutoGenerateFiles { //nolint:nestif
+		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		if generateSection != nil {
+			// Ensure component directory exists for file generation.
+			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+				return fmt.Errorf("failed to create component directory for auto-generation: %w", mkdirErr)
+			}
+
+			// Generate files before path validation.
+			if genErr := generateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
+				return fmt.Errorf("failed to auto-generate files: %w", genErr)
+			}
+		}
 	}
 
 	componentPathExists, err := u.IsDirectory(componentPath)
