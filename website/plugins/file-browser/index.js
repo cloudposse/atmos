@@ -39,6 +39,7 @@ const TAGS_MAP = {
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'custom-components': ['Components'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
@@ -95,6 +96,10 @@ const DOCS_MAP = {
   ],
   'demo-custom-command': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'custom-components': [
+    { label: 'Custom Commands', url: '/cli/configuration/commands' },
+    { label: 'Custom Component Types', url: '/cli/configuration/commands#custom-component-types' },
   ],
   'config-profiles': [
     { label: 'CLI Configuration', url: '/cli/configuration' },
