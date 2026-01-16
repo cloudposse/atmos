@@ -567,3 +567,102 @@ func TestSortedAuthKeys(t *testing.T) {
 	keys := sortedAuthKeys(m)
 	assert.Equal(t, []string{"ALPHA", "CHARLIE", "ZEBRA"}, keys)
 }
+
+func TestFormatAuthGitHubDelimiterCollision(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		contains []string
+	}{
+		{
+			name: "value contains default delimiter",
+			envVars: map[string]string{
+				"CERT": "line1\nATMOS_EOF_CERT\nline3",
+			},
+			// Should use ATMOS_EOF_CERT_X since ATMOS_EOF_CERT is in value.
+			contains: []string{
+				"CERT<<ATMOS_EOF_CERT_X\n",
+				"line1\nATMOS_EOF_CERT\nline3\n",
+				"ATMOS_EOF_CERT_X\n",
+			},
+		},
+		{
+			name: "value contains multiple delimiter variants",
+			envVars: map[string]string{
+				"KEY": "ATMOS_EOF_KEY\nATMOS_EOF_KEY_X\ndata",
+			},
+			// Should use ATMOS_EOF_KEY_X_X since both variants are in value.
+			contains: []string{
+				"KEY<<ATMOS_EOF_KEY_X_X\n",
+				"ATMOS_EOF_KEY_X_X\n",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAuthGitHub(tt.envVars)
+			for _, expected := range tt.contains {
+				assert.Contains(t, result, expected)
+			}
+		})
+	}
+}
+
+func TestGitHubEnvAutoDetect(t *testing.T) {
+	_ = NewTestKit(t)
+
+	t.Run("auto-detects GITHUB_ENV and appends", func(t *testing.T) {
+		tempDir := t.TempDir()
+		githubEnvFile := filepath.Join(tempDir, "github_env")
+
+		// Write initial content to simulate existing GitHub Actions env vars.
+		err := os.WriteFile(githubEnvFile, []byte("EXISTING=value\n"), 0o644)
+		require.NoError(t, err)
+
+		// Set GITHUB_ENV environment variable.
+		t.Setenv("GITHUB_ENV", githubEnvFile)
+
+		envVars := map[string]string{
+			"NEW_VAR": "new-value",
+		}
+
+		// Simulate what the command does when --format=github and no --output.
+		output := os.Getenv("GITHUB_ENV")
+		require.NotEmpty(t, output, "GITHUB_ENV should be set")
+
+		err = writeAuthEnvToFile(envVars, output, formatAuthGitHub)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(githubEnvFile)
+		require.NoError(t, err)
+
+		// Verify it appended (not overwrote) and used correct format.
+		assert.Equal(t, "EXISTING=value\nNEW_VAR=new-value\n", string(content))
+	})
+
+	t.Run("auto-detect with multiline values", func(t *testing.T) {
+		tempDir := t.TempDir()
+		githubEnvFile := filepath.Join(tempDir, "github_env")
+
+		t.Setenv("GITHUB_ENV", githubEnvFile)
+
+		envVars := map[string]string{
+			"CERT": "-----BEGIN CERT-----\ndata\n-----END CERT-----",
+		}
+
+		output := os.Getenv("GITHUB_ENV")
+		err := writeAuthEnvToFile(envVars, output, formatAuthGitHub)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(githubEnvFile)
+		require.NoError(t, err)
+
+		// Verify heredoc format for multiline.
+		assert.Contains(t, string(content), "CERT<<ATMOS_EOF_CERT\n")
+		assert.Contains(t, string(content), "-----BEGIN CERT-----\ndata\n-----END CERT-----\n")
+		assert.Contains(t, string(content), "ATMOS_EOF_CERT\n")
+	})
+}
