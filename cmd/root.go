@@ -833,17 +833,32 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 // chain is experimental. Returns the name of the experimental command, or empty
 // string if none found. This allows subcommands to inherit experimental status
 // from their parent (e.g., "atmos devcontainer list" triggers the devcontainer warning).
+//
+// The function uses a two-pass approach:
+//  1. First, check for registry-based experimental commands (top-level like devcontainer, toolchain).
+//     These are the "original" experimental commands and should be preferred.
+//  2. Second, check for annotation-based experimental subcommands (like terraform backend).
+//     This handles explicit subcommand-level experimental status.
+//
+// This ordering ensures that "devcontainer list" returns "devcontainer" (the registered
+// experimental parent) rather than "list" (which inherited the annotation).
 func findExperimentalParent(cmd *cobra.Command) string {
+	// First pass: Look for registry-based experimental commands.
+	// These are top-level commands like devcontainer, toolchain.
 	for c := cmd; c != nil; c = c.Parent() {
-		// Check registry-based experimental status (top-level commands).
 		if internal.IsCommandExperimental(c.Name()) {
 			return c.Name()
 		}
-		// Check annotation-based experimental status (subcommands like "list affected").
+	}
+
+	// Second pass: Look for annotation-based experimental subcommands.
+	// These are subcommands explicitly marked experimental like "terraform backend".
+	for c := cmd; c != nil; c = c.Parent() {
 		if c.Annotations != nil && c.Annotations["experimental"] == "true" {
 			return c.Name()
 		}
 	}
+
 	return ""
 }
 

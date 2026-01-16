@@ -2341,15 +2341,17 @@ func TestFormatterExperimentalfMethod(t *testing.T) {
 	f := NewFormatter(ioCtx, term).(*formatter)
 
 	// Test the method on formatter struct.
-	// Note: Experimentalf doesn't actually use the format args in output,
-	// it just renders a static message about experimental features.
-	result := f.Experimentalf("Feature %s is %s", "test", "experimental")
+	// Experimentalf formats the feature name and passes to Experimental.
+	result := f.Experimentalf("%s", "toolchain")
 	if result == "" {
 		t.Error("Formatter.Experimentalf() returned empty string")
 	}
-	// The method outputs a generic experimental feature message.
-	if !strings.Contains(result, "Experimental feature") {
-		t.Errorf("Formatter.Experimentalf() should contain 'Experimental feature', got: %q", result)
+	// The method outputs the feature name in the experimental message.
+	if !strings.Contains(result, "toolchain") {
+		t.Errorf("Formatter.Experimentalf() should contain feature name, got: %q", result)
+	}
+	if !strings.Contains(result, "experimental feature") {
+		t.Errorf("Formatter.Experimentalf() should contain 'experimental feature', got: %q", result)
 	}
 }
 
@@ -2430,9 +2432,12 @@ func TestFormatterExperimentalMethod(t *testing.T) {
 			if result == "" {
 				t.Error("Formatter.Experimental() returned empty string")
 			}
-			// The method outputs a generic experimental feature message, not the feature name.
-			if !strings.Contains(result, "Experimental feature") {
-				t.Errorf("Formatter.Experimental() should contain 'Experimental feature', got: %q", result)
+			// The method outputs the feature name in the experimental message.
+			if !strings.Contains(result, tt.feature) {
+				t.Errorf("Formatter.Experimental() should contain feature name %q, got: %q", tt.feature, result)
+			}
+			if !strings.Contains(result, "experimental feature") {
+				t.Errorf("Formatter.Experimental() should contain 'experimental feature', got: %q", result)
 			}
 		})
 	}

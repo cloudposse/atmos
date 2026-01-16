@@ -53,7 +53,7 @@ settings:
 ### Environment Variable
 
 ```bash
-ATMOS_SETTINGS_EXPERIMENTAL=warn
+ATMOS_EXPERIMENTAL=warn
 ```
 
 ## Architecture
@@ -176,20 +176,40 @@ When `warn` or `error` mode is active, users see:
 
 The following commands are marked as experimental:
 
-- `atmos devcontainer` - Devcontainer management
-- Additional commands as identified
+| Command | Description |
+|---------|-------------|
+| `atmos devcontainer` | Development container lifecycle management |
+| `atmos toolchain` | Tool version management and installation |
+| `atmos terraform backend` | Terraform state backend management |
+| `atmos terraform workdir` | Component working directory management |
+| `atmos list affected` | Identify changes for targeted CI/CD |
 
-## Future Considerations
+## Implementation Details
 
-### Subcommand-Level Experimental Flags
+### Top-Level Command Experimental Status
 
-Currently, the experimental flag is at the command level. Future versions may support subcommand-level flags:
+Top-level commands declare experimental status via the `CommandProvider` interface:
 
 ```go
-type SubcommandProvider interface {
-    IsExperimental() bool
+func (p *DevcontainerCommandProvider) IsExperimental() bool {
+    return true
 }
 ```
+
+### Subcommand-Level Experimental Status
+
+Subcommands use Cobra annotations to declare experimental status:
+
+```go
+func init() {
+    // Mark this subcommand as experimental.
+    workdirCmd.Annotations = map[string]string{"experimental": "true"}
+}
+```
+
+The `findExperimentalParent()` function in `cmd/root.go` walks up the command tree to check both registry-based and annotation-based experimental status.
+
+## Future Considerations
 
 ### Feature-Level Experimental Support
 

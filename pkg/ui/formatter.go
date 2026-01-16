@@ -900,7 +900,12 @@ func (f *formatter) Infof(format string, a ...interface{}) string {
 }
 
 func (f *formatter) Experimental(feature string) string {
-	message := "Experimental feature. [Learn more](https://atmos.tools/experimental)"
+	var message string
+	if feature != "" {
+		message = fmt.Sprintf("`%s` is an experimental feature. [Learn more](https://atmos.tools/experimental)", feature)
+	} else {
+		message = "Experimental feature. [Learn more](https://atmos.tools/experimental)"
+	}
 	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Muted, message)
 	return result
 }
