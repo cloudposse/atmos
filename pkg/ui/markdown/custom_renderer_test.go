@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -518,14 +519,22 @@ func TestCustomRenderer_EdgeCases(t *testing.T) {
 // successfully extract the internal goldmark.Markdown instance from glamour.TermRenderer.
 // This test serves as a canary for glamour version upgrades - if glamour changes its
 // internal structure, this test will fail and alert us to update getGlamourGoldmark.
+// Tested against glamour v0.10.0 - revisit if glamour is upgraded.
 func TestGetGlamourGoldmark_ReflectionStability(t *testing.T) {
-	// Create a glamour.TermRenderer using the same setup as NewCustomRenderer.
+	// DIRECT TEST: Create a glamour.TermRenderer directly and verify
+	// getGlamourGoldmark returns non-nil. This will catch reflection breakage
+	// if glamour changes its internal field structure.
+	glamourRenderer, err := glamour.NewTermRenderer()
+	require.NoError(t, err)
+
+	md := getGlamourGoldmark(glamourRenderer)
+	require.NotNil(t, md, "getGlamourGoldmark returned nil; glamour internal structure may have changed")
+
+	// INDIRECT TEST: Verify extensions work via full pipeline.
+	// If getGlamourGoldmark failed silently, extensions wouldn't be registered.
 	renderer, err := NewCustomRenderer()
 	require.NoError(t, err)
 
-	// The fact that NewCustomRenderer succeeded with custom extensions means
-	// getGlamourGoldmark returned a valid goldmark.Markdown instance.
-	// Verify by testing that admonition syntax is rendered correctly.
 	input := `> [!NOTE]
 > This should be rendered as an admonition.`
 
