@@ -40,6 +40,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/heatmap"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
@@ -1568,6 +1569,24 @@ func initCobraConfig() {
 
 		CheckForAtmosUpdateAndPrintMessage(atmosConfig)
 	})
+}
+
+// ConvertToTermenvProfile converts our terminal.ColorProfile to termenv.Profile.
+// This is used to configure lipgloss with the correct color capabilities.
+func convertToTermenvProfile(profile terminal.ColorProfile) termenv.Profile {
+	switch profile {
+	case terminal.ColorNone:
+		return termenv.Ascii
+	case terminal.Color16:
+		return termenv.ANSI
+	case terminal.Color256:
+		return termenv.ANSI256
+	case terminal.ColorTrue:
+		return termenv.TrueColor
+	default:
+		// Default to ASCII (no color) for unknown profiles.
+		return termenv.Ascii
+	}
 }
 
 // https://www.sobyte.net/post/2021-12/create-cli-app-with-cobra/

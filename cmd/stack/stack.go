@@ -56,3 +56,8 @@ func (s *StackCommandProvider) GetCompatibilityFlags() map[string]compat.Compati
 func (s *StackCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns false as stack command is not experimental.
+func (s *StackCommandProvider) IsExperimental() bool {
+	return false
+}
