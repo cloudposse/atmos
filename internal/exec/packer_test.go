@@ -2,6 +2,8 @@ package exec
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -9,7 +11,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -262,11 +266,8 @@ func TestExecutePacker_Fmt(t *testing.T) {
 
 	packerFlags := PackerFlags{}
 
-	// packer fmt -check returns 0 if files are formatted, non-zero otherwise.
-	// We just verify the command executes without errors.
 	err := ExecutePacker(&info, &packerFlags)
-	// The test passes regardless of fmt exit code since we're testing command execution.
-	_ = err
+	assert.NoError(t, err)
 }
 
 func TestExecutePacker_Errors(t *testing.T) {
@@ -289,6 +290,55 @@ func TestExecutePacker_Errors(t *testing.T) {
 
 		err := ExecutePacker(&info, &packerFlags)
 		assert.Error(t, err)
+	})
+
+	t.Run("missing packer base path", func(t *testing.T) {
+		// Create a temporary directory with minimal config without packer base_path.
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+		stacksDir := filepath.Join(tempDir, "stacks")
+		require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+		stackFile := filepath.Join(stacksDir, "nonprod.yaml")
+		err := os.WriteFile(stackFile, []byte(`vars:
+  stage: nonprod
+`), 0o644)
+		require.NoError(t, err)
+
+		// Normalize path for YAML (Windows backslashes break YAML parsing).
+		yamlSafePath := filepath.ToSlash(tempDir)
+
+		// Write config with empty packer base_path.
+		err = os.WriteFile(configPath, []byte(fmt.Sprintf(`base_path: "%s"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: "components/terraform"
+  packer:
+    base_path: ""
+`, yamlSafePath)), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "validate",
+		}
+		packerFlags := PackerFlags{}
+
+		err = ExecutePacker(&info, &packerFlags)
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrMissingPackerBasePath), "expected ErrMissingPackerBasePath, got: %v", err)
+
+		// Reset working directory.
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
 	})
 
 	t.Run("invalid component path", func(t *testing.T) {

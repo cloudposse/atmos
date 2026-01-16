@@ -69,9 +69,11 @@ func TestExecutePackerOutput(t *testing.T) {
 `), 0o644)
 		require.NoError(t, err)
 
+		// Normalize path for YAML (Windows backslashes break YAML parsing).
+		yamlSafePath := filepath.ToSlash(tempDir)
+
 		// Write config with absolute paths to avoid path resolution issues.
-		// Use single quotes for base_path to avoid YAML escape issues with Windows backslashes.
-		err = os.WriteFile(configPath, []byte(fmt.Sprintf(`base_path: '%s'
+		err = os.WriteFile(configPath, []byte(fmt.Sprintf(`base_path: "%s"
 stacks:
   base_path: "stacks"
   included_paths:
@@ -83,7 +85,7 @@ components:
     base_path: "components/terraform"
   packer:
     base_path: ""
-`, tempDir)), 0o644)
+`, yamlSafePath)), 0o644)
 		require.NoError(t, err)
 
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)

@@ -38,7 +38,10 @@ func TestPackerBuildCmd(t *testing.T) {
 
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe for stdout capture: %v", err)
+	}
 	os.Stdout = w
 	os.Stderr = w
 	log.SetOutput(w)
@@ -53,7 +56,7 @@ func TestPackerBuildCmd(t *testing.T) {
 	// Run packer build - it will fail due to missing AWS credentials,
 	// but we verify that Atmos correctly processes the command.
 	RootCmd.SetArgs([]string{"packer", "build", "aws/bastion", "-s", "nonprod"})
-	err := Execute()
+	err = Execute()
 
 	// Close write end after Execute.
 	_ = w.Close()
@@ -106,7 +109,10 @@ func TestPackerBuildCmdInvalidComponent(t *testing.T) {
 
 	// Capture stderr for error messages.
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe for stderr capture: %v", err)
+	}
 	os.Stderr = w
 	log.SetOutput(w)
 
@@ -116,7 +122,7 @@ func TestPackerBuildCmdInvalidComponent(t *testing.T) {
 	}()
 
 	RootCmd.SetArgs([]string{"packer", "build", "invalid/component", "-s", "nonprod"})
-	err := Execute()
+	err = Execute()
 
 	// Close write end after Execute.
 	_ = w.Close()
@@ -174,7 +180,10 @@ func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("failed to create pipe for stdout capture: %v", err)
+	}
 	os.Stdout = w
 	os.Stderr = w
 	log.SetOutput(w)
@@ -188,7 +197,7 @@ func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 	// Test with explicit directory template flag (directory mode).
 	// This uses "." to load all *.pkr.hcl files from the component directory.
 	RootCmd.SetArgs([]string{"packer", "build", "aws/multi-file", "-s", "nonprod", "--template", "."})
-	err := Execute()
+	err = Execute()
 
 	// Close write end after Execute.
 	_ = w.Close()

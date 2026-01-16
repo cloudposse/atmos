@@ -1,8 +1,7 @@
 ---
 title: Packer Troubleshooting
-sidebar_label: Troubleshooting
-sidebar_class_name: hidden
-sidebar_position: 99
+sidebar_label: Packer
+sidebar_position: 10
 description: Common issues and solutions when using Atmos with Packer
 id: packer-troubleshooting
 ---
@@ -16,7 +15,7 @@ This guide covers common issues you might encounter when using Atmos with Packer
 ### Packer Base Path Not Configured
 
 **Error:**
-```
+```console
 packer base path is required: must be provided in 'components.packer.base_path' config or 'ATMOS_COMPONENTS_PACKER_BASE_PATH' ENV variable
 ```
 
@@ -38,7 +37,7 @@ export ATMOS_COMPONENTS_PACKER_BASE_PATH=components/packer
 ### Component Not Found
 
 **Error:**
-```
+```console
 invalid component: 'my-component' points to the Packer component 'my-component', but it does not exist in 'components/packer'
 ```
 
@@ -52,7 +51,7 @@ invalid component: 'my-component' points to the Packer component 'my-component',
 ### Stack Not Specified
 
 **Error:**
-```
+```console
 stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)
 ```
 
@@ -68,7 +67,7 @@ atmos packer build my-ami -s prod
 ### Abstract Component Cannot Be Provisioned
 
 **Error:**
-```
+```console
 abstract component cannot be provisioned: the component 'aws/bastion' cannot be provisioned because it's marked as abstract (metadata.type: abstract)
 ```
 
@@ -82,7 +81,7 @@ abstract component cannot be provisioned: the component 'aws/bastion' cannot be 
 ### Locked Component Cannot Be Modified
 
 **Error:**
-```
+```console
 locked component cannot be modified: component 'aws/bastion' cannot be modified (metadata.locked: true)
 ```
 
@@ -95,7 +94,7 @@ locked component cannot be modified: component 'aws/bastion' cannot be modified 
 ### AWS Credentials Not Found
 
 **Error:**
-```
+```console
 no valid credential sources found
 NoCredentialProviders: no valid providers in chain
 ```
@@ -122,7 +121,7 @@ NoCredentialProviders: no valid providers in chain
 ### Plugin Not Installed
 
 **Error:**
-```
+```console
 Missing plugins: amazon
 ```
 
@@ -139,7 +138,7 @@ atmos packer build my-ami -s prod
 ### Unsupported Attribute
 
 **Error:**
-```
+```console
 Unsupported attribute: var.my_variable
 ```
 
@@ -153,7 +152,7 @@ Unsupported attribute: var.my_variable
 ### Template File Not Found
 
 **Error:**
-```
+```console
 stat template.pkr.hcl: no such file or directory
 ```
 
@@ -167,7 +166,7 @@ stat template.pkr.hcl: no such file or directory
 ### Invalid HCL Syntax
 
 **Error:**
-```
+```console
 Error: Invalid block definition
 ```
 
@@ -183,7 +182,7 @@ Error: Invalid block definition
 ### Manifest File Not Found
 
 **Error:**
-```
+```console
 packer manifest is missing: manifest.json does not exist
 ```
 
@@ -209,7 +208,7 @@ packer manifest is missing: manifest.json does not exist
 ### Invalid YQ Query
 
 **Error:**
-```
+```console
 yq: Error: Invalid query syntax
 ```
 

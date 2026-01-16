@@ -4,7 +4,7 @@ This component tests Atmos support for directory-based Packer templates.
 
 ## Structure
 
-```
+```text
 aws/multi-file/
 ├── variables.pkr.hcl  # Variable declarations
 ├── main.pkr.hcl       # Source and build blocks
@@ -30,5 +30,5 @@ atmos packer validate aws/multi-file -s prod --template .
 
 ## Related
 
-- GitHub Issue: https://github.com/cloudposse/atmos/issues/1937
-- Packer HCL Templates: https://developer.hashicorp.com/packer/docs/templates/hcl_templates
+- GitHub Issue: [cloudposse/atmos#1937](https://github.com/cloudposse/atmos/issues/1937)
+- Packer HCL Templates: [HCL Templates](https://developer.hashicorp.com/packer/docs/templates/hcl_templates)
