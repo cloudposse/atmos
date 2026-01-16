@@ -13,13 +13,25 @@ Atmos now supports Azure Service Principal authentication for automated environm
 
 We've added the `azure/service-principal` provider to the Atmos auth system, enabling OAuth2 client credentials authentication for Azure. This complements the existing `azure/cli`, `azure/device-code`, and `azure/oidc` providers.
 
-## Why This Matters
+## When to Use Which Provider
 
-**Automation-Friendly**: Service principals are the standard way to authenticate automated systems with Azure. Unlike device code or CLI auth, they don't require human interaction.
+| Provider | Use Case | Secrets Required |
+|----------|----------|------------------|
+| `azure/oidc` | **CI/CD (recommended)** - GitHub Actions, Azure DevOps | None (federated tokens) |
+| `azure/service-principal` | Automation with static credentials | `AZURE_CLIENT_SECRET` env var |
+| `azure/device-code` | Developer workstations (interactive) | None (browser-based) |
+| `azure/cli` | Developer workstations (uses `az login`) | None (CLI-based) |
 
-**Flexible Secret Management**: The client secret can be provided via configuration or the standard `AZURE_CLIENT_SECRET` environment variable, fitting naturally into CI/CD pipelines.
+**For CI/CD, we recommend `azure/oidc`** - it uses federated tokens and requires no secrets.
 
-**Terraform Compatible**: Sets `ARM_USE_CLI=true` and `ARM_CLIENT_SECRET` for seamless integration with azurerm and azapi Terraform providers.
+## Why Service Principal?
+
+Use `azure/service-principal` when:
+- Your CI/CD platform doesn't support OIDC federation with Azure
+- You're running in environments without browser access (embedded systems, etc.)
+- You need static credentials for legacy automation
+
+**Terraform Compatible**: Sets `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, and `ARM_TENANT_ID` for seamless integration with azurerm and azapi Terraform providers.
 
 ## How to Use It
 
@@ -48,6 +60,7 @@ Then authenticate:
 ```bash
 export AZURE_CLIENT_SECRET="your-client-secret"
 atmos auth login --identity azure-prod
+atmos terraform plan -s your-stack
 ```
 
 ## Get Involved
