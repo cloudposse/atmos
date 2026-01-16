@@ -120,21 +120,20 @@ func ExecutePacker(
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
-	if (info.SubCommand == "build") && info.ComponentIsAbstract {
+	// For Packer, only `build` creates external resources (AMIs, images, etc.).
+	// Other commands (init, validate, inspect, fmt, console) are read-only or local operations.
+	if info.ComponentIsAbstract && info.SubCommand == "build" {
 		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true).
-	if info.ComponentIsLocked {
-		// Allow read-only commands, block modification commands.
-		switch info.SubCommand {
-		case "build":
-			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
-				errUtils.ErrLockedComponentCantBeProvisioned,
-				filepath.Join(info.ComponentFolderPrefix, info.Component))
-		}
+	// For Packer, only `build` modifies external resources.
+	if info.ComponentIsLocked && info.SubCommand == "build" {
+		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+			errUtils.ErrLockedComponentCantBeProvisioned,
+			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	// Resolve and install component dependencies.

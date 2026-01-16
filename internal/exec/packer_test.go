@@ -698,3 +698,96 @@ func TestPackerComponentEnvSectionConversion(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutePacker_ComponentMetadata tests that abstract and locked components are handled correctly.
+// Abstract components cannot be built (metadata.type: abstract).
+// Locked components cannot be modified (metadata.locked: true).
+// Both should still allow read-only commands like validate and inspect.
+func TestExecutePacker_ComponentMetadata(t *testing.T) {
+	tests.RequirePacker(t)
+
+	workDir := "../../tests/fixtures/scenarios/packer"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
+	log.SetLevel(log.InfoLevel)
+
+	testCases := []struct {
+		name           string
+		component      string
+		subCommand     string
+		shouldError    bool
+		errorSubstring string
+	}{
+		// Abstract component tests.
+		{
+			name:           "build command should fail for abstract component",
+			component:      "aws/bastion-abstract",
+			subCommand:     "build",
+			shouldError:    true,
+			errorSubstring: "abstract",
+		},
+		{
+			name:           "validate command should succeed for abstract component",
+			component:      "aws/bastion-abstract",
+			subCommand:     "validate",
+			shouldError:    false,
+			errorSubstring: "abstract",
+		},
+		{
+			name:           "inspect command should succeed for abstract component",
+			component:      "aws/bastion-abstract",
+			subCommand:     "inspect",
+			shouldError:    false,
+			errorSubstring: "abstract",
+		},
+		// Locked component tests.
+		{
+			name:           "build command should fail for locked component",
+			component:      "aws/bastion-locked",
+			subCommand:     "build",
+			shouldError:    true,
+			errorSubstring: "locked",
+		},
+		{
+			name:           "validate command should succeed for locked component",
+			component:      "aws/bastion-locked",
+			subCommand:     "validate",
+			shouldError:    false,
+			errorSubstring: "locked",
+		},
+		{
+			name:           "inspect command should succeed for locked component",
+			component:      "aws/bastion-locked",
+			subCommand:     "inspect",
+			shouldError:    false,
+			errorSubstring: "locked",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			info := schema.ConfigAndStacksInfo{
+				Stack:            "nonprod",
+				ComponentType:    "packer",
+				ComponentFromArg: tc.component,
+				SubCommand:       tc.subCommand,
+				ProcessTemplates: true,
+				ProcessFunctions: true,
+			}
+
+			packerFlags := PackerFlags{}
+			err := ExecutePacker(&info, &packerFlags)
+
+			if tc.shouldError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tc.errorSubstring)
+			} else if err != nil {
+				// For non-build commands, we don't check for no error because
+				// they may fail for other reasons (network, plugins, etc.)
+				// We just verify they don't fail with the metadata-specific error.
+				assert.NotContains(t, err.Error(), tc.errorSubstring,
+					"Non-build commands should not fail with %s error", tc.errorSubstring)
+			}
+		})
+	}
+}

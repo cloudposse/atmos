@@ -25,3 +25,19 @@ components:
         instance_type: "t3.micro"
         tags:
           Stage: nonprod
+
+    # Abstract component test - cannot be built directly
+    aws/bastion-abstract:
+      metadata:
+        type: abstract
+        component: aws/bastion
+      vars:
+        instance_type: "t4g.small"
+
+    # Locked component test - cannot be modified
+    aws/bastion-locked:
+      metadata:
+        locked: true
+        component: aws/bastion
+      vars:
+        instance_type: "t4g.small"
