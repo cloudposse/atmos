@@ -7,15 +7,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestVendorCommands_Error tests that vendor commands return errors for invalid flags.
-func TestVendorCommands_Error(t *testing.T) {
+// TestVendorPullCmd_ExecutorError tests that vendor pull executor handles unexpected args.
+func TestVendorPullCmd_ExecutorError(t *testing.T) {
 	stacksPath := "../../tests/fixtures/scenarios/terraform-apply-affected"
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err := vendorPullCmd.RunE(vendorPullCmd, []string{"--invalid-flag"})
-	assert.Error(t, err, "vendor pull command should return an error when called with invalid flags")
+	err := vendorPullCmd.RunE(vendorPullCmd, []string{"unexpected-arg"})
+	assert.Error(t, err, "vendor pull command should return an error with unexpected arguments")
 }
 
 // TestVendorCommandProvider tests the VendorCommandProvider interface methods.
