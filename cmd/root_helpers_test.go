@@ -891,6 +891,10 @@ func TestConvertToTermenvProfile(t *testing.T) {
 }
 
 // TestFindExperimentalParent tests finding experimental parent commands.
+// This function uses a two-pass approach:
+// - First pass: Look for registry-based experimental commands (top-level like devcontainer, toolchain)
+// - Second pass: Look for annotation-based experimental subcommands (terraform backend, etc.)
+// This ensures that when running "devcontainer list", it returns "devcontainer" not "list".
 func TestFindExperimentalParent(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -934,6 +938,76 @@ func TestFindExperimentalParent(t *testing.T) {
 				return child
 			},
 			expected: "parent",
+		},
+		{
+			name: "deeply nested subcommand returns nearest experimental parent",
+			setup: func() *cobra.Command {
+				grandparent := &cobra.Command{
+					Use:         "grandparent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				parent := &cobra.Command{
+					Use:         "parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				child := &cobra.Command{Use: "child"}
+				parent.AddCommand(child)
+				grandparent.AddCommand(parent)
+				return child
+			},
+			// The function finds the nearest experimental parent (first match going up the tree).
+			expected: "parent",
+		},
+		{
+			name: "mixed: non-experimental grandparent with experimental parent",
+			setup: func() *cobra.Command {
+				grandparent := &cobra.Command{Use: "grandparent"}
+				parent := &cobra.Command{
+					Use:         "parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				child := &cobra.Command{Use: "child"}
+				parent.AddCommand(child)
+				grandparent.AddCommand(parent)
+				return child
+			},
+			expected: "parent",
+		},
+		{
+			name: "subcommand without annotation under experimental parent",
+			setup: func() *cobra.Command {
+				parent := &cobra.Command{
+					Use:         "experimental-parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				// Child has no annotation but parent does.
+				child := &cobra.Command{Use: "subcommand"}
+				parent.AddCommand(child)
+				return child
+			},
+			expected: "experimental-parent",
+		},
+		{
+			name: "command with non-true experimental annotation returns empty",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "cmd",
+					Annotations: map[string]string{"experimental": "false"},
+				}
+				return cmd
+			},
+			expected: "",
+		},
+		{
+			name: "command with empty annotations map returns empty",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "cmd",
+					Annotations: map[string]string{},
+				}
+				return cmd
+			},
+			expected: "",
 		},
 	}
 
