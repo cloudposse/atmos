@@ -15,11 +15,13 @@ func TestBuildTemplateData_NoReplacements(t *testing.T) {
 		RepoOwner: "aws",
 		RepoName:  "aws-cli",
 		Format:    "zip",
+		// No VersionPrefix - version should be used as-is (Aqua behavior).
 	}
 
 	data := buildTemplateData(tool, "2.15.0")
 
-	assert.Equal(t, "v2.15.0", data.Version)
+	// With no VersionPrefix, version is used as-is without adding "v" prefix.
+	assert.Equal(t, "2.15.0", data.Version)
 	assert.Equal(t, "2.15.0", data.SemVer)
 	assert.Equal(t, runtime.GOOS, data.OS)
 	assert.Equal(t, runtime.GOARCH, data.Arch)
@@ -115,29 +117,52 @@ func TestBuildTemplateData_VersionPrefix(t *testing.T) {
 		expectedSemVer  string
 	}{
 		{
-			name:            "default prefix adds v",
+			// CRITICAL: This test prevents the regression - empty prefix should NOT add "v".
+			// Following Aqua behavior where version_prefix defaults to empty.
+			name:            "empty prefix does not add v (Aqua behavior)",
 			version:         "2.15.0",
 			versionPrefix:   "",
-			expectedVersion: "v2.15.0",
+			expectedVersion: "2.15.0",
 			expectedSemVer:  "2.15.0",
 		},
 		{
-			name:            "version already has default prefix",
+			name:            "version with v prefix stays unchanged when no prefix configured",
 			version:         "v2.15.0",
 			versionPrefix:   "",
 			expectedVersion: "v2.15.0",
+			expectedSemVer:  "v2.15.0",
+		},
+		{
+			name:            "explicit v prefix adds v",
+			version:         "2.15.0",
+			versionPrefix:   "v",
+			expectedVersion: "v2.15.0",
 			expectedSemVer:  "2.15.0",
 		},
 		{
-			name:            "custom prefix",
-			version:         "2.15.0",
-			versionPrefix:   "release-",
-			expectedVersion: "release-2.15.0",
+			name:            "version already has explicit v prefix",
+			version:         "v2.15.0",
+			versionPrefix:   "v",
+			expectedVersion: "v2.15.0",
 			expectedSemVer:  "2.15.0",
+		},
+		{
+			name:            "custom prefix jq-",
+			version:         "1.7.1",
+			versionPrefix:   "jq-",
+			expectedVersion: "jq-1.7.1",
+			expectedSemVer:  "1.7.1",
 		},
 		{
 			name:            "version already has custom prefix",
-			version:         "release-2.15.0",
+			version:         "jq-1.7.1",
+			versionPrefix:   "jq-",
+			expectedVersion: "jq-1.7.1",
+			expectedSemVer:  "1.7.1",
+		},
+		{
+			name:            "custom prefix release-",
+			version:         "2.15.0",
 			versionPrefix:   "release-",
 			expectedVersion: "release-2.15.0",
 			expectedSemVer:  "2.15.0",
@@ -254,11 +279,13 @@ func TestBuildAssetURL_HTTPType(t *testing.T) {
 func TestBuildAssetURL_GitHubReleaseType(t *testing.T) {
 	installer := &Installer{}
 
+	// Terraform uses "v" prefix in release tags - must be explicitly configured.
 	tool := &registry.Tool{
-		Type:      "github_release",
-		RepoOwner: "hashicorp",
-		RepoName:  "terraform",
-		Asset:     "terraform_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip",
+		Type:          "github_release",
+		RepoOwner:     "hashicorp",
+		RepoName:      "terraform",
+		Asset:         "terraform_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip",
+		VersionPrefix: "v", // Terraform releases use v prefix.
 	}
 
 	url, err := installer.BuildAssetURL(tool, "1.5.7")
@@ -328,19 +355,22 @@ func TestBuildAssetURL_GitHubRelease_MissingName(t *testing.T) {
 func TestBuildAssetURL_GitHubRelease_DefaultAssetTemplate(t *testing.T) {
 	installer := &Installer{}
 
+	// Without VersionPrefix configured, version is used as-is (no automatic "v").
 	tool := &registry.Tool{
 		Type:      "github_release",
 		RepoOwner: "hashicorp",
 		RepoName:  "terraform",
 		// Asset is empty, should use default template.
+		// VersionPrefix is empty, so version is used as-is.
 	}
 
 	url, err := installer.BuildAssetURL(tool, "1.5.7")
 	require.NoError(t, err)
 
 	// Default template: {{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz
-	assert.Contains(t, url, "https://github.com/hashicorp/terraform/releases/download/v1.5.7/")
-	assert.Contains(t, url, "terraform_v1.5.7_")
+	// Without version_prefix, version is used as-is (no "v" added).
+	assert.Contains(t, url, "https://github.com/hashicorp/terraform/releases/download/1.5.7/")
+	assert.Contains(t, url, "terraform_1.5.7_")
 	assert.Contains(t, url, ".tar.gz")
 }
 
@@ -462,4 +492,97 @@ func TestExecuteAssetTemplate_ExecutionError(t *testing.T) {
 	template := "{{.NonExistent.Field}}"
 	_, err := executeAssetTemplate(template, tool, data)
 	require.Error(t, err)
+}
+
+// =============================================================================
+// REGRESSION TESTS: Real-world tool URL generation
+// These tests ensure the actual tools that failed continue to work correctly.
+// =============================================================================
+
+func TestBuildAssetURL_AWSCLINoVersionPrefix(t *testing.T) {
+	// CRITICAL REGRESSION TEST: AWS CLI uses http type without version prefix.
+	// URL should NOT include "v" prefix - this was the root cause of the bootstrap failure.
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "http",
+		RepoOwner: "aws",
+		RepoName:  "aws-cli",
+		Asset:     "https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.pkg",
+		// VersionPrefix intentionally empty - this is how Aqua registry defines it.
+	}
+
+	url, err := installer.BuildAssetURL(tool, "2.32.31")
+	require.NoError(t, err)
+
+	// CRITICAL: URL must NOT contain "v2.32.31" - that causes 404.
+	assert.Equal(t, "https://awscli.amazonaws.com/AWSCLIV2-2.32.31.pkg", url)
+	assert.NotContains(t, url, "v2.32.31", "AWS CLI URLs must not have v prefix")
+}
+
+func TestBuildAssetURL_JQWithExplicitVersionPrefix(t *testing.T) {
+	// jq uses explicit version_prefix: jq-.
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:          "github_release",
+		RepoOwner:     "jqlang",
+		RepoName:      "jq",
+		Asset:         "jq-{{.OS}}-{{.Arch}}",
+		VersionPrefix: "jq-", // Explicitly set in Aqua registry.
+	}
+
+	url, err := installer.BuildAssetURL(tool, "1.7.1")
+	require.NoError(t, err)
+
+	// Release tag should use the explicit prefix.
+	assert.Contains(t, url, "/download/jq-1.7.1/")
+}
+
+func TestBuildAssetURL_GumWithExplicitVPrefixAndTrimV(t *testing.T) {
+	// gum uses {{trimV .Version}} in asset template with explicit v prefix.
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:          "github_release",
+		RepoOwner:     "charmbracelet",
+		RepoName:      "gum",
+		Asset:         "gum_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+		VersionPrefix: "v", // Explicit v prefix for release tag.
+		Replacements: map[string]string{
+			"darwin": "Darwin",
+			"amd64":  "x86_64",
+		},
+	}
+
+	url, err := installer.BuildAssetURL(tool, "0.17.0")
+	require.NoError(t, err)
+
+	// Release tag should have v prefix (v0.17.0).
+	assert.Contains(t, url, "/download/v0.17.0/")
+	// Asset filename should NOT have v prefix (trimV removes it).
+	assert.Contains(t, url, "gum_0.17.0_")
+}
+
+func TestBuildAssetURL_HTTPTypePreservesVersionAsIs(t *testing.T) {
+	// Generic test: HTTP type tools should use version exactly as provided.
+	installer := &Installer{}
+
+	tool := &registry.Tool{
+		Type:      "http",
+		RepoOwner: "example",
+		RepoName:  "tool",
+		Asset:     "https://example.com/tool-{{.Version}}.tar.gz",
+		// No VersionPrefix - version should be used as-is.
+	}
+
+	// Test with version without prefix.
+	url, err := installer.BuildAssetURL(tool, "1.2.3")
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/tool-1.2.3.tar.gz", url)
+
+	// Test with version that already has v prefix - should preserve it.
+	url2, err := installer.BuildAssetURL(tool, "v1.2.3")
+	require.NoError(t, err)
+	assert.Equal(t, "https://example.com/tool-v1.2.3.tar.gz", url2)
 }

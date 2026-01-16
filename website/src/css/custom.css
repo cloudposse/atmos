@@ -1016,3 +1016,21 @@ a[class*="table-of-contents__link"] {
     width: 100%;
     max-width: none;
 }
+
+/* YAML syntax highlighting - nightOwl theme doesn't style atrule tokens */
+/* YAML keys use atrule token, values use various scalar types */
+.prism-code .token.atrule,
+.token.atrule {
+    color: rgb(127, 219, 202) !important;
+}
+
+.prism-code .token.scalar,
+.token.scalar {
+    color: rgb(173, 219, 103) !important;
+}
+
+/* Ensure YAML punctuation (colons, dashes) are visible */
+.prism-code .token.punctuation,
+.token.punctuation {
+    color: rgb(199, 146, 234);
+}

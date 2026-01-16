@@ -42,6 +42,7 @@
 
 # Tool version managers
 .tool-versions
+!examples/toolchain/.tool-versions
 
 # Ignore cache files
 **/.atmos/cache.yaml

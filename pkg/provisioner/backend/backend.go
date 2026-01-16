@@ -10,13 +10,18 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ProvisionResult holds the result of a backend provisioning operation.
+type ProvisionResult struct {
+	Warnings []string // Warning messages to display after spinner completes.
+}
+
 // BackendCreateFunc is a function that creates a Terraform backend.
 type BackendCreateFunc func(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
-) error
+) (*ProvisionResult, error)
 
 // BackendDeleteFunc is a function that deletes a Terraform backend.
 type BackendDeleteFunc func(
@@ -190,19 +195,19 @@ func BackendName(backendType string, backendConfig map[string]any) string {
 }
 
 // ProvisionBackend provisions a backend if provisioning is enabled.
-// Returns an error if provisioning fails or no provisioner is registered.
+// Returns ProvisionResult with any warnings, and an error if provisioning fails or no provisioner is registered.
 func ProvisionBackend(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	authContext *schema.AuthContext,
-) error {
+) (*ProvisionResult, error) {
 	defer perf.Track(atmosConfig, "backend.ProvisionBackend")()
 
 	// Check if provisioning is enabled.
 	provision, ok := componentConfig["provision"].(map[string]any)
 	if !ok {
-		return errUtils.Build(errUtils.ErrProvisioningNotConfigured).
+		return nil, errUtils.Build(errUtils.ErrProvisioningNotConfigured).
 			WithExplanation("No 'provision' configuration found for this component").
 			WithHint("Add 'provision.backend.enabled: true' to the component's stack configuration").
 			Err()
@@ -210,7 +215,7 @@ func ProvisionBackend(
 
 	backend, ok := provision["backend"].(map[string]any)
 	if !ok {
-		return errUtils.Build(errUtils.ErrProvisioningNotConfigured).
+		return nil, errUtils.Build(errUtils.ErrProvisioningNotConfigured).
 			WithExplanation("No 'provision.backend' configuration found for this component").
 			WithHint("Add 'provision.backend.enabled: true' to the component's stack configuration").
 			Err()
@@ -218,7 +223,7 @@ func ProvisionBackend(
 
 	enabled, ok := backend["enabled"].(bool)
 	if !ok || !enabled {
-		return errUtils.Build(errUtils.ErrProvisioningNotConfigured).
+		return nil, errUtils.Build(errUtils.ErrProvisioningNotConfigured).
 			WithExplanation("Backend provisioning is not enabled for this component").
 			WithHint("Set 'provision.backend.enabled: true' in the component's stack configuration").
 			Err()
@@ -227,18 +232,18 @@ func ProvisionBackend(
 	// Get backend configuration.
 	backendConfig, ok := componentConfig["backend"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("%w: backend configuration not found", errUtils.ErrBackendNotFound)
+		return nil, fmt.Errorf("%w: backend configuration not found", errUtils.ErrBackendNotFound)
 	}
 
 	backendType, ok := componentConfig["backend_type"].(string)
 	if !ok {
-		return fmt.Errorf("%w: backend_type not specified", errUtils.ErrBackendTypeRequired)
+		return nil, fmt.Errorf("%w: backend_type not specified", errUtils.ErrBackendTypeRequired)
 	}
 
 	// Get create function for backend type.
 	createFunc := GetBackendCreate(backendType)
 	if createFunc == nil {
-		return fmt.Errorf("%w: %s", errUtils.ErrCreateNotImplemented, backendType)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrCreateNotImplemented, backendType)
 	}
 
 	// Execute create function.

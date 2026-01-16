@@ -66,3 +66,9 @@ func (c *CICommandProvider) GetCompatibilityFlags() map[string]compat.Compatibil
 func (c *CICommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns true if this command is experimental.
+// CI command is experimental while under development.
+func (c *CICommandProvider) IsExperimental() bool {
+	return true
+}

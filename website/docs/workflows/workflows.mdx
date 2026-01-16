@@ -9,6 +9,7 @@ slug: /workflows
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Workflows are a way of combining multiple commands into one executable unit of work.
@@ -631,3 +632,96 @@ Running `atmos workflow deploy-mixed -f workflows --identity superadmin` will:
 - Execute `plan-vpc` step as `superadmin`
 - Execute `apply-app` step as `developer` (step-level identity overrides)
 - Execute `apply-monitoring` step as `superadmin`
+
+## Using Toolchain Tools
+
+Workflows automatically have access to tools defined in your project's `.tool-versions` file. The toolchain ensures the correct versions are installed and available in PATH when your workflow executes.
+
+### Automatic Tool Access
+
+If your project has a `.tool-versions` file:
+
+```
+terraform 1.10.0
+kubectl 1.32.0
+helm 3.16.0
+```
+
+Workflow steps can use these tools directly:
+
+```yaml title="stacks/workflows/deploy.yaml"
+workflows:
+  deploy:
+    description: Deploy infrastructure
+    steps:
+      # Atmos commands (type: atmos is implicit)
+      - name: plan-vpc
+        command: terraform plan vpc
+      - name: apply-vpc
+        command: terraform apply vpc -auto-approve
+
+      # Shell commands for non-Atmos tools
+      - name: apply-k8s
+        command: kubectl apply -f manifests/
+        type: shell
+```
+
+When the workflow runs:
+1. Atmos reads `.tool-versions` to identify required tools
+2. Missing tools are automatically installed
+3. PATH is updated to include toolchain binaries
+4. Workflow steps execute with the correct tool versions
+
+### Declaring Workflow Dependencies
+
+Use the `dependencies` field at the workflow level to require additional tools or override versions from `.tool-versions`:
+
+```yaml title="stacks/workflows/validate.yaml"
+workflows:
+  validate:
+    description: Validate infrastructure
+    dependencies:
+      tools:
+        tflint: "^0.54.0"
+        checkov: "latest"
+    steps:
+      # Atmos command (type: atmos is implicit)
+      - name: validate
+        command: terraform validate vpc
+
+      # Shell commands for toolchain tools
+      - name: lint
+        command: tflint --recursive
+        type: shell
+      - name: security
+        command: checkov -d .
+        type: shell
+```
+
+Dependencies declared in the workflow take precedence over `.tool-versions`.
+
+### Version Constraints
+
+Dependencies support SemVer constraints:
+
+| Constraint | Meaning | Example |
+|------------|---------|---------|
+| `1.10.3` | Exact version | Only version 1.10.3 |
+| `~> 1.10.0` | Pessimistic (patch) | Includes 1.10.x but not 1.11.0 |
+| `^1.10.0` | Compatible (minor) | Includes 1.x.x but not 2.0.0 |
+| `latest` | Latest available | Most recent version |
+
+:::tip
+Use `.tool-versions` for project-wide tool defaults and workflow `dependencies` for workflow-specific version requirements. This gives you flexibility while maintaining consistency across your team.
+:::
+
+### Related Documentation
+
+- [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool version management
+- [Custom Commands](/cli/configuration/commands) - Custom commands also support toolchain integration
+
+## Try It
+
+Explore a working example that demonstrates workflows in action.
+
+<EmbedExample example="demo-workflows" />

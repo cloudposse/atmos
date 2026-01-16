@@ -538,23 +538,67 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	// Resolve and install command dependencies
+	// Resolve and install command dependencies.
+	// First, load tools from .tool-versions (project-wide defaults).
+	// Then merge with command-specific dependencies (command deps override .tool-versions).
 	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(&atmosConfig)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to load .tool-versions for command '%s'", commandConfig.Name).
+			WithHint("Check that .tool-versions file exists and is readable").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Get command-specific dependencies.
+	commandDeps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve dependencies for command '%s'", commandConfig.Name).
+			WithHint("Check the command's dependencies section for valid tool specifications").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Merge: .tool-versions as base, command deps override.
+	deps, err := dependencies.MergeDependencies(toolVersionsDeps, commandDeps)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to merge dependencies for command '%s'", commandConfig.Name).
+			WithHint("Check that command dependency versions satisfy constraints from .tool-versions").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	if len(deps) > 0 {
 		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+			err = errUtils.Build(errUtils.ErrToolInstall).
+				WithCause(err).
+				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
-		// Update PATH to include installed tools
+		// Update PATH to include installed tools.
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+			err = errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
+				WithHint("Check that toolchain install_path is writable").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	}
 

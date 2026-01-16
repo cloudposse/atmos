@@ -705,8 +705,9 @@ func TestApplyS3BucketDefaults_NewBucket(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "new-bucket", false)
+	warnings, err := applyS3BucketDefaults(ctx, mockClient, "new-bucket", false)
 	require.NoError(t, err)
+	assert.Empty(t, warnings, "No warnings should be returned for new bucket")
 	assert.True(t, versioningCalled, "Versioning should be enabled")
 	assert.True(t, encryptionCalled, "Encryption should be enabled")
 	assert.True(t, publicAccessCalled, "Public access should be blocked")
@@ -737,9 +738,11 @@ func TestApplyS3BucketDefaults_ExistingBucket(t *testing.T) {
 	}
 
 	// With alreadyExisted=true, all operations should still be called.
-	err := applyS3BucketDefaults(ctx, mockClient, "existing-bucket", true)
+	warnings, err := applyS3BucketDefaults(ctx, mockClient, "existing-bucket", true)
 	require.NoError(t, err)
 	assert.Equal(t, 4, callCount, "All 4 operations should be called")
+	assert.Len(t, warnings, 1, "Warning should be returned for existing bucket")
+	assert.Contains(t, warnings[0], "Applying Atmos defaults to existing bucket")
 }
 
 func TestApplyS3BucketDefaults_VersioningFails(t *testing.T) {
@@ -750,7 +753,7 @@ func TestApplyS3BucketDefaults_VersioningFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEnableVersioning)
 }
@@ -766,7 +769,7 @@ func TestApplyS3BucketDefaults_EncryptionFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrEnableEncryption)
 }
@@ -785,7 +788,7 @@ func TestApplyS3BucketDefaults_PublicAccessFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBlockPublicAccess)
 }
@@ -807,7 +810,7 @@ func TestApplyS3BucketDefaults_TaggingFails(t *testing.T) {
 		},
 	}
 
-	err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
+	_, err := applyS3BucketDefaults(ctx, mockClient, "test-bucket", false)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrApplyTags)
 }
