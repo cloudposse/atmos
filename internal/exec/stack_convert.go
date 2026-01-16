@@ -59,7 +59,7 @@ func ExecuteStackConvert(
 
 	// Check if conversion would be a no-op.
 	if sourceFormat == targetFormat {
-		_ = ui.Warning(fmt.Sprintf("Source file is already in %s format", targetFormat))
+		ui.Warning(fmt.Sprintf("Source file is already in %s format", targetFormat))
 	}
 
 	// Convert to target format.
@@ -75,14 +75,14 @@ func ExecuteStackConvert(
 
 	// Handle output.
 	if dryRun {
-		_ = ui.Info("Dry run - conversion preview:")
-		_ = data.Writeln(output)
+		ui.Info("Dry run - conversion preview:")
+		data.Writeln(output)
 		return nil
 	}
 
 	if outputPath == "" {
 		// Write to stdout.
-		_ = data.Writeln(output)
+		data.Writeln(output)
 		return nil
 	}
 
@@ -95,7 +95,7 @@ func ExecuteStackConvert(
 			Err()
 	}
 
-	_ = ui.Success(fmt.Sprintf("Converted %s to %s", inputPath, outputPath))
+	ui.Success(fmt.Sprintf("Converted %s to %s", inputPath, outputPath))
 	return nil
 }
 
@@ -274,14 +274,8 @@ func convertStacksToYAML(stacks []filetype.StackDocument) (string, error) {
 		if i > 0 {
 			result.WriteString("---\n")
 		}
-		// If stack has a name, ensure it's in the config.
-		config := stack.Config
-		if stack.Name != "" {
-			if config == nil {
-				config = make(map[string]any)
-			}
-			config[nameSectionName] = stack.Name
-		}
+		// Use prepareStackConfig to get a cloned config with name included.
+		config := prepareStackConfig(stack)
 		out, err := yaml.Marshal(config)
 		if err != nil {
 			return "", err
@@ -321,12 +315,15 @@ func convertStacksToJSON(stacks []filetype.StackDocument) (string, error) {
 }
 
 // prepareStackConfig ensures the stack name is included in the config map.
+// Returns a shallow clone to avoid mutating the input.
 func prepareStackConfig(stack filetype.StackDocument) map[string]any {
-	config := stack.Config
+	// Create a shallow clone to avoid mutating the input map.
+	config := make(map[string]any, len(stack.Config)+1)
+	for k, v := range stack.Config {
+		config[k] = v
+	}
+
 	if stack.Name != "" {
-		if config == nil {
-			config = make(map[string]any)
-		}
 		config[nameSectionName] = stack.Name
 	}
 	return config
