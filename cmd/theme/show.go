@@ -141,8 +141,8 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 }
 
 // createMarkdownRenderer creates a markdown renderer for the specified theme.
-// This function is passed to theme.ShowTheme to render markdown previews
-// without creating an import cycle between theme and markdown packages.
+// It is passed to theme.ShowTheme to render markdown previews without
+// creating an import cycle between theme and markdown packages.
 func createMarkdownRenderer(themeName string, content string) (string, error) {
 	atmosConfig := schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{

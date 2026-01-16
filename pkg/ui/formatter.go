@@ -792,11 +792,13 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 		styledIcon = icon
 	}
 
-	// Split by newlines and trim trailing padding that Glamour adds
+	// Split by newlines and trim trailing padding that Glamour adds.
 	lines := trimTrailingWhitespace(rendered)
 
 	// Remove trailing empty/whitespace-only lines that Glamour may add.
 	// Glamour can output extra padded lines before trailing newlines.
+	// Note: Intentional trailing newlines from the original text are also stripped
+	// because they would cause extra indented empty lines in multi-line output.
 	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
 		lines = lines[:len(lines)-1]
 	}

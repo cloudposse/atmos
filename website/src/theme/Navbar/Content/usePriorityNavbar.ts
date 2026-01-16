@@ -56,9 +56,14 @@ export function usePriorityNavbar(
 
   const calculateVisibleItems = useCallback(() => {
     const container = containerRef.current;
-    const items = itemRefs.current;
+    // Clamp refs to totalItems to avoid stale trailing entries when items are removed.
+    // This prevents endless re-measure loops when itemRefs.current.length > totalItems.
+    const items = Array.from(
+      { length: totalItems },
+      (_, i) => itemRefs.current?.[i] ?? null
+    );
 
-    if (!container || !items || items.length === 0) {
+    if (!container || items.length === 0) {
       return;
     }
 

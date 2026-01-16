@@ -88,22 +88,19 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 	// Some environments (like VHS) set up the TTY after the binary is loaded.
 	isTerm := termUtils.IsTTYSupportForStdout() || termUtils.IsTTYSupportForStderr()
 
-	// Check if color is forced via ForceColor (ATMOS_FORCE_COLOR)
+	// Check if color is forced via ForceColor (ATMOS_FORCE_COLOR).
+	// ForceColor acts like isTTY=true for color support checking.
 	forceColor := config.Settings.Terminal.ForceColor
 
-	// Check if color is explicitly disabled via NoColor flag.
+	// Check if color is enabled using the canonical IsColorEnabled method.
+	// This properly handles: NoColor (deprecated), Color setting, and TTY detection.
 	// NoColor takes precedence over everything, including ForceColor.
-	if config.Settings.Terminal.NoColor {
+	if !config.Settings.Terminal.IsColorEnabled(isTerm || forceColor) {
 		return code, nil
 	}
 
 	// Skip highlighting if syntax highlighting is disabled in settings.
 	if !GetHighlightSettings(config).Enabled {
-		return code, nil
-	}
-
-	// Skip highlighting if not in a terminal, unless ForceColor is set.
-	if !isTerm && !forceColor {
 		return code, nil
 	}
 
