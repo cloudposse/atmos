@@ -1,0 +1,166 @@
+---
+slug: packer-directory-based-templates
+title: "Packer Directory-Based Templates for Multi-File Configurations"
+authors: [aknysh]
+tags: [feature, dx]
+date: 2026-01-16
+---
+
+Atmos now supports directory-based Packer templates by default. Instead of requiring a single HCL template file, you can organize your Packer configurations across multiple files following HashiCorp's recommended patterns. Atmos automatically passes the component directory to Packer, which loads all `*.pkr.hcl` files.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, Atmos required users to specify a single HCL file via `--template` flag or `settings.packer.template` configuration. Running Packer commands without this setting would result in an error:
+
+```bash
+# Old behavior
+atmos packer build my-ami -s prod
+# Error: packer template is required
+```
+
+Now, Atmos defaults the template to `.` (current directory) when not specified, allowing Packer to load all `*.pkr.hcl` files from the component directory automatically:
+
+```bash
+# New behavior - works out of the box
+atmos packer build my-ami -s prod
+# Packer loads all *.pkr.hcl files from the component directory
+```
+
+## Why This Matters
+
+HashiCorp recommends organizing Packer configurations across multiple files for better maintainability:
+
+- `variables.pkr.hcl` - Variable declarations
+- `main.pkr.hcl` or `template.pkr.hcl` - Source and build blocks
+- `locals.pkr.hcl` - Local values
+- `plugins.pkr.hcl` - Required plugins
+
+When users followed this practice, Atmos would only load the specified template file, causing "Unsupported attribute" errors when variables were defined in separate files. This change aligns Atmos with Packer's native behavior and HashiCorp best practices.
+
+## How to Use It
+
+### Directory Mode (New Default)
+
+Simply organize your Packer component with multiple files and run commands without specifying a template:
+
+```
+components/packer/my-ami/
+├── variables.pkr.hcl    # Variable declarations
+├── main.pkr.hcl         # Source and build blocks
+├── locals.pkr.hcl       # Local values (optional)
+└── plugins.pkr.hcl      # Required plugins (optional)
+```
+
+```yaml
+# Stack configuration - no template needed
+components:
+  packer:
+    my-ami:
+      vars:
+        region: us-east-1
+        instance_type: t3.medium
+```
+
+```bash
+# All commands work without --template
+atmos packer init my-ami -s prod
+atmos packer validate my-ami -s prod
+atmos packer build my-ami -s prod
+atmos packer inspect my-ami -s prod
+```
+
+### Single File Mode (Backward Compatible)
+
+If you prefer to use a single template file, you can still specify it explicitly:
+
+```yaml
+# Stack configuration with explicit template
+components:
+  packer:
+    my-ami:
+      settings:
+        packer:
+          template: main.pkr.hcl  # Use specific file
+      vars:
+        region: us-east-1
+```
+
+Or use the `--template` flag:
+
+```bash
+atmos packer build my-ami -s prod --template main.pkr.hcl
+```
+
+## Examples
+
+### Multi-File Component Structure
+
+```hcl
+# components/packer/my-ami/variables.pkr.hcl
+variable "region" {
+  type        = string
+  description = "AWS region to build the AMI"
+}
+
+variable "instance_type" {
+  type        = string
+  default     = "t3.medium"
+  description = "EC2 instance type for the builder"
+}
+
+variable "ami_name" {
+  type        = string
+  description = "Name for the resulting AMI"
+}
+```
+
+```hcl
+# components/packer/my-ami/main.pkr.hcl
+packer {
+  required_plugins {
+    amazon = {
+      version = ">= 1.2.0"
+      source  = "github.com/hashicorp/amazon"
+    }
+  }
+}
+
+source "amazon-ebs" "base" {
+  region        = var.region
+  instance_type = var.instance_type
+  ami_name      = "${var.ami_name}-{{timestamp}}"
+  # ... other settings
+}
+
+build {
+  sources = ["source.amazon-ebs.base"]
+  # ... provisioners
+}
+```
+
+### Validating Multi-File Components
+
+```bash
+# Validate all files in the component directory
+atmos packer validate my-ami -s prod
+
+# Inspect the combined template
+atmos packer inspect my-ami -s prod
+```
+
+## Backward Compatibility
+
+All existing configurations continue to work unchanged:
+
+- Components with explicit `settings.packer.template` use the specified file
+- The `--template` flag overrides both the default and settings values
+- Single-file components work exactly as before
+
+## Documentation
+
+For more details, see:
+- [Packer Components](/stacks/components/packer)
+- [Packer Build Command](/cli/commands/packer/packer-build)
+- [Packer Usage](/cli/commands/packer/usage)
