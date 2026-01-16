@@ -192,11 +192,13 @@ export const roadmapConfig = {
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', version: 'v1.201.0', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
         { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
+        { label: '.env file support', status: 'shipped', quarter: 'q1-2026', pr: 1930, changelog: 'dotenv-file-support', description: 'Load environment variables from .env files with glob pattern support, parent directory walking, and early loading for ATMOS_* variables.', benefits: 'Use familiar .env files for environment configuration. Variables are available to all commands without manual sourcing.' },
       ],
       issues: [],
       prs: [
         { number: 1908, title: 'Add Terraform streaming UI with real-time visualization' },
         { number: 1891, title: 'Native CI Integration with Summary Templates and Terraform Command Registry' },
+        { number: 1930, title: 'Add .env file support' },
       ],
     },
     {
