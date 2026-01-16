@@ -1,0 +1,189 @@
+{
+  "atmos_cli_config": {
+    "base_path": "./",
+    "components": {
+      "terraform": {
+        "base_path": "components/terraform",
+        "apply_auto_approve": false,
+        "append_user_agent": "Atmos/test (Cloud Posse; +https://atmos.tools)",
+        "deploy_run_init": true,
+        "init_run_reconfigure": true,
+        "auto_generate_backend_file": false,
+        "auto_generate_files": false,
+        "command": "",
+        "shell": {
+          "prompt": ""
+        },
+        "init": {
+          "pass_vars": false
+        },
+        "plan": {
+          "skip_planfile": false
+        },
+        "plugin_cache": true
+      },
+      "helmfile": {
+        "base_path": "",
+        "use_eks": true,
+        "kubeconfig_path": "",
+        "helm_aws_profile_pattern": "",
+        "cluster_name_pattern": "",
+        "command": ""
+      },
+      "packer": {
+        "base_path": "",
+        "command": ""
+      },
+      "list": {
+        "format": "",
+        "columns": null
+      },
+      "Plugins": null
+    },
+    "stacks": {
+      "base_path": "stacks",
+      "included_paths": [
+        "**/*"
+      ],
+      "excluded_paths": [],
+      "name_pattern": "",
+      "name_template": "",
+      "list": {
+        "format": "",
+        "columns": null
+      },
+      "inherit": {}
+    },
+    "workflows": {
+      "base_path": "",
+      "list": {
+        "format": "",
+        "columns": null
+      }
+    }
+  },
+  "atmos_component": "mock",
+  "atmos_manifest": "prod",
+  "atmos_stack": "production",
+  "atmos_stack_file": "prod",
+  "auth": {},
+  "backend": {},
+  "backend_type": "",
+  "cli_args": [
+    "describe",
+    "component"
+  ],
+  "command": "terraform",
+  "component": "mock",
+  "component_info": {
+    "component_path": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock",
+    "component_type": "terraform",
+    "terraform_config": {
+      "path": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock",
+      "variables": {
+        "enabled": {
+          "name": "enabled",
+          "type": "bool",
+          "description": "Whether this component is enabled",
+          "default": true,
+          "required": false,
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock/variables.tf",
+            "line": 6
+          }
+        },
+        "environment": {
+          "name": "environment",
+          "type": "string",
+          "description": "The environment name",
+          "default": null,
+          "required": true,
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock/variables.tf",
+            "line": 1
+          }
+        }
+      },
+      "outputs": {
+        "environment": {
+          "name": "environment",
+          "description": "The environment name",
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock/outputs.tf",
+            "line": 1
+          }
+        },
+        "message": {
+          "name": "message",
+          "description": "A greeting message",
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/stack-names/components/terraform/mock/outputs.tf",
+            "line": 6
+          }
+        }
+      },
+      "required_providers": {},
+      "managed_resources": {},
+      "data_resources": {},
+      "module_calls": {}
+    }
+  },
+  "component_type": "terraform",
+  "deps": [
+    "prod"
+  ],
+  "deps_all": [
+    "prod"
+  ],
+  "env": {},
+  "generate": {},
+  "hooks": {},
+  "imports": [],
+  "inheritance": [],
+  "metadata": {},
+  "overrides": {},
+  "providers": {},
+  "provision": {},
+  "remote_state_backend": {},
+  "remote_state_backend_type": "",
+  "settings": {},
+  "source": {},
+  "sources": {
+    "backend": {},
+    "env": {},
+    "settings": {},
+    "vars": {
+      "enabled": {
+        "final_value": true,
+        "name": "enabled",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "prod",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": true
+          }
+        ]
+      },
+      "environment": {
+        "final_value": "production",
+        "name": "environment",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "prod",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": "production"
+          }
+        ]
+      }
+    }
+  },
+  "stack": "production",
+  "tf_cli_vars": {},
+  "vars": {
+    "enabled": true,
+    "environment": "production"
+  },
+  "workspace": "production"
+}
