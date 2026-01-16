@@ -1,0 +1,56 @@
+---
+slug: azure-service-principal-provider
+title: "Azure Service Principal Authentication Provider"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports Azure Service Principal authentication for automated environments using client credentials.
+
+<!--truncate-->
+
+## What Changed
+
+We've added the `azure/service-principal` provider to the Atmos auth system, enabling OAuth2 client credentials authentication for Azure. This complements the existing `azure/cli`, `azure/device-code`, and `azure/oidc` providers.
+
+## Why This Matters
+
+**Automation-Friendly**: Service principals are the standard way to authenticate automated systems with Azure. Unlike device code or CLI auth, they don't require human interaction.
+
+**Flexible Secret Management**: The client secret can be provided via configuration or the standard `AZURE_CLIENT_SECRET` environment variable, fitting naturally into CI/CD pipelines.
+
+**Terraform Compatible**: Sets `ARM_USE_CLI=true` and `ARM_CLIENT_SECRET` for seamless integration with azurerm and azapi Terraform providers.
+
+## How to Use It
+
+```yaml
+auth:
+  providers:
+    azure-automation:
+      kind: azure/service-principal
+      spec:
+        tenant_id: "your-tenant-id"
+        client_id: "your-client-id"
+        subscription_id: "your-subscription-id"
+        # client_secret via AZURE_CLIENT_SECRET env var
+
+  identities:
+    azure-prod:
+      kind: azure/subscription
+      via:
+        provider: azure-automation
+      principal:
+        subscription_id: "your-subscription-id"
+```
+
+Then authenticate:
+
+```bash
+export AZURE_CLIENT_SECRET="your-client-secret"
+atmos auth login --identity azure-prod
+```
+
+## Get Involved
+
+- Read the [Auth documentation](/cli/configuration/auth/providers)
+- Report issues on [GitHub](https://github.com/cloudposse/atmos/issues)
