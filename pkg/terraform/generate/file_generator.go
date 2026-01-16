@@ -251,13 +251,13 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 		result.Created = true
 	} else {
 		// Other read error.
-		result.Error = fmt.Errorf("failed to read existing %s: %w", ctx.filePath, readErr)
+		result.Error = fmt.Errorf("%w: failed to read existing %s: %w", errUtils.ErrFileOperation, ctx.filePath, readErr)
 		return
 	}
 
 	// Write file with standard permissions for config files.
 	if err := os.WriteFile(ctx.filePath, fileContent, filePermissions); err != nil {
-		result.Error = fmt.Errorf("failed to write %s: %w", ctx.filePath, err)
+		result.Error = fmt.Errorf("%w: failed to write %s: %w", errUtils.ErrFileOperation, ctx.filePath, err)
 		return
 	}
 }
@@ -456,7 +456,7 @@ func serializeToTFVars(content map[string]any) ([]byte, error) {
 		value := content[key]
 		ctyVal, err := toCtyValue(value)
 		if err != nil {
-			return nil, fmt.Errorf("error converting %s to tfvars: %w", key, err)
+			return nil, fmt.Errorf("%w: error converting %s to tfvars: %w", errUtils.ErrInvalidConfig, key, err)
 		}
 		body.SetAttributeValue(key, ctyVal)
 	}
@@ -491,7 +491,7 @@ func writeHCLBlock(body *hclwrite.Body, content map[string]any) error {
 			// Convert value to cty and set as attribute.
 			ctyVal, err := toCtyValue(value)
 			if err != nil {
-				return fmt.Errorf("error converting %s to HCL: %w", key, err)
+				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
 			}
 			body.SetAttributeValue(key, ctyVal)
 		}
@@ -561,7 +561,7 @@ func writeBlockBody(body *hclwrite.Body, content map[string]any) error {
 			// Convert value to cty and set as attribute.
 			ctyVal, err := toCtyValue(value)
 			if err != nil {
-				return fmt.Errorf("error converting %s to HCL: %w", key, err)
+				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
 			}
 			body.SetAttributeValue(key, ctyVal)
 		}
