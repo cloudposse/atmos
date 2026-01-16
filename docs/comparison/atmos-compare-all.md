@@ -7,30 +7,41 @@ This document provides a comprehensive comparison of Atmos with similar infrastr
 ## Table of Contents
 
 1. [Atmos Features](#atmos-features)
-2. [CLI Orchestration Tools](#cli-orchestration-tools)
-  - [Terragrunt](#terragrunt-features)
-  - [Terramate](#terramate-features)
-  - [Terraspace](#terraspace-features)
-3. [Programmatic IaC Tools](#programmatic-iac-tools)
-  - [Pulumi](#pulumi-features)
-  - [CDKTF](#cdktf-features-deprecated)
-4. [CI/CD Platforms](#cicd-platforms)
-  - [Spacelift](#spacelift-features)
-  - [env0](#env0-features)
-  - [Scalr](#scalr-features)
-  - [Digger](#digger-features)
-5. [Feature Comparison Matrix](#feature-comparison-matrix)
-6. [Summary](#summary)
+2. [HashiCorp Native Tools](#hashicorp-native-tools)
+
+- [Terraform Stacks](#terraform-stacks-features)
+
+3. [CLI Orchestration Tools](#cli-orchestration-tools)
+
+- [Terragrunt](#terragrunt-features)
+- [Terramate](#terramate-features)
+- [Terraspace](#terraspace-features)
+
+4. [Programmatic IaC Tools](#programmatic-iac-tools)
+
+- [Pulumi](#pulumi-features)
+- [CDKTF](#cdktf-features-deprecated)
+
+5. [CI/CD Platforms](#cicd-platforms)
+
+- [Spacelift](#spacelift-features)
+- [env0](#env0-features)
+- [Scalr](#scalr-features)
+- [Digger](#digger-features)
+
+6. [Feature Comparison Matrix](#feature-comparison-matrix)
+7. [Summary](#summary)
 
 ---
 
 ## Tool Categories
 
-| Category              | Tools                                    | Description                                   |
-|-----------------------|------------------------------------------|-----------------------------------------------|
-| **CLI Orchestration** | Atmos, Terragrunt, Terramate, Terraspace | Local CLI tools for Terraform orchestration   |
-| **Programmatic IaC**  | Pulumi, CDKTF                            | Use programming languages instead of HCL/YAML |
-| **CI/CD Platforms**   | Spacelift, env0, Scalr, Digger           | SaaS platforms for IaC automation             |
+| Category              | Tools                                    | Description                                         |
+|-----------------------|------------------------------------------|-----------------------------------------------------|
+| **HashiCorp Native**  | Terraform Stacks                         | Native HCP Terraform multi-deployment orchestration |
+| **CLI Orchestration** | Atmos, Terragrunt, Terramate, Terraspace | Local CLI tools for Terraform orchestration         |
+| **Programmatic IaC**  | Pulumi, CDKTF                            | Use programming languages instead of HCL/YAML       |
+| **CI/CD Platforms**   | Spacelift, env0, Scalr, Digger           | SaaS platforms for IaC automation                   |
 
 ---
 
@@ -185,6 +196,138 @@ This document provides a comprehensive comparison of Atmos with similar infrastr
 | **Multi-Region**          | Region-aware stack organization        |
 | **Multi-Account**         | Account hierarchy support              |
 | **Multi-Tenant**          | Tenant isolation patterns              |
+
+---
+
+## HashiCorp Native Tools
+
+### Terraform Stacks Features
+
+**Overview**: Native HCP Terraform feature for multi-deployment orchestration with component-based architecture.
+
+**Status**: Public Beta (as of 2024)
+
+**Documentation**:
+
+- [Terraform Stacks Explained](https://www.hashicorp.com/en/blog/terraform-stacks-explained)
+- [Stacks Language Reference](https://developer.hashicorp.com/terraform/language/stacks)
+- [Stacks in HCP Terraform](https://developer.hashicorp.com/terraform/cloud-docs/stacks)
+- [Creating Stacks](https://developer.hashicorp.com/terraform/cloud-docs/stacks/create)
+- [Deploy with Stacks Tutorial](https://developer.hashicorp.com/terraform/tutorials/cloud/stacks-deploy)
+
+#### Core Architecture
+
+| Feature                 | Description                                                        |
+|-------------------------|--------------------------------------------------------------------|
+| **Component-based**     | Reusable Terraform modules packaged as named components            |
+| **Deployments**         | Infrastructure instances across environments, regions, or accounts |
+| **Configuration Files** | `.tfstack.hcl` (stack config), `.tfdeploy.hcl` (deployment config) |
+| **Language**            | HCL (HashiCorp Configuration Language)                             |
+| **Platform**            | HCP Terraform only (no local execution)                            |
+
+#### Configuration Files
+
+| File Type             | Description                                                               |
+|-----------------------|---------------------------------------------------------------------------|
+| **`.tfstack.hcl`**    | Component definitions, provider configurations, variables, outputs        |
+| **`.tfdeploy.hcl`**   | Deployment definitions, identity tokens, store blocks, auto-approve rules |
+| **Component Blocks**  | Define individual Terraform modules with inputs                           |
+| **Deployment Blocks** | Define infrastructure instances per environment                           |
+
+#### Stack Configuration (`.tfstack.hcl`)
+
+| Feature                   | Description                           |
+|---------------------------|---------------------------------------|
+| **Component Blocks**      | Define Terraform modules with inputs  |
+| **Provider Declarations** | Centralized authentication workflows  |
+| **Variables**             | Input values for stack customization  |
+| **Outputs**               | Values exposed from the stack         |
+| **Locals**                | Temporary computed values             |
+| **Stack References**      | Link to other stacks for data sharing |
+
+#### Deployment Configuration (`.tfdeploy.hcl`)
+
+| Feature                      | Description                                  |
+|------------------------------|----------------------------------------------|
+| **Deployment Blocks**        | Define instances across environments/regions |
+| **Deployment Groups**        | Organize and coordinate deployments          |
+| **Identity Tokens**          | Secure provider authentication               |
+| **Store Blocks**             | Access HCP Terraform variable sets           |
+| **Auto-approve Rules**       | Conditional automatic approvals              |
+| **Publish Output Blocks**    | Expose values to downstream stacks           |
+| **Upstream Input Blocks**    | Consume data from other stacks               |
+| **`for_each` Meta-argument** | Multi-region/multi-environment patterns      |
+
+#### Orchestration Features
+
+| Feature                   | Description                                   |
+|---------------------------|-----------------------------------------------|
+| **Sequential Rollout**    | Changes roll out one deployment at a time     |
+| **Independent Lifecycle** | Changes to one deployment don't affect others |
+| **Deployment Groups**     | Coordinate rollouts across environments       |
+| **Staged Approach**       | Reduce risk during infrastructure updates     |
+| **Change Tracking**       | Visibility across all deployments             |
+
+#### Cross-Stack Integration
+
+| Feature                | Description                              |
+|------------------------|------------------------------------------|
+| **Upstream Stacks**    | Link up to 20 stacks for data import     |
+| **Downstream Stacks**  | Expose values to 25 stacks               |
+| **Automatic Triggers** | Dependent stack runs when outputs change |
+| **Stack References**   | Reference outputs from other stacks      |
+
+#### State Management
+
+| Feature              | Description                         |
+|----------------------|-------------------------------------|
+| **Isolated State**   | Separate state file per deployment  |
+| **HCP Managed**      | State managed by HCP Terraform      |
+| **Version Tracking** | Configuration version management    |
+| **Plan Review**      | Deployment plan review capabilities |
+
+#### Resource Limits (Beta)
+
+| Limit                         | Value       |
+|-------------------------------|-------------|
+| **Deployments per Stack**     | 20          |
+| **Components per Stack**      | 100         |
+| **Resources per Stack**       | 10,000      |
+| **Upstream Stack Links**      | 20          |
+| **Downstream Stack Exposure** | 25          |
+| **Deployments per Group**     | 1 (current) |
+
+#### HCP Terraform Integration
+
+| Feature                        | Description                          |
+|--------------------------------|--------------------------------------|
+| **Project-scoped Permissions** | Access controls at project level     |
+| **Variable Sets**              | Access via store blocks              |
+| **Concurrent Operations**      | Same agent pool as workspaces        |
+| **Deployment Runs**            | Monitoring and management            |
+| **Remote Execution**           | HCP Terraform or custom agents       |
+| **API Access**                 | Programmatic creation and management |
+
+#### Creation Methods
+
+| Method                | Description                 |
+|-----------------------|-----------------------------|
+| **HCP Terraform UI**  | Web interface               |
+| **Terraform CLI**     | `terraform stacks` commands |
+| **HCP Terraform API** | Programmatic creation       |
+
+#### Key Limitations
+
+| Limitation                 | Description                             |
+|----------------------------|-----------------------------------------|
+| **HCP Terraform Required** | No local/open-source execution          |
+| **Beta Status**            | Not production-ready                    |
+| **No OpenTofu**            | HashiCorp Terraform only                |
+| **Limited Deployments**    | Max 20 per stack                        |
+| **No Helmfile/Packer**     | Terraform-only                          |
+| **No Inheritance**         | No configuration composition like Atmos |
+| **No Vendoring**           | No component versioning/vendoring       |
+| **No CLI Orchestration**   | Remote execution only                   |
 
 ---
 
@@ -744,6 +887,7 @@ This document provides a comprehensive comparison of Atmos with similar infrastr
 | **Atmos**      | CLI         | YAML       | Apache 2.0  | Active         |
 | **Terragrunt** | CLI         | HCL        | MIT         | Active         |
 | **Terramate**  | CLI + Cloud | HCL        | MPL 2.0     | Active         |
+| **TF Stacks**  | HCP SaaS    | HCL        | BSL         | **Beta**       |
 | **Terraspace** | CLI         | Ruby       | Apache 2.0  | Active         |
 | **Pulumi**     | CLI + Cloud | Multi-lang | Apache 2.0  | Active         |
 | **CDKTF**      | CLI         | Multi-lang | MPL 2.0     | **Deprecated** |
@@ -754,139 +898,139 @@ This document provides a comprehensive comparison of Atmos with similar infrastr
 
 ### IaC Tool Support
 
-| Feature            | Atmos | Terragrunt | Terramate | Terraspace | Pulumi | Spacelift | env0 | Scalr | Digger |
-|--------------------|:-----:|:----------:|:---------:|:----------:|:------:|:---------:|:----:|:-----:|:------:|
-| **Terraform**      |   ✅   |     ✅      |     ✅     |     ✅      |   ❌    |     ✅     |  ✅   |   ✅   |   ✅    |
-| **OpenTofu**       |   ✅   |     ✅      |     ✅     |     ✅      |   ❌    |     ✅     |  ✅   |   ✅   |   ✅    |
-| **Helmfile**       |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |     ❌     |  ❌   |   ❌   |   ❌    |
-| **Packer**         |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |     ❌     |  ❌   |   ❌   |   ❌    |
-| **Kubernetes**     |   ✅   |     ❌      |     ✅     |     ❌      |   ✅    |     ✅     |  ✅   |   ❌   |   ❌    |
-| **Pulumi**         |   ❌   |     ❌      |     ❌     |     ❌      |   ✅    |     ✅     |  ✅   |   ❌   |   ❌    |
-| **CloudFormation** |   ❌   |     ❌      |     ❌     |     ❌      |   ❌    |     ✅     |  ✅   |   ❌   |   ❌    |
-| **Ansible**        |   ❌   |     ❌      |     ❌     |     ❌      |   ❌    |     ✅     |  ✅   |   ❌   |   ❌    |
-| **Terragrunt**     |   ❌   |    N/A     |     ✅     |     ❌      |   ❌    |     ✅     |  ✅   |   ✅   |   ✅    |
+| Feature            | Atmos | Terragrunt | Terramate | TF Stacks | Terraspace | Pulumi | Spacelift | env0 | Scalr | Digger |
+|--------------------|:-----:|:----------:|:---------:|:---------:|:----------:|:------:|:---------:|:----:|:-----:|:------:|
+| **Terraform**      |   ✅   |     ✅      |     ✅     |     ✅     |     ✅      |   ❌    |     ✅     |  ✅   |   ✅   |   ✅    |
+| **OpenTofu**       |   ✅   |     ✅      |     ✅     |     ❌     |     ✅      |   ❌    |     ✅     |  ✅   |   ✅   |   ✅    |
+| **Helmfile**       |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |     ❌     |  ❌   |   ❌   |   ❌    |
+| **Packer**         |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |     ❌     |  ❌   |   ❌   |   ❌    |
+| **Kubernetes**     |   ✅   |     ❌      |     ✅     |     ❌     |     ❌      |   ✅    |     ✅     |  ✅   |   ❌   |   ❌    |
+| **Pulumi**         |   ❌   |     ❌      |     ❌     |     ❌     |     ❌      |   ✅    |     ✅     |  ✅   |   ❌   |   ❌    |
+| **CloudFormation** |   ❌   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |     ✅     |  ✅   |   ❌   |   ❌    |
+| **Ansible**        |   ❌   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |     ✅     |  ✅   |   ❌   |   ❌    |
+| **Terragrunt**     |   ❌   |    N/A     |     ✅     |     ❌     |     ❌      |   ❌    |     ✅     |  ✅   |   ✅   |   ✅    |
 
 ### Configuration & Composition
 
-| Feature                  |    Atmos     | Terragrunt | Terramate | Terraspace |   Pulumi   |
-|--------------------------|:------------:|:----------:|:---------:|:----------:|:----------:|
-| **Config Language**      |     YAML     |    HCL     |    HCL    |    Ruby    | Multi-lang |
-| **Inheritance**          | ✅ Deep merge | ✅ Include  | ✅ Import  | ✅ Layering |     ❌      |
-| **Multiple Inheritance** |      ✅       |     ✅      |     ❌     |     ❌      |     ❌      |
-| **Mixins**               |      ✅       |     ❌      |     ❌     |     ❌      |     ❌      |
-| **Template Functions**   |    ✅ 100+    | ✅ Limited  |  ✅ 150+   |   ✅ ERB    |    N/A     |
-| **YAML Functions**       |    ✅ 17+     |     ❌      |     ❌     |     ❌      |     ❌      |
-| **Abstract Components**  |      ✅       |     ❌      |     ❌     |     ❌      |     ✅      |
+| Feature                  |    Atmos     | Terragrunt | Terramate | TF Stacks | Terraspace |   Pulumi   |
+|--------------------------|:------------:|:----------:|:---------:|:---------:|:----------:|:----------:|
+| **Config Language**      |     YAML     |    HCL     |    HCL    |    HCL    |    Ruby    | Multi-lang |
+| **Inheritance**          | ✅ Deep merge | ✅ Include  | ✅ Import  |     ❌     | ✅ Layering |     ❌      |
+| **Multiple Inheritance** |      ✅       |     ✅      |     ❌     |     ❌     |     ❌      |     ❌      |
+| **Mixins**               |      ✅       |     ❌      |     ❌     |     ❌     |     ❌      |     ❌      |
+| **Template Functions**   |    ✅ 100+    | ✅ Limited  |  ✅ 150+   |     ❌     |   ✅ ERB    |    N/A     |
+| **YAML Functions**       |    ✅ 17+     |     ❌      |     ❌     |     ❌     |     ❌      |     ❌      |
+| **Abstract Components**  |      ✅       |     ❌      |     ❌     |     ✅     |     ❌      |     ✅      |
 
 ### State & Backend
 
-| Feature                  | Atmos | Terragrunt | Terramate | Terraspace | Pulumi | Spacelift | env0 | Scalr | Digger |
-|--------------------------|:-----:|:----------:|:---------:|:----------:|:------:|:---------:|:----:|:-----:|:------:|
-| **Backend Generation**   |   ✅   |     ✅      |     ✅     |     ✅      |  N/A   |     ✅     |  ✅   |   ✅   |   ❌    |
-| **Backend Provisioning** |   ✅   |     ✅      |     ❌     |     ✅      |  N/A   |     ❌     |  ❌   |   ❌   |   ❌    |
-| **Remote State Access**  |   ✅   |     ✅      |     ❌     |     ✅      |   ✅    |     ✅     |  ✅   |   ✅   |   ✅    |
-| **Backend Migration**    |   ❌   |     ✅      |     ❌     |     ❌      |   ❌    |     ❌     |  ❌   |   ❌   |   ❌    |
-| **Managed State**        |   ❌   |     ❌      |     ❌     |     ❌      |   ✅    |     ✅     |  ✅   |   ✅   |   ✅    |
+| Feature                  | Atmos | Terragrunt | Terramate | TF Stacks | Terraspace | Pulumi | Spacelift | env0 | Scalr | Digger |
+|--------------------------|:-----:|:----------:|:---------:|:---------:|:----------:|:------:|:---------:|:----:|:-----:|:------:|
+| **Backend Generation**   |   ✅   |     ✅      |     ✅     |    N/A    |     ✅      |  N/A   |     ✅     |  ✅   |   ✅   |   ❌    |
+| **Backend Provisioning** |   ✅   |     ✅      |     ❌     |    N/A    |     ✅      |  N/A   |     ❌     |  ❌   |   ❌   |   ❌    |
+| **Remote State Access**  |   ✅   |     ✅      |     ❌     |     ✅     |     ✅      |   ✅    |     ✅     |  ✅   |   ✅   |   ✅    |
+| **Backend Migration**    |   ❌   |     ✅      |     ❌     |    N/A    |     ❌      |   ❌    |     ❌     |  ❌   |   ❌   |   ❌    |
+| **Managed State**        |   ❌   |     ❌      |     ❌     |     ✅     |     ❌      |   ✅    |     ✅     |  ✅   |   ✅   |   ✅    |
 
 ### Hooks & Lifecycle
 
-| Feature             | Atmos | Terragrunt | Terramate | Terraspace |
-|---------------------|:-----:|:----------:|:---------:|:----------:|
-| **Before Hooks**    |   ❌   |     ✅      |     ❌     |     ✅      |
-| **After Hooks**     |   ✅   |     ✅      |     ❌     |     ✅      |
-| **Error Hooks**     |   ❌   |     ✅      |     ❌     |     ❌      |
-| **Store to Remote** |   ✅   |     ❌      |     ❌     |     ✅      |
+| Feature             | Atmos | Terragrunt | Terramate | TF Stacks | Terraspace |
+|---------------------|:-----:|:----------:|:---------:|:---------:|:----------:|
+| **Before Hooks**    |   ❌   |     ✅      |     ❌     |     ❌     |     ✅      |
+| **After Hooks**     |   ✅   |     ✅      |     ❌     |     ❌     |     ✅      |
+| **Error Hooks**     |   ❌   |     ✅      |     ❌     |     ❌     |     ❌      |
+| **Store to Remote** |   ✅   |     ❌      |     ❌     |    N/A    |     ✅      |
 
 ### Vendoring & Module Management
 
-| Feature                 | Atmos | Terragrunt | Terramate | Terraspace |
-|-------------------------|:-----:|:----------:|:---------:|:----------:|
-| **Component Vendoring** |   ✅   |     ❌      |     ❌     |     ❌      |
-| **Git Sources**         |   ✅   |     ✅      |     ❌     |     ✅      |
-| **OCI Registry**        |   ✅   |     ❌      |     ❌     |     ❌      |
-| **S3/GCS Sources**      |   ✅   |     ✅      |     ❌     |     ✅      |
-| **Module Caching**      |   ❌   |     ✅      |     ❌     |     ✅      |
-| **Module Catalog**      |   ❌   |     ✅      |     ✅     |     ❌      |
-| **Scaffolding**         |   ❌   |     ✅      |     ✅     |     ✅      |
+| Feature                 | Atmos | Terragrunt | Terramate | TF Stacks | Terraspace |
+|-------------------------|:-----:|:----------:|:---------:|:---------:|:----------:|
+| **Component Vendoring** |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |
+| **Git Sources**         |   ✅   |     ✅      |     ❌     |     ❌     |     ✅      |
+| **OCI Registry**        |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |
+| **S3/GCS Sources**      |   ✅   |     ✅      |     ❌     |     ❌     |     ✅      |
+| **Module Caching**      |   ❌   |     ✅      |     ❌     |     ❌     |     ✅      |
+| **Module Catalog**      |   ❌   |     ✅      |     ✅     |     ❌     |     ❌      |
+| **Scaffolding**         |   ❌   |     ✅      |     ✅     |     ❌     |     ✅      |
 
 ### Validation & Policy
 
-| Feature               | Atmos | Terragrunt | Terramate |  Spacelift  | env0 | Scalr | Digger |
-|-----------------------|:-----:|:----------:|:---------:|:-----------:|:----:|:-----:|:------:|
-| **OPA Policies**      |   ✅   |     ❌      |     ❌     | ✅ (9 types) |  ✅   |   ✅   |   ✅    |
-| **JSON Schema**       |   ✅   |     ❌      |     ❌     |      ❌      |  ❌   |   ❌   |   ❌    |
-| **Built-in Policies** |   ❌   |     ❌      | ✅ (500+)  |      ❌      |  ❌   |   ❌   |   ❌    |
-| **Checkov**           |   ❌   |     ❌      |     ❌     |      ❌      |  ❌   |   ✅   |   ✅    |
-| **Infracost**         |   ❌   |     ❌      |     ❌     |      ✅      |  ✅   |   ❌   |   ✅    |
+| Feature               | Atmos | Terragrunt | Terramate | TF Stacks |  Spacelift  | env0 | Scalr | Digger |
+|-----------------------|:-----:|:----------:|:---------:|:---------:|:-----------:|:----:|:-----:|:------:|
+| **OPA Policies**      |   ✅   |     ❌      |     ❌     |     ❌     | ✅ (9 types) |  ✅   |   ✅   |   ✅    |
+| **JSON Schema**       |   ✅   |     ❌      |     ❌     |     ❌     |      ❌      |  ❌   |   ❌   |   ❌    |
+| **Built-in Policies** |   ❌   |     ❌      | ✅ (500+)  |     ❌     |      ❌      |  ❌   |   ❌   |   ❌    |
+| **Checkov**           |   ❌   |     ❌      |     ❌     |     ❌     |      ❌      |  ❌   |   ✅   |   ✅    |
+| **Infracost**         |   ❌   |     ❌      |     ❌     |     ❌     |      ✅      |  ✅   |   ❌   |   ✅    |
 
 ### Authentication
 
-| Feature                 | Atmos | Terragrunt | Terramate | Spacelift | env0 | Scalr |
-|-------------------------|:-----:|:----------:|:---------:|:---------:|:----:|:-----:|
-| **AWS IAM/SSO**         |   ✅   |     ✅      |     ❌     |     ✅     |  ✅   |   ✅   |
-| **Azure**               |   ✅   |     ❌      |     ❌     |     ✅     |  ✅   |   ✅   |
-| **GCP**                 |   ✅   |     ❌      |     ❌     |     ✅     |  ✅   |   ✅   |
-| **OIDC**                |   ✅   |     ✅      |     ❌     |     ✅     |  ✅   |   ✅   |
-| **Auth CLI**            |   ✅   |     ❌      |     ❌     |     ❌     |  ❌   |   ❌   |
-| **Multiple Identities** |   ✅   |     ❌      |     ❌     |     ❌     |  ❌   |   ❌   |
+| Feature                 | Atmos | Terragrunt | Terramate | TF Stacks | Spacelift | env0 | Scalr |
+|-------------------------|:-----:|:----------:|:---------:|:---------:|:---------:|:----:|:-----:|
+| **AWS IAM/SSO**         |   ✅   |     ✅      |     ❌     |     ✅     |     ✅     |  ✅   |   ✅   |
+| **Azure**               |   ✅   |     ❌      |     ❌     |     ✅     |     ✅     |  ✅   |   ✅   |
+| **GCP**                 |   ✅   |     ❌      |     ❌     |     ✅     |     ✅     |  ✅   |   ✅   |
+| **OIDC**                |   ✅   |     ✅      |     ❌     |     ✅     |     ✅     |  ✅   |   ✅   |
+| **Auth CLI**            |   ✅   |     ❌      |     ❌     |     ❌     |     ❌     |  ❌   |   ❌   |
+| **Multiple Identities** |   ✅   |     ❌      |     ❌     |     ✅     |     ❌     |  ❌   |   ❌   |
 
 ### Change Detection & Drift
 
-| Feature                 | Atmos | Terragrunt | Terramate | Spacelift | env0 | Scalr | Digger |
-|-------------------------|:-----:|:----------:|:---------:|:---------:|:----:|:-----:|:------:|
-| **Git-based Detection** |   ✅   |     ✅      |     ✅     |     ✅     |  ✅   |   ❌   |   ✅    |
-| **Affected Components** |   ✅   |     ✅      |     ✅     |     ✅     |  ✅   |   ❌   |   ✅    |
-| **Drift Detection**     |   ✅   |     ❌      |     ✅     |     ✅     |  ✅   |   ✅   |   ✅    |
-| **Drift Remediation**   |   ✅   |     ❌      |     ✅     |     ✅     |  ✅   |   ✅   |   ❌    |
-| **Drift Dashboard**     |   ❌   |     ❌      |     ✅     |     ✅     |  ✅   |   ✅   |   ❌    |
+| Feature                 | Atmos | Terragrunt | Terramate | TF Stacks | Spacelift | env0 | Scalr | Digger |
+|-------------------------|:-----:|:----------:|:---------:|:---------:|:---------:|:----:|:-----:|:------:|
+| **Git-based Detection** |   ✅   |     ✅      |     ✅     |     ✅     |     ✅     |  ✅   |   ❌   |   ✅    |
+| **Affected Components** |   ✅   |     ✅      |     ✅     |     ✅     |     ✅     |  ✅   |   ❌   |   ✅    |
+| **Drift Detection**     |   ✅   |     ❌      |     ✅     |     ✅     |     ✅     |  ✅   |   ✅   |   ✅    |
+| **Drift Remediation**   |   ✅   |     ❌      |     ✅     |     ✅     |     ✅     |  ✅   |   ✅   |   ❌    |
+| **Drift Dashboard**     |   ❌   |     ❌      |     ✅     |     ✅     |     ✅     |  ✅   |   ✅   |   ❌    |
 
 ### CI/CD Integration
 
-| Feature            | Atmos | Terragrunt | Terramate | Spacelift | env0 | Scalr | Digger |
-|--------------------|:-----:|:----------:|:---------:|:---------:|:----:|:-----:|:------:|
-| **GitHub Actions** |   ✅   |     ❌      |     ✅     |     ✅     |  ✅   |   ✅   |   ✅    |
-| **GitLab CI**      |   ❌   |     ❌      |     ✅     |     ✅     |  ✅   |   ✅   |   ✅    |
-| **Bitbucket**      |   ❌   |     ❌      |     ✅     |     ✅     |  ✅   |   ✅   |   ❌    |
-| **Azure DevOps**   |   ❌   |     ❌      |     ❌     |     ✅     |  ✅   |   ✅   |   ✅    |
-| **Atlantis**       |   ✅   |     ❌      |     ⏳     |     ❌     |  ❌   |   ❌   |   ❌    |
-| **Spacelift**      |   ✅   |     ❌      |     ❌     |    N/A    |  ❌   |   ❌   |   ❌    |
+| Feature            | Atmos | Terragrunt | Terramate | TF Stacks | Spacelift | env0 | Scalr | Digger |
+|--------------------|:-----:|:----------:|:---------:|:---------:|:---------:|:----:|:-----:|:------:|
+| **GitHub Actions** |   ✅   |     ❌      |     ✅     |     ✅     |     ✅     |  ✅   |   ✅   |   ✅    |
+| **GitLab CI**      |   ❌   |     ❌      |     ✅     |     ✅     |     ✅     |  ✅   |   ✅   |   ✅    |
+| **Bitbucket**      |   ❌   |     ❌      |     ✅     |     ✅     |     ✅     |  ✅   |   ✅   |   ❌    |
+| **Azure DevOps**   |   ❌   |     ❌      |     ❌     |     ❌     |     ✅     |  ✅   |   ✅   |   ✅    |
+| **Atlantis**       |   ✅   |     ❌      |     ⏳     |     ❌     |     ❌     |  ❌   |   ❌   |   ❌    |
+| **Spacelift**      |   ✅   |     ❌      |     ❌     |     ❌     |    N/A    |  ❌   |   ❌   |   ❌    |
 
 ### Developer Experience
 
-| Feature                | Atmos | Terragrunt | Terramate | Terraspace | Pulumi |
-|------------------------|:-----:|:----------:|:---------:|:----------:|:------:|
-| **Terminal UI**        |   ✅   |     ✅      |     ❌     |     ❌      |   ❌    |
-| **Shell Completion**   |   ✅   |     ✅      |     ✅     |     ✅      |   ✅    |
-| **IDE/LSP Support**    |   ❌   |     ❌      |     ✅     |     ❌      |   ✅    |
-| **Themes**             |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |
-| **Secret Masking**     |   ✅   |     ❌      |     ❌     |     ❌      |   ✅    |
-| **Markdown Rendering** |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |
+| Feature                | Atmos | Terragrunt | Terramate | TF Stacks | Terraspace | Pulumi |
+|------------------------|:-----:|:----------:|:---------:|:---------:|:----------:|:------:|
+| **Terminal UI**        |   ✅   |     ✅      |     ❌     |     ❌     |     ❌      |   ❌    |
+| **Shell Completion**   |   ✅   |     ✅      |     ✅     |    N/A    |     ✅      |   ✅    |
+| **IDE/LSP Support**    |   ❌   |     ❌      |     ✅     |     ✅     |     ❌      |   ✅    |
+| **Themes**             |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |
+| **Secret Masking**     |   ✅   |     ❌      |     ❌     |     ✅     |     ❌      |   ✅    |
+| **Markdown Rendering** |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |
 
 ### Cloud Platform Features
 
-| Feature                 | Atmos Pro | Terramate Cloud | Spacelift | env0 | Scalr |
-|-------------------------|:---------:|:---------------:|:---------:|:----:|:-----:|
-| **Dashboard**           |     ✅     |        ✅        |     ✅     |  ✅   |   ✅   |
-| **Stack Inventory**     |     ❌     |        ✅        |     ✅     |  ✅   |   ✅   |
-| **PR Previews**         |     ✅     |        ✅        |     ✅     |  ✅   |   ✅   |
-| **Deployment Tracking** |     ❌     |        ✅        |     ✅     |  ✅   |   ✅   |
-| **Audit Trails**        |     ❌     |        ✅        |     ✅     |  ✅   |   ✅   |
-| **Cost Management**     |     ❌     |        ❌        |     ✅     |  ✅   |   ❌   |
-| **Slack Integration**   |     ❌     |        ✅        |     ✅     |  ✅   |   ✅   |
-| **Locking**             |     ✅     |        ❌        |     ✅     |  ✅   |   ✅   |
-| **AI Features**         |     ❌     |        ❌        |     ✅     |  ✅   |   ✅   |
+| Feature                 | Atmos Pro | Terramate Cloud | HCP TF Stacks | Spacelift | env0 | Scalr |
+|-------------------------|:---------:|:---------------:|:-------------:|:---------:|:----:|:-----:|
+| **Dashboard**           |     ✅     |        ✅        |       ✅       |     ✅     |  ✅   |   ✅   |
+| **Stack Inventory**     |     ❌     |        ✅        |       ✅       |     ✅     |  ✅   |   ✅   |
+| **PR Previews**         |     ✅     |        ✅        |       ❌       |     ✅     |  ✅   |   ✅   |
+| **Deployment Tracking** |     ❌     |        ✅        |       ✅       |     ✅     |  ✅   |   ✅   |
+| **Audit Trails**        |     ❌     |        ✅        |       ✅       |     ✅     |  ✅   |   ✅   |
+| **Cost Management**     |     ❌     |        ❌        |       ❌       |     ✅     |  ✅   |   ❌   |
+| **Slack Integration**   |     ❌     |        ✅        |       ❌       |     ✅     |  ✅   |   ✅   |
+| **Locking**             |     ✅     |        ❌        |       ✅       |     ✅     |  ✅   |   ✅   |
+| **AI Features**         |     ❌     |        ❌        |       ❌       |     ✅     |  ✅   |   ✅   |
 
 ### Advanced Features
 
-| Feature                  | Atmos | Terragrunt | Terramate | Terraspace | Pulumi |
-|--------------------------|:-----:|:----------:|:---------:|:----------:|:------:|
-| **Toolchain Management** |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |
-| **Devcontainers**        |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |
-| **Service Catalogs**     |   ✅   |     ❌      |     ✅     |     ❌      |   ❌    |
-| **Component Updater**    |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |
-| **Provenance Tracking**  |   ✅   |     ❌      |     ❌     |     ❌      |   ❌    |
-| **Testing Framework**    |   ❌   |     ❌      |     ❌     |     ✅      |   ✅    |
-| **Custom IaC Engines**   |   ❌   |     ✅      |     ❌     |     ❌      |   ❌    |
+| Feature                  | Atmos | Terragrunt | Terramate | TF Stacks | Terraspace | Pulumi |
+|--------------------------|:-----:|:----------:|:---------:|:---------:|:----------:|:------:|
+| **Toolchain Management** |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |
+| **Devcontainers**        |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |
+| **Service Catalogs**     |   ✅   |     ❌      |     ✅     |     ❌     |     ❌      |   ❌    |
+| **Component Updater**    |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |
+| **Provenance Tracking**  |   ✅   |     ❌      |     ❌     |     ❌     |     ❌      |   ❌    |
+| **Testing Framework**    |   ❌   |     ❌      |     ❌     |     ❌     |     ✅      |   ✅    |
+| **Custom IaC Engines**   |   ❌   |     ✅      |     ❌     |     ❌     |     ❌      |   ❌    |
 
 ---
 
@@ -930,6 +1074,7 @@ This document provides a comprehensive comparison of Atmos with similar infrastr
 | **Multi-tool orchestration (TF + Helmfile + Packer)** | Atmos                      |
 | **HCL-native Terraform wrapper**                      | Terragrunt                 |
 | **Cloud platform with governance**                    | Terramate, Spacelift, env0 |
+| **HashiCorp-native multi-deployment (HCP only)**      | TF Stacks                  |
 | **Programming language IaC**                          | Pulumi                     |
 | **Enterprise compliance (FedRAMP)**                   | Spacelift                  |
 | **FinOps/Cost management**                            | env0, Spacelift            |
