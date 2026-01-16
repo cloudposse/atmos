@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	// DefaultAuthFileMode is used for output files.
-	defaultAuthFileMode = 0o644
+	// DefaultAuthFileMode is used for output files containing credentials.
+	// Owner read/write only (0o600) to protect sensitive credential data.
+	defaultAuthFileMode = 0o600
 	// SingleQuote is used for escaping in shell output.
 	singleQuote = "'"
 	// EscapedSingleQuote is the escaped version for shell literals.
@@ -37,14 +38,17 @@ var authEnvCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get output format.
-		format, _ := cmd.Flags().GetString("format")
+		// Get output format from Viper (honors CLI > ENV > config > defaults).
+		format := viper.GetString("auth_env_format")
+		if format == "" {
+			format = "bash"
+		}
 		if !slices.Contains(SupportedFormats, format) {
 			return fmt.Errorf("%w invalid format: %s", errUtils.ErrInvalidArgumentError, format)
 		}
 
-		// Get output file path.
-		output, _ := cmd.Flags().GetString("output")
+		// Get output file path from Viper (honors CLI > ENV > config > defaults).
+		output := viper.GetString("auth_env_output")
 
 		// Get login flag.
 		login, _ := cmd.Flags().GetBool("login")
@@ -233,9 +237,13 @@ func formatAuthGitHub(envVars map[string]string) string {
 	for _, key := range keys {
 		value := envVars[key]
 		// Check if value contains newlines - use heredoc syntax.
-		// Use ATMOS_EOF_ prefix to avoid collision with values containing "EOF".
 		if strings.Contains(value, "\n") {
-			sb.WriteString(fmt.Sprintf("%s<<ATMOS_EOF_%s\n%s\nATMOS_EOF_%s\n", key, key, value, key))
+			// Generate a unique delimiter that doesn't appear in the value.
+			delimiter := "ATMOS_EOF_" + key
+			for strings.Contains(value, delimiter) {
+				delimiter += "_X"
+			}
+			sb.WriteString(fmt.Sprintf("%s<<%s\n%s\n%s\n", key, delimiter, value, delimiter))
 		} else {
 			sb.WriteString(fmt.Sprintf("%s=%s\n", key, value))
 		}
@@ -248,13 +256,13 @@ func writeAuthEnvToFile(envVars map[string]string, filePath string, formatter fu
 	// Open file in append mode, create if doesn't exist.
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultAuthFileMode)
 	if err != nil {
-		return fmt.Errorf("failed to open file '%s': %w", filePath, err)
+		return fmt.Errorf("%w '%s': %w", errUtils.ErrOpenFile, filePath, err)
 	}
 	defer f.Close()
 
 	content := formatter(envVars)
 	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to file '%s': %w", filePath, err)
+		return fmt.Errorf("%w '%s': %w", errUtils.ErrWriteFile, filePath, err)
 	}
 	return nil
 }
