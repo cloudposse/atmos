@@ -885,7 +885,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "message with only newline",
 			icon:     "✓",
 			message:  "\n",
-			expected: "✓ \n  \n", // Glamour collapses single newline to empty paragraph
+			expected: "✓ \n", // Empty/whitespace-only lines are stripped
 		},
 		{
 			name:     "message starting with newline",
@@ -897,7 +897,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "message ending with newline",
 			icon:     "✓",
 			message:  "Ending text\n",
-			expected: "✓ Ending text\n  \n", // Glamour treats trailing newline as paragraph separation
+			expected: "✓ Ending text\n", // Trailing empty/whitespace lines are stripped
 		},
 		{
 			name:     "multiple consecutive newlines",
@@ -915,7 +915,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "special characters in message",
 			icon:     "⚠",
 			message:  "Warning: special chars\n\t- Tab character\n  - Spaces",
-			expected: "⚠ Warning: special chars\n  - Tab character\n  \n  • Spaces\n", // Glamour normalizes whitespace, adds paragraph break, and converts "  - " to bullet
+			expected: "⚠ Warning: special chars\n  - Tab character\n  \n  Spaces\n", // Glamour normalizes whitespace, adds paragraph break
 		},
 		{
 			name:     "unicode in message",
@@ -2024,7 +2024,12 @@ func TestFormatterHintfMethod(t *testing.T) {
 
 func TestFormatterToastMethod(t *testing.T) {
 	ioCtx := createTestIOContext()
-	term := terminal.New()
+	// Use mock terminal without colors for consistent testing.
+	// Color rendering is tested separately in other tests.
+	term := createMockTerminal(terminal.ColorNone)
+	// Also set global lipgloss color profile to match terminal, since
+	// markdown rendering uses lipgloss.DefaultRenderer().ColorProfile().
+	SetColorProfile(termenv.Ascii)
 	f := NewFormatter(ioCtx, term)
 
 	// Test the Toast method on Formatter instance.
@@ -2039,7 +2044,10 @@ func TestFormatterToastMethod(t *testing.T) {
 
 func TestFormatterToastfMethod(t *testing.T) {
 	ioCtx := createTestIOContext()
-	term := terminal.New()
+	// Use mock terminal without colors for consistent testing.
+	term := createMockTerminal(terminal.ColorNone)
+	// Also set global lipgloss color profile to match terminal.
+	SetColorProfile(termenv.Ascii)
 	f := NewFormatter(ioCtx, term)
 
 	// Test the Toastf method on Formatter instance.

@@ -795,8 +795,15 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 	// Split by newlines and trim trailing padding that Glamour adds
 	lines := trimTrailingWhitespace(rendered)
 
+	// Remove trailing empty/whitespace-only lines that Glamour may add.
+	// Glamour can output extra padded lines before trailing newlines.
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+
 	if len(lines) == 0 {
-		return styledIcon, nil
+		// Empty message: return icon + space for consistency with iconMessageFormat.
+		return fmt.Sprintf(iconMessageFormat, styledIcon, ""), nil
 	}
 
 	if len(lines) == 1 {

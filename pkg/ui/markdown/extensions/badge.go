@@ -74,6 +74,12 @@ func (p *badgeParser) Parse(parent ast.Node, block text.Reader, pc parser.Contex
 	line, _ := block.PeekLine()
 	pos := block.LineOffset()
 
+	// Validate bounds before slicing - offset can exceed line length
+	// when parsing inline elements across multi-line or ANSI-encoded content.
+	if pos >= len(line) {
+		return nil
+	}
+
 	// Get remaining text from current position.
 	remaining := string(line[pos:])
 
