@@ -235,6 +235,12 @@ func (l *Loader) parse(ctx context.Context, data []byte) (any, map[string]loader
 		return nil, nil, fmt.Errorf(errWrap, errUtils.ErrLoaderParseFailed, err)
 	}
 
+	// Check for trailing content after the JSON value.
+	// Valid JSON files should contain exactly one value.
+	if decoder.More() {
+		return nil, nil, fmt.Errorf("%w: unexpected content after JSON value", errUtils.ErrLoaderParseFailed)
+	}
+
 	// Extract positions from the parsed structure.
 	l.extractPositions(result, "", positions, data)
 

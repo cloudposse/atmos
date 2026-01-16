@@ -34,10 +34,25 @@ func NewRegistry() *Registry {
 func (r *Registry) Register(loader StackLoader) error {
 	defer perf.Track(nil, "loader.Registry.Register")()
 
+	// Validate loader is not nil.
+	if loader == nil {
+		return fmt.Errorf("%w: loader cannot be nil", errUtils.ErrInvalidArguments)
+	}
+
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	name := loader.Name()
+
+	// Validate loader has a non-empty name.
+	if name == "" {
+		return fmt.Errorf("%w: loader name cannot be empty", errUtils.ErrInvalidArguments)
+	}
+
+	// Validate loader has at least one extension.
+	if len(loader.Extensions()) == 0 {
+		return fmt.Errorf("%w: loader must support at least one extension", errUtils.ErrInvalidArguments)
+	}
 
 	// Check if the name is already registered.
 	if _, exists := r.loaders[name]; exists {
@@ -185,8 +200,12 @@ func (r *Registry) Clear() {
 }
 
 // normalizeExtension ensures the extension starts with a dot and is lowercase.
+// Returns empty string for empty input to avoid returning just ".".
 func normalizeExtension(ext string) string {
 	ext = strings.ToLower(strings.TrimSpace(ext))
+	if ext == "" {
+		return ""
+	}
 	if !strings.HasPrefix(ext, ".") {
 		ext = "." + ext
 	}

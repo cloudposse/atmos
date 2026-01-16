@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/function"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // ErrFailedToProcessHclFile is an alias for the central error sentinel.
@@ -56,6 +57,8 @@ func hclEvalContext() *hcl.EvalContext {
 
 // IsYAML checks if data is in YAML format.
 func IsYAML(data string) bool {
+	defer perf.Track(nil, "filetype.IsYAML")()
+
 	if strings.TrimSpace(data) == "" {
 		return false
 	}
@@ -75,6 +78,8 @@ func IsYAML(data string) bool {
 
 // IsHCL checks if data is in HCL format.
 func IsHCL(data string) bool {
+	defer perf.Track(nil, "filetype.IsHCL")()
+
 	if strings.TrimSpace(data) == "" {
 		return false
 	}
@@ -85,6 +90,8 @@ func IsHCL(data string) bool {
 
 // IsJSON checks if data is in JSON format.
 func IsJSON(data string) bool {
+	defer perf.Track(nil, "filetype.IsJSON")()
+
 	if strings.TrimSpace(data) == "" {
 		return false
 	}
@@ -96,6 +103,8 @@ func IsJSON(data string) bool {
 // DetectFormatAndParseFile detects the format of the file (JSON, YAML, HCL) and parses the file into a Go type.
 // For all other formats, it just reads the file and returns the content as a string.
 func DetectFormatAndParseFile(readFileFunc func(string) ([]byte, error), filename string) (any, error) {
+	defer perf.Track(nil, "filetype.DetectFormatAndParseFile")()
+
 	d, err := readFileFunc(filename)
 	if err != nil {
 		return nil, err
@@ -315,6 +324,8 @@ func isBlockRelatedDiagnostic(diags hcl.Diagnostics) bool {
 // Returns a slice of StackDocument, one for each stack block found.
 // If no stack blocks are found, returns a single StackDocument with the entire file content.
 func ParseHCLStacks(data []byte, filename string) ([]StackDocument, error) {
+	defer perf.Track(nil, "filetype.ParseHCLStacks")()
+
 	parser := hclparse.NewParser()
 	file, diags := parser.ParseHCL(data, filename)
 	if diags != nil && diags.HasErrors() {
@@ -475,6 +486,8 @@ func parseHCLBodyForStacks(body hcl.Body, filename string) ([]StackDocument, err
 // ParseYAMLStacks parses a YAML file that may contain multiple documents (separated by ---).
 // Returns a slice of StackDocument, one for each document found.
 func ParseYAMLStacks(data []byte) ([]StackDocument, error) {
+	defer perf.Track(nil, "filetype.ParseYAMLStacks")()
+
 	decoder := yaml.NewDecoder(bytes.NewReader(data))
 
 	var stacks []StackDocument

@@ -173,7 +173,7 @@ func (ctx *Context) Pop() {
 func (ctx *Context) buildCycleError(newNode Node) error {
 	var builder strings.Builder
 
-	builder.WriteString(fmt.Sprintf("%s\n\n", ErrCycleDetected))
+	// Start with dependency chain header (sentinel provides "cycle detected" prefix).
 	builder.WriteString("Dependency chain:\n")
 
 	// Show the full call stack.
@@ -185,7 +185,7 @@ func (ctx *Context) buildCycleError(newNode Node) error {
 	}
 
 	// Show where the cycle completes.
-	builder.WriteString(fmt.Sprintf("  %d. %s (cycle detected)\n",
+	builder.WriteString(fmt.Sprintf("  %d. %s (cycle completes here)\n",
 		len(ctx.CallStack)+1, newNode.Label))
 	if newNode.CallInfo != "" {
 		builder.WriteString(fmt.Sprintf("     -> %s\n", newNode.CallInfo))
