@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestHandlePromptError(t *testing.T) {
@@ -519,3 +522,706 @@ func TestFilterDeployableComponents(t *testing.T) {
 		})
 	}
 }
+
+// mockSetup holds the common mock configuration for tests.
+type mockSetup struct {
+	configError error
+	stacksError error
+	stacksMap   map[string]any
+}
+
+// setupMocksWithCleanup sets up the mocks with the given configuration and returns a cleanup function.
+func setupMocksWithCleanup(t *testing.T) (func(ms mockSetup), func()) {
+	t.Helper()
+	originalInitCliConfig := initCliConfig
+	originalExecuteDescribeStacks := executeDescribeStacks
+
+	setMocks := func(ms mockSetup) {
+		initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			if ms.configError != nil {
+				return schema.AtmosConfiguration{}, ms.configError
+			}
+			return schema.AtmosConfiguration{}, nil
+		}
+
+		executeDescribeStacks = func(_ *schema.AtmosConfiguration, _ string, _ []string, _ []string, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+			if ms.stacksError != nil {
+				return nil, ms.stacksError
+			}
+			return ms.stacksMap, nil
+		}
+	}
+
+	cleanup := func() {
+		initCliConfig = originalInitCliConfig
+		executeDescribeStacks = originalExecuteDescribeStacks
+	}
+
+	return setMocks, cleanup
+}
+
+// TestListTerraformComponents tests the listTerraformComponents function.
+func TestListTerraformComponents(t *testing.T) {
+	setMocks, cleanup := setupMocksWithCleanup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name               string
+		mockConfigError    error
+		mockStacksError    error
+		mockStacksMap      map[string]any
+		expectedComponents []string
+		expectedError      bool
+	}{
+		{
+			name:            "success with multiple components across stacks",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+							"eks": map[string]any{},
+						},
+					},
+				},
+				"prod-us-west-2": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc":    map[string]any{},
+							"aurora": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"aurora", "eks", "vpc"},
+			expectedError:      false,
+		},
+		{
+			name:               "returns error when config init fails",
+			mockConfigError:    errors.New("config init failed"),
+			mockStacksError:    nil,
+			mockStacksMap:      nil,
+			expectedComponents: nil,
+			expectedError:      true,
+		},
+		{
+			name:               "returns error when describe stacks fails",
+			mockConfigError:    nil,
+			mockStacksError:    errors.New("describe stacks failed"),
+			mockStacksMap:      nil,
+			expectedComponents: nil,
+			expectedError:      true,
+		},
+		{
+			name:               "returns empty slice for empty stacks",
+			mockConfigError:    nil,
+			mockStacksError:    nil,
+			mockStacksMap:      map[string]any{},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+		{
+			name:            "filters out abstract components",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"metadata": map[string]any{"type": "real"},
+							},
+							"base-component": map[string]any{
+								"metadata": map[string]any{"type": "abstract"},
+							},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"vpc"},
+			expectedError:      false,
+		},
+		{
+			name:            "deduplicates components across stacks",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"stack1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+				"stack2": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+				"stack3": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"vpc"},
+			expectedError:      false,
+		},
+		{
+			name:            "handles stacks without terraform components",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"helmfile": map[string]any{
+							"chart1": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+		{
+			name:            "handles invalid stack data type",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": "invalid-stack-data",
+			},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setMocks(mockSetup{
+				configError: tt.mockConfigError,
+				stacksError: tt.mockStacksError,
+				stacksMap:   tt.mockStacksMap,
+			})
+
+			result, err := listTerraformComponents()
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedComponents, result)
+			}
+		})
+	}
+}
+
+// TestListTerraformComponentsForStack tests the listTerraformComponentsForStack function.
+func TestListTerraformComponentsForStack(t *testing.T) {
+	setMocks, cleanup := setupMocksWithCleanup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name               string
+		stack              string
+		mockConfigError    error
+		mockStacksError    error
+		mockStacksMap      map[string]any
+		expectedComponents []string
+		expectedError      bool
+	}{
+		{
+			name:            "success with specific stack",
+			stack:           "dev-us-east-1",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+							"eks": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"eks", "vpc"},
+			expectedError:      false,
+		},
+		{
+			name:            "returns empty when stack not found",
+			stack:           "nonexistent",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+		{
+			name:               "returns error when config init fails",
+			stack:              "dev",
+			mockConfigError:    errors.New("config init failed"),
+			mockStacksError:    nil,
+			mockStacksMap:      nil,
+			expectedComponents: nil,
+			expectedError:      true,
+		},
+		{
+			name:               "returns error when describe stacks fails",
+			stack:              "dev",
+			mockConfigError:    nil,
+			mockStacksError:    errors.New("describe stacks failed"),
+			mockStacksMap:      nil,
+			expectedComponents: nil,
+			expectedError:      true,
+		},
+		{
+			name:            "handles invalid stack data type",
+			stack:           "dev",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": "invalid-data",
+			},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+		{
+			name:            "handles stack without components key",
+			stack:           "dev",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"settings": map[string]any{},
+				},
+			},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+		{
+			name:            "handles stack without terraform components",
+			stack:           "dev",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"helmfile": map[string]any{},
+					},
+				},
+			},
+			expectedComponents: []string{},
+			expectedError:      false,
+		},
+		{
+			name:            "filters out abstract components",
+			stack:           "dev",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+							"base-vpc": map[string]any{
+								"metadata": map[string]any{"type": "abstract"},
+							},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"vpc"},
+			expectedError:      false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setMocks(mockSetup{
+				configError: tt.mockConfigError,
+				stacksError: tt.mockStacksError,
+				stacksMap:   tt.mockStacksMap,
+			})
+
+			result, err := listTerraformComponentsForStack(tt.stack)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedComponents, result)
+			}
+		})
+	}
+}
+
+// TestListTerraformComponentsForStack_EmptyStackDelegation tests that empty stack delegates to listTerraformComponents.
+func TestListTerraformComponentsForStack_EmptyStackDelegation(t *testing.T) {
+	// This test needs custom mock setup to track calls, so we keep it separate.
+	originalInitCliConfig := initCliConfig
+	originalExecuteDescribeStacks := executeDescribeStacks
+	defer func() {
+		initCliConfig = originalInitCliConfig
+		executeDescribeStacks = originalExecuteDescribeStacks
+	}()
+
+	describeStacksCalled := false
+	initCliConfig = func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+		return schema.AtmosConfiguration{}, nil
+	}
+	executeDescribeStacks = func(_ *schema.AtmosConfiguration, filterStack string, _ []string, _ []string, _ []string, _, _, _, _ bool, _ []string, _ auth.AuthManager) (map[string]any, error) {
+		describeStacksCalled = true
+		// When stack is empty, it should call listTerraformComponents which passes empty string.
+		assert.Equal(t, "", filterStack)
+		return map[string]any{
+			"stack1": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{},
+					},
+				},
+			},
+		}, nil
+	}
+
+	result, err := listTerraformComponentsForStack("")
+
+	assert.NoError(t, err)
+	assert.True(t, describeStacksCalled)
+	assert.Equal(t, []string{"vpc"}, result)
+}
+
+// TestListStacksForComponent tests the listStacksForComponent function.
+func TestListStacksForComponent(t *testing.T) {
+	setMocks, cleanup := setupMocksWithCleanup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name            string
+		component       string
+		mockConfigError error
+		mockStacksError error
+		mockStacksMap   map[string]any
+		expectedStacks  []string
+		expectedError   bool
+	}{
+		{
+			name:            "success with matching stacks",
+			component:       "vpc",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+							"eks": map[string]any{},
+						},
+					},
+				},
+				"prod-us-west-2": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+				"staging": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"rds": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedStacks: []string{"dev-us-east-1", "prod-us-west-2"},
+			expectedError:  false,
+		},
+		{
+			name:            "no matching stacks",
+			component:       "nonexistent",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedStacks: nil,
+			expectedError:  false,
+		},
+		{
+			name:            "returns error when config init fails",
+			component:       "vpc",
+			mockConfigError: errors.New("config init failed"),
+			mockStacksError: nil,
+			mockStacksMap:   nil,
+			expectedStacks:  nil,
+			expectedError:   true,
+		},
+		{
+			name:            "returns error when describe stacks fails",
+			component:       "vpc",
+			mockConfigError: nil,
+			mockStacksError: errors.New("describe stacks failed"),
+			mockStacksMap:   nil,
+			expectedStacks:  nil,
+			expectedError:   true,
+		},
+		{
+			name:            "returns empty for empty stacks map",
+			component:       "vpc",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap:   map[string]any{},
+			expectedStacks:  nil,
+			expectedError:   false,
+		},
+		{
+			name:            "results are sorted alphabetically",
+			component:       "vpc",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"z-stack": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{"vpc": map[string]any{}},
+					},
+				},
+				"a-stack": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{"vpc": map[string]any{}},
+					},
+				},
+				"m-stack": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{"vpc": map[string]any{}},
+					},
+				},
+			},
+			expectedStacks: []string{"a-stack", "m-stack", "z-stack"},
+			expectedError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setMocks(mockSetup{
+				configError: tt.mockConfigError,
+				stacksError: tt.mockStacksError,
+				stacksMap:   tt.mockStacksMap,
+			})
+
+			result, err := listStacksForComponent(tt.component)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedStacks, result)
+			}
+		})
+	}
+}
+
+// TestListAllStacks tests the listAllStacks function.
+func TestListAllStacks(t *testing.T) {
+	setMocks, cleanup := setupMocksWithCleanup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name            string
+		mockConfigError error
+		mockStacksError error
+		mockStacksMap   map[string]any
+		expectedStacks  []string
+		expectedError   bool
+	}{
+		{
+			name:            "success with multiple stacks",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1":  map[string]any{},
+				"prod-us-west-2": map[string]any{},
+				"staging":        map[string]any{},
+			},
+			expectedStacks: []string{"dev-us-east-1", "prod-us-west-2", "staging"},
+			expectedError:  false,
+		},
+		{
+			name:            "returns error when config init fails",
+			mockConfigError: errors.New("config init failed"),
+			mockStacksError: nil,
+			mockStacksMap:   nil,
+			expectedStacks:  nil,
+			expectedError:   true,
+		},
+		{
+			name:            "returns error when describe stacks fails",
+			mockConfigError: nil,
+			mockStacksError: errors.New("describe stacks failed"),
+			mockStacksMap:   nil,
+			expectedStacks:  nil,
+			expectedError:   true,
+		},
+		{
+			name:            "returns empty for empty stacks map",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap:   map[string]any{},
+			expectedStacks:  []string{},
+			expectedError:   false,
+		},
+		{
+			name:            "results are sorted alphabetically",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"z-stack": map[string]any{},
+				"a-stack": map[string]any{},
+				"m-stack": map[string]any{},
+			},
+			expectedStacks: []string{"a-stack", "m-stack", "z-stack"},
+			expectedError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setMocks(mockSetup{
+				configError: tt.mockConfigError,
+				stacksError: tt.mockStacksError,
+				stacksMap:   tt.mockStacksMap,
+			})
+
+			result, err := listAllStacks()
+
+			if tt.expectedError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedStacks, result)
+			}
+		})
+	}
+}
+
+// TestComponentsArgCompletionWithStack tests the componentsArgCompletionWithStack function.
+func TestComponentsArgCompletionWithStack(t *testing.T) {
+	setMocks, cleanup := setupMocksWithCleanup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name               string
+		args               []string
+		stack              string
+		mockConfigError    error
+		mockStacksError    error
+		mockStacksMap      map[string]any
+		expectedComponents []string
+		expectedDirective  cobra.ShellCompDirective
+	}{
+		{
+			name:            "with stack filter returns filtered components",
+			args:            []string{},
+			stack:           "dev",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+							"eks": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"eks", "vpc"},
+			expectedDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:            "without stack filter returns all components",
+			args:            []string{},
+			stack:           "",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{},
+						},
+					},
+				},
+				"prod": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"rds": map[string]any{},
+						},
+					},
+				},
+			},
+			expectedComponents: []string{"rds", "vpc"},
+			expectedDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:               "with args returns nil",
+			args:               []string{"existing-component"},
+			stack:              "",
+			mockConfigError:    nil,
+			mockStacksError:    nil,
+			mockStacksMap:      nil,
+			expectedComponents: nil,
+			expectedDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+		{
+			name:               "returns NoFileComp on error",
+			args:               []string{},
+			stack:              "",
+			mockConfigError:    errors.New("config error"),
+			mockStacksError:    nil,
+			mockStacksMap:      nil,
+			expectedComponents: nil,
+			expectedDirective:  cobra.ShellCompDirectiveNoFileComp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setMocks(mockSetup{
+				configError: tt.mockConfigError,
+				stacksError: tt.mockStacksError,
+				stacksMap:   tt.mockStacksMap,
+			})
+
+			cmd := &cobra.Command{Use: "test"}
+			result, directive := componentsArgCompletionWithStack(cmd, tt.args, "", tt.stack)
+
+			assert.Equal(t, tt.expectedComponents, result)
+			assert.Equal(t, tt.expectedDirective, directive)
+		})
+	}
+}
+
+// Ensure cfg import is used.
+var _ = cfg.InitCliConfig

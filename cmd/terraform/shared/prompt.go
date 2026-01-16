@@ -15,6 +15,12 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Package-level variables for dependency injection (enables testing).
+var (
+	initCliConfig         = cfg.InitCliConfig
+	executeDescribeStacks = e.ExecuteDescribeStacks
+)
+
 // PromptForComponent shows an interactive selector for component selection.
 // If stack is provided, filters components to only those in that stack.
 func PromptForComponent(cmd *cobra.Command, stack string) (string, error) {
@@ -177,12 +183,12 @@ func filterDeployableComponents(terraformComponents map[string]any) []string {
 // Filters out abstract and disabled components.
 func listTerraformComponents() ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -220,12 +226,12 @@ func listTerraformComponentsForStack(stack string) ([]string, error) {
 	}
 
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, stack, nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, stack, nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -258,12 +264,12 @@ func listTerraformComponentsForStack(stack string) ([]string, error) {
 // listStacksForComponent returns stacks that contain the specified component.
 func listStacksForComponent(component string) ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -300,12 +306,12 @@ func stackContainsComponent(stackData any, component string) bool {
 // listAllStacks returns all stacks.
 func listAllStacks() ([]string, error) {
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
