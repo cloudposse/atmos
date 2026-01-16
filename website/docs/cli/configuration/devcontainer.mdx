@@ -9,6 +9,7 @@ slug: /cli/configuration/devcontainer
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 import DocCardList from '@theme/DocCardList'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Configure development container environments in your `atmos.yaml` to provide consistent, reproducible tooling across your team. Based on the [Development Container Specification](https://containers.dev/), Atmos manages named container configurations with support for Docker and Podman runtimes.
@@ -556,6 +557,14 @@ devcontainer:
           TERM: "${localEnv:TERM}"
 ```
 </File>
+
+## Working Examples
+
+Browse complete working examples of devcontainer configurations:
+
+<EmbedExample example="devcontainer" title="Simple Devcontainer Example" />
+
+<EmbedExample example="devcontainer-build" title="Devcontainer with Dockerfile Build" />
 
 ## Environment Variables
 
