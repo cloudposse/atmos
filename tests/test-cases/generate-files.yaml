@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the generate-files example in examples/generate-files/
+# These tests verify the user-facing example works correctly
+tests:
+  # Test generating files for the demo component (dry-run)
+  - name: "generate files demo component dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for demo component in dev stack (dry-run)"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "demo"
+      - "-s"
+      - "dev"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "versions.tf"
+        - "locals.tf"
+        - "variables.tf"
+        - "outputs.tf"
+        - "terraform.tfvars"
+        - "config.json"
+        - "README.md"
+
+  # Test --all flag with dry-run
+  - name: "generate files --all dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for all components (dry-run)"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "--all"
+      - "--dry-run"
+    env:
+      ATMOS_LOGS_LEVEL: Info
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "Processing component"
+
+  # Test prod stack works too
+  - name: "generate files prod stack dry-run"
+    enabled: true
+    tty: false
+    description: "Generate files for demo component in prod stack (dry-run)"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "generate"
+      - "files"
+      - "demo"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would generate"
+        - "locals.tf"
+
+  # Test describe component works for demo
+  - name: "describe component demo"
+    enabled: true
+    tty: false
+    description: "Verify demo component can be described"
+    workdir: "../examples/generate-files/"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "demo"
+      - "-s"
+      - "dev"
+    expect:
+      exit_code: 0
+      stdout:
+        - "generate"
+        - "versions.tf"
