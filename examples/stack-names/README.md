@@ -4,10 +4,14 @@ This example demonstrates imperative stack naming using the `name` field in stac
 
 ## Overview
 
-When no `name_template` or `name_pattern` is configured in `atmos.yaml`, stacks are identified by:
+Stack names are determined by the following precedence (highest to lowest):
 
-1. **`name`** (highest priority) - Explicit name from the stack manifest
-2. **Filename** (fallback) - Basename of the stack file
+1. **`name`** - Explicit name from the stack manifest (always wins)
+2. **`name_template`** - Template-based naming (if configured)
+3. **`name_pattern`** - Pattern-based naming (if configured)
+4. **Filename** - Basename of the stack file (fallback)
+
+This example demonstrates the `name` field, which always takes precedence over other naming methods.
 
 ## Stacks
 
