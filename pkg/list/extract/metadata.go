@@ -1,19 +1,40 @@
 package extract
 
 import (
+	"sync"
+
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
+
+// isTTYCached caches the TTY check to avoid repeated allocations when processing many instances.
+var isTTYCached = sync.OnceValue(func() bool {
+	term := terminal.New()
+	return term.IsTTY(terminal.Stdout)
+})
 
 // getStatusIndicator returns a colored dot indicator based on enabled/locked state.
 // - Gray (●) if enabled: false (disabled).
 // - Red (●) if locked: true.
 // - Green (●) if enabled: true and not locked.
+// When output is piped (non-TTY), returns the semantic status text instead.
 func getStatusIndicator(enabled, locked bool) string {
+	return getStatusIndicatorWithTTY(enabled, locked, isTTYCached())
+}
+
+// getStatusIndicatorWithTTY is the internal implementation that accepts the TTY state.
+// This allows testing both TTY and non-TTY code paths.
+func getStatusIndicatorWithTTY(enabled, locked, isTTY bool) string {
 	const statusDot = "●"
+
+	// If not a TTY, return semantic status text for machine-readable output.
+	if !isTTY {
+		return getStatusText(enabled, locked)
+	}
 
 	switch {
 	case locked:

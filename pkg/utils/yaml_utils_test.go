@@ -1453,3 +1453,169 @@ func TestLongString_MarshalYAML(t *testing.T) {
 	// The result should be a yaml.Node with FoldedStyle.
 	require.NotNil(t, node)
 }
+
+// TestUnmarshalYAMLFromFileWithPositions_ProvenanceReparse tests that when a file
+// is first cached without provenance tracking, then requested with provenance enabled,
+// the file is re-parsed to extract position information.
+func TestUnmarshalYAMLFromFileWithPositions_ProvenanceReparse(t *testing.T) {
+	yamlContent := `name: test
+value: 42
+nested:
+  key: value`
+	fileName := "test-provenance-reparse.yaml"
+
+	// Capture old cache state and restore after test.
+	parsedYAMLCacheMu.Lock()
+	oldCache := parsedYAMLCache
+	parsedYAMLCacheMu.Unlock()
+	t.Cleanup(func() {
+		parsedYAMLCacheMu.Lock()
+		parsedYAMLCache = oldCache
+		parsedYAMLCacheMu.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	parsedYAMLCacheMu.Lock()
+	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu.Unlock()
+
+	// First parse WITHOUT provenance tracking.
+	configNoProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: false,
+	}
+
+	result1, positions1, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configNoProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	assert.Equal(t, "test", result1["name"])
+
+	// Positions should be empty when provenance is disabled.
+	assert.Empty(t, positions1, "Positions should be empty when provenance is disabled")
+
+	// Second parse WITH provenance tracking - should re-parse to get positions.
+	configWithProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: true,
+	}
+
+	result2, positions2, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.Equal(t, "test", result2["name"])
+
+	// Positions should now be populated.
+	assert.NotEmpty(t, positions2, "Positions should be populated when provenance is enabled and file is re-parsed")
+
+	// Verify positions contain expected keys.
+	assert.Contains(t, positions2, "name", "Positions should contain 'name' key")
+	assert.Contains(t, positions2, "value", "Positions should contain 'value' key")
+	assert.Contains(t, positions2, "nested", "Positions should contain 'nested' key")
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError tests that nil atmosConfig
+// returns an error (by design - config is required).
+func TestUnmarshalYAMLFromFileWithPositions_NilConfigReturnsError(t *testing.T) {
+	yamlContent := `name: test`
+	fileName := "test-nil-config-error.yaml"
+
+	// Call with nil config - should return error (not panic).
+	_, _, err := UnmarshalYAMLFromFileWithPositions[map[string]any](nil, yamlContent, fileName)
+	require.Error(t, err, "Nil config should return an error")
+	assert.Contains(t, err.Error(), "nil", "Error should mention nil config")
+}
+
+// TestHandleCacheMiss_NilConfigSafe tests that handleCacheMiss handles nil atmosConfig safely.
+// This tests the nil checks we added to prevent panics.
+func TestHandleCacheMiss_NilConfigSafe(t *testing.T) {
+	// Capture old cache state and restore after test.
+	parsedYAMLCacheMu.Lock()
+	oldCache := parsedYAMLCache
+	parsedYAMLCacheMu.Unlock()
+	t.Cleanup(func() {
+		parsedYAMLCacheMu.Lock()
+		parsedYAMLCache = oldCache
+		parsedYAMLCacheMu.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	parsedYAMLCacheMu.Lock()
+	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu.Unlock()
+
+	yamlContent := `name: test`
+
+	// Call handleCacheMiss with nil config - should NOT panic.
+	// This tests the nil check we added in parseAndCacheYAML.
+	node, positions, err := handleCacheMiss(nil, "test-file.yaml", yamlContent)
+	require.NoError(t, err)
+	require.NotNil(t, node)
+
+	// Positions should be empty since config is nil (TrackProvenance defaults to false).
+	assert.Empty(t, positions, "Positions should be empty when config is nil")
+}
+
+// TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance tests that
+// a cache hit with provenance already populated doesn't re-parse.
+func TestUnmarshalYAMLFromFileWithPositions_CacheHitWithProvenance(t *testing.T) {
+	yamlContent := `name: cached
+value: 123`
+	fileName := "test-cache-hit-provenance.yaml"
+
+	// Capture old cache state and restore after test.
+	// Note: Only capture values, not the struct containing the mutex.
+	parsedYAMLCacheMu.Lock()
+	oldCache := parsedYAMLCache
+	parsedYAMLCacheMu.Unlock()
+	parsedYAMLCacheStats.Lock()
+	oldHits := parsedYAMLCacheStats.hits
+	oldMisses := parsedYAMLCacheStats.misses
+	parsedYAMLCacheStats.Unlock()
+	t.Cleanup(func() {
+		parsedYAMLCacheMu.Lock()
+		parsedYAMLCache = oldCache
+		parsedYAMLCacheMu.Unlock()
+		parsedYAMLCacheStats.Lock()
+		parsedYAMLCacheStats.hits = oldHits
+		parsedYAMLCacheStats.misses = oldMisses
+		parsedYAMLCacheStats.Unlock()
+	})
+
+	// Clear cache to ensure clean state.
+	parsedYAMLCacheMu.Lock()
+	parsedYAMLCache = make(map[string]*parsedYAMLCacheEntry)
+	parsedYAMLCacheMu.Unlock()
+
+	// Reset stats.
+	parsedYAMLCacheStats.Lock()
+	parsedYAMLCacheStats.hits = 0
+	parsedYAMLCacheStats.misses = 0
+	parsedYAMLCacheStats.Unlock()
+
+	// First parse WITH provenance tracking.
+	configWithProvenance := &schema.AtmosConfiguration{
+		TrackProvenance: true,
+	}
+
+	result1, positions1, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result1)
+	assert.NotEmpty(t, positions1, "First call should have positions")
+
+	// Get cache stats before second call.
+	parsedYAMLCacheStats.RLock()
+	hitsBefore := parsedYAMLCacheStats.hits
+	parsedYAMLCacheStats.RUnlock()
+
+	// Second parse WITH provenance - should be a cache HIT (not re-parsed).
+	result2, positions2, err := UnmarshalYAMLFromFileWithPositions[map[string]any](configWithProvenance, yamlContent, fileName)
+	require.NoError(t, err)
+	require.NotNil(t, result2)
+	assert.NotEmpty(t, positions2, "Second call should also have positions")
+
+	// Get cache stats after second call.
+	parsedYAMLCacheStats.RLock()
+	hitsAfter := parsedYAMLCacheStats.hits
+	parsedYAMLCacheStats.RUnlock()
+
+	// Verify cache hit (hits should increase).
+	assert.Greater(t, hitsAfter, hitsBefore, "Cache hits should increase on second call")
+}

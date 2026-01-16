@@ -1,11 +1,13 @@
 package backend
 
 import (
+	"context"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/cloudposse/atmos/cmd/terraform/shared"
 	"github.com/cloudposse/atmos/pkg/flags"
-	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 var listParser *flags.StandardParser
@@ -17,36 +19,27 @@ var listCmd = &cobra.Command{
 	Example: `  atmos terraform backend list --stack dev`,
 	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		defer perf.Track(atmosConfigPtr, "backend.list.RunE")()
-
-		v := viper.GetViper()
-		opts, err := ParseCommonFlags(cmd, listParser)
+		ctx := context.Background()
+		result, err := listParser.Parse(ctx, args)
 		if err != nil {
 			return err
 		}
 
-		format := v.GetString("format")
-
-		// Initialize config using injected dependency (no component needed for list).
-		atmosConfig, _, err := configInit.InitConfigAndAuth("", opts.Stack, opts.Identity)
-		if err != nil {
-			return err
-		}
-
-		// Execute list command using injected provisioner.
-		return prov.ListBackends(atmosConfig, map[string]string{"format": format})
+		return executeListCommandWithValues(result.Stack, result.Identity.Value(), result.Format)
 	},
 }
 
 func init() {
 	listCmd.DisableFlagParsing = false
 
-	// Create parser with functional options.
+	// Create parser with prompting options.
 	listParser = flags.NewStandardParser(
 		flags.WithStackFlag(),
 		flags.WithIdentityFlag(),
 		flags.WithStringFlag("format", "f", "table", "Output format: table, yaml, json"),
 		flags.WithEnvVars("format", "ATMOS_FORMAT"),
+		// Enable prompting for missing stack flag.
+		flags.WithCompletionPrompt("stack", "Choose a stack", shared.StackFlagCompletion),
 	)
 
 	// Register flags with the command.

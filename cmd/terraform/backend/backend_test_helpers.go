@@ -11,11 +11,12 @@ import (
 
 // commandTestParams holds parameters for testing backend command structure.
 type commandTestParams struct {
-	cmd           *cobra.Command
-	parser        *flags.StandardParser
-	expectedUse   string
-	expectedShort string
-	requiredFlags []string
+	cmd              *cobra.Command
+	parser           *flags.StandardParser
+	expectedUse      string
+	expectedShort    string
+	requiredFlags    []string
+	hasPositionalArg bool // Whether the command has a positional arg (with prompting).
 }
 
 // testCommandStructure is a helper function to test common command structure patterns.
@@ -49,20 +50,25 @@ func testCommandStructure(t *testing.T, params commandTestParams) {
 		assert.NotNil(t, identityFlag, "identity flag should be registered")
 	})
 
-	t.Run("command requires exactly one argument", func(t *testing.T) {
-		// The Args field should be set to cobra.ExactArgs(1).
-		assert.NotNil(t, params.cmd.Args)
+	// Only test arg validation for commands without prompt-aware validation.
+	// Commands with prompting allow 0 args and will prompt for missing values.
+	if params.hasPositionalArg {
+		t.Run("command has prompt-aware arg validation", func(t *testing.T) {
+			// With prompting, the Args validator is set by SetPositionalArgs.
+			// It should allow 0 args (for prompting) and 1 arg (when provided).
+			assert.NotNil(t, params.cmd.Args)
 
-		// Test with no args.
-		err := params.cmd.Args(params.cmd, []string{})
-		assert.Error(t, err, "should error with no arguments")
+			// 0 args is allowed (will trigger prompt in interactive mode).
+			err := params.cmd.Args(params.cmd, []string{})
+			assert.NoError(t, err, "should allow 0 arguments (prompting enabled)")
 
-		// Test with one arg.
-		err = params.cmd.Args(params.cmd, []string{"vpc"})
-		assert.NoError(t, err, "should accept exactly one argument")
+			// 1 arg is allowed.
+			err = params.cmd.Args(params.cmd, []string{"vpc"})
+			assert.NoError(t, err, "should accept one argument")
 
-		// Test with multiple args.
-		err = params.cmd.Args(params.cmd, []string{"vpc", "extra"})
-		assert.Error(t, err, "should error with multiple arguments")
-	})
+			// Multiple args should error.
+			err = params.cmd.Args(params.cmd, []string{"vpc", "extra"})
+			assert.Error(t, err, "should error with multiple arguments")
+		})
+	}
 }
