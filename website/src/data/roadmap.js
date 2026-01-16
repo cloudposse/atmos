@@ -401,6 +401,28 @@ export const roadmapConfig = {
       issues: [],
       prs: [],
     },
+    {
+      id: 'secrets-management',
+      icon: 'RiShieldKeyholeLine',
+      title: 'Secrets Management',
+      tagline: 'Protect sensitive data automatically',
+      description:
+        'Comprehensive secrets management with automatic masking, custom patterns, and secure credential handling across all output channels.',
+      progress: 50,
+      status: 'in-progress',
+      milestones: [
+        { label: 'Built-in secret pattern library (120+ patterns)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/mask', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Automatic detection and masking of 120+ secret patterns from the Gitleaks library including AWS keys, tokens, and passwords.', benefits: 'Secrets are protected automatically without configuration. Safe to share terminal output or stream logs.' },
+        { label: 'Custom masking patterns from atmos.yaml', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'User-defined regex patterns and literal values loaded from atmos.yaml configuration for environment-specific secret formats.', benefits: 'Define patterns for internal tokens, custom API keys, and organization-specific secrets. Mask values beyond built-in patterns.' },
+        { label: 'Configurable replacement string', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Customize the masked output replacement string from the default ***MASKED*** to any value.', benefits: 'Use [REDACTED], <secret>, or any string that fits your logging and compliance requirements.' },
+        { label: '`!store` YAML function for secrets', status: 'shipped', quarter: 'q3-2025', docs: '/functions/yaml/store', description: 'Access secrets from configured stores (SSM, Secrets Manager, etc.) directly in stack configuration.', codeExample: 'api_key: !store ssm:/myapp/api-key', benefits: 'Reference secrets at deploy time. No hardcoded values or environment variables needed.' },
+        { label: 'Output masking across all channels', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Secrets are masked in terraform output, shell commands, logs, auth commands, documentation display, and error messages.', benefits: 'Comprehensive protection across all CLI output. No secret leakage through any channel.' },
+        { label: 'Vault integration', status: 'planned', quarter: 'q2-2026', description: 'Native HashiCorp Vault integration for secret retrieval and dynamic credentials.', benefits: 'Use Vault as your secret backend. Dynamic credentials for databases and cloud providers.' },
+      ],
+      issues: [],
+      prs: [
+        { number: 1972, title: 'Implement custom secrets masking patterns and fix output routing' },
+      ],
+    },
   ],
 
   highlights: [

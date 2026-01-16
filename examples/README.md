@@ -38,7 +38,8 @@ Think of each demo folder as representing an example of a standalone repository.
 7.  ├── demo-custom-command/      # Learn how to extend Atmos with your own custom CLI commands.
 8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
 9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
-10. └── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
+10. ├── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
+11. └── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
 ```
 
 ## Playground
