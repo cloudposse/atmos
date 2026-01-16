@@ -19,10 +19,17 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// PackerFlags type represents Packer command-line flags.
+// PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
+	// Template specifies the Packer template file or directory path.
+	// If empty, defaults to "." (current directory), which tells Packer to load all *.pkr.hcl files.
+	// Can be set via --template/-t flag or settings.packer.template in stack manifest.
 	Template string
-	Query    string
+
+	// Query specifies a YQ expression to extract data from the Packer manifest.
+	// Used by ExecutePackerOutput to query the manifest.json file.
+	// Can be set via --query/-q flag.
+	Query string
 }
 
 // ExecutePacker executes Packer commands.
@@ -210,7 +217,7 @@ func ExecutePacker(
 	varFile := constructPackerComponentVarfileName(info)
 	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
 
-	log.Debug("Writing the variables to file:", "file", varFilePath)
+	log.Debug("Writing the variables to file", "file", varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)

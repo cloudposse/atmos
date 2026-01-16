@@ -1,6 +1,8 @@
 package exec
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -8,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -49,6 +52,54 @@ func TestExecutePackerOutput(t *testing.T) {
 
 		_, err := ExecutePackerOutput(&info, &packerFlags)
 		assert.Error(t, err)
+	})
+
+	// Test missing packer base path configuration.
+	t.Run("missing packer base path", func(t *testing.T) {
+		// Create a temporary directory with minimal config without packer base_path.
+		tempDir := t.TempDir()
+		configPath := filepath.Join(tempDir, "atmos.yaml")
+		// Must provide stacks config too since it's validated before packer config.
+		stacksDir := filepath.Join(tempDir, "stacks")
+		require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+		// Create a minimal stack file so ProcessStacks doesn't fail before checkPackerConfig.
+		stackFile := filepath.Join(stacksDir, "nonprod.yaml")
+		err := os.WriteFile(stackFile, []byte(`vars:
+  stage: nonprod
+`), 0o644)
+		require.NoError(t, err)
+
+		// Write config with absolute paths to avoid path resolution issues.
+		err = os.WriteFile(configPath, []byte(fmt.Sprintf(`base_path: "%s"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: "components/terraform"
+  packer:
+    base_path: ""
+`, tempDir)), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion",
+			SubCommand:       "output",
+		}
+
+		packerFlags := PackerFlags{}
+
+		_, err = ExecutePackerOutput(&info, &packerFlags)
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrMissingPackerBasePath), "expected ErrMissingPackerBasePath, got: %v", err)
 	})
 
 	// Test invalid component path
