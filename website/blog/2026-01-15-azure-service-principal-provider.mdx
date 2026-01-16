@@ -27,9 +27,9 @@ We've added the `azure/service-principal` provider to the Atmos auth system, ena
 ## Why Service Principal?
 
 Use `azure/service-principal` when:
-- Your CI/CD platform doesn't support OIDC federation with Azure
-- You're running in environments without browser access (embedded systems, etc.)
-- You need static credentials for legacy automation
+- Your CI/CD platform doesn't support OIDC federation with Azure.
+- You're running in environments without browser access (embedded systems, etc.).
+- You need static credentials for legacy automation.
 
 **Terraform Compatible**: Sets `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, and `ARM_TENANT_ID` for seamless integration with azurerm and azapi Terraform providers.
 

@@ -153,9 +153,9 @@ func (p *servicePrincipalProvider) getTokenEndpoint() string {
 }
 
 // Authenticate performs Azure service principal authentication using client credentials.
-// This acquires tokens for multiple scopes to ensure Azure CLI and Terraform compatibility:
-// - Management API (ARM operations)
-// - Graph API (azuread provider and some az commands)
+// This acquires tokens for multiple scopes to ensure Azure CLI and Terraform compatibility.
+// - Management API (ARM operations).
+// - Graph API (azuread provider and some az commands).
 // - KeyVault API (optional, for KeyVault operations).
 func (p *servicePrincipalProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.servicePrincipalProvider.Authenticate")()
@@ -315,8 +315,7 @@ func (p *servicePrincipalProvider) Validate() error {
 	if p.clientID == "" {
 		return fmt.Errorf("%w: client_id is required", errUtils.ErrInvalidProviderConfig)
 	}
-	// Note: client_secret validation happens at authentication time to allow
-	// environment variable configuration.
+	// Note: client_secret validation happens at authentication time to allow environment variable configuration.
 	return nil
 }
 
@@ -353,8 +352,7 @@ func (p *servicePrincipalProvider) PrepareEnvironment(ctx context.Context, envir
 
 	// Explicitly disable CLI auth mode for service principal authentication.
 	// ARM_USE_CLI=true only works for user accounts, not service principals.
-	// The azurerm/azapi providers will use the ARM_CLIENT_ID/ARM_CLIENT_SECRET
-	// credentials we set below for service principal auth.
+	// The azurerm/azapi providers will use the ARM_CLIENT_ID/ARM_CLIENT_SECRET credentials we set below for service principal auth.
 	result["ARM_USE_CLI"] = "false"
 
 	// Set client credentials for Terraform providers (azurerm, azapi).
@@ -384,12 +382,12 @@ func (p *servicePrincipalProvider) Logout(ctx context.Context) error {
 }
 
 // Paths returns credential files/directories used by this provider.
-// Azure service principal provider relies on Azure CLI credential cache.
+// Azure service principal provider does not manage credential files directly.
 func (p *servicePrincipalProvider) Paths() ([]authTypes.Path, error) {
 	return []authTypes.Path{}, nil
 }
 
 // GetFilesDisplayPath returns empty string (no files managed directly by this provider).
 func (p *servicePrincipalProvider) GetFilesDisplayPath() string {
-	return "" // Service principal provider uses Azure CLI cache, not separate files.
+	return "" // Service principal provider does not manage credential files directly.
 }
