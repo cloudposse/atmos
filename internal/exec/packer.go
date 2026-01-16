@@ -37,6 +37,11 @@ func ExecutePacker(
 		return err
 	}
 
+	// Validate packer configuration.
+	if err := checkPackerConfig(&atmosConfig); err != nil {
+		return err
+	}
+
 	// Add the `command` from `components.packer.command` from `atmos.yaml`.
 	if info.Command == "" {
 		if atmosConfig.Components.Packer.Command != "" {
@@ -213,6 +218,14 @@ func ExecutePacker(
 		if err != nil {
 			return err
 		}
+
+		// Defer cleanup of the variable file.
+		// Use a closure to capture varFilePath and ensure cleanup runs even on early errors.
+		defer func() {
+			if removeErr := os.Remove(varFilePath); removeErr != nil && !os.IsNotExist(removeErr) {
+				log.Trace("Failed to remove var file during cleanup", "error", removeErr, "file", varFilePath)
+			}
+		}()
 	}
 
 	var inheritance string
@@ -253,7 +266,7 @@ func ExecutePacker(
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	log.Debug("Using ENV", "variables", envVars)
 
-	err = ExecuteShellCommand(
+	return ExecuteShellCommand(
 		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
@@ -262,15 +275,4 @@ func ExecutePacker(
 		info.DryRun,
 		info.RedirectStdErr,
 	)
-	if err != nil {
-		return err
-	}
-
-	// Cleanup.
-	err = os.Remove(varFilePath)
-	if err != nil {
-		log.Warn(err.Error())
-	}
-
-	return nil
 }
