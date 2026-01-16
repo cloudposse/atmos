@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/project/config"
 )
 
@@ -113,7 +114,6 @@ func TestProcessFileSkipPaths(t *testing.T) {
 		"false",
 		"null",
 		"<no value>",
-		"/absolute/path.txt",
 		"path//double-slash.txt",
 		"path/trailing/",
 	}
@@ -133,6 +133,19 @@ func TestProcessFileSkipPaths(t *testing.T) {
 			assert.True(t, errors.As(err, &skipErr), "Expected FileSkippedError for path: %s", path)
 		})
 	}
+
+	// Absolute paths should return ErrPathTraversal (security check takes precedence over skip).
+	t.Run("error_absolute_path", func(t *testing.T) {
+		file := File{
+			Path:        "/absolute/path.txt",
+			Content:     "test",
+			IsTemplate:  false,
+			Permissions: 0o644,
+		}
+
+		err := processor.ProcessFile(file, tempDir, false, false, nil, nil)
+		assert.ErrorIs(t, err, errUtils.ErrPathTraversal, "Expected ErrPathTraversal for absolute path")
+	})
 }
 
 // TestHandleExistingFileForce tests force flag overwrites existing files.

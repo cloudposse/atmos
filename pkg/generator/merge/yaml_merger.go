@@ -12,7 +12,7 @@ import (
 
 // Constants for YAML merging.
 const (
-	maxChangePercentage = 100 // Maximum change percentage when parsing fails
+	maxChangePercentage = 100 // Maximum change percentage when parsing fails.
 )
 
 // YAMLMerger handles 3-way merging of YAML files with structure awareness.
@@ -370,6 +370,7 @@ func (m *YAMLMerger) mergeScalars(base, ours, theirs *yaml.Node, path string, co
 }
 
 // buildKeyMap builds a map of key -> value node for a mapping.
+// Non-scalar keys (complex keys) are skipped as they cannot be represented as string keys.
 func buildKeyMap(node *yaml.Node) map[string]*yaml.Node {
 	result := make(map[string]*yaml.Node)
 
@@ -378,11 +379,17 @@ func buildKeyMap(node *yaml.Node) map[string]*yaml.Node {
 	}
 
 	for i := 0; i < len(node.Content); i += 2 {
-		if i+1 < len(node.Content) {
-			key := node.Content[i].Value
-			value := node.Content[i+1]
-			result[key] = value
+		if i+1 >= len(node.Content) {
+			continue
 		}
+		keyNode := node.Content[i]
+		// Skip non-scalar keys (complex keys not supported in merge).
+		if keyNode.Kind != yaml.ScalarNode {
+			continue
+		}
+		key := keyNode.Value
+		value := node.Content[i+1]
+		result[key] = value
 	}
 
 	return result
@@ -423,7 +430,8 @@ func nodesEqual(a, b *yaml.Node) bool {
 
 	switch a.Kind {
 	case yaml.ScalarNode:
-		return a.Value == b.Value
+		// Tag affects semantics (e.g., !!bool vs !!str), so include it in comparison.
+		return a.Tag == b.Tag && a.Value == b.Value
 	case yaml.MappingNode, yaml.SequenceNode:
 		if len(a.Content) != len(b.Content) {
 			return false

@@ -802,6 +802,7 @@ var (
 	ErrScaffoldConfigMissing         = errors.New("scaffold configuration not found")
 	ErrInitializationPartialFailure  = errors.New("initialization partially failed")
 	ErrInvalidScaffoldSection        = errors.New("invalid scaffold section")
+	ErrPathTraversal                 = errors.New("path traversal not allowed")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

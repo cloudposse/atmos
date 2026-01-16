@@ -10,6 +10,8 @@ import (
 	"github.com/go-git/go-git/v5/plumbing/object"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // gitTestRepo holds common test repository setup.
@@ -157,7 +159,7 @@ func TestProcessorWithGitStorage_UserAddedFile(t *testing.T) {
 	assert.NotContains(t, string(resultContent), "template: value", "Should not contain template content")
 }
 
-// TestProcessorWithoutGitStorage tests fallback behavior when not in a git repo.
+// TestProcessorWithoutGitStorage tests that update mode requires git storage.
 func TestProcessorWithoutGitStorage(t *testing.T) {
 	// Create a temporary directory (NOT a git repo)
 	tmpDir := t.TempDir()
@@ -181,16 +183,12 @@ func TestProcessorWithoutGitStorage(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	// Process file in update mode (will use template as base, legacy behavior)
+	// Process file in update mode should fail without git storage.
+	// This is a security/correctness measure: without git, we can't compute a meaningful
+	// 3-way merge base, so the merge would be a no-op.
 	err = processor.ProcessFile(templateFile, tmpDir, false, true, nil, nil)
-	require.NoError(t, err)
-
-	// Should work even without git
-	mergedContent, err := os.ReadFile(configPath)
-	require.NoError(t, err)
-
-	// In legacy mode, uses template as base
-	assert.Contains(t, string(mergedContent), "version", "Should have version field")
+	require.Error(t, err, "Update mode should require git storage")
+	assert.ErrorIs(t, err, errUtils.ErrThreeWayMerge, "Should return ErrThreeWayMerge")
 }
 
 // TestProcessorWithGitStorage_TemplateFile tests merging with template processing (IsTemplate=true).

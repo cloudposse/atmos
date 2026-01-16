@@ -22,9 +22,11 @@ import (
 
 // Default threshold and permission constants.
 const (
-	defaultMergeThreshold = 50    // Default 50% threshold for 3-way merges
-	dirPermissions        = 0o755 // Default directory permissions
-	maxValuePreviewLen    = 200   // Maximum length for value previews in logs
+	defaultMergeThreshold = 50    // Default 50% threshold for 3-way merges.
+	dirPermissions        = 0o755 // Default directory permissions.
+	maxValuePreviewLen    = 200   // Maximum length for value previews in logs.
+	defaultLeftDelimiter  = "{{"  // Default Go template left delimiter.
+	defaultRightDelimiter = "}}"  // Default Go template right delimiter.
 )
 
 // File represents a file to be processed by the templating engine.
@@ -127,7 +129,7 @@ func (p *Processor) SetupGitStorage(targetPath string, baseRef string) error {
 func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}) (string, error) {
 	defer perf.Track(nil, "engine.Processor.ProcessTemplate")()
 
-	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{"{{", "}}"})
+	return p.ProcessTemplateWithDelimiters(content, targetPath, scaffoldConfig, userValues, []string{defaultLeftDelimiter, defaultRightDelimiter})
 }
 
 // ProcessTemplateWithDelimiters processes Go templates in file content with custom delimiters.
@@ -135,6 +137,11 @@ func (p *Processor) ProcessTemplate(content string, targetPath string, scaffoldC
 //nolint:revive // function-length: template processing requires multiple setup steps
 func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
 	defer perf.Track(nil, "engine.Processor.ProcessTemplateWithDelimiters")()
+
+	// Guard against invalid delimiters slice.
+	if len(delimiters) != 2 {
+		delimiters = []string{defaultLeftDelimiter, defaultRightDelimiter}
+	}
 
 	// Create template data with rich configuration
 	templateData := map[string]interface{}{
@@ -148,16 +155,29 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 	d := data.Data{}
 	ctx := context.TODO()
 
-	// Add Gomplate, Sprig and custom template functions
+	// Build template function map by merging Gomplate, Sprig, and custom functions.
+	// Order matters for collisions - later additions override earlier ones.
+	//
+	// Function precedence (later wins):
+	//   1. Gomplate functions (added first)
+	//   2. Sprig functions (override Gomplate on collisions)
+	//   3. Custom functions (highest priority)
+	//
+	// Notable collisions where Sprig overrides Gomplate:
+	//   - env, dict, join, split, toJson, fromJson, toYaml, fromYaml
+	//   - base, dir, ext, trim, upper, lower, rand, uuid
+	//
+	// To use Gomplate's version explicitly, use namespaced variants:
+	//   - coll.Dict, conv.ToJSON, data.YAML, base64.Encode, etc.
 	funcs := template.FuncMap{}
 
-	// Add gomplate functions
+	// Add gomplate functions (base layer).
 	gomplateFuncs := gomplate.CreateFuncs(ctx, &d)
 	for k, v := range gomplateFuncs {
 		funcs[k] = v
 	}
 
-	// Add sprig functions
+	// Add sprig functions (overrides gomplate on collisions).
 	sprigFuncs := sprig.FuncMap()
 	for k, v := range sprigFuncs {
 		funcs[k] = v
@@ -191,7 +211,7 @@ func (p *Processor) ProcessTemplateWithDelimiters(content string, targetPath str
 			WithHint("Check that all referenced variables are defined").
 			WithHint("Verify template functions are valid").
 			WithHint("Use `--set key=value` to provide missing variables").
-			WithContext("template_data", fmt.Sprintf("%+v", templateData)).
+			WithContext("template_data_keys", fmt.Sprintf("%v", mapKeys(templateData))).
 			WithContext("content_preview", truncateString(content, 300)).
 			WithExitCode(1).
 			Err()
@@ -241,6 +261,11 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 		return err
 	}
 
+	// Validate path security: reject absolute paths, path traversal, and unrendered templates.
+	if err := validateRenderedPath(renderedPath, file.Path); err != nil {
+		return err
+	}
+
 	// Check if file should be skipped
 	if p.ShouldSkipFile(renderedPath) {
 		return &FileSkippedError{Path: file.Path, RenderedPath: renderedPath}
@@ -263,7 +288,7 @@ func (p *Processor) ProcessFile(file File, targetPath string, force, update bool
 
 // extractDelimiters extracts template delimiters from scaffold config or returns defaults.
 func extractDelimiters(scaffoldConfig interface{}) []string {
-	delimiters := []string{"{{", "}}"}
+	delimiters := []string{defaultLeftDelimiter, defaultRightDelimiter}
 
 	if scaffoldConfig == nil {
 		return delimiters
@@ -335,8 +360,9 @@ func tryExtractFromMapConfig(scaffoldConfig interface{}) []string {
 
 // processFilePath processes the file path as a template and returns the rendered path.
 func (p *Processor) processFilePath(filePath, targetPath string, scaffoldConfig interface{}, userValues map[string]interface{}, delimiters []string) (string, error) {
+	// Use empty map if nil to ensure template processing runs and catches unrendered markers.
 	if userValues == nil {
-		return filePath, nil
+		userValues = make(map[string]interface{})
 	}
 
 	renderedPath, err := p.ProcessTemplateWithDelimiters(filePath, targetPath, scaffoldConfig, userValues, delimiters)
@@ -346,7 +372,7 @@ func (p *Processor) processFilePath(filePath, targetPath string, scaffoldConfig 
 			WithHint("Check template syntax in the file path").
 			WithHint("Verify all variables used in the path are defined").
 			WithContext("file_path", filePath).
-			WithContext("user_values", fmt.Sprintf("%+v", userValues)).
+			WithContext("user_value_keys", fmt.Sprintf("%v", mapKeys(userValues))).
 			WithExitCode(1).
 			Err()
 	}
@@ -376,6 +402,50 @@ func fileExists(path string) bool {
 	return err == nil && !info.IsDir()
 }
 
+// validateRenderedPath validates that a rendered path is safe.
+// Rejects absolute paths, path traversal attempts (..), and unrendered template markers.
+func validateRenderedPath(renderedPath, originalPath string) error {
+	// Clean the path to normalize it.
+	cleaned := filepath.Clean(renderedPath)
+
+	// Reject absolute paths.
+	if filepath.IsAbs(cleaned) {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Absolute path not allowed: `%s`", renderedPath).
+			WithHint("File paths must be relative to the target directory").
+			WithContext("original_path", originalPath).
+			WithContext("rendered_path", renderedPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	// Reject path traversal (.. segments).
+	if strings.HasPrefix(cleaned, "..") || strings.Contains(cleaned, string(os.PathSeparator)+"..") {
+		return errUtils.Build(errUtils.ErrPathTraversal).
+			WithExplanationf("Path traversal not allowed: `%s`", renderedPath).
+			WithHint("File paths cannot escape the target directory").
+			WithHint("Check template variables for unexpected values").
+			WithContext("original_path", originalPath).
+			WithContext("rendered_path", renderedPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	// Reject unrendered template markers (indicates missing variables).
+	if strings.Contains(renderedPath, defaultLeftDelimiter) || strings.Contains(renderedPath, defaultRightDelimiter) {
+		return errUtils.Build(errUtils.ErrUnprocessedTemplate).
+			WithExplanationf("Unrendered template in file path: `%s`", renderedPath).
+			WithHint("Ensure all template variables in the path are defined").
+			WithHint("Use `--set key=value` to provide missing variables").
+			WithContext("original_path", originalPath).
+			WithContext("rendered_path", renderedPath).
+			WithExitCode(2).
+			Err()
+	}
+
+	return nil
+}
+
 // handleExistingFile handles the case where the target file already exists.
 //
 //nolint:revive // argument-limit: file handling requires all context parameters
@@ -395,6 +465,18 @@ func (p *Processor) handleExistingFile(file File, fullPath, targetPath string, f
 
 	// Handle update mode (3-way merge)
 	if update {
+		// Require git storage for meaningful 3-way merge.
+		// Without git, we would use template content as base, making merge a no-op.
+		if p.gitStorage == nil {
+			return errUtils.Build(errUtils.ErrThreeWayMerge).
+				WithExplanation("`--update` requires a git repository to compute a 3-way merge base").
+				WithHint("Run inside a git repository and/or pass `--base-ref`").
+				WithHint("Or use `--force` to overwrite the file").
+				WithContext("file_path", file.Path).
+				WithExitCode(2).
+				Err()
+		}
+
 		processedContent, err := p.ProcessTemplateWithDelimiters(file.Content, targetPath, scaffoldConfig, userValues, delimiters)
 		if err != nil {
 			return errUtils.Build(errUtils.ErrTemplateExecution).
@@ -467,7 +549,7 @@ func (p *Processor) processFileContent(file File, targetPath string, scaffoldCon
 			WithHint("Use `--set key=value` to provide missing variables").
 			WithContext("file_path", file.Path).
 			WithContext("content_preview", truncateString(content, maxValuePreviewLen)).
-			WithContext("user_values", fmt.Sprintf("%+v", userValues)).
+			WithContext("user_value_keys", fmt.Sprintf("%v", mapKeys(userValues))).
 			WithExitCode(1).
 			Err()
 	}
@@ -514,7 +596,7 @@ func (p *Processor) mergeFile(existingPath string, file File, targetPath string)
 	// Process new template content to get "theirs" version
 	newContent := file.Content
 	if file.IsTemplate {
-		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{"{{", "}}"})
+		processedContent, err := p.ProcessTemplateWithDelimiters(newContent, targetPath, nil, nil, []string{defaultLeftDelimiter, defaultRightDelimiter})
 		if err != nil {
 			return errUtils.Build(errUtils.ErrTemplateExecution).
 				WithExplanationf("Failed to process template during merge: `%s`", file.Path).
@@ -645,7 +727,7 @@ func (p *Processor) ShouldSkipFile(renderedPath string) bool {
 func (p *Processor) ContainsUnprocessedTemplates(content string) bool {
 	defer perf.Track(nil, "engine.Processor.ContainsUnprocessedTemplates")()
 
-	return strings.Contains(content, "{{") && strings.Contains(content, "}}")
+	return strings.Contains(content, defaultLeftDelimiter) && strings.Contains(content, defaultRightDelimiter)
 }
 
 // ContainsUnprocessedTemplatesWithDelimiters checks if the given content contains unprocessed template syntax with custom delimiters.
@@ -685,4 +767,14 @@ func truncateString(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen] + "..."
+}
+
+// mapKeys returns a sorted slice of keys from a map.
+// Used for error context to avoid leaking sensitive values.
+func mapKeys(m map[string]interface{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	return keys
 }
