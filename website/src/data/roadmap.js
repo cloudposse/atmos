@@ -129,7 +129,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 83,
+      progress: 80,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.' },
