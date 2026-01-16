@@ -9,6 +9,7 @@ description: Use the `atmos.yaml` to configure any custom commands you want to a
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import StepTypes from '@site/docs/workflows/_partials/_step-types.mdx'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Atmos can be easily extended to support any number of custom CLI commands. Custom commands are exposed through the `atmos` CLI when you run `atmos help`. It's a great way to centralize the way operational tools are run in order to improve DX.
@@ -822,3 +823,9 @@ The combination of `.tool-versions` for project-wide defaults and per-command `d
 
 - [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool version management
 - [Workflows](/workflows) - Workflows also support toolchain integration
+
+## Try It
+
+Explore working examples that demonstrate custom commands in action.
+
+<EmbedExample example="custom-commands" />
