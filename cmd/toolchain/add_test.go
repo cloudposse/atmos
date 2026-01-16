@@ -81,9 +81,9 @@ func TestAddCommand_MultiPackageSupport(t *testing.T) {
 	t.Run("Args validator allows multiple arguments", func(t *testing.T) {
 		// Test with various numbers of arguments.
 		testCases := []struct {
-			name     string
-			args     []string
-			wantErr  bool
+			name    string
+			args    []string
+			wantErr bool
 		}{
 			{"zero args", []string{}, true},
 			{"one arg", []string{"terraform@1.5.0"}, false},
