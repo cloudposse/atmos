@@ -316,6 +316,144 @@ func TestCheckTerraformFlags_AllEdgeCases(t *testing.T) {
 	}
 }
 
+// TestHasMultiComponentFlags tests the hasMultiComponentFlags function.
+func TestHasMultiComponentFlags(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     *schema.ConfigAndStacksInfo
+		expected bool
+	}{
+		{
+			name:     "no flags set",
+			info:     &schema.ConfigAndStacksInfo{},
+			expected: false,
+		},
+		{
+			name: "all flag set",
+			info: &schema.ConfigAndStacksInfo{
+				All: true,
+			},
+			expected: true,
+		},
+		{
+			name: "affected flag set",
+			info: &schema.ConfigAndStacksInfo{
+				Affected: true,
+			},
+			expected: true,
+		},
+		{
+			name: "query flag set",
+			info: &schema.ConfigAndStacksInfo{
+				Query: ".components.test",
+			},
+			expected: true,
+		},
+		{
+			name: "components flag set",
+			info: &schema.ConfigAndStacksInfo{
+				Components: []string{"comp1", "comp2"},
+			},
+			expected: true,
+		},
+		{
+			name: "empty components slice",
+			info: &schema.ConfigAndStacksInfo{
+				Components: []string{},
+			},
+			expected: false,
+		},
+		{
+			name: "multiple multi-component flags set",
+			info: &schema.ConfigAndStacksInfo{
+				All:   true,
+				Query: ".components.test",
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasMultiComponentFlags(tt.info)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestHandleInteractiveComponentStackSelection_SkipsPromptForMultiComponentFlags tests that
+// interactive prompting is skipped when multi-component flags are set.
+// Regression test for: https://github.com/cloudposse/atmos/issues/1945
+// Before the fix, `--all` flag was not applied to info before this check, causing
+// the prompt to appear even when `--all` was specified.
+func TestHandleInteractiveComponentStackSelection_SkipsPromptForMultiComponentFlags(t *testing.T) {
+	tests := []struct {
+		name string
+		info *schema.ConfigAndStacksInfo
+	}{
+		{
+			name: "skips prompt when --all flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				All: true,
+			},
+		},
+		{
+			name: "skips prompt when --affected flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				Affected: true,
+			},
+		},
+		{
+			name: "skips prompt when --query flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				Query: ".components.test",
+			},
+		},
+		{
+			name: "skips prompt when --components flag is set",
+			info: &schema.ConfigAndStacksInfo{
+				Components: []string{"comp1", "comp2"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "plan"}
+
+			// Capture the initial state - ComponentFromArg should remain empty
+			// because the function should skip prompting and return early.
+			initialComponent := tt.info.ComponentFromArg
+			initialStack := tt.info.Stack
+
+			err := handleInteractiveComponentStackSelection(tt.info, cmd)
+
+			// Should return nil (no error) and NOT modify the info struct.
+			assert.NoError(t, err)
+			assert.Equal(t, initialComponent, tt.info.ComponentFromArg,
+				"ComponentFromArg should not be modified when multi-component flags are set")
+			assert.Equal(t, initialStack, tt.info.Stack,
+				"Stack should not be modified when multi-component flags are set")
+		})
+	}
+}
+
+// TestHandleInteractiveComponentStackSelection_SkipsWhenBothProvided tests that
+// interactive prompting is skipped when both component and stack are already provided.
+func TestHandleInteractiveComponentStackSelection_SkipsWhenBothProvided(t *testing.T) {
+	cmd := &cobra.Command{Use: "plan"}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "my-component",
+		Stack:            "my-stack",
+	}
+
+	err := handleInteractiveComponentStackSelection(info, cmd)
+
+	assert.NoError(t, err)
+	assert.Equal(t, "my-component", info.ComponentFromArg)
+	assert.Equal(t, "my-stack", info.Stack)
+}
+
 // TestStackFlagCompletion_NoArgs tests the stackFlagCompletion function without args.
 func TestStackFlagCompletion_NoArgs(t *testing.T) {
 	t.Chdir("../../examples/demo-stacks")

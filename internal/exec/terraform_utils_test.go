@@ -238,8 +238,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.False(t, processed)
 		assert.False(t, called)
 	})
 
@@ -253,8 +254,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.False(t, processed)
 		assert.False(t, called)
 	})
 
@@ -268,8 +270,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan", Query: ".vars.tags.team == \"foo\""}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.False(t, processed)
 		assert.False(t, called)
 	})
 
@@ -286,8 +289,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.True(t, processed)
 		assert.True(t, called)
 	})
 }
