@@ -204,12 +204,24 @@ atmos terraform clean vpc --stack dev
 # Clean without confirmation prompt
 atmos terraform clean --force
 atmos terraform clean test/test-component-override-3 -s tenant1-ue2-dev
+```
+</Terminal>
 
+### Workspace Examples
+
+<Terminal>
+```shell
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr /dev/null
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr /dev/stdout
 atmos terraform workspace test/test-component-override-3 -s tenant1-ue2-dev --redirect-stderr ./errors.txt
+```
+</Terminal>
 
+### Additional Flag Examples
+
+<Terminal>
+```shell
 atmos terraform plan test/test-component -s tenant1-ue2-dev -- -refresh=false -lock=false
 
 atmos terraform plan test/test-component -s tenant1-ue2-dev --append-user-agent "Acme/1.0 (Build 1234; arm64)"
