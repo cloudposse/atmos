@@ -86,6 +86,26 @@ type UIProvider interface {
 	PrintError(err error, title, explanation string)
 }
 
+// DependencyProvider abstracts toolchain dependency resolution and installation.
+// This interface enables testing workflow execution without actual tool installation.
+type DependencyProvider interface {
+	// LoadToolVersionsDependencies loads tools from .tool-versions file.
+	// Returns an empty map if the file doesn't exist.
+	LoadToolVersionsDependencies() (map[string]string, error)
+
+	// ResolveWorkflowDependencies extracts tool dependencies from a workflow definition.
+	ResolveWorkflowDependencies(workflowDef *schema.WorkflowDefinition) (map[string]string, error)
+
+	// MergeDependencies merges two dependency maps, with overlay taking precedence.
+	MergeDependencies(base, overlay map[string]string) (map[string]string, error)
+
+	// EnsureTools ensures all required tools are installed.
+	EnsureTools(dependencies map[string]string) error
+
+	// UpdatePathForTools updates PATH to include tool binaries.
+	UpdatePathForTools(dependencies map[string]string) error
+}
+
 // ExecuteOptions contains options for workflow execution.
 type ExecuteOptions struct {
 	// DryRun if true, commands are not actually executed.

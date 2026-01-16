@@ -45,7 +45,7 @@ func runUninstallWithInstaller(_ *cobra.Command, args []string, installer *Insta
 		return err
 	}
 	if tool == "" {
-		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or alias@version", ErrInvalidToolSpec, toolSpec)
 	}
 
 	if installer == nil {
@@ -77,7 +77,7 @@ func RunUninstall(toolSpec string) error {
 		return err
 	}
 	if tool == "" {
-		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or tool@version", ErrInvalidToolSpec, toolSpec)
+		return fmt.Errorf("%w: %s. Expected format: owner/repo@version or alias@version", ErrInvalidToolSpec, toolSpec)
 	}
 
 	owner, repo := parseToolSpecLenient(installer, tool)

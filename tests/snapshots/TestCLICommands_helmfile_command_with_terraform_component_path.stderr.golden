@@ -6,4 +6,9 @@ match command
 
 ## Hints
 
+💡 Path resolves to terraform component but command expects helmfile component
+You ran: atmos helmfile <command> . The path points to: terraform component
+
+💡 Run the correct command for this component type
+
 💡 Make sure the path is within your component directories

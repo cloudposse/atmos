@@ -8,6 +8,7 @@ description: Configure vendoring behavior in atmos.yaml.
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 The `vendor` section in `atmos.yaml` configures how Atmos discovers and processes vendor manifest files for dependency management.
@@ -168,6 +169,12 @@ Atmos processes files in alphabetical order: `aws.yaml`, then `common.yaml`, the
   {type: 'link', href: '/cli/commands/vendor/usage', label: 'atmos vendor', description: 'Vendor Atmos components and stacks'},
   {type: 'link', href: '/cli/commands/vendor/pull', label: 'atmos vendor pull', description: 'Pull dependencies from vendor manifest'},
 ]} />
+
+## Try It
+
+Explore a working example that demonstrates vendor configuration.
+
+<EmbedExample example="demo-vendoring" />
 
 ## Related
 

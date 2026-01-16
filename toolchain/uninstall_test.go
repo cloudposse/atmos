@@ -298,6 +298,94 @@ func TestRunUninstall(t *testing.T) {
 	}
 }
 
+// TestRunUninstall_InvalidToolSpecFormat tests the specific error message for invalid tool spec.
+func TestRunUninstall_InvalidToolSpecFormat(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	SetAtmosConfig(&schema.AtmosConfiguration{Toolchain: schema.Toolchain{}})
+
+	tests := []struct {
+		name     string
+		toolSpec string
+		errMsg   string
+	}{
+		{
+			name:     "missing tool name before @",
+			toolSpec: "@1.0.0",
+			errMsg:   "missing tool name before @",
+		},
+		{
+			name:     "missing version after @",
+			toolSpec: "terraform@",
+			errMsg:   "missing version after @",
+		},
+		{
+			name:     "multiple @ symbols",
+			toolSpec: "tool@1.0@extra",
+			errMsg:   "multiple @",
+		},
+		{
+			name:     "empty tool argument",
+			toolSpec: "",
+			errMsg:   "empty tool argument",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := RunUninstall(tt.toolSpec)
+			// Empty toolSpec is handled differently - it triggers uninstall from tool-versions.
+			if tt.toolSpec == "" {
+				// This tests the no-args path which may succeed if no .tool-versions exists.
+				return
+			}
+			assert.Error(t, err)
+			assert.ErrorIs(t, err, ErrInvalidToolSpec)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
+// TestRunUninstallWithInstaller_InvalidToolSpecFormat tests the specific error for invalid tool spec with installer.
+func TestRunUninstallWithInstaller_InvalidToolSpecFormat(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	installer := NewInstallerWithBinDir(tempDir)
+
+	tests := []struct {
+		name     string
+		toolSpec string
+		errMsg   string
+	}{
+		{
+			name:     "missing tool name before @",
+			toolSpec: "@1.0.0",
+			errMsg:   "missing tool name before @",
+		},
+		{
+			name:     "missing version after @",
+			toolSpec: "terraform@",
+			errMsg:   "missing version after @",
+		},
+		{
+			name:     "multiple @ symbols",
+			toolSpec: "tool@1.0@extra",
+			errMsg:   "multiple @",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{}
+			err := runUninstallWithInstaller(cmd, []string{tt.toolSpec}, installer)
+			assert.Error(t, err)
+			assert.ErrorIs(t, err, ErrInvalidToolSpec)
+			assert.Contains(t, err.Error(), tt.errMsg)
+		})
+	}
+}
+
 func TestGetVersionsToUninstall(t *testing.T) {
 	tests := []struct {
 		name             string

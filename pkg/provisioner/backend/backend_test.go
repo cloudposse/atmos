@@ -24,8 +24,8 @@ func TestRegisterBackendCreate(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return nil
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+		return &ProvisionResult{}, nil
 	}
 
 	RegisterBackendCreate("s3", mockProvisioner)
@@ -46,12 +46,12 @@ func TestGetBackendCreate_MultipleTypes(t *testing.T) {
 	// Reset registry before test.
 	resetBackendRegistry()
 
-	s3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return nil
+	s3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+		return &ProvisionResult{}, nil
 	}
 
-	gcsProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return nil
+	gcsProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+		return &ProvisionResult{}, nil
 	}
 
 	RegisterBackendCreate("s3", s3Provisioner)
@@ -109,8 +109,8 @@ func TestGetBackendDelete_MultipleTypes(t *testing.T) {
 
 func TestResetRegistryForTesting(t *testing.T) {
 	// Register some functions first.
-	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return nil
+	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+		return &ProvisionResult{}, nil
 	}
 	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
 		return nil
@@ -135,8 +135,8 @@ func TestResetRegistryForTesting_ClearsAllEntries(t *testing.T) {
 	// Reset at start.
 	ResetRegistryForTesting()
 
-	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return nil
+	mockCreator := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+		return &ProvisionResult{}, nil
 	}
 	mockDeleter := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext, force bool) error {
 		return nil
@@ -180,7 +180,7 @@ func TestProvisionBackend_NoProvisioningConfiguration(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err, "Should return error when no provisioning configuration exists")
 	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
@@ -203,7 +203,7 @@ func TestProvisionBackend_NoBackendProvisioningConfiguration(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err, "Should return error when no backend provisioning configuration exists")
 	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
@@ -226,7 +226,7 @@ func TestProvisionBackend_ProvisioningDisabled(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err, "Should return error when provisioning is explicitly disabled")
 	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
@@ -247,7 +247,7 @@ func TestProvisionBackend_ProvisioningEnabledMissingField(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err, "Should return error when enabled field is missing")
 	assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
 }
@@ -266,7 +266,7 @@ func TestProvisionBackend_MissingBackendConfiguration(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBackendNotFound)
 	assert.Contains(t, err.Error(), "backend configuration not found")
@@ -289,7 +289,7 @@ func TestProvisionBackend_MissingBackendType(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrBackendTypeRequired)
 	assert.Contains(t, err.Error(), "backend_type not specified")
@@ -315,7 +315,7 @@ func TestProvisionBackend_UnsupportedBackendType(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrCreateNotImplemented)
 	assert.Contains(t, err.Error(), "unsupported")
@@ -332,11 +332,11 @@ func TestProvisionBackend_Success(t *testing.T) {
 	var capturedBackendConfig map[string]any
 	var capturedAuthContext *schema.AuthContext
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
 		provisionerCalled = true
 		capturedBackendConfig = backendConfig
 		capturedAuthContext = authContext
-		return nil
+		return &ProvisionResult{}, nil
 	}
 
 	RegisterBackendCreate("s3", mockProvisioner)
@@ -354,7 +354,7 @@ func TestProvisionBackend_Success(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.NoError(t, err)
 	assert.True(t, provisionerCalled, "Provisioner should have been called")
 	assert.NotNil(t, capturedBackendConfig)
@@ -372,9 +372,9 @@ func TestProvisionBackend_WithAuthContext(t *testing.T) {
 
 	var capturedAuthContext *schema.AuthContext
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
 		capturedAuthContext = authContext
-		return nil
+		return &ProvisionResult{}, nil
 	}
 
 	RegisterBackendCreate("s3", mockProvisioner)
@@ -399,7 +399,7 @@ func TestProvisionBackend_WithAuthContext(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, authContext)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, authContext)
 	require.NoError(t, err)
 	require.NotNil(t, capturedAuthContext)
 	require.NotNil(t, capturedAuthContext.AWS)
@@ -414,8 +414,8 @@ func TestProvisionBackend_ProvisionerFailure(t *testing.T) {
 	ctx := context.Background()
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
-		return errors.New("bucket creation failed: permission denied")
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
+		return nil, errors.New("bucket creation failed: permission denied")
 	}
 
 	RegisterBackendCreate("s3", mockProvisioner)
@@ -433,7 +433,7 @@ func TestProvisionBackend_ProvisionerFailure(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "bucket creation failed")
 	assert.Contains(t, err.Error(), "permission denied")
@@ -449,14 +449,14 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 	s3Called := false
 	gcsCalled := false
 
-	mockS3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockS3Provisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
 		s3Called = true
-		return nil
+		return &ProvisionResult{}, nil
 	}
 
-	mockGCSProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockGCSProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
 		gcsCalled = true
-		return nil
+		return &ProvisionResult{}, nil
 	}
 
 	RegisterBackendCreate("s3", mockS3Provisioner)
@@ -476,7 +476,7 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 		},
 	}
 
-	err := ProvisionBackend(ctx, atmosConfig, componentConfigS3, nil)
+	_, err := ProvisionBackend(ctx, atmosConfig, componentConfigS3, nil)
 	require.NoError(t, err)
 	assert.True(t, s3Called, "S3 provisioner should have been called")
 	assert.False(t, gcsCalled, "GCS provisioner should not have been called")
@@ -499,7 +499,7 @@ func TestProvisionBackend_MultipleBackendTypes(t *testing.T) {
 		},
 	}
 
-	err = ProvisionBackend(ctx, atmosConfig, componentConfigGCS, nil)
+	_, err = ProvisionBackend(ctx, atmosConfig, componentConfigGCS, nil)
 	require.NoError(t, err)
 	assert.False(t, s3Called, "S3 provisioner should not have been called")
 	assert.True(t, gcsCalled, "GCS provisioner should have been called")
@@ -515,11 +515,11 @@ func TestConcurrentBackendProvisioning(t *testing.T) {
 	var callCount int
 	var mu sync.Mutex
 
-	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+	mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
 		mu.Lock()
 		callCount++
 		mu.Unlock()
-		return nil
+		return &ProvisionResult{}, nil
 	}
 
 	RegisterBackendCreate("s3", mockProvisioner)
@@ -550,7 +550,7 @@ func TestConcurrentBackendProvisioning(t *testing.T) {
 				"backend":      baseComponentConfig["backend"],
 				"provision":    baseComponentConfig["provision"],
 			}
-			err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+			_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 			assert.NoError(t, err)
 		}()
 	}
@@ -603,9 +603,9 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 			resetBackendRegistry()
 
 			provisionerCalled := false
-			mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) error {
+			mockProvisioner := func(ctx context.Context, atmosConfig *schema.AtmosConfiguration, backendConfig map[string]any, authContext *schema.AuthContext) (*ProvisionResult, error) {
 				provisionerCalled = true
-				return nil
+				return &ProvisionResult{}, nil
 			}
 
 			RegisterBackendCreate("s3", mockProvisioner)
@@ -623,7 +623,7 @@ func TestProvisionBackend_EnabledWrongType(t *testing.T) {
 				},
 			}
 
-			err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
+			_, err := ProvisionBackend(ctx, atmosConfig, componentConfig, nil)
 			if tt.shouldError {
 				require.Error(t, err)
 				assert.ErrorIs(t, err, errUtils.ErrProvisioningNotConfigured)
