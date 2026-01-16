@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
@@ -86,9 +87,11 @@ func (d *DefaultToolResolver) Resolve(toolName string) (string, string, error) {
 		return owner, repo, nil
 	}
 	return "", "", errUtils.Build(errUtils.ErrToolNotInRegistry).
-		WithExplanationf("Tool `%s` not found in Aqua registry", toolName).
-		WithHint("Use full format: `owner/repo` (e.g., `hashicorp/terraform`)").
-		WithHint("Run `atmos toolchain registry search` to browse available tools").
+		WithExplanationf("Tool '%s' not found in Aqua registry", toolName).
+		WithHintf("Add an alias in atmos.yaml:\n```yaml\ntoolchain:\n  aliases:\n    %s: owner/repo\n```", toolName).
+		WithHint("Or use full format: owner/repo (e.g., hashicorp/terraform)").
+		WithHint("Run 'atmos toolchain registry search' to browse available tools").
+		WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
 		WithContext("tool", toolName).
 		WithExitCode(2).
 		Err()
@@ -138,6 +141,21 @@ func WithResolver(resolver ToolResolver) Option {
 
 	return func(i *Installer) {
 		i.resolver = resolver
+	}
+}
+
+// WithAtmosConfig sets the AtmosConfig on the default resolver for alias resolution.
+// This must be called after the installer is created to update the default resolver.
+func WithAtmosConfig(config *schema.AtmosConfiguration) Option {
+	defer perf.Track(nil, "installer.WithAtmosConfig")()
+
+	return func(i *Installer) {
+		// If using the default resolver, update its AtmosConfig.
+		if resolver, ok := i.resolver.(*DefaultToolResolver); ok {
+			resolver.AtmosConfig = config
+		} else {
+			log.Debug("WithAtmosConfig skipped: resolver is not DefaultToolResolver")
+		}
 	}
 }
 
@@ -232,6 +250,9 @@ func (i *Installer) Install(owner, repo, version string) (string, error) {
 
 // Helper to handle the rest of the install logic.
 func (i *Installer) installFromTool(tool *registry.Tool, version string) (string, error) {
+	// Set version on tool so extraction functions can use it for template expansion.
+	tool.Version = version
+
 	// Apply platform-specific overrides before building the asset URL.
 	ApplyPlatformOverrides(tool)
 
@@ -423,14 +444,8 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 		return "", fmt.Errorf("%w: failed to create version directory: %w", ErrFileOperation, err)
 	}
 
-	// Determine the binary name
-	binaryName := tool.BinaryName
-	if binaryName == "" {
-		binaryName = tool.Name
-	}
-	if binaryName == "" {
-		binaryName = tool.RepoName
-	}
+	// Determine the binary name using shared resolution logic.
+	binaryName := resolveBinaryName(tool)
 
 	binaryPath := filepath.Join(versionDir, binaryName)
 
@@ -474,7 +489,16 @@ func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) strin
 			}
 			entryPath := filepath.Join(versionDir, entry.Name())
 			info, err := os.Stat(entryPath)
-			if err == nil && info.Mode()&executablePermissionMask != 0 {
+			if err != nil {
+				continue
+			}
+			// On Unix, check executable permission bits.
+			// On Windows, check for .exe extension (permission bits don't apply).
+			isExec := info.Mode()&executablePermissionMask != 0
+			if runtime.GOOS == "windows" {
+				isExec = strings.HasSuffix(strings.ToLower(entry.Name()), ".exe")
+			}
+			if isExec {
 				// Found an executable.
 				return entryPath
 			}

@@ -36,7 +36,7 @@ func TestEmitPath(t *testing.T) {
 
 	// Test that runInstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided
-	err = RunInstall("", false, false)
+	err = RunInstall("", false, false, true, false)
 	assert.NoError(t, err)
 
 	// Test basic functionality with export flag

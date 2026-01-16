@@ -75,20 +75,25 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 }
 
 // buildTemplateData creates template data for asset URL building.
+// Following Aqua behavior: version_prefix defaults to empty, not "v".
+// Templates use {{trimV .Version}} or {{.SemVer}} when they need the version without prefix.
 func buildTemplateData(tool *registry.Tool, version string) *assetTemplateData {
 	defer perf.Track(nil, "buildTemplateData")()
 
+	// Use version_prefix only if explicitly set in registry definition.
+	// This matches Aqua's behavior where version_prefix defaults to empty.
 	prefix := tool.VersionPrefix
-	if prefix == "" {
-		prefix = VersionPrefix
-	}
 
 	releaseVersion := version
-	if !strings.HasPrefix(releaseVersion, prefix) {
+	if prefix != "" && !strings.HasPrefix(releaseVersion, prefix) {
 		releaseVersion = prefix + releaseVersion
 	}
 
-	semVer := strings.TrimPrefix(releaseVersion, prefix)
+	// SemVer is the version without any prefix.
+	semVer := version
+	if prefix != "" {
+		semVer = strings.TrimPrefix(releaseVersion, prefix)
+	}
 
 	// Get OS and Arch, applying any replacements from the tool config.
 	osVal := runtime.GOOS
