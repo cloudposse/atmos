@@ -515,7 +515,7 @@ func writeLabeledBlocks(body *hclwrite.Body, blockType string, content map[strin
 		firstValue := content[firstLabel]
 		firstMap, ok := firstValue.(map[string]any)
 		if !ok {
-			return fmt.Errorf("labeled block %s %q expects a map, got %T", blockType, firstLabel, firstValue) //nolint:err113
+			return fmt.Errorf("%w: labeled block %s %q expects a map, got %T", errUtils.ErrInvalidConfig, blockType, firstLabel, firstValue)
 		}
 
 		switch labelCount {
@@ -532,7 +532,7 @@ func writeLabeledBlocks(body *hclwrite.Body, blockType string, content map[strin
 				secondValue := firstMap[secondLabel]
 				secondMap, ok := secondValue.(map[string]any)
 				if !ok {
-					return fmt.Errorf("labeled block %s %q %q expects a map, got %T", blockType, firstLabel, secondLabel, secondValue) //nolint:err113
+					return fmt.Errorf("%w: labeled block %s %q %q expects a map, got %T", errUtils.ErrInvalidConfig, blockType, firstLabel, secondLabel, secondValue)
 				}
 				block := body.AppendNewBlock(blockType, []string{firstLabel, secondLabel})
 				if err := writeBlockBody(block.Body(), secondMap); err != nil {

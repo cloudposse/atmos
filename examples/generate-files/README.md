@@ -136,7 +136,7 @@ version  = "1.0.0-dev"
 
 ## Project Structure
 
-```
+```text
 generate-files/
 ├── atmos.yaml                    # Atmos configuration (auto_generate_files: true)
 ├── components/                   # Generated (gitignored)

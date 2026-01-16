@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -61,7 +62,7 @@ func HandlePromptError(err error, name string) error {
 // ComponentsArgCompletion provides shell completion for component positional arguments.
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
-		output, err := listTerraformComponents()
+		output, err := listTerraformComponents(cmd)
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -76,7 +77,7 @@ func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete strin
 func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
-		output, err := listStacksForComponent(args[0])
+		output, err := listStacksForComponent(cmd, args[0])
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -84,16 +85,30 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 	}
 
 	// Otherwise, list all stacks.
-	output, err := listAllStacks()
+	output, err := listAllStacks(cmd)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
 }
 
+// buildConfigAndStacksInfo creates a ConfigAndStacksInfo from command's global flags.
+// This ensures list functions honor --base-path, --config, --config-path, and --profile.
+func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+}
+
 // listTerraformComponents lists all terraform components.
-func listTerraformComponents() ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+// Accepts cmd to honor config-selection flags (--base-path, --config, --config-path, --profile).
+func listTerraformComponents(cmd *cobra.Command) ([]string, error) {
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
@@ -127,8 +142,9 @@ func listTerraformComponents() ([]string, error) {
 }
 
 // listStacksForComponent returns stacks that contain the specified component.
-func listStacksForComponent(component string) ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+// Accepts cmd to honor config-selection flags (--base-path, --config, --config-path, --profile).
+func listStacksForComponent(cmd *cobra.Command, component string) ([]string, error) {
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
@@ -169,8 +185,9 @@ func stackContainsComponent(stackData any, component string) bool {
 }
 
 // listAllStacks returns all stacks.
-func listAllStacks() ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+// Accepts cmd to honor config-selection flags (--base-path, --config, --config-path, --profile).
+func listAllStacks(cmd *cobra.Command) ([]string, error) {
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
 	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err

@@ -4,6 +4,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -89,21 +90,22 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
-	// Auto-generate files BEFORE path validation when:
-	// 1. auto_generate_files is enabled
-	// 2. Component has a generate section
+	// Auto-generate files BEFORE path validation when the following conditions hold.
+	// 1. auto_generate_files is enabled.
+	// 2. Component has a generate section.
+	// 3. Not in dry-run mode (to avoid filesystem modifications).
 	// This allows generating entire components from stack configuration.
-	if atmosConfig.Components.Helmfile.AutoGenerateFiles { //nolint:nestif
+	if atmosConfig.Components.Helmfile.AutoGenerateFiles && !info.DryRun { //nolint:nestif
 		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
 		if generateSection != nil {
 			// Ensure component directory exists for file generation.
 			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
-				return fmt.Errorf("failed to create component directory for auto-generation: %w", mkdirErr)
+				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
 			}
 
 			// Generate files before path validation.
 			if genErr := generateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
-				return fmt.Errorf("failed to auto-generate files: %w", genErr)
+				return errors.Join(errUtils.ErrFileOperation, genErr)
 			}
 		}
 	}
