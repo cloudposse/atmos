@@ -126,8 +126,8 @@ func TestProcessTemplateWithRichConfig(t *testing.T) {
 		},
 		{
 			name:     "default function",
-			template: `Name: {{default .Config.name "default-name"}}, Missing: {{default .Config.missing "fallback"}}`,
-			expected: `Name: default-name, Missing: fallback`,
+			template: `Name: {{default "default-name" .Config.name}}, Missing: {{default "fallback" .Config.missing}}`,
+			expected: `Name: test-project, Missing: fallback`,
 		},
 		{
 			name:     "mixed variables",

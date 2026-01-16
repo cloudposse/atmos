@@ -38,7 +38,8 @@ type TemplateLoader interface {
 	LoadTemplates() (map[string]templates.Configuration, error)
 
 	// MergeConfiguredTemplates merges templates from atmos.yaml into the configs map.
-	MergeConfiguredTemplates(configs map[string]templates.Configuration) error
+	// It also updates the origins map to track which templates came from atmos.yaml.
+	MergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string) error
 }
 
 // TemplateExecutor defines the interface for executing template generation.

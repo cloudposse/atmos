@@ -52,10 +52,11 @@ If no target directory is specified, you will be prompted for one.`,
 		setFlags, _ := cmd.Flags().GetStringSlice("set")
 		templateValues := make(map[string]interface{})
 		for _, flag := range setFlags {
-			key, value := parseSetFlag(flag)
-			if key != "" {
-				templateValues[key] = value
+			key, value, err := parseSetFlag(flag)
+			if err != nil {
+				return fmt.Errorf("%w: invalid --set value %q: %w", errUtils.ErrInitialization, flag, err)
 			}
+			templateValues[key] = value
 		}
 
 		return executeInit(
@@ -120,13 +121,19 @@ func (i *InitCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
+// IsExperimental returns whether this command is experimental.
+func (i *InitCommandProvider) IsExperimental() bool {
+	return false
+}
+
 // parseSetFlag parses a --set flag in the format key=value.
-func parseSetFlag(flag string) (string, string) {
+// Returns an error if the flag is malformed (missing = or empty key).
+func parseSetFlag(flag string) (string, string, error) {
 	parts := strings.SplitN(flag, "=", 2)
-	if len(parts) != 2 {
-		return "", ""
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" {
+		return "", "", fmt.Errorf("expected key=value format")
 	}
-	return parts[0], parts[1]
+	return strings.TrimSpace(parts[0]), strings.TrimSpace(parts[1]), nil
 }
 
 // executeInit initializes a new Atmos project from a template.
@@ -152,7 +159,7 @@ func executeInit(
 	// Create I/O context for this command
 	ioCtx, err := iolib.NewContext()
 	if err != nil {
-		return fmt.Errorf("failed to create I/O context: %w", err)
+		return fmt.Errorf("%w: failed to create I/O context: %w", errUtils.ErrInitialization, err)
 	}
 
 	// Create terminal writer for I/O

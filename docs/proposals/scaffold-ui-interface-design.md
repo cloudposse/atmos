@@ -10,65 +10,65 @@ The `ScaffoldUI` interface abstracts all UI operations for the scaffold command,
 package scaffold
 
 import (
-	"io"
+    "io"
 
-	"github.com/cloudposse/atmos/pkg/generator/templates"
+    "github.com/cloudposse/atmos/pkg/generator/templates"
 )
 
 // ScaffoldUI defines all UI operations needed by the scaffold command.
 // This interface allows us to inject mock implementations for testing.
 type ScaffoldUI interface {
-	// Basic Output Methods
-	Info(message string) error
-	Success(message string) error
-	Error(message string) error
-	Warning(message string) error
-	Write(message string) error
-	Writef(format string, args ...interface{}) error
-	Writeln(message string) error
+    // Basic Output Methods
+    Info(message string) error
+    Success(message string) error
+    Error(message string) error
+    Warning(message string) error
+    Write(message string) error
+    Writef(format string, args ...interface{}) error
+    Writeln(message string) error
 
-	// Interactive Prompts
-	PromptForTemplate(configs map[string]templates.Configuration) (templates.Configuration, error)
-	PromptForTargetDirectory(defaultDir string) (string, error)
-	PromptForValue(prompt PromptConfig, defaultValue interface{}) (interface{}, error)
+    // Interactive Prompts
+    PromptForTemplate(configs map[string]templates.Configuration) (templates.Configuration, error)
+    PromptForTargetDirectory(defaultDir string) (string, error)
+    PromptForValue(prompt PromptConfig, defaultValue interface{}) (interface{}, error)
 
-	// Complex Rendering
-	RenderTemplateList(configs map[string]templates.Configuration) error
-	RenderDryRunPreview(config *templates.Configuration, targetDir string, files []DryRunFile) error
-	RenderValidationResults(results []ValidationResult) error
-	RenderValidationSummary(validCount, errorCount int) error
+    // Complex Rendering
+    RenderTemplateList(configs map[string]templates.Configuration) error
+    RenderDryRunPreview(config *templates.Configuration, targetDir string, files []DryRunFile) error
+    RenderValidationResults(results []ValidationResult) error
+    RenderValidationSummary(validCount, errorCount int) error
 
-	// File Operations Feedback
-	PrintFilePath(targetDir, renderedPath string) error
-	PrintFileStatus(path string, status FileStatus) error
+    // File Operations Feedback
+    PrintFilePath(targetDir, renderedPath string) error
+    PrintFileStatus(path string, status FileStatus) error
 }
 
 // DryRunFile represents a file that would be generated.
 type DryRunFile struct {
-	Path        string
-	Content     string
-	IsTemplate  bool
-	Exists      bool
-	WouldCreate bool
-	WouldUpdate bool
+    Path        string
+    Content     string
+    IsTemplate  bool
+    Exists      bool
+    WouldCreate bool
+    WouldUpdate bool
 }
 
 // FileStatus represents the status of a file operation.
 type FileStatus int
 
 const (
-	FileStatusCreated FileStatus = iota
-	FileStatusUpdated
-	FileStatusSkipped
-	FileStatusConflict
+    FileStatusCreated FileStatus = iota
+    FileStatusUpdated
+    FileStatusSkipped
+    FileStatusConflict
 )
 
 // ValidationResult represents the result of validating a scaffold file.
 type ValidationResult struct {
-	Path    string
-	Valid   bool
-	Errors  []string
-	Message string
+    Path    string
+    Valid   bool
+    Errors  []string
+    Message string
 }
 ```
 

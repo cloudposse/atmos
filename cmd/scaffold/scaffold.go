@@ -142,7 +142,7 @@ If no target directory is specified, you will be prompted for one.`,
 			rawSetFlags, _ := cmd.Flags().GetStringSlice("set")
 			for _, entry := range rawSetFlags {
 				if err := validateSetFlag(entry); err != nil {
-					log.Warn(err.Error())
+					return err
 				}
 			}
 		}
@@ -248,6 +248,11 @@ func (s *ScaffoldCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
+// IsExperimental returns whether this command is experimental.
+func (s *ScaffoldCommandProvider) IsExperimental() bool {
+	return false
+}
+
 // GetFlagsBuilder returns nil since the parent scaffold command has no flags.
 // Flags (--force, --dry-run, --set) belong to the generate subcommand.
 func (s *ScaffoldCommandProvider) GetFlagsBuilder() flags.Builder {
@@ -281,7 +286,7 @@ func executeScaffoldGenerate(
 	}
 
 	// Load all available templates
-	configs, scaffoldUI, err := loadScaffoldTemplates()
+	configs, _, scaffoldUI, err := loadScaffoldTemplates()
 	if err != nil {
 		return err
 	}
@@ -331,11 +336,12 @@ func resolveTargetDirectory(targetDir string) (string, error) {
 }
 
 // loadScaffoldTemplates loads all available scaffold templates from embedded and atmos.yaml.
-func loadScaffoldTemplates() (map[string]templates.Configuration, *generatorUI.InitUI, error) {
+// Returns configs, origins (map[name]source where source is "embedded" or "atmos.yaml"), UI, and error.
+func loadScaffoldTemplates() (map[string]templates.Configuration, map[string]string, *generatorUI.InitUI, error) {
 	// Create generator context
 	genCtx, err := setup.NewGeneratorContext()
 	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrCreateGeneratorContext).
+		return nil, nil, nil, errUtils.Build(errUtils.ErrCreateGeneratorContext).
 			WithExplanation("Failed to initialize generator context").
 			WithHint("Check terminal capabilities and I/O permissions").
 			WithHint("Try running with `ATMOS_LOGS_LEVEL=Debug` for more details").
@@ -346,7 +352,7 @@ func loadScaffoldTemplates() (map[string]templates.Configuration, *generatorUI.I
 	// Load embedded templates
 	configs, err := templates.GetAvailableConfigurations()
 	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
+		return nil, nil, nil, errUtils.Build(errUtils.ErrLoadScaffoldTemplates).
 			WithExplanation("Failed to load available scaffold templates").
 			WithHint("Run `atmos scaffold list` to see available templates").
 			WithHint("Check that embedded templates are included in the binary").
@@ -355,16 +361,23 @@ func loadScaffoldTemplates() (map[string]templates.Configuration, *generatorUI.I
 			Err()
 	}
 
-	// Merge with configured templates from atmos.yaml
-	if err := mergeConfiguredTemplates(configs); err != nil {
-		return nil, nil, err
+	// Track origins - embedded templates first
+	origins := make(map[string]string)
+	for name := range configs {
+		origins[name] = "embedded"
 	}
 
-	return configs, genCtx.UI, nil
+	// Merge with configured templates from atmos.yaml
+	if err := mergeConfiguredTemplates(configs, origins); err != nil {
+		return nil, nil, nil, err
+	}
+
+	return configs, origins, genCtx.UI, nil
 }
 
 // mergeConfiguredTemplates merges scaffold templates from atmos.yaml into the configs map.
-func mergeConfiguredTemplates(configs map[string]templates.Configuration) error {
+// It also updates the origins map to track which templates came from atmos.yaml.
+func mergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string) error {
 	scaffoldSection, err := config.ReadAtmosScaffoldSection(".")
 	if err != nil {
 		return errUtils.Build(errUtils.ErrReadScaffoldConfig).
@@ -402,6 +415,8 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration) error 
 		}
 		// Configured templates override embedded templates
 		configs[templateName] = cfg
+		// Track origin as atmos.yaml (overriding any embedded origin)
+		origins[templateName] = "atmos.yaml"
 	}
 
 	return nil
@@ -641,7 +656,7 @@ func executeTemplateWithoutTargetDir(
 // This logic was moved from internal/exec/scaffold.go to keep command logic in cmd/.
 func executeScaffoldList(_ *cobra.Command) error {
 	// Load all available templates (embedded + atmos.yaml).
-	configs, scaffoldUI, err := loadScaffoldTemplates()
+	configs, origins, scaffoldUI, err := loadScaffoldTemplates()
 	if err != nil {
 		return err
 	}
@@ -661,9 +676,10 @@ func executeScaffoldList(_ *cobra.Command) error {
 	header := []string{"Template", "Description", "Source"}
 	var rows [][]string
 	for name, cfg := range configs {
-		source := "embedded"
-		if cfg.TargetDir != "" {
-			source = "atmos.yaml"
+		// Use tracked origin instead of inferring from TargetDir
+		source := origins[name]
+		if source == "" {
+			source = "embedded" // Fallback for safety
 		}
 		description := cfg.Description
 		if description == "" {

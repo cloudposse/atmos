@@ -18,6 +18,7 @@ func (l *ProductionTemplateLoader) LoadTemplates() (map[string]templates.Configu
 }
 
 // MergeConfiguredTemplates merges templates from atmos.yaml into the configs map.
-func (l *ProductionTemplateLoader) MergeConfiguredTemplates(configs map[string]templates.Configuration) error {
-	return mergeConfiguredTemplates(configs)
+// It also updates the origins map to track which templates came from atmos.yaml.
+func (l *ProductionTemplateLoader) MergeConfiguredTemplates(configs map[string]templates.Configuration, origins map[string]string) error {
+	return mergeConfiguredTemplates(configs, origins)
 }

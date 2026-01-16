@@ -848,9 +848,12 @@ func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
 	configs := map[string]templates.Configuration{
 		"existing": {Name: "existing", Description: "Existing template"},
 	}
+	origins := map[string]string{
+		"existing": "embedded",
+	}
 
 	// This should not error, just skip silently
-	err := mergeConfiguredTemplates(configs)
+	err := mergeConfiguredTemplates(configs, origins)
 	assert.NoError(t, err)
 	assert.Len(t, configs, 1) // Original template still there
 }
@@ -858,10 +861,11 @@ func TestMergeConfiguredTemplates_NoTemplatesKey(t *testing.T) {
 func TestMergeConfiguredTemplates_InvalidTemplatesFormat(t *testing.T) {
 	// Test when templates is not a map
 	configs := map[string]templates.Configuration{}
+	origins := map[string]string{}
 
 	// This test would require mocking config.ReadAtmosScaffoldSection
 	// For now, we just verify the function exists and handles errors
-	err := mergeConfiguredTemplates(configs)
+	err := mergeConfiguredTemplates(configs, origins)
 	// May error from ReadAtmosScaffoldSection when atmos.yaml doesn't exist
 	// or succeed if there's a valid atmos.yaml but no templates section
 	_ = err
@@ -1101,7 +1105,11 @@ func TestMergeConfiguredTemplates_AllBranches(t *testing.T) {
 			}
 
 			configs := tt.initialConfig
-			err := mergeConfiguredTemplates(configs)
+			origins := make(map[string]string)
+			for name := range configs {
+				origins[name] = "embedded"
+			}
+			err := mergeConfiguredTemplates(configs, origins)
 
 			// May error or succeed depending on atmos.yaml existence
 			// We're just exercising the code path
@@ -1134,11 +1142,17 @@ func TestResolveTargetDirectory_ErrorPath(t *testing.T) {
 
 func TestLoadScaffoldTemplates_Coverage(t *testing.T) {
 	// Test the function executes without errors
-	configs, ui, err := loadScaffoldTemplates()
+	configs, origins, ui, err := loadScaffoldTemplates()
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
+	assert.NotNil(t, origins)
 	assert.NotNil(t, ui)
 
 	// Verify some expected templates exist
 	assert.NotEmpty(t, configs, "Should have at least some embedded templates")
+
+	// Verify origins are tracked for all configs
+	for name := range configs {
+		assert.Contains(t, origins, name, "Origin should be tracked for template %s", name)
+	}
 }

@@ -561,9 +561,9 @@ git config merge.conflictStyle diff3
 | **nasdf/diff3** | 23 | 1 | 2024-02-04 (9 months) | MIT | ✅ Recent | ⭐ **ALTERNATIVE** |
 | **charlesvdv/go-three-way-merge** | 3 | 1 | 2018-05-23 (6+ years) | MIT | ❌ Abandoned | ❌ Avoid |
 
-### Option 1: epiclabs-io/diff3 (PRIMARY RECOMMENDATION)
+### Option 1: nasdf/diff3 (PRIMARY RECOMMENDATION)
 
-**Repository**: https://github.com/epiclabs-io/diff3
+**Repository**: https://github.com/nasdf/diff3
 **Language**: Pure Go (no CGO)
 **License**: MIT
 **Stars**: 15 | **Contributors**: 3

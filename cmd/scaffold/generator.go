@@ -58,8 +58,12 @@ func (g *ScaffoldGenerator) Generate(opts GenerateOptions) error {
 			Err()
 	}
 
-	// Merge with configured templates.
-	if err := g.templateLoader.MergeConfiguredTemplates(configs); err != nil {
+	// Merge with configured templates (origins tracked but not used here).
+	origins := make(map[string]string)
+	for name := range configs {
+		origins[name] = "embedded"
+	}
+	if err := g.templateLoader.MergeConfiguredTemplates(configs, origins); err != nil {
 		return err
 	}
 
@@ -88,8 +92,12 @@ func (g *ScaffoldGenerator) ListTemplates() error {
 			Err()
 	}
 
-	// Merge with configured templates.
-	if err := g.templateLoader.MergeConfiguredTemplates(configs); err != nil {
+	// Merge with configured templates (origins tracked but not used in list view yet).
+	origins := make(map[string]string)
+	for name := range configs {
+		origins[name] = "embedded"
+	}
+	if err := g.templateLoader.MergeConfiguredTemplates(configs, origins); err != nil {
 		return err
 	}
 

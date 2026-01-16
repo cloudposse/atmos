@@ -506,38 +506,62 @@ func TestParseSetFlag(t *testing.T) {
 		input     string
 		expectKey string
 		expectVal string
+		expectErr bool
 	}{
 		{
 			name:      "valid key=value",
 			input:     "key=value",
 			expectKey: "key",
 			expectVal: "value",
+			expectErr: false,
 		},
 		{
 			name:      "value with equals sign",
 			input:     "key=value=with=equals",
 			expectKey: "key",
 			expectVal: "value=with=equals",
+			expectErr: false,
+		},
+		{
+			name:      "key with spaces trimmed",
+			input:     "  key  =  value  ",
+			expectKey: "key",
+			expectVal: "value",
+			expectErr: false,
 		},
 		{
 			name:      "invalid - no equals sign",
 			input:     "keyvalue",
 			expectKey: "",
 			expectVal: "",
+			expectErr: true,
 		},
 		{
-			name:      "empty string",
+			name:      "invalid - empty string",
 			input:     "",
 			expectKey: "",
 			expectVal: "",
+			expectErr: true,
+		},
+		{
+			name:      "invalid - empty key",
+			input:     "=value",
+			expectKey: "",
+			expectVal: "",
+			expectErr: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			key, val := parseSetFlag(tt.input)
-			assert.Equal(t, tt.expectKey, key)
-			assert.Equal(t, tt.expectVal, val)
+			key, val, err := parseSetFlag(tt.input)
+			if tt.expectErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectKey, key)
+				assert.Equal(t, tt.expectVal, val)
+			}
 		})
 	}
 }

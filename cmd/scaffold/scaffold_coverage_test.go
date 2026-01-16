@@ -219,9 +219,10 @@ func TestResolveTargetDirectory(t *testing.T) {
 
 // TestLoadScaffoldTemplates tests loading scaffold templates.
 func TestLoadScaffoldTemplates(t *testing.T) {
-	configs, ui, err := loadScaffoldTemplates()
+	configs, origins, ui, err := loadScaffoldTemplates()
 	require.NoError(t, err)
 	assert.NotNil(t, configs)
+	assert.NotNil(t, origins)
 	assert.NotNil(t, ui)
 	assert.NotEmpty(t, configs)
 }

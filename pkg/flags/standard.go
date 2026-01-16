@@ -319,10 +319,16 @@ func (p *StandardFlagParser) registerStringMapFlag(flagSet *pflag.FlagSet, f *St
 
 	// Convert default map to []string for Cobra registration.
 	// This allows Cobra to handle the flag as a repeated string slice.
+	// Keys are sorted to ensure deterministic output for help and tests.
 	var defaultSlice []string
 	if f.Default != nil {
-		for k, v := range f.Default {
-			defaultSlice = append(defaultSlice, k+"="+v)
+		keys := make([]string, 0, len(f.Default))
+		for k := range f.Default {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			defaultSlice = append(defaultSlice, k+"="+f.Default[k])
 		}
 	}
 

@@ -2,7 +2,6 @@ package merge
 
 import (
 	"bytes"
-	"fmt"
 	"strings"
 
 	"github.com/epiclabs-io/diff3"
@@ -53,14 +52,20 @@ func (m *TextMerger) Merge(base, ours, theirs string) (*MergeResult, error) {
 		"Theirs",
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to perform diff3 merge: %w", err)
+		return nil, errUtils.Build(errUtils.ErrThreeWayMerge).
+			WithCause(err).
+			WithExplanation("Failed to perform diff3 merge").
+			Err()
 	}
 
 	// Read the merged content from the Result reader
 	var buf bytes.Buffer
 	_, err = buf.ReadFrom(mergeResult.Result)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read merge result: %w", err)
+		return nil, errUtils.Build(errUtils.ErrReadFile).
+			WithCause(err).
+			WithExplanation("Failed to read merge result").
+			Err()
 	}
 
 	mergedContent := buf.String()
