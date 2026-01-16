@@ -339,7 +339,7 @@ func (p *servicePrincipalProvider) Environment() (map[string]string, error) {
 }
 
 // PrepareEnvironment prepares environment variables for external processes (Terraform, etc.).
-// For service principal providers, we set ARM_USE_CLI=true to use the Azure CLI credentials.
+// For service principal providers, we use client credentials auth (not CLI mode).
 func (p *servicePrincipalProvider) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "azure.servicePrincipalProvider.PrepareEnvironment")()
 
@@ -351,10 +351,13 @@ func (p *servicePrincipalProvider) PrepareEnvironment(ctx context.Context, envir
 		Location:       p.location,
 	})
 
-	// Set ARM_USE_CLI=true to use credentials cached by Azure CLI.
-	result["ARM_USE_CLI"] = "true"
+	// Explicitly disable CLI auth mode for service principal authentication.
+	// ARM_USE_CLI=true only works for user accounts, not service principals.
+	// The azurerm/azapi providers will use the ARM_CLIENT_ID/ARM_CLIENT_SECRET
+	// credentials we set below for service principal auth.
+	result["ARM_USE_CLI"] = "false"
 
-	// Also set client credentials for Terraform providers that support it directly.
+	// Set client credentials for Terraform providers (azurerm, azapi).
 	if p.clientID != "" {
 		result["ARM_CLIENT_ID"] = p.clientID
 	}
@@ -363,7 +366,7 @@ func (p *servicePrincipalProvider) PrepareEnvironment(ctx context.Context, envir
 	}
 
 	log.Debug("Azure service principal environment prepared",
-		"ARM_USE_CLI", "true",
+		"ARM_USE_CLI", "false",
 		"ARM_CLIENT_ID", p.clientID,
 		"subscription", p.subscriptionID,
 		"tenant", p.tenantID,

@@ -267,7 +267,7 @@ func TestServicePrincipalProvider_PrepareEnvironment(t *testing.T) {
 
 	// Check key environment variables are set.
 	assert.Equal(t, "/home/user", result["HOME"])
-	assert.Equal(t, "true", result["ARM_USE_CLI"])
+	assert.Equal(t, "false", result["ARM_USE_CLI"])
 	assert.Equal(t, "client-456", result["ARM_CLIENT_ID"])
 	assert.Equal(t, "secret-789", result["ARM_CLIENT_SECRET"])
 	assert.Equal(t, "sub-789", result["ARM_SUBSCRIPTION_ID"])
