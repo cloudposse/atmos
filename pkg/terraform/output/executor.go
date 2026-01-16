@@ -182,6 +182,7 @@ func (e *Executor) GetAllOutputs(
 	component string,
 	stack string,
 	skipInit bool,
+	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
 
@@ -199,7 +200,7 @@ func (e *Executor) GetAllOutputs(
 
 	// Use quiet mode to suppress terraform init/workspace output.
 	opts := &OutputOptions{QuietMode: true}
-	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts)
+	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
 		return nil, err
@@ -318,6 +319,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	component, stack, stackSlug string,
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
+	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.fetchAndCacheOutputs")()
 
@@ -326,6 +328,7 @@ func (e *Executor) fetchAndCacheOutputs(
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
+		AuthManager:          authManager,
 	})
 	if err != nil {
 		return nil, wrapDescribeError(component, stack, err)

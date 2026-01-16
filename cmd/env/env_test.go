@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/data"
+	envfmt "github.com/cloudposse/atmos/pkg/env"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -66,7 +67,9 @@ func TestFormatBash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatBash(tt.envVars)
+			dataMap := convertToAnyMap(tt.envVars)
+			result, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -101,7 +104,9 @@ func TestFormatDotenv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatDotenv(tt.envVars)
+			dataMap := convertToAnyMap(tt.envVars)
+			result, err := envfmt.FormatData(dataMap, envfmt.FormatDotenv)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -151,7 +156,9 @@ func TestFormatGitHub(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := formatGitHub(tt.envVars)
+			dataMap := convertToAnyMap(tt.envVars)
+			result, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
+			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -162,8 +169,11 @@ func TestWriteEnvToFile(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "test.env")
 
-		envVars := map[string]string{"FOO": "bar"}
-		err := writeEnvToFile(envVars, filePath, formatBash)
+		dataMap := convertToAnyMap(map[string]string{"FOO": "bar"})
+		formatted, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
+		require.NoError(t, err)
+
+		err = envfmt.WriteToFile(filePath, formatted)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filePath)
@@ -180,8 +190,11 @@ func TestWriteEnvToFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// Append env vars.
-		envVars := map[string]string{"FOO": "bar"}
-		err = writeEnvToFile(envVars, filePath, formatBash)
+		dataMap := convertToAnyMap(map[string]string{"FOO": "bar"})
+		formatted, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
+		require.NoError(t, err)
+
+		err = envfmt.WriteToFile(filePath, formatted)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filePath)
@@ -193,52 +206,20 @@ func TestWriteEnvToFile(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "github_env")
 
-		envVars := map[string]string{
+		dataMap := convertToAnyMap(map[string]string{
 			"GITHUB_TOKEN": "ghp_xxxx",
 			"AWS_REGION":   "us-east-1",
-		}
-		err := writeEnvToFile(envVars, filePath, formatGitHub)
+		})
+		formatted, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
+		require.NoError(t, err)
+
+		err = envfmt.WriteToFile(filePath, formatted)
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(filePath)
 		require.NoError(t, err)
 		assert.Equal(t, "AWS_REGION=us-east-1\nGITHUB_TOKEN=ghp_xxxx\n", string(content))
 	})
-}
-
-func TestSortedKeys(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    map[string]string
-		expected []string
-	}{
-		{
-			name:     "empty map",
-			input:    map[string]string{},
-			expected: []string{},
-		},
-		{
-			name:     "single key",
-			input:    map[string]string{"FOO": "bar"},
-			expected: []string{"FOO"},
-		},
-		{
-			name: "multiple keys sorted",
-			input: map[string]string{
-				"ZZZ": "last",
-				"AAA": "first",
-				"MMM": "middle",
-			},
-			expected: []string{"AAA", "MMM", "ZZZ"},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := sortedKeys(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }
 
 func TestSupportedFormats(t *testing.T) {
@@ -285,84 +266,6 @@ func TestEnvCommandProvider(t *testing.T) {
 	})
 }
 
-func TestOutputEnvAsBash(t *testing.T) {
-	// Initialize I/O context for data package.
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-
-	tests := []struct {
-		name    string
-		envVars map[string]string
-	}{
-		{
-			name:    "empty map",
-			envVars: map[string]string{},
-		},
-		{
-			name: "single variable",
-			envVars: map[string]string{
-				"FOO": "bar",
-			},
-		},
-		{
-			name: "multiple variables",
-			envVars: map[string]string{
-				"FOO": "bar",
-				"BAZ": "qux",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// outputEnvAsBash writes to stdout via data.Write.
-			// We just verify it doesn't error.
-			err := outputEnvAsBash(tt.envVars)
-			assert.NoError(t, err)
-		})
-	}
-}
-
-func TestOutputEnvAsDotenv(t *testing.T) {
-	// Initialize I/O context for data package.
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-
-	tests := []struct {
-		name    string
-		envVars map[string]string
-	}{
-		{
-			name:    "empty map",
-			envVars: map[string]string{},
-		},
-		{
-			name: "single variable",
-			envVars: map[string]string{
-				"FOO": "bar",
-			},
-		},
-		{
-			name: "multiple variables",
-			envVars: map[string]string{
-				"FOO": "bar",
-				"BAZ": "qux",
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// outputEnvAsDotenv writes to stdout via data.Write.
-			// We just verify it doesn't error.
-			err := outputEnvAsDotenv(tt.envVars)
-			assert.NoError(t, err)
-		})
-	}
-}
-
 func TestOutputEnvAsJSON(t *testing.T) {
 	// Initialize I/O context for data package.
 	ioCtx, err := iolib.NewContext()
@@ -406,8 +309,7 @@ func TestOutputEnvAsJSON(t *testing.T) {
 func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 	t.Run("fails with invalid path", func(t *testing.T) {
 		// Try to write to a path that doesn't exist and can't be created.
-		envVars := map[string]string{"FOO": "bar"}
-		err := writeEnvToFile(envVars, "/nonexistent/directory/file.env", formatBash)
+		err := envfmt.WriteToFile("/nonexistent/directory/file.env", "content")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to open file")
 	})
@@ -429,9 +331,39 @@ func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 			_ = os.Chmod(readOnlyDir, 0o755)
 		}()
 
-		envVars := map[string]string{"FOO": "bar"}
-		err = writeEnvToFile(envVars, filepath.Join(readOnlyDir, "test.env"), formatBash)
+		err = envfmt.WriteToFile(filepath.Join(readOnlyDir, "test.env"), "content")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to open file")
 	})
+}
+
+func TestConvertToAnyMap(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]string
+		expected map[string]any
+	}{
+		{
+			name:     "empty map",
+			input:    map[string]string{},
+			expected: map[string]any{},
+		},
+		{
+			name:     "single entry",
+			input:    map[string]string{"FOO": "bar"},
+			expected: map[string]any{"FOO": "bar"},
+		},
+		{
+			name:     "multiple entries",
+			input:    map[string]string{"FOO": "bar", "BAZ": "qux"},
+			expected: map[string]any{"FOO": "bar", "BAZ": "qux"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertToAnyMap(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

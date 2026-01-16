@@ -1,10 +1,7 @@
 package env
 
 import (
-	"fmt"
-	"os"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,15 +11,11 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-const (
-	// DefaultFileMode is the file mode for output files.
-	defaultFileMode = 0o644
 )
 
 // SupportedFormats lists all supported output formats.
@@ -87,47 +80,74 @@ var envCmd = &cobra.Command{
 
 		// Handle GitHub format special case.
 		if format == "github" {
-			if output == "" {
-				// GITHUB_ENV is an external CI environment variable set by GitHub Actions,
-				// not an Atmos configuration variable, so os.Getenv is appropriate here.
-				//nolint:forbidigo // GITHUB_ENV is an external CI env var, not Atmos config
-				output = os.Getenv("GITHUB_ENV")
-				if output == "" {
+			path := output
+			if path == "" {
+				path = envfmt.GetEnvPath()
+				if path == "" {
 					return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 						WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output to specify a file path.").
 						Err()
 				}
 			}
-			return writeEnvToFile(envVars, output, formatGitHub)
+			// Convert map[string]string to map[string]any for formatting.
+			dataMap := convertToAnyMap(envVars)
+			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
+			if err != nil {
+				return err
+			}
+			return envfmt.WriteToFile(path, formatted)
 		}
 
 		// Handle file output for other formats.
 		if output != "" {
-			var formatter func(map[string]string) string
+			// Convert map[string]string to map[string]any for formatting.
+			dataMap := convertToAnyMap(envVars)
+			var formatted string
+			var err error
+
 			switch format {
 			case "bash":
-				formatter = formatBash
+				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatBash)
 			case "dotenv":
-				formatter = formatDotenv
+				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatDotenv)
 			case "json":
 				// For JSON file output, use the utility function.
-				return u.WriteToFileAsJSON(output, envVars, defaultFileMode)
+				return u.WriteToFileAsJSON(output, envVars, 0o644)
 			default:
-				formatter = formatBash
+				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatBash)
 			}
-			return writeEnvToFile(envVars, output, formatter)
+			if err != nil {
+				return err
+			}
+			return envfmt.WriteToFile(output, formatted)
 		}
 
 		// Output to stdout.
 		switch format {
 		case "json":
 			return outputEnvAsJSON(&atmosConfig, envVars)
-		case "bash":
-			return outputEnvAsBash(envVars)
-		case "dotenv":
-			return outputEnvAsDotenv(envVars)
+		case "bash", "dotenv":
+			// Convert map[string]string to map[string]any for formatting.
+			dataMap := convertToAnyMap(envVars)
+			var formatted string
+			var err error
+			if format == "bash" {
+				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatBash)
+			} else {
+				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatDotenv)
+			}
+			if err != nil {
+				return err
+			}
+			return data.Write(formatted)
 		default:
-			return outputEnvAsBash(envVars)
+			// Default to bash format.
+			dataMap := convertToAnyMap(envVars)
+			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
+			if err != nil {
+				return err
+			}
+			return data.Write(formatted)
 		}
 	},
 }
@@ -137,84 +157,13 @@ func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]
 	return u.PrintAsJSON(atmosConfig, envVars)
 }
 
-// outputEnvAsBash outputs environment variables as shell export statements.
-func outputEnvAsBash(envVars map[string]string) error {
-	return data.Write(formatBash(envVars))
-}
-
-// outputEnvAsDotenv outputs environment variables in .env format.
-func outputEnvAsDotenv(envVars map[string]string) error {
-	return data.Write(formatDotenv(envVars))
-}
-
-// formatBash formats environment variables as shell export statements.
-func formatBash(envVars map[string]string) string {
-	keys := sortedKeys(envVars)
-	var sb strings.Builder
-	for _, key := range keys {
-		value := envVars[key]
-		// Escape single quotes for safe single-quoted shell literals: ' -> '\''.
-		safe := strings.ReplaceAll(value, "'", "'\\''")
-		sb.WriteString(fmt.Sprintf("export %s='%s'\n", key, safe))
+// convertToAnyMap converts a map[string]string to map[string]any for use with env formatters.
+func convertToAnyMap(envVars map[string]string) map[string]any {
+	result := make(map[string]any, len(envVars))
+	for k, v := range envVars {
+		result[k] = v
 	}
-	return sb.String()
-}
-
-// formatDotenv formats environment variables in .env format.
-func formatDotenv(envVars map[string]string) string {
-	keys := sortedKeys(envVars)
-	var sb strings.Builder
-	for _, key := range keys {
-		value := envVars[key]
-		// Use the same safe single-quoted escaping as bash output.
-		safe := strings.ReplaceAll(value, "'", "'\\''")
-		sb.WriteString(fmt.Sprintf("%s='%s'\n", key, safe))
-	}
-	return sb.String()
-}
-
-// formatGitHub formats environment variables for GitHub Actions $GITHUB_ENV file.
-// Uses KEY=value format without quoting. For multiline values, GitHub uses heredoc syntax.
-func formatGitHub(envVars map[string]string) string {
-	keys := sortedKeys(envVars)
-	var sb strings.Builder
-	for _, key := range keys {
-		value := envVars[key]
-		// Check if value contains newlines - use heredoc syntax.
-		// Use ATMOS_EOF_ prefix to avoid collision with values containing "EOF".
-		if strings.Contains(value, "\n") {
-			sb.WriteString(fmt.Sprintf("%s<<ATMOS_EOF_%s\n%s\nATMOS_EOF_%s\n", key, key, value, key))
-		} else {
-			sb.WriteString(fmt.Sprintf("%s=%s\n", key, value))
-		}
-	}
-	return sb.String()
-}
-
-// writeEnvToFile writes formatted environment variables to a file (append mode).
-func writeEnvToFile(envVars map[string]string, filePath string, formatter func(map[string]string) string) error {
-	// Open file in append mode, create if doesn't exist.
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to open file '%s': %w", filePath, err)
-	}
-	defer f.Close()
-
-	content := formatter(envVars)
-	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to file '%s': %w", filePath, err)
-	}
-	return nil
-}
-
-// sortedKeys returns the keys of a map sorted alphabetically.
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return result
 }
 
 func init() {

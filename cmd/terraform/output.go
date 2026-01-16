@@ -12,11 +12,13 @@ import (
 	exec "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // outputParser handles flag parsing for output command.
@@ -114,7 +116,7 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 	uppercase := v.GetBool("uppercase")
 	flatten := v.GetBool("flatten")
 
-	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit)
+	outputs, err := tfoutput.GetComponentOutputs(atmosConfig, info.ComponentFromArg, info.Stack, skipInit, nil)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
 			WithCause(err).
@@ -126,6 +128,11 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 	opts := tfoutput.FormatOptions{
 		Uppercase: uppercase,
 		Flatten:   flatten,
+	}
+
+	// Handle GitHub format special case - always writes to file.
+	if format == "github" {
+		return executeGitHubOutput(outputs, outputFile, opts)
 	}
 
 	// Check if a specific output name was requested (in AdditionalArgsAndFlags).
@@ -144,6 +151,36 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 		return tfoutput.WriteToFile(outputFile, formatted)
 	}
 	return data.Write(formatted)
+}
+
+// executeGitHubOutput handles the special github format that writes to $GITHUB_OUTPUT.
+func executeGitHubOutput(outputs map[string]any, outputFile string, opts tfoutput.FormatOptions) error {
+	defer perf.Track(nil, "terraform.executeGitHubOutput")()
+
+	// Determine output file - use $GITHUB_OUTPUT if not specified.
+	path := outputFile
+	if path == "" {
+		path = envfmt.GetOutputPath()
+		if path == "" {
+			return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+				WithExplanation("--format=github requires GITHUB_OUTPUT environment variable to be set, or use --output-file to specify a file path.").
+				Err()
+		}
+	}
+
+	// Format outputs for GitHub Actions.
+	formatted, err := tfoutput.FormatOutputsWithOptions(outputs, tfoutput.FormatGitHub, opts)
+	if err != nil {
+		return err
+	}
+
+	// Write to file (append mode).
+	if err := envfmt.WriteToFile(path, formatted); err != nil {
+		return err
+	}
+
+	// Emit success message to stderr.
+	return ui.Successf("Wrote %d outputs to %s", len(outputs), path)
 }
 
 // extractOutputName extracts the output name from additional args.
@@ -171,7 +208,7 @@ func formatSingleOutput(outputs map[string]any, outputName, format string, opts 
 
 func init() {
 	outputParser = flags.NewStandardParser(
-		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, hcl, env, dotenv, bash, csv, tsv"),
+		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, hcl, env, dotenv, bash, csv, tsv, github"),
 		flags.WithStringFlag("output-file", "o", "", "Write output to file instead of stdout"),
 		flags.WithBoolFlag("uppercase", "u", false, "Convert keys to uppercase (useful for env vars)"),
 		flags.WithBoolFlag("flatten", "", false, "Flatten nested maps into key_subkey format"),

@@ -1,0 +1,426 @@
+package env
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
+
+func TestFormatData(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     map[string]any
+		format   Format
+		opts     []Option
+		expected string
+	}{
+		{
+			name:     "env format with simple values",
+			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
+			format:   FormatEnv,
+			expected: "KEY1=value1\nKEY2=value2\n",
+		},
+		{
+			name:     "dotenv format with simple values",
+			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
+			format:   FormatDotenv,
+			expected: "KEY1='value1'\nKEY2='value2'\n",
+		},
+		{
+			name:     "bash format with simple values",
+			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
+			format:   FormatBash,
+			expected: "export KEY1='value1'\nexport KEY2='value2'\n",
+		},
+		{
+			name:     "github format with simple values",
+			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
+			format:   FormatGitHub,
+			expected: "KEY1=value1\nKEY2=value2\n",
+		},
+		{
+			name:     "github format with multiline value",
+			data:     map[string]any{"CONFIG": "line1\nline2\nline3"},
+			format:   FormatGitHub,
+			expected: "CONFIG<<ATMOS_EOF_CONFIG\nline1\nline2\nline3\nATMOS_EOF_CONFIG\n",
+		},
+		{
+			name:     "dotenv format with single quotes",
+			data:     map[string]any{"MSG": "it's working"},
+			format:   FormatDotenv,
+			expected: "MSG='it'\\''s working'\n",
+		},
+		{
+			name:     "bash format with single quotes",
+			data:     map[string]any{"MSG": "it's working"},
+			format:   FormatBash,
+			expected: "export MSG='it'\\''s working'\n",
+		},
+		{
+			name:     "env format with boolean",
+			data:     map[string]any{"ENABLED": true, "DISABLED": false},
+			format:   FormatEnv,
+			expected: "DISABLED=false\nENABLED=true\n",
+		},
+		{
+			name:     "env format with integer",
+			data:     map[string]any{"COUNT": 42, "PORT": 8080},
+			format:   FormatEnv,
+			expected: "COUNT=42\nPORT=8080\n",
+		},
+		{
+			name:     "env format with map (JSON encoded)",
+			data:     map[string]any{"CONFIG": map[string]any{"key": "value"}},
+			format:   FormatEnv,
+			expected: "CONFIG={\"key\":\"value\"}\n",
+		},
+		{
+			name:     "env format with slice (JSON encoded)",
+			data:     map[string]any{"ITEMS": []any{"a", "b", "c"}},
+			format:   FormatEnv,
+			expected: "ITEMS=[\"a\",\"b\",\"c\"]\n",
+		},
+		{
+			name:     "github format with JSON multiline",
+			data:     map[string]any{"CONFIG": map[string]any{"key": "value", "nested": map[string]any{"a": 1}}},
+			format:   FormatGitHub,
+			expected: "CONFIG={\"key\":\"value\",\"nested\":{\"a\":1}}\n",
+		},
+		{
+			name:     "with uppercase option",
+			data:     map[string]any{"myKey": "value"},
+			format:   FormatEnv,
+			opts:     []Option{WithUppercase()},
+			expected: "MYKEY=value\n",
+		},
+		{
+			name:     "with flatten option",
+			data:     map[string]any{"parent": map[string]any{"child": "value"}},
+			format:   FormatEnv,
+			opts:     []Option{WithFlatten("_")},
+			expected: "parent_child=value\n",
+		},
+		{
+			name:     "with uppercase and flatten options",
+			data:     map[string]any{"parent": map[string]any{"child": "value"}},
+			format:   FormatEnv,
+			opts:     []Option{WithUppercase(), WithFlatten("_")},
+			expected: "PARENT_CHILD=value\n",
+		},
+		{
+			name:     "nil values are skipped",
+			data:     map[string]any{"KEY1": "value1", "KEY2": nil, "KEY3": "value3"},
+			format:   FormatEnv,
+			expected: "KEY1=value1\nKEY3=value3\n",
+		},
+		{
+			name:     "empty data",
+			data:     map[string]any{},
+			format:   FormatEnv,
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FormatData(tt.data, tt.format, tt.opts...)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		value    any
+		format   Format
+		opts     []Option
+		expected string
+	}{
+		{
+			name:     "env format single value",
+			key:      "KEY",
+			value:    "value",
+			format:   FormatEnv,
+			expected: "KEY=value\n",
+		},
+		{
+			name:     "bash format single value",
+			key:      "KEY",
+			value:    "value",
+			format:   FormatBash,
+			expected: "export KEY='value'\n",
+		},
+		{
+			name:     "with uppercase option",
+			key:      "myKey",
+			value:    "value",
+			format:   FormatEnv,
+			opts:     []Option{WithUppercase()},
+			expected: "MYKEY=value\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FormatValue(tt.key, tt.value, tt.format, tt.opts...)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestValueToString(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    any
+		expected string
+	}{
+		{
+			name:     "string value",
+			value:    "hello",
+			expected: "hello",
+		},
+		{
+			name:     "boolean true",
+			value:    true,
+			expected: "true",
+		},
+		{
+			name:     "boolean false",
+			value:    false,
+			expected: "false",
+		},
+		{
+			name:     "integer",
+			value:    42,
+			expected: "42",
+		},
+		{
+			name:     "int64",
+			value:    int64(1234567890),
+			expected: "1234567890",
+		},
+		{
+			name:     "float64",
+			value:    3.14,
+			expected: "3.14",
+		},
+		{
+			name:     "float64 whole number",
+			value:    float64(42),
+			expected: "42",
+		},
+		{
+			name:     "map",
+			value:    map[string]any{"key": "value"},
+			expected: `{"key":"value"}`,
+		},
+		{
+			name:     "slice",
+			value:    []any{"a", "b", "c"},
+			expected: `["a","b","c"]`,
+		},
+		{
+			name:     "nil",
+			value:    nil,
+			expected: "",
+		},
+		{
+			name:     "string slice",
+			value:    []string{"a", "b"},
+			expected: `["a","b"]`,
+		},
+		{
+			name:     "string map",
+			value:    map[string]string{"key": "value"},
+			expected: `{"key":"value"}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := ValueToString(tt.value)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestEscapeSingleQuotes(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "no quotes",
+			input:    "hello world",
+			expected: "hello world",
+		},
+		{
+			name:     "single quote",
+			input:    "it's",
+			expected: "it'\\''s",
+		},
+		{
+			name:     "multiple quotes",
+			input:    "it's a 'test'",
+			expected: "it'\\''s a '\\''test'\\''",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EscapeSingleQuotes(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestWriteToFile(t *testing.T) {
+	t.Run("creates new file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.txt")
+
+		err := WriteToFile(path, "content1\n")
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, "content1\n", string(content))
+	})
+
+	t.Run("appends to existing file", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		path := filepath.Join(tmpDir, "test.txt")
+
+		err := WriteToFile(path, "content1\n")
+		require.NoError(t, err)
+
+		err = WriteToFile(path, "content2\n")
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assert.Equal(t, "content1\ncontent2\n", string(content))
+	})
+
+	t.Run("error on invalid path", func(t *testing.T) {
+		err := WriteToFile("/nonexistent/dir/file.txt", "content")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to open file")
+	})
+}
+
+func TestGitHubHelpers(t *testing.T) {
+	t.Run("IsGitHubActions returns false when not in CI", func(t *testing.T) {
+		// t.Setenv handles cleanup automatically.
+		t.Setenv("GITHUB_ACTIONS", "")
+		os.Unsetenv("GITHUB_ACTIONS")
+		assert.False(t, IsGitHubActions())
+	})
+
+	t.Run("IsGitHubActions returns true when GITHUB_ACTIONS=true", func(t *testing.T) {
+		t.Setenv("GITHUB_ACTIONS", "true")
+		assert.True(t, IsGitHubActions())
+	})
+
+	t.Run("GetOutputPath returns empty when not set", func(t *testing.T) {
+		t.Setenv("GITHUB_OUTPUT", "")
+		os.Unsetenv("GITHUB_OUTPUT")
+		assert.Empty(t, GetOutputPath())
+	})
+
+	t.Run("GetOutputPath returns path when set", func(t *testing.T) {
+		t.Setenv("GITHUB_OUTPUT", "/tmp/github_output")
+		assert.Equal(t, "/tmp/github_output", GetOutputPath())
+	})
+
+	t.Run("GetEnvPath returns empty when not set", func(t *testing.T) {
+		t.Setenv("GITHUB_ENV", "")
+		os.Unsetenv("GITHUB_ENV")
+		assert.Empty(t, GetEnvPath())
+	})
+
+	t.Run("GetEnvPath returns path when set", func(t *testing.T) {
+		t.Setenv("GITHUB_ENV", "/tmp/github_env")
+		assert.Equal(t, "/tmp/github_env", GetEnvPath())
+	})
+
+	t.Run("GetPathPath returns empty when not set", func(t *testing.T) {
+		t.Setenv("GITHUB_PATH", "")
+		os.Unsetenv("GITHUB_PATH")
+		assert.Empty(t, GetPathPath())
+	})
+
+	t.Run("GetSummaryPath returns empty when not set", func(t *testing.T) {
+		t.Setenv("GITHUB_STEP_SUMMARY", "")
+		os.Unsetenv("GITHUB_STEP_SUMMARY")
+		assert.Empty(t, GetSummaryPath())
+	})
+}
+
+func TestUnsupportedFormat(t *testing.T) {
+	_, err := FormatData(map[string]any{"key": "value"}, Format("invalid"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFormat)
+}
+
+func TestFlattenNestedMaps(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     map[string]any
+		opts     []Option
+		expected string
+	}{
+		{
+			name: "deeply nested map",
+			data: map[string]any{
+				"level1": map[string]any{
+					"level2": map[string]any{
+						"level3": "value",
+					},
+				},
+			},
+			opts:     []Option{WithFlatten("_")},
+			expected: "level1_level2_level3=value\n",
+		},
+		{
+			name: "mixed nested and flat",
+			data: map[string]any{
+				"flat":   "value1",
+				"nested": map[string]any{"child": "value2"},
+			},
+			opts:     []Option{WithFlatten("_")},
+			expected: "flat=value1\nnested_child=value2\n",
+		},
+		{
+			name: "custom separator",
+			data: map[string]any{
+				"parent": map[string]any{"child": "value"},
+			},
+			opts:     []Option{WithFlatten("__")},
+			expected: "parent__child=value\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FormatData(tt.data, FormatEnv, tt.opts...)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
