@@ -44,6 +44,7 @@ const TAGS_MAP = {
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
+  'stack-names': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.
@@ -110,6 +111,9 @@ const DOCS_MAP = {
   ],
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+  'stack-names': [
+    { label: 'Stack Names', url: '/stacks/name' },
   ],
 };
 
