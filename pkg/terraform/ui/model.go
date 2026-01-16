@@ -12,7 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	atmosui "github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -21,10 +21,24 @@ import (
 const (
 	progressBarWidth = 40
 	tickInterval     = 100 * time.Millisecond
+	defaultTermWidth = 120
+
+	// Text truncation constants.
+	maxTextLength   = 100
+	minWordBoundary = 60
 
 	// ANSI escape sequences for terminal control.
 	clearToEOL = "\x1b[K" // Clear from cursor to end of line.
 	cursorUp   = "\x1b[A" // Move cursor up one line.
+
+	// Terraform action constants.
+	actionCreate = "create"
+	actionRead   = "read"
+	actionUpdate = "update"
+	actionDelete = "delete"
+
+	// Format string constants.
+	fmtDurationSuffix = " (%.1fs)"
 )
 
 // Model is the bubbletea model for streaming terraform output.
@@ -258,7 +272,7 @@ func (m Model) progressView() string {
 	// Layout: spinner + commandInfo + activityInfo + gap + progressInfo.
 	width := m.width
 	if width == 0 {
-		width = 120 // Default width if not set.
+		width = defaultTermWidth // Default width if not set.
 	}
 
 	leftPart := spin + commandInfo + activityInfo
@@ -288,19 +302,21 @@ func (m Model) progressView() string {
 }
 
 // formatActivityVerb returns a short verb describing the current activity.
+//
+//nolint:gocritic // bubbletea models must be passed by value
 func (m Model) formatActivityVerb(op *ResourceOperation) string {
 	switch op.State {
 	case ResourceStateRefreshing:
 		return "Reading"
 	case ResourceStateInProgress:
 		switch op.Action {
-		case "create":
+		case actionCreate:
 			return "Creating"
-		case "update":
+		case actionUpdate:
 			return "Updating"
-		case "delete":
+		case actionDelete:
 			return "Destroying"
-		case "read":
+		case actionRead:
 			return "Reading"
 		default:
 			return "Processing"
@@ -311,6 +327,8 @@ func (m Model) formatActivityVerb(op *ResourceOperation) string {
 }
 
 // renderResource renders a single resource line.
+//
+//nolint:gocritic // bubbletea models must be passed by value
 func (m Model) renderResource(res *ResourceOperation) string {
 	var icon string
 	var actionVerb string
@@ -346,14 +364,15 @@ func (m Model) renderResource(res *ResourceOperation) string {
 
 	// Build timing info.
 	var timingStr string
-	if res.State == ResourceStateInProgress || res.State == ResourceStateRefreshing {
+	switch res.State {
+	case ResourceStateInProgress, ResourceStateRefreshing:
 		elapsed := m.clock.Since(res.StartTime).Seconds()
-		timingStr = fmt.Sprintf(" (%.1fs)", elapsed)
-	} else if res.State == ResourceStateComplete || res.State == ResourceStateError {
+		timingStr = fmt.Sprintf(fmtDurationSuffix, elapsed)
+	case ResourceStateComplete, ResourceStateError:
 		if res.ElapsedSecs > 0 {
-			timingStr = fmt.Sprintf(" (%.1fs)", float64(res.ElapsedSecs))
+			timingStr = fmt.Sprintf(fmtDurationSuffix, float64(res.ElapsedSecs))
 		} else if !res.EndTime.IsZero() {
-			timingStr = fmt.Sprintf(" (%.1fs)", res.EndTime.Sub(res.StartTime).Seconds())
+			timingStr = fmt.Sprintf(fmtDurationSuffix, res.EndTime.Sub(res.StartTime).Seconds())
 		}
 	}
 
@@ -366,15 +385,17 @@ func (m Model) renderResource(res *ResourceOperation) string {
 }
 
 // formatActionPending formats the pending action verb.
+//
+//nolint:gocritic // bubbletea models must be passed by value
 func (m Model) formatActionPending(action string) string {
 	switch action {
-	case "create":
+	case actionCreate:
 		return "Create"
-	case "read":
+	case actionRead:
 		return "Read"
-	case "update":
+	case actionUpdate:
 		return "Update"
-	case "delete":
+	case actionDelete:
 		return "Destroy"
 	case "no-op":
 		return "No change"
@@ -384,15 +405,17 @@ func (m Model) formatActionPending(action string) string {
 }
 
 // formatActionInProgress formats the in-progress action verb.
+//
+//nolint:gocritic // bubbletea models must be passed by value
 func (m Model) formatActionInProgress(action string) string {
 	switch action {
-	case "create":
+	case actionCreate:
 		return "Creating"
-	case "read":
+	case actionRead:
 		return "Reading"
-	case "update":
+	case actionUpdate:
 		return "Updating"
-	case "delete":
+	case actionDelete:
 		return "Destroying"
 	case "no-op":
 		return "No change"
@@ -402,15 +425,17 @@ func (m Model) formatActionInProgress(action string) string {
 }
 
 // formatActionComplete formats the completed action verb.
+//
+//nolint:gocritic // bubbletea models must be passed by value
 func (m Model) formatActionComplete(action string) string {
 	switch action {
-	case "create":
+	case actionCreate:
 		return "Created"
-	case "read":
+	case actionRead:
 		return "Read"
-	case "update":
+	case actionUpdate:
 		return "Updated"
-	case "delete":
+	case actionDelete:
 		return "Destroyed"
 	case "no-op":
 		return "No change"
@@ -469,7 +494,7 @@ func (m Model) finalView() string {
 				m.stack,
 				m.component,
 			))
-			b.WriteString(dimStyle.Render(fmt.Sprintf(" (%.1fs)", elapsed)))
+			b.WriteString(dimStyle.Render(fmt.Sprintf(fmtDurationSuffix, elapsed)))
 		} else {
 			// Render base message first.
 			b.WriteString(atmosui.FormatSuccessf("%s `%s/%s` completed",
@@ -477,7 +502,7 @@ func (m Model) finalView() string {
 				m.stack,
 				m.component,
 			))
-			b.WriteString(dimStyle.Render(fmt.Sprintf(" (%.1fs)", elapsed)))
+			b.WriteString(dimStyle.Render(fmt.Sprintf(fmtDurationSuffix, elapsed)))
 		}
 		b.WriteString("\n")
 	}
@@ -538,7 +563,7 @@ func (m *Model) logDiagnostic(diag *DiagnosticMessage) {
 	// Add source location if present.
 	if diag.Diagnostic.Range != nil {
 		keyvals = append(keyvals,
-			logger.FieldFile, diag.Diagnostic.Range.Filename,
+			log.FieldFile, diag.Diagnostic.Range.Filename,
 			"line", diag.Diagnostic.Range.Start.Line,
 		)
 	}
@@ -546,11 +571,11 @@ func (m *Model) logDiagnostic(diag *DiagnosticMessage) {
 	// Route to appropriate logger level based on severity.
 	switch diag.Diagnostic.Severity {
 	case "error":
-		logger.Error(msg, keyvals...)
+		log.Error(msg, keyvals...)
 	case "warning":
-		logger.Warn(msg, keyvals...)
+		log.Warn(msg, keyvals...)
 	default:
-		logger.Info(msg, keyvals...)
+		log.Info(msg, keyvals...)
 	}
 }
 
@@ -639,13 +664,13 @@ func extractFirstSentence(text string) string {
 	}
 
 	// Return the whole text if it's short enough.
-	if len(text) <= 100 {
+	if len(text) <= maxTextLength {
 		return text
 	}
 
 	// Truncate at word boundary.
-	truncated := text[:100]
-	if lastSpace := strings.LastIndex(truncated, " "); lastSpace > 60 {
+	truncated := text[:maxTextLength]
+	if lastSpace := strings.LastIndex(truncated, " "); lastSpace > minWordBoundary {
 		return truncated[:lastSpace] + "..."
 	}
 	return truncated + "..."

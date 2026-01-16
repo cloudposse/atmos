@@ -78,3 +78,8 @@ func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.Compatib
 func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (l *ListCommandProvider) IsExperimental() bool {
+	return false
+}

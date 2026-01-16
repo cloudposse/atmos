@@ -10,6 +10,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
+// iconPlaceholder is used as a placeholder when no action icon is needed.
+const iconPlaceholder = " "
+
 // RenderTree renders the tree as a string with box-drawing characters.
 // Uses a two-column layout: action symbol (fixed width) | tree structure.
 func (t *DependencyTree) RenderTree() string {
@@ -27,13 +30,14 @@ func (t *DependencyTree) RenderTreeWithConfig(config *RenderConfig) string {
 	treeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray)) // Dark gray for branches.
 
 	// Render stack/component header (cyan, bold) - aligned with tree.
-	b.WriteString(fmt.Sprintf("     %s\n", headerStyle.Render(t.Stack+"/"+t.Component)))
+	fmt.Fprintf(&b, "     %s\n", headerStyle.Render(t.Stack+"/"+t.Component))
 
 	// Render resource tree.
 	renderChildren(&b, t.Root.Children, "", treeStyle, config)
 	return b.String()
 }
 
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
 func renderChildren(b *strings.Builder, nodes []*TreeNode, prefix string, treeStyle lipgloss.Style, config *RenderConfig) {
 	for i, node := range nodes {
 		isLastChild := i == len(nodes)-1
@@ -56,7 +60,7 @@ func renderChildren(b *strings.Builder, nodes []*TreeNode, prefix string, treeSt
 		// Column 2: tree prefix + connector + resource address
 		treeLine := treeStyle.Render(prefix+connector) + node.Address
 
-		b.WriteString(fmt.Sprintf("  %s  %s\n", symbol, treeLine))
+		fmt.Fprintf(b, "  %s  %s\n", symbol, treeLine)
 
 		// Render attribute changes below the resource.
 		if len(node.Changes) > 0 {
@@ -168,11 +172,12 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 		// - Red: deleted attribute (before!=nil, after=nil, NOT unknown)
 		// - Yellow: updated attribute (both have values, or unknown computed value)
 		var keyStyle lipgloss.Style
-		if change.Before == nil && change.After != nil {
+		switch {
+		case change.Before == nil && change.After != nil:
 			keyStyle = createStyle
-		} else if change.Before != nil && change.After == nil && !change.Unknown {
+		case change.Before != nil && change.After == nil && !change.Unknown:
 			keyStyle = deleteStyle
-		} else {
+		default:
 			keyStyle = updateStyle
 		}
 
@@ -195,12 +200,12 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 		// Check if we need multi-line rendering.
 		if fc.isMulti {
 			// Multi-line rendering: show key on first line, then each value line.
-			b.WriteString(fmt.Sprintf("%s%s%s%s\n",
+			fmt.Fprintf(b, "%s%s%s%s\n",
 				baseIndent,
 				attrBar,
 				keyStyle.Render(paddedKey),
 				forcesReplacementAnnotation,
-			))
+			)
 
 			beforeStr, _ := getRawStringValue(change.Before, change.Sensitive)
 			afterStr, _ := getRawStringValue(change.After, change.Sensitive)
@@ -216,18 +221,19 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 			if attrBar != "" {
 				contentIndent = baseIndent + attrBar + "  "
 			}
-			if hasBeforeContent && hasAfterContent {
+			switch {
+			case hasBeforeContent && hasAfterContent:
 				renderMultilineDiffSimple(b, beforeStr, afterStr, contentIndent, createStyle, deleteStyle, config)
-			} else if hasBeforeContent {
+			case hasBeforeContent:
 				renderMultilineValueSimple(b, beforeStr, contentIndent, "-", deleteStyle, config)
-			} else if hasAfterContent {
+			case hasAfterContent:
 				renderMultilineValueSimple(b, afterStr, contentIndent, "+", createStyle, config)
 			}
 		} else {
 			// Single-line rendering: old → new on same line with aligned columns.
 			paddedOldVal := fmt.Sprintf("%-*s", maxOldValWidth, fc.oldVal)
 
-			b.WriteString(fmt.Sprintf("%s%s%s %s  %s  %s%s\n",
+			fmt.Fprintf(b, "%s%s%s %s  %s  %s%s\n",
 				baseIndent,
 				attrBar,
 				keyStyle.Render(paddedKey),
@@ -235,22 +241,24 @@ func renderAttributeChanges(b *strings.Builder, changes []*AttributeChange, pref
 				dimStyle.Render("→"),
 				fc.newVal,
 				forcesReplacementAnnotation,
-			))
+			)
 		}
 	}
 }
 
 // renderComplexAttributeChange renders a complex attribute (map/array) with pretty-printed JSON.
+//
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
 func renderComplexAttributeChange(b *strings.Builder, change *AttributeChange, baseIndent, attrBar string,
 	keyStyle, dimStyle, createStyle, deleteStyle lipgloss.Style, annotation string, config *RenderConfig,
 ) {
 	// Write key line.
-	b.WriteString(fmt.Sprintf("%s%s%s%s\n",
+	fmt.Fprintf(b, "%s%s%s%s\n",
 		baseIndent,
 		attrBar,
 		keyStyle.Render(change.Key),
 		annotation,
-	))
+	)
 
 	// Format values as JSON lines.
 	beforeLines := formatComplexValue(change.Before, nil)
@@ -271,110 +279,125 @@ func renderComplexAttributeChange(b *strings.Builder, change *AttributeChange, b
 	}
 
 	// Render based on what content we have.
-	if len(beforeLines) > 0 && len(afterLines) > 0 {
+	switch {
+	case len(beforeLines) > 0 && len(afterLines) > 0:
 		// Both have values - show diff.
 		renderJSONDiff(b, beforeLines, afterLines, contentIndent, createStyle, deleteStyle, config)
-	} else if len(beforeLines) > 0 {
+	case len(beforeLines) > 0:
 		// Only before (deletion).
 		for _, line := range beforeLines {
-			b.WriteString(fmt.Sprintf("%s%s %s\n", contentIndent, deleteStyle.Render("-"), line))
+			fmt.Fprintf(b, "%s%s %s\n", contentIndent, deleteStyle.Render("-"), line)
 		}
-	} else if len(afterLines) > 0 {
+	case len(afterLines) > 0:
 		// Only after (creation).
 		for _, line := range afterLines {
-			b.WriteString(fmt.Sprintf("%s%s %s\n", contentIndent, createStyle.Render("+"), line))
+			fmt.Fprintf(b, "%s%s %s\n", contentIndent, createStyle.Render("+"), line)
 		}
 	}
 }
 
+// linesMatch checks if both indices are valid and lines match.
+func linesMatch(before, after []string, i, j int) bool {
+	return i < len(before) && j < len(after) && before[i] == after[j]
+}
+
+// collectChanges collects deleted and added lines until the next matching line.
+func collectChanges(before, after []string, iStart, jStart int) (deleted, added []string, i, j int) {
+	i, j = iStart, jStart
+	for i < len(before) || j < len(after) {
+		if linesMatch(before, after, i, j) {
+			break
+		}
+		if i < len(before) {
+			deleted = append(deleted, before[i])
+			i++
+		}
+		if j < len(after) {
+			added = append(added, after[j])
+			j++
+		}
+	}
+	return deleted, added, i, j
+}
+
+// renderDiffLines outputs deleted and added lines to the builder.
+//
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
+func renderDiffLines(b *strings.Builder, deleted, added []string, indent string,
+	deleteStyle, createStyle lipgloss.Style, transform func(string) string,
+) {
+	for _, line := range deleted {
+		if transform != nil {
+			line = transform(line)
+		}
+		fmt.Fprintf(b, "%s%s %s\n", indent, deleteStyle.Render("-"), line)
+	}
+	for _, line := range added {
+		if transform != nil {
+			line = transform(line)
+		}
+		fmt.Fprintf(b, "%s%s %s\n", indent, createStyle.Render("+"), line)
+	}
+}
+
 // renderJSONDiff renders a line-by-line diff of JSON content.
+//
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
 func renderJSONDiff(b *strings.Builder, beforeLines, afterLines []string, indent string,
 	createStyle, deleteStyle lipgloss.Style, config *RenderConfig,
 ) {
 	i, j := 0, 0
 	for i < len(beforeLines) || j < len(afterLines) {
-		if i < len(beforeLines) && j < len(afterLines) && beforeLines[i] == afterLines[j] {
-			// Unchanged line.
-			b.WriteString(fmt.Sprintf("%s  %s\n", indent, beforeLines[i]))
+		if linesMatch(beforeLines, afterLines, i, j) {
+			fmt.Fprintf(b, "%s  %s\n", indent, beforeLines[i])
 			i++
 			j++
-		} else {
-			// Changed lines - collect and group.
-			var deleted, added []string
-			for i < len(beforeLines) || j < len(afterLines) {
-				if i < len(beforeLines) && j < len(afterLines) && beforeLines[i] == afterLines[j] {
-					break
-				}
-				if i < len(beforeLines) {
-					deleted = append(deleted, beforeLines[i])
-					i++
-				}
-				if j < len(afterLines) {
-					added = append(added, afterLines[j])
-					j++
-				}
-			}
-
-			// Output deleted first, then added.
-			for _, line := range deleted {
-				b.WriteString(fmt.Sprintf("%s%s %s\n", indent, deleteStyle.Render("-"), line))
-			}
-			for _, line := range added {
-				b.WriteString(fmt.Sprintf("%s%s %s\n", indent, createStyle.Render("+"), line))
-			}
+			continue
 		}
+		var deleted, added []string
+		deleted, added, i, j = collectChanges(beforeLines, afterLines, i, j)
+		renderDiffLines(b, deleted, added, indent, deleteStyle, createStyle, nil)
+	}
+}
+
+// makeTruncator returns a function that truncates lines to maxWidth.
+func makeTruncator(maxWidth int) func(string) string {
+	return func(line string) string {
+		if maxWidth > 3 && len(line) > maxWidth {
+			return line[:maxWidth-3] + "..."
+		}
+		return line
 	}
 }
 
 // renderMultilineDiffSimple renders a simple line-by-line diff with clean indentation.
+//
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
 func renderMultilineDiffSimple(b *strings.Builder, before, after, indent string,
 	createStyle, deleteStyle lipgloss.Style, config *RenderConfig,
 ) {
 	maxWidth := getMaxLineWidth()
 	beforeLines := strings.Split(before, "\n")
 	afterLines := strings.Split(after, "\n")
-
-	// Truncate helper.
-	truncateLine := func(line string) string {
-		if maxWidth > 3 && len(line) > maxWidth {
-			return line[:maxWidth-3] + "..."
-		}
-		return line
-	}
+	truncateLine := makeTruncator(maxWidth)
 
 	i, j := 0, 0
 	for i < len(beforeLines) || j < len(afterLines) {
-		if i < len(beforeLines) && j < len(afterLines) && beforeLines[i] == afterLines[j] {
-			b.WriteString(fmt.Sprintf("%s  %s\n", indent, truncateLine(beforeLines[i])))
+		if linesMatch(beforeLines, afterLines, i, j) {
+			fmt.Fprintf(b, "%s  %s\n", indent, truncateLine(beforeLines[i]))
 			i++
 			j++
-		} else {
-			var deleted, added []string
-			for i < len(beforeLines) || j < len(afterLines) {
-				if i < len(beforeLines) && j < len(afterLines) && beforeLines[i] == afterLines[j] {
-					break
-				}
-				if i < len(beforeLines) {
-					deleted = append(deleted, beforeLines[i])
-					i++
-				}
-				if j < len(afterLines) {
-					added = append(added, afterLines[j])
-					j++
-				}
-			}
-
-			for _, line := range deleted {
-				b.WriteString(fmt.Sprintf("%s%s %s\n", indent, deleteStyle.Render("-"), truncateLine(line)))
-			}
-			for _, line := range added {
-				b.WriteString(fmt.Sprintf("%s%s %s\n", indent, createStyle.Render("+"), truncateLine(line)))
-			}
+			continue
 		}
+		var deleted, added []string
+		deleted, added, i, j = collectChanges(beforeLines, afterLines, i, j)
+		renderDiffLines(b, deleted, added, indent, deleteStyle, createStyle, truncateLine)
 	}
 }
 
 // renderMultilineValueSimple renders multi-line content with clean indentation.
+//
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
 func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol string,
 	symbolStyle lipgloss.Style, config *RenderConfig,
 ) {
@@ -385,7 +408,7 @@ func renderMultilineValueSimple(b *strings.Builder, content, indent, symbol stri
 		if maxWidth > 3 && len(line) > maxWidth {
 			line = line[:maxWidth-3] + "..."
 		}
-		b.WriteString(fmt.Sprintf("%s%s %s\n", indent, symbolStyle.Render(symbol), line))
+		fmt.Fprintf(b, "%s%s %s\n", indent, symbolStyle.Render(symbol), line)
 	}
 }
 
@@ -414,9 +437,9 @@ func colorizedActionSymbol(action string) string {
 	case "read":
 		return readStyle.Render(theme.IconActive)
 	case "no-op":
-		return " "
+		return iconPlaceholder
 	default:
-		return " "
+		return iconPlaceholder
 	}
 }
 
@@ -425,7 +448,7 @@ func (t *DependencyTree) GetChangeSummary() (add, change, remove int) {
 	defer perf.Track(nil, "terraform.ui.DependencyTree.GetChangeSummary")()
 
 	countActions(t.Root, &add, &change, &remove)
-	return
+	return add, change, remove
 }
 
 func countActions(node *TreeNode, add, change, remove *int) {

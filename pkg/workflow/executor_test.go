@@ -1154,3 +1154,298 @@ func TestCalculateWorkingDirectory(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutor_ensureToolchainDependencies_NoDeps tests early return when no dependencies.
+func TestExecutor_ensureToolchainDependencies_NoDeps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	// Expect no .tool-versions and no workflow deps.
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(map[string]string{}, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(map[string]string{}, nil)
+	mockDeps.EXPECT().MergeDependencies(map[string]string{}, map[string]string{}).Return(map[string]string{}, nil)
+	// EnsureTools and UpdatePathForTools should NOT be called (early return).
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_ToolVersionsOnly tests loading tools from .tool-versions.
+func TestExecutor_ensureToolchainDependencies_ToolVersionsOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	toolVersionsDeps := map[string]string{"jq": "1.7.1"}
+
+	// Expect .tool-versions to be loaded and installed.
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(toolVersionsDeps, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(map[string]string{}, nil)
+	mockDeps.EXPECT().MergeDependencies(toolVersionsDeps, map[string]string{}).Return(toolVersionsDeps, nil)
+	mockDeps.EXPECT().EnsureTools(toolVersionsDeps).Return(nil)
+	mockDeps.EXPECT().UpdatePathForTools(toolVersionsDeps).Return(nil)
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_WorkflowDepsOnly tests workflow-specific dependencies.
+func TestExecutor_ensureToolchainDependencies_WorkflowDepsOnly(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	workflowDeps := map[string]string{"terraform": "1.10.0"}
+
+	// Expect workflow deps to be installed.
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(map[string]string{}, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(workflowDeps, nil)
+	mockDeps.EXPECT().MergeDependencies(map[string]string{}, workflowDeps).Return(workflowDeps, nil)
+	mockDeps.EXPECT().EnsureTools(workflowDeps).Return(nil)
+	mockDeps.EXPECT().UpdatePathForTools(workflowDeps).Return(nil)
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Dependencies: &schema.Dependencies{
+			Tools: workflowDeps,
+		},
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_MergedDeps tests workflow deps override .tool-versions.
+func TestExecutor_ensureToolchainDependencies_MergedDeps(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	toolVersionsDeps := map[string]string{"jq": "1.7.0"}
+	workflowDeps := map[string]string{"jq": "1.7.1"}
+	mergedDeps := map[string]string{"jq": "1.7.1"} // Workflow overrides.
+
+	// Expect merge to occur.
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(toolVersionsDeps, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(workflowDeps, nil)
+	mockDeps.EXPECT().MergeDependencies(toolVersionsDeps, workflowDeps).Return(mergedDeps, nil)
+	mockDeps.EXPECT().EnsureTools(mergedDeps).Return(nil)
+	mockDeps.EXPECT().UpdatePathForTools(mergedDeps).Return(nil)
+
+	mockRunner.EXPECT().
+		RunShell("echo 'hello'", "test-workflow-step-0", ".", []string{}, false).
+		Return(nil)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Dependencies: &schema.Dependencies{
+			Tools: workflowDeps,
+		},
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.NoError(t, err)
+	assert.True(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_LoadToolVersionsError tests .tool-versions load failure.
+func TestExecutor_ensureToolchainDependencies_LoadToolVersionsError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	loadError := errors.New("failed to load .tool-versions")
+
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(nil, loadError)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	assert.False(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_ResolveWorkflowError tests workflow resolution failure.
+func TestExecutor_ensureToolchainDependencies_ResolveWorkflowError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	resolveError := errors.New("failed to resolve workflow dependencies")
+
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(map[string]string{}, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(nil, resolveError)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	assert.False(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_MergeError tests merge failure.
+func TestExecutor_ensureToolchainDependencies_MergeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	mergeError := errors.New("failed to merge dependencies")
+
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(map[string]string{"jq": "1.7.0"}, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(map[string]string{"jq": "1.7.1"}, nil)
+	mockDeps.EXPECT().MergeDependencies(gomock.Any(), gomock.Any()).Return(nil, mergeError)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Dependencies: &schema.Dependencies{
+			Tools: map[string]string{"jq": "1.7.1"},
+		},
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	assert.False(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_InstallError tests tool installation failure.
+func TestExecutor_ensureToolchainDependencies_InstallError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	deps := map[string]string{"jq": "1.7.1"}
+	installError := errors.New("failed to install jq")
+
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(deps, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(map[string]string{}, nil)
+	mockDeps.EXPECT().MergeDependencies(gomock.Any(), gomock.Any()).Return(deps, nil)
+	mockDeps.EXPECT().EnsureTools(deps).Return(installError)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.False(t, result.Success)
+}
+
+// TestExecutor_ensureToolchainDependencies_UpdatePathError tests PATH update failure.
+func TestExecutor_ensureToolchainDependencies_UpdatePathError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockRunner := NewMockCommandRunner(ctrl)
+	mockDeps := NewMockDependencyProvider(ctrl)
+
+	deps := map[string]string{"jq": "1.7.1"}
+	pathError := errors.New("failed to update PATH")
+
+	mockDeps.EXPECT().LoadToolVersionsDependencies().Return(deps, nil)
+	mockDeps.EXPECT().ResolveWorkflowDependencies(gomock.Any()).Return(map[string]string{}, nil)
+	mockDeps.EXPECT().MergeDependencies(gomock.Any(), gomock.Any()).Return(deps, nil)
+	mockDeps.EXPECT().EnsureTools(deps).Return(nil)
+	mockDeps.EXPECT().UpdatePathForTools(deps).Return(pathError)
+
+	executor := NewExecutor(mockRunner, nil, nil).WithDependencyProvider(mockDeps)
+
+	workflowDef := &schema.WorkflowDefinition{
+		Steps: []schema.WorkflowStep{
+			{Name: "step1", Command: "echo 'hello'", Type: "shell"},
+		},
+	}
+
+	result, err := executor.Execute(newTestParams(workflowDef, ExecuteOptions{}))
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDependencyResolution)
+	assert.False(t, result.Success)
+}

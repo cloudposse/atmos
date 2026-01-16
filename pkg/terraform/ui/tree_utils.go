@@ -20,6 +20,29 @@ const (
 	defaultTerminalWidth = 120
 	// TreeIndentWidth is the approximate width of tree prefix and symbols.
 	treeIndentWidth = 20
+	// MinReasonableWidth is the minimum width for text truncation.
+	minReasonableWidth = 40
+
+	// Hex color parsing constants.
+	hexColorLength = 6
+	hexBase        = 16
+
+	// SRGB to linear conversion constants (IEC 61966-2-1).
+	srgbMaxValue      = 255.0
+	srgbLinearThresh  = 0.03928
+	srgbLinearDivisor = 12.92
+	srgbGammaExp      = 2.4
+
+	// Relative luminance coefficients (ITU-R BT.709).
+	lumCoeffRed   = 0.2126
+	lumCoeffGreen = 0.7152
+	lumCoeffBlue  = 0.0722
+	lumThreshold  = 0.5
+
+	// Truncation display ratios.
+	truncHeadRatioNum = 6
+	truncTailRatioNum = 3
+	truncRatioDenom   = 10
 )
 
 // getRawStringValue returns the raw string content and whether it's multi-line.
@@ -102,8 +125,8 @@ func getMaxLineWidth() int {
 	}
 	// Subtract space for tree indent, symbols, and some margin.
 	maxWidth := width - treeIndentWidth
-	if maxWidth < 40 {
-		maxWidth = 40 // Minimum reasonable width.
+	if maxWidth < minReasonableWidth {
+		maxWidth = minReasonableWidth // Minimum reasonable width.
 	}
 	return maxWidth
 }
@@ -118,7 +141,7 @@ func getContrastTextColor(bgColor string) string {
 	}
 
 	// Default to white if parsing fails.
-	if len(hexColor) != 6 {
+	if len(hexColor) != hexColorLength {
 		return theme.ColorWhite
 	}
 
@@ -133,11 +156,11 @@ func getContrastTextColor(bgColor string) string {
 
 	// Convert to 0-1 range and apply gamma correction.
 	toLinear := func(c int64) float64 {
-		v := float64(c) / 255.0
-		if v <= 0.03928 {
-			return v / 12.92
+		v := float64(c) / srgbMaxValue
+		if v <= srgbLinearThresh {
+			return v / srgbLinearDivisor
 		}
-		return math.Pow((v+0.055)/1.055, 2.4)
+		return math.Pow((v+0.055)/1.055, srgbGammaExp)
 	}
 
 	rLinear := toLinear(r)
@@ -145,10 +168,10 @@ func getContrastTextColor(bgColor string) string {
 	bLinear := toLinear(b)
 
 	// Calculate relative luminance (WCAG formula).
-	luminance := 0.2126*rLinear + 0.7152*gLinear + 0.0722*bLinear
+	luminance := lumCoeffRed*rLinear + lumCoeffGreen*gLinear + lumCoeffBlue*bLinear
 
-	// Use black text for light backgrounds (luminance > 0.5), white for dark backgrounds.
-	if luminance > 0.5 {
+	// Use black text for light backgrounds (luminance > threshold), white for dark backgrounds.
+	if luminance > lumThreshold {
 		return theme.ColorBlack // Black text for light backgrounds.
 	}
 	return theme.ColorWhite // White text for dark backgrounds.
@@ -158,7 +181,7 @@ func getContrastTextColor(bgColor string) string {
 func parseHexComponent(hex string) (int64, error) {
 	var result int64
 	for _, c := range hex {
-		result *= 16
+		result *= hexBase
 		switch {
 		case c >= '0' && c <= '9':
 			result += int64(c - '0')
@@ -194,8 +217,8 @@ func collapseIfNeeded(lines []string, maxLines int) []string {
 	}
 
 	// When collapsing, show first 60% + last 30%.
-	showHead := maxLines * 6 / 10
-	showTail := maxLines * 3 / 10
+	showHead := maxLines * truncHeadRatioNum / truncRatioDenom
+	showTail := maxLines * truncTailRatioNum / truncRatioDenom
 	if showHead < 1 {
 		showHead = 1
 	}

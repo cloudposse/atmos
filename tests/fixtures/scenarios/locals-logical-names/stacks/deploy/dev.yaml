@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Vars with LITERAL values (not templates) so name_template can derive logical stack name.
+# This results in logical stack name: "dev-us-east-1" (from name_template).
+vars:
+  environment: dev
+  stage: us-east-1
+
+# File-scoped locals.
+locals:
+  namespace: acme
+  env_prefix: "{{ .locals.namespace }}-dev"
+  full_prefix: "{{ .locals.env_prefix }}-us-east-1"
+
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-dev-tfstate"
+    tf_only: terraform-specific-dev
+
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        name: "{{ .locals.full_prefix }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
+
+    rds:
+      metadata:
+        component: mock
+      vars:
+        name: "{{ .locals.full_prefix }}-rds"
+        bucket: "{{ .locals.backend_bucket }}"

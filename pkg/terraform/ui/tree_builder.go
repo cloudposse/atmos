@@ -124,15 +124,16 @@ func buildRelationships(tree *DependencyTree, plan *tfjson.Plan) {
 		deps := dependsOn[addr]
 		hasParentInChangeSet := false
 		for _, dep := range deps {
-			if _, exists := tree.nodes[dep]; exists {
-				hasParentInChangeSet = true
-				// Find the first dependency that's in the change set and use it as parent.
-				parentNode := tree.nodes[dep]
-				node.Parent = parentNode
-				parentNode.Children = append(parentNode.Children, node)
-				attached[addr] = true
-				break
+			if _, exists := tree.nodes[dep]; !exists {
+				continue
 			}
+			hasParentInChangeSet = true
+			// Find the first dependency that's in the change set and use it as parent.
+			parentNode := tree.nodes[dep]
+			node.Parent = parentNode
+			parentNode.Children = append(parentNode.Children, node)
+			attached[addr] = true
+			break
 		}
 		if !hasParentInChangeSet {
 			// This is a root-level resource.
