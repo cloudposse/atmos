@@ -324,53 +324,7 @@ func TestWriteToFile(t *testing.T) {
 	})
 }
 
-func TestGitHubHelpers(t *testing.T) {
-	t.Run("IsGitHubActions returns false when not in CI", func(t *testing.T) {
-		// t.Setenv handles cleanup automatically.
-		t.Setenv("GITHUB_ACTIONS", "")
-		os.Unsetenv("GITHUB_ACTIONS")
-		assert.False(t, IsGitHubActions())
-	})
-
-	t.Run("IsGitHubActions returns true when GITHUB_ACTIONS=true", func(t *testing.T) {
-		t.Setenv("GITHUB_ACTIONS", "true")
-		assert.True(t, IsGitHubActions())
-	})
-
-	t.Run("GetOutputPath returns empty when not set", func(t *testing.T) {
-		t.Setenv("GITHUB_OUTPUT", "")
-		os.Unsetenv("GITHUB_OUTPUT")
-		assert.Empty(t, GetOutputPath())
-	})
-
-	t.Run("GetOutputPath returns path when set", func(t *testing.T) {
-		t.Setenv("GITHUB_OUTPUT", "/tmp/github_output")
-		assert.Equal(t, "/tmp/github_output", GetOutputPath())
-	})
-
-	t.Run("GetEnvPath returns empty when not set", func(t *testing.T) {
-		t.Setenv("GITHUB_ENV", "")
-		os.Unsetenv("GITHUB_ENV")
-		assert.Empty(t, GetEnvPath())
-	})
-
-	t.Run("GetEnvPath returns path when set", func(t *testing.T) {
-		t.Setenv("GITHUB_ENV", "/tmp/github_env")
-		assert.Equal(t, "/tmp/github_env", GetEnvPath())
-	})
-
-	t.Run("GetPathPath returns empty when not set", func(t *testing.T) {
-		t.Setenv("GITHUB_PATH", "")
-		os.Unsetenv("GITHUB_PATH")
-		assert.Empty(t, GetPathPath())
-	})
-
-	t.Run("GetSummaryPath returns empty when not set", func(t *testing.T) {
-		t.Setenv("GITHUB_STEP_SUMMARY", "")
-		os.Unsetenv("GITHUB_STEP_SUMMARY")
-		assert.Empty(t, GetSummaryPath())
-	})
-}
+// GitHub helper tests are in pkg/github/actions/env/env_test.go.
 
 func TestUnsupportedFormat(t *testing.T) {
 	_, err := FormatData(map[string]any{"key": "value"}, Format("invalid"))
