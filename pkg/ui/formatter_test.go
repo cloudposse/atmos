@@ -2023,6 +2023,10 @@ func TestFormatterHintfMethod(t *testing.T) {
 }
 
 func TestFormatterToastMethod(t *testing.T) {
+	// Save and restore global color profile for test isolation.
+	prevProfile := lipgloss.DefaultRenderer().ColorProfile()
+	t.Cleanup(func() { SetColorProfile(prevProfile) })
+
 	ioCtx := createTestIOContext()
 	// Use mock terminal without colors for consistent testing.
 	// Color rendering is tested separately in other tests.
@@ -2043,6 +2047,10 @@ func TestFormatterToastMethod(t *testing.T) {
 }
 
 func TestFormatterToastfMethod(t *testing.T) {
+	// Save and restore global color profile for test isolation.
+	prevProfile := lipgloss.DefaultRenderer().ColorProfile()
+	t.Cleanup(func() { SetColorProfile(prevProfile) })
+
 	ioCtx := createTestIOContext()
 	// Use mock terminal without colors for consistent testing.
 	term := createMockTerminal(terminal.ColorNone)
