@@ -15,7 +15,7 @@ import (
 	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	ghenv "github.com/cloudposse/atmos/pkg/github/actions/env"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
@@ -161,7 +161,7 @@ func executeGitHubOutput(outputs map[string]any, outputFile string, opts tfoutpu
 	// Determine output file - use $GITHUB_OUTPUT if not specified.
 	path := outputFile
 	if path == "" {
-		path = ghenv.GetOutputPath()
+		path = ghactions.GetOutputPath()
 		if path == "" {
 			return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 				WithExplanation("--format=github requires GITHUB_OUTPUT environment variable to be set, or use --output-file to specify a file path.").

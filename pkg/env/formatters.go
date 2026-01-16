@@ -2,7 +2,8 @@ package env
 
 import (
 	"fmt"
-	"strings"
+
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 )
 
 // formatEnvValue formats a key-value pair as key=value (no quoting).
@@ -23,12 +24,7 @@ func formatBashValue(key, value string) string {
 }
 
 // formatGitHubValue formats a key-value pair for GitHub Actions.
-// Uses key=value for single-line values and heredoc syntax for multiline values.
-// The heredoc delimiter is ATMOS_EOF_<key> to avoid collision with values containing "EOF".
+// Delegates to pkg/github/actions for GitHub-specific formatting.
 func formatGitHubValue(key, value string) string {
-	if strings.Contains(value, "\n") {
-		delimiter := fmt.Sprintf("ATMOS_EOF_%s", key)
-		return fmt.Sprintf("%s<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
-	}
-	return fmt.Sprintf("%s=%s\n", key, value)
+	return ghactions.FormatValue(key, value)
 }

@@ -1,7 +1,7 @@
-// Package env provides helpers for GitHub Actions environment files.
-// It supports reading paths to $GITHUB_OUTPUT, $GITHUB_ENV, $GITHUB_PATH,
-// and $GITHUB_STEP_SUMMARY files, plus writing formatted data to them.
-package env
+// Package actions provides utilities for GitHub Actions workflows.
+// It supports detecting the GitHub Actions environment and accessing
+// paths to $GITHUB_OUTPUT, $GITHUB_ENV, $GITHUB_PATH, and $GITHUB_STEP_SUMMARY files.
+package actions
 
 import (
 	"os"
@@ -12,7 +12,7 @@ import (
 // IsGitHubActions returns true if running in GitHub Actions.
 // It checks for the GITHUB_ACTIONS environment variable set by GitHub.
 func IsGitHubActions() bool {
-	defer perf.Track(nil, "github.actions.env.IsGitHubActions")()
+	defer perf.Track(nil, "github.actions.IsGitHubActions")()
 
 	// GITHUB_ACTIONS is an external CI environment variable set by GitHub Actions,
 	// not an Atmos configuration variable, so os.Getenv is appropriate here.
@@ -23,7 +23,7 @@ func IsGitHubActions() bool {
 // GetOutputPath returns the path to $GITHUB_OUTPUT file, or empty string if not set.
 // GITHUB_OUTPUT is used to pass outputs between workflow steps.
 func GetOutputPath() string {
-	defer perf.Track(nil, "github.actions.env.GetOutputPath")()
+	defer perf.Track(nil, "github.actions.GetOutputPath")()
 
 	// GITHUB_OUTPUT is an external CI environment variable set by GitHub Actions,
 	// not an Atmos configuration variable, so os.Getenv is appropriate here.
@@ -34,7 +34,7 @@ func GetOutputPath() string {
 // GetEnvPath returns the path to $GITHUB_ENV file, or empty string if not set.
 // GITHUB_ENV is used to set environment variables for subsequent workflow steps.
 func GetEnvPath() string {
-	defer perf.Track(nil, "github.actions.env.GetEnvPath")()
+	defer perf.Track(nil, "github.actions.GetEnvPath")()
 
 	// GITHUB_ENV is an external CI environment variable set by GitHub Actions,
 	// not an Atmos configuration variable, so os.Getenv is appropriate here.
@@ -45,7 +45,7 @@ func GetEnvPath() string {
 // GetPathPath returns the path to $GITHUB_PATH file, or empty string if not set.
 // GITHUB_PATH is used to prepend directories to the system PATH for subsequent steps.
 func GetPathPath() string {
-	defer perf.Track(nil, "github.actions.env.GetPathPath")()
+	defer perf.Track(nil, "github.actions.GetPathPath")()
 
 	// GITHUB_PATH is an external CI environment variable set by GitHub Actions,
 	// not an Atmos configuration variable, so os.Getenv is appropriate here.
@@ -56,7 +56,7 @@ func GetPathPath() string {
 // GetSummaryPath returns the path to $GITHUB_STEP_SUMMARY file, or empty string if not set.
 // GITHUB_STEP_SUMMARY is used to write job summary markdown.
 func GetSummaryPath() string {
-	defer perf.Track(nil, "github.actions.env.GetSummaryPath")()
+	defer perf.Track(nil, "github.actions.GetSummaryPath")()
 
 	// GITHUB_STEP_SUMMARY is an external CI environment variable set by GitHub Actions,
 	// not an Atmos configuration variable, so os.Getenv is appropriate here.

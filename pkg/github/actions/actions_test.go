@@ -1,4 +1,4 @@
-package env
+package actions
 
 import (
 	"os"
@@ -75,5 +75,61 @@ func TestGetSummaryPath(t *testing.T) {
 	t.Run("returns path when set", func(t *testing.T) {
 		t.Setenv("GITHUB_STEP_SUMMARY", "/tmp/github_step_summary")
 		assert.Equal(t, "/tmp/github_step_summary", GetSummaryPath())
+	})
+}
+
+func TestFormatValue(t *testing.T) {
+	t.Run("single line value", func(t *testing.T) {
+		result := FormatValue("KEY", "value")
+		assert.Equal(t, "KEY=value\n", result)
+	})
+
+	t.Run("multiline value uses heredoc", func(t *testing.T) {
+		result := FormatValue("KEY", "line1\nline2")
+		expected := "KEY<<ATMOS_EOF_KEY\nline1\nline2\nATMOS_EOF_KEY\n"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("value with trailing newline", func(t *testing.T) {
+		result := FormatValue("KEY", "line1\nline2\n")
+		expected := "KEY<<ATMOS_EOF_KEY\nline1\nline2\n\nATMOS_EOF_KEY\n"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("empty value", func(t *testing.T) {
+		result := FormatValue("KEY", "")
+		assert.Equal(t, "KEY=\n", result)
+	})
+
+	t.Run("value with special characters", func(t *testing.T) {
+		result := FormatValue("KEY", "value with spaces & special=chars")
+		assert.Equal(t, "KEY=value with spaces & special=chars\n", result)
+	})
+}
+
+func TestFormatData(t *testing.T) {
+	t.Run("formats and sorts keys", func(t *testing.T) {
+		data := map[string]string{"B": "2", "A": "1"}
+		result := FormatData(data)
+		assert.Equal(t, "A=1\nB=2\n", result)
+	})
+
+	t.Run("skips empty values", func(t *testing.T) {
+		data := map[string]string{"A": "1", "B": "", "C": "3"}
+		result := FormatData(data)
+		assert.Equal(t, "A=1\nC=3\n", result)
+	})
+
+	t.Run("empty map", func(t *testing.T) {
+		data := map[string]string{}
+		result := FormatData(data)
+		assert.Equal(t, "", result)
+	})
+
+	t.Run("handles multiline values", func(t *testing.T) {
+		data := map[string]string{"MULTI": "line1\nline2", "SINGLE": "value"}
+		result := FormatData(data)
+		expected := "MULTI<<ATMOS_EOF_MULTI\nline1\nline2\nATMOS_EOF_MULTI\nSINGLE=value\n"
+		assert.Equal(t, expected, result)
 	})
 }

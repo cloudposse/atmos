@@ -14,7 +14,7 @@ import (
 	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	ghenv "github.com/cloudposse/atmos/pkg/github/actions/env"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -83,7 +83,7 @@ var envCmd = &cobra.Command{
 		if format == "github" {
 			path := output
 			if path == "" {
-				path = ghenv.GetEnvPath()
+				path = ghactions.GetEnvPath()
 				if path == "" {
 					return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 						WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output to specify a file path.").
