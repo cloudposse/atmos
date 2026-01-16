@@ -1,6 +1,8 @@
 package toolchain
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -23,6 +25,7 @@ func TestGetCurrentPath_PreservesComplexPath(t *testing.T) {
 }
 
 func TestConstructFinalPath(t *testing.T) {
+	sep := string(os.PathListSeparator)
 	tests := []struct {
 		name        string
 		pathEntries []string
@@ -33,25 +36,25 @@ func TestConstructFinalPath(t *testing.T) {
 			name:        "single entry",
 			pathEntries: []string{"/tools/bin"},
 			currentPath: "/usr/bin",
-			expected:    "/tools/bin:/usr/bin",
+			expected:    "/tools/bin" + sep + "/usr/bin",
 		},
 		{
 			name:        "multiple entries",
 			pathEntries: []string{"/a", "/b"},
 			currentPath: "/usr/bin",
-			expected:    "/a:/b:/usr/bin",
+			expected:    "/a" + sep + "/b" + sep + "/usr/bin",
 		},
 		{
 			name:        "empty entries",
 			pathEntries: []string{},
 			currentPath: "/usr/bin",
-			expected:    ":/usr/bin",
+			expected:    sep + "/usr/bin",
 		},
 		{
 			name:        "empty current path",
 			pathEntries: []string{"/tools/bin"},
 			currentPath: "",
-			expected:    "/tools/bin:",
+			expected:    "/tools/bin" + sep,
 		},
 	}
 
@@ -89,7 +92,7 @@ func TestResolveDirPath(t *testing.T) {
 			result, err := resolveDirPath(tt.binaryPath, tt.relativeFlag)
 			assert.NoError(t, err)
 			if tt.expectAbs {
-				assert.True(t, len(result) > 0 && result[0] == '/', "Expected absolute path, got: %s", result)
+				assert.True(t, filepath.IsAbs(result), "Expected absolute path, got: %s", result)
 			}
 		})
 	}

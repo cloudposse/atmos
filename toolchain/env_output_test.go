@@ -50,7 +50,9 @@ func TestAppendToFile_FishFormat(t *testing.T) {
 	setupTestIO(t)
 	tempFile := filepath.Join(t.TempDir(), "fish")
 
-	err := appendToFile(tempFile, "fish", []string{}, "/tools/bin:/usr/bin")
+	// Use platform-appropriate path separator since formatFishContent splits by os.PathListSeparator.
+	testPath := "/tools/bin" + string(os.PathListSeparator) + "/usr/bin"
+	err := appendToFile(tempFile, "fish", []string{}, testPath)
 	require.NoError(t, err)
 
 	content, err := os.ReadFile(tempFile)
