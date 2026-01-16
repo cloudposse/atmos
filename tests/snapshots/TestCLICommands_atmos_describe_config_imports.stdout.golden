@@ -66,6 +66,7 @@ settings:
       wrap: false
     color: true
     no_color: false
+  experimental: warn
   inject_github_token: true
   inject_bitbucket_token: true
   inject_gitlab_token: true

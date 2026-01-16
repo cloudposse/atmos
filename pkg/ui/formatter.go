@@ -333,6 +333,27 @@ func Hintf(format string, a ...interface{}) error {
 	return f.terminal.Write(formatted)
 }
 
+// Experimental writes an experimental feature notification with test tube icon to stderr (UI channel).
+// This is used to notify users when they're using an experimental feature that may change.
+// The notification behavior is controlled by settings.experimental in atmos.yaml (silence, disable, warn, error).
+// The caller (root.go PersistentPreRun) handles the config check - this function just outputs.
+// Flow: ui.Experimental() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Experimental(feature string) error {
+	f, err := getFormatter()
+	if err != nil {
+		return err
+	}
+
+	formatted := f.Experimental(feature) + newline
+	return f.terminal.Write(formatted)
+}
+
+// Experimentalf writes a formatted experimental feature notification with test tube icon to stderr (UI channel).
+// Flow: ui.Experimentalf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+func Experimentalf(format string, a ...interface{}) error {
+	return Experimental(fmt.Sprintf(format, a...))
+}
+
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
 func Write(text string) error {
@@ -363,6 +384,33 @@ func FormatError(text string) string {
 		return "✗ " + text
 	}
 	return f.Error(text)
+}
+
+// Badge returns a styled badge with the given text, background color, and foreground color.
+// Badges are compact labels with background styling, typically used for status indicators.
+// The background and foreground should be hex colors (e.g., "#FF9800", "#000000").
+// Use this when you need the formatted string without writing (e.g., in help text).
+func Badge(text, background, foreground string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[" + text + "]"
+	}
+	return f.Badge(text, background, foreground)
+}
+
+// FormatExperimentalBadge returns an "EXPERIMENTAL" badge using theme colors.
+// Use this to indicate experimental features in help text or command descriptions.
+func FormatExperimentalBadge() string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[EXPERIMENTAL]"
+	}
+	if !f.SupportsColor() {
+		return "[EXPERIMENTAL]"
+	}
+	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
 }
 
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
@@ -469,6 +517,20 @@ func (f *formatter) Toast(icon, message string) string {
 // Toastf renders formatted markdown text with an icon prefix.
 func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 	return f.Toast(icon, fmt.Sprintf(format, a...))
+}
+
+// Badge renders a styled badge with background color, foreground color, bold text, and padding.
+// Badges are compact labels used for status indicators like [EXPERIMENTAL], [BETA], etc.
+func (f *formatter) Badge(text, background, foreground string) string {
+	if !f.SupportsColor() {
+		return "[" + text + "]"
+	}
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(background)).
+		Foreground(lipgloss.Color(foreground)).
+		Bold(true).
+		Padding(0, 1).
+		Render(text)
 }
 
 // isANSIStart checks if position i marks the start of an ANSI escape sequence.
@@ -835,6 +897,21 @@ func (f *formatter) Info(text string) string {
 
 func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
+}
+
+func (f *formatter) Experimental(feature string) string {
+	var message string
+	if feature != "" {
+		message = fmt.Sprintf("`%s` is an experimental feature. [Learn more](https://atmos.tools/experimental)", feature)
+	} else {
+		message = "Experimental feature. [Learn more](https://atmos.tools/experimental)"
+	}
+	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Muted, message)
+	return result
+}
+
+func (f *formatter) Experimentalf(format string, a ...interface{}) string {
+	return f.Experimental(fmt.Sprintf(format, a...))
 }
 
 func (f *formatter) Hint(text string) string {

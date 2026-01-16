@@ -1,6 +1,8 @@
 
 👽 test linux/amd64
 
+[EXPERIMENTAL]
+
 A standalone tool to install CLI binaries using registry metadata.
 
 USAGE

@@ -347,6 +347,9 @@ type SyntaxHighlighting struct {
 type AtmosSettings struct {
 	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	// Experimental controls how experimental features are handled.
+	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
