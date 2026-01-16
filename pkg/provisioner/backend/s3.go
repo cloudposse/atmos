@@ -17,7 +17,6 @@ import (
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -144,19 +143,19 @@ func CreateS3Backend(
 	atmosConfig *schema.AtmosConfiguration,
 	backendConfig map[string]any,
 	authContext *schema.AuthContext,
-) error {
+) (*ProvisionResult, error) {
 	defer perf.Track(atmosConfig, "backend.CreateS3Backend")()
 
 	// Extract and validate required configuration.
 	config, err := extractS3Config(backendConfig)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Load AWS configuration with auth context.
 	awsConfig, err := loadAWSConfigWithAuth(ctx, config.region, config.roleArn, authContext)
 	if err != nil {
-		return errUtils.Build(errUtils.ErrLoadAWSConfig).
+		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).
 			WithHint("Check AWS credentials are configured correctly").
 			WithHintf("Verify AWS region '%s' is valid", config.region).
 			WithHint("If using --identity flag, ensure the identity is authenticated").
@@ -171,16 +170,18 @@ func CreateS3Backend(
 	// Check if bucket exists and create if needed.
 	bucketAlreadyExisted, err := ensureBucket(ctx, client, config.bucket, config.region)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// Apply hardcoded defaults.
-	// If bucket already existed, warn that settings may be overwritten.
-	if err := applyS3BucketDefaults(ctx, client, config.bucket, bucketAlreadyExisted); err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrApplyBucketDefaults, err)
+	// If bucket already existed, warnings are returned (not printed directly) to avoid
+	// concurrent output issues when running inside a spinner.
+	warnings, err := applyS3BucketDefaults(ctx, client, config.bucket, bucketAlreadyExisted)
+	if err != nil {
+		return nil, fmt.Errorf(errFormat, errUtils.ErrApplyBucketDefaults, err)
 	}
 
-	return nil
+	return &ProvisionResult{Warnings: warnings}, nil
 }
 
 // extractS3Config extracts and validates required S3 configuration.
@@ -367,12 +368,15 @@ func createBucket(ctx context.Context, client S3ClientAPI, bucket, region string
 // - Public Access: BLOCKED (all 4 settings)
 // - Tags: Replaces entire tag set with Name and ManagedBy=Atmos only
 //
-// If the bucket already existed (alreadyExisted=true), warnings are logged to inform the user
-// that existing settings are being modified.
-func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket string, alreadyExisted bool) error {
-	// Warn user if modifying pre-existing bucket settings.
+// If the bucket already existed (alreadyExisted=true), warnings are returned to inform the user
+// that existing settings are being modified. Warnings are returned instead of printed directly
+// to avoid concurrent output issues when called inside a spinner.
+func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket string, alreadyExisted bool) ([]string, error) {
+	var warnings []string
+
+	// Collect warning if modifying pre-existing bucket settings.
 	if alreadyExisted {
-		_ = ui.Warning(fmt.Sprintf("Applying Atmos defaults to existing bucket `%s`\n\n"+
+		warnings = append(warnings, fmt.Sprintf("Applying Atmos defaults to existing bucket `%s`\n\n"+
 			"- Versioning will be ENABLED\n"+
 			"- Encryption will be set to AES-256 (existing KMS encryption will be replaced)\n"+
 			"- Public access will be BLOCKED (all 4 settings)\n"+
@@ -381,33 +385,33 @@ func applyS3BucketDefaults(ctx context.Context, client S3ClientAPI, bucket strin
 
 	// 1. Enable versioning (ALWAYS).
 	if err := enableVersioning(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrEnableVersioning, err)
+		return nil, fmt.Errorf(errFormat, errUtils.ErrEnableVersioning, err)
 	}
 
 	// Skip operations not supported by gofakes3 during testing.
 	// These are tested separately with mocks in s3_test.go.
 	if getS3SkipUnsupportedTestOps() {
-		return nil
+		return warnings, nil
 	}
 
 	// 2. Enable encryption with AES-256 (ALWAYS).
 	// NOTE: This replaces any existing encryption configuration, including KMS.
 	if err := enableEncryption(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrEnableEncryption, err)
+		return nil, fmt.Errorf(errFormat, errUtils.ErrEnableEncryption, err)
 	}
 
 	// 3. Block public access (ALWAYS).
 	if err := blockPublicAccess(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrBlockPublicAccess, err)
+		return nil, fmt.Errorf(errFormat, errUtils.ErrBlockPublicAccess, err)
 	}
 
 	// 4. Apply standard tags (ALWAYS).
 	// NOTE: This replaces the entire tag set. Existing tags are not preserved.
 	if err := applyTags(ctx, client, bucket); err != nil {
-		return fmt.Errorf(errFormat, errUtils.ErrApplyTags, err)
+		return nil, fmt.Errorf(errFormat, errUtils.ErrApplyTags, err)
 	}
 
-	return nil
+	return warnings, nil
 }
 
 // enableVersioning enables versioning on an S3 bucket.
