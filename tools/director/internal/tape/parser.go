@@ -23,12 +23,31 @@ var typeRegex = regexp.MustCompile("^\\s*Type\\s+[\"'`](.+)[\"'`]\\s*$")
 // sleepRegex matches Sleep directives (Sleep 1s, Sleep 500ms, etc.).
 var sleepRegex = regexp.MustCompile(`^\s*Sleep\s+[\d.]+(?:ms|s)\s*$`)
 
+// envRegex matches Env directives: Env NAME "value" or Env NAME 'value'.
+var envRegex = regexp.MustCompile(`^\s*Env\s+(\w+)\s+["'](.+)["']\s*$`)
+
+// TapeResult contains the parsed commands and environment variables from a tape file.
+type TapeResult struct {
+	Commands []Command
+	EnvVars  map[string]string
+}
+
 // ParseCommands extracts executable commands from a VHS tape file.
 // It finds Type directives followed by Enter and returns them as commands.
 // Sleep directives between Type and Enter are allowed.
 // Comments (lines starting with #) are marked but included for context.
 func ParseCommands(tapePath string) ([]Command, error) {
-	defer perf.Track(nil, "tape.ParseCommands")()
+	result, err := ParseTape(tapePath)
+	if err != nil {
+		return nil, err
+	}
+	return result.Commands, nil
+}
+
+// ParseTape extracts commands and environment variables from a VHS tape file.
+// This is the full parser that returns both commands and Env directives.
+func ParseTape(tapePath string) (*TapeResult, error) {
+	defer perf.Track(nil, "tape.ParseTape")()
 
 	file, err := os.Open(tapePath)
 	if err != nil {
@@ -36,7 +55,9 @@ func ParseCommands(tapePath string) ([]Command, error) {
 	}
 	defer file.Close()
 
-	var commands []Command
+	result := &TapeResult{
+		EnvVars: make(map[string]string),
+	}
 	var pendingType *Command
 
 	scanner := bufio.NewScanner(file)
@@ -47,9 +68,21 @@ func ParseCommands(tapePath string) ([]Command, error) {
 		line := scanner.Text()
 		trimmed := strings.TrimSpace(line)
 
+		// Check for Env directive.
+		if matches := envRegex.FindStringSubmatch(line); matches != nil {
+			name := matches[1]
+			value := matches[2]
+			result.EnvVars[name] = value
+			continue
+		}
+
 		// Check for Type directive.
 		if matches := typeRegex.FindStringSubmatch(line); matches != nil {
 			text := matches[1]
+			// Unescape VHS-specific escape sequences.
+			// VHS uses \$ to type a literal $ (preventing VHS variable expansion).
+			// When we execute via bash, we want bash to expand $VAR, so unescape.
+			text = strings.ReplaceAll(text, `\$`, "$")
 			isComment := strings.HasPrefix(strings.TrimSpace(text), "#")
 
 			pendingType = &Command{
@@ -62,7 +95,7 @@ func ParseCommands(tapePath string) ([]Command, error) {
 
 		// Check for Enter directive.
 		if trimmed == "Enter" && pendingType != nil {
-			commands = append(commands, *pendingType)
+			result.Commands = append(result.Commands, *pendingType)
 			pendingType = nil
 			continue
 		}
@@ -87,7 +120,7 @@ func ParseCommands(tapePath string) ([]Command, error) {
 		return nil, fmt.Errorf("failed to read tape file %s: %w", tapePath, err)
 	}
 
-	return commands, nil
+	return result, nil
 }
 
 // FilterExecutable returns only commands that should be executed (non-comments).

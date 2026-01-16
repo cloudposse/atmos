@@ -518,15 +518,21 @@ func runTestMode(ctx context.Context, c *cobra.Command, demosDir string, scenes 
 			}
 		}
 
-		// Parse commands from tape file.
-		commands, err := tape.ParseCommands(tapePath)
+		// Parse commands and env vars from tape file.
+		tapeResult, err := tape.ParseTape(tapePath)
 		if err != nil {
 			c.Printf("  ✗ Failed to parse tape: %v\n\n", err)
 			return fmt.Errorf("failed to parse tape for scene %s: %w", sc.Name, err)
 		}
 
+		// Convert tape env vars to KEY=value format for executor.
+		var tapeEnv []string
+		for k, v := range tapeResult.EnvVars {
+			tapeEnv = append(tapeEnv, fmt.Sprintf("%s=%s", k, v))
+		}
+
 		// Filter to executable commands only.
-		executable := tape.FilterExecutable(commands)
+		executable := tape.FilterExecutable(tapeResult.Commands)
 
 		if len(executable) == 0 {
 			c.Printf("  (no executable commands found)\n\n")
@@ -539,13 +545,13 @@ func runTestMode(ctx context.Context, c *cobra.Command, demosDir string, scenes 
 			if verbose {
 				// Direct execution - output goes straight to terminal, no buffering.
 				c.Printf("$ %s\n", cmd.Text)
-				result = tape.ExecuteCommandDirect(ctx, cmd, workdir, nil)
+				result = tape.ExecuteCommandDirect(ctx, cmd, workdir, tapeEnv)
 				if result.Success {
 					c.Printf("\n")
 				}
 			} else {
 				// Buffered execution for non-verbose mode.
-				result = tape.ExecuteCommand(ctx, cmd, workdir, nil)
+				result = tape.ExecuteCommand(ctx, cmd, workdir, tapeEnv)
 				if result.Success {
 					c.Printf("  ✓ %s (%.1fs)\n", cmd.Text, result.Duration.Seconds())
 				}

@@ -17,6 +17,11 @@ import (
 
 const (
 	spinnerAnimationFrames = 5 // Number of animation frames for progress spinner.
+
+	// Installation status constants.
+	statusInstalled = "installed"
+	statusFailed    = "failed"
+	statusSkipped   = "skipped"
 )
 
 // Bubble Tea spinner model.
@@ -211,16 +216,16 @@ func installMultipleTools(toolSpecs []string, setAsDefault, reinstallFlag bool) 
 	for i, tool := range toolList {
 		result, err := installOrSkipTool(installer, tool, reinstallFlag)
 		switch result {
-		case "installed":
+		case statusInstalled:
 			installedCount++
 			// Update .tool-versions for each successfully installed tool.
 			toolName := fmt.Sprintf("%s/%s", tool.owner, tool.repo)
 			if err := updateToolVersionsFile(toolName, tool.version, setAsDefault); err != nil {
 				_ = ui.Warningf("Failed to update .tool-versions for `%s@%s`: %v", toolName, tool.version, err)
 			}
-		case "failed":
+		case statusFailed:
 			failedCount++
-		case "skipped":
+		case statusSkipped:
 			alreadyInstalledCount++
 		}
 		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
@@ -298,11 +303,11 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag bool) error 
 	for i, tool := range toolList {
 		result, err := installOrSkipTool(installer, tool, reinstallFlag)
 		switch result {
-		case "installed":
+		case statusInstalled:
 			installedCount++
-		case "failed":
+		case statusFailed:
 			failedCount++
-		case "skipped":
+		case statusSkipped:
 			alreadyInstalledCount++
 		}
 		showProgress(&spinner, &progressBar, tool, progressState{index: i, total: len(toolList), result: result, err: err})
@@ -329,14 +334,14 @@ func buildToolList(installer *Installer, toolVersions *ToolVersions) []toolInfo 
 func installOrSkipTool(installer *Installer, tool toolInfo, reinstallFlag bool) (string, error) {
 	_, err := installer.FindBinaryPath(tool.owner, tool.repo, tool.version)
 	if err == nil && !reinstallFlag {
-		return "skipped", nil
+		return statusSkipped, nil
 	}
 
 	err = InstallSingleTool(tool.owner, tool.repo, tool.version, tool.version == "latest", false)
 	if err != nil {
-		return "failed", err
+		return statusFailed, err
 	}
-	return "installed", nil
+	return statusInstalled, nil
 }
 
 type toolInfo struct {
@@ -365,11 +370,11 @@ func showProgress(
 
 	// Print status message (with newline - this becomes a permanent line that scrolls up).
 	switch state.result {
-	case "skipped":
+	case statusSkipped:
 		_ = ui.Successf("Skipped `%s/%s@%s` ((already installed))", tool.owner, tool.repo, tool.version)
-	case "installed":
+	case statusInstalled:
 		_ = ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
-	case "failed":
+	case statusFailed:
 		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
