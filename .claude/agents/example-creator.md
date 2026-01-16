@@ -384,6 +384,54 @@ import EmbedFile from '@site/src/components/EmbedFile'
 - Docs automatically stay in sync with examples
 - No manual code duplication
 
+## File Browser Integration
+
+Examples appear in the website file browser at `/examples/{name}`. The file-browser plugin automatically scans examples and displays them with tags and related documentation links.
+
+### Plugin Configuration
+
+**File:** `website/plugins/file-browser/index.js`
+
+Two mappings control example metadata:
+
+#### TAGS_MAP
+
+Assigns category tags to examples for filtering:
+
+```javascript
+const TAGS_MAP = {
+  // Add your example:
+  'demo-{name}': ['Stacks'],  // Choose: Quickstart, Stacks, Components, Automation, DX
+};
+```
+
+**Available Categories:**
+- `Quickstart` - Quick start tutorials
+- `Stacks` - Stack configuration examples
+- `Components` - Component/library examples
+- `Automation` - Workflow/automation examples
+- `DX` - Developer experience (tools, containers, etc.)
+
+#### DOCS_MAP
+
+Links related documentation to examples:
+
+```javascript
+const DOCS_MAP = {
+  'demo-{name}': [
+    { label: 'Feature Docs', url: '/cli/configuration/feature' },
+    { label: 'Core Concepts', url: '/core-concepts/related' },
+  ],
+};
+```
+
+### When to Update
+
+**ALWAYS** update both maps when creating a new example. This ensures:
+- Example appears with correct category filter in file browser
+- Related docs are linked for easy navigation
+- EmbedExample component displays example correctly
+
 ## Creation Workflow
 
 Follow these steps when creating a new example:
@@ -427,11 +475,14 @@ atmos terraform plan {component} -s dev
 2. Run tests: `go test ./tests -run 'TestCLICommands/demo-{name}'`
 3. Generate snapshots if needed: `go test ./tests -run 'TestCLICommands/demo-{name}' -regenerate-snapshots`
 
-### 6. Update Website Documentation
+### 6. Update Website Integration
 
-1. Find related docs: `grep -r "keyword" website/docs/`
-2. Add EmbedFile imports
-3. Build website: `cd website && npm run build`
+1. **Update file-browser plugin** (`website/plugins/file-browser/index.js`):
+   - Add entry to `TAGS_MAP`: `'demo-{name}': ['Category']`
+   - Add entry to `DOCS_MAP` with related documentation links
+2. Find related docs: `grep -r "keyword" website/docs/`
+3. Add EmbedFile/EmbedExample imports to relevant doc pages
+4. Build website: `cd website && pnpm run build`
 
 ### 7. Update Workflow (Optional)
 
