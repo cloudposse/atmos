@@ -191,8 +191,12 @@ func ExecutePacker(
 			template = packerSettingTemplate
 		}
 	}
+	// If no template specified, default to "." (current directory).
+	// Packer will load all *.pkr.hcl files from the component directory.
+	// This allows users to organize Packer configurations across multiple files
+	// (e.g., variables.pkr.hcl, main.pkr.hcl, locals.pkr.hcl).
 	if template == "" {
-		return errUtils.ErrMissingPackerTemplate
+		template = "."
 	}
 
 	// Print component variables.

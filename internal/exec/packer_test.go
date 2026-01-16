@@ -418,6 +418,211 @@ func TestExecutePacker_Errors(t *testing.T) {
 	})
 }
 
+// TestExecutePacker_DirectoryMode tests that Packer commands work with directory-based templates
+// where multiple *.pkr.hcl files are loaded from the component directory.
+// This tests the fix for GitHub issue #1937.
+func TestExecutePacker_DirectoryMode(t *testing.T) {
+	tests.RequirePacker(t)
+
+	workDir := "../../tests/fixtures/scenarios/packer"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
+	log.SetLevel(log.InfoLevel)
+
+	t.Run("directory mode with no template specified", func(t *testing.T) {
+		// First init the multi-file component
+		initInfo := schema.ConfigAndStacksInfo{
+			Stack:            "prod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/multi-file",
+			SubCommand:       "init",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		packerFlags := PackerFlags{}
+		err := ExecutePacker(&initInfo, &packerFlags)
+		if err != nil {
+			t.Skipf("Skipping test: packer init failed (may require network access): %v", err)
+		}
+
+		// Now test validate with no template (should default to ".")
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "prod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/multi-file",
+			SubCommand:       "validate",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		oldStd := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		defer func() {
+			os.Stdout = oldStd
+		}()
+
+		log.SetOutput(w)
+
+		// Note: No template flag - should default to "."
+		err = ExecutePacker(&info, &packerFlags)
+
+		w.Close()
+		os.Stdout = oldStd
+
+		assert.NoError(t, err, "validate should succeed with directory mode (no template)")
+
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(r)
+		assert.NoError(t, err)
+		output := buf.String()
+
+		expected := "The configuration is valid"
+		if !strings.Contains(output, expected) {
+			t.Logf("TestExecutePacker_DirectoryMode output: %s", output)
+			t.Errorf("Output should contain: %s", expected)
+		}
+	})
+
+	t.Run("directory mode with explicit dot template", func(t *testing.T) {
+		// First init
+		initInfo := schema.ConfigAndStacksInfo{
+			Stack:            "prod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/multi-file",
+			SubCommand:       "init",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		packerFlags := PackerFlags{Template: "."}
+		err := ExecutePacker(&initInfo, &packerFlags)
+		if err != nil {
+			t.Skipf("Skipping test: packer init failed (may require network access): %v", err)
+		}
+
+		// Test inspect with explicit "." template
+		info := schema.ConfigAndStacksInfo{
+			Stack:            "prod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/multi-file",
+			SubCommand:       "inspect",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		oldStd := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		defer func() {
+			os.Stdout = oldStd
+		}()
+
+		log.SetOutput(w)
+
+		err = ExecutePacker(&info, &packerFlags)
+
+		w.Close()
+		os.Stdout = oldStd
+
+		assert.NoError(t, err, "inspect should succeed with explicit '.' template")
+
+		var buf bytes.Buffer
+		_, err = buf.ReadFrom(r)
+		assert.NoError(t, err)
+		output := buf.String()
+
+		// Verify that variables from variables.pkr.hcl are loaded
+		expected := "var.region"
+		if !strings.Contains(output, expected) {
+			t.Logf("TestExecutePacker_DirectoryMode inspect output: %s", output)
+			t.Errorf("Output should contain: %s", expected)
+		}
+	})
+}
+
+// TestExecutePacker_MultiFileComponent tests that a component with separate
+// variables.pkr.hcl and main.pkr.hcl files works correctly when no template is specified.
+func TestExecutePacker_MultiFileComponent(t *testing.T) {
+	tests.RequirePacker(t)
+
+	workDir := "../../tests/fixtures/scenarios/packer"
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
+	log.SetLevel(log.InfoLevel)
+
+	// Verify the multi-file component has the correct files
+	componentPath := filepath.Join(workDir, "components", "packer", "aws", "multi-file")
+
+	// Check variables.pkr.hcl exists
+	variablesFile := filepath.Join(componentPath, "variables.pkr.hcl")
+	_, err := os.Stat(variablesFile)
+	assert.NoError(t, err, "variables.pkr.hcl should exist in multi-file component")
+
+	// Check main.pkr.hcl exists
+	mainFile := filepath.Join(componentPath, "main.pkr.hcl")
+	_, err = os.Stat(mainFile)
+	assert.NoError(t, err, "main.pkr.hcl should exist in multi-file component")
+
+	// Run packer init
+	initInfo := schema.ConfigAndStacksInfo{
+		Stack:            "nonprod",
+		ComponentType:    "packer",
+		ComponentFromArg: "aws/multi-file",
+		SubCommand:       "init",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	packerFlags := PackerFlags{}
+	err = ExecutePacker(&initInfo, &packerFlags)
+	if err != nil {
+		t.Skipf("Skipping test: packer init failed (may require network access): %v", err)
+	}
+
+	// Run packer validate - this should load both files
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "nonprod",
+		ComponentType:    "packer",
+		ComponentFromArg: "aws/multi-file",
+		SubCommand:       "validate",
+		ProcessTemplates: true,
+		ProcessFunctions: true,
+	}
+
+	oldStd := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	defer func() {
+		os.Stdout = oldStd
+	}()
+
+	log.SetOutput(w)
+
+	err = ExecutePacker(&info, &packerFlags)
+
+	w.Close()
+	os.Stdout = oldStd
+
+	// This should succeed because Packer loads all *.pkr.hcl files from the directory
+	assert.NoError(t, err, "multi-file component should validate successfully when Packer loads all *.pkr.hcl files")
+
+	var buf bytes.Buffer
+	_, err = buf.ReadFrom(r)
+	assert.NoError(t, err)
+	output := buf.String()
+
+	expected := "The configuration is valid"
+	if !strings.Contains(output, expected) {
+		t.Logf("TestExecutePacker_MultiFileComponent output: %s", output)
+		t.Errorf("Output should contain: %s", expected)
+	}
+}
+
 // TestPackerComponentEnvSectionConversion verifies that ComponentEnvSection is properly
 // converted to ComponentEnvList in Packer execution. This ensures auth environment variables
 // and stack config env sections are passed to Packer commands.

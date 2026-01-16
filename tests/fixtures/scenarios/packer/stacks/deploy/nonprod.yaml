@@ -5,6 +5,7 @@ vars:
 
 import:
   - catalog/aws/bastion/defaults
+  - catalog/aws/multi-file/defaults
 
 components:
   packer:
@@ -16,4 +17,11 @@ components:
         assume_role_arn: null
         # assume_role_arn: "arn:aws:iam::NONPROD_ACCOUNT_ID:role/ROLE_NAME"
         ami_tags:
+          Stage: nonprod
+
+    # Multi-file component test - uses directory mode (no template specified)
+    aws/multi-file:
+      vars:
+        instance_type: "t3.micro"
+        tags:
           Stage: nonprod
