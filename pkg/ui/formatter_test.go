@@ -879,7 +879,7 @@ func TestFormatter_FormatToast_EdgeCases(t *testing.T) {
 			name:     "empty message",
 			icon:     "✓",
 			message:  "",
-			expected: "✓ \n  \n", // Glamour renders empty as paragraph with indent
+			expected: "✓ \n", // Custom renderer produces cleaner output for empty messages
 		},
 		{
 			name:     "message with only newline",

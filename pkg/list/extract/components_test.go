@@ -222,7 +222,7 @@ func TestExtractComponentType(t *testing.T) {
 	require.NotNil(t, vpc)
 	assert.Equal(t, "vpc", vpc["component"])
 	assert.Equal(t, "test-stack", vpc["stack"])
-	assert.Equal(t, "terraform", vpc["kind"]) // terraform, helmfile, packer
+	assert.Equal(t, "terraform", vpc["type"]) // terraform, helmfile, packer
 	assert.Equal(t, true, vpc["enabled"])
 }
 

@@ -72,7 +72,7 @@ func TestInstallCommand_CommandStructure(t *testing.T) {
 		assert.True(t, installCmd.SilenceErrors)
 	})
 
-	t.Run("command accepts max 1 argument", func(t *testing.T) {
+	t.Run("command accepts multiple arguments", func(t *testing.T) {
 		assert.NotNil(t, installCmd.Args)
 	})
 }
