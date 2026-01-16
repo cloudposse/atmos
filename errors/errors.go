@@ -80,6 +80,10 @@ var (
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
 
+	// Experimental feature errors.
+	ErrExperimentalDisabled   = errors.New("experimental command is disabled")
+	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
+
 	// Authentication and TTY errors.
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")
@@ -93,6 +97,8 @@ var (
 	ErrWorkflowNameRequired       = errors.New("workflow name is required")
 	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
+	ErrStackRequired              = errors.New("--stack flag is required")
+	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -315,6 +321,7 @@ var (
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
+	ErrInvalidComponentLocals                 = errors.New("invalid component locals section")
 	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
 	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
@@ -427,6 +434,7 @@ var (
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
+	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
@@ -697,26 +705,27 @@ var (
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
 	// Backend provisioning errors.
-	ErrBucketRequired       = errors.New("backend.bucket is required")
-	ErrRegionRequired       = errors.New("backend.region is required")
-	ErrBackendNotFound      = errors.New("backend configuration not found")
-	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
-	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
-	ErrProvisionerFailed    = errors.New("provisioner failed")
-	ErrLoadAWSConfig        = errors.New("failed to load AWS config")
-	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
-	ErrCreateBucket         = errors.New("failed to create bucket")
-	ErrApplyBucketDefaults  = errors.New("failed to apply bucket defaults")
-	ErrEnableVersioning     = errors.New("failed to enable versioning")
-	ErrEnableEncryption     = errors.New("failed to enable encryption")
-	ErrBlockPublicAccess    = errors.New("failed to block public access")
-	ErrApplyTags            = errors.New("failed to apply tags")
-	ErrForceRequired        = errors.New("--force flag required for backend deletion")
-	ErrBucketNotEmpty       = errors.New("bucket contains objects and cannot be deleted")
-	ErrStateFilesExist      = errors.New("bucket contains terraform state files")
-	ErrDeleteObjects        = errors.New("failed to delete objects from bucket")
-	ErrDeleteBucket         = errors.New("failed to delete bucket")
-	ErrListObjects          = errors.New("failed to list bucket objects")
+	ErrBucketRequired            = errors.New("backend.bucket is required")
+	ErrRegionRequired            = errors.New("backend.region is required")
+	ErrBackendNotFound           = errors.New("backend configuration not found")
+	ErrProvisioningNotConfigured = errors.New("provisioning not configured")
+	ErrCreateNotImplemented      = errors.New("create not implemented for backend type")
+	ErrDeleteNotImplemented      = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed         = errors.New("provisioner failed")
+	ErrLoadAWSConfig             = errors.New("failed to load AWS config")
+	ErrCheckBucketExist          = errors.New("failed to check bucket existence")
+	ErrCreateBucket              = errors.New("failed to create bucket")
+	ErrApplyBucketDefaults       = errors.New("failed to apply bucket defaults")
+	ErrEnableVersioning          = errors.New("failed to enable versioning")
+	ErrEnableEncryption          = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess         = errors.New("failed to block public access")
+	ErrApplyTags                 = errors.New("failed to apply tags")
+	ErrForceRequired             = errors.New("--force flag required for backend deletion")
+	ErrBucketNotEmpty            = errors.New("bucket contains objects and cannot be deleted")
+	ErrStateFilesExist           = errors.New("bucket contains terraform state files")
+	ErrDeleteObjects             = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket              = errors.New("failed to delete bucket")
+	ErrListObjects               = errors.New("failed to list bucket objects")
 
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")

@@ -93,6 +93,13 @@ func RegisterAll(root *cobra.Command) error {
 			return fmt.Errorf("%w: provider %s", errUtils.ErrCommandNil, name)
 		}
 
+		// Mark experimental commands with an annotation for later rendering.
+		// The actual styled badge is added in formatCommandLine during help rendering
+		// when the color profile is available.
+		if provider.IsExperimental() {
+			markCommandExperimental(cmd)
+		}
+
 		root.AddCommand(cmd)
 	}
 
@@ -181,6 +188,19 @@ func RegisterAll(root *cobra.Command) error {
 	return nil
 }
 
+// markCommandExperimental sets the experimental annotation on a command and all its subcommands.
+func markCommandExperimental(cmd *cobra.Command) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = make(map[string]string)
+	}
+	cmd.Annotations["experimental"] = "true"
+
+	// Recursively mark all subcommands.
+	for _, sub := range cmd.Commands() {
+		markCommandExperimental(sub)
+	}
+}
+
 // GetProvider returns a built-in command provider by name.
 //
 // This function is primarily used for testing and diagnostics.
@@ -191,6 +211,16 @@ func GetProvider(name string) (CommandProvider, bool) {
 
 	provider, ok := registry.providers[name]
 	return provider, ok
+}
+
+// IsCommandExperimental returns true if the named command is experimental.
+// Returns false if the command is not found or is not experimental.
+func IsCommandExperimental(name string) bool {
+	provider, ok := GetProvider(name)
+	if !ok {
+		return false
+	}
+	return provider.IsExperimental()
 }
 
 // ListProviders returns all registered providers grouped by category.
