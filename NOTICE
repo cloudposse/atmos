@@ -656,7 +656,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/googleapis/gax-go/v2
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/gax-go/blob/v2.16.0/v2/LICENSE
+    URL: https://github.com/googleapis/gax-go/blob/v2.16.0/LICENSE
 
   - github.com/gorilla/css/scanner
     License: BSD-3-Clause
