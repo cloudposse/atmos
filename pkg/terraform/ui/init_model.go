@@ -21,6 +21,10 @@ import (
 const (
 	initMaxLines = 6 // Maximum lines to show in viewport.
 
+	// Line display constants.
+	initMaxLineWidth   = 70 // Maximum width for displayed lines.
+	initTruncatedWidth = 67 // Width after truncation (leaves room for "...").
+
 	// ANSI escape sequences for terminal control.
 	initClearToEOL = "\x1b[K" // Clear from cursor to end of line.
 )
@@ -206,8 +210,8 @@ func (m *InitModel) renderProgress() string {
 	dimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorGray))
 	for _, line := range m.lines {
 		// Truncate long lines using rune-aware width to handle multi-byte UTF-8.
-		if runewidth.StringWidth(line) > 70 {
-			line = runewidth.Truncate(line, 67, "...")
+		if runewidth.StringWidth(line) > initMaxLineWidth {
+			line = runewidth.Truncate(line, initTruncatedWidth, "...")
 		}
 		b.WriteString(fmt.Sprintf("    %s\n", dimStyle.Render(line)))
 	}

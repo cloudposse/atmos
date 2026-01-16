@@ -84,6 +84,9 @@ var affectedCmd = &cobra.Command{
 }
 
 func init() {
+	// Mark this subcommand as experimental.
+	affectedCmd.Annotations = map[string]string{"experimental": "true"}
+
 	// Create parser using flag wrappers.
 	affectedParser = NewListParser(
 		WithFormatFlag,

@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+# Global locals - available to all sections in this file.
+locals:
+  namespace: "acme"
+  environment: "dev"
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+vars:
+  environment: "dev"
+  stage: "us-east-1"
+
+terraform:
+  # Terraform-scope locals - inherit from global, can override.
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
+    tf_specific: "terraform-only"
+
+components:
+  terraform:
+    # Base component with component-level locals.
+    vpc/base:
+      metadata:
+        type: abstract
+        component: mock
+      locals:
+        vpc_type: "standard"
+        cidr_prefix: "10.0"
+      vars:
+        # Use file-level locals (global + terraform section).
+        name: "{{ .locals.name_prefix }}-vpc"
+        bucket: "{{ .locals.backend_bucket }}"
+
+    # Component inheriting from vpc/base with locals override.
+    vpc/dev:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        # Override vpc_type from base.
+        vpc_type: "development"
+        # Add new local.
+        extra_tag: "dev-only"
+      vars:
+        # Use file-level locals.
+        description: "{{ .locals.name_prefix }}-vpc-dev"
+
+    # Component inheriting from vpc/base without locals override.
+    vpc/standard:
+      metadata:
+        inherits:
+          - vpc/base
+      vars:
+        # Use file-level locals.
+        description: "{{ .locals.name_prefix }}-vpc-standard"
+
+    # Component with only component-level locals (no inheritance).
+    standalone:
+      metadata:
+        component: mock
+      locals:
+        standalone_value: "standalone-only"
+        computed_ref: "{{ .locals.name_prefix }}"
+      vars:
+        # Use file-level locals.
+        name: "{{ .locals.name_prefix }}-standalone"
+        bucket: "{{ .locals.backend_bucket }}"
+
+    # Component with component attribute (different from metadata.inherits).
+    vpc/custom:
+      component: mock
+      locals:
+        custom_local: "custom-value"
+      vars:
+        prefix: "{{ .locals.name_prefix }}"

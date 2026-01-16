@@ -1,0 +1,49 @@
+# Test fixture for flag inheritance scenarios.
+# Tests that custom commands can inherit flags from global/parent commands.
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "../../components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+# Custom commands that test flag inheritance
+commands:
+  # Test 1: Custom command inheriting global --verbose flag (bool)
+  - name: echo
+    description: Echo commands with verbose support
+    commands:
+      - name: info
+        description: Echo information with optional verbose output
+        flags:
+          - name: verbose
+            shorthand: v
+            type: bool
+            description: Enable verbose output
+        steps:
+          - 'echo "Info: This is a basic message"'
+          - '{{ if .Flags.verbose }}echo "Verbose: Additional details enabled"{{ end }}'
+
+  # Test 2: Custom command with --stack flag (same as terraform's parent flag)
+  - name: deploy
+    description: Deploy commands with stack support
+    commands:
+      - name: component
+        description: Deploy a component to a stack
+        arguments:
+          - name: component
+            description: Name of the component
+        flags:
+          - name: stack
+            shorthand: s
+            description: Name of the stack
+            required: true
+        steps:
+          - 'echo "Deploying component: {{ .Arguments.component }}"'
+          - 'echo "To stack: {{ .Flags.stack }}"'

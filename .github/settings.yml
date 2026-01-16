@@ -37,3 +37,6 @@ labels:
   - name: go
     color: '#00add8'
     description: Pull requests that update Go code
+  - name: experimental
+    color: '#ff9800'
+    description: Feature is experimental and still being refined

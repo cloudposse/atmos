@@ -631,3 +631,74 @@ The `--identity` flag is automatically added to all custom commands and takes pr
 :::note
 The `identity` field applies to all steps in the custom command. If you need different identities for different operations, consider using separate custom commands or [workflows](/workflows) with per-step identity configuration.
 :::
+
+## Using Toolchain Tools
+
+Custom commands automatically have access to tools defined in your project's `.tool-versions` file. The toolchain ensures the correct versions are installed and available in PATH when your command executes.
+
+### Automatic Tool Access
+
+If your project has a `.tool-versions` file:
+
+```
+terraform 1.10.0
+kubectl 1.32.0
+helm 3.16.0
+```
+
+Custom commands can use these tools directly:
+
+```yaml
+commands:
+  - name: deploy
+    description: Deploy infrastructure
+    steps:
+      - terraform init
+      - terraform plan
+      - kubectl apply -f manifests/
+```
+
+When you run `atmos deploy`:
+1. Atmos reads `.tool-versions` to identify required tools
+2. Missing tools are automatically installed
+3. PATH is updated to include toolchain binaries
+4. Command steps execute with the correct tool versions
+
+### Declaring Additional Dependencies
+
+Use the `dependencies` field to require additional tools or override versions from `.tool-versions`:
+
+```yaml
+commands:
+  - name: validate
+    description: Validate with specific tool versions
+    dependencies:
+      tools:
+        tflint: "^0.54.0"      # Additional tool not in .tool-versions
+        terraform: "1.9.8"     # Override .tool-versions version
+    steps:
+      - terraform validate
+      - tflint --recursive
+```
+
+Dependencies declared in the command take precedence over `.tool-versions`.
+
+### Version Constraints
+
+Dependencies support SemVer constraints:
+
+| Constraint | Meaning | Example |
+|------------|---------|---------|
+| `1.10.3` | Exact version | Only version 1.10.3 |
+| `~> 1.10.0` | Pessimistic (patch) | Includes 1.10.x but not 1.11.0 |
+| `^1.10.0` | Compatible (minor) | Includes 1.x.x but not 2.0.0 |
+| `latest` | Latest available | Most recent version |
+
+:::tip
+The combination of `.tool-versions` for project-wide defaults and per-command `dependencies` for overrides gives you flexibility while maintaining consistency across your team.
+:::
+
+### Related Documentation
+
+- [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool version management
+- [Workflows](/workflows) - Workflows also support toolchain integration

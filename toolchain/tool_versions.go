@@ -9,6 +9,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
+const (
+	defaultFileWritePermissions = 0o644
+)
+
 // ToolVersions represents the .tool-versions file format (asdf-compatible: tool -> list of versions, first is default).
 type ToolVersions struct {
 	Tools map[string][]string

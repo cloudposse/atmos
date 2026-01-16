@@ -16,5 +16,5 @@ tests:
     expect:
       exit_code: 0
       ignore:
-        # Ignore platform-specific line (darwin/arm64 vs linux/amd64)
-        - "👽 Atmos .* on (darwin|linux)/(arm64|amd64)"
+        # Ignore platform-specific line (darwin/arm64 vs linux/amd64 vs windows/amd64)
+        - "👽 Atmos .* on (darwin|linux|windows)/(arm64|amd64)"

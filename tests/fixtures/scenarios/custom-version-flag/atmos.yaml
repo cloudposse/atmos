@@ -1,0 +1,37 @@
+base_path: "./"
+
+# Minimal config to test custom commands with --version flag
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{tenant}-{environment}-{stage}"
+  included_paths:
+    - "**/*"
+
+commands:
+  # Test that custom commands can define their own --version flag.
+  # This was previously blocked because --version was a persistent global flag.
+  # Note: Don't use -v shorthand because it conflicts with global --verbose flag.
+  - name: install
+    description: "Install a tool with specific version"
+    flags:
+      - name: version
+        shorthand: V
+        type: string
+        description: "Version to install"
+        required: true
+    steps:
+      - "echo Installing version {{ .Flags.version }}"
+
+  # Test with bool type --version flag (same type as atmos's --version)
+  - name: check-version
+    description: "Check if version is installed"
+    flags:
+      - name: version
+        type: bool
+        description: "Show version info"
+    steps:
+      - "echo Version check: {{ .Flags.version }}"

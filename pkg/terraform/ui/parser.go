@@ -66,6 +66,15 @@ func (p *Parser) Next() (*ParseResult, error) {
 	}
 }
 
+// unmarshalMessage is a helper that unmarshals JSON into a message pointer.
+func unmarshalMessage[T any](line []byte) (*T, error) {
+	var msg T
+	if err := json.Unmarshal(line, &msg); err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
+	}
+	return &msg, nil
+}
+
 // parseMessage parses a JSON line into the appropriate message type.
 func (p *Parser) parseMessage(line []byte) (any, error) {
 	// First, parse to determine message type.
@@ -78,96 +87,31 @@ func (p *Parser) parseMessage(line []byte) (any, error) {
 	// Parse into specific type based on message type.
 	switch base.Type {
 	case MessageTypeVersion:
-		var msg VersionMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[VersionMessage](line)
 	case MessageTypePlannedChange:
-		var msg PlannedChangeMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[PlannedChangeMessage](line)
 	case MessageTypeChangeSummary:
-		var msg ChangeSummaryMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[ChangeSummaryMessage](line)
 	case MessageTypeApplyStart:
-		var msg ApplyStartMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[ApplyStartMessage](line)
 	case MessageTypeApplyProgress:
-		var msg ApplyProgressMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[ApplyProgressMessage](line)
 	case MessageTypeApplyComplete:
-		var msg ApplyCompleteMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[ApplyCompleteMessage](line)
 	case MessageTypeApplyErrored:
-		var msg ApplyErroredMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[ApplyErroredMessage](line)
 	case MessageTypeRefreshStart:
-		var msg RefreshStartMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[RefreshStartMessage](line)
 	case MessageTypeRefreshComplete:
-		var msg RefreshCompleteMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[RefreshCompleteMessage](line)
 	case MessageTypeDiagnostic:
-		var msg DiagnosticMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[DiagnosticMessage](line)
 	case MessageTypeOutputs:
-		var msg OutputsMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[OutputsMessage](line)
 	case MessageTypeInitOutput:
-		var msg InitOutputMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[InitOutputMessage](line)
 	case MessageTypeLog:
-		var msg LogMessage
-		if err := json.Unmarshal(line, &msg); err != nil {
-			return nil, fmt.Errorf("%w: %w", errUtils.ErrParseTerraformOutput, err)
-		}
-		return &msg, nil
-
+		return unmarshalMessage[LogMessage](line)
 	default:
 		// Unknown message type - return base message.
 		return &base, nil

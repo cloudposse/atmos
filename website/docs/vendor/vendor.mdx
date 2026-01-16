@@ -9,6 +9,7 @@ id: vendor
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 When your infrastructure depends on external modules, you're at the mercy of upstream changes, network availability, and release schedules you don't control. Vendoring brings that code in-house, giving you full control over when and how dependencies change.
@@ -103,3 +104,9 @@ With Atmos vendoring, you can copy components and other artifacts from the follo
 
 Our implementation is primarily inspired by the excellent tool by VMware Tanzu, called [`vendir`](https://github.com/vmware-tanzu/carvel-vendir).
 While Atmos does not call `vendir`, it functions and supports a subset of the configuration that is very similar.
+
+## Try It
+
+Explore a working example that demonstrates vendoring in action.
+
+<EmbedExample example="demo-vendoring" />

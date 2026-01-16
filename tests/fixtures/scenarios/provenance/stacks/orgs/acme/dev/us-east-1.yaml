@@ -1,0 +1,14 @@
+# Stack file for acme-dev-use1 (depth 1 - the parent stack being described).
+import:
+  - orgs/acme/_defaults
+
+vars:
+  region: us-east-1
+
+components:
+  terraform:
+    mock:
+      vars:
+        region: us-east-1
+        tags:
+          region: us-east-1

@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - mixins/base
+
+vars:
+  stage: "test"
+
+components:
+  terraform:
+    test-component:
+      metadata:
+        component: mock
+      vars:
+        # This attempts to use a mixin's local - should FAIL because locals are file-scoped.
+        attempt_mixin_local: "{{ .locals.mixin_value }}"

@@ -407,6 +407,13 @@ docs:
         hide_empty: false
         indent_level: 2
 
+toolchain:
+  registries:
+    # Default Aqua registry
+    - name: aqua
+      type: aqua
+      priority: 10
+
 version:
   check:
     enabled: true

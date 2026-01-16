@@ -257,3 +257,100 @@ func (mr *MockUIProviderMockRecorder) PrintMessage(format any, args ...any) *gom
 	varargs := append([]any{format}, args...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintMessage", reflect.TypeOf((*MockUIProvider)(nil).PrintMessage), varargs...)
 }
+
+// MockDependencyProvider is a mock of DependencyProvider interface.
+type MockDependencyProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockDependencyProviderMockRecorder
+	isgomock struct{}
+}
+
+// MockDependencyProviderMockRecorder is the mock recorder for MockDependencyProvider.
+type MockDependencyProviderMockRecorder struct {
+	mock *MockDependencyProvider
+}
+
+// NewMockDependencyProvider creates a new mock instance.
+func NewMockDependencyProvider(ctrl *gomock.Controller) *MockDependencyProvider {
+	mock := &MockDependencyProvider{ctrl: ctrl}
+	mock.recorder = &MockDependencyProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockDependencyProvider) EXPECT() *MockDependencyProviderMockRecorder {
+	return m.recorder
+}
+
+// EnsureTools mocks base method.
+func (m *MockDependencyProvider) EnsureTools(dependencies map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "EnsureTools", dependencies)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// EnsureTools indicates an expected call of EnsureTools.
+func (mr *MockDependencyProviderMockRecorder) EnsureTools(dependencies any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureTools", reflect.TypeOf((*MockDependencyProvider)(nil).EnsureTools), dependencies)
+}
+
+// LoadToolVersionsDependencies mocks base method.
+func (m *MockDependencyProvider) LoadToolVersionsDependencies() (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "LoadToolVersionsDependencies")
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// LoadToolVersionsDependencies indicates an expected call of LoadToolVersionsDependencies.
+func (mr *MockDependencyProviderMockRecorder) LoadToolVersionsDependencies() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "LoadToolVersionsDependencies", reflect.TypeOf((*MockDependencyProvider)(nil).LoadToolVersionsDependencies))
+}
+
+// MergeDependencies mocks base method.
+func (m *MockDependencyProvider) MergeDependencies(base, overlay map[string]string) (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MergeDependencies", base, overlay)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MergeDependencies indicates an expected call of MergeDependencies.
+func (mr *MockDependencyProviderMockRecorder) MergeDependencies(base, overlay any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MergeDependencies", reflect.TypeOf((*MockDependencyProvider)(nil).MergeDependencies), base, overlay)
+}
+
+// ResolveWorkflowDependencies mocks base method.
+func (m *MockDependencyProvider) ResolveWorkflowDependencies(workflowDef *schema.WorkflowDefinition) (map[string]string, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveWorkflowDependencies", workflowDef)
+	ret0, _ := ret[0].(map[string]string)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveWorkflowDependencies indicates an expected call of ResolveWorkflowDependencies.
+func (mr *MockDependencyProviderMockRecorder) ResolveWorkflowDependencies(workflowDef any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveWorkflowDependencies", reflect.TypeOf((*MockDependencyProvider)(nil).ResolveWorkflowDependencies), workflowDef)
+}
+
+// UpdatePathForTools mocks base method.
+func (m *MockDependencyProvider) UpdatePathForTools(dependencies map[string]string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdatePathForTools", dependencies)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdatePathForTools indicates an expected call of UpdatePathForTools.
+func (mr *MockDependencyProviderMockRecorder) UpdatePathForTools(dependencies any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePathForTools", reflect.TypeOf((*MockDependencyProvider)(nil).UpdatePathForTools), dependencies)
+}

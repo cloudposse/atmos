@@ -177,7 +177,11 @@ func (b *GlobalOptionsBuilder) registerSystemFlags(defaults *global.Flags) {
 	// Verbose flag for error formatting.
 	b.WithVerbose()
 
-	b.options = append(b.options, WithBoolFlag("version", "", defaults.Version, "Display the Atmos CLI version"))
+	// Note: --version flag is NOT registered here as a persistent flag.
+	// It's registered as a LOCAL flag on RootCmd only (in cmd/root.go) because:
+	// 1. It only makes sense at the root level (atmos --version)
+	// 2. Custom commands should be able to define their own --version flag
+	// 3. Native commands may want to pass --version to underlying tools
 
 	// Version management flag - specify which version of Atmos to use.
 	// Note: ATMOS_VERSION and ATMOS_VERSION_USE env vars are also checked in reexec.go.

@@ -8,11 +8,12 @@ import (
 
 func TestDeleteCmd_Structure(t *testing.T) {
 	testCommandStructure(t, commandTestParams{
-		cmd:           deleteCmd,
-		parser:        deleteParser,
-		expectedUse:   "delete <component>",
-		expectedShort: "Delete backend infrastructure",
-		requiredFlags: []string{"force"},
+		cmd:              deleteCmd,
+		parser:           deleteParser,
+		expectedUse:      "delete [component]",
+		expectedShort:    "Delete backend infrastructure",
+		requiredFlags:    []string{"force"},
+		hasPositionalArg: true,
 	})
 
 	t.Run("force flag is boolean", func(t *testing.T) {

@@ -29,7 +29,7 @@ func resolveVersionFromToolVersions(tool, toolSpec string) (versionLookupResult,
 	}
 
 	installer := NewInstaller()
-	result := LookupToolVersionOrLatest(tool, toolVersions, installer.resolver)
+	result := LookupToolVersionOrLatest(tool, toolVersions, installer.GetResolver())
 	if !result.Found && !result.UsedLatest {
 		return versionLookupResult{}, errUtils.Build(errUtils.ErrInvalidToolSpec).
 			WithExplanationf("Invalid tool specification: `%s`", toolSpec).

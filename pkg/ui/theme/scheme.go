@@ -47,6 +47,10 @@ type ColorScheme struct {
 	// Syntax highlighting
 	ChromaTheme string // Chroma theme name for syntax highlighting
 
+	// Experimental badge colors
+	ExperimentalBadgeBg string // Background for experimental badges (orange)
+	ExperimentalBadgeFg string // Foreground for experimental badges (dark text)
+
 	// Log level colors (backgrounds)
 	LogDebug   string // Debug log level background
 	LogInfo    string // Info log level background
@@ -109,6 +113,10 @@ func GenerateColorScheme(t *Theme) ColorScheme {
 
 		// Syntax highlighting - map themes to appropriate Chroma themes
 		ChromaTheme: getChromaThemeForAtmosTheme(t),
+
+		// Experimental badge colors - use warning color for visibility
+		ExperimentalBadgeBg: t.Yellow,     // Warning/orange background
+		ExperimentalBadgeFg: t.Background, // Dark text for contrast
 
 		// Log level colors - use standard colors as backgrounds
 		LogDebug:   t.Cyan,   // Cyan for debug

@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+import:
+  - mixins/layer1
+
+# Level 3: Layer2 mixin - has its own locals (cannot see base or layer1 locals).
+locals:
+  layer2_local: "from-layer2-mixin"
+  shared_key: "layer2-value"
+
+# Regular vars ARE inherited from all levels.
+vars:
+  layer2_var: "from-layer2-vars"

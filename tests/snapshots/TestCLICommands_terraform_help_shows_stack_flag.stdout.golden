@@ -1,0 +1,184 @@
+
+👽 test darwin/arm64
+
+This command allows you to execute Terraform commands, such as plan, apply, and
+destroy, using Atmos stack configurations for consistent infrastructure
+management.
+
+USAGE
+
+                                             
+    $ atmos terraform [flags]                
+    $ atmos terraform [sub-command] [flags]  
+                                             
+
+ALIASES
+
+  terraform, tf
+
+EXAMPLES
+
+                                                                      
+    – Execute a terraform subcommand                                  
+                                                                      
+                                                                      
+     $ atmos terraform [subcommand] <component-name> -s <stack-name>  
+                                                                      
+
+AVAILABLE COMMANDS
+
+      apply                             Apply changes to infrastructure
+      backend [command] [EXPERIMENTAL]  Manage Terraform state backends
+      clean                             Clean up Terraform state and artifacts
+      console                           Try Terraform expressions at an interactive command prompt
+      deploy                            Deploy the specified infrastructure using Terraform
+      destroy                           Destroy previously-created infrastructure
+      fmt                               Reformat your configuration in the standard style
+      force-unlock                      Release a stuck lock on the current workspace
+      generate [command]                Generate Terraform configuration files for Atmos components and stacks
+      get                               Install or upgrade remote Terraform modules
+      graph                             Generate a Graphviz graph of the steps in an operation
+      help                              Show help for terraform command
+      import                            Import existing infrastructure into Terraform state
+      init                              Prepare your working directory for other commands
+      login                             Obtain and save credentials for a remote host
+      logout                            Remove locally-stored credentials for a remote host
+      metadata                          Metadata related commands
+      modules                           Show all declared modules in a working directory
+      output                            Show output values from your root module
+      plan                              Show changes required by the current configuration
+      plan-diff                         Compare two Terraform plans and show the differences
+      providers                         Show the providers required for this configuration
+      provision                         This command provisions terraform components
+      refresh                           Update the state to match remote systems
+      shell                             Configure an environment for an Atmos component and start a new shell
+      show                              Show the current state or a saved plan
+      source [command]                  Manage Terraform component sources (JIT vendoring)
+      state                             Advanced state management
+      taint                             Mark a resource instance as not fully functional
+      test                              Execute integration tests for Terraform modules
+      untaint                           Remove the 'tainted' state from a resource instance
+      validate                          Check whether the configuration is valid
+      version                           Show the current Terraform version
+      workdir [command] [EXPERIMENTAL]  Manage component working directories
+      workspace                         Manage Terraform workspaces
+
+FLAGS
+
+      --append-user-agent string  Customize User-Agent string in Terraform provider requests (sets
+                                  TF_APPEND_USER_AGENT)
+
+      --clone-target-ref          Clone the target reference with which to compare the current branch
+
+      --components strings        Filter by specific components
+
+      --dry-run                   Perform dry run without making actual changes
+
+  -h, --help                      help for terraform
+
+  -i, --identity string           Specify the identity to authenticate to before running Terraform commands. Use
+                                  without value to interactively select.
+
+      --include-dependents        For each affected component, detect the dependent components and process them in the
+                                  dependency order
+
+      --init-pass-vars            Pass the generated varfile to terraform init using --var-file flag (OpenTofu feature)
+
+      --process-functions         Enable/disable YAML functions processing in Atmos stack manifests (default true)
+
+      --process-templates         Enable/disable Go template processing in Atmos stack manifests (default true)
+
+  -q, --query string              Execute atmos terraform command on components filtered by a YQ expression
+
+      --ref string                Git reference with which to compare the current branch
+
+      --repo-path string          Filesystem path to the already cloned target repository with which to compare the
+                                  current branch
+
+      --sha string                Git commit SHA with which to compare the current branch
+
+      --skip strings              Skip executing specific YAML functions in the Atmos stack manifests
+
+      --skip-init                 Skip terraform init before running command
+
+      --ssh-key string            Path to PEM-encoded private key to clone private repos using SSH
+
+      --ssh-key-password string   Encryption password for the PEM-encoded private key if the key contains a password-
+                                  encrypted PEM block
+
+  -s, --stack string              Stack name
+
+      --upload-status             Upload plan status to Atmos Pro
+
+
+GLOBAL FLAGS
+
+      --base-path string        Base path for Atmos project
+
+  -C, --chdir string            Change working directory before executing the command (run as if Atmos started in this
+                                directory)
+
+      --config strings          Paths to configuration files (comma-separated or repeated flag)
+
+      --config-path strings     Paths to search for Atmos configuration (comma-separated or repeated flag)
+
+      --force-color             Force color output even when not a TTY (useful for screenshots)
+
+      --force-tty               Force TTY mode with sane defaults when terminal detection fails (useful for
+                                screenshots)
+
+      --heatmap                 Show performance heatmap visualization after command execution (includes P95 latency)
+
+      --heatmap-mode string     Heatmap visualization mode: bar, sparkline, table (press 1-3 to switch in TUI) (default
+                                bar)
+
+      --interactive             Enable interactive prompts for missing required flags, optional value flags using the
+                                sentinel pattern, and missing positional arguments (requires TTY, disabled in CI)
+                                (default true)
+
+      --logs-file string        The file to write Atmos logs to. Logs can be written to any file or any standard file
+                                descriptor, including '/dev/stdout', '/dev/stderr' and '/dev/null' (default
+                                /dev/stderr)
+
+      --logs-level string       Logs level. Supported log levels are Trace, Debug, Info, Warning, Off. If the log
+                                level is set to Off, Atmos will not log any messages (default Warning)
+
+      --mask                    Enable automatic masking of sensitive data in output (use --mask=false to disable)
+                                (default true)
+
+      --no-color                Disable color output
+
+      --pager string            Enable pager for output (--pager or --pager=true to enable, --pager=false to disable, --
+                                pager=less to use specific pager)
+
+      --profile strings         Activate configuration profiles (comma-separated or repeated flag)
+
+      --profile-file string     Write profiling data to file instead of starting server
+
+      --profile-type string     Type of profile to collect when using --profile-file. Options: cpu, heap, allocs,
+                                goroutine, block, mutex, threadcreate, trace (default cpu)
+
+      --profiler-enabled        Enable pprof profiling server
+
+      --profiler-host string    Host for pprof profiling server (default localhost)
+
+      --profiler-port int       Port for pprof profiling server (default 6060)
+
+      --redirect-stderr string  File descriptor to redirect stderr to. Errors can be redirected to any file or any
+                                standard file descriptor (including '/dev/null')
+
+      --use-version string      Use a specific version of Atmos (e.g., --use-version=1.160.0)
+
+  -v, --verbose                 Enable verbose error output with full context, stack traces, and detailed information
+
+
+COMPATIBILITY FLAGS
+
+  These flags are passed through to the underlying terraform/tofu command.
+
+      -chdir    Switch to a different working directory before executing the given subcommand
+      -help     Show terraform help output
+      -version  Show terraform version
+
+
+Use atmos terraform [command] --help for more information about a command.

@@ -52,7 +52,8 @@ terraform:
       bucket: "your-s3-bucket-name"
       key: "terraform.tfstate"
       region: "your-aws-region"
-      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+      assume_role:
+        role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
       use_lockfile: true
 ```
 
@@ -73,7 +74,8 @@ terraform:
       bucket: "your-s3-bucket-name"
       key: "terraform.tfstate"
       region: "your-aws-region"
-      role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
+      assume_role:
+        role_arn: "arn:aws:iam::xxxxxxxx:role/terraform-backend-read-write"
       use_lockfile: true
 
   remote_state_backend_type: s3 # s3, remote, vault, azurerm, gcs, cloud, static

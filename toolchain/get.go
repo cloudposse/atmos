@@ -21,7 +21,7 @@ func ListToolVersions(showAll bool, limit int, toolName string) error {
 	filePath := GetToolVersionsFilePath()
 	installer := NewInstaller()
 
-	owner, repo, err := installer.parseToolSpec(toolName)
+	owner, repo, err := installer.ParseToolSpec(toolName)
 	if err != nil {
 		return fmt.Errorf("invalid tool name: %w", err)
 	}

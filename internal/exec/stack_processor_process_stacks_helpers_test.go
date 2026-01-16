@@ -18,6 +18,7 @@ func TestProcessComponent(t *testing.T) {
 		expectedVars      map[string]any
 		expectedSettings  map[string]any
 		expectedEnv       map[string]any
+		expectedLocals    map[string]any
 		expectedMetadata  map[string]any
 		expectedCommand   string
 		expectedProviders map[string]any
@@ -102,6 +103,52 @@ func TestProcessComponent(t *testing.T) {
 				"type": "real",
 			},
 			expectedCommand: "tofu",
+		},
+		{
+			name: "terraform component with locals",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.VarsSectionName: map[string]any{
+						"region": "us-east-1",
+					},
+					cfg.LocalsSectionName: map[string]any{
+						"environment": "dev",
+						"team":        "platform",
+					},
+				},
+				AllComponentsMap:         map[string]any{},
+				ComponentsBasePath:       "/test/components",
+				CheckBaseComponentExists: true,
+				AtmosConfig:              &schema.AtmosConfiguration{},
+			},
+			expectedVars: map[string]any{
+				"region": "us-east-1",
+			},
+			expectedLocals: map[string]any{
+				"environment": "dev",
+				"team":        "platform",
+			},
+		},
+		{
+			name: "invalid locals section type",
+			opts: ComponentProcessorOptions{
+				ComponentType: cfg.TerraformComponentType,
+				Component:     "vpc",
+				Stack:         "test-stack",
+				StackName:     "test-stack",
+				ComponentMap: map[string]any{
+					cfg.LocalsSectionName: "invalid-not-a-map",
+				},
+				AllComponentsMap:         map[string]any{},
+				ComponentsBasePath:       "/test/components",
+				CheckBaseComponentExists: true,
+				AtmosConfig:              &schema.AtmosConfiguration{},
+			},
+			expectedError: "invalid component locals section",
 		},
 		{
 			name: "helmfile component without terraform-specific sections",
@@ -307,6 +354,10 @@ func TestProcessComponent(t *testing.T) {
 
 			if tt.expectedEnv != nil {
 				assert.Equal(t, tt.expectedEnv, result.ComponentEnv)
+			}
+
+			if tt.expectedLocals != nil {
+				assert.Equal(t, tt.expectedLocals, result.ComponentLocals)
 			}
 
 			if tt.expectedMetadata != nil {
@@ -937,6 +988,10 @@ func TestApplyBaseComponentConfig(t *testing.T) {
 		BaseComponentEnv: map[string]any{
 			"AWS_REGION": "us-east-1",
 		},
+		BaseComponentLocals: map[string]any{
+			"environment": "dev",
+			"team":        "platform",
+		},
 		BaseComponentCommand: "terraform",
 		BaseComponentProviders: map[string]any{
 			"aws": map[string]any{"region": "us-east-1"},
@@ -968,6 +1023,7 @@ func TestApplyBaseComponentConfig(t *testing.T) {
 	assert.Equal(t, baseComponentConfig.BaseComponentVars, result.BaseComponentVars)
 	assert.Equal(t, baseComponentConfig.BaseComponentSettings, result.BaseComponentSettings)
 	assert.Equal(t, baseComponentConfig.BaseComponentEnv, result.BaseComponentEnv)
+	assert.Equal(t, baseComponentConfig.BaseComponentLocals, result.BaseComponentLocals)
 	assert.Equal(t, "terraform", result.BaseComponentCommand)
 	assert.Equal(t, baseComponentConfig.BaseComponentProviders, result.BaseComponentProviders)
 	assert.Equal(t, baseComponentConfig.BaseComponentHooks, result.BaseComponentHooks)

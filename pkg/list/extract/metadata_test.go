@@ -296,33 +296,34 @@ func TestMetadata_IncludesVarsSettingsEnv(t *testing.T) {
 	assert.Equal(t, "us-east-2", env["AWS_REGION"])
 }
 
-func TestGetStatusIndicator(t *testing.T) {
+func TestGetStatusIndicatorTTY(t *testing.T) {
+	// Test TTY mode: should return colored dot.
 	tests := []struct {
 		name     string
 		enabled  bool
 		locked   bool
-		contains string // Check if output contains the dot character
+		contains string // The colored dot character
 	}{
 		{
-			name:     "enabled and not locked shows green",
+			name:     "enabled and not locked shows green dot",
 			enabled:  true,
 			locked:   false,
 			contains: "●",
 		},
 		{
-			name:     "locked shows red",
+			name:     "locked shows red dot",
 			enabled:  true,
 			locked:   true,
 			contains: "●",
 		},
 		{
-			name:     "disabled shows gray",
+			name:     "disabled shows gray dot",
 			enabled:  false,
 			locked:   false,
 			contains: "●",
 		},
 		{
-			name:     "disabled and locked shows red (locked takes precedence)",
+			name:     "disabled and locked shows red dot (locked takes precedence)",
 			enabled:  false,
 			locked:   true,
 			contains: "●",
@@ -331,11 +332,53 @@ func TestGetStatusIndicator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := getStatusIndicator(tt.enabled, tt.locked)
-			// Always contains the status dot.
-			assert.Contains(t, result, tt.contains)
-			// Result is non-empty (may or may not have ANSI codes depending on TTY).
+			// Test TTY mode explicitly.
+			result := getStatusIndicatorWithTTY(tt.enabled, tt.locked, true)
+			assert.Contains(t, result, tt.contains, "TTY mode should contain the status dot")
 			assert.NotEmpty(t, result)
+		})
+	}
+}
+
+func TestGetStatusIndicatorNonTTY(t *testing.T) {
+	// Test non-TTY mode: should return semantic text.
+	tests := []struct {
+		name     string
+		enabled  bool
+		locked   bool
+		expected string // The semantic text
+	}{
+		{
+			name:     "enabled and not locked returns enabled text",
+			enabled:  true,
+			locked:   false,
+			expected: "enabled",
+		},
+		{
+			name:     "locked returns locked text",
+			enabled:  true,
+			locked:   true,
+			expected: "locked",
+		},
+		{
+			name:     "disabled returns disabled text",
+			enabled:  false,
+			locked:   false,
+			expected: "disabled",
+		},
+		{
+			name:     "disabled and locked returns locked text (locked takes precedence)",
+			enabled:  false,
+			locked:   true,
+			expected: "locked",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Test non-TTY mode explicitly.
+			result := getStatusIndicatorWithTTY(tt.enabled, tt.locked, false)
+			assert.Equal(t, tt.expected, result, "non-TTY mode should return semantic text")
 		})
 	}
 }

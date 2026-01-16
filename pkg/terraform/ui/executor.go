@@ -20,11 +20,37 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/logger"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+)
+
+// Terraform subcommand constants.
+const (
+	subCommandApply   = "apply"
+	subCommandPlan    = "plan"
+	subCommandDestroy = "destroy"
+	subCommandInit    = "init"
+)
+
+// Flag constants.
+const (
+	flagAutoApprove     = "-auto-approve"
+	flagJSON            = "-json"
+	flagCompactWarnings = "-compact-warnings"
+)
+
+// Format string constants.
+const (
+	fmtNewlineStr = "\n%s"
+	fmtDuration   = " (%.1fs)"
+)
+
+// Numeric constants.
+const (
+	floatBitSize = 64
 )
 
 // ExecuteOptions configures streaming execution.
@@ -63,6 +89,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	args := buildArgsWithJSON(opts.Args, opts.SubCommand)
 
 	// Create command.
+	//nolint:gosec // intentional subprocess call - terraform command with validated args
 	cmd := exec.CommandContext(ctx, opts.Command, args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
@@ -86,7 +113,7 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	go func() {
 		scanner := bufio.NewScanner(stderrPipe)
 		for scanner.Scan() {
-			logger.Debug(scanner.Text())
+			log.Debug(scanner.Text())
 		}
 	}()
 
@@ -118,11 +145,11 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	// Get exit code.
 	var exitCode int
 	if cmdErr != nil {
-		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
+		exitErr, ok := cmdErr.(*exec.ExitError)
+		if !ok {
 			return cmdErr
 		}
+		exitCode = exitErr.ExitCode()
 	}
 
 	// Check if model has an error.
@@ -149,11 +176,48 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 	}
 
 	// Display outputs after successful apply.
-	if opts.SubCommand == "apply" && exitCode == 0 {
+	if opts.SubCommand == subCommandApply && exitCode == 0 {
 		displayOutputs(m.GetTracker())
 	}
 
 	return nil
+}
+
+// hasJSONFlag checks if the -json flag is present in arguments.
+func hasJSONFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == flagJSON || strings.HasPrefix(arg, flagJSON+"=") {
+			return true
+		}
+	}
+	return false
+}
+
+// hasCompactWarningsFlag checks if the -compact-warnings flag is present.
+func hasCompactWarningsFlag(args []string) bool {
+	for _, arg := range args {
+		if arg == flagCompactWarnings {
+			return true
+		}
+	}
+	return false
+}
+
+// isJSONSubCommand returns true if the argument is a terraform subcommand that supports -json.
+func isJSONSubCommand(arg string) bool {
+	return arg == subCommandPlan || arg == subCommandApply || arg == subCommandInit || arg == "refresh"
+}
+
+// buildRequiredFlags builds the list of flags that need to be added.
+func buildRequiredFlags(hasJSON, hasCompactWarnings bool) []string {
+	var flags []string
+	if !hasJSON {
+		flags = append(flags, flagJSON)
+	}
+	if !hasCompactWarnings {
+		flags = append(flags, flagCompactWarnings)
+	}
+	return flags
 }
 
 // buildArgsWithJSON adds the -json and -compact-warnings flags to the arguments.
@@ -161,50 +225,32 @@ func Execute(ctx context.Context, opts *ExecuteOptions) error {
 // -compact-warnings suppresses verbose human-readable warnings since we route
 // diagnostics through the Atmos logger via parsed JSON.
 func buildArgsWithJSON(args []string, subCommand string) []string {
-	// Check if -json is already present.
-	hasJSON := false
-	hasCompactWarnings := false
-	for _, arg := range args {
-		if arg == "-json" || strings.HasPrefix(arg, "-json=") {
-			hasJSON = true
-		}
-		if arg == "-compact-warnings" {
-			hasCompactWarnings = true
-		}
-	}
+	hasJSON := hasJSONFlag(args)
+	hasCompactWarnings := hasCompactWarningsFlag(args)
 
 	// If both flags are already present, return as-is.
 	if hasJSON && hasCompactWarnings {
 		return args
 	}
 
+	requiredFlags := buildRequiredFlags(hasJSON, hasCompactWarnings)
+
 	// Find the position to insert flags (after the subcommand).
-	// Let append handle capacity growth to avoid integer overflow concerns.
 	var result []string
+	inserted := false
 
 	for i, arg := range args {
 		result = append(result, arg)
 		// Insert flags after the subcommand (plan, apply, init, refresh).
-		if i == 0 && (arg == "plan" || arg == "apply" || arg == "init" || arg == "refresh") {
-			if !hasJSON {
-				result = append(result, "-json")
-			}
-			if !hasCompactWarnings {
-				result = append(result, "-compact-warnings")
-			}
+		if i == 0 && isJSONSubCommand(arg) {
+			result = append(result, requiredFlags...)
+			inserted = true
 		}
 	}
 
 	// If no subcommand was found at position 0, just prepend flags.
-	if len(result) == len(args) {
-		var flags []string
-		if !hasJSON {
-			flags = append(flags, "-json")
-		}
-		if !hasCompactWarnings {
-			flags = append(flags, "-compact-warnings")
-		}
-		result = append(flags, args...)
+	if !inserted {
+		return append(requiredFlags, args...)
 	}
 
 	return result
@@ -229,7 +275,7 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 			add, change, remove := tree.GetChangeSummary()
 			// Only render tree if there are changes; otherwise just show badge.
 			if add > 0 || change > 0 || remove > 0 {
-				_ = ui.Writef("\n%s", tree.RenderTree())
+				_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
 			}
 			_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
 		}
@@ -240,9 +286,11 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 	// Generate temp planfile path.
 	planFile := filepath.Join(opts.WorkingDir, fmt.Sprintf(".atmos-plan-%d.tfplan", time.Now().UnixNano()))
 
-	// Add -out flag to args.
+	// Add -out flag to args (copy slice to avoid modifying original).
 	planOpts := *opts
-	planOpts.Args = append(opts.Args, "-out="+planFile)
+	planOpts.Args = make([]string, len(opts.Args)+1)
+	copy(planOpts.Args, opts.Args)
+	planOpts.Args[len(opts.Args)] = "-out=" + planFile
 
 	// Run plan with TUI.
 	if err := Execute(ctx, &planOpts); err != nil {
@@ -257,7 +305,7 @@ func ExecutePlan(ctx context.Context, opts *ExecuteOptions) error {
 		add, change, remove := tree.GetChangeSummary()
 		// Only render tree if there are changes; otherwise just show badge.
 		if add > 0 || change > 0 || remove > 0 {
-			_ = ui.Writef("\n%s", tree.RenderTree())
+			_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
 		}
 		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	}
@@ -288,6 +336,7 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	}
 
 	// Create command (no -json flag for init).
+	//nolint:gosec // intentional subprocess call - terraform command with validated args
 	cmd := exec.CommandContext(ctx, opts.Command, opts.Args...)
 	cmd.Dir = opts.WorkingDir
 	cmd.Env = opts.Env
@@ -336,11 +385,11 @@ func ExecuteInit(ctx context.Context, opts *ExecuteOptions) error {
 	// Get exit code.
 	var exitCode int
 	if cmdErr != nil {
-		if exitErr, ok := cmdErr.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
+		exitErr, ok := cmdErr.(*exec.ExitError)
+		if !ok {
 			return cmdErr
 		}
+		exitCode = exitErr.ExitCode()
 	}
 
 	// Check if model has an error.
@@ -406,7 +455,7 @@ func ShouldUseStreamingUI(uiFlagSet bool, uiFlag bool, configEnabled bool, subCo
 
 	// Only enable for supported subcommands.
 	switch subCommand {
-	case "plan", "apply", "init", "destroy":
+	case subCommandPlan, subCommandApply, subCommandInit, subCommandDestroy:
 		return true
 	case "refresh":
 		// refresh doesn't have good -json streaming support.
@@ -418,15 +467,15 @@ func ShouldUseStreamingUI(uiFlagSet bool, uiFlag bool, configEnabled bool, subCo
 
 // ExecuteApply runs terraform apply with optional confirmation.
 // If -auto-approve is not present and not using --from-plan, it runs:
-// 1. terraform plan -json -out=<temp> (with TUI)
-// 2. Display dependency tree
-// 3. Confirmation prompt
-// 4. terraform apply -json <temp> (with TUI)
+// (1) terraform plan -json -out=<temp> (with TUI)
+// (2) Display dependency tree
+// (3) Confirmation prompt
+// (4) terraform apply -json <temp> (with TUI).
 func ExecuteApply(ctx context.Context, opts *ExecuteOptions) error {
 	defer perf.Track(nil, "terraform.ui.ExecuteApply")()
 
 	// Check if -auto-approve is in args - skip confirmation.
-	if hasFlag(opts.Args, "-auto-approve") {
+	if hasFlag(opts.Args, flagAutoApprove) {
 		return Execute(ctx, opts)
 	}
 
@@ -440,7 +489,7 @@ func ExecuteApply(ctx context.Context, opts *ExecuteOptions) error {
 }
 
 // executeTwoPhaseOperation executes a plan → confirm → apply workflow.
-// isDestroy determines whether this is a destroy operation (affects planfile name and confirmation).
+// The isDestroy parameter determines whether this is a destroy operation (affects planfile name and confirmation).
 func executeTwoPhaseOperation(ctx context.Context, opts *ExecuteOptions, isDestroy bool) error {
 	// Generate temp planfile path.
 	planFilePattern := ".atmos-plan-%d.tfplan"
@@ -479,7 +528,7 @@ func executeTwoPhaseOperation(ctx context.Context, opts *ExecuteOptions, isDestr
 			return nil
 		}
 		// Display the dependency tree and badge summary.
-		_ = ui.Writef("\n%s", tree.RenderTree())
+		_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
 		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	}
 
@@ -508,7 +557,7 @@ func executeTwoPhaseOperation(ctx context.Context, opts *ExecuteOptions, isDestr
 	applyArgs := buildApplyArgs(planFile)
 	applyOpts := *opts
 	applyOpts.Args = applyArgs
-	applyOpts.SubCommand = "apply"
+	applyOpts.SubCommand = subCommandApply
 
 	err = Execute(ctx, &applyOpts)
 
@@ -524,15 +573,15 @@ func executeTwoPhaseApply(ctx context.Context, opts *ExecuteOptions) error {
 
 // ExecuteDestroy runs terraform destroy with confirmation.
 // It runs:
-// 1. terraform plan -destroy -json -out=<temp> (with TUI)
-// 2. Display dependency tree
-// 3. Confirmation prompt
-// 4. terraform apply -json <temp> (with TUI)
+// (1) terraform plan -destroy -json -out=<temp> (with TUI)
+// (2) Display dependency tree
+// (3) Confirmation prompt
+// (4) terraform apply -json <temp> (with TUI).
 func ExecuteDestroy(ctx context.Context, opts *ExecuteOptions) error {
 	defer perf.Track(nil, "terraform.ui.ExecuteDestroy")()
 
 	// Check if -auto-approve is in args - skip confirmation.
-	if hasFlag(opts.Args, "-auto-approve") {
+	if hasFlag(opts.Args, flagAutoApprove) {
 		return Execute(ctx, opts)
 	}
 
@@ -557,7 +606,7 @@ func executeWithPlanFile(ctx context.Context, opts *ExecuteOptions, planFile str
 			return nil
 		}
 		// Display the dependency tree and badge summary.
-		_ = ui.Writef("\n%s", tree.RenderTree())
+		_ = ui.Writef(fmtNewlineStr, tree.RenderTree())
 		_ = ui.Write(RenderChangeSummaryBadges(add, change, remove))
 	}
 
@@ -619,12 +668,13 @@ func buildPlanArgs(args []string, planFile string) []string {
 
 	// Replace "apply" with "plan".
 	for i, arg := range args {
-		if i == 0 && arg == "apply" {
-			result = append(result, "plan")
-		} else if arg == "-auto-approve" {
+		switch {
+		case i == 0 && arg == subCommandApply:
+			result = append(result, subCommandPlan)
+		case arg == flagAutoApprove:
 			// Skip -auto-approve for plan.
 			continue
-		} else {
+		default:
 			result = append(result, arg)
 		}
 	}
@@ -637,7 +687,7 @@ func buildPlanArgs(args []string, planFile string) []string {
 
 func buildApplyArgs(planFile string) []string {
 	// Simple apply with planfile - no -auto-approve needed since planfile is provided.
-	return []string{"apply", planFile}
+	return []string{subCommandApply, planFile}
 }
 
 func buildDestroyPlanArgs(args []string, planFile string) []string {
@@ -647,12 +697,13 @@ func buildDestroyPlanArgs(args []string, planFile string) []string {
 
 	// Replace "destroy" with "plan" and add -destroy flag.
 	for i, arg := range args {
-		if i == 0 && arg == "destroy" {
-			result = append(result, "plan", "-destroy")
-		} else if arg == "-auto-approve" {
+		switch {
+		case i == 0 && arg == subCommandDestroy:
+			result = append(result, subCommandPlan, "-destroy")
+		case arg == flagAutoApprove:
 			// Skip -auto-approve for plan.
 			continue
-		} else {
+		default:
 			result = append(result, arg)
 		}
 	}
@@ -809,6 +860,8 @@ func createOutputsStyleFunc(rows [][]string, styles *theme.StyleSet) func(int, i
 }
 
 // getOutputCellStyle returns the appropriate style for an output value cell.
+//
+//nolint:gocritic // lipgloss.Style is designed to be passed by value (immutable)
 func getOutputCellStyle(value string, baseStyle lipgloss.Style, styles *theme.StyleSet) lipgloss.Style {
 	contentType := detectOutputContentType(value)
 
@@ -876,6 +929,6 @@ func detectOutputContentType(value string) outputContentType {
 // isNumericString checks if a string represents a number.
 func isNumericString(s string) bool {
 	// Try to parse as float (covers both integers and floats).
-	_, err := strconv.ParseFloat(s, 64)
+	_, err := strconv.ParseFloat(s, floatBitSize)
 	return err == nil
 }
