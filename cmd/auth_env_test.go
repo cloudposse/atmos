@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -381,4 +383,187 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFormatAuthGitHub(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		expected string
+	}{
+		{
+			name: "single line values",
+			envVars: map[string]string{
+				"AWS_PROFILE": "test-profile",
+				"AWS_REGION":  "us-east-1",
+			},
+			expected: "AWS_PROFILE=test-profile\nAWS_REGION=us-east-1\n",
+		},
+		{
+			name: "multiline value",
+			envVars: map[string]string{
+				"SIMPLE_VAR":    "simple",
+				"MULTILINE_VAR": "line1\nline2\nline3",
+			},
+			expected: "MULTILINE_VAR<<ATMOS_EOF_MULTILINE_VAR\nline1\nline2\nline3\nATMOS_EOF_MULTILINE_VAR\nSIMPLE_VAR=simple\n",
+		},
+		{
+			name:     "empty map",
+			envVars:  map[string]string{},
+			expected: "",
+		},
+		{
+			name: "value with equals sign",
+			envVars: map[string]string{
+				"VAR_WITH_EQUALS": "key=value",
+			},
+			expected: "VAR_WITH_EQUALS=key=value\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAuthGitHub(tt.envVars)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatAuthBash(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		expected string
+	}{
+		{
+			name: "simple values",
+			envVars: map[string]string{
+				"AWS_PROFILE": "test-profile",
+				"AWS_REGION":  "us-east-1",
+			},
+			expected: "export AWS_PROFILE='test-profile'\nexport AWS_REGION='us-east-1'\n",
+		},
+		{
+			name: "value with single quote",
+			envVars: map[string]string{
+				"MSG": "it's working",
+			},
+			expected: "export MSG='it'\\''s working'\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAuthBash(tt.envVars)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatAuthDotenv(t *testing.T) {
+	_ = NewTestKit(t)
+
+	tests := []struct {
+		name     string
+		envVars  map[string]string
+		expected string
+	}{
+		{
+			name: "simple values",
+			envVars: map[string]string{
+				"AWS_PROFILE": "test-profile",
+				"AWS_REGION":  "us-east-1",
+			},
+			expected: "AWS_PROFILE='test-profile'\nAWS_REGION='us-east-1'\n",
+		},
+		{
+			name: "value with single quote",
+			envVars: map[string]string{
+				"MSG": "it's working",
+			},
+			expected: "MSG='it'\\''s working'\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatAuthDotenv(tt.envVars)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestWriteAuthEnvToFile(t *testing.T) {
+	_ = NewTestKit(t)
+
+	t.Run("creates and writes to new file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, "github_env")
+
+		envVars := map[string]string{
+			"AWS_PROFILE": "test-profile",
+			"AWS_REGION":  "us-east-1",
+		}
+
+		err := writeAuthEnvToFile(envVars, filePath, formatAuthGitHub)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, "AWS_PROFILE=test-profile\nAWS_REGION=us-east-1\n", string(content))
+	})
+
+	t.Run("appends to existing file", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, "github_env")
+
+		// Write initial content.
+		err := os.WriteFile(filePath, []byte("EXISTING_VAR=existing\n"), 0o644)
+		require.NoError(t, err)
+
+		envVars := map[string]string{
+			"NEW_VAR": "new-value",
+		}
+
+		err = writeAuthEnvToFile(envVars, filePath, formatAuthGitHub)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(filePath)
+		require.NoError(t, err)
+		assert.Equal(t, "EXISTING_VAR=existing\nNEW_VAR=new-value\n", string(content))
+	})
+
+	t.Run("handles multiline values correctly", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, "github_env")
+
+		envVars := map[string]string{
+			"MULTILINE": "line1\nline2",
+		}
+
+		err := writeAuthEnvToFile(envVars, filePath, formatAuthGitHub)
+		require.NoError(t, err)
+
+		content, err := os.ReadFile(filePath)
+		require.NoError(t, err)
+		expected := "MULTILINE<<ATMOS_EOF_MULTILINE\nline1\nline2\nATMOS_EOF_MULTILINE\n"
+		assert.Equal(t, expected, string(content))
+	})
+}
+
+func TestSortedAuthKeys(t *testing.T) {
+	_ = NewTestKit(t)
+
+	m := map[string]string{
+		"ZEBRA":   "z",
+		"ALPHA":   "a",
+		"CHARLIE": "c",
+	}
+
+	keys := sortedAuthKeys(m)
+	assert.Equal(t, []string{"ALPHA", "CHARLIE", "ZEBRA"}, keys)
 }
