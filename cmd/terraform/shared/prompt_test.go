@@ -319,3 +319,203 @@ func TestStackFlagCompletion_ArgsHandling(t *testing.T) {
 		})
 	}
 }
+
+// TestIsComponentDeployable tests the helper that checks if a component can be deployed.
+func TestIsComponentDeployable(t *testing.T) {
+	tests := []struct {
+		name            string
+		componentConfig any
+		expected        bool
+	}{
+		{
+			name:            "nil config is deployable",
+			componentConfig: nil,
+			expected:        true,
+		},
+		{
+			name:            "non-map config is deployable",
+			componentConfig: "string",
+			expected:        true,
+		},
+		{
+			name:            "empty map is deployable",
+			componentConfig: map[string]any{},
+			expected:        true,
+		},
+		{
+			name: "component without metadata is deployable",
+			componentConfig: map[string]any{
+				"vars": map[string]any{"foo": "bar"},
+			},
+			expected: true,
+		},
+		{
+			name: "component with invalid metadata type is deployable",
+			componentConfig: map[string]any{
+				"metadata": "invalid",
+			},
+			expected: true,
+		},
+		{
+			name: "real component is deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"type": "real",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "abstract component is not deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"type": "abstract",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "enabled component is deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"enabled": true,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "disabled component is not deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"enabled": false,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "abstract and disabled component is not deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"type":    "abstract",
+					"enabled": false,
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "real and enabled component is deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"type":    "real",
+					"enabled": true,
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "real but disabled component is not deployable",
+			componentConfig: map[string]any{
+				"metadata": map[string]any{
+					"type":    "real",
+					"enabled": false,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isComponentDeployable(tt.componentConfig)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestFilterDeployableComponents tests filtering a map of components to only deployable ones.
+func TestFilterDeployableComponents(t *testing.T) {
+	tests := []struct {
+		name       string
+		components map[string]any
+		expected   []string
+	}{
+		{
+			name:       "nil map returns empty slice",
+			components: nil,
+			expected:   []string{},
+		},
+		{
+			name:       "empty map returns empty slice",
+			components: map[string]any{},
+			expected:   []string{},
+		},
+		{
+			name: "all real components are returned",
+			components: map[string]any{
+				"vpc": map[string]any{
+					"metadata": map[string]any{"type": "real"},
+				},
+				"eks": map[string]any{
+					"metadata": map[string]any{"type": "real"},
+				},
+			},
+			expected: []string{"eks", "vpc"},
+		},
+		{
+			name: "abstract components are filtered out",
+			components: map[string]any{
+				"vpc": map[string]any{
+					"metadata": map[string]any{"type": "real"},
+				},
+				"base-vpc": map[string]any{
+					"metadata": map[string]any{"type": "abstract"},
+				},
+			},
+			expected: []string{"vpc"},
+		},
+		{
+			name: "disabled components are filtered out",
+			components: map[string]any{
+				"vpc": map[string]any{
+					"metadata": map[string]any{"enabled": true},
+				},
+				"old-vpc": map[string]any{
+					"metadata": map[string]any{"enabled": false},
+				},
+			},
+			expected: []string{"vpc"},
+		},
+		{
+			name: "mixed filtering",
+			components: map[string]any{
+				"vpc": map[string]any{
+					"metadata": map[string]any{"type": "real", "enabled": true},
+				},
+				"base-vpc": map[string]any{
+					"metadata": map[string]any{"type": "abstract"},
+				},
+				"disabled-vpc": map[string]any{
+					"metadata": map[string]any{"enabled": false},
+				},
+				"eks": map[string]any{}, // No metadata - should be deployable.
+			},
+			expected: []string{"eks", "vpc"},
+		},
+		{
+			name: "components without metadata are deployable",
+			components: map[string]any{
+				"simple-component": map[string]any{
+					"vars": map[string]any{"foo": "bar"},
+				},
+			},
+			expected: []string{"simple-component"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := filterDeployableComponents(tt.components)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

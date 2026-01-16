@@ -365,8 +365,9 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 	}
 
 	// Prompt for component if missing.
+	// If stack is already provided (via --stack flag), filter components to that stack.
 	if info.ComponentFromArg == "" {
-		component, err := promptForComponent(cmd)
+		component, err := promptForComponent(cmd, info.Stack)
 		if err = handlePromptError(err, "component"); err != nil {
 			return err
 		}
@@ -391,8 +392,9 @@ func handlePromptError(err error, name string) error {
 }
 
 // promptForComponent delegates to shared.PromptForComponent.
-func promptForComponent(cmd *cobra.Command) (string, error) {
-	return shared.PromptForComponent(cmd)
+// If stack is provided, filters components to only those in that stack.
+func promptForComponent(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
 }
 
 // promptForStack delegates to shared.PromptForStack.
