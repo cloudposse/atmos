@@ -62,6 +62,8 @@ func extractStackVars(stack map[string]any, stackMap map[string]any) {
 // Checks built-in component types (terraform, helmfile, packer) plus any
 // additional types registered in the component registry.
 func findVarsFromComponents(stackMap map[string]any) map[string]any {
+	defer perf.Track(nil, "extract.findVarsFromComponents")()
+
 	componentsMap, ok := stackMap["components"].(map[string]any)
 	if !ok {
 		return nil
@@ -103,6 +105,8 @@ func findVarsFromComponents(stackMap map[string]any) map[string]any {
 // Includes built-in types (terraform, helmfile, packer) plus any
 // additional types registered in the component registry.
 func getComponentTypes() []string {
+	defer perf.Track(nil, "extract.getComponentTypes")()
+
 	// Start with built-in component types.
 	// These are the standard types defined in pkg/config/const.go.
 	typeSet := map[string]struct{}{

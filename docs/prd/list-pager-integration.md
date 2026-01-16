@@ -11,7 +11,7 @@ Wire up the pager to list commands (`list stacks`, `list components`, etc.) so t
 - Describe commands (e.g., `describe component`) use the pager via:
   1. Check `atmosConfig.Settings.Terminal.IsPagerEnabled()`
   2. Call `pageCreator.Run(title, formattedContent)`
-- List commands do NOT use the pager - they render directly via `renderer.Render()` which calls `output.Write()`
+- Previously, list commands rendered directly via `renderer.Render()` (which calls `output.Write()`); pager support is now being rolled out to list commands.
 
 ## Implementation Plan
 
