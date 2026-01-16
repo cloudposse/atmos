@@ -30,6 +30,8 @@ export interface Milestone {
   priority?: 'high';
   /** Demo video ID (optional) - matches scene name in demos/scenes.yaml. */
   demoId?: string;
+  /** Whether this feature is experimental (still being refined). */
+  experimental?: boolean;
 }
 
 interface MilestoneListProps {
@@ -130,12 +132,22 @@ export default function MilestoneList({
     return Boolean(milestone.description || milestone.benefits || milestone.screenshot || milestone.codeExample);
   };
 
-  // Render badges on the right side (Announcement, Docs, PRs).
+  // Render badges on the right side (Experimental, Announcement, Docs, PRs).
   const renderMilestoneLinks = (milestone: Milestone) => {
-    if (!milestone.changelog && !milestone.docs && !milestone.pr) return null;
+    if (!milestone.changelog && !milestone.docs && !milestone.pr && !milestone.experimental) return null;
 
     return (
       <span className={styles.milestoneLinks}>
+        {milestone.experimental && (
+          <Link
+            to="/experimental"
+            className={`${styles.milestoneLinkBadge} ${styles.milestoneLinkExperimental}`}
+            onClick={(e) => e.stopPropagation()}
+            title="This feature is experimental"
+          >
+            Experimental
+          </Link>
+        )}
         {milestone.changelog && (
           <Link
             to={`/changelog/${milestone.changelog}`}

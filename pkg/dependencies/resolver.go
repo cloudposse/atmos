@@ -2,10 +2,12 @@ package dependencies
 
 import (
 	"fmt"
+	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 // Resolver resolves tool dependencies with inheritance and validation.
@@ -157,4 +159,30 @@ func extractDependenciesFromConfig(config map[string]any) map[string]string {
 	}
 
 	return tools
+}
+
+// LoadToolVersionsDependencies loads tools from .tool-versions as a dependency map.
+// Returns an empty map if the file doesn't exist (no error).
+// The first version listed for each tool is used as the default.
+func LoadToolVersionsDependencies(atmosConfig *schema.AtmosConfiguration) (map[string]string, error) {
+	defer perf.Track(atmosConfig, "dependencies.LoadToolVersionsDependencies")()
+
+	toolVersionsPath := toolchain.GetToolVersionsFilePath()
+	toolVersions, err := toolchain.LoadToolVersions(toolVersionsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			// No .tool-versions file is fine - return empty map.
+			return map[string]string{}, nil
+		}
+		return nil, fmt.Errorf("%w: failed to load .tool-versions: %w", errUtils.ErrDependencyResolution, err)
+	}
+
+	deps := make(map[string]string)
+	for tool, versions := range toolVersions.Tools {
+		if len(versions) > 0 {
+			deps[tool] = versions[0] // First version is the default.
+		}
+	}
+
+	return deps, nil
 }

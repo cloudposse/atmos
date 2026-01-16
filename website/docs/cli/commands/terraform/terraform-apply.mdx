@@ -326,6 +326,96 @@ Or use `atmos terraform deploy` for fully automated deployments:
 atmos terraform deploy vpc -s prod
 ```
 
+## Multi-Component Operations
+
+Execute `terraform apply` across multiple components using filtering flags. All flags can be combined with `--dry-run` to preview what would be executed.
+
+:::warning
+Multi-component apply operations can make significant infrastructure changes. Always use `--dry-run` first to verify which components will be affected.
+:::
+
+### Apply All Components
+
+```shell
+# Apply all components in all stacks
+atmos terraform apply --all
+
+# Apply all components in a specific stack
+atmos terraform apply --all --stack prod
+atmos terraform apply --stack prod
+```
+
+### Apply Affected Components
+
+Apply only components affected by changes in the current branch (requires git). Components are processed in dependency order:
+
+```shell
+# Apply affected components in all stacks
+atmos terraform apply --affected
+
+# Apply affected components in a specific stack
+atmos terraform apply --affected --stack prod
+
+# Include dependent components (components that depend on affected components)
+atmos terraform apply --affected --include-dependents
+
+# Clone the target reference instead of checking it out
+atmos terraform apply --affected --clone-target-ref=true
+```
+
+### Apply Specific Components
+
+```shell
+# Apply specific components in all stacks
+atmos terraform apply --components vpc,eks
+
+# Apply specific components in a specific stack
+atmos terraform apply --components vpc,eks --stack prod
+```
+
+### Apply Components by Query
+
+Filter components using [YQ](https://mikefarah.gitbook.io/yq) expressions against component configuration:
+
+```shell
+# Apply components where team tag equals "eks"
+atmos terraform apply --query '.vars.tags.team == "eks"'
+
+# Apply components in a specific account
+atmos terraform apply --query '.settings.context.account_id == 12345'
+
+# Combine with stack filter
+atmos terraform apply --query '.vars.tags.team == "eks"' --stack prod
+```
+
+### Multi-Component Flags
+
+<dl>
+    <dt>`--all`</dt>
+    <dd>Apply all components in all stacks (or specified stack with `--stack`).</dd>
+
+    <dt>`--affected`</dt>
+    <dd>Apply components affected by git changes in dependency order. Supports all flags from [`atmos describe affected`](/cli/commands/describe/affected).</dd>
+
+    <dt>`--components`</dt>
+    <dd>Apply specific components by name (comma-separated or repeated flag).</dd>
+
+    <dt>`--query`</dt>
+    <dd>Apply components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
+
+    <dt>`--include-dependents`</dt>
+    <dd>With `--affected`, also apply components that depend on affected components, recursively.</dd>
+
+    <dt>`--ref`</dt>
+    <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>
+
+    <dt>`--sha`</dt>
+    <dd>Git commit SHA to compare against.</dd>
+
+    <dt>`--clone-target-ref`</dt>
+    <dd>Clone the target reference instead of checking it out locally.</dd>
+</dl>
+
 ## Related Commands
 
 - [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate an execution plan

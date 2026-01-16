@@ -161,12 +161,7 @@ func ExecuteDescribeStacks(
 		delete(stackSection.(map[string]any), "imports")
 
 		// Extract the stack-level 'name' field (logical name override).
-		stackManifestName = ""
-		if nameValue, ok := stackSection.(map[string]any)[cfg.NameSectionName]; ok {
-			if name, ok := nameValue.(string); ok {
-				stackManifestName = name
-			}
-		}
+		stackManifestName = getStackManifestName(stackSection)
 
 		// Check if the `components` section exists and has explicit components.
 		hasExplicitComponents := false

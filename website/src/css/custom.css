@@ -279,6 +279,19 @@ article h1 {
     --announcement-bar-text-color: #fff;
 }
 
+/* Fix announcement bar responsive wrapping at mid-range widths */
+/* Override Docusaurus default fixed 30px height on desktop */
+@media (min-width: 997px) {
+    :root {
+        --docusaurus-announcement-bar-height: auto;
+    }
+}
+
+/* Ensure announcement bar content wraps properly */
+div[class*="announcementBarContent"] {
+    line-height: 1.4;
+}
+
 /* For readability concerns, you should choose a lighter palette in dark mode. */
 [data-theme='dark'] {
     --ifm-color-primary: #3578e5;
@@ -1050,4 +1063,22 @@ html[data-theme="light"] .demos-title {
     ) text;
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
+}
+
+/* YAML syntax highlighting - nightOwl theme doesn't style atrule tokens */
+/* YAML keys use atrule token, values use various scalar types */
+.prism-code .token.atrule,
+.token.atrule {
+    color: rgb(127, 219, 202) !important;
+}
+
+.prism-code .token.scalar,
+.token.scalar {
+    color: rgb(173, 219, 103) !important;
+}
+
+/* Ensure YAML punctuation (colons, dashes) are visible */
+.prism-code .token.punctuation,
+.token.punctuation {
+    color: rgb(199, 146, 234);
 }

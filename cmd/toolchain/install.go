@@ -55,7 +55,17 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	reinstall := v.GetBool("reinstall")
 	defaultVersion := v.GetBool("default")
 
-	return toolchain.RunInstall(args, defaultVersion, reinstall)
+	// Handle single tool vs multiple tools.
+	if len(args) == 0 {
+		// No args: install from .tool-versions file.
+		return toolchain.RunInstall("", defaultVersion, reinstall, true, true)
+	}
+	if len(args) == 1 {
+		// Single tool: use single-tool flow with full progress.
+		return toolchain.RunInstall(args[0], defaultVersion, reinstall, true, true)
+	}
+	// Multiple tools: use batch installer.
+	return toolchain.RunInstallBatch(args, reinstall)
 }
 
 // InstallCommandProvider implements the CommandProvider interface.

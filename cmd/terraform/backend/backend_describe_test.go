@@ -8,11 +8,12 @@ import (
 
 func TestDescribeCmd_Structure(t *testing.T) {
 	testCommandStructure(t, commandTestParams{
-		cmd:           describeCmd,
-		parser:        describeParser,
-		expectedUse:   "describe <component>",
-		expectedShort: "Describe backend configuration",
-		requiredFlags: []string{"format"},
+		cmd:              describeCmd,
+		parser:           describeParser,
+		expectedUse:      "describe [component]",
+		expectedShort:    "Describe backend configuration",
+		requiredFlags:    []string{"format"},
+		hasPositionalArg: true,
 	})
 
 	t.Run("format flag is string", func(t *testing.T) {

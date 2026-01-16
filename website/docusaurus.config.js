@@ -350,6 +350,9 @@ const config = {
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
         ],
         [
+            path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
+        ],
+        [
             path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
             {
                 generateLlmsTxt: true,
@@ -369,7 +372,20 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'slide-notes-extractor'), {}
-        ]
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'examples',
+                sourceDir: '../examples',
+                routeBasePath: '/examples',
+                title: 'Examples',
+                description: 'Explore Atmos example projects with stack configurations, components, and workflows',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'examples',
+            },
+        ],
     ],
 
     presets: [
@@ -453,6 +469,11 @@ const config = {
                         label: 'Demos'
                     },
                     {
+                        to: '/examples',
+                        position: 'left',
+                        label: 'Examples'
+                    },
+                    {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
@@ -495,7 +516,7 @@ const config = {
                 theme: lightCodeTheme,
                 darkTheme: darkCodeTheme,
                 // https://prismjs.com/#supported-languages
-                additionalLanguages: ['hcl', 'bash']
+                additionalLanguages: ['hcl', 'bash', 'yaml', 'json', 'toml', 'ini', 'docker', 'makefile', 'python', 'go']
             },
             algolia: {
                 appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',

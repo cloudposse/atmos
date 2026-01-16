@@ -4,29 +4,8 @@
  */
 import React from 'react';
 import { useBlogPost } from '@docusaurus/plugin-content-blog/client';
-import clsx from 'clsx';
+import ReleaseBadge from './ReleaseBadge';
 import styles from './styles.module.css';
-
-function ReleaseBadge({ release }: { release: string }): JSX.Element {
-  if (release === 'unreleased') {
-    return (
-      <span className={clsx(styles.releaseBadge, styles.unreleased)}>
-        Unreleased
-      </span>
-    );
-  }
-
-  return (
-    <a
-      href={`https://github.com/cloudposse/atmos/releases/tag/${release}`}
-      className={styles.releaseBadge}
-      target="_blank"
-      rel="noopener noreferrer"
-    >
-      {release}
-    </a>
-  );
-}
 
 export default function BlogReleaseBadge(): JSX.Element | null {
   // This hook will throw if not inside BlogPostProvider.

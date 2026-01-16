@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/terminal"
@@ -1706,6 +1707,737 @@ func TestTrimRight(t *testing.T) {
 					strippedExpected,
 					strings.TrimRight(strippedExpected, " \t"),
 				)
+			}
+		})
+	}
+}
+
+//nolint:dupl // Test structure intentionally mirrors TestTrimRight for consistency.
+func TestTrimLeftSpaces(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+		desc     string
+	}{
+		{
+			name:     "plain text no leading spaces",
+			input:    "hello world",
+			expected: "hello world",
+			desc:     "Baseline: plain text without leading spaces should be unchanged",
+		},
+		{
+			name:     "plain text with leading spaces",
+			input:    "   hello world",
+			expected: "hello world",
+			desc:     "Plain text with leading spaces should be trimmed",
+		},
+		{
+			name:     "ANSI colored text no leading spaces",
+			input:    "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI colored text without leading spaces should preserve all codes",
+		},
+		{
+			name:     "ANSI colored text with plain leading spaces",
+			input:    "   \x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI colored text with plain leading spaces should trim spaces",
+		},
+		{
+			name:     "ANSI codes before leading spaces (Glamour pattern)",
+			input:    "\x1b[38;2;247;250;252m\x1b[0m\x1b[38;2;247;250;252m\x1b[0m  \x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI codes before leading spaces (Glamour pattern) should be trimmed",
+		},
+		{
+			name:     "ANSI wrapped leading spaces",
+			input:    "\x1b[38;2;247;250;252m   \x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m",
+			desc:     "ANSI-wrapped leading spaces should be trimmed (reset code preserved)",
+		},
+		{
+			name:     "mixed ANSI codes and spaces at start",
+			input:    "\x1b[0m\x1b[38;2;247;250;252m\x1b[0m  \x1b[38;2;247;250;252m• Item one\x1b[0m",
+			expected: "\x1b[38;2;247;250;252m• Item one\x1b[0m",
+			desc:     "Mixed ANSI codes and spaces at start should be trimmed correctly",
+		},
+		{
+			name:     "Unicode characters with leading spaces",
+			input:    "  ℹ hello → world",
+			expected: "ℹ hello → world",
+			desc:     "Unicode characters with leading spaces should be trimmed correctly",
+		},
+		{
+			name:     "Unicode with ANSI and leading spaces",
+			input:    "\x1b[38;2;247;250;252m   \x1b[0m\x1b[38;2;247;250;252mℹ hello → world\x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252mℹ hello → world\x1b[0m",
+			desc:     "Unicode with ANSI codes and leading spaces should trim correctly (reset code preserved)",
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+			desc:     "Empty string should remain empty",
+		},
+		{
+			name:     "only spaces",
+			input:    "     ",
+			expected: "",
+			desc:     "String with only spaces should become empty",
+		},
+		{
+			name:     "only ANSI wrapped spaces",
+			input:    "\x1b[38;2;247;250;252m     \x1b[0m",
+			expected: "",
+			desc:     "String with only ANSI-wrapped spaces should become empty",
+		},
+		{
+			name:     "preserves trailing spaces",
+			input:    "   hello world   ",
+			expected: "hello world   ",
+			desc:     "Trailing spaces should be preserved, only leading removed",
+		},
+		{
+			name:     "preserves ANSI on trailing spaces",
+			input:    "\x1b[38;2;247;250;252m   \x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			expected: "\x1b[0m\x1b[38;2;247;250;252mhello world\x1b[0m\x1b[38;2;247;250;252m   \x1b[0m",
+			desc:     "ANSI codes on trailing spaces should be preserved (leading reset code after trim)",
+		},
+		{
+			name:     "real Glamour output with bullet",
+			input:    "\x1b[38;2;247;250;252m\x1b[0m\x1b[38;2;247;250;252m\x1b[0m  \x1b[38;2;247;250;252m• \x1b[0m\x1b[38;2;247;250;252mItem one\x1b[0m",
+			expected: "\x1b[38;2;247;250;252m• \x1b[0m\x1b[38;2;247;250;252mItem one\x1b[0m",
+			desc:     "Real Glamour bullet list output should have leading spaces trimmed",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimLeftSpaces(tt.input)
+
+			// Compare results.
+			if result != tt.expected {
+				t.Errorf("\nTest: %s\nDescription: %s\n\nInput:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nExpected:\n  Raw: %q\n  Hex: % X\n  Visual: %s\n\nGot:\n  Raw: %q\n  Hex: % X\n  Visual: %s",
+					tt.name,
+					tt.desc,
+					tt.input,
+					[]byte(tt.input),
+					tt.input,
+					tt.expected,
+					[]byte(tt.expected),
+					tt.expected,
+					result,
+					[]byte(result),
+					result,
+				)
+			}
+
+			// Additional verification: check visual width.
+			strippedInput := ansi.Strip(tt.input)
+			strippedExpected := ansi.Strip(tt.expected)
+			strippedResult := ansi.Strip(result)
+
+			expectedWidth := ansi.StringWidth(strings.TrimLeft(strippedInput, " "))
+			resultWidth := ansi.StringWidth(strippedResult)
+
+			if resultWidth != expectedWidth {
+				t.Errorf("\nVisual width mismatch:\n  Expected trimmed width: %d (from %q)\n  Got width: %d (from %q)",
+					expectedWidth,
+					strings.TrimLeft(strippedInput, " "),
+					resultWidth,
+					strippedResult,
+				)
+			}
+
+			// Verify no leading whitespace in result.
+			if strippedResult != strings.TrimLeft(strippedResult, " ") {
+				t.Errorf("\nResult still has leading whitespace:\n  Stripped result: %q\n  After TrimLeft: %q",
+					strippedResult,
+					strings.TrimLeft(strippedResult, " "),
+				)
+			}
+
+			// Verify expected also matches this property.
+			if strippedExpected != strings.TrimLeft(strippedExpected, " ") {
+				t.Errorf("\nTest case error - expected value has leading whitespace:\n  Stripped expected: %q\n  After TrimLeft: %q",
+					strippedExpected,
+					strings.TrimLeft(strippedExpected, " "),
+				)
+			}
+		})
+	}
+}
+
+func TestReset(t *testing.T) {
+	// Initialize first.
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	// Verify initialized.
+	if Format == nil {
+		t.Fatal("Format should be initialized after InitFormatter")
+	}
+
+	// Reset.
+	Reset()
+
+	// Verify reset.
+	if Format != nil {
+		t.Error("Format should be nil after Reset")
+	}
+
+	// Re-initialize for other tests.
+	InitFormatter(ioCtx)
+}
+
+func TestSetColorProfile(t *testing.T) {
+	// This function should not panic.
+	SetColorProfile(termenv.Ascii)
+	SetColorProfile(termenv.ANSI)
+	SetColorProfile(termenv.ANSI256)
+	SetColorProfile(termenv.TrueColor)
+}
+
+func TestHint(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Hint("This is a hint")
+	if err != nil {
+		t.Errorf("Hint() returned error: %v", err)
+	}
+}
+
+func TestHintf(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Hintf("This is a %s hint", "formatted")
+	if err != nil {
+		t.Errorf("Hintf() returned error: %v", err)
+	}
+}
+
+func TestExperimental(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Experimental("test-feature")
+	if err != nil {
+		t.Errorf("Experimental() returned error: %v", err)
+	}
+}
+
+func TestExperimentalf(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	err := Experimentalf("test-%s", "feature")
+	if err != nil {
+		t.Errorf("Experimentalf() returned error: %v", err)
+	}
+}
+
+func TestBadge(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	result := Badge("TEST", "#FF9800", "#000000")
+	if result == "" {
+		t.Error("Badge() returned empty string")
+	}
+	// Badge should contain the text.
+	if !strings.Contains(result, "TEST") {
+		t.Errorf("Badge() should contain text 'TEST', got: %q", result)
+	}
+}
+
+func TestFormatExperimentalBadge(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	result := FormatExperimentalBadge()
+	if result == "" {
+		t.Error("FormatExperimentalBadge() returned empty string")
+	}
+	// Should contain EXPERIMENTAL.
+	if !strings.Contains(result, "EXPERIMENTAL") {
+		t.Errorf("FormatExperimentalBadge() should contain 'EXPERIMENTAL', got: %q", result)
+	}
+}
+
+func TestClearLine(t *testing.T) {
+	ioCtx := createTestIOContext()
+	InitFormatter(ioCtx)
+
+	// ClearLine should not panic or return error.
+	err := ClearLine()
+	if err != nil {
+		t.Errorf("ClearLine() returned error: %v", err)
+	}
+}
+
+func TestConfigureColorProfileAllProfiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile terminal.ColorProfile
+	}{
+		{name: "ColorNone", profile: terminal.ColorNone},
+		{name: "Color16", profile: terminal.Color16},
+		{name: "Color256", profile: terminal.Color256},
+		{name: "ColorTrue", profile: terminal.ColorTrue},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			term := &mockTerminal{profile: tt.profile}
+			// Should not panic.
+			configureColorProfile(term)
+		})
+	}
+}
+
+func TestFormatterHintMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Hint method on Formatter instance.
+	result := f.Hint("This is a hint message")
+	if result == "" {
+		t.Error("Formatter.Hint() returned empty string")
+	}
+}
+
+func TestFormatterHintfMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Hintf method on Formatter instance.
+	result := f.Hintf("This is a %s hint", "formatted")
+	if result == "" {
+		t.Error("Formatter.Hintf() returned empty string")
+	}
+}
+
+func TestFormatterToastMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Toast method on Formatter instance.
+	result := f.Toast("🎉", "Test message")
+	if result == "" {
+		t.Error("Formatter.Toast() returned empty string")
+	}
+	if !strings.Contains(result, "Test message") {
+		t.Errorf("Formatter.Toast() should contain message, got: %q", result)
+	}
+}
+
+func TestFormatterToastfMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// Test the Toastf method on Formatter instance.
+	result := f.Toastf("📣", "Value is %d", 42)
+	if result == "" {
+		t.Error("Formatter.Toastf() returned empty string")
+	}
+	if !strings.Contains(result, "42") {
+		t.Errorf("Formatter.Toastf() should contain formatted value, got: %q", result)
+	}
+}
+
+func TestFormatterHintWithBackticks(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	// The renderInlineMarkdownWithBase is called through Hint.
+	// Test through the public API.
+	result := f.Hint("Use `--help` for more info")
+	if result == "" {
+		t.Error("Formatter.Hint() with backticks returned empty string")
+	}
+}
+
+func TestFormatterBoldMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Bold("Bold text")
+	if result == "" {
+		t.Error("Formatter.Bold() returned empty string")
+	}
+	if !strings.Contains(result, "Bold text") {
+		t.Errorf("Formatter.Bold() should contain text, got: %q", result)
+	}
+}
+
+func TestFormatterMutedMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Muted("Muted text")
+	if result == "" {
+		t.Error("Formatter.Muted() returned empty string")
+	}
+	if !strings.Contains(result, "Muted text") {
+		t.Errorf("Formatter.Muted() should contain text, got: %q", result)
+	}
+}
+
+func TestFormatterHeadingMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Heading("Heading text")
+	if result == "" {
+		t.Error("Formatter.Heading() returned empty string")
+	}
+	if !strings.Contains(result, "Heading text") {
+		t.Errorf("Formatter.Heading() should contain text, got: %q", result)
+	}
+}
+
+func TestFormatterLabelMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := terminal.New()
+	f := NewFormatter(ioCtx, term)
+
+	result := f.Label("Label text")
+	if result == "" {
+		t.Error("Formatter.Label() returned empty string")
+	}
+	if !strings.Contains(result, "Label text") {
+		t.Errorf("Formatter.Label() should contain text, got: %q", result)
+	}
+}
+
+func TestExperimental_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Experimental should return error when formatter not initialized.
+	err := Experimental("test-feature")
+	if err == nil {
+		t.Error("Experimental() should return error when formatter not initialized")
+	}
+}
+
+func TestExperimentalf_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Experimentalf should return error when formatter not initialized.
+	err := Experimentalf("test-%s", "feature")
+	if err == nil {
+		t.Error("Experimentalf() should return error when formatter not initialized")
+	}
+}
+
+func TestBadge_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// Badge should return fallback format when formatter not initialized.
+	result := Badge("TEST", "#FF9800", "#000000")
+	expected := "[TEST]"
+	if result != expected {
+		t.Errorf("Badge() fallback = %q, want %q", result, expected)
+	}
+}
+
+func TestFormatExperimentalBadge_FormatterNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalFormatter = nil
+	Format = nil
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// FormatExperimentalBadge should return fallback format when formatter not initialized.
+	result := FormatExperimentalBadge()
+	expected := "[EXPERIMENTAL]"
+	if result != expected {
+		t.Errorf("FormatExperimentalBadge() fallback = %q, want %q", result, expected)
+	}
+}
+
+func TestFormatExperimentalBadge_NoColorSupport(t *testing.T) {
+	// Initialize formatter with no color support.
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = nil
+		Format = nil
+		globalTerminal = nil
+		formatterMu.Unlock()
+	}()
+
+	// FormatExperimentalBadge should return plain format when color not supported.
+	result := FormatExperimentalBadge()
+	expected := "[EXPERIMENTAL]"
+	if result != expected {
+		t.Errorf("FormatExperimentalBadge() with no color = %q, want %q", result, expected)
+	}
+}
+
+func TestClearLine_TerminalNotInitialized(t *testing.T) {
+	// Save original state.
+	formatterMu.Lock()
+	oldFormatter := globalFormatter
+	oldFormat := Format
+	oldTerminal := globalTerminal
+	globalTerminal = nil
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = oldFormatter
+		Format = oldFormat
+		globalTerminal = oldTerminal
+		formatterMu.Unlock()
+	}()
+
+	// ClearLine should return error when terminal not initialized.
+	err := ClearLine()
+	if err == nil {
+		t.Error("ClearLine() should return error when terminal not initialized")
+	}
+}
+
+func TestClearLine_WithColorSupport(t *testing.T) {
+	// Initialize with color support.
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorTrue)
+	formatterMu.Lock()
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = nil
+		Format = nil
+		globalTerminal = nil
+		formatterMu.Unlock()
+	}()
+
+	// ClearLine should not return error when color is supported.
+	err := ClearLine()
+	if err != nil {
+		t.Errorf("ClearLine() with color support returned error: %v", err)
+	}
+}
+
+func TestClearLine_NoColorSupport(t *testing.T) {
+	// Initialize without color support.
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	formatterMu.Lock()
+	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+	Format = globalFormatter
+	globalTerminal = term
+	formatterMu.Unlock()
+
+	// Restore after test.
+	defer func() {
+		formatterMu.Lock()
+		globalFormatter = nil
+		Format = nil
+		globalTerminal = nil
+		formatterMu.Unlock()
+	}()
+
+	// ClearLine should not return error when color is not supported (uses \r fallback).
+	err := ClearLine()
+	if err != nil {
+		t.Errorf("ClearLine() without color support returned error: %v", err)
+	}
+}
+
+func TestFormatterExperimentalfMethod(t *testing.T) {
+	ioCtx := createTestIOContext()
+	term := createMockTerminal(terminal.ColorNone)
+	f := NewFormatter(ioCtx, term).(*formatter)
+
+	// Test the method on formatter struct.
+	// Experimentalf formats the feature name and passes to Experimental.
+	result := f.Experimentalf("%s", "toolchain")
+	if result == "" {
+		t.Error("Formatter.Experimentalf() returned empty string")
+	}
+	// The method outputs the feature name in the experimental message.
+	if !strings.Contains(result, "toolchain") {
+		t.Errorf("Formatter.Experimentalf() should contain feature name, got: %q", result)
+	}
+	if !strings.Contains(result, "experimental feature") {
+		t.Errorf("Formatter.Experimentalf() should contain 'experimental feature', got: %q", result)
+	}
+}
+
+func TestFormatterBadgeMethod(t *testing.T) {
+	tests := []struct {
+		name       string
+		profile    terminal.ColorProfile
+		text       string
+		background string
+		foreground string
+	}{
+		{
+			name:       "Badge with color support",
+			profile:    terminal.ColorTrue,
+			text:       "TEST",
+			background: "#FF9800",
+			foreground: "#000000",
+		},
+		{
+			name:       "Badge without color support",
+			profile:    terminal.ColorNone,
+			text:       "BADGE",
+			background: "#0000FF",
+			foreground: "#FFFFFF",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := f.Badge(tt.text, tt.background, tt.foreground)
+			if result == "" {
+				t.Error("Formatter.Badge() returned empty string")
+			}
+			if !strings.Contains(result, tt.text) {
+				t.Errorf("Formatter.Badge() should contain text %q, got: %q", tt.text, result)
+			}
+
+			// Without color, should return plain bracketed format.
+			if tt.profile == terminal.ColorNone {
+				expected := "[" + tt.text + "]"
+				if result != expected {
+					t.Errorf("Formatter.Badge() without color = %q, want %q", result, expected)
+				}
+			}
+		})
+	}
+}
+
+func TestFormatterExperimentalMethod(t *testing.T) {
+	tests := []struct {
+		name    string
+		profile terminal.ColorProfile
+		feature string
+	}{
+		{
+			name:    "Experimental with color support",
+			profile: terminal.ColorTrue,
+			feature: "new-feature",
+		},
+		{
+			name:    "Experimental without color support",
+			profile: terminal.ColorNone,
+			feature: "test-feature",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ioCtx := createTestIOContext()
+			term := createMockTerminal(tt.profile)
+			f := NewFormatter(ioCtx, term).(*formatter)
+
+			result := f.Experimental(tt.feature)
+			if result == "" {
+				t.Error("Formatter.Experimental() returned empty string")
+			}
+			// The method outputs the feature name in the experimental message.
+			if !strings.Contains(result, tt.feature) {
+				t.Errorf("Formatter.Experimental() should contain feature name %q, got: %q", tt.feature, result)
+			}
+			if !strings.Contains(result, "experimental feature") {
+				t.Errorf("Formatter.Experimental() should contain 'experimental feature', got: %q", result)
 			}
 		})
 	}

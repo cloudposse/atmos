@@ -1,6 +1,6 @@
 # Toolchain Configuration Example
 
-This example demonstrates how to configure Atmos toolchain with tool registries.
+This example demonstrates how to configure Atmos toolchain with tool registries, and how toolchain-managed tools integrate automatically with custom commands and workflows.
 
 ## Overview
 
@@ -9,6 +9,7 @@ The toolchain system enables:
 - **Air-Gapped Deployments**: Mirror registries for offline environments
 - **Security & Compliance**: Control tool sources and versions
 - **Registry Precedence**: Local/corporate registries override public ones
+- **Automatic Integration**: Tools from `.tool-versions` are available in custom commands and workflows
 
 ## Configuration
 
@@ -22,17 +23,17 @@ The `type` field specifies the **registry format/schema**, not the transport pro
 
 Atmos supports two patterns for Aqua registries:
 
-1. **Single Index File** (like official Aqua registry):
+1. **Single Index File** (all packages in one file):
    ```yaml
    toolchain:
      registries:
        - name: custom
          type: aqua
-         source: file://./custom-registry/registry.yaml  # Points to index file
+         source: file://./registry.yaml  # Points to index file
          priority: 100
    ```
    - Detection: Source ends with `.yaml` or `.yml`
-   - All packages in one file
+   - All packages defined in one file
    - Recommended for custom/corporate registries
 
 2. **Per-Package Directory** (separate file per package):
@@ -41,12 +42,11 @@ Atmos supports two patterns for Aqua registries:
      registries:
        - name: custom
          type: aqua
-         source: file://./custom-registry/pkgs/  # Points to directory
+         source: file://./pkgs/  # Points to directory
          priority: 100
    ```
    - Detection: Source doesn't end with `.yaml`/`.yml`
    - Each package has its own `registry.yaml` at `{source}/{owner}/{repo}/registry.yaml`
-   - Each registry.yaml file contains ONE package definition
    - Used by official Aqua registry for per-tool lookups
 
 **Official Aqua Registry:**
@@ -73,18 +73,29 @@ Define tools directly in `atmos.yaml` without external files:
 
 ```yaml
 toolchain:
+  aliases:
+    jq: jqlang/jq
+    yq: mikefarah/yq
+
   registries:
     - name: my-tools
       type: atmos
       priority: 150
       tools:
-        stedolan/jq:
+        jqlang/jq:
           type: github_release
           url: "jq-{{.OS}}-{{.Arch}}"
           binary_name: jq
+          version_prefix: "jq-"
+          overrides:
+            - goos: darwin
+              replacements:
+                darwin: macos
         mikefarah/yq:
           type: github_release
-          url: "yq_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+          url: "yq_{{.OS}}_{{.Arch}}"
+          format: tar.gz
+          binary_name: yq
 ```
 
 **Use Cases**:
@@ -238,7 +249,74 @@ If a tool is not found:
 
 Registries are checked in order. If a high-priority registry is unavailable, lower-priority registries will be tried automatically.
 
+## Toolchain Integration with Custom Commands and Workflows
+
+Tools defined in `.tool-versions` are automatically available in custom commands and workflows. This example demonstrates four different integration patterns.
+
+### The `.tool-versions` File
+
+This example includes a `.tool-versions` file defining project-wide tool defaults:
+
+```text
+jq 1.7.1
+yq 4.45.1
+```
+
+### Custom Commands Demo
+
+Each example demonstrates a different toolchain feature:
+
+```bash
+# 1. Implicit dependencies - uses tools from .tool-versions
+atmos demo which
+
+# 2. Exact version pinning - override with specific version
+atmos demo pinned
+
+# 3. SemVer constraints - allow compatible version ranges
+atmos demo constrained
+
+# 4. Multi-tool pipeline - combine tools together
+atmos demo convert
+```
+
+### Workflows Demo
+
+Workflows demonstrate the same patterns:
+
+```bash
+# 1. Implicit dependencies - uses tools from .tool-versions
+atmos workflow which -f toolchain-demo
+
+# 2. Exact version pinning
+atmos workflow pinned -f toolchain-demo
+
+# 3. SemVer constraints
+atmos workflow constrained -f toolchain-demo
+
+# 4. Multi-tool pipeline
+atmos workflow convert -f toolchain-demo
+```
+
+### Version Constraint Patterns
+
+| Pattern | Example | Meaning |
+|---------|---------|---------|
+| Exact | `1.7.1` | Only version 1.7.1 |
+| Caret | `^1.7.0` | Any 1.x.x (compatible) |
+| Tilde | `~> 4.40.0` | Any 4.40.x (patch only) |
+| Latest | `latest` | Most recent version |
+
+### How It Works
+
+1. **Automatic Tool Discovery**: Atmos reads `.tool-versions` when commands/workflows run
+2. **Dependency Merging**: Explicit `dependencies` override `.tool-versions`
+3. **Tool Installation**: Missing tools are automatically installed to `.tools/`
+4. **PATH Update**: Toolchain binaries are prepended to PATH
+
 ## Related Documentation
 
 - [Aqua Registry Documentation](https://aquaproj.github.io/docs/reference/registry/)
 - [Atmos Toolchain Documentation](https://atmos.tools/cli/commands/toolchain/)
+- [Custom Commands Documentation](https://atmos.tools/cli/configuration/commands/)
+- [Workflows Documentation](https://atmos.tools/workflows/)

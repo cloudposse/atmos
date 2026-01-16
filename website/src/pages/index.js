@@ -27,9 +27,9 @@ function Home() {
               <h1>
                 <span className="hero__title-line">One Tool to Orchestrate</span>
                 <span className="typing-container" aria-hidden="true">
-                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile']} />
+                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'Devcontainers']} />
                 </span>
-                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile</span>
+                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Devcontainers</span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">

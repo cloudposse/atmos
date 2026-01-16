@@ -264,7 +264,7 @@ func TestBuildComponentFilters(t *testing.T) {
 			opts: &ComponentsOptions{
 				Stack: "prod-*",
 			},
-			expectedCount: 2, // Stack filter + abstract filter
+			expectedCount: 1, // abstract filter only (stack filter not applicable to unique components)
 			description:   "Stack glob filter + abstract filter",
 		},
 		{
@@ -315,7 +315,7 @@ func TestBuildComponentFilters(t *testing.T) {
 				Enabled: &enabledTrue,
 				Locked:  &lockedTrue,
 			},
-			expectedCount: 4, // Stack + Type + Enabled + Locked (no abstract filter when Type is set)
+			expectedCount: 3, // Type + Enabled + Locked (stack filter not applicable to unique components)
 			description:   "All filters combined",
 		},
 		{
@@ -353,7 +353,7 @@ func TestGetComponentColumns(t *testing.T) {
 				},
 			},
 			columnsFlag: []string{},
-			expectLen:   6,   // status dot, Component, Stack, Kind, Type, Path
+			expectLen:   4,   // status dot, Component, Type, Stacks
 			expectName:  " ", // status column has space as name
 		},
 		{
@@ -370,8 +370,8 @@ func TestGetComponentColumns(t *testing.T) {
 		{
 			name: "Columns from config",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					List: schema.ListConfig{
+				List: schema.TopLevelListConfig{
+					Components: schema.ListConfig{
 						Columns: []schema.ListColumnConfig{
 							{Name: "Component", Value: "{{ .component }}"},
 							{Name: "Stack", Value: "{{ .stack }}"},
@@ -410,7 +410,7 @@ func TestBuildComponentSorters(t *testing.T) {
 		{
 			name:      "Empty sort (default)",
 			sortSpec:  "",
-			expectLen: 1, // Default sort by component ascending
+			expectLen: 1, // Default sort by component ascending only (unique components)
 		},
 		{
 			name:      "Single sort field ascending",
@@ -873,8 +873,8 @@ func TestRenderComponents(t *testing.T) {
 		{
 			name: "Components with custom columns from config",
 			atmosConfig: &schema.AtmosConfiguration{
-				Components: schema.Components{
-					List: schema.ListConfig{
+				List: schema.TopLevelListConfig{
+					Components: schema.ListConfig{
 						Columns: []schema.ListColumnConfig{
 							{Name: "Name", Value: "{{ .component }}"},
 							{Name: "Environment", Value: "{{ .stack }}"},

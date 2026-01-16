@@ -206,8 +206,10 @@ func initAndExtractComponents(cmd *cobra.Command, args []string, opts *Component
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Extract components into structured data.
-	components, err := extract.Components(stacksMap)
+	// Extract unique components (deduplicated across all stacks).
+	// This is the original "list components" behavior - showing unique component definitions.
+	// Pass the stack pattern to filter which stacks to consider when deduplicating.
+	components, err := extract.UniqueComponents(stacksMap, opts.Stack)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -378,20 +380,15 @@ func filterComponentsWithQuery(atmosConfig *schema.AtmosConfiguration, component
 }
 
 // buildComponentFilters creates filters based on command options.
+// Note: --stack filter is not applicable to unique components (use "list instances" for per-stack filtering).
 func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 	defer perf.Track(nil, "list.components.buildComponentFilters")()
 
 	var filters []filter.Filter
 
-	// Stack filter (glob pattern).
-	if opts.Stack != "" {
-		globFilter, err := filter.NewGlobFilter("stack", opts.Stack)
-		if err != nil {
-			_ = ui.Warning(fmt.Sprintf("Invalid glob pattern '%s': %v, filter will be ignored", opts.Stack, err))
-		} else {
-			filters = append(filters, globFilter)
-		}
-	}
+	// Note: Stack filter is intentionally not applied here.
+	// "list components" shows unique component definitions, not per-stack instances.
+	// Use "atmos list instances --stack=xxx" for per-stack filtering.
 
 	// Type filter (authoritative when provided, targets type field: real/abstract).
 	if opts.Type != "" && opts.Type != "all" {
@@ -414,7 +411,7 @@ func buildComponentFilters(opts *ComponentsOptions) []filter.Filter {
 	return filters
 }
 
-// getComponentColumns returns column configuration.
+// getComponentColumns returns column configuration for unique components listing.
 func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []string) []column.Config {
 	defer perf.Track(nil, "list.components.getComponentColumns")()
 
@@ -423,10 +420,10 @@ func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []s
 		return parseColumnsFlag(columnsFlag)
 	}
 
-	// Check atmos.yaml for components.list.columns configuration.
-	if len(atmosConfig.Components.List.Columns) > 0 {
+	// Check new config path: list.components.columns.
+	if len(atmosConfig.List.Components.Columns) > 0 {
 		var configs []column.Config
-		for _, col := range atmosConfig.Components.List.Columns {
+		for _, col := range atmosConfig.List.Components.Columns {
 			configs = append(configs, column.Config{
 				Name:  col.Name,
 				Value: col.Value,
@@ -436,14 +433,15 @@ func getComponentColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []s
 		return configs
 	}
 
-	// Default columns: show status dot and standard component fields.
+	// Default columns: show unique component information.
+	// Note: Stack is not included because this lists unique components, not instances.
+	// Note: We intentionally do NOT fall back to components.list.columns here because
+	// that configuration is designed for instances (per-stack data), not unique components.
 	return []column.Config{
 		{Name: " ", Value: "{{ .status }}", Width: 1},
 		{Name: "Component", Value: "{{ .component }}"},
-		{Name: "Stack", Value: "{{ .stack }}"},
-		{Name: "Kind", Value: "{{ .kind }}"},           // terraform, helmfile, packer
-		{Name: "Type", Value: "{{ .type }}"},           // real, abstract
-		{Name: "Path", Value: "{{ .component_path }}"}, // filesystem path to component
+		{Name: "Type", Value: "{{ .type }}"},
+		{Name: "Stacks", Value: "{{ .stack_count }}"},
 	}
 }
 
@@ -452,7 +450,7 @@ func buildComponentSorters(sortSpec string) ([]*listSort.Sorter, error) {
 	defer perf.Track(nil, "list.components.buildComponentSorters")()
 
 	if sortSpec == "" {
-		// Default sort: by component ascending.
+		// Default sort: by component name ascending for deterministic output.
 		return []*listSort.Sorter{
 			listSort.NewSorter("Component", listSort.Ascending),
 		}, nil

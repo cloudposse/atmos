@@ -2,6 +2,8 @@ package extract
 
 import (
 	"fmt"
+	"path"
+	"path/filepath"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	perf "github.com/cloudposse/atmos/pkg/perf"
@@ -28,6 +30,11 @@ const (
 	// Component metadata field names.
 	metadataEnabled = "enabled"
 	metadataLocked  = "locked"
+
+	// Field names for component data.
+	fieldComponent       = "component"
+	fieldComponentFolder = "component_folder"
+	fieldMetadata        = "metadata"
 )
 
 // Components transforms stacksMap into structured component data.
@@ -87,9 +94,9 @@ func buildBaseComponent(componentName, stackName, componentKind string) map[stri
 	defer perf.Track(nil, "list.extract.buildBaseComponent")()
 
 	return map[string]any{
-		"component": componentName,
-		"stack":     stackName,
-		"kind":      componentKind, // terraform, helmfile, packer
+		fieldComponent: componentName,
+		"stack":        stackName,
+		"type":         componentKind, // terraform, helmfile, packer
 	}
 }
 
@@ -109,9 +116,9 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 		}
 	}
 
-	metadata, hasMetadata := compMap["metadata"].(map[string]any)
+	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
 	if hasMetadata {
-		comp["metadata"] = metadata
+		comp[fieldMetadata] = metadata
 		extractMetadataFields(comp, metadata)
 	} else {
 		setDefaultMetadataFields(comp)
@@ -119,6 +126,26 @@ func enrichComponentWithMetadata(comp map[string]any, componentData any) {
 
 	// Compute status indicator after enabled/locked are set.
 	computeComponentStatus(comp)
+
+	// Extract vars to top level for easy template access ({{ .vars.tenant }}).
+	if vars, ok := compMap["vars"].(map[string]any); ok {
+		comp["vars"] = vars
+	}
+
+	// Extract settings to top level.
+	if settings, ok := compMap["settings"].(map[string]any); ok {
+		comp["settings"] = settings
+	}
+
+	// Extract component_folder for column templates.
+	if folder, ok := compMap[fieldComponentFolder].(string); ok {
+		comp[fieldComponentFolder] = folder
+	}
+
+	// Extract terraform_component if different from component name.
+	if tfComp, ok := compMap["terraform_component"].(string); ok {
+		comp["terraform_component"] = tfComp
+	}
 
 	comp["data"] = compMap
 }
@@ -129,7 +156,16 @@ func extractMetadataFields(comp map[string]any, metadata map[string]any) {
 
 	comp[metadataEnabled] = getBoolWithDefault(metadata, metadataEnabled, true)
 	comp[metadataLocked] = getBoolWithDefault(metadata, metadataLocked, false)
-	comp["type"] = getStringWithDefault(metadata, "type", "real") // real, abstract
+	comp["component_type"] = getStringWithDefault(metadata, "type", "real") // real, abstract
+
+	// Extract component_folder from metadata.component (the terraform component path).
+	// This is the relative path to the component within the components directory.
+	// If metadata.component is not set, fall back to the component name.
+	if folder, ok := metadata[fieldComponent].(string); ok && folder != "" {
+		comp[fieldComponentFolder] = folder
+	} else if componentName, ok := comp[fieldComponent].(string); ok {
+		comp[fieldComponentFolder] = componentName
+	}
 }
 
 // setDefaultMetadataFields sets default values for metadata fields.
@@ -138,7 +174,12 @@ func setDefaultMetadataFields(comp map[string]any) {
 
 	comp[metadataEnabled] = true
 	comp[metadataLocked] = false
-	comp["type"] = "real" // real, abstract
+	comp["component_type"] = "real" // real, abstract
+
+	// Default component_folder to component name when no metadata.component is set.
+	if componentName, ok := comp[fieldComponent].(string); ok {
+		comp[fieldComponentFolder] = componentName
+	}
 }
 
 // getBoolWithDefault safely extracts a bool value or returns the default.
@@ -159,6 +200,111 @@ func getStringWithDefault(m map[string]any, key string, defaultValue string) str
 		return val
 	}
 	return defaultValue
+}
+
+// UniqueComponents extracts deduplicated components from all stacks.
+// Returns unique component names with aggregated metadata (stack count, types).
+// This is the original behavior of "list components" - showing unique component definitions.
+// The stackPattern parameter is an optional glob pattern to filter which stacks to consider.
+func UniqueComponents(stacksMap map[string]any, stackPattern string) ([]map[string]any, error) {
+	defer perf.Track(nil, "list.extract.UniqueComponents")()
+
+	if stacksMap == nil {
+		return nil, errUtils.ErrStackNotFound
+	}
+
+	// Use a map to deduplicate by component name + type combination.
+	// Key: "componentName:componentType" (e.g., "vpc:terraform").
+	seen := make(map[string]map[string]any)
+
+	for stackName, stackData := range stacksMap {
+		// Apply stack filter if provided.
+		if stackPattern != "" {
+			// Stack names are slash-separated; normalize for cross-platform matching.
+			// Use path.Match (not filepath.Match) to ensure consistent behavior on Windows.
+			name := filepath.ToSlash(stackName)
+			pattern := filepath.ToSlash(stackPattern)
+			matched, err := path.Match(pattern, name)
+			if err != nil || !matched {
+				continue
+			}
+		}
+
+		stackMap, ok := stackData.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		componentsMap, ok := stackMap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+
+		// Process each component type.
+		extractUniqueComponentType("terraform", componentsMap, seen)
+		extractUniqueComponentType("helmfile", componentsMap, seen)
+		extractUniqueComponentType("packer", componentsMap, seen)
+	}
+
+	// Convert map to slice.
+	var components []map[string]any
+	for _, comp := range seen {
+		components = append(components, comp)
+	}
+
+	return components, nil
+}
+
+// extractUniqueComponentType extracts unique components of a specific type.
+func extractUniqueComponentType(componentType string, componentsMap map[string]any, seen map[string]map[string]any) {
+	typeComponents, ok := componentsMap[componentType].(map[string]any)
+	if !ok {
+		return
+	}
+
+	for componentName, componentData := range typeComponents {
+		key := componentName + ":" + componentType
+
+		// If we haven't seen this component, add it.
+		if _, exists := seen[key]; !exists {
+			comp := map[string]any{
+				fieldComponent: componentName,
+				"type":         componentType,
+				"stack_count":  0,
+			}
+
+			// Extract metadata from first occurrence.
+			enrichUniqueComponentMetadata(comp, componentData)
+			seen[key] = comp
+		}
+
+		// Increment stack count.
+		if count, ok := seen[key]["stack_count"].(int); ok {
+			seen[key]["stack_count"] = count + 1
+		}
+	}
+}
+
+// enrichUniqueComponentMetadata adds metadata fields to a unique component.
+func enrichUniqueComponentMetadata(comp map[string]any, componentData any) {
+	compMap, ok := componentData.(map[string]any)
+	if !ok {
+		setDefaultMetadataFields(comp)
+		return
+	}
+
+	metadata, hasMetadata := compMap[fieldMetadata].(map[string]any)
+	if hasMetadata {
+		comp[fieldMetadata] = metadata
+		extractMetadataFields(comp, metadata)
+	} else {
+		setDefaultMetadataFields(comp)
+	}
+
+	// Extract component_folder for column templates.
+	if folder, ok := compMap[fieldComponentFolder].(string); ok {
+		comp[fieldComponentFolder] = folder
+	}
 }
 
 // ComponentsForStack extracts components for a specific stack only.

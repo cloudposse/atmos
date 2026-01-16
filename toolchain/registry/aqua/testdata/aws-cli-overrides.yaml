@@ -1,0 +1,15 @@
+packages:
+  - type: http
+    repo_owner: aws
+    repo_name: aws-cli
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{.Version}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        url: https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.{{.Format}}
+        format: pkg
+        files:
+          - name: aws
+            src: aws-cli.pkg/Payload/aws-cli/aws
+          - name: aws_completer
+            src: aws-cli.pkg/Payload/aws-cli/aws_completer
