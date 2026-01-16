@@ -1,0 +1,7 @@
+aws/aws-cli (registry: atmos-inline)
+Type: http
+Repository: https://github.com/aws/aws-cli
+
+No versions installed
+
+💡 Use atmos toolchain install aws/aws-cli@<version> to install

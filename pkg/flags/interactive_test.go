@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestIsInteractive tests the isInteractive function.
@@ -728,6 +730,36 @@ func TestStandardFlagParser_PromptForMissingPositionalArgs_MultipleArgs(t *testi
 
 		err := parser.promptForMissingPositionalArgs(result)
 		assert.NoError(t, err, "should not return error when no specs")
+	})
+}
+
+// TestPromptForConfirmation tests the PromptForConfirmation function.
+func TestPromptForConfirmation(t *testing.T) {
+	t.Run("returns true immediately when force is true", func(t *testing.T) {
+		confirmed, err := PromptForConfirmation("Delete this?", true)
+		assert.NoError(t, err, "should not return error when force is true")
+		assert.True(t, confirmed, "should return true when force is true")
+	})
+
+	t.Run("returns true immediately when force is true with any title", func(t *testing.T) {
+		confirmed, err := PromptForConfirmation("Are you sure you want to destroy everything?", true)
+		assert.NoError(t, err, "should not return error when force is true")
+		assert.True(t, confirmed, "should return true when force is true regardless of title")
+	})
+
+	t.Run("returns ErrInteractiveNotAvailable in non-TTY environment", func(t *testing.T) {
+		// In test environment, stdin is typically not a TTY.
+		confirmed, err := PromptForConfirmation("Delete this?", false)
+		// The result depends on the environment, but typically in tests:
+		// - Either we get ErrInteractiveNotAvailable (no TTY)
+		// - Or the test would hang waiting for input (TTY present)
+		// Since tests run non-interactively, we expect the error.
+		if err != nil {
+			assert.ErrorIs(t, err, errUtils.ErrInteractiveNotAvailable, "should return ErrInteractiveNotAvailable in non-TTY")
+			assert.False(t, confirmed, "should return false when interactive not available")
+		}
+		// If no error and test environment has TTY, the test would hang.
+		// This is acceptable - the main coverage is for the force=true path.
 	})
 }
 

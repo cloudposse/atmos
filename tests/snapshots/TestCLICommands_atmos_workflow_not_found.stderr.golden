@@ -21,4 +21,10 @@
 • shell-echo-args
 • shell-failure
 • shell-pass
+• shell-var-echo
 • shell-with-path
+• terraform-var-double-quotes
+• terraform-var-equals-in-value
+• terraform-var-multiple
+• terraform-var-single-quotes
+• terraform-var-with-spaces

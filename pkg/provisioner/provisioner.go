@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/backend"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // Error types for provisioning operations.
@@ -62,8 +64,6 @@ func ProvisionWithParams(params *ProvisionParams) error {
 		return fmt.Errorf("%w: DescribeComponent callback", errUtils.ErrNilParam)
 	}
 
-	_ = ui.Info(fmt.Sprintf("Provisioning %s '%s' in stack '%s'", params.ProvisionerType, params.Component, params.Stack))
-
 	// Get component configuration from stack.
 	componentConfig, err := params.DescribeComponent(params.Component, params.Stack)
 	if err != nil {
@@ -75,22 +75,46 @@ func ProvisionWithParams(params *ProvisionParams) error {
 		return fmt.Errorf("%w: %s (supported: backend)", ErrUnsupportedProvisionerType, params.ProvisionerType)
 	}
 
-	// Execute backend provisioner.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	// Extract backend type and name for display.
+	backendType, _ := componentConfig["backend_type"].(string)
+	if backendType == "" {
+		backendType = "backend"
+	}
+	backendConfig, _ := componentConfig["backend"].(map[string]any)
+	backendName := backend.BackendName(backendType, backendConfig)
 
-	// Pass AuthContext from params directly to backend provisioner.
-	// This enables in-process SDK calls with Atmos-managed credentials.
-	// The AuthContext was populated by the command layer through InitConfigAndAuth,
-	// which merges component-level auth with global auth and respects default identity settings.
-	authContext := params.AuthContext
+	// Execute backend provisioner with spinner feedback.
+	progressMsg := fmt.Sprintf("Provisioning %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
+	completedMsg := fmt.Sprintf("Provisioned %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
 
-	err = backend.ProvisionBackend(ctx, params.AtmosConfig, componentConfig, authContext)
+	// Capture provisioning result to display warnings after spinner completes.
+	// Warnings must be displayed AFTER the spinner to avoid concurrent output corruption.
+	var result *backend.ProvisionResult
+	err = spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		// Pass AuthContext from params directly to backend provisioner.
+		// This enables in-process SDK calls with Atmos-managed credentials.
+		// The AuthContext was populated by the command layer through InitConfigAndAuth,
+		// which merges component-level auth with global auth and respects default identity settings.
+		var provErr error
+		result, provErr = backend.ProvisionBackend(ctx, params.AtmosConfig, componentConfig, params.AuthContext)
+		return provErr
+	})
 	if err != nil {
-		return fmt.Errorf("backend provisioning failed: %w", err)
+		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("Successfully provisioned %s '%s' in stack '%s'", params.ProvisionerType, params.Component, params.Stack))
+	// Display warnings AFTER spinner completes to avoid concurrent output issues.
+	// The spinner runs operations in a background goroutine while animating on stderr,
+	// so any output during spinner execution would interleave and corrupt the display.
+	if result != nil {
+		for _, warning := range result.Warnings {
+			_ = ui.Warning(warning)
+		}
+	}
+
 	return nil
 }
 
@@ -163,8 +187,6 @@ func DeleteBackendWithParams(params *DeleteBackendParams) error {
 		return err
 	}
 
-	_ = ui.Info(fmt.Sprintf("Deleting backend for component '%s' in stack '%s'", params.Component, params.Stack))
-
 	componentConfig, err := params.DescribeComponent(params.Component, params.Stack)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrDescribeComponent).WithCause(err).
@@ -186,8 +208,17 @@ func DeleteBackendWithParams(params *DeleteBackendParams) error {
 			WithHint("Supported backend types for deletion: s3").Err()
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-	defer cancel()
+	// Extract backend name for display.
+	backendName := backend.BackendName(backendType, backendConfig)
 
-	return deleteFunc(ctx, params.AtmosConfig, backendConfig, params.AuthContext, params.Force)
+	// Execute backend deletion with spinner feedback.
+	progressMsg := fmt.Sprintf("Deleting %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
+	completedMsg := fmt.Sprintf("Deleted %s backend `%s` for `%s` in stack `%s`", strings.ToUpper(backendType), backendName, params.Component, params.Stack)
+
+	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		return deleteFunc(ctx, params.AtmosConfig, backendConfig, params.AuthContext, params.Force)
+	})
 }
