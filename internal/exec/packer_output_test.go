@@ -70,7 +70,8 @@ func TestExecutePackerOutput(t *testing.T) {
 		require.NoError(t, err)
 
 		// Write config with absolute paths to avoid path resolution issues.
-		err = os.WriteFile(configPath, []byte(fmt.Sprintf(`base_path: "%s"
+		// Use single quotes for base_path to avoid YAML escape issues with Windows backslashes.
+		err = os.WriteFile(configPath, []byte(fmt.Sprintf(`base_path: '%s'
 stacks:
   base_path: "stacks"
   included_paths:

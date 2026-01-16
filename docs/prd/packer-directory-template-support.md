@@ -167,7 +167,7 @@ All criteria have been met:
 
 ### Unit Tests
 
-```
+```text
 === RUN   TestExecutePacker_DirectoryMode
 === RUN   TestExecutePacker_DirectoryMode/directory_mode_with_no_template_specified
 === RUN   TestExecutePacker_DirectoryMode/directory_mode_with_explicit_dot_template

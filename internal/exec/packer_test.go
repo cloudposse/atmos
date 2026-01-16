@@ -16,11 +16,12 @@ import (
 )
 
 // captureStdout captures stdout during the execution of fn and returns the captured output.
-// It restores stdout after the function completes, even if fn panics.
+// It restores stdout and logger output after the function completes, even if fn panics.
 func captureStdout(t *testing.T, fn func()) string {
 	t.Helper()
 
 	oldStdout := os.Stdout
+	oldLogOut := os.Stderr
 	r, w, err := os.Pipe()
 	if err != nil {
 		t.Fatalf("failed to create pipe: %v", err)
@@ -28,18 +29,29 @@ func captureStdout(t *testing.T, fn func()) string {
 	os.Stdout = w
 	log.SetOutput(w)
 
-	// Ensure stdout is restored even if fn panics.
+	closed := false
+
+	// Ensure stdout and logger are restored even if fn panics.
 	defer func() {
 		os.Stdout = oldStdout
+		log.SetOutput(oldLogOut)
+		if !closed {
+			_ = w.Close()
+			_ = r.Close()
+		}
 	}()
 
 	fn()
 
-	w.Close()
+	// Close writer before reading to avoid deadlock.
+	_ = w.Close()
+	closed = true
 	os.Stdout = oldStdout
+	log.SetOutput(oldLogOut)
 
 	var buf bytes.Buffer
 	_, err = io.Copy(&buf, r)
+	_ = r.Close()
 	if err != nil {
 		t.Fatalf("failed to read captured output: %v", err)
 	}

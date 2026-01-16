@@ -27,14 +27,26 @@ func TestPackerBuildCmd(t *testing.T) {
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)
 
-	oldStd := os.Stdout
+	// Ensure plugins are installed so build errors are about credentials, not init.
+	RootCmd.SetArgs([]string{"packer", "init", "aws/bastion", "-s", "nonprod"})
+	if initErr := Execute(); initErr != nil {
+		t.Skipf("Skipping test: packer init failed (may require network access): %v", initErr)
+	}
+
+	// Reset for actual test.
+	_ = NewTestKit(t)
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	os.Stderr = w
 	log.SetOutput(w)
 
 	// Ensure cleanup happens before any reads.
 	defer func() {
-		os.Stdout = oldStd
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
 		log.SetOutput(os.Stderr)
 	}()
 
@@ -52,23 +64,34 @@ func TestPackerBuildCmd(t *testing.T) {
 	output := buf.String()
 
 	// The command may fail due to AWS credentials, but the output should contain
-	// packer-specific content (like color output or build messages), indicating
-	// that Atmos successfully invoked packer with the correct arguments.
-	if err != nil {
-		// If packer ran and failed due to credentials, that's expected.
-		// Check that packer actually ran (output contains packer-specific content).
-		if strings.Contains(output, "amazon-ebs") || strings.Contains(output, "Build") ||
-			strings.Contains(output, "credential") || strings.Contains(output, "Packer") {
-			t.Logf("Packer build executed but failed (likely due to missing credentials): %v", err)
-			// Test passes - packer was correctly invoked.
-		} else {
-			// If the error is from Atmos (not packer), that's a real failure.
-			t.Logf("TestPackerBuildCmd output: %s", output)
-			t.Errorf("Packer build failed unexpectedly: %v", err)
-		}
-	} else {
+	// packer-specific content, indicating that Atmos successfully invoked packer
+	// with the correct arguments.
+	if err == nil {
 		t.Logf("TestPackerBuildCmd completed successfully (unexpected in test environment)")
+		return
 	}
+
+	// Skip if plugins are still missing despite init attempt.
+	if strings.Contains(output, "Missing plugins") {
+		t.Skipf("Skipping test: packer plugins missing (run packer init): %v", err)
+	}
+
+	// If packer ran and failed due to credentials, that's expected.
+	// Check that packer actually ran (output contains packer-specific content).
+	packerRan := strings.Contains(output, "amazon-ebs") ||
+		strings.Contains(output, "Build") ||
+		strings.Contains(output, "credential") ||
+		strings.Contains(output, "Packer")
+
+	if packerRan {
+		t.Logf("Packer build executed but failed (likely due to missing credentials): %v", err)
+		// Test passes - packer was correctly invoked.
+		return
+	}
+
+	// If the error is from Atmos (not packer), that's a real failure.
+	t.Logf("TestPackerBuildCmd output: %s", output)
+	t.Errorf("Packer build failed unexpectedly: %v", err)
 }
 
 func TestPackerBuildCmdInvalidComponent(t *testing.T) {
@@ -140,13 +163,25 @@ func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 	t.Setenv("ATMOS_LOGS_LEVEL", "Warning")
 	log.SetLevel(log.WarnLevel)
 
-	oldStd := os.Stdout
+	// Ensure plugins are installed so build errors are about credentials, not init.
+	RootCmd.SetArgs([]string{"packer", "init", "aws/multi-file", "-s", "nonprod"})
+	if initErr := Execute(); initErr != nil {
+		t.Skipf("Skipping test: packer init failed (may require network access): %v", initErr)
+	}
+
+	// Reset for actual test.
+	_ = NewTestKit(t)
+
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stdout = w
+	os.Stderr = w
 	log.SetOutput(w)
 
 	defer func() {
-		os.Stdout = oldStd
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
 		log.SetOutput(os.Stderr)
 	}()
 
@@ -164,14 +199,26 @@ func TestPackerBuildCmdWithDirectoryTemplate(t *testing.T) {
 	output := buf.String()
 
 	// The command may fail due to AWS credentials, but verify packer was invoked.
-	if err != nil {
-		if strings.Contains(output, "amazon-ebs") || strings.Contains(output, "Build") ||
-			strings.Contains(output, "credential") || strings.Contains(output, "Packer") {
-			t.Logf("Packer build with directory template executed (failed due to credentials): %v", err)
-			// Test passes.
-		} else {
-			t.Logf("TestPackerBuildCmdWithDirectoryTemplate output: %s", output)
-			t.Errorf("Packer build with directory template failed unexpectedly: %v", err)
-		}
+	if err == nil {
+		return
 	}
+
+	// Skip if plugins are still missing despite init attempt.
+	if strings.Contains(output, "Missing plugins") {
+		t.Skipf("Skipping test: packer plugins missing (run packer init): %v", err)
+	}
+
+	packerRan := strings.Contains(output, "amazon-ebs") ||
+		strings.Contains(output, "Build") ||
+		strings.Contains(output, "credential") ||
+		strings.Contains(output, "Packer")
+
+	if packerRan {
+		t.Logf("Packer build with directory template executed (failed due to credentials): %v", err)
+		// Test passes.
+		return
+	}
+
+	t.Logf("TestPackerBuildCmdWithDirectoryTemplate output: %s", output)
+	t.Errorf("Packer build with directory template failed unexpectedly: %v", err)
 }
