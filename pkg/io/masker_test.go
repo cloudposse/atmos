@@ -200,6 +200,22 @@ func TestMasker_Mask(t *testing.T) {
 			input: "token123 and api_key=xyz789",
 			want:  "***MASKED*** and ***MASKED***",
 		},
+		{
+			name: "json structure preserved",
+			setup: func(m Masker) {
+				m.RegisterSecret("mysecret")
+			},
+			input: `{"key": "mysecret", "other": "value"}`,
+			want:  `{"key": "***MASKED***", "other": "value"}`,
+		},
+		{
+			name: "yaml structure preserved",
+			setup: func(m Masker) {
+				m.RegisterSecret("mysecret")
+			},
+			input: "key: mysecret\nother: value",
+			want:  "key: ***MASKED***\nother: value",
+		},
 	}
 
 	for _, tt := range tests {

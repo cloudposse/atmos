@@ -85,14 +85,18 @@ func (m *masker) RegisterSecret(secret string) {
 	// Register URL encoded version
 	m.RegisterValue(url.QueryEscape(secret))
 
-	// Register JSON encoded version (both quoted and unquoted)
+	// Register JSON-escaped version (without quotes to preserve JSON structure).
+	// We only register the inner content, not the full quoted string,
+	// so that "secret" becomes "***MASKED***" (valid JSON), not ***MASKED*** (invalid).
 	if jsonBytes, err := json.Marshal(secret); err == nil {
 		jsonStr := string(jsonBytes)
-		// Register the full quoted JSON string
-		m.RegisterValue(jsonStr)
-		// Also register the unquoted inner text
+		// Only register the escaped inner text (handles special chars like \n, \t, etc.).
 		if len(jsonStr) > 2 {
-			m.RegisterValue(jsonStr[1 : len(jsonStr)-1])
+			escapedInner := jsonStr[1 : len(jsonStr)-1]
+			// Only register if different from plain secret (has escaping).
+			if escapedInner != secret {
+				m.RegisterValue(escapedInner)
+			}
 		}
 	}
 }
