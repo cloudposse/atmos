@@ -68,7 +68,7 @@ func NewSpinner(message string) *tea.Program {
 		// Workaround for non-TTY environments.
 		opts = append(opts, tea.WithoutRenderer(), tea.WithInput(nil))
 		log.Debug("No TTY detected. Falling back to basic output. This can happen when no terminal is attached or when commands are pipelined.")
-		_ = ui.Writeln(message)
+		ui.Writeln(message)
 	}
 
 	p := tea.NewProgram(modelSpinner{
@@ -87,7 +87,7 @@ func RunSpinner(p *tea.Program, spinnerChan chan struct{}, message string) {
 		defer close(spinnerChan)
 		if _, err := p.Run(); err != nil {
 			// If there's any error running the spinner, output the message and log the error.
-			_ = ui.Writeln(message)
+			ui.Writeln(message)
 			log.Error("Failed to run spinner:", "error", err)
 		}
 	}()

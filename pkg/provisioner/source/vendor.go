@@ -196,7 +196,7 @@ func matchesPatterns(relPath string, patterns []string, patternType string) bool
 	for _, pattern := range patterns {
 		matched, err := filepath.Match(pattern, relPath)
 		if err != nil {
-			_ = ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
+			ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
 			continue
 		}
 		if matched {
@@ -205,7 +205,7 @@ func matchesPatterns(relPath string, patterns []string, patternType string) bool
 		// Also check just the filename.
 		matched, err = filepath.Match(pattern, filepath.Base(relPath))
 		if err != nil {
-			_ = ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
+			ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
 			continue
 		}
 		if matched {

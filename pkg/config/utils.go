@@ -478,13 +478,13 @@ func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 
 // warnVersionConstraint logs a warning for unsatisfied version constraint.
 func warnVersionConstraint(constraint schema.VersionConstraint) {
-	_ = ui.Warning(fmt.Sprintf(
+	ui.Warning(fmt.Sprintf(
 		"Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s",
 		constraint.Require,
 		version.Version,
 	))
 	if constraint.Message != "" {
-		_ = ui.Warning(constraint.Message)
+		ui.Warning(constraint.Message)
 	}
 }
 
