@@ -92,10 +92,16 @@ func HighlightCodeWithConfig(config *schema.AtmosConfiguration, code string, for
 	// ForceColor acts like isTTY=true for color support checking.
 	forceColor := config.Settings.Terminal.ForceColor
 
-	// Check if color is enabled using the canonical IsColorEnabled method.
-	// This properly handles: NoColor (deprecated), Color setting, and TTY detection.
-	// NoColor takes precedence over everything, including ForceColor.
-	if !config.Settings.Terminal.IsColorEnabled(isTerm || forceColor) {
+	// Skip highlighting if not in a terminal AND color is not forced.
+	// The Color setting enables color when TTY is present but doesn't force it.
+	// ForceColor (ATMOS_FORCE_COLOR) explicitly enables highlighting even without TTY.
+	if !isTerm && !forceColor {
+		return code, nil
+	}
+
+	// Check if color is explicitly disabled via NoColor.
+	// NoColor takes precedence over everything.
+	if config.Settings.Terminal.NoColor {
 		return code, nil
 	}
 
