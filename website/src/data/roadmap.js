@@ -31,8 +31,8 @@ export const roadmapConfig = {
     { id: 'q1-2025', label: 'Q1 2025', status: 'completed' },
     { id: 'q2-2025', label: 'Q2 2025', status: 'completed' },
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
-    { id: 'q4-2025', label: 'Q4 2025', status: 'current' },
-    { id: 'q1-2026', label: 'Q1 2026', status: 'planned' },
+    { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
+    { id: 'q1-2026', label: 'Q1 2026', status: 'current' },
     { id: 'q2-2026', label: 'Q2 2026', status: 'planned' },
   ],
 
