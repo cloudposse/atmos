@@ -138,12 +138,12 @@ func TestEnvCommand_FormatValidation(t *testing.T) {
 
 func TestEnvCommand_SupportedFormats(t *testing.T) {
 	t.Run("supportedFormats contains expected formats", func(t *testing.T) {
-		expected := []string{"bash", "json", "dotenv", "fish", "powershell"}
+		expected := []string{"bash", "json", "dotenv", "fish", "powershell", "github"}
 		assert.Equal(t, expected, supportedFormats)
 	})
 
 	t.Run("supportedFormats has correct count", func(t *testing.T) {
-		assert.Len(t, supportedFormats, 5)
+		assert.Len(t, supportedFormats, 6)
 	})
 }
 
