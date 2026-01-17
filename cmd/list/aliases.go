@@ -101,7 +101,7 @@ func executeListAliasesWithOptions(opts *AliasesOptions, rootCmd *cobra.Command)
 	allAliases := collectAllAliases(rootCmd, atmosConfig.CommandAliases)
 
 	if len(allAliases) == 0 {
-		_ = ui.Info("No aliases found")
+		ui.Info("No aliases found")
 		return nil
 	}
 
@@ -249,11 +249,13 @@ func displayAliases(aliases []AliasInfo) error {
 	if !term.IsTTYSupportForStdout() {
 		// Fall back to simple text output for non-TTY.
 		output := formatSimpleAliasesOutput(aliases)
-		return ui.Write(output)
+		ui.Write(output)
+		return nil
 	}
 
 	output := formatAliasesTable(aliases)
-	return ui.Write(output)
+	ui.Write(output)
+	return nil
 }
 
 // formatAliasesTable formats aliases into a styled Charmbracelet table.

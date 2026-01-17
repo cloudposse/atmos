@@ -108,7 +108,7 @@ type fileContext struct {
 func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	if dryRun {
 		result.Skipped = true
-		_ = ui.Writef("Would delete: %s\n", filePath)
+		ui.Writef("Would delete: %s\n", filePath)
 		return
 	}
 
@@ -122,7 +122,7 @@ func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	}
 
 	result.Deleted = true
-	_ = ui.Writef("Deleted: %s\n", filePath)
+	ui.Writef("Deleted: %s\n", filePath)
 }
 
 // processGenerateFile handles file generation in generate mode.
@@ -135,7 +135,7 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 
 	if ctx.dryRun {
 		result.Skipped = true
-		_ = ui.Writef("Would generate: %s\n", ctx.filePath)
+		ui.Writef("Would generate: %s\n", ctx.filePath)
 		return
 	}
 
@@ -150,9 +150,9 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 	}
 
 	if result.Created {
-		_ = ui.Writef("Created: %s\n", ctx.filePath)
+		ui.Writef("Created: %s\n", ctx.filePath)
 	} else {
-		_ = ui.Writef("Updated: %s\n", ctx.filePath)
+		ui.Writef("Updated: %s\n", ctx.filePath)
 	}
 }
 

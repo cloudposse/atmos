@@ -70,7 +70,7 @@ func runInstall(cmd *cobra.Command, args []string) error {
 	// Multiple tools: use batch install.
 	// Note: --default flag is ignored for batch installs (only applies to single-tool installs).
 	if defaultVersion {
-		_ = ui.Warning("--default flag is ignored when installing multiple tools")
+		ui.Warning("--default flag is ignored when installing multiple tools")
 	}
 	return toolchain.RunInstallBatch(args, reinstall)
 }

@@ -796,31 +796,26 @@ func TestToast_Integration(t *testing.T) {
 		name     string
 		icon     string
 		message  string
-		wantErr  bool
 		contains []string
 	}{
 		{
 			name:     "single line toast",
 			icon:     "✓",
 			message:  "Success",
-			wantErr:  false,
 			contains: []string{"✓", "Success"},
 		},
 		{
 			name:     "multiline toast",
 			icon:     "📦",
 			message:  "Installed\nVersion: 1.0",
-			wantErr:  false,
 			contains: []string{"📦", "Installed", "Version: 1.0"},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Toast(tt.icon, tt.message)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Toast() error = %v, wantErr %v", err, tt.wantErr)
-			}
+			// Toast no longer returns an error - it logs internally if there's a write failure.
+			Toast(tt.icon, tt.message)
 		})
 	}
 }
@@ -832,34 +827,29 @@ func TestToastf_Integration(t *testing.T) {
 	globalFormatter = NewFormatter(ioCtx, term).(*formatter)
 
 	tests := []struct {
-		name    string
-		icon    string
-		format  string
-		args    []interface{}
-		wantErr bool
+		name   string
+		icon   string
+		format string
+		args   []interface{}
 	}{
 		{
-			name:    "formatted single line",
-			icon:    "✓",
-			format:  "Installed %s version %s",
-			args:    []interface{}{"atmos", "1.2.3"},
-			wantErr: false,
+			name:   "formatted single line",
+			icon:   "✓",
+			format: "Installed %s version %s",
+			args:   []interface{}{"atmos", "1.2.3"},
 		},
 		{
-			name:    "formatted multiline",
-			icon:    "📦",
-			format:  "Package: %s\nVersion: %s\nSize: %dMB",
-			args:    []interface{}{"atmos", "1.2.3", 42},
-			wantErr: false,
+			name:   "formatted multiline",
+			icon:   "📦",
+			format: "Package: %s\nVersion: %s\nSize: %dMB",
+			args:   []interface{}{"atmos", "1.2.3", 42},
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Toastf(tt.icon, tt.format, tt.args...)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Toastf() error = %v, wantErr %v", err, tt.wantErr)
-			}
+			// Toastf no longer returns an error - it logs internally if there's a write failure.
+			Toastf(tt.icon, tt.format, tt.args...)
 		})
 	}
 }
@@ -1013,34 +1003,34 @@ func TestToast_WithConvenienceFunctions(t *testing.T) {
 
 	tests := []struct {
 		name     string
-		fn       func() error
+		fn       func()
 		contains []string
 	}{
 		{
 			name: "Success with multiline via Success",
-			fn: func() error {
-				return Success("Done\nAll tasks completed")
+			fn: func() {
+				Success("Done\nAll tasks completed")
 			},
 			contains: []string{"✓", "Done", "All tasks completed"},
 		},
 		{
 			name: "Error with multiline via Error",
-			fn: func() error {
-				return Error("Failed\nCheck logs for details")
+			fn: func() {
+				Error("Failed\nCheck logs for details")
 			},
 			contains: []string{"✗", "Failed", "Check logs"},
 		},
 		{
 			name: "Warning with multiline via Warning",
-			fn: func() error {
-				return Warning("Deprecated\nUse new API instead")
+			fn: func() {
+				Warning("Deprecated\nUse new API instead")
 			},
 			contains: []string{"⚠", "Deprecated", "new API"},
 		},
 		{
 			name: "Info with multiline via Info",
-			fn: func() error {
-				return Info("Processing\nStep 1 of 3")
+			fn: func() {
+				Info("Processing\nStep 1 of 3")
 			},
 			contains: []string{"ℹ", "Processing", "Step 1"},
 		},
@@ -1048,10 +1038,8 @@ func TestToast_WithConvenienceFunctions(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.fn()
-			if err != nil {
-				t.Errorf("Function returned error: %v", err)
-			}
+			// Functions no longer return errors - they log internally if there's a write failure.
+			tt.fn()
 		})
 	}
 }
@@ -1090,10 +1078,8 @@ func TestToastf_FormattingWithMultiline(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := Toastf(tt.icon, tt.format, tt.args...)
-			if err != nil {
-				t.Errorf("Toastf() returned error: %v", err)
-			}
+			// Toastf no longer returns an error - it logs internally if there's a write failure.
+			Toastf(tt.icon, tt.format, tt.args...)
 		})
 	}
 }
@@ -1115,15 +1101,10 @@ func TestFormatter_FormatToast_NotInitialized(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	err := Toast("✓", "This should fail")
-	if err == nil {
-		t.Error("Expected error when formatter not initialized, got nil")
-	}
-
-	err = Toastf("✓", "This should fail: %s", "test")
-	if err == nil {
-		t.Error("Expected error when formatter not initialized for Toastf, got nil")
-	}
+	// Functions no longer return errors when not initialized - they log internally.
+	// This test verifies that calling the functions when not initialized doesn't panic.
+	Toast("✓", "This should not panic")
+	Toastf("✓", "This should not panic: %s", "test")
 }
 
 func TestFormatter_ConvenienceFunctions_Multiline(t *testing.T) {
@@ -1903,40 +1884,32 @@ func TestHint(t *testing.T) {
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 
-	err := Hint("This is a hint")
-	if err != nil {
-		t.Errorf("Hint() returned error: %v", err)
-	}
+	// Hint no longer returns an error - it logs internally if there's a write failure.
+	Hint("This is a hint")
 }
 
 func TestHintf(t *testing.T) {
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 
-	err := Hintf("This is a %s hint", "formatted")
-	if err != nil {
-		t.Errorf("Hintf() returned error: %v", err)
-	}
+	// Hintf no longer returns an error - it logs internally if there's a write failure.
+	Hintf("This is a %s hint", "formatted")
 }
 
 func TestExperimental(t *testing.T) {
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 
-	err := Experimental("test-feature")
-	if err != nil {
-		t.Errorf("Experimental() returned error: %v", err)
-	}
+	// Experimental no longer returns an error - it logs internally if there's a write failure.
+	Experimental("test-feature")
 }
 
 func TestExperimentalf(t *testing.T) {
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 
-	err := Experimentalf("test-%s", "feature")
-	if err != nil {
-		t.Errorf("Experimentalf() returned error: %v", err)
-	}
+	// Experimentalf no longer returns an error - it logs internally if there's a write failure.
+	Experimentalf("test-%s", "feature")
 }
 
 func TestBadge(t *testing.T) {
@@ -1971,11 +1944,8 @@ func TestClearLine(t *testing.T) {
 	ioCtx := createTestIOContext()
 	InitFormatter(ioCtx)
 
-	// ClearLine should not panic or return error.
-	err := ClearLine()
-	if err != nil {
-		t.Errorf("ClearLine() returned error: %v", err)
-	}
+	// ClearLine no longer returns an error - it logs internally if there's a write failure.
+	ClearLine()
 }
 
 func TestConfigureColorProfileAllProfiles(t *testing.T) {
@@ -2157,11 +2127,9 @@ func TestExperimental_FormatterNotInitialized(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	// Experimental should return error when formatter not initialized.
-	err := Experimental("test-feature")
-	if err == nil {
-		t.Error("Experimental() should return error when formatter not initialized")
-	}
+	// Experimental no longer returns errors - it logs internally.
+	// This test verifies that calling the function when not initialized doesn't panic.
+	Experimental("test-feature")
 }
 
 func TestExperimentalf_FormatterNotInitialized(t *testing.T) {
@@ -2184,11 +2152,9 @@ func TestExperimentalf_FormatterNotInitialized(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	// Experimentalf should return error when formatter not initialized.
-	err := Experimentalf("test-%s", "feature")
-	if err == nil {
-		t.Error("Experimentalf() should return error when formatter not initialized")
-	}
+	// Experimentalf no longer returns errors - it logs internally.
+	// This test verifies that calling the function when not initialized doesn't panic.
+	Experimentalf("test-%s", "feature")
 }
 
 func TestBadge_FormatterNotInitialized(t *testing.T) {
@@ -2292,11 +2258,9 @@ func TestClearLine_TerminalNotInitialized(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	// ClearLine should return error when terminal not initialized.
-	err := ClearLine()
-	if err == nil {
-		t.Error("ClearLine() should return error when terminal not initialized")
-	}
+	// ClearLine no longer returns errors - it logs internally.
+	// This test verifies that calling the function when not initialized doesn't panic.
+	ClearLine()
 }
 
 func TestClearLine_WithColorSupport(t *testing.T) {
@@ -2318,11 +2282,8 @@ func TestClearLine_WithColorSupport(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	// ClearLine should not return error when color is supported.
-	err := ClearLine()
-	if err != nil {
-		t.Errorf("ClearLine() with color support returned error: %v", err)
-	}
+	// ClearLine no longer returns errors - it logs internally if there's a write failure.
+	ClearLine()
 }
 
 func TestClearLine_NoColorSupport(t *testing.T) {
@@ -2344,11 +2305,9 @@ func TestClearLine_NoColorSupport(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	// ClearLine should not return error when color is not supported (uses \r fallback).
-	err := ClearLine()
-	if err != nil {
-		t.Errorf("ClearLine() without color support returned error: %v", err)
-	}
+	// ClearLine no longer returns errors - it logs internally if there's a write failure.
+	// When color is not supported, it uses \r fallback.
+	ClearLine()
 }
 
 func TestFormatterExperimentalfMethod(t *testing.T) {
@@ -2457,4 +2416,212 @@ func TestFormatterExperimentalMethod(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestHint_PackageLevel tests the Hint package-level function.
+func TestHint_PackageLevel(t *testing.T) {
+	t.Run("hint when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Hint("This is a hint message")
+	})
+
+	t.Run("hint when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Hint("This should not panic")
+	})
+}
+
+// TestHintf_PackageLevel tests the Hintf package-level function.
+func TestHintf_PackageLevel(t *testing.T) {
+	t.Run("hintf when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Hintf("Use `%s` to %s", "atmos help", "get help")
+	})
+
+	t.Run("hintf when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Hintf("This should not panic: %s", "test")
+	})
+}
+
+// TestMarkdown_PackageLevel tests the Markdown package-level function.
+func TestMarkdown_PackageLevel(t *testing.T) {
+	t.Run("markdown when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Markdown("# Header\n\nThis is **bold** text.")
+	})
+
+	t.Run("markdown when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter and IO.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		oldIO := globalIO
+		globalFormatter = nil
+		globalIO = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			globalIO = oldIO
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Markdown("# This should not panic")
+	})
+}
+
+// TestMarkdownf_PackageLevel tests the Markdownf package-level function.
+func TestMarkdownf_PackageLevel(t *testing.T) {
+	t.Run("markdownf when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Markdownf("# %s\n\nVersion: **%s**", "Atmos", "1.0.0")
+	})
+}
+
+// TestMarkdownMessage_PackageLevel tests the MarkdownMessage package-level function.
+func TestMarkdownMessage_PackageLevel(t *testing.T) {
+	t.Run("markdown message when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		MarkdownMessage("**Error:** Something went wrong")
+	})
+
+	t.Run("markdown message when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter and IO.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		oldIO := globalIO
+		globalFormatter = nil
+		globalIO = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			globalIO = oldIO
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		MarkdownMessage("**This should not panic**")
+	})
+}
+
+// TestMarkdownMessagef_PackageLevel tests the MarkdownMessagef package-level function.
+func TestMarkdownMessagef_PackageLevel(t *testing.T) {
+	t.Run("markdown messagef when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		MarkdownMessagef("**%s:** %s", "Warning", "Check configuration")
+	})
+}
+
+// TestWrite_PackageLevel tests the Write package-level function.
+func TestWrite_PackageLevel(t *testing.T) {
+	t.Run("write when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Write("Plain text message")
+	})
+
+	t.Run("write when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Write("This should not panic")
+	})
+}
+
+// TestWritef_PackageLevel tests the Writef package-level function.
+func TestWritef_PackageLevel(t *testing.T) {
+	t.Run("writef when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Writef("Processing %d items", 42)
+	})
+}
+
+// TestWriteln_PackageLevel tests the Writeln package-level function.
+func TestWriteln_PackageLevel(t *testing.T) {
+	t.Run("writeln when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Writeln("Line of text")
+	})
 }

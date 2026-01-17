@@ -131,9 +131,9 @@ func printVersions(versions []string, defaultVersion string, installed map[strin
 			indicator = theme.Styles.Checkmark.Render()
 		}
 		if installed[v] {
-			_ = ui.Writef("%s %s", indicator, installedStyle.Render(v))
+			ui.Writef("%s %s", indicator, installedStyle.Render(v))
 		} else {
-			_ = ui.Writef("%s %s", indicator, notInstalledStyle.Render(v))
+			ui.Writef("%s %s", indicator, notInstalledStyle.Render(v))
 		}
 	}
 }
