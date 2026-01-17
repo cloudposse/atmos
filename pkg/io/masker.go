@@ -14,8 +14,8 @@ import (
 
 const (
 	// MaskReplacement is the string used to replace masked values.
-	// Uses angle brackets to be safe in both JSON and YAML output
-	// (asterisks would be interpreted as YAML alias references).
+	// Uses angle brackets to be safe in both JSON and YAML output.
+	// (Asterisks would be interpreted as YAML alias references).
 	MaskReplacement = "<MASKED>"
 
 	// AWS access key ID length (AKIA prefix + 16 characters).
@@ -88,8 +88,8 @@ func (m *masker) RegisterSecret(secret string) {
 	m.RegisterValue(url.QueryEscape(secret))
 
 	// Register JSON-escaped version (without quotes to preserve JSON structure).
-	// We only register the inner content, not the full quoted string,
-	// so that "secret" becomes "***MASKED***" (valid JSON), not ***MASKED*** (invalid).
+	// We only register the inner content, not the full quoted string.
+	// This ensures "secret" becomes "<MASKED>" (valid JSON), not <MASKED> (invalid).
 	if jsonBytes, err := json.Marshal(secret); err == nil {
 		jsonStr := string(jsonBytes)
 		// Only register the escaped inner text (handles special chars like \n, \t, etc.).
