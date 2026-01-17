@@ -323,8 +323,8 @@ func TestStackFlagCompletion_ArgsHandling(t *testing.T) {
 	}
 }
 
-// TestIsComponentDeployable tests the helper that checks if a component can be deployed.
-func TestIsComponentDeployable(t *testing.T) {
+// TestIsComponentDeployableHelper tests the helper that checks if a component can be deployed.
+func TestIsComponentDeployableHelper(t *testing.T) {
 	tests := []struct {
 		name            string
 		componentConfig any
@@ -429,14 +429,14 @@ func TestIsComponentDeployable(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isComponentDeployable(tt.componentConfig)
+			result := IsComponentDeployable(tt.componentConfig)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
 }
 
-// TestFilterDeployableComponents tests filtering a map of components to only deployable ones.
-func TestFilterDeployableComponents(t *testing.T) {
+// TestFilterDeployableComponentsHelper tests filtering a map of components to only deployable ones.
+func TestFilterDeployableComponentsHelper(t *testing.T) {
 	tests := []struct {
 		name       string
 		components map[string]any
@@ -517,7 +517,7 @@ func TestFilterDeployableComponents(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := filterDeployableComponents(tt.components)
+			result := FilterDeployableComponents(tt.components)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -709,7 +709,7 @@ func TestListTerraformComponents(t *testing.T) {
 				stacksMap:   tt.mockStacksMap,
 			})
 
-			result, err := listTerraformComponents()
+			result, err := listTerraformComponents(nil)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -857,7 +857,7 @@ func TestListTerraformComponentsForStack(t *testing.T) {
 				stacksMap:   tt.mockStacksMap,
 			})
 
-			result, err := listTerraformComponentsForStack(tt.stack)
+			result, err := listTerraformComponentsForStack(nil, tt.stack)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -898,7 +898,7 @@ func TestListTerraformComponentsForStack_EmptyStackDelegation(t *testing.T) {
 		}, nil
 	}
 
-	result, err := listTerraformComponentsForStack("")
+	result, err := listTerraformComponentsForStack(nil, "")
 
 	assert.NoError(t, err)
 	assert.True(t, describeStacksCalled)
@@ -1030,7 +1030,7 @@ func TestListStacksForComponent(t *testing.T) {
 				stacksMap:   tt.mockStacksMap,
 			})
 
-			result, err := listStacksForComponent(tt.component)
+			result, err := listStacksForComponent(nil, tt.component)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -1113,7 +1113,7 @@ func TestListAllStacks(t *testing.T) {
 				stacksMap:   tt.mockStacksMap,
 			})
 
-			result, err := listAllStacks()
+			result, err := listAllStacks(nil)
 
 			if tt.expectedError {
 				assert.Error(t, err)
@@ -1298,7 +1298,7 @@ func TestValidateStackExists(t *testing.T) {
 				stacksMap:   tt.mockStacksMap,
 			})
 
-			err := ValidateStackExists(tt.stack)
+			err := ValidateStackExists(nil, tt.stack)
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -1310,6 +1310,37 @@ func TestValidateStackExists(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestBuildConfigAndStacksInfo tests the buildConfigAndStacksInfo function.
+func TestBuildConfigAndStacksInfo(t *testing.T) {
+	t.Run("nil command returns empty struct", func(t *testing.T) {
+		result := buildConfigAndStacksInfo(nil)
+		assert.Equal(t, schema.ConfigAndStacksInfo{}, result)
+	})
+
+	t.Run("command without flags returns empty values", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		result := buildConfigAndStacksInfo(cmd)
+		// When no flags are set, the result should have empty values.
+		assert.Empty(t, result.AtmosBasePath)
+		assert.Empty(t, result.AtmosConfigFilesFromArg)
+		assert.Empty(t, result.AtmosConfigDirsFromArg)
+		assert.Empty(t, result.ProfilesFromArg)
+	})
+
+	t.Run("command with flags defined does not panic", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("base-path", "", "Base path")
+		cmd.Flags().StringSlice("config", nil, "Config files")
+		cmd.Flags().StringSlice("config-path", nil, "Config paths")
+		cmd.Flags().StringSlice("profile", nil, "Profiles")
+		// Note: The function reads from viper, not directly from flags.
+		// This test verifies the function doesn't panic with a real command.
+		result := buildConfigAndStacksInfo(cmd)
+		// Result may have empty values since we didn't bind to viper.
+		_ = result
+	})
 }
 
 // Ensure cfg import is used.

@@ -704,3 +704,146 @@ func TestComponentsArgCompletion_WithExistingArgs(t *testing.T) {
 	assert.Nil(t, components)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
+
+// TestHandleInteractiveComponentStackSelection_ValidateStackExists tests the ValidateStackExists path.
+func TestHandleInteractiveComponentStackSelection_ValidateStackExists(t *testing.T) {
+	t.Chdir("../../examples/demo-stacks")
+
+	tests := []struct {
+		name        string
+		info        *schema.ConfigAndStacksInfo
+		expectError bool
+	}{
+		{
+			name: "valid stack with no component passes validation",
+			info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev",
+				ComponentFromArg: "",
+			},
+			// Note: In non-TTY environment, this won't prompt but will return nil
+			// since interactive mode isn't available.
+			expectError: false,
+		},
+		{
+			name: "invalid stack with no component - validation returns error",
+			info: &schema.ConfigAndStacksInfo{
+				Stack:            "nonexistent-stack-xyz",
+				ComponentFromArg: "",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+			err := handleInteractiveComponentStackSelection(tt.info, cmd)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				// In non-TTY environment, it should return nil (interactive mode not available).
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestHandlePromptErrorDelegate tests the handlePromptError delegate function.
+func TestHandlePromptErrorDelegate(t *testing.T) {
+	// Save original OsExit and restore it after tests.
+	originalOsExit := errUtils.OsExit
+	defer func() {
+		errUtils.OsExit = originalOsExit
+	}()
+
+	tests := []struct {
+		name             string
+		err              error
+		promptName       string
+		expectExit       bool
+		expectedExitCode int
+		expectedReturn   error
+	}{
+		{
+			name:           "nil error returns nil",
+			err:            nil,
+			promptName:     "component",
+			expectExit:     false,
+			expectedReturn: nil,
+		},
+		{
+			name:           "ErrInteractiveModeNotAvailable returns nil",
+			err:            errUtils.ErrInteractiveModeNotAvailable,
+			promptName:     "stack",
+			expectExit:     false,
+			expectedReturn: nil,
+		},
+		{
+			name:           "generic error returns the error",
+			err:            errors.New("some error"),
+			promptName:     "component",
+			expectExit:     false,
+			expectedReturn: errors.New("some error"),
+		},
+		{
+			name:             "ErrUserAborted triggers exit with SIGINT code",
+			err:              errUtils.ErrUserAborted,
+			promptName:       "component",
+			expectExit:       true,
+			expectedExitCode: errUtils.ExitCodeSIGINT,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var exitCalled bool
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCalled = true
+				exitCode = code
+			}
+
+			result := handlePromptError(tt.err, tt.promptName)
+
+			if tt.expectExit {
+				assert.True(t, exitCalled, "OsExit should be called")
+				assert.Equal(t, tt.expectedExitCode, exitCode, "Exit code should match")
+			} else {
+				assert.False(t, exitCalled, "OsExit should not be called")
+				if tt.expectedReturn == nil {
+					assert.NoError(t, result)
+				} else {
+					assert.Error(t, result)
+					assert.Equal(t, tt.expectedReturn.Error(), result.Error())
+				}
+			}
+		})
+	}
+}
+
+// TestPromptForComponentDelegate tests the promptForComponent delegate function.
+func TestPromptForComponentDelegate(t *testing.T) {
+	// Test that it delegates to shared.PromptForComponent.
+	// In non-TTY environment, it should return ErrInteractiveModeNotAvailable.
+	cmd := &cobra.Command{Use: "test"}
+	_, err := promptForComponent(cmd, "")
+	// The function should return an error in non-TTY environment.
+	// This is expected behavior - in CI, interactive mode is not available.
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	}
+}
+
+// TestPromptForStackDelegate tests the promptForStack delegate function.
+func TestPromptForStackDelegate(t *testing.T) {
+	// Test that it delegates to shared.PromptForStack.
+	// In non-TTY environment, it should return ErrInteractiveModeNotAvailable.
+	cmd := &cobra.Command{Use: "test"}
+	_, err := promptForStack(cmd, "")
+	// The function should return an error in non-TTY environment.
+	// This is expected behavior - in CI, interactive mode is not available.
+	if err != nil {
+		assert.ErrorIs(t, err, errUtils.ErrInteractiveModeNotAvailable)
+	}
+}

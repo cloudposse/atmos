@@ -471,41 +471,66 @@ func TestErrorBuilder_WithCause(t *testing.T) {
 }
 
 func TestErrorBuilder_WithCausef(t *testing.T) {
-	t.Run("creates formatted cause error", func(t *testing.T) {
-		stackName := "dev-us-east-1"
+	tests := []struct {
+		name         string
+		build        func() error
+		wantIs       error
+		wantContains string
+		assertExtra  func(t *testing.T, err error)
+	}{
+		{
+			name: "creates formatted cause error",
+			build: func() error {
+				stackName := "dev-us-east-1"
+				return Build(ErrInvalidStack).
+					WithCausef("stack `%s` does not exist", stackName).
+					Err()
+			},
+			wantIs:       ErrInvalidStack,
+			wantContains: "stack `dev-us-east-1` does not exist",
+		},
+		{
+			name: "works with multiple format arguments",
+			build: func() error {
+				return Build(ErrInvalidComponent).
+					WithCausef("component `%s` not found in stack `%s`", "vpc", "prod").
+					Err()
+			},
+			wantIs:       ErrInvalidComponent,
+			wantContains: "component `vpc` not found in stack `prod`",
+		},
+		{
+			name: "chains with other builder methods",
+			build: func() error {
+				return Build(ErrInvalidStack).
+					WithCausef("stack `%s` does not exist", "demo").
+					WithExplanation("The stack was not found").
+					WithHint("Check your configuration").
+					Err()
+			},
+			wantIs:       ErrInvalidStack,
+			wantContains: "stack `demo` does not exist",
+			assertExtra: func(t *testing.T, err error) {
+				// Verify hint is present.
+				hints := errors.GetAllHints(err)
+				assert.Contains(t, hints, "Check your configuration")
+			},
+		},
+	}
 
-		err := Build(ErrInvalidStack).
-			WithCausef("stack `%s` does not exist", stackName).
-			Err()
-
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, ErrInvalidStack))
-		assert.Contains(t, err.Error(), "stack `dev-us-east-1` does not exist")
-	})
-
-	t.Run("works with multiple format arguments", func(t *testing.T) {
-		err := Build(ErrInvalidComponent).
-			WithCausef("component `%s` not found in stack `%s`", "vpc", "prod").
-			Err()
-
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, ErrInvalidComponent))
-		assert.Contains(t, err.Error(), "component `vpc` not found in stack `prod`")
-	})
-
-	t.Run("chains with other builder methods", func(t *testing.T) {
-		err := Build(ErrInvalidStack).
-			WithCausef("stack `%s` does not exist", "demo").
-			WithExplanation("The stack was not found").
-			WithHint("Check your configuration").
-			Err()
-
-		assert.Error(t, err)
-		assert.True(t, errors.Is(err, ErrInvalidStack))
-		assert.Contains(t, err.Error(), "stack `demo` does not exist")
-
-		// Verify hint is present.
-		hints := errors.GetAllHints(err)
-		assert.Contains(t, hints, "Check your configuration")
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.build()
+			assert.Error(t, err)
+			if tt.wantIs != nil {
+				assert.True(t, errors.Is(err, tt.wantIs))
+			}
+			if tt.wantContains != "" {
+				assert.Contains(t, err.Error(), tt.wantContains)
+			}
+			if tt.assertExtra != nil {
+				tt.assertExtra(t, err)
+			}
+		})
+	}
 }

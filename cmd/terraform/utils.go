@@ -361,7 +361,7 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 
 	// Validate stack exists if provided via flag (fail fast before prompting or execution).
 	if info.Stack != "" && info.ComponentFromArg == "" {
-		if err := shared.ValidateStackExists(info.Stack); err != nil {
+		if err := shared.ValidateStackExists(cmd, info.Stack); err != nil {
 			return err
 		}
 	}
