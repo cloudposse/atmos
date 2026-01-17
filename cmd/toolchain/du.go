@@ -62,5 +62,10 @@ func (d *DuCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
+// IsExperimental returns whether this command is experimental.
+func (d *DuCommandProvider) IsExperimental() bool {
+	return false
+}
+
 // Compile-time check that DuCommandProvider implements CommandProvider.
 var _ internal.CommandProvider = (*DuCommandProvider)(nil)
