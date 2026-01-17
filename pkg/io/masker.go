@@ -23,10 +23,10 @@ const (
 // masker implements the Masker interface.
 type masker struct {
 	mu          sync.RWMutex
-	literals    map[string]bool  // Literal values to mask
-	patterns    []*regexp.Regexp // Regex patterns to mask
+	literals    map[string]bool  // Literal values to mask.
+	patterns    []*regexp.Regexp // Regex patterns to mask.
 	enabled     bool
-	replacement string // Custom replacement string (default: MaskReplacement)
+	replacement string // Custom replacement string (default: MaskReplacement).
 }
 
 // newMasker creates a new Masker.
@@ -174,14 +174,16 @@ func (m *masker) Mask(input string) string {
 		}
 	}
 
-	// Replace literals in order (longest first)
+	// Replace literals in order (longest first).
 	for _, literal := range literals {
 		masked = strings.ReplaceAll(masked, literal, m.replacement)
 	}
 
-	// Mask regex patterns
+	// Mask regex patterns.
+	// Escape $ as $$ to prevent backreference interpretation in replacements.
+	quotedReplacement := strings.ReplaceAll(m.replacement, "$", "$$")
 	for _, pattern := range m.patterns {
-		masked = pattern.ReplaceAllString(masked, m.replacement)
+		masked = pattern.ReplaceAllString(masked, quotedReplacement)
 	}
 
 	return masked

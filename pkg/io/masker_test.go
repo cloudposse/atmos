@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestMasker_RegisterValue(t *testing.T) {
@@ -100,6 +102,38 @@ func TestMasker_RegisterPattern(t *testing.T) {
 	err = m.RegisterPattern(`[invalid(`)
 	if err == nil {
 		t.Error("expected error for invalid regex, got nil")
+	}
+}
+
+func TestMasker_DollarSignInReplacement(t *testing.T) {
+	// Test that $ in custom replacement strings is treated literally, not as backreference.
+	cfg := &Config{
+		DisableMasking: false,
+		AtmosConfig: schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				Terminal: schema.Terminal{
+					Mask: schema.MaskSettings{
+						Replacement: "$REDACTED",
+					},
+				},
+			},
+		},
+	}
+	m := newMasker(cfg)
+
+	// Register a pattern that would capture a group.
+	err := m.RegisterPattern(`secret-([a-z]+)`)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	// If $ is not escaped, $1 would be replaced with "abc" (the captured group).
+	// We want the literal string "$REDACTED" instead.
+	input := "token: secret-abc"
+	expected := "token: $REDACTED"
+	got := m.Mask(input)
+	if got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
 	}
 }
 
