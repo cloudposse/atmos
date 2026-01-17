@@ -167,7 +167,7 @@ func TestBaseHandler_ResolveContent(t *testing.T) {
 
 		_, err := handler.ResolveContent(ctx, step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "test")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }
 
@@ -270,6 +270,6 @@ func TestBaseHandler_ResolveCommand(t *testing.T) {
 
 		_, err := handler.ResolveCommand(ctx, step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "test")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }

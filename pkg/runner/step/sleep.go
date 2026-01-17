@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -37,11 +38,19 @@ func (h *SleepHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	if step.Timeout != "" {
 		resolved, err := vars.Resolve(step.Timeout)
 		if err != nil {
-			return nil, err
+			return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("field", "timeout").
+				Err()
 		}
 		parsed, err := time.ParseDuration(resolved)
 		if err != nil {
-			return nil, err
+			return nil, errUtils.Build(errUtils.ErrInvalidDuration).
+				WithCause(err).
+				WithContext("step", step.Name).
+				WithContext("value", resolved).
+				Err()
 		}
 		duration = parsed
 	}
@@ -51,6 +60,10 @@ func (h *SleepHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	case <-time.After(duration):
 		return NewStepResult(duration.String()), nil
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, errUtils.Build(errUtils.ErrUserAborted).
+			WithCause(ctx.Err()).
+			WithContext("step", step.Name).
+			WithExplanation("Sleep interrupted by context cancellation").
+			Err()
 	}
 }

@@ -59,7 +59,8 @@ func (h BaseHandler) CheckTTY(step *schema.WorkflowStep) error {
 	}
 
 	term := terminal.New()
-	if !term.IsTTY(terminal.Stdout) {
+	// Interactive steps require both stdin and stdout to be TTYs.
+	if !term.IsTTY(terminal.Stdin) || !term.IsTTY(terminal.Stdout) {
 		return errUtils.Build(errUtils.ErrStepTTYRequired).
 			WithContext("step", step.Name).
 			WithContext("type", step.Type).
@@ -95,7 +96,11 @@ func (h BaseHandler) ResolveContent(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.Resolve(step.Content)
 	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve content template: %w", step.Name, err)
+		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "content").
+			Err()
 	}
 	return resolved, nil
 }
@@ -109,7 +114,11 @@ func (h BaseHandler) ResolvePrompt(ctx context.Context, step *schema.WorkflowSte
 	}
 	resolved, err := vars.Resolve(step.Prompt)
 	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve prompt template: %w", step.Name, err)
+		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "prompt").
+			Err()
 	}
 	return resolved, nil
 }
@@ -123,7 +132,11 @@ func (h BaseHandler) ResolveCommand(ctx context.Context, step *schema.WorkflowSt
 	}
 	resolved, err := vars.Resolve(step.Command)
 	if err != nil {
-		return "", fmt.Errorf("step '%s': failed to resolve command template: %w", step.Name, err)
+		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("field", "command").
+			Err()
 	}
 	return resolved, nil
 }

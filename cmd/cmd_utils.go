@@ -659,6 +659,9 @@ func executeCustomCommand(
 		log.Debug("Using working directory for custom command", "command", commandConfig.Name, "working_directory", workDir)
 	}
 
+	// Initialize step executor once before loop - reused across steps to preserve outputs.
+	executor := stepPkg.NewStepExecutor()
+
 	// Execute custom command's steps
 	for i, step := range commandConfig.Steps {
 		// Prepare template data for arguments
@@ -801,10 +804,7 @@ func executeCustomCommand(
 				// Update command with template-resolved value.
 				workflowStep.Command = commandToRun
 
-				// Initialize step executor for custom commands (creates fresh Variables instance).
-				executor := stepPkg.NewStepExecutor()
-
-				// Add environment variables to the executor.
+				// Update environment variables for this step (reuse executor to preserve step outputs).
 				for _, envVar := range env {
 					parts := strings.SplitN(envVar, "=", 2)
 					if len(parts) == 2 {

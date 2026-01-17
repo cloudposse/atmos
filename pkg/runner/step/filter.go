@@ -61,8 +61,12 @@ func (h *FilterHandler) Execute(ctx context.Context, step *schema.WorkflowStep, 
 
 	// Check if multiple selection is allowed.
 	limit := step.Limit
-	if limit <= 0 {
-		limit = 1 // Default to single selection.
+	if step.Multiple && limit <= 0 {
+		// When multiple selection is enabled with no limit, allow selecting all options.
+		limit = len(options)
+	} else if limit <= 0 {
+		// Default to single selection.
+		limit = 1
 	}
 
 	if limit > 1 || step.Multiple {

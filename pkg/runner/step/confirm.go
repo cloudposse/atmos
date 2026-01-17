@@ -3,7 +3,6 @@ package step
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
@@ -77,7 +76,12 @@ func (h *ConfirmHandler) Execute(ctx context.Context, step *schema.WorkflowStep,
 		if errors.Is(err, huh.ErrUserAborted) {
 			return nil, errUtils.ErrUserAborted
 		}
-		return nil, fmt.Errorf("step '%s': confirmation failed: %w", step.Name, err)
+		return nil, errUtils.Build(errUtils.ErrWorkflowStepFailed).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("type", step.Type).
+			WithExplanation("Confirmation prompt failed").
+			Err()
 	}
 
 	value := "false"

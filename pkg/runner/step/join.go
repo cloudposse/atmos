@@ -46,7 +46,11 @@ func (h *JoinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		for i, opt := range step.Options {
 			resolved, err := vars.Resolve(opt)
 			if err != nil {
-				return nil, fmt.Errorf("step '%s': failed to resolve option %d: %w", step.Name, i, err)
+				return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+					WithCause(err).
+					WithContext("step", step.Name).
+					WithContext("option_index", fmt.Sprintf("%d", i)).
+					Err()
 			}
 			parts = append(parts, resolved)
 		}
@@ -54,7 +58,10 @@ func (h *JoinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		// Content is a single template - resolve and return as-is.
 		content, err := h.ResolveContent(ctx, step, vars)
 		if err != nil {
-			return nil, err
+			return nil, errUtils.Build(errUtils.ErrWorkflowStepFailed).
+				WithCause(err).
+				WithContext("step", step.Name).
+				Err()
 		}
 		return NewStepResult(content), nil
 	}

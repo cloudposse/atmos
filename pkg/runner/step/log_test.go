@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,26 +18,24 @@ func TestLogHandler_GetLogLevel(t *testing.T) {
 	tests := []struct {
 		name     string
 		level    string
-		expected string
+		expected log.Level
 	}{
-		{"trace", "trace", "trace"},
-		{"debug", "debug", "debug"},
-		{"info", "info", "info"},
-		{"warn", "warn", "warn"},
-		{"warning", "warning", "warn"},
-		{"error", "error", "error"},
-		{"empty defaults to info", "", "info"},
-		{"unknown defaults to info", "unknown", "info"},
-		{"uppercase", "DEBUG", "debug"},
-		{"mixed case", "WaRn", "warn"},
+		{"trace", "trace", log.TraceLevel},
+		{"debug", "debug", log.DebugLevel},
+		{"info", "info", log.InfoLevel},
+		{"warn", "warn", log.WarnLevel},
+		{"warning", "warning", log.WarnLevel},
+		{"error", "error", log.ErrorLevel},
+		{"empty defaults to info", "", log.InfoLevel},
+		{"unknown defaults to info", "unknown", log.InfoLevel},
+		{"uppercase", "DEBUG", log.DebugLevel},
+		{"mixed case", "WaRn", log.WarnLevel},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			level := getLogLevel(tt.level)
-			// Check that the level is valid by verifying it's one of the expected values.
-			// We can't directly compare log levels, so we just verify no panic.
-			assert.NotNil(t, level)
+			assert.Equal(t, tt.expected, level)
 		})
 	}
 }

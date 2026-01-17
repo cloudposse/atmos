@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -38,7 +39,10 @@ func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	content, err := h.ResolveContent(ctx, step, vars)
 	if err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrTemplateEvaluation).
+			WithCause(err).
+			WithContext("step", step.Name).
+			Err()
 	}
 
 	// Render markdown if enabled.
@@ -69,7 +73,10 @@ func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	output := style.Render(content)
 
 	if err := ui.Writeln(output); err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrWriteToStream).
+			WithCause(err).
+			WithContext("step", step.Name).
+			Err()
 	}
 
 	return NewStepResult(content), nil
@@ -131,13 +138,13 @@ func (h *StyleHandler) buildStyle(step *schema.WorkflowStep) lipgloss.Style {
 		}
 	}
 
-	// Padding (supports "1", "1 2", "1 2 1 2" formats).
+	// Padding (supports "1", "1 2", "1 2 3", "1 2 3 4" formats).
 	if step.Padding != "" {
 		spacing := parseSpacing(step.Padding)
 		style = style.Padding(spacing.Top, spacing.Right, spacing.Bottom, spacing.Left)
 	}
 
-	// Margin (supports "1", "1 2", "1 2 1 2" formats).
+	// Margin (supports "1", "1 2", "1 2 3", "1 2 3 4" formats).
 	if step.Margin != "" {
 		spacing := parseSpacing(step.Margin)
 		style = style.Margin(spacing.Top, spacing.Right, spacing.Bottom, spacing.Left)

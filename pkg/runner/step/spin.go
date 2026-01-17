@@ -56,7 +56,10 @@ func (h *SpinHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		return nil, err
 	}
 
-	execCtx, cancel := h.createExecContext(ctx, step)
+	execCtx, cancel, err := h.createExecContext(ctx, step)
+	if err != nil {
+		return nil, err
+	}
 	if cancel != nil {
 		defer cancel()
 	}
@@ -111,17 +114,30 @@ func (h *SpinHandler) prepareExecution(ctx context.Context, step *schema.Workflo
 }
 
 // createExecContext creates an execution context with optional timeout.
-func (h *SpinHandler) createExecContext(ctx context.Context, step *schema.WorkflowStep) (context.Context, context.CancelFunc) {
+func (h *SpinHandler) createExecContext(ctx context.Context, step *schema.WorkflowStep) (context.Context, context.CancelFunc, error) {
 	if step.Timeout == "" {
-		return ctx, nil
+		return ctx, nil, nil
 	}
 
 	timeout, err := time.ParseDuration(step.Timeout)
-	if err != nil || timeout <= 0 {
-		return ctx, nil
+	if err != nil {
+		return ctx, nil, errUtils.Build(errUtils.ErrInvalidDuration).
+			WithCause(err).
+			WithContext("step", step.Name).
+			WithContext("value", step.Timeout).
+			Err()
 	}
 
-	return context.WithTimeout(ctx, timeout)
+	if timeout <= 0 {
+		return ctx, nil, errUtils.Build(errUtils.ErrInvalidDuration).
+			WithContext("step", step.Name).
+			WithContext("value", step.Timeout).
+			WithExplanation("Timeout must be greater than zero").
+			Err()
+	}
+
+	timeoutCtx, cancel := context.WithTimeout(ctx, timeout)
+	return timeoutCtx, cancel, nil
 }
 
 // runCommand executes the command with configured options.

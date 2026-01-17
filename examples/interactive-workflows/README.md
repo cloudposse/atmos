@@ -10,7 +10,7 @@ This example demonstrates Atmos's powerful interactive workflow step types. Thes
 ## Quick Start
 
 ```bash
-cd examples/demo-interactive-workflows
+cd examples/interactive-workflows
 
 # Run the main deployment workflow
 atmos workflow deploy -f interactive

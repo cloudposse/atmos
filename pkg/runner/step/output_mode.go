@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os/exec"
+	"strings"
 	"sync"
 
 	"github.com/cloudposse/atmos/pkg/data"
@@ -260,12 +261,13 @@ func RenderCommand(step *schema.WorkflowStep, workflow *schema.WorkflowDefinitio
 	_ = ui.Writeln(cmdDisplay)
 }
 
-// StreamingOutputWriter handles real-time output streaming with prefix.
+// StreamingOutputWriter handles real-time output streaming with prefix per line.
 type StreamingOutputWriter struct {
-	prefix string
-	output *bytes.Buffer
-	mu     sync.Mutex
-	target io.Writer
+	prefix     string
+	output     *bytes.Buffer
+	lineBuffer *bytes.Buffer // Buffer for incomplete lines.
+	mu         sync.Mutex
+	target     io.Writer
 }
 
 // NewStreamingOutputWriter creates a writer that prefixes each line.
@@ -273,13 +275,14 @@ func NewStreamingOutputWriter(prefix string, target io.Writer) *StreamingOutputW
 	defer perf.Track(nil, "step.NewStreamingOutputWriter")()
 
 	return &StreamingOutputWriter{
-		prefix: prefix,
-		output: &bytes.Buffer{},
-		target: target,
+		prefix:     prefix,
+		output:     &bytes.Buffer{},
+		lineBuffer: &bytes.Buffer{},
+		target:     target,
 	}
 }
 
-// Write implements io.Writer.
+// Write implements io.Writer with line-buffering so prefix is applied per line.
 func (w *StreamingOutputWriter) Write(p []byte) (n int, err error) {
 	defer perf.Track(nil, "step.StreamingOutputWriter.Write")()
 
@@ -289,17 +292,62 @@ func (w *StreamingOutputWriter) Write(p []byte) (n int, err error) {
 	// Store in buffer.
 	w.output.Write(p)
 
-	// Write with prefix to target.
-	if w.target != nil {
-		_, _ = fmt.Fprintf(w.target, "%s %s", w.prefix, string(p))
+	// Process line by line for target output.
+	if w.target == nil {
+		return len(p), nil
 	}
+
+	w.processLines(string(p))
 
 	return len(p), nil
 }
 
-// String returns the captured output.
+// processLines handles line-buffered output with prefix. Must be called with lock held.
+func (w *StreamingOutputWriter) processLines(input string) {
+	lines := strings.Split(input, "\n")
+
+	for i, line := range lines {
+		isLastPart := (i == len(lines)-1)
+		hasNewline := (i < len(lines)-1)
+
+		if hasNewline {
+			w.writeCompleteLine(line)
+		} else if !isLastPart || line != "" {
+			// Incomplete line or non-empty last part - buffer it.
+			w.lineBuffer.WriteString(line)
+		}
+	}
+}
+
+// writeCompleteLine writes a complete line with prefix, flushing buffer first if needed. Must be called with lock held.
+func (w *StreamingOutputWriter) writeCompleteLine(line string) {
+	if w.lineBuffer.Len() > 0 {
+		_, _ = fmt.Fprintf(w.target, "%s %s%s\n", w.prefix, w.lineBuffer.String(), line)
+		w.lineBuffer.Reset()
+	} else {
+		_, _ = fmt.Fprintf(w.target, "%s %s\n", w.prefix, line)
+	}
+}
+
+// Flush writes any buffered content to the target.
+func (w *StreamingOutputWriter) Flush() {
+	defer perf.Track(nil, "step.StreamingOutputWriter.Flush")()
+
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.target != nil && w.lineBuffer.Len() > 0 {
+		_, _ = fmt.Fprintf(w.target, "%s %s", w.prefix, w.lineBuffer.String())
+		w.lineBuffer.Reset()
+	}
+}
+
+// String returns the captured output, flushing any buffered content first.
 func (w *StreamingOutputWriter) String() string {
 	defer perf.Track(nil, "step.StreamingOutputWriter.String")()
+
+	// Flush buffered content before returning.
+	w.Flush()
 
 	w.mu.Lock()
 	defer w.mu.Unlock()

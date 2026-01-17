@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -118,7 +119,7 @@ func TestJoinHandler_Execute(t *testing.T) {
 
 		_, err := handler.Execute(ctx, step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve option 1")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 
 	t.Run("returns error for invalid content template", func(t *testing.T) {

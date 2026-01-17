@@ -645,7 +645,7 @@ func TestSleepHandlerExecution(t *testing.T) {
 
 		_, err := handler.Execute(ctx, step, vars)
 		assert.Error(t, err)
-		assert.Equal(t, context.Canceled, err)
+		assert.ErrorIs(t, err, errUtils.ErrUserAborted)
 	})
 
 	t.Run("invalid duration", func(t *testing.T) {

@@ -143,7 +143,7 @@ func TestBaseHandlerResolveContent(t *testing.T) {
 
 		_, err := handler.ResolveContent(context.Background(), step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve content template")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }
 
@@ -183,7 +183,7 @@ func TestBaseHandlerResolvePrompt(t *testing.T) {
 
 		_, err := handler.ResolvePrompt(context.Background(), step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve prompt template")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }
 
@@ -223,7 +223,7 @@ func TestBaseHandlerResolveCommand(t *testing.T) {
 
 		_, err := handler.ResolveCommand(context.Background(), step, vars)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to resolve command template")
+		assert.ErrorIs(t, err, errUtils.ErrTemplateEvaluation)
 	})
 }
 
@@ -322,18 +322,21 @@ func TestVariablesStageTracking(t *testing.T) {
 }
 
 func TestVariablesLoadOSEnv(t *testing.T) {
+	// Set test environment variables for portability.
+	t.Setenv("PATH", "test-path")
+	t.Setenv("HOME", "test-home")
+
 	// NewVariables automatically loads OS env.
 	vars := NewVariables()
 
-	// PATH should be set on any Unix-like system.
+	// Verify test environment variables are loaded.
 	path, ok := vars.Env["PATH"]
 	assert.True(t, ok, "PATH should be loaded from OS environment")
-	assert.NotEmpty(t, path)
+	assert.Equal(t, "test-path", path)
 
-	// HOME should also exist.
 	home, ok := vars.Env["HOME"]
 	assert.True(t, ok, "HOME should be loaded from OS environment")
-	assert.NotEmpty(t, home)
+	assert.Equal(t, "test-home", home)
 }
 
 func TestVariablesResolveWithEnv(t *testing.T) {

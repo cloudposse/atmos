@@ -217,7 +217,8 @@ func TestSpinHandler_CreateExecContext(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		execCtx, cancel := spinHandler.createExecContext(ctx, step)
+		execCtx, cancel, err := spinHandler.createExecContext(ctx, step)
+		require.NoError(t, err)
 		assert.Equal(t, ctx, execCtx)
 		assert.Nil(t, cancel)
 	})
@@ -231,7 +232,8 @@ func TestSpinHandler_CreateExecContext(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		execCtx, cancel := spinHandler.createExecContext(ctx, step)
+		execCtx, cancel, err := spinHandler.createExecContext(ctx, step)
+		require.NoError(t, err)
 		assert.NotEqual(t, ctx, execCtx)
 		assert.NotNil(t, cancel)
 		cancel()
@@ -246,7 +248,8 @@ func TestSpinHandler_CreateExecContext(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		execCtx, cancel := spinHandler.createExecContext(ctx, step)
+		execCtx, cancel, err := spinHandler.createExecContext(ctx, step)
+		assert.Error(t, err)
 		assert.Equal(t, ctx, execCtx)
 		assert.Nil(t, cancel)
 	})
@@ -260,7 +263,8 @@ func TestSpinHandler_CreateExecContext(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		execCtx, cancel := spinHandler.createExecContext(ctx, step)
+		execCtx, cancel, err := spinHandler.createExecContext(ctx, step)
+		assert.Error(t, err)
 		assert.Equal(t, ctx, execCtx)
 		assert.Nil(t, cancel)
 	})
@@ -274,7 +278,8 @@ func TestSpinHandler_CreateExecContext(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		execCtx, cancel := spinHandler.createExecContext(ctx, step)
+		execCtx, cancel, err := spinHandler.createExecContext(ctx, step)
+		assert.Error(t, err)
 		assert.Equal(t, ctx, execCtx)
 		assert.Nil(t, cancel)
 	})

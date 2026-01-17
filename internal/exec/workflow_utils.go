@@ -329,10 +329,10 @@ func ExecuteWorkflow(
 	totalSteps := len(steps)
 	progressRenderer := workflowPkg.NewProgressRenderer(workflowDefinition, totalSteps)
 
-	for stepIdx, step := range steps {
-		// Render header before first step (if enabled).
-		showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
+	// Render header before first step (if enabled).
+	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
 
+	for stepIdx, step := range steps {
 		// Render step label with optional count prefix and progress bar.
 		// When progress is enabled, combine label + progress on single line (no newline).
 		// When progress is disabled, just show the label with newline.
