@@ -19,6 +19,9 @@ atmos_cli_config:
       plugin_cache: true
       ui:
         enabled: false
+        compact: null
+        show_attribute_bar: null
+        max_lines: 0
     helmfile:
       base_path: ""
       use_eks: true
