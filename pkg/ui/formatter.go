@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
@@ -149,6 +150,8 @@ func SetColorProfile(profile termenv.Profile) {
 //	profile := ui.GetColorProfile()
 //	glamour.WithColorProfile(profile)
 func GetColorProfile() termenv.Profile {
+	defer perf.Track(nil, "ui.GetColorProfile")()
+
 	return lipgloss.DefaultRenderer().ColorProfile()
 }
 
