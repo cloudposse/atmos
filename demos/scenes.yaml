@@ -453,7 +453,7 @@ scenes:
       loop: true
     tags:
       - list
-    prep:
+    setup:
       - ".mock-states/setup.sh"
     gallery:
       category: "list"
@@ -1290,3 +1290,419 @@ scenes:
       category: "flagship"
       title: "Getting Started"
       order: 3
+
+  # =============================================
+  # Example Scenes (FileBrowser only, no gallery)
+  # These appear on individual example pages
+  # =============================================
+
+  - name: "example-demo-stacks"
+    enabled: true
+    description: "Stack inheritance across environments"
+    tape: "scenes/examples/demo-stacks.tape"
+    workdir: "examples/demo-stacks"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-vendoring"
+    enabled: true
+    description: "Pull Terraform modules from external sources"
+    tape: "scenes/examples/demo-vendoring.tape"
+    workdir: "examples/demo-vendoring"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-workflows"
+    enabled: true
+    description: "Run multiple commands in sequence"
+    tape: "scenes/examples/demo-workflows.tape"
+    workdir: "examples/demo-workflows"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-auth"
+    enabled: true
+    description: "Cloud provider authentication"
+    tape: "scenes/examples/demo-auth.tape"
+    workdir: "examples/demo-auth"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-helmfile"
+    enabled: true
+    description: "Kubernetes deployments with Helmfile"
+    tape: "scenes/examples/demo-helmfile.tape"
+    workdir: "examples/demo-helmfile"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-localstack"
+    enabled: true
+    description: "Test with LocalStack AWS emulator"
+    tape: "scenes/examples/demo-localstack.tape"
+    workdir: "examples/demo-localstack"
+    requires:
+      - atmos
+      - docker
+    setup:
+      - "atmos localstack up"
+    cleanup:
+      - "atmos localstack down"
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-custom-command"
+    enabled: true
+    description: "Extend Atmos with custom commands"
+    tape: "scenes/examples/demo-custom-command.tape"
+    workdir: "examples/demo-custom-command"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-component-versions"
+    enabled: true
+    description: "Pin components to specific versions"
+    tape: "scenes/examples/demo-component-versions.tape"
+    workdir: "examples/demo-component-versions"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-context"
+    enabled: true
+    description: "Inspect configuration resolution"
+    tape: "scenes/examples/demo-context.tape"
+    workdir: "examples/demo-context"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-schemas"
+    enabled: true
+    description: "JSON Schema validation"
+    tape: "scenes/examples/demo-schemas.tape"
+    workdir: "examples/demo-schemas"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-library"
+    enabled: true
+    description: "Distribute reusable components"
+    tape: "scenes/examples/demo-library.tape"
+    workdir: "examples/demo-library"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-env"
+    enabled: true
+    description: "Export environment variables"
+    tape: "scenes/examples/demo-env.tape"
+    workdir: "examples/demo-env"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-demo-atlantis"
+    enabled: true
+    description: "Atlantis PR-based automation"
+    tape: "scenes/examples/demo-atlantis.tape"
+    workdir: "examples/demo-atlantis"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-quick-start-simple"
+    enabled: true
+    description: "Minimal Atmos setup"
+    tape: "scenes/examples/quick-start-simple.tape"
+    workdir: "examples/quick-start-simple"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-quick-start-advanced"
+    enabled: true
+    description: "Multi-environment setup"
+    tape: "scenes/examples/quick-start-advanced.tape"
+    workdir: "examples/quick-start-advanced"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-config-profiles"
+    enabled: true
+    description: "Environment-specific configurations"
+    tape: "scenes/examples/config-profiles.tape"
+    workdir: "examples/config-profiles"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-toolchain"
+    enabled: true
+    description: "Manage tool versions"
+    tape: "scenes/examples/toolchain.tape"
+    workdir: "examples/toolchain"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-devcontainer"
+    enabled: true
+    description: "Isolated development environments"
+    tape: "scenes/examples/devcontainer.tape"
+    workdir: "examples/devcontainer"
+    requires:
+      - atmos
+      - podman
+    setup:
+      - "podman machine start 2>/dev/null || true"
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-devcontainer-build"
+    enabled: true
+    description: "Custom Dockerfile devcontainers"
+    tape: "scenes/examples/devcontainer-build.tape"
+    workdir: "examples/devcontainer-build"
+    requires:
+      - atmos
+      - podman
+    setup:
+      - "podman machine start 2>/dev/null || true"
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples
+
+  - name: "example-source-provisioning"
+    enabled: false
+    description: "Just-in-Time component vendoring"
+    tape: "scenes/examples/source-provisioning.tape"
+    workdir: "examples/source-provisioning"
+    requires:
+      - atmos
+    outputs:
+      - gif
+      - png
+      - mp4
+      - svg
+    audio:
+      source: "audio/background.mp3"
+      volume: 0.15
+      fade_out: 2.0
+      loop: true
+    tags:
+      - examples

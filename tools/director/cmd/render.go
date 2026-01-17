@@ -486,6 +486,23 @@ func runValidation(c *cobra.Command, demosDir string, scenesList *scene.ScenesLi
 	return nil
 }
 
+// checkRequirements verifies that all required tools for a scene are available.
+// Returns a list of missing requirements, or nil if all requirements are met.
+func checkRequirements(requires []string) []string {
+	var missing []string
+	for _, req := range requires {
+		// Skip "atmos" since we ensure it's installed via toolmgr.
+		if req == "atmos" {
+			continue
+		}
+		// Check if the tool exists in PATH.
+		if _, err := exec.LookPath(req); err != nil {
+			missing = append(missing, req)
+		}
+	}
+	return missing
+}
+
 // runTestMode executes commands from tape files without rendering.
 // This is useful for validating that demo commands work correctly.
 // Exits on first failure (fail-fast behavior).
@@ -493,7 +510,15 @@ func runValidation(c *cobra.Command, demosDir string, scenesList *scene.ScenesLi
 func runTestMode(ctx context.Context, c *cobra.Command, demosDir string, scenes []*scene.Scene, verbose bool) error {
 	c.Printf("Testing %d scene(s)...\n\n", len(scenes))
 
+	skipped := 0
 	for _, sc := range scenes {
+		// Check requirements before running.
+		if missing := checkRequirements(sc.Requires); len(missing) > 0 {
+			c.Printf("Skipping scene: %s (missing: %s)\n\n", sc.Name, strings.Join(missing, ", "))
+			skipped++
+			continue
+		}
+
 		tapePath := filepath.Join(demosDir, sc.Tape)
 
 		// Resolve workdir.
@@ -505,17 +530,37 @@ func runTestMode(ctx context.Context, c *cobra.Command, demosDir string, scenes 
 		c.Printf("Testing scene: %s\n", sc.Name)
 		c.Printf("Workdir: %s\n\n", workdir)
 
-		// Run prep commands if any.
-		if len(sc.Prep) > 0 {
-			for _, prep := range sc.Prep {
-				prepCmd := exec.CommandContext(ctx, "bash", "-c", prep)
-				prepCmd.Dir = workdir
-				if err := prepCmd.Run(); err != nil {
-					c.Printf("  ✗ prep: %s\n", prep)
+		// Run setup commands if any.
+		if len(sc.Setup) > 0 {
+			for _, setup := range sc.Setup {
+				setupCmd := exec.CommandContext(ctx, "bash", "-c", setup)
+				setupCmd.Dir = workdir
+				setupCmd.Env = os.Environ() // Inherit PATH including cached atmos binary
+				setupCmd.Stdout = os.Stdout
+				setupCmd.Stderr = os.Stderr
+				if err := setupCmd.Run(); err != nil {
+					c.Printf("  ✗ setup: %s\n", setup)
 					c.Printf("    Error: %v\n", err)
-					return fmt.Errorf("prep command failed in scene %s", sc.Name)
+					return fmt.Errorf("setup command failed in scene %s", sc.Name)
 				}
 			}
+		}
+
+		// Defer cleanup commands if any.
+		if len(sc.Cleanup) > 0 {
+			defer func() {
+				for _, cleanup := range sc.Cleanup {
+					cleanupCmd := exec.CommandContext(ctx, "bash", "-c", cleanup)
+					cleanupCmd.Dir = workdir
+					cleanupCmd.Env = os.Environ() // Inherit PATH including cached atmos binary
+					cleanupCmd.Stdout = os.Stdout
+					cleanupCmd.Stderr = os.Stderr
+					if err := cleanupCmd.Run(); err != nil {
+						c.Printf("  ✗ cleanup: %s\n", cleanup)
+						c.Printf("    Error: %v\n", err)
+					}
+				}
+			}()
 		}
 
 		// Parse commands and env vars from tape file.
@@ -582,6 +627,10 @@ func runTestMode(ctx context.Context, c *cobra.Command, demosDir string, scenes 
 		c.Printf("\n")
 	}
 
-	c.Printf("All commands passed!\n")
+	if skipped > 0 {
+		c.Printf("All commands passed! (%d scene(s) skipped due to missing requirements)\n", skipped)
+	} else {
+		c.Printf("All commands passed!\n")
+	}
 	return nil
 }

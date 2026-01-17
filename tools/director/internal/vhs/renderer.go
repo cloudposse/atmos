@@ -120,11 +120,20 @@ func (r *Renderer) Render(ctx context.Context, sc *scene.Scene) (*RenderResult, 
 		workdir = filepath.Join(repoRoot, sc.Workdir)
 	}
 
-	// Run prep commands before VHS.
-	if len(sc.Prep) > 0 {
-		if err := r.runPrepCommands(ctx, sc, workdir); err != nil {
-			return nil, fmt.Errorf("prep commands failed: %w", err)
+	// Run setup commands before VHS.
+	if len(sc.Setup) > 0 {
+		if err := r.runSetupCommands(ctx, sc, workdir); err != nil {
+			return nil, fmt.Errorf("setup commands failed: %w", err)
 		}
+	}
+
+	// Defer cleanup commands to run after VHS (even on error).
+	if len(sc.Cleanup) > 0 {
+		defer func() {
+			if cleanupErr := r.runCleanupCommands(ctx, sc, workdir); cleanupErr != nil {
+				fmt.Printf("  Warning: cleanup commands failed: %v\n", cleanupErr)
+			}
+		}()
 	}
 
 	// Always preprocess the tape to inline Source directives.
@@ -510,10 +519,10 @@ func moveFile(src, dst string) error {
 	return os.Remove(src)
 }
 
-// runPrepCommands runs prep shell commands before VHS rendering.
-func (r *Renderer) runPrepCommands(ctx context.Context, sc *scene.Scene, workdir string) error {
-	for i, cmdStr := range sc.Prep {
-		fmt.Printf("  Running prep command %d/%d: %s\n", i+1, len(sc.Prep), cmdStr)
+// runSetupCommands runs setup shell commands before VHS rendering.
+func (r *Renderer) runSetupCommands(ctx context.Context, sc *scene.Scene, workdir string) error {
+	for i, cmdStr := range sc.Setup {
+		fmt.Printf("  Running setup command %d/%d: %s\n", i+1, len(sc.Setup), cmdStr)
 
 		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
 		cmd.Dir = workdir
@@ -521,7 +530,24 @@ func (r *Renderer) runPrepCommands(ctx context.Context, sc *scene.Scene, workdir
 		cmd.Stderr = os.Stderr
 
 		if err := cmd.Run(); err != nil {
-			return fmt.Errorf("prep command %d failed: %s: %w", i+1, cmdStr, err)
+			return fmt.Errorf("setup command %d failed: %s: %w", i+1, cmdStr, err)
+		}
+	}
+	return nil
+}
+
+// runCleanupCommands runs cleanup shell commands after VHS rendering.
+func (r *Renderer) runCleanupCommands(ctx context.Context, sc *scene.Scene, workdir string) error {
+	for i, cmdStr := range sc.Cleanup {
+		fmt.Printf("  Running cleanup command %d/%d: %s\n", i+1, len(sc.Cleanup), cmdStr)
+
+		cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+		cmd.Dir = workdir
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("cleanup command %d failed: %s: %w", i+1, cmdStr, err)
 		}
 	}
 	return nil

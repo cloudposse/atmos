@@ -28,7 +28,8 @@ type Scene struct {
 	Audio         *AudioConfig      `yaml:"audio,omitempty"`
 	Tags          []string          `yaml:"tags,omitempty"`           // Tags for filtering (e.g., "featured")
 	Gallery       *GalleryConfig    `yaml:"gallery,omitempty"`        // Gallery display configuration
-	Prep          []string          `yaml:"prep,omitempty"`           // Shell commands to run before VHS (in workdir)
+	Setup         []string          `yaml:"setup,omitempty"`          // Shell commands to run before VHS (in workdir)
+	Cleanup       []string          `yaml:"cleanup,omitempty"`        // Shell commands to run after VHS (in workdir)
 	Validate      *ValidationConfig `yaml:"validate,omitempty"`       // Post-render validation rules
 	Status        string            `yaml:"status,omitempty"`         // "published" (default) or "draft"
 	FeaturedOrder int               `yaml:"featured_order,omitempty"` // Order within featured demos (lower = first)
