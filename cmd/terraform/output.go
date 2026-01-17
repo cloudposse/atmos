@@ -181,7 +181,8 @@ func executeGitHubOutput(outputs map[string]any, outputFile string, opts tfoutpu
 	}
 
 	// Emit success message to stderr.
-	return ui.Successf("Wrote %d outputs to %s", len(outputs), path)
+	ui.Successf("Wrote %d outputs to %s", len(outputs), path)
+	return nil
 }
 
 // extractOutputName extracts the output name from additional args.
