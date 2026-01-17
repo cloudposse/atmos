@@ -21,7 +21,7 @@ func DuExec() error {
 	if err != nil {
 		// If the directory doesn't exist, report 0 usage.
 		if os.IsNotExist(err) {
-			_ = ui.Info("No tools installed (0 B)")
+			ui.Info("No tools installed (0 B)")
 			return nil
 		}
 		return fmt.Errorf("failed to calculate disk usage: %w", err)
@@ -31,7 +31,7 @@ func DuExec() error {
 	humanSize := formatBytes(totalSize)
 
 	// Display using ui.Info.
-	_ = ui.Infof("Total disk space used by installed tools: %s", humanSize)
+	ui.Infof("Total disk space used by installed tools: %s", humanSize)
 
 	return nil
 }

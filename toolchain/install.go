@@ -189,7 +189,7 @@ func InstallSingleTool(owner, repo, version string, opts InstallOptions) error {
 
 	if err != nil {
 		if opts.ShowProgressBar {
-			_ = ui.Errorf("Install failed %s/%s@%s: %v", owner, repo, version, err)
+			ui.Errorf("Install failed %s/%s@%s: %v", owner, repo, version, err)
 		}
 		return err
 	}
@@ -218,7 +218,7 @@ func installFromToolVersions(toolVersionsPath string, reinstallFlag, showHint bo
 
 	toolList := buildToolList(installer, toolVersions)
 	if len(toolList) == 0 {
-		_ = ui.Writef("No tools found in %s\n", toolVersionsPath)
+		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
 
@@ -300,11 +300,11 @@ func showProgress(
 
 	switch state.result {
 	case resultSkipped:
-		_ = ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
+		ui.Successf("Skipped `%s/%s@%s` (already installed)", tool.owner, tool.repo, tool.version)
 	case resultInstalled:
-		_ = ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
+		ui.Successf("Installed `%s/%s@%s`", tool.owner, tool.repo, tool.version)
 	case resultFailed:
-		_ = ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
+		ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
 	percent := float64(state.index+1) / float64(state.total)
@@ -322,10 +322,10 @@ func showProgress(
 func printSummary(installed, failed, skipped, total int, showHint bool) {
 	// Clear progress bar line before printing summary.
 	resetLine()
-	_ = ui.Writeln("")
+	ui.Writeln("")
 
 	if total == 0 {
-		_ = ui.Success("No tools to install")
+		ui.Success("No tools to install")
 		return
 	}
 
@@ -340,20 +340,20 @@ func printSummary(installed, failed, skipped, total int, showHint bool) {
 
 func printFailureSummary(installed, failed, skipped int) {
 	if skipped == 0 {
-		_ = ui.Errorf("Installed %d tools, failed %d", installed, failed)
+		ui.Errorf("Installed %d tools, failed %d", installed, failed)
 	} else {
-		_ = ui.Errorf("Installed %d tools, failed %d, skipped %d", installed, failed, skipped)
+		ui.Errorf("Installed %d tools, failed %d, skipped %d", installed, failed, skipped)
 	}
 }
 
 func printSuccessSummary(installed, skipped int, showHint bool) {
 	if skipped == 0 {
-		_ = ui.Successf("Installed **%d** tools", installed)
+		ui.Successf("Installed **%d** tools", installed)
 	} else {
-		_ = ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
+		ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
 	}
 	if showHint {
-		_ = ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+		ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 	}
 }
 
@@ -387,13 +387,13 @@ func installMultipleTools(toolSpecs []string, reinstallFlag bool) error {
 	for _, spec := range toolSpecs {
 		tool, version, err := ParseToolVersionArg(spec)
 		if err != nil {
-			_ = ui.Errorf("Invalid tool spec `%s`: %v", spec, err)
+			ui.Errorf("Invalid tool spec `%s`: %v", spec, err)
 			continue
 		}
 
 		owner, repo, err := installer.ParseToolSpec(tool)
 		if err != nil {
-			_ = ui.Errorf("Invalid tool `%s`: %v", tool, err)
+			ui.Errorf("Invalid tool `%s`: %v", tool, err)
 			continue
 		}
 

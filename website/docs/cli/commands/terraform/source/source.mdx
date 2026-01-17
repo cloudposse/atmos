@@ -6,6 +6,7 @@ id: source
 description: Manage terraform component sources with JIT vendoring
 ---
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
 import ActionCard from '@site/src/components/ActionCard'
@@ -14,6 +15,8 @@ import PrimaryCTA from '@site/src/components/PrimaryCTA'
 <Intro>
 Use these commands to manage Terraform component sources with just-in-time (JIT) vendoring. This enables components to declare their source location inline using the top-level `source` field without requiring a separate `component.yaml` file. Sources are automatically provisioned when running terraform commands—just run `atmos terraform plan` and the source is downloaded on first use.
 </Intro>
+
+<Experimental />
 
 <ActionCard title="Source-Based Version Pinning">
     Learn how to use the source field for native per-environment version control directly in stack configuration.

@@ -101,7 +101,7 @@ func containsRandomFunction(forwardPorts []interface{}) bool {
 func printPorts(config *Config) {
 	ports, err := ParsePorts(config.ForwardPorts, config.PortsAttributes)
 	if err != nil {
-		_ = ui.Warningf("Error parsing ports: %v", err)
+		ui.Warningf("Error parsing ports: %v", err)
 		return
 	}
 	if len(ports) == 0 {
@@ -119,7 +119,7 @@ func printPorts(config *Config) {
 
 	// Warn about !random values.
 	if containsRandomFunction(config.ForwardPorts) {
-		_ = ui.Warning("Ports using !random will generate new values each time Atmos processes the configuration.\nTo see actual runtime ports, use: atmos devcontainer list")
+		ui.Warning("Ports using !random will generate new values each time Atmos processes the configuration.\nTo see actual runtime ports, use: atmos devcontainer list")
 	}
 }
 

@@ -413,7 +413,7 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dest string) error {
 	case tar.TypeReg:
 		return extractFile(tr, targetPath, header)
 	default:
-		_ = ui.Warningf("Skipping unknown type: %s", header.Name)
+		ui.Warningf("Skipping unknown type: %s", header.Name)
 		return nil
 	}
 }
