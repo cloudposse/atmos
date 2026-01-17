@@ -2401,3 +2401,211 @@ func TestFormatterExperimentalMethod(t *testing.T) {
 		})
 	}
 }
+
+// TestHint_PackageLevel tests the Hint package-level function.
+func TestHint_PackageLevel(t *testing.T) {
+	t.Run("hint when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Hint("This is a hint message")
+	})
+
+	t.Run("hint when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Hint("This should not panic")
+	})
+}
+
+// TestHintf_PackageLevel tests the Hintf package-level function.
+func TestHintf_PackageLevel(t *testing.T) {
+	t.Run("hintf when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Hintf("Use `%s` to %s", "atmos help", "get help")
+	})
+
+	t.Run("hintf when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Hintf("This should not panic: %s", "test")
+	})
+}
+
+// TestMarkdown_PackageLevel tests the Markdown package-level function.
+func TestMarkdown_PackageLevel(t *testing.T) {
+	t.Run("markdown when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Markdown("# Header\n\nThis is **bold** text.")
+	})
+
+	t.Run("markdown when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter and IO.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		oldIO := globalIO
+		globalFormatter = nil
+		globalIO = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			globalIO = oldIO
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Markdown("# This should not panic")
+	})
+}
+
+// TestMarkdownf_PackageLevel tests the Markdownf package-level function.
+func TestMarkdownf_PackageLevel(t *testing.T) {
+	t.Run("markdownf when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Markdownf("# %s\n\nVersion: **%s**", "Atmos", "1.0.0")
+	})
+}
+
+// TestMarkdownMessage_PackageLevel tests the MarkdownMessage package-level function.
+func TestMarkdownMessage_PackageLevel(t *testing.T) {
+	t.Run("markdown message when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		MarkdownMessage("**Error:** Something went wrong")
+	})
+
+	t.Run("markdown message when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter and IO.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		oldIO := globalIO
+		globalFormatter = nil
+		globalIO = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			globalIO = oldIO
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		MarkdownMessage("**This should not panic**")
+	})
+}
+
+// TestMarkdownMessagef_PackageLevel tests the MarkdownMessagef package-level function.
+func TestMarkdownMessagef_PackageLevel(t *testing.T) {
+	t.Run("markdown messagef when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		MarkdownMessagef("**%s:** %s", "Warning", "Check configuration")
+	})
+}
+
+// TestWrite_PackageLevel tests the Write package-level function.
+func TestWrite_PackageLevel(t *testing.T) {
+	t.Run("write when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Write("Plain text message")
+	})
+
+	t.Run("write when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		// Should not panic when not initialized.
+		Write("This should not panic")
+	})
+}
+
+// TestWritef_PackageLevel tests the Writef package-level function.
+func TestWritef_PackageLevel(t *testing.T) {
+	t.Run("writef when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Writef("Processing %d items", 42)
+	})
+}
+
+// TestWriteln_PackageLevel tests the Writeln package-level function.
+func TestWriteln_PackageLevel(t *testing.T) {
+	t.Run("writeln when initialized", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		// Should not panic when initialized.
+		Writeln("Line of text")
+	})
+}
