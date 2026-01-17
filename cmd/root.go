@@ -507,9 +507,9 @@ var RootCmd = &cobra.Command{
 					"", "",
 				)
 			case "warn":
-				_ = ui.Experimental(experimentalCmd)
+				ui.Experimental(experimentalCmd)
 			case "error":
-				_ = ui.Experimental(experimentalCmd)
+				ui.Experimental(experimentalCmd)
 				errUtils.CheckErrorPrintAndExit(
 					errUtils.Build(errUtils.ErrExperimentalRequiresIn).
 						WithContext("command", experimentalCmd).

@@ -111,7 +111,7 @@ func ProvisionWithParams(params *ProvisionParams) error {
 	// so any output during spinner execution would interleave and corrupt the display.
 	if result != nil {
 		for _, warning := range result.Warnings {
-			_ = ui.Warning(warning)
+			ui.Warning(warning)
 		}
 	}
 
