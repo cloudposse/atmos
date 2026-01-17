@@ -134,5 +134,6 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 		return result.Error
 	}
 
-	return ui.Write(result.Output)
+	ui.Write(result.Output)
+	return nil
 }

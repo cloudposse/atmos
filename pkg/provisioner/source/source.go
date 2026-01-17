@@ -67,7 +67,7 @@ func Provision(ctx context.Context, params *ProvisionParams) error {
 
 	// Check if vendoring is needed.
 	if !params.Force && !needsVendoring(targetDir) {
-		_ = ui.Info(fmt.Sprintf("Component already exists at %s (use --force to re-vendor)", targetDir))
+		ui.Info(fmt.Sprintf("Component already exists at %s (use --force to re-vendor)", targetDir))
 		return nil
 	}
 
