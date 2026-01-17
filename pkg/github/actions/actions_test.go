@@ -105,6 +105,22 @@ func TestFormatValue(t *testing.T) {
 		result := FormatValue("KEY", "value with spaces & special=chars")
 		assert.Equal(t, "KEY=value with spaces & special=chars\n", result)
 	})
+
+	t.Run("delimiter collision avoidance", func(t *testing.T) {
+		// Value contains the default delimiter, so it should use a suffixed one.
+		valueWithDelimiter := "line1\nATMOS_EOF_KEY\nline2"
+		result := FormatValue("KEY", valueWithDelimiter)
+		expected := "KEY<<ATMOS_EOF_KEY_0\nline1\nATMOS_EOF_KEY\nline2\nATMOS_EOF_KEY_0\n"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("multiple delimiter collisions", func(t *testing.T) {
+		// Value contains both the default delimiter and first suffixed version.
+		valueWithDelimiters := "line1\nATMOS_EOF_KEY\nATMOS_EOF_KEY_0\nline2"
+		result := FormatValue("KEY", valueWithDelimiters)
+		expected := "KEY<<ATMOS_EOF_KEY_1\nline1\nATMOS_EOF_KEY\nATMOS_EOF_KEY_0\nline2\nATMOS_EOF_KEY_1\n"
+		assert.Equal(t, expected, result)
+	})
 }
 
 func TestFormatData(t *testing.T) {

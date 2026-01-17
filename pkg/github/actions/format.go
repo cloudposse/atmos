@@ -10,12 +10,17 @@ import (
 
 // FormatValue formats a single key-value pair for GitHub Actions.
 // Uses key=value for single-line values and heredoc syntax for multiline values.
-// The heredoc delimiter is ATMOS_EOF_<key> to avoid collision with values containing "EOF".
+// The heredoc delimiter is ATMOS_EOF_<key> with collision detection to ensure
+// the delimiter doesn't appear in the value content.
 func FormatValue(key, value string) string {
 	defer perf.Track(nil, "github.actions.FormatValue")()
 
 	if strings.Contains(value, "\n") {
 		delimiter := fmt.Sprintf("ATMOS_EOF_%s", key)
+		// Ensure delimiter doesn't collide with value content.
+		for i := 0; strings.Contains(value, delimiter); i++ {
+			delimiter = fmt.Sprintf("ATMOS_EOF_%s_%d", key, i)
+		}
 		return fmt.Sprintf("%s<<%s\n%s\n%s\n", key, delimiter, value, delimiter)
 	}
 	return fmt.Sprintf("%s=%s\n", key, value)
