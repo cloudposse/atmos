@@ -10,9 +10,8 @@ VERSION=test
 
 export CGO_ENABLED=0
 
-readme:
-	@echo "README.md generation temporarily disabled."
-	@exit 0
+readme: build
+	./build/atmos docs generate readme
 
 build: build-default
 
