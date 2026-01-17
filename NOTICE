@@ -519,7 +519,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - gopkg.in/yaml.v2
     License: Apache-2.0
-    URL: Unknown
+    URL: https://github.com/go-yaml/yaml/blob/v2.4.0/LICENSE
 
   - k8s.io/client-go/util/jsonpath
     License: Apache-2.0
@@ -1638,7 +1638,7 @@ MIT LICENSED DEPENDENCIES
 
   - gopkg.in/yaml.v3
     License: MIT
-    URL: Unknown
+    URL: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
 
 
 ================================================================================
