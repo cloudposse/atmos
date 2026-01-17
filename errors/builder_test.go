@@ -469,3 +469,43 @@ func TestErrorBuilder_WithCause(t *testing.T) {
 		assert.True(t, errors.Is(err, causeErr))
 	})
 }
+
+func TestErrorBuilder_WithCausef(t *testing.T) {
+	t.Run("creates formatted cause error", func(t *testing.T) {
+		stackName := "dev-us-east-1"
+
+		err := Build(ErrInvalidStack).
+			WithCausef("stack `%s` does not exist", stackName).
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidStack))
+		assert.Contains(t, err.Error(), "stack `dev-us-east-1` does not exist")
+	})
+
+	t.Run("works with multiple format arguments", func(t *testing.T) {
+		err := Build(ErrInvalidComponent).
+			WithCausef("component `%s` not found in stack `%s`", "vpc", "prod").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidComponent))
+		assert.Contains(t, err.Error(), "component `vpc` not found in stack `prod`")
+	})
+
+	t.Run("chains with other builder methods", func(t *testing.T) {
+		err := Build(ErrInvalidStack).
+			WithCausef("stack `%s` does not exist", "demo").
+			WithExplanation("The stack was not found").
+			WithHint("Check your configuration").
+			Err()
+
+		assert.Error(t, err)
+		assert.True(t, errors.Is(err, ErrInvalidStack))
+		assert.Contains(t, err.Error(), "stack `demo` does not exist")
+
+		// Verify hint is present.
+		hints := errors.GetAllHints(err)
+		assert.Contains(t, hints, "Check your configuration")
+	})
+}

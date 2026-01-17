@@ -1223,5 +1223,94 @@ func TestComponentsArgCompletionWithStack(t *testing.T) {
 	}
 }
 
+// TestValidateStackExists tests the ValidateStackExists function.
+func TestValidateStackExists(t *testing.T) {
+	setMocks, cleanup := setupMocksWithCleanup(t)
+	defer cleanup()
+
+	tests := []struct {
+		name            string
+		stack           string
+		mockConfigError error
+		mockStacksError error
+		mockStacksMap   map[string]any
+		expectError     bool
+		errorIs         error
+	}{
+		{
+			name:            "valid stack returns nil",
+			stack:           "dev-us-east-1",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1":  map[string]any{},
+				"prod-us-west-2": map[string]any{},
+			},
+			expectError: false,
+			errorIs:     nil,
+		},
+		{
+			name:            "invalid stack returns error",
+			stack:           "nonexistent-stack",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap: map[string]any{
+				"dev-us-east-1":  map[string]any{},
+				"prod-us-west-2": map[string]any{},
+			},
+			expectError: true,
+			errorIs:     errUtils.ErrInvalidStack,
+		},
+		{
+			name:            "config error propagates",
+			stack:           "any-stack",
+			mockConfigError: errors.New("config init failed"),
+			mockStacksError: nil,
+			mockStacksMap:   nil,
+			expectError:     true,
+			errorIs:         nil, // Not a sentinel error.
+		},
+		{
+			name:            "describe stacks error propagates",
+			stack:           "any-stack",
+			mockConfigError: nil,
+			mockStacksError: errors.New("describe stacks failed"),
+			mockStacksMap:   nil,
+			expectError:     true,
+			errorIs:         nil, // Not a sentinel error.
+		},
+		{
+			name:            "empty stacks map returns error",
+			stack:           "any-stack",
+			mockConfigError: nil,
+			mockStacksError: nil,
+			mockStacksMap:   map[string]any{},
+			expectError:     true,
+			errorIs:         errUtils.ErrInvalidStack,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			setMocks(mockSetup{
+				configError: tt.mockConfigError,
+				stacksError: tt.mockStacksError,
+				stacksMap:   tt.mockStacksMap,
+			})
+
+			err := ValidateStackExists(tt.stack)
+
+			if tt.expectError {
+				assert.Error(t, err)
+				if tt.errorIs != nil {
+					assert.ErrorIs(t, err, tt.errorIs)
+				}
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 // Ensure cfg import is used.
 var _ = cfg.InitCliConfig

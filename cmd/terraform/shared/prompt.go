@@ -4,6 +4,7 @@ package shared
 import (
 	"errors"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -322,4 +323,27 @@ func listAllStacks() ([]string, error) {
 	}
 	sort.Strings(stacks)
 	return stacks, nil
+}
+
+// ValidateStackExists checks if the provided stack name exists and returns
+// an error with suggestions if it doesn't.
+func ValidateStackExists(stack string) error {
+	stacks, err := listAllStacks()
+	if err != nil {
+		return err
+	}
+
+	for _, s := range stacks {
+		if s == stack {
+			return nil // Stack exists.
+		}
+	}
+
+	// Stack not found - use ErrorBuilder pattern with sentinel error.
+	return errUtils.Build(errUtils.ErrInvalidStack).
+		WithCausef("stack `%s` does not exist", stack).
+		WithExplanation("The specified stack was not found in the configuration").
+		WithHintf("Available stacks: %s", strings.Join(stacks, ", ")).
+		WithContext("stack", stack).
+		Err()
 }
