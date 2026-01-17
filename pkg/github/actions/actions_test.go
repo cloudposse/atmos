@@ -130,10 +130,16 @@ func TestFormatData(t *testing.T) {
 		assert.Equal(t, "A=1\nB=2\n", result)
 	})
 
-	t.Run("skips empty values", func(t *testing.T) {
+	t.Run("includes empty values", func(t *testing.T) {
 		data := map[string]string{"A": "1", "B": "", "C": "3"}
 		result := FormatData(data)
-		assert.Equal(t, "A=1\nC=3\n", result)
+		assert.Equal(t, "A=1\nB=\nC=3\n", result)
+	})
+
+	t.Run("all empty values", func(t *testing.T) {
+		data := map[string]string{"A": "", "B": ""}
+		result := FormatData(data)
+		assert.Equal(t, "A=\nB=\n", result)
 	})
 
 	t.Run("empty map", func(t *testing.T) {

@@ -28,7 +28,7 @@ func FormatValue(key, value string) string {
 
 // FormatData formats a map of key-value pairs for GitHub Actions.
 // Keys are sorted alphabetically for consistent output.
-// Empty values are skipped.
+// Empty values are preserved as key= entries per GitHub Actions specification.
 func FormatData(data map[string]string) string {
 	defer perf.Track(nil, "github.actions.FormatData")()
 
@@ -41,9 +41,6 @@ func FormatData(data map[string]string) string {
 	var sb strings.Builder
 	for _, key := range keys {
 		value := data[key]
-		if value == "" {
-			continue
-		}
 		sb.WriteString(FormatValue(key, value))
 	}
 	return sb.String()
