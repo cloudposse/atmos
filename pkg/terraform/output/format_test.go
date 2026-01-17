@@ -85,9 +85,10 @@ func TestFormatOutputs_Dotenv(t *testing.T) {
 	result, err := FormatOutputs(outputs, FormatDotenv)
 	require.NoError(t, err)
 
-	assert.Contains(t, result, "url='https://example.com'\n")
-	assert.Contains(t, result, "port='8080'\n")
-	assert.Contains(t, result, "enabled='true'\n")
+	// shellescape.Quote only adds quotes when needed.
+	assert.Contains(t, result, "url=https://example.com\n")
+	assert.Contains(t, result, "port=8080\n")
+	assert.Contains(t, result, "enabled=true\n")
 }
 
 func TestFormatOutputs_Bash(t *testing.T) {
@@ -100,9 +101,10 @@ func TestFormatOutputs_Bash(t *testing.T) {
 	result, err := FormatOutputs(outputs, FormatBash)
 	require.NoError(t, err)
 
-	assert.Contains(t, result, "export url='https://example.com'\n")
-	assert.Contains(t, result, "export port='8080'\n")
-	assert.Contains(t, result, "export enabled='true'\n")
+	// shellescape.Quote only adds quotes when needed.
+	assert.Contains(t, result, "export url=https://example.com\n")
+	assert.Contains(t, result, "export port=8080\n")
+	assert.Contains(t, result, "export enabled=true\n")
 }
 
 func TestFormatOutputs_CSV(t *testing.T) {
@@ -176,13 +178,13 @@ func TestFormatOutputs_NullValues(t *testing.T) {
 	// Dotenv format should skip null values.
 	result, err = FormatOutputs(outputs, FormatDotenv)
 	require.NoError(t, err)
-	assert.Contains(t, result, "url='https://example.com'\n")
+	assert.Contains(t, result, "url=https://example.com\n")
 	assert.NotContains(t, result, "nullable")
 
 	// Bash format should skip null values.
 	result, err = FormatOutputs(outputs, FormatBash)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export url='https://example.com'\n")
+	assert.Contains(t, result, "export url=https://example.com\n")
 	assert.NotContains(t, result, "nullable")
 
 	// HCL format should skip null values.
@@ -231,15 +233,15 @@ func TestFormatOutputs_SpecialCharacters(t *testing.T) {
 		"with_backslash": `path\to\file`,
 	}
 
-	// Dotenv format should escape single quotes.
+	// Dotenv format should escape single quotes using shellescape pattern.
 	result, err := FormatOutputs(outputs, FormatDotenv)
 	require.NoError(t, err)
-	assert.Contains(t, result, `with_quote='it'\''s a test'`)
+	assert.Contains(t, result, `with_quote='it'"'"'s a test'`)
 
-	// Bash format should escape single quotes.
+	// Bash format should escape single quotes using shellescape pattern.
 	result, err = FormatOutputs(outputs, FormatBash)
 	require.NoError(t, err)
-	assert.Contains(t, result, `export with_quote='it'\''s a test'`)
+	assert.Contains(t, result, `export with_quote='it'"'"'s a test'`)
 
 	// HCL format should escape backslashes and quotes.
 	result, err = FormatOutputs(outputs, FormatHCL)
@@ -376,8 +378,8 @@ func TestFormatSingleValue_Scalar(t *testing.T) {
 		{"hcl number", "port", float64(8080), FormatHCL, "port = 8080\n"},
 		{"env string", "url", "https://example.com", FormatEnv, "url=https://example.com\n"},
 		{"env number", "port", float64(8080), FormatEnv, "port=8080\n"},
-		{"dotenv string", "url", "https://example.com", FormatDotenv, "url='https://example.com'\n"},
-		{"bash string", "url", "https://example.com", FormatBash, "export url='https://example.com'\n"},
+		{"dotenv string", "url", "https://example.com", FormatDotenv, "url=https://example.com\n"},
+		{"bash string", "url", "https://example.com", FormatBash, "export url=https://example.com\n"},
 		{"csv string", "url", "https://example.com", FormatCSV, "url,https://example.com\n"},
 		{"tsv string", "url", "https://example.com", FormatTSV, "url\thttps://example.com\n"},
 	}
@@ -541,8 +543,8 @@ func TestFormatOutputsWithOptions_Uppercase(t *testing.T) {
 	// Test bash format with uppercase.
 	result, err = FormatOutputsWithOptions(outputs, FormatBash, opts)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export VPC_ID='vpc-123'\n")
-	assert.Contains(t, result, "export SUBNET_ID='subnet-456'\n")
+	assert.Contains(t, result, "export VPC_ID=vpc-123\n")
+	assert.Contains(t, result, "export SUBNET_ID=subnet-456\n")
 
 	// Test JSON format with uppercase (keys should be uppercase).
 	result, err = FormatOutputsWithOptions(outputs, FormatJSON, opts)
@@ -568,7 +570,7 @@ func TestFormatSingleValueWithOptions_Uppercase(t *testing.T) {
 	// Test bash format with uppercase.
 	result, err = FormatSingleValueWithOptions("cluster_name", "my-cluster", FormatBash, opts)
 	require.NoError(t, err)
-	assert.Equal(t, "export CLUSTER_NAME='my-cluster'\n", result)
+	assert.Equal(t, "export CLUSTER_NAME=my-cluster\n", result)
 
 	// Test HCL format with uppercase.
 	result, err = FormatSingleValueWithOptions("port", float64(8080), FormatHCL, opts)
@@ -610,8 +612,8 @@ func TestFormatOutputsWithOptions_Flatten(t *testing.T) {
 	// Test bash format with flatten.
 	result, err = FormatOutputsWithOptions(outputs, FormatBash, opts)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export config_host='localhost'\n")
-	assert.Contains(t, result, "export config_port='3000'\n")
+	assert.Contains(t, result, "export config_host=localhost\n")
+	assert.Contains(t, result, "export config_port=3000\n")
 
 	// Test JSON format with flatten.
 	result, err = FormatOutputsWithOptions(outputs, FormatJSON, opts)
@@ -640,8 +642,8 @@ func TestFormatOutputsWithOptions_FlattenAndUppercase(t *testing.T) {
 	// Test bash format with both options.
 	result, err = FormatOutputsWithOptions(outputs, FormatBash, opts)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export CONFIG_DB_HOST='localhost'\n")
-	assert.Contains(t, result, "export CONFIG_DB_PORT='5432'\n")
+	assert.Contains(t, result, "export CONFIG_DB_HOST=localhost\n")
+	assert.Contains(t, result, "export CONFIG_DB_PORT=5432\n")
 }
 
 func TestFormatOutputsWithOptions_FlattenArrays(t *testing.T) {
