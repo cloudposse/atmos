@@ -105,6 +105,27 @@ components:
 		assert.True(t, errors.Is(err, errUtils.ErrMissingPackerBasePath), "expected ErrMissingPackerBasePath, got: %v", err)
 	})
 
+	// Test disabled component - should return nil without error.
+	t.Run("disabled component", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", workDir)
+
+		info := schema.ConfigAndStacksInfo{
+			StackFromArg:     "",
+			Stack:            "nonprod",
+			ComponentType:    "packer",
+			ComponentFromArg: "aws/bastion-disabled",
+			SubCommand:       "output",
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		}
+
+		packerFlags := PackerFlags{}
+
+		result, err := ExecutePackerOutput(&info, &packerFlags)
+		assert.NoError(t, err)
+		assert.Nil(t, result, "disabled component should return nil result")
+	})
+
 	// Test invalid component path
 	t.Run("invalid component path", func(t *testing.T) {
 		info := schema.ConfigAndStacksInfo{

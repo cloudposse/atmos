@@ -11,12 +11,10 @@ import (
 )
 
 // TestPackerBuildCmd tests the packer build command execution.
-// Note: This test verifies that packer build executes correctly. The actual packer
-// execution may fail due to missing AWS credentials, but the test verifies:
-// 1. Command arguments are parsed correctly.
-// 2. Component and stack are resolved.
-// 3. Variable file is generated.
-// 4. Packer is invoked with correct arguments.
+// This test verifies that packer build executes correctly.
+// The actual packer execution may fail due to missing AWS credentials.
+// The test verifies command arguments are parsed correctly, component and stack are resolved,
+// the variable file is generated, and packer is invoked with correct arguments.
 func TestPackerBuildCmd(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -53,8 +51,8 @@ func TestPackerBuildCmd(t *testing.T) {
 		log.SetOutput(os.Stderr)
 	}()
 
-	// Run packer build - it will fail due to missing AWS credentials,
-	// but we verify that Atmos correctly processes the command.
+	// Run packer build. It will fail due to missing AWS credentials.
+	// We verify that Atmos correctly processes the command.
 	RootCmd.SetArgs([]string{"packer", "build", "aws/bastion", "-s", "nonprod"})
 	err = Execute()
 
@@ -66,9 +64,8 @@ func TestPackerBuildCmd(t *testing.T) {
 	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
-	// The command may fail due to AWS credentials, but the output should contain
-	// packer-specific content, indicating that Atmos successfully invoked packer
-	// with the correct arguments.
+	// The command may fail due to AWS credentials.
+	// The output should contain packer-specific content, indicating that Atmos invoked packer correctly.
 	if err == nil {
 		t.Logf("TestPackerBuildCmd completed successfully (unexpected in test environment)")
 		return
@@ -153,8 +150,8 @@ func TestPackerBuildCmdMissingStack(t *testing.T) {
 	RootCmd.SetArgs([]string{"packer", "build", "aws/bastion"})
 	err := Execute()
 
-	// The command should fail - either with "stack is required" or with a packer
-	// execution error. Both indicate the command was processed.
+	// The command should fail either with "stack is required" or with a packer execution error.
+	// Both indicate the command was processed.
 	assert.Error(t, err, "'TestPackerBuildCmdMissingStack' should fail when stack is not specified")
 	t.Logf("TestPackerBuildCmdMissingStack error: %v", err)
 }

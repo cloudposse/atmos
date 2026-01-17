@@ -9,7 +9,9 @@ async function fetchLatestRelease() {
     headers['Authorization'] = `token ${token}`;
   }
 
-  // Fallback version for offline/network issues
+  // Fallback version for offline/network issues.
+  // NOTE: Update this value when making major releases to keep docs reasonably current.
+  // This is only used when GitHub API is unreachable (rate limits, network issues, etc.).
   const fallbackVersion = 'v1.204.0';
 
   try {

@@ -41,3 +41,11 @@ components:
         component: aws/bastion
       vars:
         instance_type: "t4g.small"
+
+    # Disabled component test - should be skipped
+    aws/bastion-disabled:
+      metadata:
+        enabled: false
+        component: aws/bastion
+      vars:
+        instance_type: "t4g.small"
