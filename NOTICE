@@ -804,7 +804,7 @@ BSD LICENSED DEPENDENCIES
 
   - gopkg.in/warnings.v0
     License: BSD-2-Clause
-    URL: Unknown
+    URL: https://github.com/go-warnings/warnings/blob/v0.1.2/LICENSE
 
   - inet.af/netaddr
     License: BSD-3-Clause
