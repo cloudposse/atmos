@@ -141,11 +141,11 @@ func SetColorProfile(profile termenv.Profile) {
 // (like macOS Terminal.app which only supports 256 colors until macOS Tahoe).
 //
 // The returned profile respects:
-//   - --force-color flag (returns TrueColor for screenshot generation)
-//   - --no-color / NO_COLOR env var (returns Ascii)
-//   - Terminal capabilities detected via COLORTERM env var
+//   - --force-color flag (returns TrueColor for screenshot generation).
+//   - --no-color / NO_COLOR env var (returns Ascii).
+//   - Terminal capabilities detected via COLORTERM env var.
 //
-// Example usage:
+// Example usage.
 //
 //	profile := ui.GetColorProfile()
 //	glamour.WithColorProfile(profile)

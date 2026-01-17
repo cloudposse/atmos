@@ -124,8 +124,7 @@ func ExecutePacker(
 	// Check if the component is locked (`metadata.locked` is set to true).
 	if info.ComponentIsLocked {
 		// Allow read-only commands, block modification commands.
-		switch info.SubCommand {
-		case "build":
+		if info.SubCommand == "build" {
 			return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 				errUtils.ErrLockedComponentCantBeProvisioned,
 				filepath.Join(info.ComponentFolderPrefix, info.Component))
