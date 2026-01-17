@@ -142,13 +142,13 @@ func emitSummary(results []GenerateResult, isClean bool, componentDir string) { 
 
 	// Show individual files that changed.
 	for _, f := range createdFiles {
-		ui.Successf("Created `%s/%s`", relDir, f)
+		ui.Successf("Created `%s`", filepath.Join(relDir, f))
 	}
 	for _, f := range updatedFiles {
-		ui.Successf("Updated `%s/%s`", relDir, f)
+		ui.Successf("Updated `%s`", filepath.Join(relDir, f))
 	}
 	for _, f := range deletedFiles {
-		ui.Successf("Deleted `%s/%s`", relDir, f)
+		ui.Successf("Deleted `%s`", filepath.Join(relDir, f))
 	}
 
 	// Build summary parts, omitting any zero counts.
