@@ -42,9 +42,7 @@ func (h *AlertHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 		if err != nil {
 			return nil, err
 		}
-		if err := ui.Writeln(content); err != nil {
-			return nil, err
-		}
+		ui.Writeln(content)
 		return NewStepResult(content), nil
 	}
 

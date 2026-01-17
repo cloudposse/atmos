@@ -40,18 +40,18 @@ func (r *ShowRenderer) RenderHeaderIfNeeded(
 	// Render header if enabled (as markdown).
 	if step.ShowHeader(showCfg) && workflow.Description != "" {
 		header := r.formatHeader(workflowName, workflow.Description)
-		_ = ui.Markdown(header)
+		ui.Markdown(header)
 	}
 
 	// Render flags if enabled.
 	if step.ShowFlags(showCfg) && len(flags) > 0 {
 		flagsOutput := r.formatFlags(flags)
-		_ = ui.Writeln(flagsOutput)
+		ui.Writeln(flagsOutput)
 	}
 
 	// Add a blank line after header/flags for visual separation.
 	if (step.ShowHeader(showCfg) && workflow.Description != "") || (step.ShowFlags(showCfg) && len(flags) > 0) {
-		_ = ui.Writeln("")
+		ui.Writeln("")
 	}
 
 	r.headerDone = true

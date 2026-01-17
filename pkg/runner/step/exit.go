@@ -41,9 +41,7 @@ func (h *ExitHandler) Execute(ctx context.Context, step *schema.WorkflowStep, va
 		if err != nil {
 			return nil, err
 		}
-		if err := ui.Writeln(content); err != nil {
-			return nil, err
-		}
+		ui.Writeln(content)
 	}
 
 	// Return an error with the exit code attached.

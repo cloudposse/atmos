@@ -60,7 +60,7 @@ func (h *StageHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 
 	// Format: [Stage 1/3] Setup
 	output := formatStageOutput(stageIndex, totalStages, resolvedTitle)
-	_ = ui.Writeln(output)
+	ui.Writeln(output)
 
 	return NewStepResult(resolvedTitle), nil
 }

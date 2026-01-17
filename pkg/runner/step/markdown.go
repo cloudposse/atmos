@@ -36,9 +36,7 @@ func (h *MarkdownHandler) Execute(ctx context.Context, step *schema.WorkflowStep
 	}
 
 	// Use MarkdownMessage to render to stderr (UI channel).
-	if err := ui.MarkdownMessage(content); err != nil {
-		return nil, err
-	}
+	ui.MarkdownMessage(content)
 
 	return NewStepResult(content), nil
 }

@@ -72,12 +72,7 @@ func (h *StyleHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	// Render the styled content.
 	output := style.Render(content)
 
-	if err := ui.Writeln(output); err != nil {
-		return nil, errUtils.Build(errUtils.ErrWriteToStream).
-			WithCause(err).
-			WithContext("step", step.Name).
-			Err()
-	}
+	ui.Writeln(output)
 
 	return NewStepResult(content), nil
 }

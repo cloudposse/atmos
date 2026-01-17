@@ -38,9 +38,7 @@ func (h *LinebreakHandler) Execute(ctx context.Context, step *schema.WorkflowSte
 	}
 
 	output := strings.Repeat("\n", count)
-	if err := ui.Write(output); err != nil {
-		return nil, err
-	}
+	ui.Write(output)
 
 	return NewStepResult(""), nil
 }

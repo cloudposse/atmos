@@ -81,7 +81,7 @@ func (r *ProgressRenderer) Render() {
 	}
 
 	output := r.formatProgressLine("")
-	_ = ui.Writeln(output)
+	ui.Writeln(output)
 }
 
 // RenderWithLabel renders the progress bar with the step label on the left.
@@ -94,7 +94,7 @@ func (r *ProgressRenderer) RenderWithLabel(stepLabel string) {
 	}
 
 	output := r.formatProgressLine(stepLabel)
-	_ = ui.Write(output) // No newline - cursor stays on this line.
+	ui.Write(output) // No newline - cursor stays on this line.
 }
 
 // RenderPermanent renders the progress bar WITH newline as a permanent record.
@@ -105,7 +105,7 @@ func (r *ProgressRenderer) RenderPermanent(stepLabel string) {
 	}
 
 	output := r.formatProgressLine(stepLabel)
-	_ = ui.Writeln(output) // With newline - becomes permanent record.
+	ui.Writeln(output) // With newline - becomes permanent record.
 }
 
 // formatProgressLine creates the progress line with right-aligned progress bar.

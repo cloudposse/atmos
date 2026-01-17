@@ -121,7 +121,7 @@ func (w *OutputModeWriter) executeLog(cmd *exec.Cmd) (string, string, error) {
 	} else {
 		stepLabel = "[" + w.stepName + "]"
 	}
-	_ = ui.Writeln(stepLabel)
+	ui.Writeln(stepLabel)
 
 	err := cmd.Run()
 
@@ -135,12 +135,12 @@ func (w *OutputModeWriter) fallbackToLog(stdout, stderr string, runErr error) (s
 		_ = data.Write(stdout)
 	}
 	if stderr != "" {
-		_ = ui.Write(stderr)
+		ui.Write(stderr)
 	}
 
 	// Print step footer with status.
 	footer := w.formatStepFooter(runErr)
-	_ = ui.Writeln(footer)
+	ui.Writeln(footer)
 
 	return stdout, stderr, runErr
 }
@@ -258,7 +258,7 @@ func RenderCommand(step *schema.WorkflowStep, workflow *schema.WorkflowDefinitio
 	} else {
 		cmdDisplay = "$ " + command
 	}
-	_ = ui.Writeln(cmdDisplay)
+	ui.Writeln(cmdDisplay)
 }
 
 // StreamingOutputWriter handles real-time output streaming with prefix per line.

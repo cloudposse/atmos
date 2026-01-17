@@ -88,7 +88,7 @@ func cleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 
-	_ = ui.Writef("%s All workdirs cleaned\n", theme.Styles.Checkmark.String())
+	ui.Writef("%s All workdirs cleaned\n", theme.Styles.Checkmark.String())
 	return nil
 }
 
@@ -99,7 +99,7 @@ func cleanSpecificWorkdir(atmosConfig *schema.AtmosConfiguration, component, sta
 		return err
 	}
 
-	_ = ui.Writef("%s Workdir cleaned for %s in %s\n", theme.Styles.Checkmark.String(), component, stack)
+	ui.Writef("%s Workdir cleaned for %s in %s\n", theme.Styles.Checkmark.String(), component, stack)
 	return nil
 }
 

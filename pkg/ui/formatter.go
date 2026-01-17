@@ -149,12 +149,14 @@ func getFormatter() (*formatter, error) {
 // Markdown writes rendered markdown to stdout (data channel).
 // Use this for help text, documentation, and other pipeable formatted content.
 // Note: Delegates to globalFormatter.Markdown() for rendering, then writes to data channel.
-func Markdown(content string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Markdown(content string) {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
 
 	if globalFormatter == nil || globalIO == nil {
-		return errUtils.ErrUIFormatterNotInitialized
+		log.Debug("ui.Markdown called before InitFormatter")
+		return
 	}
 
 	rendered, err := globalFormatter.Markdown(content)
@@ -163,24 +165,27 @@ func Markdown(content string) error {
 		rendered = content
 	}
 
-	_, writeErr := fmt.Fprint(globalIO.Data(), rendered)
-	return writeErr
+	if _, writeErr := fmt.Fprint(globalIO.Data(), rendered); writeErr != nil {
+		log.Debug("ui.Markdown write failed", "error", writeErr)
+	}
 }
 
 // Markdownf writes formatted markdown to stdout (data channel).
-func Markdownf(format string, a ...interface{}) error {
+func Markdownf(format string, a ...interface{}) {
 	content := fmt.Sprintf(format, a...)
-	return Markdown(content)
+	Markdown(content)
 }
 
 // MarkdownMessage writes rendered markdown to stderr (UI channel).
 // Use this for formatted UI messages and errors.
-func MarkdownMessage(content string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func MarkdownMessage(content string) {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
 
 	if globalFormatter == nil || globalIO == nil {
-		return errUtils.ErrUIFormatterNotInitialized
+		log.Debug("ui.MarkdownMessage called before InitFormatter")
+		return
 	}
 
 	rendered, err := globalFormatter.Markdown(content)
@@ -189,158 +194,237 @@ func MarkdownMessage(content string) error {
 		rendered = content
 	}
 
-	_, writeErr := fmt.Fprint(globalIO.UI(), rendered)
-	return writeErr
+	if _, writeErr := fmt.Fprint(globalIO.UI(), rendered); writeErr != nil {
+		log.Debug("ui.MarkdownMessage write failed", "error", writeErr)
+	}
 }
 
 // MarkdownMessagef writes formatted markdown to stderr (UI channel).
-func MarkdownMessagef(format string, a ...interface{}) error {
+func MarkdownMessagef(format string, a ...interface{}) {
 	content := fmt.Sprintf(format, a...)
-	return MarkdownMessage(content)
+	MarkdownMessage(content)
 }
 
 // Success writes a success message with green checkmark to stderr (UI channel).
 // Flow: ui.Success() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Success(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Success(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Success called before InitFormatter")
+		return
 	}
 	formatted := f.Success(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Success write failed", "error", writeErr)
+	}
 }
 
 // Successf writes a formatted success message with green checkmark to stderr (UI channel).
 // Flow: ui.Successf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Successf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Successf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Successf called before InitFormatter")
+		return
 	}
 	formatted := f.Successf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Successf write failed", "error", writeErr)
+	}
 }
 
 // Error writes an error message with red X to stderr (UI channel).
 // Flow: ui.Error() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Error(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Error(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Error called before InitFormatter")
+		return
 	}
 	formatted := f.Error(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Error write failed", "error", writeErr)
+	}
 }
 
 // Errorf writes a formatted error message with red X to stderr (UI channel).
 // Flow: ui.Errorf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Errorf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Errorf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Errorf called before InitFormatter")
+		return
 	}
 	formatted := f.Errorf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Errorf write failed", "error", writeErr)
+	}
 }
 
 // Warning writes a warning message with yellow warning sign to stderr (UI channel).
 // Flow: ui.Warning() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Warning(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Warning(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Warning called before InitFormatter")
+		return
 	}
 	formatted := f.Warning(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Warning write failed", "error", writeErr)
+	}
 }
 
 // Warningf writes a formatted warning message with yellow warning sign to stderr (UI channel).
 // Flow: ui.Warningf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Warningf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Warningf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Warningf called before InitFormatter")
+		return
 	}
 	formatted := f.Warningf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Warningf write failed", "error", writeErr)
+	}
 }
 
 // Info writes an info message with cyan info icon to stderr (UI channel).
 // Flow: ui.Info() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Info(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Info(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Info called before InitFormatter")
+		return
 	}
 	formatted := f.Info(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Info write failed", "error", writeErr)
+	}
 }
 
 // Infof writes a formatted info message with cyan info icon to stderr (UI channel).
 // Flow: ui.Infof() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Infof(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Infof(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Infof called before InitFormatter")
+		return
 	}
 	formatted := f.Infof(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Infof write failed", "error", writeErr)
+	}
 }
 
 // Toast writes a toast message with custom icon to stderr (UI channel).
 // Flow: ui.Toast() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Toast(icon, message string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Toast(icon, message string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Toast called before InitFormatter")
+		return
 	}
 	formatted := f.Toast(icon, message) // formatter.Toast() already includes trailing newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Toast write failed", "error", writeErr)
+	}
 }
 
 // Toastf writes a formatted toast message with custom icon to stderr (UI channel).
 // Flow: ui.Toastf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Toastf(icon, format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Toastf(icon, format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Toastf called before InitFormatter")
+		return
 	}
 	formatted := f.Toastf(icon, format, a...) // formatter.Toastf() already includes trailing newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Toastf write failed", "error", writeErr)
+	}
 }
 
 // Hint writes a hint/tip message with lightbulb icon to stderr (UI channel).
 // This is a convenience wrapper with themed hint icon and muted color.
 // Flow: ui.Hint() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Hint(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Hint(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Hint called before InitFormatter")
+		return
 	}
 	formatted := f.Hint(text) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Hint write failed", "error", writeErr)
+	}
 }
 
 // Hintf writes a formatted hint/tip message with lightbulb icon to stderr (UI channel).
 // This is a convenience wrapper with themed hint icon and muted color.
 // Flow: ui.Hintf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Hintf(format string, a ...interface{}) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Hintf(format string, a ...interface{}) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Hintf called before InitFormatter")
+		return
 	}
 	formatted := f.Hintf(format, a...) + newline
-	return f.terminal.Write(formatted)
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Hintf write failed", "error", writeErr)
+	}
+}
+
+// Experimental writes an experimental feature notification with test tube icon to stderr (UI channel).
+// This is used to notify users when they're using an experimental feature that may change.
+// The notification behavior is controlled by settings.experimental in atmos.yaml (silence, disable, warn, error).
+// The caller (root.go PersistentPreRun) handles the config check - this function just outputs.
+// Flow: ui.Experimental() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Experimental(feature string) {
+	f, err := getFormatter()
+	if err != nil {
+		log.Debug("ui.Experimental called before InitFormatter")
+		return
+	}
+
+	formatted := f.Experimental(feature) + newline
+	if writeErr := f.terminal.Write(formatted); writeErr != nil {
+		log.Debug("ui.Experimental write failed", "error", writeErr)
+	}
+}
+
+// Experimentalf writes a formatted experimental feature notification with test tube icon to stderr (UI channel).
+// Flow: ui.Experimentalf() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Experimentalf(format string, a ...interface{}) {
+	Experimental(fmt.Sprintf(format, a...))
 }
 
 // Write writes plain text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Write(text string) error {
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
+func Write(text string) {
 	f, err := getFormatter()
 	if err != nil {
-		return err
+		log.Debug("ui.Write called before InitFormatter")
+		return
 	}
-	return f.terminal.Write(text)
+	if writeErr := f.terminal.Write(text); writeErr != nil {
+		log.Debug("ui.Write write failed", "error", writeErr)
+	}
 }
 
 // FormatSuccess returns a success message with green checkmark as a formatted string.
@@ -365,16 +449,43 @@ func FormatError(text string) string {
 	return f.Error(text)
 }
 
+// Badge returns a styled badge with the given text, background color, and foreground color.
+// Badges are compact labels with background styling, typically used for status indicators.
+// The background and foreground should be hex colors (e.g., "#FF9800", "#000000").
+// Use this when you need the formatted string without writing (e.g., in help text).
+func Badge(text, background, foreground string) string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[" + text + "]"
+	}
+	return f.Badge(text, background, foreground)
+}
+
+// FormatExperimentalBadge returns an "EXPERIMENTAL" badge using theme colors.
+// Use this to indicate experimental features in help text or command descriptions.
+func FormatExperimentalBadge() string {
+	f, err := getFormatter()
+	if err != nil {
+		// Fallback to unformatted.
+		return "[EXPERIMENTAL]"
+	}
+	if !f.SupportsColor() {
+		return "[EXPERIMENTAL]"
+	}
+	return f.styles.ExperimentalBadge.Render("EXPERIMENTAL")
+}
+
 // Writef writes formatted text to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writef() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Writef(format string, a ...interface{}) error {
-	return Write(fmt.Sprintf(format, a...))
+func Writef(format string, a ...interface{}) {
+	Write(fmt.Sprintf(format, a...))
 }
 
 // Writeln writes text followed by a newline to stderr (UI channel) without icons or automatic styling.
 // Flow: ui.Writeln() → terminal.Write() → io.Write(UIStream) → masking → stderr.
-func Writeln(text string) error {
-	return Write(text + newline)
+func Writeln(text string) {
+	Write(text + newline)
 }
 
 // ClearLine clears the current line in the terminal and returns cursor to the beginning.
@@ -382,26 +493,28 @@ func Writeln(text string) error {
 // When colors are disabled, only writes carriage return to move cursor to start of line.
 // This is useful for replacing spinner messages or other dynamic output with final status messages.
 // Flow: ui.ClearLine() → ui.Write() → terminal.Write() → io.Write(UIStream) → masking → stderr.
+// Write errors are logged but not returned since callers cannot meaningfully handle them.
 //
 // Example usage:
 //
-//	// Clear spinner line and show success message
-//	_ = ui.ClearLine()
-//	_ = ui.Success("Operation completed successfully")
-func ClearLine() error {
+//	ui.ClearLine()
+//	ui.Success("Operation completed successfully")
+func ClearLine() {
 	formatterMu.RLock()
 	defer formatterMu.RUnlock()
 
 	if globalTerminal == nil {
-		return errUtils.ErrUIFormatterNotInitialized
+		log.Debug("ui.ClearLine called before InitFormatter")
+		return
 	}
 
 	// Only use ANSI clear sequence if terminal supports colors.
 	// When NO_COLOR=1 or color is disabled, just use carriage return.
 	if globalTerminal.ColorProfile() != terminal.ColorNone {
-		return Write(clearLine) // \r\x1b[K - carriage return + clear to EOL
+		Write(clearLine) // \r\x1b[K - carriage return + clear to EOL
+	} else {
+		Write("\r") // Just carriage return when colors disabled
 	}
-	return Write("\r") // Just carriage return when colors disabled
 }
 
 // Format exposes the global formatter for advanced use cases.
@@ -469,6 +582,20 @@ func (f *formatter) Toast(icon, message string) string {
 // Toastf renders formatted markdown text with an icon prefix.
 func (f *formatter) Toastf(icon, format string, a ...interface{}) string {
 	return f.Toast(icon, fmt.Sprintf(format, a...))
+}
+
+// Badge renders a styled badge with background color, foreground color, bold text, and padding.
+// Badges are compact labels used for status indicators like [EXPERIMENTAL], [BETA], etc.
+func (f *formatter) Badge(text, background, foreground string) string {
+	if !f.SupportsColor() {
+		return "[" + text + "]"
+	}
+	return lipgloss.NewStyle().
+		Background(lipgloss.Color(background)).
+		Foreground(lipgloss.Color(foreground)).
+		Bold(true).
+		Padding(0, 1).
+		Render(text)
 }
 
 // isANSIStart checks if position i marks the start of an ANSI escape sequence.
@@ -835,6 +962,21 @@ func (f *formatter) Info(text string) string {
 
 func (f *formatter) Infof(format string, a ...interface{}) string {
 	return f.Info(fmt.Sprintf(format, a...))
+}
+
+func (f *formatter) Experimental(feature string) string {
+	var message string
+	if feature != "" {
+		message = fmt.Sprintf("`%s` is an experimental feature. [Learn more](https://atmos.tools/experimental)", feature)
+	} else {
+		message = "Experimental feature. [Learn more](https://atmos.tools/experimental)"
+	}
+	result, _ := f.toastMarkdown(theme.IconExperimental, &f.styles.Muted, message)
+	return result
+}
+
+func (f *formatter) Experimentalf(format string, a ...interface{}) string {
+	return f.Experimental(fmt.Sprintf(format, a...))
 }
 
 func (f *formatter) Hint(text string) string {

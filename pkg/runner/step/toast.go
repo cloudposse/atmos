@@ -39,18 +39,14 @@ func (h *ToastHandler) Execute(ctx context.Context, step *schema.WorkflowStep, v
 	// Display based on level (default to info).
 	switch strings.ToLower(step.Level) {
 	case "success":
-		err = ui.Success(content)
+		ui.Success(content)
 	case "warning", "warn":
-		err = ui.Warning(content)
+		ui.Warning(content)
 	case "error":
-		err = ui.Error(content)
+		ui.Error(content)
 	default:
 		// Default to info for "", "info", or any other value.
-		err = ui.Info(content)
-	}
-
-	if err != nil {
-		return nil, err
+		ui.Info(content)
 	}
 
 	return NewStepResult(content), nil

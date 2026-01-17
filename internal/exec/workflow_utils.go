@@ -342,7 +342,7 @@ func ExecuteWorkflow(
 			progressRenderer.Update(stepIdx+1, step.Name)
 			progressRenderer.RenderWithLabel(label) // No newline - will be cleared.
 		} else if stepPkg.ShowCount(showCfg) {
-			_ = ui.Writeln(label)
+			ui.Writeln(label)
 		}
 
 		command := strings.TrimSpace(step.Command)
@@ -377,7 +377,7 @@ func ExecuteWorkflow(
 		// Clear progress line and re-render as permanent record before step execution.
 		// This ensures progress line appears as header, then step output below it.
 		if progressRenderer.IsEnabled() {
-			_ = ui.ClearLine()
+			ui.ClearLine()
 			progressRenderer.RenderPermanent(label)
 		}
 
@@ -434,7 +434,7 @@ func ExecuteWorkflow(
 			// Render command before execution if show.command is enabled.
 			stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
 
-			_ = ui.Infof("Executing command: `atmos %s`", command)
+			ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
