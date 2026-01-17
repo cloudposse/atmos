@@ -97,6 +97,12 @@ func (a *AuthCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
+// IsExperimental returns whether this command is experimental.
+// Auth commands are currently experimental as part of Pro Features.
+func (a *AuthCommandProvider) IsExperimental() bool {
+	return true
+}
+
 // GetIdentityFromFlags retrieves the identity flag value, handling the NoOptDefVal quirk.
 // The identity flag uses NoOptDefVal="__SELECT__" which causes Viper to always return "__SELECT__"
 // after parsing, even when the flag wasn't provided. This function checks the actual flag state
