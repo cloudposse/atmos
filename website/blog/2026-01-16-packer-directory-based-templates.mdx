@@ -20,7 +20,7 @@ atmos packer build my-ami -s prod
 # Error: packer template is required
 ```
 
-Now, Atmos defaults the template to `.` (current directory) when not specified, allowing Packer to load all `*.pkr.hcl` files from the component directory automatically:
+Now, Atmos defaults the template to `.` (component working directory) when not specified, allowing Packer to load all `*.pkr.hcl` files from the component directory automatically:
 
 ```bash
 # New behavior - works out of the box

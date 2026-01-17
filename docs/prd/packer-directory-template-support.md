@@ -44,13 +44,13 @@ From [HashiCorp Packer documentation](https://developer.hashicorp.com/packer/doc
 
 Native Packer supports:
 
-- `packer build .` - Load all `*.pkr.hcl` files from current directory
+- `packer build .` - Load all `*.pkr.hcl` files from component working directory
 - `packer build ./my-component/` - Load all `*.pkr.hcl` files from specified directory
 - `packer build template.pkr.hcl` - Load single file (previous Atmos behavior)
 
 ## Solution
 
-Make the `template` parameter optional with a default of `"."` (current directory), allowing Packer to load all
+Make the `template` parameter optional with a default of `"."` (component working directory), allowing Packer to load all
 `*.pkr.hcl` files from the component directory.
 
 ### Behavior Changes
@@ -69,7 +69,7 @@ Make the `template` parameter optional with a default of `"."` (current director
 **File:** `internal/exec/packer.go` (lines 194-200)
 
 ```go
-// If no template specified, default to "." (current directory).
+// If no template specified, default to "." (component working directory).
 // Packer will load all *.pkr.hcl files from the component directory.
 // This allows users to organize Packer configurations across multiple files
 // (e.g., variables.pkr.hcl, main.pkr.hcl, locals.pkr.hcl).

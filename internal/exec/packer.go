@@ -22,7 +22,7 @@ import (
 // PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
 	// Template specifies the Packer template file or directory path.
-	// If empty, defaults to "." (current directory), which tells Packer to load all *.pkr.hcl files.
+	// If empty, defaults to "." (component working directory), which tells Packer to load all *.pkr.hcl files.
 	// Can be set via --template/-t flag or settings.packer.template in stack manifest.
 	Template string
 
@@ -202,7 +202,7 @@ func ExecutePacker(
 			template = packerSettingTemplate
 		}
 	}
-	// If no template specified, default to "." (current directory).
+	// If no template specified, default to "." (component working directory).
 	// Packer will load all *.pkr.hcl files from the component directory.
 	// This allows users to organize Packer configurations across multiple files.
 	// For example: variables.pkr.hcl, main.pkr.hcl, locals.pkr.hcl.

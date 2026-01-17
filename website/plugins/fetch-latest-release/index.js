@@ -9,11 +9,6 @@ async function fetchLatestRelease() {
     headers['Authorization'] = `token ${token}`;
   }
 
-  // Fallback version for offline/network issues.
-  // NOTE: Update this value when making major releases to keep docs reasonably current.
-  // This is only used when GitHub API is unreachable (rate limits, network issues, etc.).
-  const fallbackVersion = 'v1.204.0';
-
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
@@ -27,15 +22,14 @@ async function fetchLatestRelease() {
       const errorMsg = token
         ? `GitHub API responded with ${response.status} (authenticated request)`
         : `GitHub API responded with ${response.status} - likely rate limited. Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable.`;
-      console.warn(`[fetch-latest-release] ${errorMsg}, using fallback version ${fallbackVersion}`);
-      return fallbackVersion;
+      throw new Error(errorMsg);
     }
 
     const release = await response.json();
     return release.tag_name;
   } catch (error) {
-    console.warn(`[fetch-latest-release] Network error: ${error.message}, using fallback version ${fallbackVersion}`);
-    return fallbackVersion;
+    console.error(`[fetch-latest-release] Failed to fetch latest release: ${error.message}`);
+    throw error;
   } finally {
     clearTimeout(timeout);
   }

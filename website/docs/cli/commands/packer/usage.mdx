@@ -85,7 +85,7 @@ atmos packer build bastion/dev --stack dev    # ✓ Explicit and unambiguous
 
     <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
     <dd>
-        Packer template file or directory path. Defaults to `.` (current directory), which tells Packer
+        Packer template file or directory path. Defaults to `.` (component working directory), which tells Packer
         to load all `*.pkr.hcl` files from the component directory.
 
         - Omit or use `.` to load all HCL files (recommended for multi-file components)

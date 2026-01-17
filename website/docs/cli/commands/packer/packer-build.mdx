@@ -50,7 +50,7 @@ For more details on the `packer build` command and options, refer to [Packer bui
 
     <dt>`--template` <em>(alias `-t`)</em><em>(optional)</em></dt>
     <dd>
-        Packer template file or directory path. Defaults to `.` (current directory), which tells Packer
+        Packer template file or directory path. Defaults to `.` (component working directory), which tells Packer
         to load all `*.pkr.hcl` files from the component directory.
 
         Can also be specified via `settings.packer.template` in the stack manifest.
