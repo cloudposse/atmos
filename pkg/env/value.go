@@ -3,7 +3,6 @@ package env
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -66,13 +65,4 @@ func formatJSON(v any) string {
 		return fmt.Sprintf(fmtFloat, v)
 	}
 	return string(jsonBytes)
-}
-
-// EscapeSingleQuotes escapes single quotes for safe single-quoted shell literals.
-// The pattern ' -> '\” closes the current quote, inserts an escaped quote,
-// and reopens the quote.
-func EscapeSingleQuotes(s string) string {
-	defer perf.Track(nil, "env.EscapeSingleQuotes")()
-
-	return strings.ReplaceAll(s, "'", "'\\''")
 }

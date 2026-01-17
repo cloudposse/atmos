@@ -31,7 +31,7 @@ func TestFormatBash(t *testing.T) {
 			envVars: map[string]string{
 				"FOO": "bar",
 			},
-			expected: "export FOO='bar'\n",
+			expected: "export FOO=bar\n",
 		},
 		{
 			name: "multiple variables sorted",
@@ -40,14 +40,14 @@ func TestFormatBash(t *testing.T) {
 				"AAA": "first",
 				"MMM": "middle",
 			},
-			expected: "export AAA='first'\nexport MMM='middle'\nexport ZZZ='last'\n",
+			expected: "export AAA=first\nexport MMM=middle\nexport ZZZ=last\n",
 		},
 		{
 			name: "value with single quotes",
 			envVars: map[string]string{
 				"QUOTED": "it's a test",
 			},
-			expected: "export QUOTED='it'\\''s a test'\n",
+			expected: "export QUOTED='it'\"'\"'s a test'\n",
 		},
 		{
 			name: "value with spaces",
@@ -91,14 +91,14 @@ func TestFormatDotenv(t *testing.T) {
 			envVars: map[string]string{
 				"FOO": "bar",
 			},
-			expected: "FOO='bar'\n",
+			expected: "FOO=bar\n",
 		},
 		{
 			name: "value with single quotes",
 			envVars: map[string]string{
 				"QUOTED": "it's a test",
 			},
-			expected: "QUOTED='it'\\''s a test'\n",
+			expected: "QUOTED='it'\"'\"'s a test'\n",
 		},
 	}
 
@@ -178,7 +178,7 @@ func TestWriteEnvToFile(t *testing.T) {
 
 		content, err := os.ReadFile(filePath)
 		require.NoError(t, err)
-		assert.Equal(t, "export FOO='bar'\n", string(content))
+		assert.Equal(t, "export FOO=bar\n", string(content))
 	})
 
 	t.Run("appends to existing file", func(t *testing.T) {
@@ -199,7 +199,7 @@ func TestWriteEnvToFile(t *testing.T) {
 
 		content, err := os.ReadFile(filePath)
 		require.NoError(t, err)
-		assert.Equal(t, "# existing content\nexport FOO='bar'\n", string(content))
+		assert.Equal(t, "# existing content\nexport FOO=bar\n", string(content))
 	})
 
 	t.Run("github format to file", func(t *testing.T) {
@@ -381,7 +381,7 @@ func TestFormatBashWithExportOption(t *testing.T) {
 				"FOO": "bar",
 			},
 			exportPrefix: true,
-			expected:     "export FOO='bar'\n",
+			expected:     "export FOO=bar\n",
 		},
 		{
 			name: "with export=false",
@@ -389,7 +389,7 @@ func TestFormatBashWithExportOption(t *testing.T) {
 				"FOO": "bar",
 			},
 			exportPrefix: false,
-			expected:     "FOO='bar'\n",
+			expected:     "FOO=bar\n",
 		},
 		{
 			name: "with export=false and single quotes",
@@ -397,7 +397,7 @@ func TestFormatBashWithExportOption(t *testing.T) {
 				"QUOTED": "it's a test",
 			},
 			exportPrefix: false,
-			expected:     "QUOTED='it'\\''s a test'\n",
+			expected:     "QUOTED='it'\"'\"'s a test'\n",
 		},
 		{
 			name: "with export=false and multiple variables",
@@ -406,7 +406,7 @@ func TestFormatBashWithExportOption(t *testing.T) {
 				"AAA": "first",
 			},
 			exportPrefix: false,
-			expected:     "AAA='first'\nZZZ='last'\n",
+			expected:     "AAA=first\nZZZ=last\n",
 		},
 	}
 

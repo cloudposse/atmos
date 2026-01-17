@@ -29,13 +29,13 @@ func TestFormatData(t *testing.T) {
 			name:     "dotenv format with simple values",
 			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
 			format:   FormatDotenv,
-			expected: "KEY1='value1'\nKEY2='value2'\n",
+			expected: "KEY1=value1\nKEY2=value2\n",
 		},
 		{
 			name:     "bash format with simple values",
 			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
 			format:   FormatBash,
-			expected: "export KEY1='value1'\nexport KEY2='value2'\n",
+			expected: "export KEY1=value1\nexport KEY2=value2\n",
 		},
 		{
 			name:     "github format with simple values",
@@ -53,13 +53,13 @@ func TestFormatData(t *testing.T) {
 			name:     "dotenv format with single quotes",
 			data:     map[string]any{"MSG": "it's working"},
 			format:   FormatDotenv,
-			expected: "MSG='it'\\''s working'\n",
+			expected: "MSG='it'\"'\"'s working'\n",
 		},
 		{
 			name:     "bash format with single quotes",
 			data:     map[string]any{"MSG": "it's working"},
 			format:   FormatBash,
-			expected: "export MSG='it'\\''s working'\n",
+			expected: "export MSG='it'\"'\"'s working'\n",
 		},
 		{
 			name:     "env format with boolean",
@@ -156,7 +156,7 @@ func TestFormatValue(t *testing.T) {
 			key:      "KEY",
 			value:    "value",
 			format:   FormatBash,
-			expected: "export KEY='value'\n",
+			expected: "export KEY=value\n",
 		},
 		{
 			name:     "with uppercase option",
@@ -248,42 +248,6 @@ func TestValueToString(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := ValueToString(tt.value)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestEscapeSingleQuotes(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "no quotes",
-			input:    "hello world",
-			expected: "hello world",
-		},
-		{
-			name:     "single quote",
-			input:    "it's",
-			expected: "it'\\''s",
-		},
-		{
-			name:     "multiple quotes",
-			input:    "it's a 'test'",
-			expected: "it'\\''s a '\\''test'\\''",
-		},
-		{
-			name:     "empty string",
-			input:    "",
-			expected: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := EscapeSingleQuotes(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -390,31 +354,31 @@ func TestWithExport(t *testing.T) {
 			name:     "bash format default includes export",
 			data:     map[string]any{"KEY": "value"},
 			opts:     nil,
-			expected: "export KEY='value'\n",
+			expected: "export KEY=value\n",
 		},
 		{
 			name:     "bash format with export=true",
 			data:     map[string]any{"KEY": "value"},
 			opts:     []Option{WithExport(true)},
-			expected: "export KEY='value'\n",
+			expected: "export KEY=value\n",
 		},
 		{
 			name:     "bash format with export=false",
 			data:     map[string]any{"KEY": "value"},
 			opts:     []Option{WithExport(false)},
-			expected: "KEY='value'\n",
+			expected: "KEY=value\n",
 		},
 		{
 			name:     "bash format with export=false and single quotes",
 			data:     map[string]any{"MSG": "it's working"},
 			opts:     []Option{WithExport(false)},
-			expected: "MSG='it'\\''s working'\n",
+			expected: "MSG='it'\"'\"'s working'\n",
 		},
 		{
 			name:     "bash format with export=false and multiple keys",
 			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
 			opts:     []Option{WithExport(false)},
-			expected: "KEY1='value1'\nKEY2='value2'\n",
+			expected: "KEY1=value1\nKEY2=value2\n",
 		},
 	}
 
