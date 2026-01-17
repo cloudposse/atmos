@@ -29,5 +29,6 @@ func AddToolVersion(tool, version string) error {
 		return err
 	}
 
-	return ui.Successf("Added/updated %s %s in %s", tool, version, filePath)
+	ui.Successf("Added/updated %s %s in %s", tool, version, filePath)
+	return nil
 }
