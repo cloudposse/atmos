@@ -142,13 +142,13 @@ func emitSummary(results []GenerateResult, isClean bool, componentDir string) { 
 
 	// Show individual files that changed.
 	for _, f := range createdFiles {
-		_ = ui.Successf("Created `%s/%s`", relDir, f)
+		ui.Successf("Created `%s/%s`", relDir, f)
 	}
 	for _, f := range updatedFiles {
-		_ = ui.Successf("Updated `%s/%s`", relDir, f)
+		ui.Successf("Updated `%s/%s`", relDir, f)
 	}
 	for _, f := range deletedFiles {
-		_ = ui.Successf("Deleted `%s/%s`", relDir, f)
+		ui.Successf("Deleted `%s/%s`", relDir, f)
 	}
 
 	// Build summary parts, omitting any zero counts.
@@ -172,9 +172,9 @@ func emitSummary(results []GenerateResult, isClean bool, componentDir string) { 
 	// Show summary line.
 	summary := strings.Join(parts, ", ")
 	if isClean {
-		_ = ui.Successf("Cleaned `%s` (%s)", relDir, summary)
+		ui.Successf("Cleaned `%s` (%s)", relDir, summary)
 	} else {
-		_ = ui.Successf("Generated `%s` (%s)", relDir, summary)
+		ui.Successf("Generated `%s` (%s)", relDir, summary)
 	}
 }
 
@@ -205,7 +205,7 @@ func relativePath(absPath string) string {
 func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	if dryRun {
 		result.Skipped = true
-		_ = ui.Infof("Would delete `%s`", relativePath(filePath))
+		ui.Writef("Would delete: %s\n", relativePath(filePath))
 		return
 	}
 
@@ -219,6 +219,7 @@ func processCleanFile(result *GenerateResult, filePath string, dryRun bool) {
 	}
 
 	result.Deleted = true
+	ui.Writef("Deleted: %s\n", relativePath(filePath))
 }
 
 // processGenerateFile handles file generation in generate mode.
@@ -231,7 +232,7 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 
 	if ctx.dryRun {
 		result.Skipped = true
-		_ = ui.Infof("Would generate `%s`", relativePath(ctx.filePath))
+		ui.Writef("Would generate: %s\n", relativePath(ctx.filePath))
 		return
 	}
 
@@ -259,6 +260,12 @@ func processGenerateFile(result *GenerateResult, ctx fileContext) {
 	if err := os.WriteFile(ctx.filePath, fileContent, filePermissions); err != nil {
 		result.Error = fmt.Errorf("%w: failed to write %s: %w", errUtils.ErrFileOperation, ctx.filePath, err)
 		return
+	}
+
+	if result.Created {
+		ui.Writef("Created: %s\n", relativePath(ctx.filePath))
+	} else {
+		ui.Writef("Updated: %s\n", relativePath(ctx.filePath))
 	}
 }
 
