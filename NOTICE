@@ -519,7 +519,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - gopkg.in/yaml.v2
     License: Apache-2.0
-    URL: https://github.com/go-yaml/yaml/blob/v2.4.0/LICENSE
+    URL: Unknown
 
   - k8s.io/client-go/util/jsonpath
     License: Apache-2.0
@@ -947,6 +947,10 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 ================================================================================
 
 MIT LICENSED DEPENDENCIES
+
+  - al.essio.dev/pkg/shellescape
+    License: MIT
+    URL: https://github.com/alessio/shellescape/blob/v1.5.1/LICENSE
 
   - github.com/99designs/keyring
     License: MIT
@@ -1638,7 +1642,7 @@ MIT LICENSED DEPENDENCIES
 
   - gopkg.in/yaml.v3
     License: MIT
-    URL: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
+    URL: Unknown
 
 
 ================================================================================
