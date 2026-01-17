@@ -29,7 +29,7 @@ func TestMasker_RegisterValue(t *testing.T) {
 
 	// Test masking
 	input := "The secret is secret123 and more text"
-	expected := "The secret is ***MASKED*** and more text"
+	expected := "The secret is <MASKED> and more text"
 	got := m.Mask(input)
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)
@@ -56,17 +56,17 @@ func TestMasker_RegisterSecret(t *testing.T) {
 		{
 			name:  "plain secret",
 			input: "Token: " + plainSecret,
-			want:  "Token: ***MASKED***",
+			want:  "Token: <MASKED>",
 		},
 		{
 			name:  "base64 encoded",
 			input: "Token: " + base64Secret,
-			want:  "Token: ***MASKED***",
+			want:  "Token: <MASKED>",
 		},
 		{
 			name:  "URL encoded",
 			input: "Token: " + urlSecret,
-			want:  "Token: ***MASKED***",
+			want:  "Token: <MASKED>",
 		},
 	}
 
@@ -92,7 +92,7 @@ func TestMasker_RegisterPattern(t *testing.T) {
 
 	// Test masking
 	input := "Authorization: Bearer abc123xyz"
-	expected := "Authorization: ***MASKED***"
+	expected := "Authorization: <MASKED>"
 	got := m.Mask(input)
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)
@@ -156,7 +156,7 @@ func TestMasker_RegisterRegex(t *testing.T) {
 	generatedToken := fmt.Sprintf("ghp_%s", tokenSuffix)
 
 	input := fmt.Sprintf("GitHub token: %s", generatedToken)
-	expected := "GitHub token: ***MASKED***"
+	expected := "GitHub token: <MASKED>"
 	got := m.Mask(input)
 	if got != expected {
 		t.Errorf("expected %q, got %q", expected, got)
@@ -206,7 +206,7 @@ func TestMasker_Mask(t *testing.T) {
 				m.RegisterValue("password123")
 			},
 			input: "The password is password123",
-			want:  "The password is ***MASKED***",
+			want:  "The password is <MASKED>",
 		},
 		{
 			name: "multiple literals",
@@ -215,7 +215,7 @@ func TestMasker_Mask(t *testing.T) {
 				m.RegisterValue("secret2")
 			},
 			input: "secret1 and secret2",
-			want:  "***MASKED*** and ***MASKED***",
+			want:  "<MASKED> and <MASKED>",
 		},
 		{
 			name: "pattern match",
@@ -223,7 +223,7 @@ func TestMasker_Mask(t *testing.T) {
 				_ = m.RegisterPattern(`password=\w+`)
 			},
 			input: "login with password=abc123",
-			want:  "login with ***MASKED***",
+			want:  "login with <MASKED>",
 		},
 		{
 			name: "combined literal and pattern",
@@ -232,7 +232,7 @@ func TestMasker_Mask(t *testing.T) {
 				_ = m.RegisterPattern(`api_key=\w+`)
 			},
 			input: "token123 and api_key=xyz789",
-			want:  "***MASKED*** and ***MASKED***",
+			want:  "<MASKED> and <MASKED>",
 		},
 		{
 			name: "json structure preserved",
@@ -240,7 +240,7 @@ func TestMasker_Mask(t *testing.T) {
 				m.RegisterSecret("mysecret")
 			},
 			input: `{"key": "mysecret", "other": "value"}`,
-			want:  `{"key": "***MASKED***", "other": "value"}`,
+			want:  `{"key": "<MASKED>", "other": "value"}`,
 		},
 		{
 			name: "yaml structure preserved",
@@ -248,7 +248,7 @@ func TestMasker_Mask(t *testing.T) {
 				m.RegisterSecret("mysecret")
 			},
 			input: "key: mysecret\nother: value",
-			want:  "key: ***MASKED***\nother: value",
+			want:  "key: <MASKED>\nother: value",
 		},
 	}
 

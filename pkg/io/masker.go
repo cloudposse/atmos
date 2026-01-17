@@ -14,7 +14,9 @@ import (
 
 const (
 	// MaskReplacement is the string used to replace masked values.
-	MaskReplacement = "***MASKED***"
+	// Uses angle brackets to be safe in both JSON and YAML output
+	// (asterisks would be interpreted as YAML alias references).
+	MaskReplacement = "<MASKED>"
 
 	// AWS access key ID length (AKIA prefix + 16 characters).
 	awsAccessKeyIDLength = 20
