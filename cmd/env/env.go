@@ -39,16 +39,17 @@ var envCmd = &cobra.Command{
 		}
 
 		// Get output format.
-		format := v.GetString("format")
-		if !slices.Contains(SupportedFormats, format) {
+		formatStr := v.GetString("format")
+		if !slices.Contains(SupportedFormats, formatStr) {
 			return errUtils.Build(errUtils.ErrInvalidArgumentError).
-				WithExplanationf("Invalid --format value %q.", format).
+				WithExplanationf("Invalid --format value %q.", formatStr).
 				WithHintf("Supported formats: %s.", strings.Join(SupportedFormats, ", ")).
 				Err()
 		}
 
-		// Get output file path.
+		// Get output file path and export flag.
 		output := v.GetString("output")
+		exportPrefix := v.GetBool("export")
 
 		// Build ConfigAndStacksInfo with CLI overrides (--config, --config-path, --base-path).
 		// These are persistent flags inherited from the root command.
@@ -79,8 +80,16 @@ var envCmd = &cobra.Command{
 			envVars = make(map[string]string)
 		}
 
-		// Handle GitHub format special case.
-		if format == "github" {
+		// Handle JSON format separately (not supported by pkg/env).
+		if formatStr == "json" {
+			if output != "" {
+				return u.WriteToFileAsJSON(output, envVars, 0o644)
+			}
+			return outputEnvAsJSON(&atmosConfig, envVars)
+		}
+
+		// Handle GitHub format special case (requires output path).
+		if formatStr == "github" {
 			path := output
 			if path == "" {
 				path = ghactions.GetEnvPath()
@@ -90,7 +99,6 @@ var envCmd = &cobra.Command{
 						Err()
 				}
 			}
-			// Convert map[string]string to map[string]any for formatting.
 			dataMap := convertToAnyMap(envVars)
 			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
 			if err != nil {
@@ -99,57 +107,24 @@ var envCmd = &cobra.Command{
 			return envfmt.WriteToFile(path, formatted)
 		}
 
-		// Handle file output for other formats.
-		if output != "" {
-			// Convert map[string]string to map[string]any for formatting.
-			dataMap := convertToAnyMap(envVars)
-			var formatted string
-			var err error
+		// Parse format string to Format type.
+		format, err := envfmt.ParseFormat(formatStr)
+		if err != nil {
+			return err
+		}
 
-			switch format {
-			case "bash":
-				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatBash)
-			case "dotenv":
-				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatDotenv)
-			case "json":
-				// For JSON file output, use the utility function.
-				return u.WriteToFileAsJSON(output, envVars, 0o644)
-			default:
-				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatBash)
-			}
-			if err != nil {
-				return err
-			}
+		// Format the environment variables with export option.
+		dataMap := convertToAnyMap(envVars)
+		formatted, err := envfmt.FormatData(dataMap, format, envfmt.WithExport(exportPrefix))
+		if err != nil {
+			return err
+		}
+
+		// Output to file or stdout.
+		if output != "" {
 			return envfmt.WriteToFile(output, formatted)
 		}
-
-		// Output to stdout.
-		switch format {
-		case "json":
-			return outputEnvAsJSON(&atmosConfig, envVars)
-		case "bash", "dotenv":
-			// Convert map[string]string to map[string]any for formatting.
-			dataMap := convertToAnyMap(envVars)
-			var formatted string
-			var err error
-			if format == "bash" {
-				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatBash)
-			} else {
-				formatted, err = envfmt.FormatData(dataMap, envfmt.FormatDotenv)
-			}
-			if err != nil {
-				return err
-			}
-			return data.Write(formatted)
-		default:
-			// Default to bash format.
-			dataMap := convertToAnyMap(envVars)
-			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
-			if err != nil {
-				return err
-			}
-			return data.Write(formatted)
-		}
+		return data.Write(formatted)
 	},
 }
 
@@ -172,8 +147,10 @@ func init() {
 	envParser = flags.NewStandardParser(
 		flags.WithStringFlag("format", "f", "bash", "Output format: bash, json, dotenv, github"),
 		flags.WithStringFlag("output", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
+		flags.WithBoolFlag("export", "", true, "Include 'export' prefix in bash format (default: true)"),
 		flags.WithEnvVars("format", "ATMOS_ENV_FORMAT"),
 		flags.WithEnvVars("output", "ATMOS_ENV_OUTPUT"),
+		flags.WithEnvVars("export", "ATMOS_ENV_EXPORT"),
 	)
 
 	// Register flags using the standard RegisterFlags method.

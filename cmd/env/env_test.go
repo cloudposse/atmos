@@ -367,3 +367,55 @@ func TestConvertToAnyMap(t *testing.T) {
 		})
 	}
 }
+
+func TestFormatBashWithExportOption(t *testing.T) {
+	tests := []struct {
+		name         string
+		envVars      map[string]string
+		exportPrefix bool
+		expected     string
+	}{
+		{
+			name: "with export=true (default)",
+			envVars: map[string]string{
+				"FOO": "bar",
+			},
+			exportPrefix: true,
+			expected:     "export FOO='bar'\n",
+		},
+		{
+			name: "with export=false",
+			envVars: map[string]string{
+				"FOO": "bar",
+			},
+			exportPrefix: false,
+			expected:     "FOO='bar'\n",
+		},
+		{
+			name: "with export=false and single quotes",
+			envVars: map[string]string{
+				"QUOTED": "it's a test",
+			},
+			exportPrefix: false,
+			expected:     "QUOTED='it'\\''s a test'\n",
+		},
+		{
+			name: "with export=false and multiple variables",
+			envVars: map[string]string{
+				"ZZZ": "last",
+				"AAA": "first",
+			},
+			exportPrefix: false,
+			expected:     "AAA='first'\nZZZ='last'\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dataMap := convertToAnyMap(tt.envVars)
+			result, err := envfmt.FormatData(dataMap, envfmt.FormatBash, envfmt.WithExport(tt.exportPrefix))
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

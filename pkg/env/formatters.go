@@ -18,8 +18,13 @@ func formatDotenvValue(key, value string) string {
 }
 
 // formatBashValue formats a key-value pair as export key='value' with single-quote escaping.
-func formatBashValue(key, value string) string {
+// If cfg.exportPrefix is explicitly set to false, omits the 'export' prefix.
+func formatBashValue(key, value string, cfg *config) string {
 	safe := EscapeSingleQuotes(value)
+	// Default to export=true if not explicitly set.
+	if cfg != nil && cfg.exportPrefix != nil && !*cfg.exportPrefix {
+		return fmt.Sprintf("%s='%s'\n", key, safe)
+	}
 	return fmt.Sprintf("export %s='%s'\n", key, safe)
 }
 

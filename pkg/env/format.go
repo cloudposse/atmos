@@ -28,6 +28,27 @@ const (
 // SupportedFormats lists all supported environment variable output formats.
 var SupportedFormats = []Format{FormatEnv, FormatDotenv, FormatBash, FormatGitHub}
 
+// ParseFormat converts a format string to a Format type.
+// Returns an error for unsupported format strings.
+func ParseFormat(s string) (Format, error) {
+	defer perf.Track(nil, "env.ParseFormat")()
+
+	switch s {
+	case "env":
+		return FormatEnv, nil
+	case "dotenv":
+		return FormatDotenv, nil
+	case "bash":
+		return FormatBash, nil
+	case "github":
+		return FormatGitHub, nil
+	default:
+		return "", errUtils.Build(errUtils.ErrInvalidFormat).
+			WithExplanationf("unsupported format: %s", s).
+			Err()
+	}
+}
+
 // FormatData formats key-value data in the specified format.
 // Complex values (maps, slices) are JSON-encoded.
 // Keys are sorted alphabetically for consistent output.
@@ -52,7 +73,7 @@ func FormatData(data map[string]any, format Format, opts ...Option) (string, err
 			continue
 		}
 
-		line, err := formatSingleValue(key, value, format)
+		line, err := formatSingleValue(key, value, format, cfg)
 		if err != nil {
 			return "", err
 		}
@@ -76,11 +97,11 @@ func FormatValue(key string, value any, format Format, opts ...Option) (string, 
 		key = strings.ToUpper(key)
 	}
 
-	return formatSingleValue(key, value, format)
+	return formatSingleValue(key, value, format, cfg)
 }
 
 // formatSingleValue formats a single key-value pair without applying options.
-func formatSingleValue(key string, value any, format Format) (string, error) {
+func formatSingleValue(key string, value any, format Format, cfg *config) (string, error) {
 	strValue := ValueToString(value)
 
 	switch format {
@@ -89,7 +110,7 @@ func formatSingleValue(key string, value any, format Format) (string, error) {
 	case FormatDotenv:
 		return formatDotenvValue(key, strValue), nil
 	case FormatBash:
-		return formatBashValue(key, strValue), nil
+		return formatBashValue(key, strValue, cfg), nil
 	case FormatGitHub:
 		return formatGitHubValue(key, strValue), nil
 	default:

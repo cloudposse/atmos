@@ -378,3 +378,104 @@ func TestFlattenNestedMaps(t *testing.T) {
 		})
 	}
 }
+
+func TestWithExport(t *testing.T) {
+	tests := []struct {
+		name     string
+		data     map[string]any
+		opts     []Option
+		expected string
+	}{
+		{
+			name:     "bash format default includes export",
+			data:     map[string]any{"KEY": "value"},
+			opts:     nil,
+			expected: "export KEY='value'\n",
+		},
+		{
+			name:     "bash format with export=true",
+			data:     map[string]any{"KEY": "value"},
+			opts:     []Option{WithExport(true)},
+			expected: "export KEY='value'\n",
+		},
+		{
+			name:     "bash format with export=false",
+			data:     map[string]any{"KEY": "value"},
+			opts:     []Option{WithExport(false)},
+			expected: "KEY='value'\n",
+		},
+		{
+			name:     "bash format with export=false and single quotes",
+			data:     map[string]any{"MSG": "it's working"},
+			opts:     []Option{WithExport(false)},
+			expected: "MSG='it'\\''s working'\n",
+		},
+		{
+			name:     "bash format with export=false and multiple keys",
+			data:     map[string]any{"KEY1": "value1", "KEY2": "value2"},
+			opts:     []Option{WithExport(false)},
+			expected: "KEY1='value1'\nKEY2='value2'\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FormatData(tt.data, FormatBash, tt.opts...)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseFormat(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		expected    Format
+		expectError bool
+	}{
+		{
+			name:     "env format",
+			input:    "env",
+			expected: FormatEnv,
+		},
+		{
+			name:     "dotenv format",
+			input:    "dotenv",
+			expected: FormatDotenv,
+		},
+		{
+			name:     "bash format",
+			input:    "bash",
+			expected: FormatBash,
+		},
+		{
+			name:     "github format",
+			input:    "github",
+			expected: FormatGitHub,
+		},
+		{
+			name:        "invalid format",
+			input:       "invalid",
+			expectError: true,
+		},
+		{
+			name:        "empty string",
+			input:       "",
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := ParseFormat(tt.input)
+			if tt.expectError {
+				require.Error(t, err)
+				assert.ErrorIs(t, err, errUtils.ErrInvalidFormat)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expected, result)
+			}
+		})
+	}
+}
