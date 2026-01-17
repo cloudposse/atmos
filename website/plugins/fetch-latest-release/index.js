@@ -14,16 +14,14 @@ async function fetchLatestRelease() {
   // This is only used when GitHub API is unreachable (rate limits, network issues, etc.).
   const fallbackVersion = 'v1.204.0';
 
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10000); // 10 second timeout
 
+  try {
     const response = await fetch(`https://api.github.com/repos/cloudposse/atmos/releases/latest`, {
       headers,
       signal: controller.signal
     });
-
-    clearTimeout(timeout);
 
     if (!response.ok) {
       const errorMsg = token
@@ -38,6 +36,8 @@ async function fetchLatestRelease() {
   } catch (error) {
     console.warn(`[fetch-latest-release] Network error: ${error.message}, using fallback version ${fallbackVersion}`);
     return fallbackVersion;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 

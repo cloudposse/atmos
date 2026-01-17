@@ -6,8 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/stretchr/testify/assert"
+
+	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
 // TestPackerBuildCmd tests the packer build command execution.
