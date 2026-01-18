@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
+	"github.com/cloudposse/atmos/pkg/component/custom"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
@@ -254,6 +255,12 @@ func processCustomCommands(
 					}
 				}
 			}
+
+			// Set ValidArgsFunction for first semantic-typed positional argument.
+			setSemanticArgCompletion(customCommand, commandConfig)
+
+			// Register completion for semantic-typed flags.
+			registerSemanticFlagCompletions(customCommand, commandConfig)
 
 			// Add the command to the parent command
 			parentCommand.AddCommand(customCommand)
@@ -681,6 +688,10 @@ func executeCustomCommand(
 			}
 		}
 
+		// Prompt for missing semantic-typed values if interactive mode is enabled.
+		// This enables interactive selection for custom commands with component/stack arguments.
+		promptForSemanticValues(cmd, commandConfig, argumentsData, flagsData, nil)
+
 		// Prepare template data
 		data := map[string]any{
 			"Arguments":    argumentsData,
@@ -688,10 +699,14 @@ func executeCustomCommand(
 			"TrailingArgs": trailingArgs,
 		}
 
-		// If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
-		// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables
-		if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
-			// Process Go templates in the command's 'component_config.component'
+		// If the custom command defines 'component' section with a custom component type,
+		// register the type, resolve component config, and expose it in {{ .Component.* }} Go template variables.
+		if commandConfig.Component != nil && commandConfig.Component.Type != "" {
+			processCustomComponentType(&atmosConfig, commandConfig, argumentsData, flagsData, data, authManager)
+		} else if commandConfig.ComponentConfig.Component != "" && commandConfig.ComponentConfig.Stack != "" {
+			// Legacy: If the custom command defines 'component_config' section with 'component' and 'stack' attributes,
+			// process the component stack config and expose it in {{ .ComponentConfig.xxx.yyy.zzz }} Go template variables.
+			// Process Go templates in the command's 'component_config.component'.
 			component, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-component-%d", i), commandConfig.ComponentConfig.Component, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if component == "" || component == "<no value>" {
@@ -699,7 +714,7 @@ func executeCustomCommand(
 					commandConfig.ComponentConfig.Component, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
-			// Process Go templates in the command's 'component_config.stack'
+			// Process Go templates in the command's 'component_config.stack'.
 			stack, err := e.ProcessTmpl(&atmosConfig, fmt.Sprintf("component-config-stack-%d", i), commandConfig.ComponentConfig.Stack, data, false)
 			errUtils.CheckErrorPrintAndExit(err, "", "")
 			if stack == "" || stack == "<no value>" {
@@ -707,7 +722,7 @@ func executeCustomCommand(
 					commandConfig.ComponentConfig.Stack, cfg.CliConfigFileName+u.DefaultStackConfigFileExtension), "", "")
 			}
 
-			// Get the config for the component in the stack
+			// Get the config for the component in the stack.
 			componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
 				Component:            component,
 				Stack:                stack,
@@ -798,6 +813,34 @@ func cloneCommand(orig *schema.Command) (*schema.Command, error) {
 	}
 
 	return &clone, nil
+}
+
+// findTypedValue finds the value of an argument or flag with the specified semantic type.
+// For arguments, it checks the Type field.
+// For flags, it checks the SemanticType field.
+// Returns empty string if no matching typed argument/flag is found.
+func findTypedValue(cmd *schema.Command, argumentsData map[string]string, flagsData map[string]any, semanticType string) string {
+	// Check arguments first.
+	for _, arg := range cmd.Arguments {
+		if arg.Type == semanticType {
+			if val, ok := argumentsData[arg.Name]; ok {
+				return val
+			}
+		}
+	}
+
+	// Check flags.
+	for _, flag := range cmd.Flags {
+		if flag.SemanticType == semanticType {
+			if val, ok := flagsData[flag.Name]; ok {
+				if strVal, ok := val.(string); ok {
+					return strVal
+				}
+			}
+		}
+	}
+
+	return ""
 }
 
 // validateAtmosConfig checks the Atmos configuration and returns an error instead of exiting.
@@ -1458,4 +1501,50 @@ func Contains(slice []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// processCustomComponentType registers a custom component type and resolves its configuration.
+//
+//nolint:revive // argument-limit: parameters are necessary for component processing
+func processCustomComponentType(
+	_ *schema.AtmosConfiguration,
+	commandConfig *schema.Command,
+	argumentsData map[string]string,
+	flagsData map[string]any,
+	data map[string]any,
+	authManager auth.AuthManager,
+) {
+	// Find component name from argument/flag with type: component.
+	componentName := findTypedValue(commandConfig, argumentsData, flagsData, "component")
+	if componentName == "" {
+		errUtils.CheckErrorPrintAndExit(errUtils.ErrComponentArgumentNotFound, "", "")
+	}
+
+	// Find stack name from argument/flag with type: stack (or semantic_type: stack for flags).
+	stackName := findTypedValue(commandConfig, argumentsData, flagsData, "stack")
+	if stackName == "" {
+		errUtils.CheckErrorPrintAndExit(errUtils.ErrStackArgumentNotFound, "", "")
+	}
+
+	// Register the custom component type if not already registered.
+	basePath := commandConfig.Component.BasePath
+	if basePath == "" {
+		basePath = fmt.Sprintf("components/%s", commandConfig.Component.Type)
+	}
+	if err := custom.EnsureRegistered(commandConfig.Component.Type, basePath); err != nil {
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Get the config for the component in the stack.
+	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		Component:            componentName,
+		Stack:                stackName,
+		ComponentType:        commandConfig.Component.Type,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+		Skip:                 nil,
+		AuthManager:          authManager,
+	})
+	errUtils.CheckErrorPrintAndExit(err, "", "")
+	data["Component"] = componentConfig
 }

@@ -702,3 +702,189 @@ The combination of `.tool-versions` for project-wide defaults and per-command `d
 
 - [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool version management
 - [Workflows](/workflows) - Workflows also support toolchain integration
+
+## Custom Component Types
+
+Custom commands can define their own component types beyond the built-in `terraform`, `helmfile`, and `packer` types. This enables you to use Atmos's stack configuration system for any tool—Ansible playbooks, Kubernetes manifests, shell scripts, CDK apps, and more.
+
+### How It Works
+
+When you define a `component:` section in a custom command with a `type`, Atmos:
+
+1. Registers the custom component type in the component registry
+2. Looks up component configuration from `components.<type>.<component>` in your stack manifests
+3. Makes the component configuration available via `{{ .Component.* }}` template variables
+
+### Typed Arguments and Flags
+
+To tell Atmos which argument or flag provides the component name and stack name, use semantic types:
+
+- **Arguments**: Set `type: component` or `type: stack` in the argument definition
+- **Flags**: Set `semantic_type: component` or `semantic_type: stack` in the flag definition
+
+Note: For flags, we use `semantic_type` because `type` is already used to specify the data type (`string`, `bool`).
+
+### Example: Script Runner
+
+Here's a complete example of a custom command that runs script components:
+
+**atmos.yaml:**
+
+```yaml
+commands:
+  - name: script
+    description: "Run script components"
+    arguments:
+      - name: component
+        description: "Component name"
+        type: component              # This argument provides the component name
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: "Stack name"
+        semantic_type: stack         # This flag provides the stack name
+        required: true
+    component:
+      type: script                   # Define the custom component type
+      base_path: components/script   # Optional: defaults to components/<type>
+    steps:
+      - 'echo "Running {{ .Component.component }} in {{ .Component.atmos_stack }}"'
+      - 'echo "App: {{ .Component.vars.app_name }}"'
+      - 'echo "Version: {{ .Component.vars.version }}"'
+      - 'cd {{ .Component.vars.script_dir }} && ./deploy.sh'
+```
+
+**stacks/catalog/script/deploy-app.yaml:**
+
+```yaml
+components:
+  script:                          # Matches component.type in the command
+    deploy-app:                    # Component name
+      vars:
+        app_name: "myapp"
+        version: "1.0.0"
+        script_dir: "${atmos.base_path}/components/script/deploy-app"
+```
+
+**stacks/deploy/dev.yaml:**
+
+```yaml
+import:
+  - catalog/script/deploy-app
+
+vars:
+  stage: dev
+
+components:
+  script:
+    deploy-app:
+      vars:
+        version: "1.0.0-dev"      # Override for dev environment
+```
+
+**Usage:**
+
+```shell
+atmos script deploy-app -s dev
+# Output:
+# Running deploy-app in dev
+# App: myapp
+# Version: 1.0.0-dev
+# (runs deploy.sh)
+```
+
+### Available Template Variables
+
+When using custom component types, the `{{ .Component }}` object contains:
+
+| Variable | Description |
+|----------|-------------|
+| `{{ .Component.component }}` | Component name |
+| `{{ .Component.component_type }}` | Component type (e.g., "script") |
+| `{{ .Component.atmos_stack }}` | Stack name |
+| `{{ .Component.vars.* }}` | Variables defined in the component |
+| `{{ .Component.settings.* }}` | Settings defined in the component |
+| `{{ .Component.env.* }}` | Environment variables defined in the component |
+
+### Configuration Options
+
+The `component:` section supports:
+
+| Option | Description |
+|--------|-------------|
+| `type` | **Required.** The component type name (e.g., "script", "ansible", "manifest") |
+| `base_path` | Optional. Base directory for components of this type. Defaults to `components/<type>` |
+
+### Comparison with component_config
+
+The `component:` section differs from the legacy `component_config:` in several ways:
+
+| Feature | `component:` (new) | `component_config:` (legacy) |
+|---------|-------------------|------------------------------|
+| Component type | Custom types | Terraform only |
+| Component/stack source | Inferred from typed args/flags | Explicit templates |
+| Template variable | `{{ .Component.* }}` | `{{ .ComponentConfig.* }}` |
+| Stack location | `components.<type>.<component>` | `components.terraform.<component>` |
+
+:::tip
+Use `component:` for new custom commands. The `component_config:` approach continues to work for backward compatibility but is limited to Terraform components.
+:::
+
+### Example: Ansible Playbook Runner
+
+```yaml
+commands:
+  - name: ansible
+    description: "Run Ansible playbooks"
+    arguments:
+      - name: component
+        type: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack
+        required: true
+      - name: check
+        description: "Run in check mode (dry-run)"
+        type: bool
+    component:
+      type: ansible
+      base_path: components/ansible
+    steps:
+      - |
+        cd {{ .Component.vars.playbook_dir }}
+        ansible-playbook {{ .Component.vars.playbook }} \
+          -i {{ .Component.vars.inventory }} \
+          --extra-vars "env={{ .Component.vars.environment }}" \
+          {{ if .Flags.check }}--check{{ end }}
+```
+
+### Example: Kubernetes Manifest Deployer
+
+```yaml
+commands:
+  - name: manifest
+    description: "Apply Kubernetes manifests"
+    arguments:
+      - name: component
+        type: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack
+        required: true
+      - name: dry-run
+        type: bool
+    component:
+      type: manifest
+    steps:
+      - |
+        kubectl apply \
+          --context {{ .Component.vars.cluster_context }} \
+          --namespace {{ .Component.vars.namespace }} \
+          {{ if index .Flags "dry-run" }}--dry-run=client{{ end }} \
+          -f {{ .Component.vars.manifest_path }}
+```

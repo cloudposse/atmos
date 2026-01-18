@@ -1,0 +1,34 @@
+base_path: "."
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+components:
+  script:
+    base_path: "components/script"
+
+commands:
+  - name: script
+    description: "Run script components"
+    arguments:
+      - name: component
+        description: "Component name"
+        type: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: "Stack name"
+        semantic_type: stack
+        required: true
+    component:
+      type: script
+    steps:
+      - 'echo "Component: {{ .Component.component }}"'
+      - 'echo "Stack: {{ .Component.atmos_stack }}"'
+      - 'echo "App: {{ .Component.vars.app_name }}"'
+      - 'echo "Version: {{ .Component.vars.version }}"'
+      - 'echo "Replicas: {{ .Component.vars.replicas }}"'

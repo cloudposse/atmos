@@ -1767,3 +1767,290 @@ func TestWithStackValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestProcessCustomCommands(t *testing.T) {
+	tests := []struct {
+		name          string
+		commands      []schema.Command
+		topLevel      bool
+		expectedCmds  []string
+		expectedError bool
+	}{
+		{
+			name: "single command with no flags",
+			commands: []schema.Command{
+				{
+					Name:        "deploy",
+					Description: "Deploy the application",
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"deploy"},
+		},
+		{
+			name: "command with bool flag",
+			commands: []schema.Command{
+				{
+					Name:        "build",
+					Description: "Build the application",
+					Flags: []schema.CommandFlag{
+						{Name: "verbose", Type: "bool", Usage: "Enable verbose output"},
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"build"},
+		},
+		{
+			name: "command with string flag",
+			commands: []schema.Command{
+				{
+					Name:        "test",
+					Description: "Run tests",
+					Flags: []schema.CommandFlag{
+						{Name: "filter", Type: "string", Usage: "Filter pattern"},
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"test"},
+		},
+		{
+			name: "command with flag shorthand",
+			commands: []schema.Command{
+				{
+					Name:        "run",
+					Description: "Run the application",
+					Flags: []schema.CommandFlag{
+						{Name: "config", Shorthand: "c", Type: "string", Usage: "Config file"},
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"run"},
+		},
+		{
+			name: "command with bool flag shorthand",
+			commands: []schema.Command{
+				{
+					Name:        "check",
+					Description: "Check status",
+					Flags: []schema.CommandFlag{
+						{Name: "quiet", Shorthand: "q", Type: "bool", Usage: "Quiet mode"},
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"check"},
+		},
+		{
+			name: "command with default values",
+			commands: []schema.Command{
+				{
+					Name:        "configure",
+					Description: "Configure settings",
+					Flags: []schema.CommandFlag{
+						{Name: "timeout", Type: "string", Default: "30s", Usage: "Timeout duration"},
+						{Name: "debug", Type: "bool", Default: true, Usage: "Debug mode"},
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"configure"},
+		},
+		{
+			name: "multiple commands",
+			commands: []schema.Command{
+				{
+					Name:        "start",
+					Description: "Start the service",
+				},
+				{
+					Name:        "stop",
+					Description: "Stop the service",
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"start", "stop"},
+		},
+		{
+			name: "nested subcommands",
+			commands: []schema.Command{
+				{
+					Name:        "service",
+					Description: "Service commands",
+					Commands: []schema.Command{
+						{
+							Name:        "start",
+							Description: "Start the service",
+						},
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"service"},
+		},
+		{
+			name: "command with component",
+			commands: []schema.Command{
+				{
+					Name:        "deploy-app",
+					Description: "Deploy application",
+					Component: &schema.CommandComponent{
+						Type: "script",
+					},
+				},
+			},
+			topLevel:     false,
+			expectedCmds: []string{"deploy-app"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+
+			parentCmd := &cobra.Command{
+				Use:   "atmos",
+				Short: "Atmos CLI",
+			}
+
+			err := processCustomCommands(
+				schema.AtmosConfiguration{},
+				tt.commands,
+				parentCmd,
+				tt.topLevel,
+			)
+
+			if tt.expectedError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			// Verify expected commands were added.
+			for _, expectedCmd := range tt.expectedCmds {
+				found := false
+				for _, cmd := range parentCmd.Commands() {
+					if cmd.Name() == expectedCmd {
+						found = true
+						break
+					}
+				}
+				assert.True(t, found, "Expected command %q to be added", expectedCmd)
+			}
+		})
+	}
+}
+
+func TestFindTypedValue(t *testing.T) {
+	tests := []struct {
+		name          string
+		cmd           *schema.Command
+		argumentsData map[string]string
+		flagsData     map[string]any
+		semanticType  string
+		want          string
+	}{
+		{
+			name: "finds value in arguments by type",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "component", Type: "component"},
+					{Name: "stack", Type: "stack"},
+				},
+			},
+			argumentsData: map[string]string{
+				"component": "vpc",
+				"stack":     "dev",
+			},
+			flagsData:    map[string]any{},
+			semanticType: "component",
+			want:         "vpc",
+		},
+		{
+			name: "finds value in flags by semantic type",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "stack", SemanticType: "stack"},
+					{Name: "component", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData: map[string]any{
+				"stack":     "prod",
+				"component": "eks",
+			},
+			semanticType: "stack",
+			want:         "prod",
+		},
+		{
+			name: "returns empty when not found in arguments",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "name", Type: "string"},
+				},
+			},
+			argumentsData: map[string]string{"name": "test"},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "",
+		},
+		{
+			name: "returns empty when not found in flags",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "verbose", SemanticType: "bool"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"verbose": true},
+			semanticType:  "stack",
+			want:          "",
+		},
+		{
+			name: "handles non-string flag values",
+			cmd: &schema.Command{
+				Flags: []schema.CommandFlag{
+					{Name: "count", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{"count": 42},
+			semanticType:  "component",
+			want:          "",
+		},
+		{
+			name: "arguments take precedence over flags",
+			cmd: &schema.Command{
+				Arguments: []schema.CommandArgument{
+					{Name: "comp", Type: "component"},
+				},
+				Flags: []schema.CommandFlag{
+					{Name: "component", SemanticType: "component"},
+				},
+			},
+			argumentsData: map[string]string{"comp": "from-arg"},
+			flagsData:     map[string]any{"component": "from-flag"},
+			semanticType:  "component",
+			want:          "from-arg",
+		},
+		{
+			name:          "handles empty command",
+			cmd:           &schema.Command{},
+			argumentsData: map[string]string{},
+			flagsData:     map[string]any{},
+			semanticType:  "component",
+			want:          "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = NewTestKit(t)
+			got := findTypedValue(tt.cmd, tt.argumentsData, tt.flagsData, tt.semanticType)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
