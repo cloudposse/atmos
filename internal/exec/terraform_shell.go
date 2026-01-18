@@ -26,13 +26,13 @@ type shellConfig struct {
 
 // printShellDryRunInfo prints the shell configuration in dry-run mode.
 func printShellDryRunInfo(info *schema.ConfigAndStacksInfo, cfg *shellConfig) {
-	_ = ui.Writeln("Dry run mode: shell would be started with the following configuration:")
-	_ = ui.Writeln("  Component: " + info.ComponentFromArg)
-	_ = ui.Writeln("  Stack: " + info.Stack)
-	_ = ui.Writeln("  Working directory: " + cfg.workingDir)
-	_ = ui.Writeln("  Terraform workspace: " + info.TerraformWorkspace)
-	_ = ui.Writeln("  Component path: " + cfg.componentPath)
-	_ = ui.Writeln("  Varfile: " + cfg.varFile)
+	ui.Writeln("Dry run mode: shell would be started with the following configuration:")
+	ui.Writeln("  Component: " + info.ComponentFromArg)
+	ui.Writeln("  Stack: " + info.Stack)
+	ui.Writeln("  Working directory: " + cfg.workingDir)
+	ui.Writeln("  Terraform workspace: " + info.TerraformWorkspace)
+	ui.Writeln("  Component path: " + cfg.componentPath)
+	ui.Writeln("  Varfile: " + cfg.varFile)
 }
 
 // ExecuteTerraformShell starts an interactive shell configured for a terraform component.

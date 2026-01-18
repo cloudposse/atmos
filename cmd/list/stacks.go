@@ -145,7 +145,7 @@ func listStacksWithOptions(cmd *cobra.Command, args []string, opts *StacksOption
 		return err
 	}
 	if len(stacks) == 0 {
-		_ = ui.Info("No stacks found")
+		ui.Info("No stacks found")
 		return nil
 	}
 

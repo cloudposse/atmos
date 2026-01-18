@@ -184,7 +184,7 @@ func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType
 	}
 
 	if _, err := os.Stat(targetDir); os.IsNotExist(err) {
-		_ = ui.Warning(fmt.Sprintf("Directory does not exist: %s", targetDir))
+		ui.Warning(fmt.Sprintf("Directory does not exist: %s", targetDir))
 		return nil
 	}
 
@@ -192,12 +192,12 @@ func deleteSourceDirectory(atmosConfig *schema.AtmosConfiguration, componentType
 	confirmed, err := flags.PromptForConfirmation(fmt.Sprintf("Delete directory: %s?", targetDir), force)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrInteractiveNotAvailable) {
-			_ = ui.Warning("Use --force to delete in non-interactive mode")
+			ui.Warning("Use --force to delete in non-interactive mode")
 		}
 		return err
 	}
 	if !confirmed {
-		_ = ui.Info("Deletion cancelled")
+		ui.Info("Deletion cancelled")
 		return nil
 	}
 

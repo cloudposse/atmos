@@ -113,7 +113,7 @@ func (s *Service) Provision(
 			Err()
 	}
 
-	_ = ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", component))
+	ui.Info(fmt.Sprintf("Provisioning workdir for component '%s'", component))
 
 	// 1. Create .workdir/terraform/<stack>-<component>/ directory.
 	workdirPath, err := s.createWorkdirDirectory(atmosConfig, stack, component)
@@ -135,7 +135,7 @@ func (s *Service) Provision(
 	// 4. Store workdir path for terraform execution.
 	componentConfig[WorkdirPathKey] = workdirPath
 
-	_ = ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+	ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
 	return nil
 }
 
@@ -190,7 +190,7 @@ func (s *Service) copyLocalToWorkdir(
 			Err()
 	}
 
-	_ = ui.Info(fmt.Sprintf("Copying local component: %s", componentPath))
+	ui.Info(fmt.Sprintf("Copying local component: %s", componentPath))
 
 	// Copy to workdir.
 	if err := s.fs.CopyDir(componentPath, workdirPath); err != nil {
@@ -205,7 +205,7 @@ func (s *Service) copyLocalToWorkdir(
 	// Compute content hash.
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
-		_ = ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
 	}
 
 	now := time.Now()

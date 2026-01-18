@@ -109,7 +109,7 @@ func parseDuration(m map[string]any, key string) time.Duration {
 		if d, err := time.ParseDuration(v); err == nil {
 			return d
 		} else {
-			_ = ui.Warningf("invalid duration for %s: %q", key, v)
+			ui.Warningf("invalid duration for %s: %q", key, v)
 		}
 	}
 	return 0

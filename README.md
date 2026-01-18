@@ -27,6 +27,8 @@
 
 -->
 
+Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
+
 ## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/core-concepts/components) that you implement using [Terraform "root modules"](https://atmos.tools/core-concepts/components/terraform). Then tie everything together using [Stack](https://atmos.tools/core-concepts/stacks) configurations defined in YAML.
 
 Atmos can change how you think about the Terraform code you write to build your infrastructure. Atmos is a framework that simplifies complex cloud architectures and DevOps workflows into intuitive CLI commands.
@@ -50,6 +52,7 @@ Atmos is extensible to accommodate any tooling, including enterprise-scale Terra
 
 
 ## Introduction
+
 
 [Atmos](https://atmos.tools) centralizes the DevOps chain and cloud automation/orchestration into a robust command-line tool,
 streamlining environments and workflows into straightforward CLI commands. Leveraging advanced hierarchical configurations,
@@ -154,32 +157,6 @@ Find all documentation at: [atmos.tools](https://atmos.tools)
 
 
 
-## Developer Tools
-
-### Testing Atmos in Geodesic
-
-The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos changes inside a Geodesic container without rebuilding the entire Geodesic image.
-
-**Usage:**
-```bash
-./scripts/test-geodesic-prebuilt.sh <path-to-infrastructure>
-```
-
-**Example:**
-```bash
-./scripts/test-geodesic-prebuilt.sh ~/Dev/cloudposse/infra/infra-live
-```
-
-**What it does:**
-1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
-2. Launches a Geodesic container with:
-   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
-   - Your infrastructure directory mounted to `/workspace`
-   - Atmos-managed AWS credentials from `~/.config/atmos/` (following XDG conventions)
-   - Standard XDG environment variables configured
-
-This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
-
 ## ✨ Contributing
 
 This project is under active development, and we encourage contributions from our community.
@@ -254,7 +231,7 @@ All other trademarks referenced herein are the property of their respective owne
 
 
 ---
-Copyright © 2017-2025 [Cloud Posse, LLC](https://cpco.io/copyright)
+Copyright © 2017-2026 [Cloud Posse, LLC](https://cpco.io/copyright)
 
 
 <a href="https://cloudposse.com/readme/footer/link?utm_source=github&utm_medium=readme&utm_campaign=cloudposse/atmos&utm_content=readme_footer_link"><img alt="README footer" src="https://cloudposse.com/readme/footer/img"/></a>

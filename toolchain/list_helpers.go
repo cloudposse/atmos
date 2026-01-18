@@ -42,7 +42,7 @@ func handleToolVersionsLoadError(err error, toolVersionsFile string) error {
 			"```shell\n" +
 			"atmos toolchain list\n" +
 			"```\n"
-		_ = ui.MarkdownMessage(message)
+		ui.MarkdownMessage(message)
 		return nil
 	}
 	return fmt.Errorf("failed to load .tool-versions: %w", err)
@@ -60,7 +60,7 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 		// Resolve tool information.
 		id, err := resolveToolInfo(toolName, toolVersions, installer)
 		if err != nil {
-			_ = ui.Warningf("Could not resolve tool '%s': %v", toolName, err)
+			ui.Warningf("Could not resolve tool '%s': %v", toolName, err)
 			continue
 		}
 

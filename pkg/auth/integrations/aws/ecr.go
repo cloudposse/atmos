@@ -99,7 +99,7 @@ func (e *ECRIntegration) Execute(ctx context.Context, creds types.ICredentials) 
 
 	// Log success with actual expiration time.
 	expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
-	_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registryURL, expiresIn))
+	ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registryURL, expiresIn))
 	log.Debug("ECR login successful", "registry", registryURL, "expires_at", result.ExpiresAt)
 
 	return nil

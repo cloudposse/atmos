@@ -71,8 +71,8 @@ func updateToolVersionsAfterRemoval(toolVersions *ToolVersions, tool string, new
 // displayRemovalSuccess displays a success message based on what was removed.
 func displayRemovalSuccess(result removeResult, filePath string) {
 	if result.removedAll {
-		_ = ui.Successf("Removed %s from %s", result.tool, filePath)
+		ui.Successf("Removed %s from %s", result.tool, filePath)
 	} else {
-		_ = ui.Successf("Removed %s@%s from %s", result.tool, result.version, filePath)
+		ui.Successf("Removed %s@%s from %s", result.tool, result.version, filePath)
 	}
 }

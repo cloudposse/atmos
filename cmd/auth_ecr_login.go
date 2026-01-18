@@ -127,7 +127,7 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 
 		// Log success with actual expiration time from ECR token.
 		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
-		_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
+		ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
 	}
 
 	// Set DOCKER_CONFIG so downstream Docker commands use the same config location.

@@ -22,12 +22,12 @@ func CleanToolsAndCaches(toolsDir, cacheDir, tempCacheDir string) error {
 	cacheCount, _ := cleanDir(cacheDir, false) // warnings only
 	tempCacheCount, _ := cleanDir(tempCacheDir, false)
 
-	_ = ui.Successf("Deleted **%d** files/directories from %s", toolsCount, toolsDir)
+	ui.Successf("Deleted **%d** files/directories from %s", toolsCount, toolsDir)
 	if cacheCount > 0 {
-		_ = ui.Successf("Deleted **%d** files from %s cache", cacheCount, cacheDir)
+		ui.Successf("Deleted **%d** files from %s cache", cacheCount, cacheDir)
 	}
 	if tempCacheCount > 0 {
-		_ = ui.Successf("Deleted **%d** files from %s cache", tempCacheCount, tempCacheDir)
+		ui.Successf("Deleted **%d** files from %s cache", tempCacheCount, tempCacheDir)
 	}
 
 	return nil
@@ -45,7 +45,7 @@ func cleanDir(path string, fatal bool) (int, error) {
 		if fatal {
 			return 0, fmt.Errorf("%w: failed to count files in %s: %w", ErrFileOperation, path, err)
 		}
-		_ = ui.Warning(msg)
+		ui.Warning(msg)
 	}
 
 	err = os.RemoveAll(path)
@@ -54,7 +54,7 @@ func cleanDir(path string, fatal bool) (int, error) {
 		if fatal {
 			return count, fmt.Errorf("%w: failed to delete %s: %w", ErrFileOperation, path, err)
 		}
-		_ = ui.Warning(msg)
+		ui.Warning(msg)
 	}
 
 	return count, nil

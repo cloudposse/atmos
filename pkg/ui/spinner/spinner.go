@@ -31,7 +31,7 @@ func ExecWithSpinner(progressMsg, completedMsg string, operation func() error) e
 		if err != nil {
 			return err
 		}
-		_ = ui.Success(completedMsg)
+		ui.Success(completedMsg)
 		return nil
 	}
 
@@ -145,9 +145,9 @@ func ExecWithSpinnerDynamic(progressMsg string, operation func() (string, error)
 		}
 		// Show the dynamic completion message if provided, otherwise use progress message.
 		if completedMsg != "" {
-			_ = ui.Success(completedMsg)
+			ui.Success(completedMsg)
 		} else {
-			_ = ui.Success(progressMsg)
+			ui.Success(progressMsg)
 		}
 		return nil
 	}
@@ -318,11 +318,11 @@ func (s *Spinner) Stop() {
 // Success is idempotent and safe to call multiple times.
 func (s *Spinner) Success(message string) {
 	if !s.isTTY {
-		_ = ui.Success(message)
+		ui.Success(message)
 		return
 	}
 	if s.program == nil {
-		_ = ui.Success(message)
+		ui.Success(message)
 		return
 	}
 	s.program.Send(manualStopMsg{message: message, success: true})
@@ -334,11 +334,11 @@ func (s *Spinner) Success(message string) {
 // Error is idempotent and safe to call multiple times.
 func (s *Spinner) Error(message string) {
 	if !s.isTTY {
-		_ = ui.Error(message)
+		ui.Error(message)
 		return
 	}
 	if s.program == nil {
-		_ = ui.Error(message)
+		ui.Error(message)
 		return
 	}
 	s.program.Send(manualStopMsg{message: message, success: false})

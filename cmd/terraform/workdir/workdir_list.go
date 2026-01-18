@@ -91,7 +91,7 @@ func printListYAML(workdirs []WorkdirInfo) error {
 
 func printListTable(workdirs []WorkdirInfo) {
 	if len(workdirs) == 0 {
-		_ = ui.Writeln("No workdirs found")
+		ui.Writeln("No workdirs found")
 		return
 	}
 
@@ -129,7 +129,7 @@ func printListTable(workdirs []WorkdirInfo) {
 			return lipgloss.NewStyle().Padding(0, 2, 0, 0)
 		})
 
-	_ = ui.Writeln(t.String())
+	ui.Writeln(t.String())
 }
 
 func init() {

@@ -62,7 +62,7 @@ func RunListInstalledAtmosVersions(currentVersion string) error {
 			"```shell\n" +
 			"atmos version list\n" +
 			"```\n"
-		_ = ui.MarkdownMessage(message)
+		ui.MarkdownMessage(message)
 		return nil
 	}
 
@@ -193,7 +193,7 @@ func printAtmosVersionTable(rows []atmosVersionRow) {
 		widths[1], headers[1],
 		widths[2], headers[2],
 		widths[3], headers[3])
-	_ = ui.Writeln(headerStyle.Render(headerLine))
+	ui.Writeln(headerStyle.Render(headerLine))
 
 	// Print rows.
 	activeStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
@@ -208,7 +208,7 @@ func printAtmosVersionTable(rows []atmosVersionRow) {
 			widths[1], row.version,
 			widths[2], row.installDate,
 			widths[3], row.size)
-		_ = ui.Writeln(line)
+		ui.Writeln(line)
 	}
 }
 
@@ -226,7 +226,7 @@ func RunList() error {
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		_ = ui.Writeln("No tools configured in .tool-versions file")
+		ui.Writeln("No tools configured in .tool-versions file")
 		return nil
 	}
 
@@ -255,7 +255,7 @@ func RunList() error {
 	t := createAndConfigureTable(columns, tableRows)
 
 	// Print the table with conditional styling.
-	_ = ui.Writeln(renderTableWithConditionalStyling(&t, rows))
+	ui.Writeln(renderTableWithConditionalStyling(&t, rows))
 
 	return nil
 }

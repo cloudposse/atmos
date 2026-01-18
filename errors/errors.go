@@ -449,6 +449,9 @@ var (
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
 
+	// Packer configuration errors.
+	ErrMissingPackerBasePath = errors.New("packer base path is required")
+
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")
 	ErrInvalidPackerVars     = errors.New("invalid packer vars section")

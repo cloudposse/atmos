@@ -263,13 +263,13 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	}
 
 	if len(toolVersions.Tools) == 0 {
-		_ = ui.Writef("No tools found in %s\n", toolVersionsPath)
+		ui.Writef("No tools found in %s\n", toolVersionsPath)
 		return nil
 	}
 
 	installedTools := collectInstalledTools(toolVersions, installer)
 	if len(installedTools) == 0 {
-		_ = ui.Writeln("No tools to uninstall")
+		ui.Writeln("No tools to uninstall")
 		return nil
 	}
 
@@ -286,14 +286,14 @@ func collectInstalledTools(toolVersions *ToolVersions, installer *Installer) []u
 		for _, version := range versions {
 			owner, repo, err := installer.ParseToolSpec(tool)
 			if err != nil {
-				_ = ui.Warningf("Skipping invalid tool specification: %s", tool)
+				ui.Warningf("Skipping invalid tool specification: %s", tool)
 				continue
 			}
 			_, err = installer.FindBinaryPath(owner, repo, version)
 			if err == nil {
 				installedTools = append(installedTools, uninstallToolInfo{tool, version, owner, repo})
 			} else {
-				_ = ui.Successf("Skipped %s/%s@%s (not installed)", owner, repo, version)
+				ui.Successf("Skipped %s/%s@%s (not installed)", owner, repo, version)
 			}
 		}
 	}
@@ -314,7 +314,7 @@ func processToolUninstalls(installedTools []uninstallToolInfo, installer *Instal
 		showToolUninstallProgress(i, len(installedTools), msg, &spinner, &progressBar)
 	}
 	resetLine()
-	_ = ui.Writeln("")
+	ui.Writeln("")
 
 	return result
 }
@@ -342,7 +342,7 @@ func showToolUninstallProgress(index, total int, msg string, spinner *bspinner.M
 	percent := float64(index+1) / float64(total)
 	bar := progressBar.ViewAs(percent)
 	resetLine()
-	_ = ui.Writeln(msg)
+	ui.Writeln(msg)
 	for j := 0; j < maxSpinnerUpdates; j++ {
 		printProgressBar(fmt.Sprintf(progressBarFormat, spinner.View(), bar))
 		*spinner, _ = spinner.Update(bspinner.TickMsg{})
@@ -388,7 +388,8 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 
 	// Check if the tool directory exists.
 	if _, err := os.Stat(toolDir); os.IsNotExist(err) {
-		return ui.Successf("Tool %s/%s is not installed", owner, repo)
+		ui.Successf("Tool %s/%s is not installed", owner, repo)
+		return nil
 	}
 
 	versionsToUninstall, err := getVersionsToUninstall(toolDir)
@@ -397,20 +398,21 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 	}
 
 	if len(versionsToUninstall) == 0 {
-		return ui.Successf("No versions of %s/%s are installed", owner, repo)
+		ui.Successf("No versions of %s/%s are installed", owner, repo)
+		return nil
 	}
 
 	// Only show the "Uninstalling all versions" message if there's more than 1 version.
 	if len(versionsToUninstall) > 1 {
-		_ = ui.Writef("Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
+		ui.Writef("Uninstalling all versions of %s/%s (%d versions)\n", owner, repo, len(versionsToUninstall))
 	}
 
 	// Uninstall each version.
 	for _, version := range versionsToUninstall {
 		if err := uninstallSingleTool(installer, owner, repo, version, false); err != nil {
-			_ = ui.Errorf("Failed to uninstall %s/%s@%s: %v", owner, repo, version, err)
+			ui.Errorf("Failed to uninstall %s/%s@%s: %v", owner, repo, version, err)
 		} else {
-			_ = ui.Successf("Uninstalled %s/%s@%s", owner, repo, version)
+			ui.Successf("Uninstalled %s/%s@%s", owner, repo, version)
 		}
 	}
 
@@ -425,7 +427,7 @@ func uninstallAllVersionsOfTool(installer *Installer, owner, repo string) error 
 
 	// Only show summary if there are multiple versions.
 	if len(versionsToUninstall) > 1 {
-		return ui.Successf("Uninstalled all versions of %s/%s", owner, repo)
+		ui.Successf("Uninstalled all versions of %s/%s", owner, repo)
 	}
 	return nil
 }

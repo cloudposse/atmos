@@ -29,11 +29,11 @@ func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack strin
 
 	// Check if workdir exists.
 	if _, err := os.Stat(workdirPath); os.IsNotExist(err) {
-		_ = ui.Info(fmt.Sprintf("No workdir found for component '%s' in stack '%s'", component, stack))
+		ui.Info(fmt.Sprintf("No workdir found for component '%s' in stack '%s'", component, stack))
 		return nil
 	}
 
-	_ = ui.Info(fmt.Sprintf("Cleaning workdir for component '%s' in stack '%s'", component, stack))
+	ui.Info(fmt.Sprintf("Cleaning workdir for component '%s' in stack '%s'", component, stack))
 
 	if err := os.RemoveAll(workdirPath); err != nil {
 		return errUtils.Build(errUtils.ErrWorkdirClean).
@@ -45,7 +45,7 @@ func CleanWorkdir(atmosConfig *schema.AtmosConfiguration, component, stack strin
 			Err()
 	}
 
-	_ = ui.Success(fmt.Sprintf("Cleaned workdir: %s", workdirPath))
+	ui.Success(fmt.Sprintf("Cleaned workdir: %s", workdirPath))
 	return nil
 }
 
@@ -62,11 +62,11 @@ func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 
 	// Check if workdir base exists.
 	if _, err := os.Stat(workdirBase); os.IsNotExist(err) {
-		_ = ui.Info("No workdirs found to clean")
+		ui.Info("No workdirs found to clean")
 		return nil
 	}
 
-	_ = ui.Info("Cleaning all workdirs")
+	ui.Info("Cleaning all workdirs")
 
 	if err := os.RemoveAll(workdirBase); err != nil {
 		return errUtils.Build(errUtils.ErrWorkdirClean).
@@ -76,7 +76,7 @@ func CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error {
 			Err()
 	}
 
-	_ = ui.Success(fmt.Sprintf("Cleaned all workdirs: %s", workdirBase))
+	ui.Success(fmt.Sprintf("Cleaned all workdirs: %s", workdirBase))
 	return nil
 }
 

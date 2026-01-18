@@ -384,7 +384,7 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
-			_ = ui.Infof("Executing command: `atmos %s`", command)
+			ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")

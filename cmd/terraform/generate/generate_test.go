@@ -4,8 +4,11 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestGenerateCmd(t *testing.T) {
@@ -375,4 +378,69 @@ func TestFilesParserFlags(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestPlanfileValidation tests validation errors in the planfile command.
+func TestPlanfileValidation(t *testing.T) {
+	t.Run("missing component returns error", func(t *testing.T) {
+		// Reset viper to avoid state pollution.
+		v := viper.New()
+		v.Set("stack", "test-stack")
+
+		// Bind the parser to the fresh viper instance.
+		err := planfileParser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "planfile"}
+		planfileParser.RegisterFlags(cmd)
+
+		// Execute RunE with no component argument.
+		// In non-TTY environment, the prompt returns ErrInteractiveModeNotAvailable
+		// which is swallowed, leaving component empty and triggering ErrMissingComponent.
+		err = planfileCmd.RunE(cmd, []string{})
+		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
+	})
+}
+
+// TestBackendValidation tests validation errors in the backend command.
+func TestBackendValidation(t *testing.T) {
+	t.Run("missing component returns error", func(t *testing.T) {
+		// Reset viper to avoid state pollution.
+		v := viper.New()
+		v.Set("stack", "test-stack")
+
+		// Bind the parser to the fresh viper instance.
+		err := backendParser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "backend"}
+		backendParser.RegisterFlags(cmd)
+
+		// Execute RunE with no component argument.
+		err = backendCmd.RunE(cmd, []string{})
+		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
+	})
+}
+
+// TestVarfileValidation tests validation errors in the varfile command.
+func TestVarfileValidation(t *testing.T) {
+	t.Run("missing component returns error", func(t *testing.T) {
+		// Reset viper to avoid state pollution.
+		v := viper.New()
+		v.Set("stack", "test-stack")
+
+		// Bind the parser to the fresh viper instance.
+		err := varfileParser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "varfile"}
+		varfileParser.RegisterFlags(cmd)
+
+		// Execute RunE with no component argument.
+		err = varfileCmd.RunE(cmd, []string{})
+		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
+	})
 }
