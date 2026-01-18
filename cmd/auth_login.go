@@ -21,6 +21,7 @@ import (
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
@@ -219,7 +220,7 @@ func displayAuthSuccess(whoami *authTypes.WhoamiInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	fmt.Fprintf(os.Stderr, "%s\n\n", t)
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n", t)
 }
 
 func init() {

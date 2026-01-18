@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envpkg "github.com/cloudposse/atmos/pkg/env"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -56,18 +57,18 @@ func ExecuteShellCommand(
 	cmd.Env = cmdEnv
 	cmd.Dir = dir
 	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
+	cmd.Stdout = ioLayer.MaskWriter(os.Stdout)
 
 	if runtime.GOOS == "windows" && redirectStdError == "/dev/null" {
 		redirectStdError = "NUL"
 	}
 
 	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
 	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = os.Stdout
+		cmd.Stderr = ioLayer.MaskWriter(os.Stdout)
 	} else if redirectStdError == "" {
-		cmd.Stderr = os.Stderr
+		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {
@@ -82,7 +83,7 @@ func ExecuteShellCommand(
 			}
 		}(f)
 
-		cmd.Stderr = f
+		cmd.Stderr = ioLayer.MaskWriter(f)
 	}
 	log.Debug("Executing", "command", cmd.String())
 
@@ -142,7 +143,7 @@ func ExecuteShell(
 		return nil
 	}
 
-	return u.ShellRunner(command, name, dir, mergedEnv, os.Stdout)
+	return u.ShellRunner(command, name, dir, mergedEnv, ioLayer.MaskWriter(os.Stdout))
 }
 
 // parseEnvVarKey extracts the key from an environment variable string (KEY=value).
@@ -509,11 +510,11 @@ func printShellEnterMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s %s", identityName, providerStyle.Render(fmt.Sprintf("(%s)", providerName)))
 	}
 
-	fmt.Fprintf(os.Stderr, "\n%s %s\n",
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n",
 		headerStyle.Render("→ Entering Atmos shell with identity:"),
 		identityStyle.Render(identityDisplay))
 
-	fmt.Fprintf(os.Stderr, "%s\n\n",
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "%s\n\n",
 		hintStyle.Render("  Type 'exit' to return to your normal shell"))
 }
 
@@ -531,7 +532,7 @@ func printShellExitMessage(identityName, providerName string) {
 		identityDisplay = fmt.Sprintf("%s (%s)", identityName, providerName)
 	}
 
-	fmt.Fprintf(os.Stderr, "\n%s %s\n\n",
+	fmt.Fprintf(ioLayer.MaskWriter(os.Stderr), "\n%s %s\n\n",
 		headerStyle.Render("← Exited Atmos shell for identity:"),
 		identityStyle.Render(identityDisplay))
 }

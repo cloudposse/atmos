@@ -17,6 +17,12 @@ Theme-aware Terminal UI system expert. Use for developing UI components, refacto
 
 **Use when:** Working with theme system, TUI components, or terminal output formatting.
 
+### example-creator
+
+Expert in creating Atmos examples with proper structure, documentation, mock components, and CI testing integration.
+
+**Use when:** Creating new examples/demos, adding mock components, writing test cases for examples, or updating documentation with EmbedFile components.
+
 ## Strategic Approach
 
 As Atmos grows, we create focused agents for each major subsystem. This scales development velocity through specialized
