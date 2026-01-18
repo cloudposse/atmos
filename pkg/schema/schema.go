@@ -368,6 +368,8 @@ type AtmosSettings struct {
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+	// OCI Registry Authentication settings
+	OCI OCISettings `yaml:"oci,omitempty" json:"oci,omitempty" mapstructure:"oci"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
@@ -376,6 +378,16 @@ type TelemetrySettings struct {
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
 	Logging  bool   `yaml:"logging" json:"logging" mapstructure:"logging"`
+}
+
+// OCISettings contains OCI Registry Authentication configuration.
+type OCISettings struct {
+	GithubToken       string `yaml:"github_token,omitempty" json:"github_token,omitempty" mapstructure:"github_token"`
+	AzureClientID     string `yaml:"azure_client_id,omitempty" json:"azure_client_id,omitempty" mapstructure:"azure_client_id"`
+	AzureClientSecret string `yaml:"azure_client_secret,omitempty" json:"azure_client_secret,omitempty" mapstructure:"azure_client_secret"`
+	AzureTenantID     string `yaml:"azure_tenant_id,omitempty" json:"azure_tenant_id,omitempty" mapstructure:"azure_tenant_id"`
+	AzureCLIAuth      string `yaml:"azure_cli_auth,omitempty" json:"azure_cli_auth,omitempty" mapstructure:"azure_cli_auth"`
+	DockerConfig      string `yaml:"docker_config,omitempty" json:"docker_config,omitempty" mapstructure:"docker_config"`
 }
 
 type Docs struct {
