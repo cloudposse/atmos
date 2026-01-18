@@ -97,11 +97,11 @@ func TestPathCommand_RunE(t *testing.T) {
 
 		// Call RunE - will return error if no tools are installed.
 		// This exercises:
-		// - Line 20: Get Viper
-		// - Line 21-23: Bind flags to Viper
-		// - Line 30-32: Get flag values
-		// - Line 34-39: Format selection logic (should be "github")
-		// - Line 41: Call EmitEnv
+		// - Line 20: Get Viper.
+		// - Line 21-23: Bind flags to Viper.
+		// - Line 30-32: Get flag values.
+		// - Line 34-39: Format selection logic (should be "github").
+		// - Line 41: Call EmitEnv.
 		err := pathCmd.RunE(pathCmd, []string{})
 
 		// Expect ErrToolNotFound since no tools are installed.

@@ -152,8 +152,7 @@ func TestToolPathStruct(t *testing.T) {
 	assert.Equal(t, "/home/user/.tools/terraform/1.5.0/bin", tp.Path)
 }
 
-// TestBuildPathEntriesWithLocator_SuccessWithInstalledTools tests the success path
-// when tools are installed and can be resolved.
+// TestBuildPathEntriesWithLocator_SuccessWithInstalledTools tests the success path when tools are installed and can be resolved.
 func TestBuildPathEntriesWithLocator_SuccessWithInstalledTools(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
