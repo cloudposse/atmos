@@ -1,0 +1,141 @@
+---
+slug: terraform-all-dependency-order
+title: "Dependency-Ordered Execution for Terraform --all Flag"
+authors: [osterman]
+tags: [feature]
+---
+
+The `--all` flag now executes Terraform components in dependency order. Run `atmos terraform apply --all -s ue2-dev` and components are automatically processed based on their `depends_on` relationships.
+
+<!--truncate-->
+
+## What Changed
+
+The `--all` flag for terraform commands now respects component dependencies defined in your stack configurations. Components are executed in topological order, ensuring dependencies are processed before dependents.
+
+```bash
+# Components execute in dependency order
+$ atmos terraform apply --all -s ue2-dev
+
+Executing: atmos terraform apply vpc -s ue2-dev
+Executing: atmos terraform apply rds -s ue2-dev      # depends on vpc
+Executing: atmos terraform apply eks -s ue2-dev      # depends on vpc
+Executing: atmos terraform apply app -s ue2-dev      # depends on rds, eks
+```
+
+Previously, `--all` processed components in an arbitrary order, which could cause failures when a component was applied before its dependencies.
+
+## Why This Matters
+
+### Reliable Infrastructure Deployments
+
+When deploying a complete environment, component order matters. A database component that references a VPC's subnet IDs will fail if the VPC hasn't been created yet. Dependency ordering eliminates these race conditions.
+
+```yaml
+# stacks/ue2-dev.yaml
+components:
+  terraform:
+    rds:
+      settings:
+        depends_on:
+          - component: vpc
+    eks:
+      settings:
+        depends_on:
+          - component: vpc
+    app:
+      settings:
+        depends_on:
+          - component: rds
+          - component: eks
+```
+
+### Destroy in Reverse Order
+
+The `destroy` command automatically reverses the dependency order, ensuring dependents are destroyed before their dependencies:
+
+```bash
+$ atmos terraform destroy --all -s ue2-dev
+
+Executing: atmos terraform destroy app -s ue2-dev    # destroyed first
+Executing: atmos terraform destroy eks -s ue2-dev
+Executing: atmos terraform destroy rds -s ue2-dev
+Executing: atmos terraform destroy vpc -s ue2-dev    # destroyed last
+```
+
+### Circular Dependency Detection
+
+The system detects circular dependencies and fails fast with a clear error message:
+
+```bash
+$ atmos terraform apply --all -s ue2-dev
+
+Error: circular dependency detected: vpc -> rds -> app -> vpc
+```
+
+## How It Works
+
+### Dependency Graph Construction
+
+When you run a command with `--all`, Atmos:
+
+1. **Discovers components** - Finds all Terraform components in the specified stack
+2. **Builds dependency graph** - Parses `depends_on` settings to create a directed acyclic graph (DAG)
+3. **Topological sort** - Orders components so dependencies come before dependents
+4. **Executes in order** - Runs the terraform command for each component sequentially
+
+### Cross-Stack Dependencies
+
+Dependencies can reference components in other stacks:
+
+```yaml
+components:
+  terraform:
+    app:
+      settings:
+        depends_on:
+          - component: vpc
+            stack: ue2-network  # Different stack
+```
+
+### Dry Run Support
+
+Preview execution order without making changes:
+
+```bash
+$ atmos terraform apply --all -s ue2-dev --dry-run
+
+Would execute: atmos terraform apply vpc -s ue2-dev
+Would execute: atmos terraform apply rds -s ue2-dev
+Would execute: atmos terraform apply eks -s ue2-dev
+Would execute: atmos terraform apply app -s ue2-dev
+```
+
+## Usage
+
+The `--all` flag requires a stack to be specified:
+
+```bash
+# Apply all components in a stack
+atmos terraform apply --all -s ue2-dev
+
+# Plan all components
+atmos terraform plan --all -s ue2-prod
+
+# Destroy all components (reverse order)
+atmos terraform destroy --all -s ue2-staging
+```
+
+### Combining with Queries
+
+Filter which components to include using the `--query` flag:
+
+```bash
+# Apply only components matching a query
+atmos terraform apply --all -s ue2-dev --query '.settings.team == "platform"'
+```
+
+## Get Involved
+
+- Share your feedback in the [Atmos Community Slack](https://cloudposse.com/slack)
+- [Report issues](https://github.com/cloudposse/atmos/issues) on GitHub
