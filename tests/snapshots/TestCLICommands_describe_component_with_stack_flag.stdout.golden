@@ -21,8 +21,10 @@ atmos_cli_config:
       base_path: components/helmfile
       use_eks: true
       kubeconfig_path: /dev/shm
-      helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-      cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+      helm_aws_profile_pattern: ""
+      cluster_name_pattern: ""
+      cluster_name_template: '{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster'
+      cluster_name: ""
       command: ""
     packer:
       base_path: ""
