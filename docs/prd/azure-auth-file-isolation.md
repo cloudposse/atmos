@@ -2,11 +2,11 @@
 
 ## Executive Summary
 
-This document defines the implementation of Azure authentication file isolation following the [Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md). Azure must implement the same XDG-compliant credential isolation pattern as [AWS](./aws-auth-file-isolation.md) to ensure consistency across all cloud providers.
+This document defines the implementation of Azure authentication file isolation following the [Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md). Unlike AWS (which only supports XDG paths), Azure implements a **dual-path strategy** to balance simplicity with isolation needs.
 
 **Status:** 🚧 **Planned** - This PRD defines the implementation plan for Azure file isolation.
 
-**Goal:** Migrate Azure authentication from writing to `~/.azure/` (user's directory) to `~/.config/atmos/azure/` (Atmos-managed directory) for credential isolation, clean logout, and XDG compliance.
+**Goal:** Provide Azure authentication with **dual-path support**: `~/.azure/` (default, shared with Azure CLI) for simplicity, and `~/.config/atmos/azure/` (opt-in via `files.base_path`) for users who need credential isolation from personal accounts.
 
 ## Problem Statement
 
@@ -33,41 +33,34 @@ Atmos authentication was designed with a security model that protects developer'
 
 The AWS authentication implementation successfully implements this model using XDG-compliant paths and environment variable control. However, Azure authentication currently writes to user's default directories.
 
-### Current Azure Behavior (Incorrect)
+### Current Azure Behavior (Default Path)
 
-**Files Modified:**
+**Files Used:**
 - `~/.azure/msal_token_cache.json` - Azure CLI MSAL cache (shared with user's manual `az login`)
 - `~/.azure/azureProfile.json` - Azure subscription configuration (shared with user's `az` commands)
 
-**Problems:**
-1. **Personal hobby account broken**: Atmos overwrites files the developer manually configured with `az login` for their personal Azure subscription
-2. **Can't clean logout**: `atmos auth logout` deletes developer's personal Azure CLI credentials for hobby projects
-3. **Work contamination**: Personal hobby account credentials leak into enterprise Terraform runs
-4. **Security model violation**: Multiple enterprise identities can potentially access each other's credentials
-5. **Not XDG compliant**: Uses hardcoded `~/.azure` instead of XDG config directory
-6. **Inconsistent with AWS**: Different pattern from established AWS implementation
+**Default Path Benefits:**
+- **Simplicity**: Credentials work with both `az` CLI and Atmos without configuration
+- **Familiarity**: Same behavior as native Azure CLI - developers know what to expect
+- **CI/CD friendly**: Service principals and OIDC don't need file management
 
-**Real Impact on Developers:**
+**When Isolation is Needed:**
+
+For developers who need to keep personal Azure accounts separate from Atmos-managed work accounts, the default `~/.azure/` path may cause conflicts:
 
 ```bash
 # Developer's personal setup for hobby projects
 $ az login  # Personal Azure subscription for side projects
 # Credentials stored in: ~/.azure/msal_token_cache.json
 
-# Developer starts using Atmos for work
-$ atmos auth login customer-a-azure  # ❌ OVERWRITES ~/.azure/ files!
+# Without isolation, Atmos work credentials overwrite personal credentials
+$ atmos auth login customer-a-azure  # Overwrites ~/.azure/ files
 
-# Personal hobby project now broken
-$ az account show  # ❌ Shows customer-a instead of personal account
-
-# Logout from work
-$ atmos auth logout customer-a-azure  # ❌ DELETES personal credentials too!
-
-# Personal hobby account is gone
-$ az account show  # ❌ No longer logged in - must re-login manually
+# Personal hobby project credentials replaced
+$ az account show  # Shows customer-a instead of personal account
 ```
 
-This is unacceptable. Developers should be able to maintain their personal Azure hobby accounts alongside Atmos-managed enterprise accounts without interference.
+**Solution:** Opt-in to XDG paths via `files.base_path: "~/.config/atmos/azure"` for credential isolation. See "Path Strategy: Dual-Path Support" section below.
 
 ### Azure SDK Environment Variable Support
 
@@ -109,12 +102,13 @@ AZURE_CONFIG_DIR=~/.config/atmos/azure/azure-oidc
 
 ### Pattern to Follow
 
-Azure must implement the same file isolation pattern as AWS:
+Azure implements a **dual-path strategy** (unlike AWS which only supports XDG paths):
 
-- **Isolated storage**: `~/.config/atmos/azure/{provider-name}/` (XDG-compliant)
-- **Environment control**: `AZURE_CONFIG_DIR` redirects SDK to Atmos paths
-- **Clean logout**: Delete provider directory without touching user's `~/.azure/` files
-- **Multi-provider**: Multiple Azure providers coexist in separate directories
+- **Default path**: `~/.azure/` - Shared with Azure CLI for simplicity
+- **Opt-in XDG path**: `~/.config/atmos/azure/{provider-name}/` via `files.base_path`
+- **Environment control**: `AZURE_CONFIG_DIR` redirects SDK to chosen path
+- **Clean logout**: Delete provider directory (when using XDG paths)
+- **Multi-provider**: Multiple Azure providers coexist in separate directories (when using XDG paths)
 
 See **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** for requirements and **[AWS Authentication File Isolation](./aws-auth-file-isolation.md)** for reference implementation.
 
@@ -122,18 +116,18 @@ See **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation
 
 ### Primary Goals
 
-1. **Match AWS isolation pattern**: Use identical architecture for consistency
-2. **XDG compliance**: Follow [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
-3. **Environment variable control**: Use Azure SDK environment variables to direct SDK to Atmos-managed files
-4. **Clean logout**: Delete provider directory to remove all traces
+1. **Dual-path support**: Support both `~/.azure/` (default) and XDG paths (`~/.config/atmos/azure/`) as user choice
+2. **Azure CLI compatibility**: Default path works identically to native `az login` for simplicity
+3. **Environment variable control**: Use Azure SDK environment variables to direct SDK to chosen path
+4. **Optional credential isolation**: Users who need isolation can opt-in via `files.base_path`
 5. **Security model preservation**: Maintain shell session identity scoping
 
 ### Secondary Goals
 
-6. **Establish universal pattern**: This becomes the reference for GCP, GitHub, and all future providers
-7. **Provider configurability**: Support `files.base_path` for custom locations
-8. **Testing isolation**: Enable test hermetic isolation with environment overrides
-9. **Backward compatibility**: Continue reading from legacy paths as fallback with migration warnings
+6. **Provider configurability**: Support `files.base_path` for custom locations (enables XDG paths)
+7. **Testing isolation**: Enable test hermetic isolation with environment overrides
+8. **Clean logout**: Delete provider directory to remove all traces (when using XDG paths)
+9. **Multi-provider coexistence**: Multiple Azure providers coexist in separate directories (when using XDG paths)
 
 ## Related PRDs
 
@@ -938,62 +932,56 @@ Each cloud provider MUST define:
 | GCP (future) | `GOOGLE_APPLICATION_CREDENTIALS`<br/>`CLOUDSDK_CONFIG` | `GOOGLE_CLOUD_PROJECT`<br/>`GCP_PROJECT` | `GOOGLE_CLOUD_PROJECT`<br/>`GOOGLE_CLOUD_REGION` | `CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE` |
 | GitHub (future) | `GITHUB_TOKEN_FILE` (custom)<br/>`GH_CONFIG_DIR` | `GITHUB_TOKEN`<br/>`GH_TOKEN` | `GITHUB_ENTERPRISE_URL` | N/A |
 
-## Migration Strategy
+## Path Strategy: Dual-Path Support (Permanent)
 
-### Phase 1: Backward Compatibility (Current)
+Unlike AWS (which only supports XDG paths), Azure will **permanently support both paths** as a user choice:
 
-**Status Quo:**
-- Azure continues writing to `~/.azure/` directory
-- No XDG compliance
-- No isolation from user's manual configuration
+### Default Path: `~/.azure/` (Shared with Azure CLI)
 
-### Phase 2: Dual-Path Support (Migration Period)
+**When to use:**
+- Users who want simplicity - credentials work with both `az` CLI and Atmos
+- Users who don't need isolation between personal and work Azure accounts
+- CI/CD environments where credential isolation isn't a concern
 
-**Implementation:**
-1. **Write to new paths**: Always write credentials to `~/.config/atmos/azure/{provider}/`
-2. **Read from both paths**: Check Atmos-managed paths first, fall back to `~/.azure/` if not found
-3. **Warn on legacy usage**: Log warning when reading from `~/.azure/`:
-   ```
-   Using legacy Azure config path ~/.azure - credentials stored in legacy location.
-   Atmos now uses XDG-compliant paths for better isolation and security.
-   To migrate: Run 'atmos auth login' to re-authenticate and store credentials in the new location.
-   Legacy location: ~/.azure/msal_token_cache.json
-   New location: ~/.config/atmos/azure/azure-oidc/msal_token_cache.json
-   ```
+**Behavior:**
+- Credentials stored in `~/.azure/msal_token_cache.json` and `~/.azure/azureProfile.json`
+- Works identically to native `az login`
+- Atmos and `az` CLI share the same credentials
 
-**Migration Command (Optional):**
-```bash
-$ atmos auth migrate azure
+### Opt-In Path: `~/.config/atmos/azure/{provider}/` (XDG-Compliant)
 
-Migrating Azure credentials to XDG-compliant paths...
+**When to use:**
+- Users who need isolation between personal Azure accounts and Atmos-managed work accounts
+- Cloud practitioners managing multiple customer Azure subscriptions
+- Environments requiring strict credential separation
 
-Found legacy credentials:
-  - ~/.azure/msal_token_cache.json
-  - ~/.azure/azureProfile.json
-
-Migration options:
-  [1] Copy to new location (recommended - preserves existing setup)
-  [2] Move to new location (removes from ~/.azure)
-  [3] Skip migration (use legacy paths)
-
-Choice: 1
-
-Copying credentials to ~/.config/atmos/azure/azure-oidc/
-✓ Copied MSAL cache
-✓ Copied Azure profile
-
-Migration complete! Atmos will now use XDG-compliant paths.
-Your existing ~/.azure files remain unchanged.
+**Configuration:**
+```yaml
+auth:
+  providers:
+    azure-oidc:
+      kind: azure/device-code
+      spec:
+        tenant_id: "..."
+        files:
+          base_path: "~/.config/atmos/azure"  # Opt-in to XDG paths
 ```
 
-### Phase 3: XDG-Only (Future)
+**Behavior:**
+- Credentials stored in `~/.config/atmos/azure/{provider}/msal_token_cache.json`
+- User's `~/.azure/` directory never touched
+- Complete isolation from personal Azure accounts
 
-**Timeline:** TBD (after sufficient migration period)
+### Why Both Paths?
 
-**Changes:**
-1. Remove fallback to `~/.azure/` paths
-2. Remove migration warnings
-3. Update documentation to reflect XDG-only behavior
+| Use Case | Recommended Path | Rationale |
+|----------|------------------|-----------|
+| Simple setup, single Azure account | `~/.azure/` (default) | Works like native Azure CLI |
+| Multi-customer cloud operations | XDG paths (opt-in) | Physical file isolation per customer |
+| Developer with personal + work Azure | XDG paths (opt-in) | Keeps personal account untouched |
+| CI/CD with service principal | `~/.azure/` (default) | Simplicity, no file management needed |
+
+**Note:** This differs from AWS, which only supports XDG paths. Azure's default preserves compatibility with the native `az` CLI ecosystem while offering isolation for users who need it.
 
 ## Testing Strategy
 

@@ -33,6 +33,8 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return azureProviders.NewDeviceCodeProvider(name, config)
 	case "azure/oidc":
 		return azureProviders.NewOIDCProvider(name, config)
+	case "azure/service-principal":
+		return azureProviders.NewServicePrincipalProvider(name, config)
 	case "github/oidc":
 		return githubProviders.NewOIDCProvider(name, config)
 	case "mock":
