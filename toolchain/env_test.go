@@ -362,20 +362,19 @@ func TestEmitEnv_ErrorContainsHintForNoInstalledTools(t *testing.T) {
 		},
 	})
 
-	// This should error with a hint about installing tools.
+	// This should error with a hint about adding tools.
 	err := EmitEnv("bash", false, "")
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, ErrToolNotFound), "Error should wrap ErrToolNotFound")
 
-	// Check that hints contain the install command.
-	// Note: This hint comes from path_helpers.go when tools are defined in .tool-versions but not installed.
+	// Check that hints contain the add command.
 	hints := cockroachErrors.GetAllHints(err)
 	foundHint := false
 	for _, hint := range hints {
-		if strings.Contains(hint, "atmos toolchain install") {
+		if strings.Contains(hint, "atmos toolchain add") {
 			foundHint = true
 			break
 		}
 	}
-	assert.True(t, foundHint, "Error should contain hint about installing tools, hints: %v", hints)
+	assert.True(t, foundHint, "Error should contain hint about adding tools, hints: %v", hints)
 }

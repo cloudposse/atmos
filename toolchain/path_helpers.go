@@ -66,7 +66,7 @@ func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relative
 	if len(pathEntries) == 0 {
 		return nil, nil, errUtils.Build(ErrToolNotFound).
 			WithExplanation("no installed tools found from tool-versions file").
-			WithHint("Run 'atmos toolchain install' to install tools defined in .tool-versions").
+			WithHint("Run 'atmos toolchain add <tool@version>' to add and install tools").
 			Err()
 	}
 
