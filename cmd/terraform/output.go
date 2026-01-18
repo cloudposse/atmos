@@ -164,7 +164,7 @@ func executeGitHubOutput(outputs map[string]any, outputFile string, opts tfoutpu
 		path = ghactions.GetOutputPath()
 		if path == "" {
 			return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-				WithExplanation("--format=github requires GITHUB_OUTPUT environment variable to be set, or use --output-file to specify a file path.").
+				WithExplanation("`--format=github` requires `GITHUB_OUTPUT` environment variable to be set, or use `--output-file` to specify a file path.").
 				Err()
 		}
 	}
