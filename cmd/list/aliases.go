@@ -222,7 +222,7 @@ func renderAliasesWithFormat(aliases []AliasInfo, outputFormat string) error {
 	// Build column selector.
 	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
 	if err != nil {
-		return fmt.Errorf("error creating column selector: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCreateColumnSelector, err)
 	}
 
 	// Create renderer with format and execute.

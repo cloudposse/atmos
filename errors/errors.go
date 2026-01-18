@@ -385,6 +385,7 @@ var (
 	ErrInitializingCLIConfig        = errors.New("error initializing CLI config")
 	ErrDescribingStacks             = errors.New("error describing stacks")
 	ErrComponentNameRequired        = errors.New("component name is required")
+	ErrCreateColumnSelector         = errors.New("failed to create column selector")
 
 	// Version command errors.
 	ErrVersionDisplayFailed   = errors.New("failed to display version information")
