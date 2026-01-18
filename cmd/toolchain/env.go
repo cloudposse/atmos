@@ -2,6 +2,7 @@ package toolchain
 
 import (
 	"fmt"
+	"os"
 	"slices"
 
 	"github.com/spf13/cobra"
@@ -13,7 +14,7 @@ import (
 	"github.com/cloudposse/atmos/toolchain"
 )
 
-var supportedFormats = []string{"bash", "json", "dotenv", "fish", "powershell"}
+var supportedFormats = []string{"bash", "json", "dotenv", "fish", "powershell", "github"}
 
 var envParser *flags.StandardParser
 
@@ -34,8 +35,15 @@ var envCmd = &cobra.Command{
 		}
 
 		relativeFlag := v.GetBool("relative")
+		outputPath := v.GetString("output")
 
-		return toolchain.EmitEnv(format, relativeFlag)
+		// For github format, default to $GITHUB_PATH if --output not specified.
+		if format == "github" && outputPath == "" {
+			//nolint:forbidigo // GITHUB_PATH is a GitHub Actions system env var, not an Atmos config
+			outputPath = os.Getenv("GITHUB_PATH")
+		}
+
+		return toolchain.EmitEnv(format, relativeFlag, outputPath)
 	},
 }
 
@@ -43,8 +51,10 @@ func init() {
 	// Create parser with env-specific flags.
 	envParser = flags.NewStandardParser(
 		flags.WithStringFlag("format", "f", "bash", fmt.Sprintf("Output format: %v", supportedFormats)),
+		flags.WithStringFlag("output", "o", "", "Append output to file (default: stdout, or $GITHUB_PATH for github format)"),
 		flags.WithBoolFlag("relative", "", false, "Use relative paths instead of absolute"),
 		flags.WithEnvVars("format", "ATMOS_TOOLCHAIN_ENV_FORMAT"),
+		flags.WithEnvVars("output", "ATMOS_TOOLCHAIN_ENV_OUTPUT"),
 		flags.WithEnvVars("relative", "ATMOS_TOOLCHAIN_RELATIVE"),
 	)
 
