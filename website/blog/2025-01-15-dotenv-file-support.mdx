@@ -1,0 +1,60 @@
+---
+slug: dotenv-file-support
+title: ".env File Support"
+authors: [atmos]
+tags: [feature, dx]
+---
+
+Atmos now supports loading environment variables from `.env` files automatically.
+
+<!--truncate-->
+
+## What Changed
+
+You can now define `.env` file loading in your `atmos.yaml`:
+
+```yaml
+env:
+  vars:
+    STATIC_VAR: "defined in atmos.yaml"
+  files:
+    enabled: true
+    paths:
+      - .env
+      - .env.local
+      - ".env.*"
+    parents: false
+```
+
+## Key Features
+
+- **Glob pattern support** - Load multiple files with patterns like `.env.*`
+- **Parent directory walking** - Optionally search parent directories up to repo root
+- **Early loading** - `.env` files load before profile detection, so `ATMOS_*` variables work
+- **Case preservation** - Environment variable names maintain their original case
+- **Backward compatible** - The legacy flat `env:` format still works
+
+## How to Use It
+
+Create a `.env` file in your project:
+
+```bash
+DATABASE_URL=postgres://localhost:5432/myapp
+API_KEY=sk-example-key
+```
+
+Configure loading in `atmos.yaml`:
+
+```yaml
+env:
+  files:
+    enabled: true
+    paths:
+      - .env
+```
+
+Environment variables are now available to all Atmos commands including Terraform, Helmfile, workflows, and custom commands.
+
+## Get Involved
+
+See the [examples/dotenv](https://github.com/cloudposse/atmos/tree/main/examples/dotenv) directory for a complete working example.

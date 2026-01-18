@@ -1,0 +1,72 @@
+# Atmos configuration demonstrating .env file support
+#
+# This example shows how to load environment variables from .env files
+# and use them in custom commands.
+
+# Base path for components and stacks
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+# Environment configuration with .env file support
+env:
+  # Static environment variables
+  vars:
+    STATIC_VAR: "I am defined in atmos.yaml"
+
+  # .env file loading configuration
+  files:
+    enabled: true
+    paths:
+      - .env           # Load .env file
+      - .env.local     # Load .env.local (typically gitignored for local overrides)
+      - ".env.*"       # Load any .env.* files (e.g., .env.dev, .env.prod)
+    parents: false     # Don't walk up parent directories
+
+# Custom commands to demonstrate .env file loading
+commands:
+  - name: show-env
+    description: "Display environment variables loaded from .env files"
+    steps:
+      - |
+        echo "=== Environment Variables Demo ==="
+        echo ""
+        echo "From .env file:"
+        echo "  DATABASE_URL=$DATABASE_URL"
+        echo "  API_KEY=$API_KEY"
+        echo "  DEBUG=$DEBUG"
+        echo ""
+        echo "From .env.local file:"
+        echo "  LOCAL_SECRET=$LOCAL_SECRET"
+        echo ""
+        echo "From .env.dev file:"
+        echo "  ENVIRONMENT=$ENVIRONMENT"
+        echo "  LOG_LEVEL=$LOG_LEVEL"
+        echo ""
+        echo "From atmos.yaml (static):"
+        echo "  STATIC_VAR=$STATIC_VAR"
+        echo ""
+        echo "=== All loaded successfully! ==="
+
+  - name: check-var
+    description: "Check if a specific environment variable is set"
+    arguments:
+      - name: var_name
+        description: "Name of the environment variable to check"
+    steps:
+      - |
+        VAR_NAME="{{ .Arguments.var_name }}"
+        VAR_VALUE=$(printenv "$VAR_NAME" 2>/dev/null || echo "")
+        if [ -n "$VAR_VALUE" ]; then
+          echo "✓ $VAR_NAME is set to: $VAR_VALUE"
+        else
+          echo "✗ $VAR_NAME is not set"
+        fi

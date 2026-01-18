@@ -598,6 +598,7 @@ func TestExecuteShell(t *testing.T) {
 
 	t.Run("simple echo command", func(t *testing.T) {
 		err := ExecuteShell(
+			nil, // no atmosConfig needed for basic tests
 			"echo 'test'",
 			"test-shell",
 			".",
@@ -609,6 +610,7 @@ func TestExecuteShell(t *testing.T) {
 
 	t.Run("dry run mode", func(t *testing.T) {
 		err := ExecuteShell(
+			nil, // no atmosConfig needed for basic tests
 			"echo 'test'",
 			"test-shell",
 			".",
@@ -620,6 +622,7 @@ func TestExecuteShell(t *testing.T) {
 
 	t.Run("syntax error in shell command", func(t *testing.T) {
 		err := ExecuteShell(
+			nil, // no atmosConfig needed for basic tests
 			"echo 'unclosed quote",
 			"test-shell",
 			".",
@@ -631,6 +634,7 @@ func TestExecuteShell(t *testing.T) {
 
 	t.Run("custom environment variables", func(t *testing.T) {
 		err := ExecuteShell(
+			nil, // no atmosConfig needed for basic tests
 			"echo test",
 			"test-shell",
 			".",
@@ -654,6 +658,7 @@ func TestExecuteShell(t *testing.T) {
 		// The shell command should see the override value, not the parent value,
 		// but should still have access to PATH.
 		err := ExecuteShell(
+			nil, // no atmosConfig needed for basic tests
 			"test \"$TEST_OVERRIDE\" = \"custom_value\" && env | grep -q PATH",
 			"test-shell",
 			".",
@@ -677,6 +682,7 @@ func TestExecuteShell(t *testing.T) {
 
 		// Call ExecuteShell with empty env slice, just like workflow commands do.
 		err := ExecuteShell(
+			nil, // no atmosConfig needed for basic tests
 			"env",
 			"test-shell",
 			".",
@@ -711,6 +717,7 @@ func TestExecuteShell(t *testing.T) {
 		for _, tc := range testCases {
 			t.Run(tc.cmd, func(t *testing.T) {
 				err := ExecuteShell(
+					nil, // no atmosConfig needed for basic tests
 					tc.cmd,
 					"test-shell",
 					".",
