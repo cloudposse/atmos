@@ -63,7 +63,8 @@ func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error
 
 	err := cmd.Run()
 	if err != nil {
-		return stdout.String(), stderr.String(), err
+		// Fall back to log mode on error to ensure output is visible.
+		return w.fallbackToLog(stdout.String(), stderr.String(), err)
 	}
 
 	// Check if terminal is available for viewport.

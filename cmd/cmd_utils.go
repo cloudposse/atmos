@@ -803,6 +803,10 @@ func executeCustomCommand(
 				workflowStep := step.ToWorkflowStep()
 				// Update command with template-resolved value.
 				workflowStep.Command = commandToRun
+				// Propagate working directory to extended step if not already set.
+				if workflowStep.WorkingDirectory == "" {
+					workflowStep.WorkingDirectory = workDir
+				}
 
 				// Update environment variables for this step (reuse executor to preserve step outputs).
 				for _, envVar := range env {
