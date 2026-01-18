@@ -7,8 +7,13 @@
 
 💡 No workflow exists with name no-workflow-exists
 
-💡 Available workflows in test.yaml: - fail
+💡 Available workflows in test.yaml: - double-hyphen-multiple-flags
 
+• double-hyphen-stack-precedence
+• double-hyphen-step-stack
+• double-hyphen-with-stack
+• double-hyphen-workflow-stack
+• fail
 • fail-with-stack
 • invalid-step-type
 • multi-component-all
@@ -18,6 +23,7 @@
 • no-steps
 • pass
 • shell-command-not-found
+• shell-double-hyphen-echo
 • shell-echo-args
 • shell-failure
 • shell-pass
