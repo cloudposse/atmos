@@ -62,7 +62,7 @@ The generate section in stack configuration supports:
 			component = args[0]
 		} else if !all {
 			// Prompt for component if missing.
-			prompted, err := shared.PromptForComponent(cmd)
+			prompted, err := shared.PromptForComponent(cmd, "")
 			if err = shared.HandlePromptError(err, "component"); err != nil {
 				return err
 			}

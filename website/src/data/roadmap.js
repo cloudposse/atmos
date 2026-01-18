@@ -31,8 +31,8 @@ export const roadmapConfig = {
     { id: 'q1-2025', label: 'Q1 2025', status: 'completed' },
     { id: 'q2-2025', label: 'Q2 2025', status: 'completed' },
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
-    { id: 'q4-2025', label: 'Q4 2025', status: 'current' },
-    { id: 'q1-2026', label: 'Q1 2026', status: 'planned' },
+    { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
+    { id: 'q1-2026', label: 'Q1 2026', status: 'current' },
     { id: 'q2-2026', label: 'Q2 2026', status: 'planned' },
   ],
 
@@ -191,6 +191,7 @@ export const roadmapConfig = {
         { label: 'Helpful error messages with hints', status: 'shipped', quarter: 'q4-2025', changelog: 'helpful-errors', version: 'v1.199.0', description: 'Error messages include actionable hints, rich context, and optional Sentry integration for enterprise error tracking.', benefits: 'Understand what went wrong and how to fix it. Enterprise teams get centralized error tracking.' },
         { label: 'Interactive Terraform prompts', status: 'shipped', quarter: 'q4-2025', changelog: 'interactive-terraform-prompts', description: 'Interactive component and stack selection when running Terraform commands without arguments.', benefits: 'Discover and select components interactively. No need to remember exact names.' },
         { label: 'Interactive file generation for terraform, helmfile, and packer', status: 'shipped', quarter: 'q1-2026', pr: 1971, changelog: 'interactive-file-generation', description: 'Interactive prompts for generate files command with cross-provisioner support and idempotent generation.', benefits: 'Explore file generation interactively. Same patterns work across terraform, helmfile, and packer.' },
+        { label: 'Smarter component selection filtering', status: 'shipped', quarter: 'q1-2026', pr: 1977, changelog: 'component-selection-filtering', description: 'Interactive component menus and shell completion now filter out abstract and disabled components, showing only deployable options.', benefits: 'Component selection shows only what can actually be deployed. No more confusion from seeing abstract templates or disabled components.' },
         { label: 'Seamless first login with provider fallback', status: 'shipped', quarter: 'q4-2025', pr: 1918, changelog: 'auth-login-provider-fallback', description: 'Auth login automatically falls back to provider when no identities exist, enabling zero-friction first-time login.', benefits: 'New users just run atmos auth login. No need to understand --provider flag on first use.' },
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', version: 'v1.195.0', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
