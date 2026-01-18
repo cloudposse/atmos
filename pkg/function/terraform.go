@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"strings"
 
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/utils"
 )
 
-// terraformArgs holds parsed terraform function arguments.
+// Terraform function tags are defined in tags.go.
+// Use YAMLTag(TagTerraformOutput) and YAMLTag(TagTerraformState) to get the YAML tag format.
+
+// terraformArgs holds parsed arguments for terraform functions.
 type terraformArgs struct {
 	component string
 	stack     string
@@ -22,10 +23,8 @@ type terraformArgs struct {
 //   - 2 parts: component output_name (stack from context)
 //   - 3 parts: component stack output_name
 func parseTerraformArgs(args string, execCtx *ExecutionContext) (*terraformArgs, error) {
-	parts, err := utils.SplitStringByDelimiter(args, ' ')
-	if err != nil {
-		return nil, err
-	}
+	// Split by whitespace - Terraform component/stack/output names don't contain spaces.
+	parts := strings.Fields(args)
 
 	var component, stack, output string
 
@@ -45,109 +44,76 @@ func parseTerraformArgs(args string, execCtx *ExecutionContext) (*terraformArgs,
 	return &terraformArgs{component: component, stack: stack, output: output}, nil
 }
 
-// TerraformOutputFunction implements the terraform.output function.
+// TerraformOutputFunction implements the !terraform.output YAML function.
+// It retrieves Terraform outputs from remote state.
+// Note: This is a PostMerge function that requires stack context.
+// During HCL parsing, it returns a placeholder for later resolution.
 type TerraformOutputFunction struct {
 	BaseFunction
 }
 
-// NewTerraformOutputFunction creates a new terraform.output function handler.
+// NewTerraformOutputFunction creates a new TerraformOutputFunction.
 func NewTerraformOutputFunction() *TerraformOutputFunction {
 	defer perf.Track(nil, "function.NewTerraformOutputFunction")()
 
 	return &TerraformOutputFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagTerraformOutput,
+			FunctionName:    "terraform.output",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the terraform.output function.
-// Usage:
-//
-//	!terraform.output component output_name
-//	!terraform.output component stack output_name
-//
-// Note: This is a placeholder that parses args. The actual terraform output
-// retrieval is handled by internal/exec which has the full implementation.
+// Execute returns a placeholder for post-merge resolution.
+// Syntax: !terraform.output component stack output
+// Syntax: !terraform.output component output (uses current stack)
+// The actual Terraform state lookup happens during YAML post-merge processing.
 func (f *TerraformOutputFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.TerraformOutputFunction.Execute")()
 
-	log.Debug("Executing terraform.output function", "args", args)
-
-	if execCtx == nil || execCtx.AtmosConfig == nil {
-		return nil, fmt.Errorf("%w: terraform.output function requires AtmosConfig", ErrExecutionFailed)
-	}
-
 	args = strings.TrimSpace(args)
 	if args == "" {
-		return nil, fmt.Errorf("%w: terraform.output function requires arguments", ErrInvalidArguments)
+		return nil, fmt.Errorf("%w: !terraform.output requires arguments: component [stack] output", ErrInvalidArguments)
 	}
 
-	// Parse arguments.
-	parsed, err := parseTerraformArgs(args, execCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debug("Parsed terraform.output args", "component", parsed.component, "stack", parsed.stack, "output", parsed.output)
-
-	// TODO: The actual implementation requires outputGetter.GetOutput and other
-	// helpers from internal/exec. For now, return a placeholder error.
-	// The migration will update internal/exec to call this function.
-	return nil, fmt.Errorf("%w: terraform.output not yet fully migrated: component=%s stack=%s output=%s", ErrExecutionFailed, parsed.component, parsed.stack, parsed.output)
+	// Return placeholder with the original arguments for post-merge resolution.
+	return fmt.Sprintf("%s %s", TagTerraformOutput, args), nil
 }
 
-// TerraformStateFunction implements the terraform.state function.
+// TerraformStateFunction implements the !terraform.state YAML function.
+// It queries Terraform state directly from backends.
+// Note: This is a PostMerge function that requires stack context.
+// During HCL parsing, it returns a placeholder for later resolution.
 type TerraformStateFunction struct {
 	BaseFunction
 }
 
-// NewTerraformStateFunction creates a new terraform.state function handler.
+// NewTerraformStateFunction creates a new TerraformStateFunction.
 func NewTerraformStateFunction() *TerraformStateFunction {
 	defer perf.Track(nil, "function.NewTerraformStateFunction")()
 
 	return &TerraformStateFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagTerraformState,
+			FunctionName:    "terraform.state",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the terraform.state function.
-// Usage:
-//
-//	!terraform.state component output_name
-//	!terraform.state component stack output_name
-//
-// Note: This is a placeholder that parses args. The actual terraform state
-// retrieval is handled by internal/exec which has the full implementation.
+// Execute returns a placeholder for post-merge resolution.
+// Syntax: !terraform.state component stack output
+// Syntax: !terraform.state component output (uses current stack)
+// The actual Terraform state lookup happens during YAML post-merge processing.
 func (f *TerraformStateFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.TerraformStateFunction.Execute")()
 
-	log.Debug("Executing terraform.state function", "args", args)
-
-	if execCtx == nil || execCtx.AtmosConfig == nil {
-		return nil, fmt.Errorf("%w: terraform.state function requires AtmosConfig", ErrExecutionFailed)
-	}
-
 	args = strings.TrimSpace(args)
 	if args == "" {
-		return nil, fmt.Errorf("%w: terraform.state function requires arguments", ErrInvalidArguments)
+		return nil, fmt.Errorf("%w: !terraform.state requires arguments: component [stack] output", ErrInvalidArguments)
 	}
 
-	// Parse arguments.
-	parsed, err := parseTerraformArgs(args, execCtx)
-	if err != nil {
-		return nil, err
-	}
-
-	log.Debug("Parsed terraform.state args", "component", parsed.component, "stack", parsed.stack, "output", parsed.output)
-
-	// TODO: The actual implementation requires state retrieval helpers from internal/exec.
-	// For now, return a placeholder error.
-	return nil, fmt.Errorf("%w: terraform.state not yet fully migrated: component=%s stack=%s output=%s", ErrExecutionFailed, parsed.component, parsed.stack, parsed.output)
+	// Return placeholder with the original arguments for post-merge resolution.
+	return fmt.Sprintf("%s %s", TagTerraformState, args), nil
 }

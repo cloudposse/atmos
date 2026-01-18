@@ -1,0 +1,113 @@
+---
+title: atmos stack convert
+sidebar_label: convert
+sidebar_class_name: command
+id: convert
+description: Convert stack configuration files between YAML, JSON, and HCL formats
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to convert Atmos stack configuration files between YAML, JSON, and HCL formats. All formats parse to the same internal data structure, enabling seamless bidirectional conversion.
+</Intro>
+
+## Usage
+
+Execute the `stack convert` command like this:
+
+```shell
+atmos stack convert <input-file> --to <format>
+```
+
+This command reads the input file, detects its format automatically, and converts it to the specified target format.
+
+:::tip
+Run `atmos stack convert --help` to see all the available options
+:::
+
+## Examples
+
+### Convert YAML to HCL
+
+```shell
+# Output to stdout
+atmos stack convert stacks/prod.yaml --to hcl
+
+# Output to file
+atmos stack convert stacks/prod.yaml --to hcl --output prod.hcl
+```
+
+### Convert HCL to YAML
+
+```shell
+atmos stack convert stacks/prod.hcl --to yaml
+```
+
+### Convert JSON to YAML
+
+```shell
+atmos stack convert stacks/prod.json --to yaml --output prod.yaml
+```
+
+### Preview conversion (dry-run)
+
+```shell
+atmos stack convert stacks/prod.yaml --to hcl --dry-run
+```
+
+## HCL Output Format
+
+When converting to HCL, the output uses the Atmos HCL stack format with a `stack` wrapper block and labeled component blocks:
+
+```hcl
+stack {
+  vars {
+    stage = "prod"
+  }
+
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          cidr_block = "10.0.0.0/16"
+        }
+      }
+
+      component "eks" {
+        vars {
+          cluster_name = "my-cluster"
+        }
+      }
+    }
+  }
+}
+```
+
+This format supports future stack naming: `stack "prod" { ... }`.
+
+## Arguments
+
+<dl>
+  <dt>`input-file`</dt>
+  <dd>Path to the stack configuration file to convert. The format is automatically detected from the file content.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--to` / `-t` <em>(required)</em></dt>
+  <dd>Target format: `yaml`, `json`, or `hcl`.</dd>
+
+  <dt>`--output` / `-o` <em>(optional)</em></dt>
+  <dd>Output file path. If not specified, output is written to stdout.</dd>
+
+  <dt>`--dry-run` / `-n` <em>(optional)</em></dt>
+  <dd>Preview conversion without writing to file.</dd>
+</dl>
+
+## Notes
+
+- **Format detection** is automatic based on file content, not file extension
+- **YAML functions** (like `!terraform.output`, `!env`) are not preserved during conversion as they are runtime features
+- **HCL functions** (like `atmos::env()`, `atmos::exec()`) are similarly not preserved
+- Conversion is structural only - the data structure is preserved but format-specific features become literal text

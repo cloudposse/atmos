@@ -70,7 +70,7 @@ func TestProcessCustomYamlTagsWithContextParameter(t *testing.T) {
 	assert.NotNil(t, result)
 
 	// Context should still have the node.
-	assert.Equal(t, 1, len(ctx.CallStack))
+	assert.Equal(t, 1, len(ctx.CallStack()))
 }
 
 func TestProcessNodesWithContextNestedMaps(t *testing.T) {
@@ -234,12 +234,12 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 			return
 		}
 
-		if len(ctx1.CallStack) != 1 {
-			errChan <- fmt.Errorf("expected 1 item in call stack, got %d", len(ctx1.CallStack))
+		if len(ctx1.CallStack()) != 1 {
+			errChan <- fmt.Errorf("expected 1 item in call stack, got %d", len(ctx1.CallStack()))
 			return
 		}
-		if ctx1.CallStack[0].Component != "component1" {
-			errChan <- fmt.Errorf("expected component1, got %s", ctx1.CallStack[0].Component)
+		if ctx1.CallStack()[0].Component != "component1" {
+			errChan <- fmt.Errorf("expected component1, got %s", ctx1.CallStack()[0].Component)
 			return
 		}
 		errChan <- nil
@@ -269,12 +269,12 @@ func TestProcessCustomYamlTagsContextIsolation(t *testing.T) {
 			return
 		}
 
-		if len(ctx2.CallStack) != 1 {
-			errChan <- fmt.Errorf("expected 1 item in call stack, got %d", len(ctx2.CallStack))
+		if len(ctx2.CallStack()) != 1 {
+			errChan <- fmt.Errorf("expected 1 item in call stack, got %d", len(ctx2.CallStack()))
 			return
 		}
-		if ctx2.CallStack[0].Component != "component2" {
-			errChan <- fmt.Errorf("expected component2, got %s", ctx2.CallStack[0].Component)
+		if ctx2.CallStack()[0].Component != "component2" {
+			errChan <- fmt.Errorf("expected component2, got %s", ctx2.CallStack()[0].Component)
 			return
 		}
 		errChan <- nil

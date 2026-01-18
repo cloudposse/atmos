@@ -61,3 +61,8 @@ var DevcontainerConfigUsageMarkdown string
 //
 //go:embed atmos_devcontainer_shell_usage.md
 var DevcontainerShellUsageMarkdown string
+
+// StackConvertUsageMarkdown contains usage examples for the stack convert command.
+//
+//go:embed atmos_stack_convert_usage.md
+var StackConvertUsageMarkdown string

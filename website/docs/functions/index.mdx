@@ -12,7 +12,7 @@ import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-Atmos provides two types of functions for dynamic configuration: **YAML Functions** (recommended) and **Template Functions**. Understanding the difference is crucial for writing reliable, maintainable configurations.
+Atmos provides three types of functions for dynamic configuration: **YAML Functions** (recommended), **HCL Functions** (for HCL stack files), and **Template Functions**. Understanding the differences is crucial for writing reliable, maintainable configurations.
 </Intro>
 
 ## Critical Differences
@@ -34,6 +34,33 @@ YAML functions are **native YAML features** that work with the YAML parser. They
 vpc_id: !terraform.output vpc.vpc_id
 environment: !env AWS_ENVIRONMENT
 config: !include common-config.yaml
+```
+
+### HCL Functions ✅
+
+HCL functions use **native HCL syntax** with the `atmos::` namespace for Atmos-specific functions, plus all standard Terraform/OpenTofu functions. They are available when using `.hcl` files for stack configurations.
+
+**Advantages:**
+- **Native HCL syntax** - Uses familiar function call syntax from Terraform
+- **Terraform compatible** - Same functions you know from Terraform/OpenTofu
+- **Type-safe** - HCL has strong typing
+- **70+ stdlib functions** - String, collection, numeric, encoding, date, regex
+
+**Example:**
+```hcl
+stack {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          region      = atmos::env("AWS_REGION us-east-1")
+          name_upper  = upper("my-app")
+          merged_tags = merge(local.common_tags, {Environment = "prod"})
+        }
+      }
+    }
+  }
+}
 ```
 
 ### Template Functions (Use with Caution) ⚠️
