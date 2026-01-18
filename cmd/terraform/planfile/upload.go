@@ -130,7 +130,7 @@ func runUpload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("Uploaded planfile to %s: %s", store.Name(), key))
+	ui.Success(fmt.Sprintf("Uploaded planfile to %s: %s", store.Name(), key))
 	return nil
 }
 

@@ -212,7 +212,7 @@ func fillMissingSHA(ctx *repoContext) {
 
 // renderStatus renders the CI status to the terminal.
 func renderStatus(status *ci.Status) {
-	_ = ui.Writef("Relevant pull requests in %s\n\n", status.Repository)
+	ui.Writef("Relevant pull requests in %s\n\n", status.Repository)
 
 	// Current branch.
 	if status.CurrentBranch != nil {
@@ -221,7 +221,7 @@ func renderStatus(status *ci.Status) {
 
 	// PRs created by user.
 	if len(status.CreatedByUser) > 0 {
-		_ = ui.Writeln("\nCreated by you")
+		ui.Writeln("\nCreated by you")
 		for _, pr := range status.CreatedByUser {
 			renderPRStatus(pr)
 		}
@@ -229,7 +229,7 @@ func renderStatus(status *ci.Status) {
 
 	// PRs requesting review.
 	if len(status.ReviewRequests) > 0 {
-		_ = ui.Writeln("\nRequesting a code review from you")
+		ui.Writeln("\nRequesting a code review from you")
 		for _, pr := range status.ReviewRequests {
 			renderPRStatus(pr)
 		}
@@ -238,23 +238,23 @@ func renderStatus(status *ci.Status) {
 
 // renderBranchStatus renders status for a branch.
 func renderBranchStatus(bs *ci.BranchStatus) {
-	_ = ui.Writeln("Current branch")
+	ui.Writeln("Current branch")
 
 	if bs.PullRequest != nil {
 		renderPRStatus(bs.PullRequest)
 	} else {
-		_ = ui.Writef("  Commit status for %s\n", truncateSHA(bs.CommitSHA))
+		ui.Writef("  Commit status for %s\n", truncateSHA(bs.CommitSHA))
 		renderChecks(bs.Checks, "  ")
-		_ = ui.Writeln("\n  No open pull request for current branch.")
+		ui.Writeln("\n  No open pull request for current branch.")
 	}
 }
 
 // renderPRStatus renders status for a pull request.
 func renderPRStatus(pr *ci.PRStatus) {
-	_ = ui.Writef("  #%d  %s [%s]\n", pr.Number, pr.Title, pr.Branch)
+	ui.Writef("  #%d  %s [%s]\n", pr.Number, pr.Title, pr.Branch)
 
 	if pr.AllPassed && len(pr.Checks) > 0 {
-		_ = ui.Writeln("    - All checks passing")
+		ui.Writeln("    - All checks passing")
 	} else {
 		renderChecks(pr.Checks, "    ")
 	}
@@ -264,7 +264,7 @@ func renderPRStatus(pr *ci.PRStatus) {
 func renderChecks(checks []*ci.CheckStatus, indent string) {
 	for _, check := range checks {
 		icon := getCheckIcon(check.CheckState())
-		_ = ui.Writef("%s- %s %s (%s)\n", indent, icon, check.Name, check.Conclusion)
+		ui.Writef("%s- %s %s (%s)\n", indent, icon, check.Name, check.Conclusion)
 	}
 }
 

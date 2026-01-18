@@ -48,7 +48,6 @@ AVAILABLE COMMANDS
       output                            Show output values from your root module
       plan                              Show changes required by the current configuration
       plan-diff                         Compare two Terraform plans and show the differences
-      planfile [command]                Manage Terraform plan files
       providers                         Show the providers required for this configuration
       provision                         This command provisions terraform components
       refresh                           Update the state to match remote systems

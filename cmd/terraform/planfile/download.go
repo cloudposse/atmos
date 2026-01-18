@@ -158,9 +158,9 @@ func writeToFile(outputPath string, reader io.Reader) error {
 
 // printDownloadSuccess prints the success message for a download.
 func printDownloadSuccess(storeName, key, outputPath string, metadata *planfile.Metadata) {
-	_ = ui.Success(fmt.Sprintf("Downloaded planfile from %s: %s -> %s", storeName, key, outputPath))
+	ui.Success(fmt.Sprintf("Downloaded planfile from %s: %s -> %s", storeName, key, outputPath))
 	if metadata != nil && metadata.Stack != "" {
-		_ = ui.Info(fmt.Sprintf("Stack: %s, Component: %s, SHA: %s", metadata.Stack, metadata.Component, metadata.SHA))
+		ui.Info(fmt.Sprintf("Stack: %s, Component: %s, SHA: %s", metadata.Stack, metadata.Component, metadata.SHA))
 	}
 }
 
