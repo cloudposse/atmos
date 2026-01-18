@@ -1,4 +1,4 @@
-package exec
+package uri
 
 import (
 	"strings"
@@ -13,7 +13,7 @@ func TestHasLocalPathPrefix(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Absolute paths
+		// Absolute paths.
 		{
 			name:     "absolute unix path",
 			uri:      "/absolute/path/to/components",
@@ -22,9 +22,9 @@ func TestHasLocalPathPrefix(t *testing.T) {
 		{
 			name:     "absolute windows path",
 			uri:      "C:\\Users\\components",
-			expected: false, // Not a Unix absolute path
+			expected: false, // Not a Unix absolute path.
 		},
-		// Relative paths
+		// Relative paths.
 		{
 			name:     "current directory prefix",
 			uri:      "./relative/path",
@@ -35,7 +35,7 @@ func TestHasLocalPathPrefix(t *testing.T) {
 			uri:      "../parent/path",
 			expected: true,
 		},
-		// Non-local paths
+		// Non-local paths.
 		{
 			name:     "github URL",
 			uri:      "github.com/owner/repo.git",
@@ -51,16 +51,16 @@ func TestHasLocalPathPrefix(t *testing.T) {
 			uri:      "components/terraform/vpc",
 			expected: false,
 		},
-		// Edge cases
+		// Edge cases.
 		{
 			name:     "single dot",
 			uri:      ".",
-			expected: false, // Only matches "./" not just "."
+			expected: false, // Only matches "./" not just ".".
 		},
 		{
 			name:     "double dot",
 			uri:      "..",
-			expected: false, // Only matches "../" not just ".."
+			expected: false, // Only matches "../" not just "..".
 		},
 		{
 			name:     "path starting with dot but not ./",
@@ -76,7 +76,7 @@ func TestHasLocalPathPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasLocalPathPrefix(tt.uri)
+			result := HasLocalPathPrefix(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -88,7 +88,7 @@ func TestHasSchemeSeparator(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Scheme separators present
+		// Scheme separators present.
 		{
 			name:     "https scheme",
 			uri:      "https://github.com/owner/repo.git",
@@ -124,13 +124,13 @@ func TestHasSchemeSeparator(t *testing.T) {
 			uri:      "oci://ghcr.io/owner/image:tag",
 			expected: true,
 		},
-		// go-getter subdirectory delimiter (not a scheme)
+		// go-getter subdirectory delimiter (not a scheme).
 		{
 			name:     "subdirectory delimiter only",
 			uri:      "github.com/owner/repo.git//modules/vpc",
 			expected: false, // Has // but not :// or ::, so no scheme separator.
 		},
-		// No scheme separators
+		// No scheme separators.
 		{
 			name:     "implicit https",
 			uri:      "github.com/owner/repo.git",
@@ -151,11 +151,11 @@ func TestHasSchemeSeparator(t *testing.T) {
 			uri:      "components/terraform/vpc",
 			expected: false,
 		},
-		// Edge cases
+		// Edge cases.
 		{
 			name:     "colon but not scheme separator",
 			uri:      "host:port/path",
-			expected: false, // Port notation, not a scheme
+			expected: false, // Port notation, not a scheme.
 		},
 		{
 			name:     "empty string",
@@ -166,7 +166,7 @@ func TestHasSchemeSeparator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasSchemeSeparator(tt.uri)
+			result := HasSchemeSeparator(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -179,7 +179,7 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// With subdirectory delimiter
+		// With subdirectory delimiter.
 		{
 			name:     "github with subdirectory",
 			uri:      "github.com/owner/repo.git//modules/vpc",
@@ -205,7 +205,7 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 			uri:      "git::https://github.com/owner/repo.git//examples",
 			expected: true,
 		},
-		// Without subdirectory delimiter
+		// Without subdirectory delimiter.
 		{
 			name:     "https without subdirectory",
 			uri:      "https://github.com/owner/repo.git",
@@ -226,16 +226,16 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 			uri:      "file:///absolute/path",
 			expected: false,
 		},
-		// Edge cases
+		// Edge cases.
 		{
 			name:     "path with double slash but not delimiter",
 			uri:      "http://example.com/path",
-			expected: false, // The // is part of the scheme, not a delimiter
+			expected: false, // The // is part of the scheme, not a delimiter.
 		},
 		{
 			name:     "oci scheme",
 			uri:      "oci://ghcr.io/owner/image:tag",
-			expected: false, // OCI uses :// not //
+			expected: false, // OCI uses :// not //.
 		},
 		{
 			name:     "empty string",
@@ -246,7 +246,7 @@ func TestHasSubdirectoryDelimiter(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := hasSubdirectoryDelimiter(tt.uri)
+			result := HasSubdirectoryDelimiter(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -258,7 +258,7 @@ func TestIsGitURI(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Git URIs - known Git hosting platforms
+		// Git URIs - known Git hosting platforms.
 		{
 			name:     "github.com URL",
 			uri:      "github.com/cloudposse/atmos.git",
@@ -284,7 +284,7 @@ func TestIsGitURI(t *testing.T) {
 			uri:      "git::https://github.com/cloudposse/atmos.git",
 			expected: true,
 		},
-		// Git URIs - .git extension
+		// Git URIs - .git extension.
 		{
 			name:     "URL with .git extension",
 			uri:      "example.com/path/repo.git",
@@ -305,7 +305,7 @@ func TestIsGitURI(t *testing.T) {
 			uri:      "git.company.com/repo.git",
 			expected: true,
 		},
-		// Git URIs - Azure DevOps
+		// Git URIs - Azure DevOps.
 		{
 			name:     "Azure DevOps URL",
 			uri:      "dev.azure.com/org/project/_git/repo",
@@ -316,7 +316,7 @@ func TestIsGitURI(t *testing.T) {
 			uri:      "dev.azure.com/org/project/_git/repo//modules",
 			expected: true,
 		},
-		// Not Git URIs - false positives to avoid
+		// Not Git URIs - false positives to avoid.
 		{
 			name:     "www.gitman.com should not match",
 			uri:      "www.gitman.com/page",
@@ -325,14 +325,14 @@ func TestIsGitURI(t *testing.T) {
 		{
 			name:     ".git in middle of word",
 			uri:      "example.com/digit.github.io/page",
-			expected: true, // Contains .git so it matches
+			expected: true, // Contains .git so it matches.
 		},
 		{
 			name:     "github in path, not domain",
 			uri:      "evil.com/github.com/fake",
 			expected: false,
 		},
-		// Not Git URIs - local paths
+		// Not Git URIs - local paths.
 		{
 			name:     "simple relative path",
 			uri:      "components/terraform/vpc",
@@ -343,7 +343,7 @@ func TestIsGitURI(t *testing.T) {
 			uri:      "/absolute/path/to/components",
 			expected: false,
 		},
-		// Not Git URIs - other schemes
+		// Not Git URIs - other schemes.
 		{
 			name:     "http archive URL",
 			uri:      "https://example.com/archive.tar.gz",
@@ -359,77 +359,77 @@ func TestIsGitURI(t *testing.T) {
 			uri:      "s3::https://s3.amazonaws.com/bucket/key",
 			expected: false,
 		},
-		// Security / Malicious Edge Cases
+		// Security / Malicious Edge Cases.
 		{
 			name:     "path traversal in URL",
 			uri:      "github.com/owner/repo/../../../etc/passwd",
-			expected: true, // Still a Git URL, path traversal handled by downloader
+			expected: true, // Still a Git URL, path traversal handled by downloader.
 		},
 		{
 			name:     "null bytes in URL (Go's url.Parse handles this)",
 			uri:      "github.com/owner/repo\x00/malicious",
-			expected: false, // URL parsing fails, returns false
+			expected: false, // URL parsing fails, returns false.
 		},
 		{
 			name:     "unicode homograph attack - gιthub.com (Greek iota)",
 			uri:      "gιthub.com/owner/repo",
-			expected: false, // Not actual github.com
+			expected: false, // Not actual github.com.
 		},
 		{
 			name:     "double scheme exploitation attempt",
 			uri:      "git::git::https://github.com/owner/repo",
-			expected: true, // Has git:: prefix
+			expected: true, // Has git:: prefix.
 		},
 		{
 			name:     "file:// with git patterns to trick detection",
 			uri:      "file:///tmp/fake.git",
-			expected: true, // Has .git in path, but file:// scheme prevents actual Git clone
+			expected: true, // Has .git in path, but file:// scheme prevents actual Git clone.
 		},
 		{
 			name:     "javascript: pseudo-protocol",
 			uri:      "javascript:alert('XSS').git",
-			expected: false, // Not a Git URL
+			expected: false, // Not a Git URL.
 		},
 		{
 			name:     "data: URL with .git",
 			uri:      "data:text/html,<script>alert('XSS')</script>.git",
-			expected: false, // Not a Git URL
+			expected: false, // Not a Git URL.
 		},
 		{
 			name:     "extremely long URL to test DoS",
 			uri:      "github.com/" + strings.Repeat("a", 10000) + "/repo.git",
-			expected: true, // Still valid Git URL, length handled elsewhere
+			expected: true, // Still valid Git URL, length handled elsewhere.
 		},
 		{
 			name:     "URL with credentials in path segment",
 			uri:      "evil.com/https://user:pass@github.com/fake",
-			expected: false, // Not actual GitHub in host
+			expected: false, // Not actual GitHub in host.
 		},
 		{
 			name:     "Mixed case attack - GiThUb.CoM",
 			uri:      "GiThUb.CoM/owner/repo",
-			expected: true, // Case-insensitive matching
+			expected: true, // Case-insensitive matching.
 		},
 		{
 			name:     "Subdomain confusion - evil-github.com",
 			uri:      "evil-github.com/owner/repo.git",
-			expected: true, // Has .git extension, would attempt Git clone
+			expected: true, // Has .git extension, would attempt Git clone.
 		},
 		{
 			name:     "Port number in URL (url.Parse handles correctly)",
 			uri:      "github.com:22/owner/repo.git",
-			expected: true, // url.Parse treats :22 as port, still github.com host with .git
+			expected: true, // url.Parse treats :22 as port, still github.com host with .git.
 		},
 		{
 			name:     "SCP-style Git URL (not standard HTTP URL)",
 			uri:      "git@github.com:owner/repo.git",
-			expected: true, // SCP-style detected via regex pattern before url.Parse
+			expected: true, // SCP-style detected via regex pattern before url.Parse.
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isGitURI(tt.uri)
+			result := IsGitURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -441,7 +441,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Domain-like structures (hostname.domain/path)
+		// Domain-like structures (hostname.domain/path).
 		{
 			name:     "self-hosted git server",
 			uri:      "git.company.com/team/repo",
@@ -467,7 +467,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 			uri:      "code.example.org/path/to/repo",
 			expected: true,
 		},
-		// Not domain-like
+		// Not domain-like.
 		{
 			name:     "no dot in URI",
 			uri:      "localhost/path",
@@ -481,7 +481,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 		{
 			name:     "dot at end with no slash",
 			uri:      "example.com",
-			expected: false, // No slash after domain
+			expected: false, // No slash after domain.
 		},
 		{
 			name:     "relative path with ../",
@@ -512,7 +512,7 @@ func TestIsDomainLikeURI(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isDomainLikeURI(tt.uri)
+			result := IsDomainLikeURI(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -524,7 +524,7 @@ func TestIsLocalPath(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Local paths - with prefix
+		// Local paths - with prefix.
 		{
 			name:     "absolute unix path",
 			uri:      "/absolute/path/to/components",
@@ -540,7 +540,7 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "../parent/path",
 			expected: true,
 		},
-		// Local paths - without prefix (relative)
+		// Local paths - without prefix (relative).
 		{
 			name:     "relative path without prefix",
 			uri:      "components/terraform/vpc",
@@ -556,7 +556,7 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "components",
 			expected: true,
 		},
-		// Remote paths - scheme separators
+		// Remote paths - scheme separators.
 		{
 			name:     "https scheme",
 			uri:      "https://github.com/owner/repo.git",
@@ -582,7 +582,7 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "oci://ghcr.io/owner/image:tag",
 			expected: false,
 		},
-		// Remote paths - go-getter subdirectory delimiter
+		// Remote paths - go-getter subdirectory delimiter.
 		{
 			name:     "github with subdirectory delimiter",
 			uri:      "github.com/owner/repo.git//modules/vpc",
@@ -593,7 +593,7 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "git.company.com/repo.git//path",
 			expected: false,
 		},
-		// Remote paths - Git URIs
+		// Remote paths - Git URIs.
 		{
 			name:     "github URL",
 			uri:      "github.com/cloudposse/atmos.git",
@@ -619,7 +619,7 @@ func TestIsLocalPath(t *testing.T) {
 			uri:      "dev.azure.com/org/project/_git/repo",
 			expected: false,
 		},
-		// Domain-like URIs
+		// Domain-like URIs.
 		{
 			name:     "self-hosted git server",
 			uri:      "git.company.com/team/repo",
@@ -639,7 +639,7 @@ func TestIsLocalPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isLocalPath(tt.uri)
+			result := IsLocalPath(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -652,7 +652,7 @@ func TestContainsTripleSlash(t *testing.T) {
 		uri      string
 		expected bool
 	}{
-		// Contains triple-slash
+		// Contains triple-slash.
 		{
 			name:     "triple-slash at end",
 			uri:      "github.com/owner/repo.git///?ref=v1.0",
@@ -678,7 +678,7 @@ func TestContainsTripleSlash(t *testing.T) {
 			uri:      "git::https://github.com/owner/repo.git///examples",
 			expected: true,
 		},
-		// Does not contain triple-slash
+		// Does not contain triple-slash.
 		{
 			name:     "double-slash only",
 			uri:      "github.com/owner/repo.git//modules",
@@ -718,7 +718,7 @@ func TestContainsTripleSlash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := containsTripleSlash(tt.uri)
+			result := ContainsTripleSlash(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -731,7 +731,7 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 		expectedSource string
 		expectedSubdir string
 	}{
-		// Triple-slash with subdirectory
+		// Triple-slash with subdirectory.
 		{
 			name:           "triple-slash with modules path",
 			uri:            "github.com/owner/repo.git///modules?ref=v1.0",
@@ -756,7 +756,7 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 			expectedSource: "https://dev.azure.com/org/proj/_git/repo?ref=main",
 			expectedSubdir: "modules",
 		},
-		// Triple-slash at root (no path after ///)
+		// Triple-slash at root (no path after ///).
 		{
 			name:           "triple-slash at root with query",
 			uri:            "github.com/owner/repo.git///?ref=v1.0",
@@ -769,7 +769,7 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 			expectedSource: "github.com/owner/repo.git",
 			expectedSubdir: "",
 		},
-		// Double-slash patterns (should not have leading / in subdir)
+		// Double-slash patterns (should not have leading / in subdir).
 		{
 			name:           "double-slash-dot",
 			uri:            "github.com/owner/repo.git//.?ref=v1.0",
@@ -782,7 +782,7 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 			expectedSource: "github.com/owner/repo.git?ref=v1.0",
 			expectedSubdir: "modules",
 		},
-		// Edge cases
+		// Edge cases.
 		{
 			name:           "no delimiter",
 			uri:            "github.com/owner/repo.git?ref=v1.0",
@@ -799,7 +799,7 @@ func TestParseSubdirFromTripleSlash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			source, subdir := parseSubdirFromTripleSlash(tt.uri)
+			source, subdir := ParseSubdirFromTripleSlash(tt.uri)
 			assert.Equal(t, tt.expectedSource, source)
 			assert.Equal(t, tt.expectedSubdir, subdir)
 		})
@@ -890,7 +890,7 @@ func TestNeedsDoubleSlashDot(t *testing.T) {
 			uri:      "https://example.com/archive.tar.gz",
 			expected: false,
 		},
-		// Special case: URIs that pass isGitURI() but are special types (lines 243-245).
+		// Special case: URIs that pass IsGitURI() but are special types (lines 243-245).
 		{
 			name:     "file:// with .git pattern",
 			uri:      "file:///tmp/repo.git",
@@ -911,7 +911,7 @@ func TestNeedsDoubleSlashDot(t *testing.T) {
 			uri:      "https://gitlab.com/group/project/-/archive/main/project.tar.gz",
 			expected: false, // Contains gitlab.com but is an archive URL.
 		},
-		// Edge cases
+		// Edge cases.
 		{
 			name:     "empty string",
 			uri:      "",
@@ -926,7 +926,7 @@ func TestNeedsDoubleSlashDot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := needsDoubleSlashDot(tt.uri)
+			result := NeedsDoubleSlashDot(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -938,7 +938,7 @@ func TestAppendDoubleSlashDot(t *testing.T) {
 		uri      string
 		expected string
 	}{
-		// Without query parameters
+		// Without query parameters.
 		{
 			name:     "simple github URL",
 			uri:      "github.com/owner/repo.git",
@@ -959,7 +959,7 @@ func TestAppendDoubleSlashDot(t *testing.T) {
 			uri:      "git.company.com/team/repo.git",
 			expected: "git.company.com/team/repo.git//.",
 		},
-		// With query parameters - should preserve query string
+		// With query parameters - should preserve query string.
 		{
 			name:     "with ref query param",
 			uri:      "github.com/owner/repo.git?ref=v1.0",
@@ -980,7 +980,7 @@ func TestAppendDoubleSlashDot(t *testing.T) {
 			uri:      "git::https://github.com/owner/repo.git?ref=main",
 			expected: "git::https://github.com/owner/repo.git//.?ref=main",
 		},
-		// Edge cases
+		// Edge cases.
 		{
 			name:     "empty string",
 			uri:      "",
@@ -1005,7 +1005,7 @@ func TestAppendDoubleSlashDot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := appendDoubleSlashDot(tt.uri)
+			result := AppendDoubleSlashDot(tt.uri)
 			assert.Equal(t, tt.expected, result)
 		})
 	}

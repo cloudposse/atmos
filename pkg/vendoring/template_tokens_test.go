@@ -1,4 +1,4 @@
-package exec
+package vendoring
 
 import (
 	"os"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -117,7 +118,7 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 				Version   string
 			}{sourceConfig.Component, sourceConfig.Version}
 
-			processedURL, err := ProcessTmpl(&atmosConfig, "test-source", sourceConfig.Source, tmplData, false)
+			processedURL, err := exec.ProcessTmpl(&atmosConfig, "test-source", sourceConfig.Source, tmplData, false)
 			require.NoError(t, err, "Template processing should succeed for %s", tt.componentName)
 
 			t.Logf("Testing: %s - %s", tt.componentName, tt.description)
@@ -241,7 +242,7 @@ base_path: "./"
 				Version   string
 			}{source.Component, source.Version}
 
-			processedURL, err := ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+			processedURL, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
 
 			if tt.expectError {
 				require.Error(t, err, "Should get error for: %s", tt.name)
@@ -339,10 +340,10 @@ settings:
 		Version   string
 	}{nativeSource.Component, nativeSource.Version}
 
-	templateProcessedURL, err := ProcessTmpl(&atmosConfig, "template-source", templateSource.Source, templateTmplData, false)
+	templateProcessedURL, err := exec.ProcessTmpl(&atmosConfig, "template-source", templateSource.Source, templateTmplData, false)
 	require.NoError(t, err, "Template processing should succeed for template-creds")
 
-	nativeProcessedURL, err := ProcessTmpl(&atmosConfig, "native-source", nativeSource.Source, nativeTmplData, false)
+	nativeProcessedURL, err := exec.ProcessTmpl(&atmosConfig, "native-source", nativeSource.Source, nativeTmplData, false)
 	require.NoError(t, err, "Template processing should succeed for native-creds")
 
 	// Template source should have credentials from template processing.
