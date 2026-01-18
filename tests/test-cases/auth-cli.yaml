@@ -13,7 +13,7 @@ tests:
       - "validate"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
 

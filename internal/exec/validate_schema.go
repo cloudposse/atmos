@@ -3,13 +3,12 @@ package exec
 import (
 	"fmt"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
-
 	"github.com/cloudposse/atmos/pkg/downloader"
 	"github.com/cloudposse/atmos/pkg/filematch"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/validator"
@@ -48,20 +47,30 @@ func NewAtmosValidatorExecutor(atmosConfig *schema.AtmosConfiguration) *atmosVal
 func (av *atmosValidatorExecutor) ExecuteAtmosValidateSchemaCmd(sourceKey string, customSchema string) error {
 	defer perf.Track(nil, "exec.ExecuteAtmosValidateSchemaCmd")()
 
-	validationSchemaWithFiles, err := av.buildValidationSchema(sourceKey, customSchema)
-	if err != nil {
-		return err
-	}
+	var totalErrCount uint
 
-	totalErrCount, err := av.validateSchemas(validationSchemaWithFiles)
-	if err != nil {
-		return err
-	}
+	err := spinner.ExecWithSpinner(
+		"Validating YAML schemas...",
+		"All schemas validated successfully",
+		func() error {
+			validationSchemaWithFiles, err := av.buildValidationSchema(sourceKey, customSchema)
+			if err != nil {
+				return err
+			}
 
-	if totalErrCount > 0 {
-		return ErrInvalidYAML
-	}
-	return nil
+			totalErrCount, err = av.validateSchemas(validationSchemaWithFiles)
+			if err != nil {
+				return err
+			}
+
+			if totalErrCount > 0 {
+				return ErrInvalidYAML
+			}
+			return nil
+		},
+	)
+
+	return err
 }
 
 func (av *atmosValidatorExecutor) buildValidationSchema(sourceKey, customSchema string) (map[string][]string, error) {

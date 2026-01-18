@@ -29,7 +29,7 @@ tests:
       - "--verbose"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Validating authentication configuration"
         - "Authentication configuration is valid"
       exit_code: 0
@@ -48,7 +48,7 @@ tests:
       ATMOS_AUTH_TEST_MISSING_PROVIDER: "true"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
 
@@ -66,6 +66,6 @@ tests:
       ATMOS_AUTH_TEST_CIRCULAR: "true"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
