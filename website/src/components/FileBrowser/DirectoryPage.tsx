@@ -8,6 +8,7 @@ import FileTree from './FileTree';
 import DirectoryListing from './DirectoryListing';
 import FileViewer from './FileViewer';
 import RelatedDocs from './RelatedDocs';
+import { DemoVideo } from '../Video';
 import { findExampleByName, getExampleNameFromPath } from './utils';
 import type { ExamplesTree, FileBrowserOptions, DirectoryNode } from './types';
 import styles from './styles.module.css';
@@ -44,6 +45,10 @@ export default function DirectoryPage({
     ? `${exampleName} - Examples`
     : `${dirData.name} - ${exampleName}`;
 
+  // Only show demo video on the example root page.
+  const isExampleRoot = dirData.path === exampleName;
+  const showDemoVideo = isExampleRoot && example.demoId;
+
   return (
     <Layout title={pageTitle}>
       <div className={styles.pageLayout}>
@@ -54,6 +59,17 @@ export default function DirectoryPage({
         />
         <main className={styles.mainContent}>
           <BreadcrumbNav path={dirData.path} routeBasePath={routeBasePath} />
+
+          {/* Show demo video on example root page */}
+          {showDemoVideo && (
+            <div className={styles.demoVideoSection}>
+              <DemoVideo
+                id={example.demoId}
+                title={`${example.name} Demo`}
+                showCaption={false}
+              />
+            </div>
+          )}
 
           {/* Show README if present */}
           {dirData.readme && (

@@ -1,0 +1,29 @@
+# Platform Dev US-West-2 Stack
+import:
+  - orgs/acme/plat/_defaults
+  - mixins/region/us-west-2
+  - mixins/stage/dev
+  - catalog/vpc
+  - catalog/cluster
+  - catalog/api
+
+vars:
+  tags:
+    Environment: dev
+    Region: us-west-2
+
+# Minimal footprint in secondary dev region
+components:
+  terraform:
+    database:
+      metadata:
+        enabled: false
+    cache:
+      metadata:
+        enabled: false
+    frontend:
+      metadata:
+        enabled: false
+    cdn:
+      metadata:
+        enabled: false

@@ -1,0 +1,56 @@
+# list scene - Show configured identities and providers
+Output auth-list.gif
+Output auth-list.mp4
+Output auth-list.svg
+
+# VHS Configuration
+Source "../../scenes/_theme.tape"
+Set Width 1400
+Set Height 800
+
+# Enable TrueColor for proper color rendering in VHS
+Env COLORTERM "truecolor"
+
+# Fix prompt (VHS runs with --no-rcs)
+Env PS1 "\033[38;2;90;86;224m> \033[0m"
+
+Hide
+Enter
+Ctrl+L
+Show
+
+# Dependencies
+Require atmos
+
+# Scene starts
+Type "# List configured identities and providers"
+Enter
+Sleep 1s
+
+Type "# Show identity tree (default view)"
+Enter
+Sleep 2s
+
+Type "atmos auth list"
+Sleep 2s
+Enter
+Sleep 3s
+
+# Capture screenshot
+Screenshot auth-list.png
+
+Type "# Table format for quick overview"
+Enter
+Sleep 2s
+
+Type "atmos auth list --format table"
+Sleep 2s
+Enter
+Sleep 3s
+
+Type "# Multiple output formats available"
+Enter
+Sleep 1s
+
+# Hold final frame
+Sleep 10s

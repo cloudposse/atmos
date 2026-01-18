@@ -28,6 +28,8 @@ export interface Milestone {
   category?: 'featured';
   /** Priority: 'high' for awesome updates, undefined for nice-to-haves. */
   priority?: 'high';
+  /** Demo video ID (optional) - matches scene name in demos/scenes.yaml. */
+  demoId?: string;
   /** Whether this feature is experimental (still being refined). */
   experimental?: boolean;
 }

@@ -34,4 +34,7 @@ var (
 
 	// ErrToolAlreadyExists indicates the tool version already exists in .tool-versions.
 	ErrToolAlreadyExists = registry.ErrToolAlreadyExists
+
+	// ErrNoValidTools indicates no valid tools were provided for installation.
+	ErrNoValidTools = registry.ErrNoValidTools
 )

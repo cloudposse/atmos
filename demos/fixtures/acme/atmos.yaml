@@ -1,0 +1,226 @@
+# Acme Corp - Atmos Configuration
+# Demo fixture for VHS demo videos
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    backend_type: local
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: true
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{tenant}-{stage}-{environment}"
+  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.environment }}"
+  list:
+    columns:
+      - name: "Stack"
+        value: "{{ .stack }}"
+      - name: "Namespace"
+        value: "{{ .vars.namespace }}"
+      - name: "Tenant"
+        value: "{{ .vars.tenant }}"
+      - name: "Environment"
+        value: "{{ .vars.environment }}"
+      - name: "Stage"
+        value: "{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Command aliases for faster workflows
+aliases:
+  tf: terraform
+  tp: terraform plan
+  ta: terraform apply
+  ds: describe stacks
+  dc: describe component
+  ls: list stacks
+  lc: list components
+  shell: devcontainer shell geodesic
+
+# Devcontainer configurations
+devcontainer:
+  geodesic:
+    settings:
+      runtime: podman
+    spec:
+      - !include .devcontainer/devcontainer.json
+
+# Custom commands for common operations
+commands:
+  - name: show-stack
+    description: "Show stack details including all components"
+    arguments:
+      - name: stack
+        description: "Target stack name"
+        required: true
+    steps:
+      - "echo '=== Stack: {{ .Arguments.stack }} ==='"
+      - "atmos list components -s {{ .Arguments.stack }}"
+
+  - name: deploy-stack
+    description: "Deploy entire stack (vpc -> cluster -> api)"
+    arguments:
+      - name: stack
+        description: "Target stack name"
+        required: true
+    steps:
+      - "terraform apply vpc -s {{ .Arguments.stack }} --auto-approve"
+      - "terraform apply cluster -s {{ .Arguments.stack }} --auto-approve"
+      - "terraform apply api -s {{ .Arguments.stack }} --auto-approve"
+
+  - name: plan-all
+    description: "Plan all components in a stack"
+    arguments:
+      - name: stack
+        description: "Target stack name"
+        required: true
+    steps:
+      - "terraform plan vpc -s {{ .Arguments.stack }}"
+      - "terraform plan cluster -s {{ .Arguments.stack }}"
+      - "terraform plan database -s {{ .Arguments.stack }}"
+      - "terraform plan api -s {{ .Arguments.stack }}"
+
+  - name: validate-all
+    description: "Validate all stacks"
+    steps:
+      - "validate stacks"
+
+  - name: lint
+    description: "Run tflint on terraform components"
+    dependencies:
+      tools:
+        tflint: "0.54.0"
+    arguments:
+      - name: component
+        description: "Component to lint"
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: "Stack name"
+        required: true
+    steps:
+      - "atmos terraform generate varfile {{ .Arguments.component }} -s {{ .Flags.stack }}"
+      - "tflint --chdir=components/terraform/{{ .Arguments.component }}"
+
+# Vendor configuration
+vendor:
+  base_path: "vendor.yaml"
+
+# Workflow configuration
+workflows:
+  base_path: "workflows"
+
+# Settings
+settings:
+  list_merge_strategy: replace
+
+# Toolchain configuration - Native tool management
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+    helm: helm/helm
+    kubectl: kubernetes/kubectl
+    tflint: terraform-linters/tflint
+  tool_versions_file: .tool-versions
+
+# Integrations
+integrations:
+  github:
+    gitops:
+      opentofu-version: 1.10.0
+      terraform-version: 1.9.0
+      infracost-enabled: false
+      artifact-storage:
+        region: us-east-2
+        bucket: acme-gitops-artifacts
+        table: acme-gitops-locks
+        role: arn:aws:iam::111111111111:role/acme-gitops
+
+# Authentication configuration
+# Uses mock/aws provider for demos (no real credentials required)
+auth:
+  default: plat-dev/admin
+
+  providers:
+    acme-sso:
+      kind: mock/aws
+      region: us-east-2
+      start_url: https://acme.awsapps.com/start/
+
+  identities:
+    # Base identity via IAM Identity Center
+    core-identity/platform-team-access:
+      kind: mock/aws
+      via:
+        provider: acme-sso
+      principal:
+        name: "PlatformTeamAccess"
+        account:
+          name: "core-identity"
+
+    # Core accounts
+    core-identity/admin:
+      kind: mock/aws
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::111111111111:role/acme-core-gbl-identity-admin
+
+    core-network/admin:
+      kind: mock/aws
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::222222222222:role/acme-core-gbl-network-admin
+
+    core-security/admin:
+      kind: mock/aws
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::333333333333:role/acme-core-gbl-security-admin
+
+    # Platform accounts
+    plat-dev/admin:
+      kind: mock/aws
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::444444444444:role/acme-plat-gbl-dev-admin
+
+    plat-staging/admin:
+      kind: mock/aws
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::555555555555:role/acme-plat-gbl-staging-admin
+
+    plat-prod/admin:
+      kind: mock/aws
+      via:
+        identity: core-identity/platform-team-access
+      principal:
+        assume_role: arn:aws:iam::666666666666:role/acme-plat-gbl-prod-admin
+
+# Schemas for validation (disabled for demo)
+# schemas:
+#   jsonschema:
+#     base_path: "stacks/schemas/jsonschema"
+#   opa:
+#     base_path: "stacks/schemas/opa"
+#   atmos:
+#     manifest: "stacks/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json"

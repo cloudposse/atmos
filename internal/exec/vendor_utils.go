@@ -567,6 +567,16 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 		PreserveTimes: false,
 		PreserveOwner: false,
 		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+		// OnDirExists handles existing directories at the destination.
+		// We skip .git directories from source, but if the destination already has a .git directory
+		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
+		// on git packfiles which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
+		},
 	}
 
 	// Adjust the target path if it's a local file with no extension

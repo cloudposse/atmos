@@ -124,8 +124,9 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 
 	// Build format options.
 	opts := tfoutput.FormatOptions{
-		Uppercase: uppercase,
-		Flatten:   flatten,
+		Uppercase:   uppercase,
+		Flatten:     flatten,
+		AtmosConfig: atmosConfig,
 	}
 
 	// Check if a specific output name was requested (in AdditionalArgsAndFlags).
@@ -171,7 +172,7 @@ func formatSingleOutput(outputs map[string]any, outputName, format string, opts 
 
 func init() {
 	outputParser = flags.NewStandardParser(
-		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, hcl, env, dotenv, bash, csv, tsv"),
+		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, hcl, env, dotenv, bash, csv, tsv, table"),
 		flags.WithStringFlag("output-file", "o", "", "Write output to file instead of stdout"),
 		flags.WithBoolFlag("uppercase", "u", false, "Convert keys to uppercase (useful for env vars)"),
 		flags.WithBoolFlag("flatten", "", false, "Flatten nested maps into key_subkey format"),

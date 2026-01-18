@@ -13,7 +13,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -465,11 +464,13 @@ func formatReleaseNotes(name, tagName, body, publishedAt string) string {
 
 // renderMarkdown renders markdown content using glamour.
 func renderMarkdown(content string, width int) string {
-	// Create a glamour renderer with dracula theme but override borders
+	// Create a glamour renderer with dracula theme but override borders.
+	// Use ui.GetColorProfile() instead of termenv.ColorProfile() to respect
+	// atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle("dracula"), // Use dracula theme for better contrast
 		glamour.WithWordWrap(width),          // Use the actual column width for word wrap
-		glamour.WithColorProfile(termenv.ColorProfile()),
+		glamour.WithColorProfile(ui.GetColorProfile()),
 		glamour.WithEmoji(),
 	)
 	if err != nil {

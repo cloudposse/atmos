@@ -37,7 +37,7 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return githubProviders.NewOIDCProvider(name, config)
 	case "mock":
 		return mockProviders.NewProvider(name, config), nil
-	case "mock-aws":
+	case "mock/aws":
 		return mockawsProviders.NewProvider(name, config), nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported provider kind: %s", errUtils.ErrInvalidProviderKind, config.Kind)
@@ -63,7 +63,7 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return azureIdentities.NewSubscriptionIdentity(name, config)
 	case "mock":
 		return mockProviders.NewIdentity(name, config), nil
-	case "mock-aws":
+	case "mock/aws":
 		return mockawsProviders.NewIdentity(name, config), nil
 	default:
 		return nil, fmt.Errorf("%w: unsupported identity kind: %s", errUtils.ErrInvalidIdentityKind, config.Kind)

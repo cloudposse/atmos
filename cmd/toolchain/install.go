@@ -12,13 +12,16 @@ import (
 var installParser *flags.StandardParser
 
 var installCmd = &cobra.Command{
-	Use:   "install [tool]",
-	Short: "Install a CLI binary from the registry",
-	Long: `Install a CLI binary using metadata from the registry.
+	Use:   "install [tool...]",
+	Short: "Install CLI binaries from the registry",
+	Long: `Install one or more CLI binaries using metadata from the registry.
 
-The tool should be specified in the format: owner/repo@version
+Tools should be specified in the format: owner/repo@version
+
+Multiple tools can be installed in a single command:
+  atmos toolchain install opentofu@1.6.0 tflint@0.50.0 kubectl@1.29.0
 `,
-	Args:          cobra.MaximumNArgs(1),
+	Args:          cobra.ArbitraryArgs,
 	RunE:          runInstall,
 	SilenceUsage:  true, // Don't show usage on error.
 	SilenceErrors: true, // Don't show errors twice.
@@ -49,16 +52,20 @@ func runInstall(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	toolSpec := ""
-	if len(args) > 0 {
-		toolSpec = args[0]
-	}
-
 	reinstall := v.GetBool("reinstall")
 	defaultVersion := v.GetBool("default")
 
-	// Show PATH hint and progress bar when running toolchain install directly.
-	return toolchain.RunInstall(toolSpec, defaultVersion, reinstall, true, true)
+	// Handle single tool vs multiple tools.
+	if len(args) == 0 {
+		// No args: install from .tool-versions file.
+		return toolchain.RunInstall("", defaultVersion, reinstall, true, true)
+	}
+	if len(args) == 1 {
+		// Single tool: use single-tool flow with full progress.
+		return toolchain.RunInstall(args[0], defaultVersion, reinstall, true, true)
+	}
+	// Multiple tools: use batch installer.
+	return toolchain.RunInstallBatch(args, reinstall)
 }
 
 // InstallCommandProvider implements the CommandProvider interface.

@@ -464,6 +464,11 @@ const config = {
                         label: 'Reference'
                     },
                     {
+                        to: '/demos',
+                        position: 'left',
+                        label: 'Demos'
+                    },
+                    {
                         to: '/examples',
                         position: 'left',
                         label: 'Examples'

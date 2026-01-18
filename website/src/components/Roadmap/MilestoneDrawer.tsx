@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from '@docusaurus/Link';
 import { RiCloseLine, RiBookOpenLine, RiMegaphoneLine } from 'react-icons/ri';
+import DemoVideo from '@site/src/components/Video/DemoVideo';
 import styles from './styles.module.css';
 import { renderInlineMarkdown } from './utils';
 import type { Milestone } from './MilestoneList';
@@ -119,6 +120,16 @@ export default function MilestoneDrawer({
             </div>
 
             <div className={styles.drawerContent}>
+              {milestone.demoId && (
+                <div className={styles.drawerDemo}>
+                  <DemoVideo
+                    id={milestone.demoId}
+                    title={milestone.label}
+                    showCaption={false}
+                  />
+                </div>
+              )}
+
               {milestone.description && (
                 <p className={styles.drawerDescription}>
                   {milestone.description}

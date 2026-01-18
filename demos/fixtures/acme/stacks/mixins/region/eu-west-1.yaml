@@ -1,0 +1,4 @@
+# Region: EU West 1 (Ireland)
+vars:
+  region: eu-west-1
+  environment: euw1
