@@ -9,22 +9,22 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
-	aliasesHeaderSeparatorWidth = 50
-	aliasTypeBuiltIn            = "built-in"
-	aliasTypeConfigured         = "configured"
+	aliasTypeBuiltIn    = "built-in"
+	aliasTypeConfigured = "configured"
 )
 
 // AliasInfo represents a command alias with its source type.
@@ -39,7 +39,9 @@ var aliasesParser *flags.StandardParser
 // AliasesOptions contains parsed flags for the aliases command.
 type AliasesOptions struct {
 	global.Flags
-	Format string
+	Format  string
+	Columns []string
+	Sort    string
 }
 
 // aliasesCmd lists configured command aliases.
@@ -51,7 +53,9 @@ var aliasesCmd = &cobra.Command{
   - Configured aliases: User-defined aliases from atmos.yaml`,
 	Example: "atmos list aliases\n" +
 		"atmos list aliases --format json\n" +
-		"atmos list aliases --format yaml",
+		"atmos list aliases --format yaml\n" +
+		"atmos list aliases --columns alias,command\n" +
+		"atmos list aliases --sort type:asc,alias:asc",
 	Args: cobra.NoArgs,
 	RunE: executeListAliases,
 }
@@ -60,6 +64,8 @@ func init() {
 	// Create parser with aliases-specific flags using flag wrappers.
 	aliasesParser = NewListParser(
 		WithFormatFlag,
+		WithAliasesColumnsFlag,
+		WithSortFlag,
 	)
 
 	// Register flags.
@@ -80,8 +86,10 @@ func executeListAliases(cmd *cobra.Command, args []string) error {
 	}
 
 	opts := &AliasesOptions{
-		Flags:  flags.ParseGlobalFlags(cmd, v),
-		Format: v.GetString("format"),
+		Flags:   flags.ParseGlobalFlags(cmd, v),
+		Format:  v.GetString("format"),
+		Columns: v.GetStringSlice("columns"),
+		Sort:    v.GetString("sort"),
 	}
 
 	// Get root command to collect built-in aliases.
@@ -106,12 +114,47 @@ func executeListAliasesWithOptions(opts *AliasesOptions, rootCmd *cobra.Command)
 		return nil
 	}
 
-	// Use renderer for non-table formats (json, yaml, csv, tsv).
-	if opts.Format != "" && opts.Format != "table" {
-		return renderAliasesWithFormat(allAliases, opts.Format)
+	// Convert aliases to []map[string]any for renderer.
+	data := aliasesToData(allAliases)
+
+	// Build columns (use opts.Columns or default).
+	columns := getAliasColumns(opts.Columns)
+
+	// Build column selector.
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCreateColumnSelector, err)
 	}
 
-	return displayAliases(allAliases)
+	// Build sorters.
+	sorters, err := buildAliasSorters(opts.Sort)
+	if err != nil {
+		return err
+	}
+
+	// Determine output format.
+	outputFormat := format.Format(opts.Format)
+
+	// Create renderer.
+	r := renderer.New(nil, selector, sorters, outputFormat, "")
+
+	// For table format with TTY, use RenderToString and add footer.
+	if outputFormat == "" || outputFormat == format.FormatTable {
+		term := terminal.New()
+		if term.IsTTY(terminal.Stdout) {
+			// Render to string, add footer, then output.
+			output, err := r.RenderToString(data)
+			if err != nil {
+				return err
+			}
+			footer := buildAliasFooter(allAliases)
+			ui.Write(output + footer)
+			return nil
+		}
+	}
+
+	// For all other cases, use standard render.
+	return r.Render(data)
 }
 
 // collectAllAliases gathers both built-in and configured aliases.
@@ -207,30 +250,6 @@ func collectBuiltInAliases(cmd *cobra.Command, parentPath string) []AliasInfo {
 	return aliases
 }
 
-// renderAliasesWithFormat renders aliases using the list renderer infrastructure.
-func renderAliasesWithFormat(aliases []AliasInfo, outputFormat string) error {
-	// Convert aliases to []map[string]any for renderer.
-	data := aliasesToData(aliases)
-
-	// Define columns for aliases (including type).
-	columns := []column.Config{
-		{Name: "Alias", Value: "{{ .alias }}"},
-		{Name: "Command", Value: "{{ .command }}"},
-		{Name: "Type", Value: "{{ .type }}"},
-	}
-
-	// Build column selector.
-	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
-	if err != nil {
-		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCreateColumnSelector, err)
-	}
-
-	// Create renderer with format and execute.
-	r := renderer.New(nil, selector, nil, format.Format(outputFormat), "")
-
-	return r.Render(data)
-}
-
 // aliasesToData converts AliasInfo slice to []map[string]any for the renderer.
 func aliasesToData(aliases []AliasInfo) []map[string]any {
 	data := make([]map[string]any, 0, len(aliases))
@@ -244,36 +263,50 @@ func aliasesToData(aliases []AliasInfo) []map[string]any {
 	return data
 }
 
-// displayAliases formats and displays the aliases to the terminal.
-func displayAliases(aliases []AliasInfo) error {
-	// Check if we're in TTY mode.
-	if !term.IsTTYSupportForStdout() {
-		// Fall back to simple text output for non-TTY.
-		output := formatSimpleAliasesOutput(aliases)
-		ui.Write(output)
-		return nil
+// getAliasColumns returns column configs, using custom columns if specified.
+func getAliasColumns(customColumns []string) []column.Config {
+	// Default columns.
+	defaultColumns := []column.Config{
+		{Name: "Alias", Value: "{{ .alias }}"},
+		{Name: "Command", Value: "{{ .command }}"},
+		{Name: "Type", Value: "{{ .type }}"},
 	}
 
-	output := formatAliasesTable(aliases)
-	ui.Write(output)
-	return nil
+	if len(customColumns) == 0 {
+		return defaultColumns
+	}
+
+	// Map column names to configs.
+	columnMap := map[string]column.Config{
+		"alias":   {Name: "Alias", Value: "{{ .alias }}"},
+		"command": {Name: "Command", Value: "{{ .command }}"},
+		"type":    {Name: "Type", Value: "{{ .type }}"},
+	}
+
+	var result []column.Config
+	for _, name := range customColumns {
+		if col, ok := columnMap[strings.ToLower(name)]; ok {
+			result = append(result, col)
+		}
+	}
+
+	if len(result) == 0 {
+		return defaultColumns
+	}
+	return result
 }
 
-// formatAliasesTable formats aliases into a styled Charmbracelet table.
-func formatAliasesTable(aliases []AliasInfo) string {
-	// Prepare headers and rows.
-	headers := []string{"Alias", "Command", "Type"}
-	var rows [][]string
-
-	for _, alias := range aliases {
-		row := []string{alias.Alias, alias.Command, alias.Type}
-		rows = append(rows, row)
+// buildAliasSorters builds sorters from sort specification.
+func buildAliasSorters(sortSpec string) ([]*listSort.Sorter, error) {
+	if sortSpec == "" {
+		// Default sort by alias name.
+		return []*listSort.Sorter{listSort.NewSorter("Alias", listSort.Ascending)}, nil
 	}
+	return listSort.ParseSortSpec(sortSpec)
+}
 
-	// Use minimal table with left-aligned columns (CreateThemedTable right-aligns column 0).
-	output := theme.CreateMinimalTable(headers, rows) + "\n"
-
-	// Footer message with breakdown.
+// buildAliasFooter builds the footer showing alias counts.
+func buildAliasFooter(aliases []AliasInfo) string {
 	styles := theme.GetCurrentStyles()
 
 	builtInCount := 0
@@ -292,40 +325,5 @@ func formatAliasesTable(aliases []AliasInfo) string {
 	}
 	footer += fmt.Sprintf(" (%d built-in, %d configured)", builtInCount, configuredCount)
 
-	output += styles.Footer.Render(footer) + "\n"
-
-	return output
-}
-
-// formatSimpleAliasesOutput formats aliases as simple text for non-TTY output.
-func formatSimpleAliasesOutput(aliases []AliasInfo) string {
-	var output string
-
-	// Header.
-	output += fmt.Sprintf("%-20s %-30s %s\n", "Alias", "Command", "Type")
-	output += fmt.Sprintf("%s\n", strings.Repeat("=", aliasesHeaderSeparatorWidth+10))
-
-	// Alias rows.
-	for _, alias := range aliases {
-		output += fmt.Sprintf("%-20s %-30s %s\n", alias.Alias, alias.Command, alias.Type)
-	}
-
-	// Footer message with breakdown.
-	builtInCount := 0
-	configuredCount := 0
-	for _, alias := range aliases {
-		if alias.Type == aliasTypeBuiltIn {
-			builtInCount++
-		} else {
-			configuredCount++
-		}
-	}
-
-	output += fmt.Sprintf("\n%d alias", len(aliases))
-	if len(aliases) != 1 {
-		output += "es"
-	}
-	output += fmt.Sprintf(" (%d built-in, %d configured)\n", builtInCount, configuredCount)
-
-	return output
+	return styles.Footer.Render(footer) + "\n"
 }

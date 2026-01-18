@@ -30,13 +30,17 @@ This replaces the need for verbose `--stack` flags in many common cases.
 
 ### New `atmos list aliases` Subcommand
 
-View all configured CLI command aliases in your `atmos.yaml`:
+View all command aliases—both built-in and user-configured:
 
 ```bash
 atmos list aliases
 ```
 
-This helps you discover shortcuts configured in your project.
+This command shows:
+- **Built-in aliases**: Native command shortcuts (e.g., `tf` → `terraform`, `hf` → `helmfile`)
+- **Configured aliases**: User-defined shortcuts from your `atmos.yaml`
+
+The output includes a "Type" column so you can easily distinguish between the two, helping you discover all available shortcuts in your project.
 
 ### Multi-Tool Installation
 

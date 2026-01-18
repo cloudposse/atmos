@@ -56,72 +56,76 @@ func TestAliasInfo(t *testing.T) {
 	assert.Equal(t, "built-in", alias.Type)
 }
 
-// TestFormatAliasesTable tests the formatAliasesTable function.
-func TestFormatAliasesTable(t *testing.T) {
+// TestGetAliasColumnsDefault tests getAliasColumns with no custom columns.
+func TestGetAliasColumnsDefault(t *testing.T) {
+	columns := getAliasColumns(nil)
+
+	assert.Len(t, columns, 3)
+	assert.Equal(t, "Alias", columns[0].Name)
+	assert.Equal(t, "Command", columns[1].Name)
+	assert.Equal(t, "Type", columns[2].Name)
+}
+
+// TestGetAliasColumnsCustom tests getAliasColumns with custom column selection.
+func TestGetAliasColumnsCustom(t *testing.T) {
+	columns := getAliasColumns([]string{"alias", "command"})
+
+	assert.Len(t, columns, 2)
+	assert.Equal(t, "Alias", columns[0].Name)
+	assert.Equal(t, "Command", columns[1].Name)
+}
+
+// TestGetAliasColumnsInvalidFallback tests getAliasColumns falls back to default with invalid columns.
+func TestGetAliasColumnsInvalidFallback(t *testing.T) {
+	columns := getAliasColumns([]string{"invalid", "unknown"})
+
+	// Should fall back to defaults when no valid columns found.
+	assert.Len(t, columns, 3)
+}
+
+// TestBuildAliasSortersDefault tests buildAliasSorters with empty spec (default sort).
+func TestBuildAliasSortersDefault(t *testing.T) {
+	sorters, err := buildAliasSorters("")
+
+	assert.NoError(t, err)
+	assert.Len(t, sorters, 1)
+	assert.Equal(t, "Alias", sorters[0].Column)
+}
+
+// TestBuildAliasSortersCustom tests buildAliasSorters with custom sort spec.
+func TestBuildAliasSortersCustom(t *testing.T) {
+	sorters, err := buildAliasSorters("type:desc,alias:asc")
+
+	assert.NoError(t, err)
+	assert.Len(t, sorters, 2)
+}
+
+// TestBuildAliasFooter tests the buildAliasFooter function.
+func TestBuildAliasFooter(t *testing.T) {
 	aliases := []AliasInfo{
 		{Alias: "ls", Command: "list stacks", Type: aliasTypeConfigured},
 		{Alias: "tf", Command: "terraform", Type: aliasTypeBuiltIn},
 		{Alias: "tp", Command: "terraform plan", Type: aliasTypeConfigured},
 	}
 
-	output := formatAliasesTable(aliases)
+	footer := buildAliasFooter(aliases)
 
-	assert.Contains(t, output, "tf")
-	assert.Contains(t, output, "terraform")
-	assert.Contains(t, output, "tp")
-	assert.Contains(t, output, "terraform plan")
-	assert.Contains(t, output, "ls")
-	assert.Contains(t, output, "list stacks")
-	assert.Contains(t, output, "3 aliases")
-	assert.Contains(t, output, "1 built-in")
-	assert.Contains(t, output, "2 configured")
+	assert.Contains(t, footer, "3 aliases")
+	assert.Contains(t, footer, "1 built-in")
+	assert.Contains(t, footer, "2 configured")
 }
 
-// TestFormatSimpleAliasesOutput tests the formatSimpleAliasesOutput function.
-func TestFormatSimpleAliasesOutput(t *testing.T) {
-	aliases := []AliasInfo{
-		{Alias: "tf", Command: "terraform", Type: aliasTypeBuiltIn},
-		{Alias: "tp", Command: "terraform plan", Type: aliasTypeConfigured},
-	}
-
-	output := formatSimpleAliasesOutput(aliases)
-
-	assert.Contains(t, output, "Alias")
-	assert.Contains(t, output, "Command")
-	assert.Contains(t, output, "Type")
-	assert.Contains(t, output, "tf")
-	assert.Contains(t, output, "terraform")
-	assert.Contains(t, output, "tp")
-	assert.Contains(t, output, "terraform plan")
-	assert.Contains(t, output, "2 aliases")
-	assert.Contains(t, output, "1 built-in")
-	assert.Contains(t, output, "1 configured")
-}
-
-// TestFormatSimpleAliasesOutputSingular tests singular alias count.
-func TestFormatSimpleAliasesOutputSingular(t *testing.T) {
+// TestBuildAliasFooterSingular tests buildAliasFooter with singular alias count.
+func TestBuildAliasFooterSingular(t *testing.T) {
 	aliases := []AliasInfo{
 		{Alias: "tf", Command: "terraform", Type: aliasTypeBuiltIn},
 	}
 
-	output := formatSimpleAliasesOutput(aliases)
+	footer := buildAliasFooter(aliases)
 
-	assert.Contains(t, output, "1 alias")
-	assert.Contains(t, output, "1 built-in")
-	assert.Contains(t, output, "0 configured")
-}
-
-// TestFormatAliasesTableSingular tests singular alias count in table format.
-func TestFormatAliasesTableSingular(t *testing.T) {
-	aliases := []AliasInfo{
-		{Alias: "tf", Command: "terraform", Type: aliasTypeConfigured},
-	}
-
-	output := formatAliasesTable(aliases)
-
-	assert.Contains(t, output, "1 alias")
-	assert.Contains(t, output, "0 built-in")
-	assert.Contains(t, output, "1 configured")
+	assert.Contains(t, footer, "1 alias")
+	assert.Contains(t, footer, "1 built-in")
+	assert.Contains(t, footer, "0 configured")
 }
 
 // TestAliasesFormatFlag tests that the format flag is registered.
@@ -130,6 +134,18 @@ func TestAliasesFormatFlag(t *testing.T) {
 	assert.NotNil(t, formatFlag, "Expected format flag to exist")
 	assert.Equal(t, "", formatFlag.DefValue)
 	assert.Equal(t, "f", formatFlag.Shorthand)
+}
+
+// TestAliasesColumnsFlag tests that the columns flag is registered.
+func TestAliasesColumnsFlag(t *testing.T) {
+	columnsFlag := aliasesCmd.Flags().Lookup("columns")
+	assert.NotNil(t, columnsFlag, "Expected columns flag to exist")
+}
+
+// TestAliasesSortFlag tests that the sort flag is registered.
+func TestAliasesSortFlag(t *testing.T) {
+	sortFlag := aliasesCmd.Flags().Lookup("sort")
+	assert.NotNil(t, sortFlag, "Expected sort flag to exist")
 }
 
 // TestAliasesToData tests the aliasesToData conversion function.
@@ -170,6 +186,8 @@ func TestAliasesExamples(t *testing.T) {
 	assert.Contains(t, aliasesCmd.Example, "atmos list aliases")
 	assert.Contains(t, aliasesCmd.Example, "--format json")
 	assert.Contains(t, aliasesCmd.Example, "--format yaml")
+	assert.Contains(t, aliasesCmd.Example, "--columns")
+	assert.Contains(t, aliasesCmd.Example, "--sort")
 }
 
 // TestCollectBuiltInAliases tests the collectBuiltInAliases function.
