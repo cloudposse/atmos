@@ -224,6 +224,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return err
 	}
 
+	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
+	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
+	applyOptionsToInfo(&info, opts)
+
 	// Resolve paths and prompt for missing component/stack interactively.
 	if err := resolveAndPromptForArgs(&info, actualCmd); err != nil {
 		return err
@@ -234,8 +238,6 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
-
-	applyOptionsToInfo(&info, opts)
 
 	// Handle --identity flag for interactive selection when used without a value.
 	if info.Identity == cfg.IdentityFlagSelectValue {
