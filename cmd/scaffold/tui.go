@@ -31,31 +31,38 @@ func NewProductionUI(initUI *generatorUI.InitUI) ScaffoldUI {
 
 // Basic output methods.
 func (ui *ProductionUI) Info(message string) error {
-	return atmosui.Info(message)
+	atmosui.Info(message)
+	return nil
 }
 
 func (ui *ProductionUI) Success(message string) error {
-	return atmosui.Success(message)
+	atmosui.Success(message)
+	return nil
 }
 
 func (ui *ProductionUI) Error(message string) error {
-	return atmosui.Error(message)
+	atmosui.Error(message)
+	return nil
 }
 
 func (ui *ProductionUI) Warning(message string) error {
-	return atmosui.Warning(message)
+	atmosui.Warning(message)
+	return nil
 }
 
 func (ui *ProductionUI) Write(message string) error {
-	return atmosui.Write(message)
+	atmosui.Write(message)
+	return nil
 }
 
 func (ui *ProductionUI) Writef(format string, args ...interface{}) error {
-	return atmosui.Writef(format, args...)
+	atmosui.Writef(format, args...)
+	return nil
 }
 
 func (ui *ProductionUI) Writeln(message string) error {
-	return atmosui.Writeln(message)
+	atmosui.Writeln(message)
+	return nil
 }
 
 // Interactive prompts.
@@ -293,9 +300,7 @@ func (ui *ProductionUI) extractOptions(rawOptions []interface{}) []string {
 
 // Complex rendering.
 func (ui *ProductionUI) RenderTemplateList(configs map[string]templates.Configuration) error {
-	if err := atmosui.Writeln("\nAvailable Scaffold Templates:\n"); err != nil {
-		return err
-	}
+	atmosui.Writeln("\nAvailable Scaffold Templates:\n")
 
 	// Build table data.
 	header := []string{"Name", "Description"}
@@ -315,21 +320,16 @@ func (ui *ProductionUI) RenderTemplateList(configs map[string]templates.Configur
 
 	// Simple table rendering since DisplayConfigurationTable is unexported.
 	// Print header.
-	if err := atmosui.Writef("%-30s %s\n", header[0], header[1]); err != nil {
-		return err
-	}
-	if err := atmosui.Writeln(strings.Repeat("-", defaultTableWidth)); err != nil {
-		return err
-	}
+	atmosui.Writef("%-30s %s\n", header[0], header[1])
+	atmosui.Writeln(strings.Repeat("-", defaultTableWidth))
 
 	// Print rows.
 	for _, row := range rows {
-		if err := atmosui.Writef("%-30s %s\n", row[0], row[1]); err != nil {
-			return err
-		}
+		atmosui.Writef("%-30s %s\n", row[0], row[1])
 	}
 
-	return atmosui.Writeln("")
+	atmosui.Writeln("")
+	return nil
 }
 
 func (ui *ProductionUI) RenderDryRunPreview(
@@ -338,28 +338,17 @@ func (ui *ProductionUI) RenderDryRunPreview(
 	files []DryRunFile,
 ) error {
 	// Header.
-	if err := atmosui.Writeln("\n🔍 Dry-run mode: Preview of files that would be generated\n"); err != nil {
-		return err
-	}
-
-	if err := atmosui.Writef("Template: %s\n", config.Name); err != nil {
-		return err
-	}
+	atmosui.Writeln("\n🔍 Dry-run mode: Preview of files that would be generated\n")
+	atmosui.Writef("Template: %s\n", config.Name)
 
 	if targetDir != "" {
-		if err := atmosui.Writef("Target: %s\n\n", targetDir); err != nil {
-			return err
-		}
+		atmosui.Writef("Target: %s\n\n", targetDir)
 	} else {
-		if err := atmosui.Writeln(""); err != nil {
-			return err
-		}
+		atmosui.Writeln("")
 	}
 
 	// File list.
-	if err := atmosui.Writeln("Files that would be generated:\n"); err != nil {
-		return err
-	}
+	atmosui.Writeln("Files that would be generated:\n")
 
 	for _, file := range files {
 		status := FileStatusCreated
@@ -367,34 +356,28 @@ func (ui *ProductionUI) RenderDryRunPreview(
 			status = FileStatusUpdated
 		}
 
-		if err := atmosui.Writef("  %s %s %s\n", status.Icon(), status.String(), file.Path); err != nil {
-			return err
-		}
+		atmosui.Writef("  %s %s %s\n", status.Icon(), status.String(), file.Path)
 	}
 
-	return atmosui.Writeln("\n💡 Use --force to overwrite existing files")
+	atmosui.Writeln("")
+	atmosui.Hint("Use --force to overwrite existing files")
+	return nil
 }
 
 func (ui *ProductionUI) RenderValidationResults(results []ValidationResult) error {
 	for _, result := range results {
 		if result.Valid {
-			if err := atmosui.Success(fmt.Sprintf("✓ %s", result.Path)); err != nil {
-				return err
-			}
+			atmosui.Success(fmt.Sprintf("✓ %s", result.Path))
 		} else {
 			errMsg := strings.Join(result.Errors, ", ")
-			if err := atmosui.Error(fmt.Sprintf("✗ %s: %s", result.Path, errMsg)); err != nil {
-				return err
-			}
+			atmosui.Error(fmt.Sprintf("✗ %s: %s", result.Path, errMsg))
 		}
 	}
 	return nil
 }
 
 func (ui *ProductionUI) RenderValidationSummary(validCount, errorCount int) error {
-	if err := atmosui.Writeln(""); err != nil {
-		return err
-	}
+	atmosui.Writeln("")
 
 	if errorCount > 0 {
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
@@ -410,15 +393,18 @@ func (ui *ProductionUI) RenderValidationSummary(validCount, errorCount int) erro
 			Err()
 	}
 
-	return atmosui.Success(fmt.Sprintf("All %d scaffold file(s) are valid!", validCount))
+	atmosui.Success(fmt.Sprintf("All %d scaffold file(s) are valid!", validCount))
+	return nil
 }
 
 // File operations feedback.
 func (ui *ProductionUI) PrintFilePath(targetDir, renderedPath string) error {
 	fullPath := filepath.Join(targetDir, renderedPath)
-	return atmosui.Writef("  %s %s\n", "•", fullPath)
+	atmosui.Writef("  %s %s\n", "•", fullPath)
+	return nil
 }
 
 func (ui *ProductionUI) PrintFileStatus(path string, status FileStatus) error {
-	return atmosui.Writef("  %s %s %s\n", status.Icon(), status.String(), path)
+	atmosui.Writef("  %s %s %s\n", status.Icon(), status.String(), path)
+	return nil
 }

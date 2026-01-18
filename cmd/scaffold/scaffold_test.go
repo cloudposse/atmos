@@ -917,8 +917,7 @@ prompts:
 
 	scaffoldPaths := []string{validPath, invalidPath}
 
-	validCount, errorCount, err := validateAllScaffoldFiles(scaffoldPaths)
-	require.NoError(t, err) // UI errors would stop execution
+	validCount, errorCount := validateAllScaffoldFiles(scaffoldPaths)
 	assert.Equal(t, 1, validCount)
 	assert.Equal(t, 1, errorCount)
 }

@@ -2,7 +2,7 @@
 slug: introducing-atmos-init-and-scaffold
 title: "Introducing atmos init and atmos scaffold: Get Started in Seconds"
 authors: [atmos]
-tags: [feature, enhancement, atmos-core]
+tags: [feature, dx]
 ---
 
 We're excited to announce two new commands that dramatically simplify getting started with Atmos: `atmos init` and `atmos scaffold`. These commands eliminate the manual setup process and help you bootstrap new Atmos projects or generate infrastructure code in seconds.

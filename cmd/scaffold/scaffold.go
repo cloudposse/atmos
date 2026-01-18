@@ -409,8 +409,8 @@ func mergeConfiguredTemplates(configs map[string]templates.Configuration, origin
 	for templateName, templateData := range templatesMap {
 		cfg, err := convertScaffoldTemplateToConfiguration(templateName, templateData)
 		if err != nil {
-			// Log error but continue with other templates
-			_ = atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
+			// Log error but continue with other templates.
+			atmosui.Warning(fmt.Sprintf("Failed to load scaffold template '%s': %v", templateName, err))
 			continue
 		}
 		// Configured templates override embedded templates
@@ -505,32 +505,25 @@ func renderDryRunPreview(
 	targetDir string,
 	templateVars map[string]interface{},
 ) error {
-	if err := renderDryRunHeader(selectedConfig, targetDir); err != nil {
-		return err
-	}
+	renderDryRunHeader(selectedConfig, targetDir)
 
 	mergedValues, err := loadDryRunValues(selectedConfig, templateVars)
 	if err != nil {
 		return err
 	}
 
-	return renderDryRunFileList(selectedConfig, targetDir, mergedValues)
+	renderDryRunFileList(selectedConfig, targetDir, mergedValues)
+	return nil
 }
 
 // renderDryRunHeader renders the header information for dry-run mode.
-func renderDryRunHeader(selectedConfig *templates.Configuration, targetDir string) error {
-	if err := atmosui.Info("Dry-run mode: No files will be written"); err != nil {
-		return err
-	}
-	if err := atmosui.Writef("\nTemplate: %s\n", selectedConfig.Name); err != nil {
-		return err
-	}
+func renderDryRunHeader(selectedConfig *templates.Configuration, targetDir string) {
+	atmosui.Info("Dry-run mode: No files will be written")
+	atmosui.Writef("\nTemplate: %s\n", selectedConfig.Name)
 	if selectedConfig.Description != "" {
-		if err := atmosui.Writef("Description: %s\n", selectedConfig.Description); err != nil {
-			return err
-		}
+		atmosui.Writef("Description: %s\n", selectedConfig.Description)
 	}
-	return atmosui.Writef("Target directory: %s\n\n", targetDir)
+	atmosui.Writef("Target directory: %s\n\n", targetDir)
 }
 
 // loadDryRunValues loads configuration values for dry-run preview using defaults.
@@ -583,10 +576,8 @@ func findScaffoldConfigFile(files []templates.File) *templates.File {
 }
 
 // renderDryRunFileList renders the list of files that would be generated.
-func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, mergedValues map[string]interface{}) error {
-	if err := atmosui.Write("Files that would be generated:\n\n"); err != nil {
-		return err
-	}
+func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir string, mergedValues map[string]interface{}) {
+	atmosui.Write("Files that would be generated:\n\n")
 
 	fileCount := 0
 	for _, file := range selectedConfig.Files {
@@ -595,13 +586,11 @@ func renderDryRunFileList(selectedConfig *templates.Configuration, targetDir str
 		}
 
 		renderedPath := renderFilePath(file.Path, mergedValues)
-		if err := printFilePath(targetDir, renderedPath); err != nil {
-			return err
-		}
+		printFilePath(targetDir, renderedPath)
 		fileCount++
 	}
 
-	return atmosui.Writef("\nTotal: %d files would be generated\n", fileCount)
+	atmosui.Writef("\nTotal: %d files would be generated\n", fileCount)
 }
 
 // renderFilePath applies simple variable substitution to a file path.
@@ -617,12 +606,13 @@ func renderFilePath(path string, values map[string]interface{}) string {
 }
 
 // printFilePath prints a file path with proper formatting.
-func printFilePath(targetDir, renderedPath string) error {
+func printFilePath(targetDir, renderedPath string) {
 	if targetDir != "" {
 		fullPath := filepath.Join(targetDir, renderedPath)
-		return atmosui.Writef("  • %s\n", fullPath)
+		atmosui.Writef("  • %s\n", fullPath)
+		return
 	}
-	return atmosui.Writef("  • %s\n", renderedPath)
+	atmosui.Writef("  • %s\n", renderedPath)
 }
 
 // executeTemplateWithoutTargetDir handles template execution when no target directory is provided.
@@ -663,12 +653,8 @@ func executeScaffoldList(_ *cobra.Command) error {
 
 	// Check if there are any templates.
 	if len(configs) == 0 {
-		if err := atmosui.Info("No scaffold templates available."); err != nil {
-			return err
-		}
-		if err := atmosui.Info("Add templates to the 'scaffold.templates' section in atmos.yaml to get started."); err != nil {
-			return err
-		}
+		atmosui.Info("No scaffold templates available.")
+		atmosui.Info("Add templates to the 'scaffold.templates' section in atmos.yaml to get started.")
 		return nil
 	}
 
@@ -706,16 +692,14 @@ func executeValidateScaffold(
 	}
 
 	if len(scaffoldPaths) == 0 {
-		return atmosui.Info("No scaffold.yaml files found to validate")
+		atmosui.Info("No scaffold.yaml files found to validate")
+		return nil
 	}
 
-	// Validate all scaffold files
-	validCount, errorCount, err := validateAllScaffoldFiles(scaffoldPaths)
-	if err != nil {
-		return err
-	}
+	// Validate all scaffold files.
+	validCount, errorCount := validateAllScaffoldFiles(scaffoldPaths)
 
-	// Print summary and return result
+	// Print summary and return result.
 	return printValidationSummary(validCount, errorCount)
 }
 
@@ -735,44 +719,30 @@ func determineScaffoldPathsToValidate(path string) ([]string, error) {
 }
 
 // validateAllScaffoldFiles validates each scaffold file and returns counts.
-func validateAllScaffoldFiles(scaffoldPaths []string) (validCount int, errorCount int, err error) {
+func validateAllScaffoldFiles(scaffoldPaths []string) (validCount int, errorCount int) {
 	for _, scaffoldPath := range scaffoldPaths {
-		if uiErr := atmosui.Infof("Validating %s", scaffoldPath); uiErr != nil {
-			return 0, 0, uiErr
-		}
+		atmosui.Infof("Validating %s", scaffoldPath)
 
 		if validationErr := validateScaffoldFile(scaffoldPath); validationErr != nil {
-			if writeErr := atmosui.Errorf("%s: %v", scaffoldPath, validationErr); writeErr != nil {
-				return 0, 0, writeErr
-			}
+			atmosui.Errorf("%s: %v", scaffoldPath, validationErr)
 			errorCount++
 		} else {
-			if writeErr := atmosui.Successf("%s: valid", scaffoldPath); writeErr != nil {
-				return 0, 0, writeErr
-			}
+			atmosui.Successf("%s: valid", scaffoldPath)
 			validCount++
 		}
 	}
 
-	return validCount, errorCount, nil
+	return validCount, errorCount
 }
 
 // printValidationSummary prints the validation summary and returns an error if validation failed.
 func printValidationSummary(validCount int, errorCount int) error {
-	if err := atmosui.Writeln(""); err != nil {
-		return err
-	}
-	if err := atmosui.Writeln("Validation Summary:"); err != nil {
-		return err
-	}
-	if err := atmosui.Successf("Valid files: %d", validCount); err != nil {
-		return err
-	}
+	atmosui.Writeln("")
+	atmosui.Writeln("Validation Summary:")
+	atmosui.Successf("Valid files: %d", validCount)
 
 	if errorCount > 0 {
-		if err := atmosui.Errorf("Invalid files: %d", errorCount); err != nil {
-			return err
-		}
+		atmosui.Errorf("Invalid files: %d", errorCount)
 		return errUtils.Build(errUtils.ErrScaffoldValidation).
 			WithExplanationf("%d scaffold file(s) failed validation", errorCount).
 			WithHint("Review the validation errors above and fix the issues").
@@ -785,7 +755,8 @@ func printValidationSummary(validCount int, errorCount int) error {
 			Err()
 	}
 
-	return atmosui.Success("All scaffold files are valid")
+	atmosui.Success("All scaffold files are valid")
+	return nil
 }
 
 // findScaffoldFiles finds scaffold.yaml files in the given path.

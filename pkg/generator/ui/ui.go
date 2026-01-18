@@ -166,9 +166,7 @@ func (ui *InitUI) colorSource(source string) string {
 // flushOutput writes the accumulated output to stderr (UI channel) and clears the buffer.
 // The buffered content is UI messages (configuration summaries, progress updates, etc.)
 func (ui *InitUI) flushOutput() {
-	if err := atmosui.Write(ui.output.String()); err != nil {
-		log.Trace("Failed to flush UI output", "error", err)
-	}
+	atmosui.Write(ui.output.String())
 	ui.output.Reset()
 }
 
@@ -634,13 +632,9 @@ func (ui *InitUI) renderMarkdown(markdownContent string) error {
 		return fmt.Errorf("failed to render markdown: %w", err)
 	}
 
-	// Display the rendered markdown
-	if err := atmosui.Writeln(""); err != nil {
-		return err
-	}
-	if err := atmosui.Writeln(rendered); err != nil {
-		return err
-	}
+	// Display the rendered markdown.
+	atmosui.Writeln("")
+	atmosui.Writeln(rendered)
 
 	return nil
 }
@@ -863,21 +857,11 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	t.SetStyles(s)
 
 	// Write the table to UI channel.
-	if err := atmosui.Writeln(""); err != nil {
-		log.Trace(failedWriteBlankLine, "error", err)
-	}
-	if err := atmosui.Writeln("Available Scaffold Templates"); err != nil {
-		log.Trace("Failed to write table header", "error", err)
-	}
-	if err := atmosui.Writeln(""); err != nil {
-		log.Trace(failedWriteBlankLine, "error", err)
-	}
-	if err := atmosui.Writeln(t.View()); err != nil {
-		log.Trace("Failed to write table", "error", err)
-	}
-	if err := atmosui.Writeln(""); err != nil {
-		log.Trace(failedWriteBlankLine, "error", err)
-	}
+	atmosui.Writeln("")
+	atmosui.Writeln("Available Scaffold Templates")
+	atmosui.Writeln("")
+	atmosui.Writeln(t.View())
+	atmosui.Writeln("")
 }
 
 // PromptForTemplate prompts the user to select a template from available options.
@@ -959,20 +943,14 @@ func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) 
 		return "", err
 	}
 
-	// Display selected template details
-	if err := atmosui.Writeln(""); err != nil {
-		log.Trace(failedWriteBlankLine, "error", err)
-	}
+	// Display selected template details.
+	atmosui.Writeln("")
 	descStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
 		Padding(0, 1)
 
-	if err := atmosui.Writeln(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate))); err != nil {
-		log.Trace("Failed to write template selection", "error", err)
-	}
-	if err := atmosui.Writeln(""); err != nil {
-		log.Trace(failedWriteBlankLine, "error", err)
-	}
+	atmosui.Writeln(descStyle.Render(fmt.Sprintf("Selected template: %s", selectedTemplate)))
+	atmosui.Writeln("")
 
 	return selectedTemplate, nil
 }
