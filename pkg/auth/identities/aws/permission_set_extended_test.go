@@ -34,6 +34,45 @@ func TestPermissionSetIdentity_Environment_NoProvider(t *testing.T) {
 	assert.Equal(t, "custom_value", env["CUSTOM_VAR"])
 }
 
+func TestPermissionSetIdentity_Environment_WithRegion(t *testing.T) {
+	// When region is explicitly configured in principal, Environment should include AWS_REGION and AWS_DEFAULT_REGION.
+	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+		Kind: "aws/permission-set",
+		Principal: map[string]interface{}{
+			"name":    "DevAccess",
+			"account": map[string]interface{}{"id": "123456789012"},
+			"region":  "ap-southeast-1",
+		},
+	})
+	require.NoError(t, err)
+
+	env, err := identity.Environment()
+	assert.NoError(t, err)
+	// Should include region vars when explicitly configured.
+	assert.Equal(t, "ap-southeast-1", env["AWS_REGION"])
+	assert.Equal(t, "ap-southeast-1", env["AWS_DEFAULT_REGION"])
+}
+
+func TestPermissionSetIdentity_Environment_WithoutRegion(t *testing.T) {
+	// When region is NOT configured, Environment should NOT include AWS_REGION (no default fallback).
+	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+		Kind: "aws/permission-set",
+		Principal: map[string]interface{}{
+			"name":    "DevAccess",
+			"account": map[string]interface{}{"id": "123456789012"},
+		},
+	})
+	require.NoError(t, err)
+
+	env, err := identity.Environment()
+	assert.NoError(t, err)
+	// Should NOT include region vars when not explicitly configured.
+	_, hasRegion := env["AWS_REGION"]
+	_, hasDefaultRegion := env["AWS_DEFAULT_REGION"]
+	assert.False(t, hasRegion, "AWS_REGION should not be set when region is not explicitly configured")
+	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
+}
+
 func TestPermissionSetIdentity_PrepareEnvironment_NoProvider(t *testing.T) {
 	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
 		Kind: "aws/permission-set",

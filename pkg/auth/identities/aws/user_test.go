@@ -55,6 +55,35 @@ func TestUserIdentity_Environment(t *testing.T) {
 	assert.Equal(t, "BAR", env["FOO"])
 }
 
+func TestUserIdentity_Environment_WithRegion(t *testing.T) {
+	// When region is explicitly configured, Environment should include AWS_REGION and AWS_DEFAULT_REGION.
+	id, err := NewUserIdentity("dev", &schema.Identity{
+		Kind:        "aws/user",
+		Credentials: map[string]any{"region": "us-west-2"},
+	})
+	require.NoError(t, err)
+	env, err := id.Environment()
+	require.NoError(t, err)
+
+	// Should include region vars when explicitly configured.
+	assert.Equal(t, "us-west-2", env["AWS_REGION"])
+	assert.Equal(t, "us-west-2", env["AWS_DEFAULT_REGION"])
+}
+
+func TestUserIdentity_Environment_WithoutRegion(t *testing.T) {
+	// When region is NOT configured, Environment should NOT include AWS_REGION (no default fallback).
+	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+	env, err := id.Environment()
+	require.NoError(t, err)
+
+	// Should NOT include region vars when not explicitly configured.
+	_, hasRegion := env["AWS_REGION"]
+	_, hasDefaultRegion := env["AWS_DEFAULT_REGION"]
+	assert.False(t, hasRegion, "AWS_REGION should not be set when region is not explicitly configured")
+	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
+}
+
 func TestIsStandaloneAWSUserChain(t *testing.T) {
 	// Not standalone when multiple elements.
 	assert.False(t, IsStandaloneAWSUserChain([]string{"p", "dev"}, map[string]schema.Identity{"dev": {Kind: "aws/user"}}))
