@@ -160,5 +160,9 @@ func createMarkdownRenderer(themeName string, content string) (string, error) {
 		return "", errors.Join(errUtils.ErrMarkdownRendererInit, err)
 	}
 
-	return renderer.Render(content)
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrMarkdownRender, err)
+	}
+	return rendered, nil
 }

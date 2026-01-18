@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -94,7 +95,7 @@ func executeListAliasesWithOptions(opts *AliasesOptions, rootCmd *cobra.Command)
 	configAndStacksInfo := buildConfigAndStacksInfo(&opts.Flags)
 	atmosConfig, err := config.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
-		return fmt.Errorf("failed to load atmos configuration: %w", err)
+		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAtmosConfig, err)
 	}
 
 	// Collect all aliases.
