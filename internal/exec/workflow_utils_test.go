@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1608,19 +1609,13 @@ func TestDoubleHyphenStackInsertion(t *testing.T) {
 			require.NoError(t, err)
 
 			// Apply the same stack insertion logic as in workflow_utils.go line 374-383.
+			// Uses slices.Index to stay in sync with production code.
 			if tt.workflowStack != "" {
-				idx := -1
-				for i, arg := range args {
-					if arg == "--" {
-						idx = i
-						break
-					}
-				}
-				if idx != -1 {
-					// Insert before the "--"
+				if idx := slices.Index(args, "--"); idx != -1 {
+					// Insert before the "--".
 					args = append(args[:idx], append([]string{"-s", tt.workflowStack}, args[idx:]...)...)
 				} else {
-					// Append at the end
+					// Append at the end.
 					args = append(args, "-s", tt.workflowStack)
 				}
 			}

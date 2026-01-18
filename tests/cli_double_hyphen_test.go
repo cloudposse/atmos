@@ -2,12 +2,10 @@ package tests
 
 import (
 	"bytes"
-	"os"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
@@ -29,10 +27,9 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	require.NoError(t, err)
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	require.NoError(t, err)
+	// Use t.Setenv for proper test isolation - automatically restored after test.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	// Use the workflows fixture which has a mock component.
 	workDir := "fixtures/scenarios/workflows"
@@ -47,25 +44,26 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 	}{
 		{
 			name:          "stack before double-hyphen is parsed correctly",
-			args:          []string{"terraform", "plan", "mock", "--stack", "nonprod", "--", "-some-tf-flag"},
+			args:          []string{"terraform", "plan", "mock", "--stack", "nonprod", "--", "-input=false"},
 			expectedStack: "nonprod",
-			shouldSucceed: false, // Will fail because -some-tf-flag is unknown to terraform
-			// But the important thing is the stack should be "nonprod" not corrupted.
-			stderrContains: "Switched to workspace \"nonprod\"",
+			shouldSucceed: false, // May still fail due to missing state, but flag parsing succeeds.
+			// The important thing is the stack should be "nonprod" not corrupted.
+			// Use partial match to handle both "Switched to workspace" and "doesn't exist" messages.
+			stderrContains: "workspace \"nonprod\"",
 		},
 		{
 			name:           "short stack flag before double-hyphen",
-			args:           []string{"terraform", "plan", "mock", "-s", "nonprod", "--", "-another-flag"},
+			args:           []string{"terraform", "plan", "mock", "-s", "nonprod", "--", "-lock=false"},
 			expectedStack:  "nonprod",
 			shouldSucceed:  false,
-			stderrContains: "Switched to workspace \"nonprod\"",
+			stderrContains: "workspace \"nonprod\"",
 		},
 		{
 			name:           "stack=value syntax before double-hyphen",
-			args:           []string{"terraform", "plan", "mock", "--stack=nonprod", "--", "-tf-only-flag"},
+			args:           []string{"terraform", "plan", "mock", "--stack=nonprod", "--", "-no-color"},
 			expectedStack:  "nonprod",
 			shouldSucceed:  false,
-			stderrContains: "Switched to workspace \"nonprod\"",
+			stderrContains: "workspace \"nonprod\"",
 		},
 	}
 
@@ -87,11 +85,11 @@ func TestDoubleHyphenSeparator(t *testing.T) {
 			}
 
 			// The key assertion: stack should be correctly parsed.
-			// We check combined output for the workspace switch message.
+			// We check combined output for the workspace message (case-insensitive).
 			combinedOutput := stdout.String() + stderr.String()
 			if tt.stderrContains != "" {
-				assert.Contains(t, combinedOutput, tt.stderrContains,
-					"output should contain expected stack workspace switch")
+				assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower(tt.stderrContains),
+					"output should mention the expected workspace")
 			}
 
 			// Ensure stack is NOT corrupted (the bug from issue #1967).
@@ -118,10 +116,9 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	require.NoError(t, err)
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	require.NoError(t, err)
+	// Use t.Setenv for proper test isolation - automatically restored after test.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	workDir := "fixtures/scenarios/workflows"
 	t.Chdir(workDir)
@@ -144,7 +141,8 @@ func TestDoubleHyphenWithConsolidateWarnings(t *testing.T) {
 
 	// The key assertion: stack should be "nonprod", not corrupted.
 	// Before the fix, the stack would be "olidate-warnings=false".
-	assert.Contains(t, combinedOutput, "Switched to workspace \"nonprod\"",
+	// Use case-insensitive partial match to handle both "Switched to workspace" and "doesn't exist".
+	assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower("workspace \"nonprod\""),
 		"stack should be correctly parsed as 'nonprod'")
 
 	// Verify no stack corruption occurred.
@@ -169,10 +167,9 @@ func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 		t.Skipf("Skipping test: %s", skipReason)
 	}
 
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	require.NoError(t, err)
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	require.NoError(t, err)
+	// Use t.Setenv for proper test isolation - automatically restored after test.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	workDir := "fixtures/scenarios/workflows"
 	t.Chdir(workDir)
@@ -194,7 +191,8 @@ func TestDoubleHyphenStackNotOverwritten(t *testing.T) {
 	t.Logf("Output:\n%s", combinedOutput)
 
 	// Stack should still be "nonprod", not "wrongstack".
-	assert.Contains(t, combinedOutput, "Switched to workspace \"nonprod\"",
+	// Use case-insensitive partial match to handle both "Switched to workspace" and "doesn't exist".
+	assert.Contains(t, strings.ToLower(combinedOutput), strings.ToLower("workspace \"nonprod\""),
 		"stack should remain 'nonprod' even when -s appears after --")
 
 	// Verify the -s after -- didn't change the stack.
