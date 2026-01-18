@@ -532,53 +532,6 @@ func TestIsMultiComponentExecution(t *testing.T) {
 	}
 }
 
-// TestHasMultiComponentFlags tests the hasMultiComponentFlags function.
-func TestHasMultiComponentFlags(t *testing.T) {
-	tests := []struct {
-		name     string
-		info     *schema.ConfigAndStacksInfo
-		expected bool
-	}{
-		{
-			name:     "all flag",
-			info:     &schema.ConfigAndStacksInfo{All: true},
-			expected: true,
-		},
-		{
-			name:     "affected flag",
-			info:     &schema.ConfigAndStacksInfo{Affected: true},
-			expected: true,
-		},
-		{
-			name:     "components set",
-			info:     &schema.ConfigAndStacksInfo{Components: []string{"comp1"}},
-			expected: true,
-		},
-		{
-			name:     "query set",
-			info:     &schema.ConfigAndStacksInfo{Query: ".test"},
-			expected: true,
-		},
-		{
-			name:     "no flags",
-			info:     &schema.ConfigAndStacksInfo{},
-			expected: false,
-		},
-		{
-			name:     "empty components slice",
-			info:     &schema.ConfigAndStacksInfo{Components: []string{}},
-			expected: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := hasMultiComponentFlags(tt.info)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestHasNonAffectedMultiFlags tests the hasNonAffectedMultiFlags function.
 func TestHasNonAffectedMultiFlags(t *testing.T) {
 	tests := []struct {

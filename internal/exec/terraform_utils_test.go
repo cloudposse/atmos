@@ -190,6 +190,49 @@ func TestExecuteTerraformQuery(t *testing.T) {
 	}
 }
 
+// TestExecuteTerraformQueryNoMatches verifies the behavior when no components match the query.
+func TestExecuteTerraformQueryNoMatches(t *testing.T) {
+	// Check if terraform is installed.
+	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	// Define the work directory and change to it.
+	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
+	t.Chdir(workDir)
+
+	oldStd := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStd
+	}()
+
+	stack := "prod"
+
+	// Use a query that won't match any component.
+	info := schema.ConfigAndStacksInfo{
+		Stack:         stack,
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+		Query:         ".vars.tags.team == \"nonexistent-team\"",
+	}
+
+	err := ExecuteTerraformQuery(&info)
+
+	// Restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStd
+
+	// The function should succeed even when no components match.
+	if err != nil {
+		t.Fatalf("ExecuteTerraformQuery should succeed when no components match: %v", err)
+	}
+}
+
 // TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
 func TestWalkTerraformComponents(t *testing.T) {
 	stacks := map[string]any{
@@ -293,6 +336,22 @@ func TestProcessTerraformComponent(t *testing.T) {
 		assert.NoError(t, err)
 		assert.True(t, processed)
 		assert.True(t, called)
+	})
+
+	t.Run("dry run", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.True(t, processed) // Returns true in dry-run mode.
+		assert.False(t, called)   // But doesn't call ExecuteTerraform.
 	})
 }
 
@@ -928,6 +987,25 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			dependents:        []schema.Dependent{},
 			args: &DescribeAffectedCmdArgs{
 				IncludeDependents: false,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      0, // No actual terraform execution in dry run.
+		},
+		{
+			name: "dry run with parent component info",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     true,
+			},
+			affectedList:      []schema.Affected{},
+			affectedComponent: "security-group",
+			affectedStack:     "prod",
+			parentComponent:   "vpc",
+			parentStack:       "prod",
+			dependents:        []schema.Dependent{},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
 			},
 			mockTerraformError: false,
 			expectedError:      false,

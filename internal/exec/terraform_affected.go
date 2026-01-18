@@ -105,7 +105,7 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 
 	// Early return for empty list - nothing to process.
 	if len(affectedList) == 0 {
-		_ = ui.Success("No components affected")
+		ui.Success("No components affected")
 		return nil
 	}
 

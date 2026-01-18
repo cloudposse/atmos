@@ -212,7 +212,7 @@ func executeTerraformAffectedComponentInDepOrder(
 		if args.IncludeDependents && parentComponent != "" && parentStack != "" {
 			msg = fmt.Sprintf("Would %s `%s` in `%s` (dependency of `%s` in `%s`) (dry run)", info.SubCommand, affectedComponent, affectedStack, parentComponent, parentStack)
 		}
-		_ = ui.Successf("%s", msg)
+		ui.Successf("%s", msg)
 		return nil
 	}
 
@@ -325,7 +325,7 @@ func processTerraformComponent(
 
 	// Show user-facing progress for dry-run mode.
 	if info.DryRun {
-		_ = ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, componentName, stackName)
+		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, componentName, stackName)
 		return true, nil
 	}
 

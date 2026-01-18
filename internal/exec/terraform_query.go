@@ -53,7 +53,7 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 
 	// Show success message if no components matched the criteria.
 	if processedCount == 0 {
-		_ = ui.Success("No components matched")
+		ui.Success("No components matched")
 	}
 
 	return nil
