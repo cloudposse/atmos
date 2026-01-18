@@ -89,7 +89,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	if !exists {
-		_ = ui.Warning(fmt.Sprintf("Planfile does not exist: %s", opts.Key))
+		ui.Warning(fmt.Sprintf("Planfile does not exist: %s", opts.Key))
 		return nil
 	}
 
@@ -106,7 +106,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("Deleted planfile from %s: %s", store.Name(), opts.Key))
+	ui.Success(fmt.Sprintf("Deleted planfile from %s: %s", store.Name(), opts.Key))
 	return nil
 }
 
