@@ -145,7 +145,7 @@ func listVendorWithOptions(opts *VendorOptions) error {
 	}
 
 	if len(vendors) == 0 {
-		_ = ui.Info("No vendor configurations found")
+		ui.Info("No vendor configurations found")
 		return nil
 	}
 
