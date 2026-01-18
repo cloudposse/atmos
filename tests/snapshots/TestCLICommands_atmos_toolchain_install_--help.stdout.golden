@@ -3,15 +3,20 @@
 
 [EXPERIMENTAL]
 
-Install a CLI binary using metadata from the registry.
+Install one or more CLI binaries using metadata from the registry.
 
-The tool should be specified in the format: owner/repo@version
+The tool(s) should be specified in the format: owner/repo@version
+
+Examples: atmos toolchain install hashicorp/terraform@1.5.0
+mailto:hashicorp/terraform@1.5.0 atmos toolchain install opentofu@1.6.0
+mailto:opentofu@1.6.0 tflint@0.50.0 mailto:tflint@0.50.0 kubectl@1.29.0
+mailto:kubectl@1.29.0
 
 USAGE
 
-                                              
-    $ atmos toolchain install [tool] [flags]  
-                                              
+                                                 
+    $ atmos toolchain install [tool...] [flags]  
+                                                 
 
 EXAMPLES
 

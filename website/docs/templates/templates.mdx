@@ -11,6 +11,7 @@ import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import SecondaryCTA from '@site/src/components/SecondaryCTA'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <PillBox>Advanced</PillBox>
 
@@ -19,6 +20,8 @@ import SecondaryCTA from '@site/src/components/SecondaryCTA'
     [Atmos Functions](/functions/yaml) are insufficient.
     Atmos supports [Go templates](https://pkg.go.dev/text/template) in stack manifests and functions to customize Stack configurations.
 </Intro>
+
+<DemoVideo id="config-template-functions" title="Template Functions" showCaption={false} />
 
 :::note Template File Validation
 Template files (`.yaml.tmpl`, `.yml.tmpl`, `.tmpl`) are automatically detected and processed during normal operations (imports, etc.).

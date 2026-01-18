@@ -21,7 +21,7 @@ AVAILABLE COMMANDS
       exec                Execute a tool with specified version
       get                 Get version information for a tool
       info                Show information about a tool
-      install             Install a CLI binary from the registry
+      install             Install CLI binaries from the registry
       list                List configured tools and their installation status
       path                Print PATH entries for installed tools
       registry [command]  Manage toolchain registries
