@@ -44,6 +44,7 @@ const TAGS_MAP = {
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
+  scaffolding: ['Scaffold', 'Init'],
 };
 
 // Documentation pages mapping for examples.
@@ -110,6 +111,10 @@ const DOCS_MAP = {
   ],
   'demo-helmfile': [
     { label: 'Helmfile', url: '/stacks/components/helmfile' },
+  ],
+  scaffolding: [
+    { label: 'Init Command', url: '/cli/commands/init' },
+    { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
   ],
 };
 

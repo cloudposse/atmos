@@ -6,10 +6,10 @@ across multiple cloud and DevOps toolchains.
 
 USAGE
 
-                                   
-    $ atmos [flags]                
-    $ atmos [sub-command] [flags]  
-                                   
+
+    $ atmos [flags]
+    $ atmos [sub-command] [flags]
+
 
 SUBCOMMAND ALIASES
 
@@ -30,10 +30,12 @@ AVAILABLE COMMANDS
       env                                    Output environment variables configured in atmos.yaml
       helmfile [command]                     Manage Helmfile-based Kubernetes deployments
       help                                   Help about any command
+      init                                   Initialize a new Atmos project from a template
       list [command]                         List available stacks and components
       packer [command]                       Manage packer-based machine images for multiple platforms
       pro [command]                          Access premium features integrated with atmos-pro.com
       profile [command]                      Manage configuration profiles
+      scaffold [command]                     Generate code from scaffold templates
       support                                Show Atmos support options
       terraform [command]                    Execute Terraform commands using Atmos stack configurations
       theme [command]                        Manage terminal themes for Atmos CLI
