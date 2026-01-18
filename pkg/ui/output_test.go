@@ -93,28 +93,24 @@ func TestWrite(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name    string
-		text    string
-		want    string
-		wantErr bool
+		name string
+		text string
+		want string
 	}{
 		{
-			name:    "simple text",
-			text:    "hello world",
-			want:    "hello world",
-			wantErr: false,
+			name: "simple text",
+			text: "hello world",
+			want: "hello world",
 		},
 		{
-			name:    "empty string",
-			text:    "",
-			want:    "",
-			wantErr: false,
+			name: "empty string",
+			text: "",
+			want: "",
 		},
 		{
-			name:    "text with newline",
-			text:    "line1\nline2",
-			want:    "line1\nline2",
-			wantErr: false,
+			name: "text with newline",
+			text: "line1\nline2",
+			want: "line1\nline2",
 		},
 	}
 
@@ -123,12 +119,8 @@ func TestWrite(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
 
-			err := Write(tt.text)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Write() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			// Write no longer returns an error.
+			Write(tt.text)
 
 			// Verify output went to stderr (UI channel).
 			got := stderr.String()
@@ -149,32 +141,28 @@ func TestWritef(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name    string
-		format  string
-		args    []interface{}
-		want    string
-		wantErr bool
+		name   string
+		format string
+		args   []interface{}
+		want   string
 	}{
 		{
-			name:    "simple format",
-			format:  "hello %s",
-			args:    []interface{}{"world"},
-			want:    "hello world",
-			wantErr: false,
+			name:   "simple format",
+			format: "hello %s",
+			args:   []interface{}{"world"},
+			want:   "hello world",
 		},
 		{
-			name:    "multiple arguments",
-			format:  "count=%d, name=%s",
-			args:    []interface{}{42, "test"},
-			want:    "count=42, name=test",
-			wantErr: false,
+			name:   "multiple arguments",
+			format: "count=%d, name=%s",
+			args:   []interface{}{42, "test"},
+			want:   "count=42, name=test",
 		},
 		{
-			name:    "no arguments",
-			format:  "static text",
-			args:    []interface{}{},
-			want:    "static text",
-			wantErr: false,
+			name:   "no arguments",
+			format: "static text",
+			args:   []interface{}{},
+			want:   "static text",
 		},
 	}
 
@@ -183,12 +171,8 @@ func TestWritef(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
 
-			err := Writef(tt.format, tt.args...)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Writef() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			// Writef no longer returns an error.
+			Writef(tt.format, tt.args...)
 
 			got := stderr.String()
 			if got != tt.want {
@@ -207,22 +191,19 @@ func TestWriteln(t *testing.T) {
 	defer cleanup()
 
 	tests := []struct {
-		name    string
-		text    string
-		want    string
-		wantErr bool
+		name string
+		text string
+		want string
 	}{
 		{
-			name:    "simple text with newline",
-			text:    "hello world",
-			want:    "hello world\n",
-			wantErr: false,
+			name: "simple text with newline",
+			text: "hello world",
+			want: "hello world\n",
 		},
 		{
-			name:    "empty string with newline",
-			text:    "",
-			want:    "\n",
-			wantErr: false,
+			name: "empty string with newline",
+			text: "",
+			want: "\n",
 		},
 	}
 
@@ -231,12 +212,8 @@ func TestWriteln(t *testing.T) {
 			stdout.Reset()
 			stderr.Reset()
 
-			err := Writeln(tt.text)
-
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Writeln() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			// Writeln no longer returns an error.
+			Writeln(tt.text)
 
 			got := stderr.String()
 			if got != tt.want {
@@ -254,10 +231,8 @@ func TestSuccess(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Success("Deployment complete")
-	if err != nil {
-		t.Errorf("Success() error = %v", err)
-	}
+	// Success no longer returns an error.
+	Success("Deployment complete")
 
 	// Verify output went to stderr.
 	output := stderr.String()
@@ -280,10 +255,8 @@ func TestSuccessf(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Successf("Deployed %d components", 42)
-	if err != nil {
-		t.Errorf("Successf() error = %v", err)
-	}
+	// Successf no longer returns an error.
+	Successf("Deployed %d components", 42)
 
 	output := stderr.String()
 	if !strings.Contains(output, "Deployed 42 components") {
@@ -303,10 +276,8 @@ func TestError(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Error("Configuration failed")
-	if err != nil {
-		t.Errorf("Error() error = %v", err)
-	}
+	// Error no longer returns an error.
+	Error("Configuration failed")
 
 	output := stderr.String()
 	if !strings.Contains(output, "Configuration failed") {
@@ -326,10 +297,8 @@ func TestErrorf(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Errorf("Failed to process %s", "component")
-	if err != nil {
-		t.Errorf("Errorf() error = %v", err)
-	}
+	// Errorf no longer returns an error.
+	Errorf("Failed to process %s", "component")
 
 	output := stderr.String()
 	if !strings.Contains(output, "Failed to process component") {
@@ -349,10 +318,8 @@ func TestWarning(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Warning("Stack is deprecated")
-	if err != nil {
-		t.Errorf("Warning() error = %v", err)
-	}
+	// Warning no longer returns an error.
+	Warning("Stack is deprecated")
 
 	output := stderr.String()
 	if !strings.Contains(output, "Stack is deprecated") {
@@ -372,10 +339,8 @@ func TestWarningf(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Warningf("Deprecated in version %s", "2.0")
-	if err != nil {
-		t.Errorf("Warningf() error = %v", err)
-	}
+	// Warningf no longer returns an error.
+	Warningf("Deprecated in version %s", "2.0")
 
 	output := stderr.String()
 	if !strings.Contains(output, "Deprecated in version 2.0") {
@@ -395,10 +360,8 @@ func TestInfo(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Info("Processing components")
-	if err != nil {
-		t.Errorf("Info() error = %v", err)
-	}
+	// Info no longer returns an error.
+	Info("Processing components")
 
 	output := stderr.String()
 	if !strings.Contains(output, "Processing components") {
@@ -418,10 +381,8 @@ func TestInfof(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Infof("Processing %d/%d components", 10, 100)
-	if err != nil {
-		t.Errorf("Infof() error = %v", err)
-	}
+	// Infof no longer returns an error.
+	Infof("Processing %d/%d components", 10, 100)
 
 	output := stderr.String()
 	if !strings.Contains(output, "Processing 10/100 components") {
@@ -441,10 +402,8 @@ func TestMarkdown(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Markdown("# Test\n\nContent")
-	if err != nil {
-		t.Errorf("Markdown() error = %v", err)
-	}
+	// Markdown no longer returns an error.
+	Markdown("# Test\n\nContent")
 
 	// Markdown goes to stdout (data channel).
 	output := stdout.String()
@@ -462,10 +421,8 @@ func TestMarkdownf(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := Markdownf("# %s\n\n%s", "Title", "Content")
-	if err != nil {
-		t.Errorf("Markdownf() error = %v", err)
-	}
+	// Markdownf no longer returns an error.
+	Markdownf("# %s\n\n%s", "Title", "Content")
 
 	output := stdout.String()
 	if len(output) == 0 {
@@ -481,10 +438,8 @@ func TestMarkdownMessage(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := MarkdownMessage("**Error:** Invalid config")
-	if err != nil {
-		t.Errorf("MarkdownMessage() error = %v", err)
-	}
+	// MarkdownMessage no longer returns an error.
+	MarkdownMessage("**Error:** Invalid config")
 
 	// MarkdownMessage goes to stderr (UI channel).
 	output := stderr.String()
@@ -502,10 +457,8 @@ func TestMarkdownMessagef(t *testing.T) {
 	stdout, stderr, cleanup := setupTestUI(t)
 	defer cleanup()
 
-	err := MarkdownMessagef("**%s:** %s", "Error", "Invalid config")
-	if err != nil {
-		t.Errorf("MarkdownMessagef() error = %v", err)
-	}
+	// MarkdownMessagef no longer returns an error.
+	MarkdownMessagef("**%s:** %s", "Error", "Invalid config")
 
 	output := stderr.String()
 	if len(output) == 0 {
@@ -561,34 +514,33 @@ func TestPackageFunctions_NotInitialized(t *testing.T) {
 		formatterMu.Unlock()
 	}()
 
-	// Test that all package-level functions return errors when not initialized.
+	// Test that all package-level functions don't panic when not initialized.
+	// Functions no longer return errors - they log internally and return gracefully.
 	tests := []struct {
 		name string
-		fn   func() error
+		fn   func()
 	}{
-		{"Success", func() error { return Success("test") }},
-		{"Successf", func() error { return Successf("test %s", "arg") }},
-		{"Error", func() error { return Error("test") }},
-		{"Errorf", func() error { return Errorf("test %s", "arg") }},
-		{"Warning", func() error { return Warning("test") }},
-		{"Warningf", func() error { return Warningf("test %s", "arg") }},
-		{"Info", func() error { return Info("test") }},
-		{"Infof", func() error { return Infof("test %s", "arg") }},
-		{"Write", func() error { return Write("test") }},
-		{"Writef", func() error { return Writef("test %s", "arg") }},
-		{"Writeln", func() error { return Writeln("test") }},
-		{"Markdown", func() error { return Markdown("# test") }},
-		{"Markdownf", func() error { return Markdownf("# %s", "test") }},
-		{"MarkdownMessage", func() error { return MarkdownMessage("**test**") }},
-		{"MarkdownMessagef", func() error { return MarkdownMessagef("**%s**", "test") }},
+		{"Success", func() { Success("test") }},
+		{"Successf", func() { Successf("test %s", "arg") }},
+		{"Error", func() { Error("test") }},
+		{"Errorf", func() { Errorf("test %s", "arg") }},
+		{"Warning", func() { Warning("test") }},
+		{"Warningf", func() { Warningf("test %s", "arg") }},
+		{"Info", func() { Info("test") }},
+		{"Infof", func() { Infof("test %s", "arg") }},
+		{"Write", func() { Write("test") }},
+		{"Writef", func() { Writef("test %s", "arg") }},
+		{"Writeln", func() { Writeln("test") }},
+		{"Markdown", func() { Markdown("# test") }},
+		{"Markdownf", func() { Markdownf("# %s", "test") }},
+		{"MarkdownMessage", func() { MarkdownMessage("**test**") }},
+		{"MarkdownMessagef", func() { MarkdownMessagef("**%s**", "test") }},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.fn()
-			if err == nil {
-				t.Errorf("%s() should return error when formatter not initialized", tt.name)
-			}
+			// Just verify it doesn't panic - functions no longer return errors.
+			tt.fn()
 		})
 	}
 }
@@ -601,11 +553,8 @@ func TestMarkdown_ErrorPath(t *testing.T) {
 	// The glamour renderer handles this gracefully.
 	largeContent := strings.Repeat("# Header\n\nContent\n\n", 1000)
 
-	err := Markdown(largeContent)
-	// Should not error even with large content.
-	if err != nil {
-		t.Errorf("Markdown() error = %v", err)
-	}
+	// Markdown no longer returns an error.
+	Markdown(largeContent)
 
 	// Should have output to stdout.
 	if stdout.Len() == 0 {
@@ -625,11 +574,8 @@ func TestMarkdownMessage_ErrorPath(t *testing.T) {
 	// Test with very large content.
 	largeContent := strings.Repeat("**Error:** "+strings.Repeat("x", 100)+"\n\n", 100)
 
-	err := MarkdownMessage(largeContent)
-	// Should not error even with large content.
-	if err != nil {
-		t.Errorf("MarkdownMessage() error = %v", err)
-	}
+	// MarkdownMessage no longer returns an error.
+	MarkdownMessage(largeContent)
 
 	// Should have output to stderr.
 	if stderr.Len() == 0 {
