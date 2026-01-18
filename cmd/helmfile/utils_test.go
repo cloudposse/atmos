@@ -151,6 +151,13 @@ func TestHandlePathResolutionError(t *testing.T) {
 			result := handlePathResolutionError(tt.inputErr)
 			assert.Error(t, result)
 			assert.True(t, errors.Is(result, tt.expectedError))
+			if tt.shouldPassthrough {
+				// Passthrough errors should be returned unchanged (same object).
+				assert.Same(t, tt.inputErr, result)
+			} else {
+				// Non-passthrough errors should be wrapped (different object).
+				assert.NotSame(t, tt.inputErr, result)
+			}
 		})
 	}
 }
