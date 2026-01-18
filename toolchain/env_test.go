@@ -368,6 +368,7 @@ func TestEmitEnv_ErrorContainsHintForNoInstalledTools(t *testing.T) {
 	assert.True(t, errors.Is(err, ErrToolNotFound), "Error should wrap ErrToolNotFound")
 
 	// Check that hints contain the install command.
+	// Note: This hint comes from path_helpers.go when tools are defined in .tool-versions but not installed.
 	hints := cockroachErrors.GetAllHints(err)
 	foundHint := false
 	for _, hint := range hints {

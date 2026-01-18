@@ -1,6 +1,7 @@
 package toolchain
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
@@ -110,7 +111,14 @@ func formatContentForFile(format string, pathEntries []string, finalPath string)
 	case "powershell":
 		return formatPowershellContent(finalPath)
 	case "json":
-		return fmt.Sprintf(`{"final_path":"%s"}`+"\n", finalPath)
+		// Use json.Marshal for proper escaping of special characters.
+		jsonData := map[string]string{"final_path": finalPath}
+		bytes, err := json.Marshal(jsonData)
+		if err != nil {
+			// Fallback to simple format if marshaling fails (shouldn't happen for strings).
+			return fmt.Sprintf(`{"final_path":"%s"}`+"\n", finalPath)
+		}
+		return string(bytes) + "\n"
 	default:
 		return formatBashContent(finalPath)
 	}

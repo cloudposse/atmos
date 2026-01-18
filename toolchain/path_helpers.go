@@ -3,6 +3,7 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -99,7 +100,24 @@ func getCurrentPath() string {
 	currentPath := os.Getenv("PATH")
 	if currentPath == "" {
 		// Fallback for edge cases where PATH isn't set (rare).
-		currentPath = strings.Join([]string{"/usr/local/bin", "/usr/bin", "/bin"}, string(os.PathListSeparator))
+		// Use OS-specific default paths.
+		if runtime.GOOS == "windows" {
+			//nolint:forbidigo // SystemRoot/WINDIR are Windows system env vars, not Atmos config
+			systemRoot := os.Getenv("SystemRoot")
+			if systemRoot == "" {
+				//nolint:forbidigo // SystemRoot/WINDIR are Windows system env vars, not Atmos config
+				systemRoot = os.Getenv("WINDIR")
+			}
+			if systemRoot != "" {
+				currentPath = strings.Join([]string{
+					filepath.Join(systemRoot, "System32"),
+					filepath.Join(systemRoot, "System32", "Wbem"),
+					filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
+				}, string(os.PathListSeparator))
+			}
+		} else {
+			currentPath = strings.Join([]string{"/usr/local/bin", "/usr/bin", "/bin"}, string(os.PathListSeparator))
+		}
 	}
 	return currentPath
 }

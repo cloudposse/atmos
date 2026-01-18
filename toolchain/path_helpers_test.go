@@ -3,6 +3,7 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,10 +30,19 @@ func TestGetCurrentPath_EmptyFallback(t *testing.T) {
 	t.Setenv("PATH", "")
 
 	result := getCurrentPath()
-	// Should return fallback paths containing standard system directories.
-	assert.Contains(t, result, "/usr/local/bin")
-	assert.Contains(t, result, "/usr/bin")
-	assert.Contains(t, result, "/bin")
+	// Should return OS-specific fallback paths.
+	if runtime.GOOS == "windows" {
+		// On Windows, should contain System32 paths (if SystemRoot is set).
+		// If no SystemRoot, result may be empty.
+		if os.Getenv("SystemRoot") != "" || os.Getenv("WINDIR") != "" {
+			assert.Contains(t, result, "System32")
+		}
+	} else {
+		// On Unix, should return standard system directories.
+		assert.Contains(t, result, "/usr/local/bin")
+		assert.Contains(t, result, "/usr/bin")
+		assert.Contains(t, result, "/bin")
+	}
 }
 
 func TestConstructFinalPath_BothEmpty(t *testing.T) {

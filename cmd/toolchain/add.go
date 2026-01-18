@@ -1,8 +1,11 @@
 package toolchain
 
 import (
+	"fmt"
+
 	"github.com/spf13/cobra"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/toolchain"
@@ -18,14 +21,14 @@ If version is omitted, defaults to "latest".`,
 		for _, arg := range args {
 			tool, version, err := toolchain.ParseToolVersionArg(arg)
 			if err != nil {
-				return err
+				return fmt.Errorf("%w: failed to parse '%s': %w", errUtils.ErrToolVersionsFileOperation, arg, err)
 			}
 			// Default to "latest" if no version specified.
 			if version == "" {
 				version = "latest"
 			}
 			if err := toolchain.AddToolVersion(tool, version); err != nil {
-				return err
+				return fmt.Errorf("%w: failed to add '%s': %w", errUtils.ErrToolVersionsFileOperation, arg, err)
 			}
 		}
 		return nil
