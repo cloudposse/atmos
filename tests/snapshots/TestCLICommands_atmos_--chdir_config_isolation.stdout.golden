@@ -1,0 +1,84 @@
+base_path: .
+components:
+  terraform:
+    base_path: chdir-isolation-components
+    apply_auto_approve: false
+    append_user_agent: Atmos/test (Cloud Posse; +https://atmos.tools)
+    deploy_run_init: false
+    init_run_reconfigure: false
+    auto_generate_backend_file: false
+    auto_generate_files: false
+    command: terraform
+    shell:
+      prompt: ""
+    init:
+      pass_vars: false
+    plan:
+      skip_planfile: false
+    plugin_cache: true
+  helmfile:
+    base_path: ""
+    use_eks: true
+    kubeconfig_path: ""
+    helm_aws_profile_pattern: ""
+    cluster_name_pattern: ""
+    command: ""
+  packer:
+    base_path: ""
+    command: ""
+stacks:
+  base_path: chdir-isolation-stacks
+  included_paths:
+    - '**/*'
+  excluded_paths: []
+  name_pattern: ""
+  name_template: '{{.vars.stage}}'
+logs:
+  file: /dev/stderr
+  level: Info
+settings:
+  list_merge_strategy: ""
+  terminal:
+    max_width: 0
+    pager: "false"
+    unicode: false
+    syntax_highlighting:
+      enabled: false
+      lexer: ""
+      formatter: ""
+      theme: ""
+      line_numbers: false
+      wrap: false
+    color: true
+    no_color: false
+  inject_github_token: true
+  inject_bitbucket_token: true
+  inject_gitlab_token: true
+  pro:
+    base_url: https://atmos-pro.com
+    endpoint: api/v1
+  telemetry:
+    enabled: true
+    endpoint: https://us.i.posthog.com
+    token: phc_TEST_TOKEN_PLACEHOLDER
+    logging: false
+vendor:
+  base_path: chdir-isolation-vendor
+initialized: true
+basePathAbsolute: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
+stacksBaseAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/chdir-isolation-stacks
+includeStackAbsolutePaths:
+  - /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/chdir-isolation-stacks/**/*
+terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation/chdir-isolation-components
+helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
+packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
+default: false
+cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/chdir-isolation
+import: []
+docs:
+  max-width: 0
+  pagination: false
+  generate:
+    readme:
+      output: ./README.md
+
