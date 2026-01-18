@@ -165,7 +165,7 @@ func appendToFile(outputPath, format string, pathEntries []string, finalPath str
 		return fmt.Errorf("failed to write to file %s: %w", outputPath, err)
 	}
 
-	_ = ui.Successf("Appended PATH to %s", outputPath)
+	ui.Successf("Appended PATH to %s", outputPath)
 	return nil
 }
 

@@ -70,7 +70,7 @@ func printShowHuman(info *WorkdirInfo) {
 
 	// Display status indicator with colored checkmark.
 	statusIndicator := theme.Styles.Checkmark.String()
-	_ = ui.Writef("%s Workdir Status\n\n", statusIndicator)
+	ui.Writef("%s Workdir Status\n\n", statusIndicator)
 
 	// Build table rows.
 	rows := [][]string{
@@ -106,7 +106,7 @@ func printShowHuman(info *WorkdirInfo) {
 			return lipgloss.NewStyle().Padding(0, 1)
 		})
 
-	_ = ui.Writef("%s\n", t)
+	ui.Writef("%s\n", t)
 }
 
 func init() {

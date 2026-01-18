@@ -137,7 +137,7 @@ func listWorkflowsWithOptions(cmd *cobra.Command, args []string, opts *Workflows
 	}
 
 	if len(workflows) == 0 {
-		_ = ui.Info("No workflows found")
+		ui.Info("No workflows found")
 		return nil
 	}
 
