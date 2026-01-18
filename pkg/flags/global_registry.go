@@ -293,7 +293,7 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 

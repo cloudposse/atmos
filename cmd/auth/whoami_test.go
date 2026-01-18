@@ -83,6 +83,9 @@ func TestRedactHomeDir(t *testing.T) {
 }
 
 func TestSanitizeEnvMap(t *testing.T) {
+	// Use filepath.Join for cross-platform compatibility.
+	homeDir := filepath.Join("home", "user")
+
 	tests := []struct {
 		name     string
 		input    map[string]string
@@ -92,7 +95,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 		{
 			name:     "empty map",
 			input:    map[string]string{},
-			homeDir:  "/home/user",
+			homeDir:  homeDir,
 			expected: map[string]string{},
 		},
 		{
@@ -100,7 +103,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"AWS_SECRET_ACCESS_KEY": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"AWS_SECRET_ACCESS_KEY": "***REDACTED***",
 			},
@@ -110,7 +113,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"AUTH_TOKEN": "token123",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"AUTH_TOKEN": "***REDACTED***",
 			},
@@ -120,7 +123,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"DB_PASSWORD": "secret123",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"DB_PASSWORD": "***REDACTED***",
 			},
@@ -130,7 +133,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"PRIVATE_KEY": "private_key_data",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"PRIVATE_KEY": "***REDACTED***",
 			},
@@ -140,7 +143,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"AWS_ACCESS_KEY_ID": "AKIAIOSFODNN7EXAMPLE",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"AWS_ACCESS_KEY_ID": "***REDACTED***",
 			},
@@ -150,7 +153,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"AWS_SESSION_TOKEN": "session_token_data",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"AWS_SESSION_TOKEN": "***REDACTED***",
 			},
@@ -161,7 +164,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 				"AWS_REGION": "us-east-1",
 				"PATH":       "/usr/bin:/bin",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"AWS_REGION": "us-east-1",
 				"PATH":       "/usr/bin:/bin",
@@ -172,7 +175,7 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"my_secret": "should_be_redacted",
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"my_secret": "***REDACTED***",
 			},
@@ -182,9 +185,9 @@ func TestSanitizeEnvMap(t *testing.T) {
 			input: map[string]string{
 				"AWS_REGION":            "us-east-1",
 				"AWS_SECRET_ACCESS_KEY": "secret",
-				"HOME":                  "/home/user",
+				"HOME":                  homeDir,
 			},
-			homeDir: "/home/user",
+			homeDir: homeDir,
 			expected: map[string]string{
 				"AWS_REGION":            "us-east-1",
 				"AWS_SECRET_ACCESS_KEY": "***REDACTED***",

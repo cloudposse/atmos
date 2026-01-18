@@ -38,7 +38,7 @@ func init() {
 	authParser = flags.NewStandardParser(
 		flags.WithStringFlag(IdentityFlagName, "i", "", "Specify the target identity to assume. Use without value to interactively select."),
 		flags.WithNoOptDefVal(IdentityFlagName, IdentityFlagSelectValue),
-		flags.WithEnvVars(IdentityFlagName, "ATMOS_IDENTITY", "IDENTITY"),
+		flags.WithEnvVars(IdentityFlagName, "ATMOS_IDENTITY"),
 	)
 
 	// Register as persistent flags (inherited by subcommands).
