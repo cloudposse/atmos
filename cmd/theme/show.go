@@ -157,7 +157,7 @@ func createMarkdownRenderer(themeName string, content string) (string, error) {
 
 	renderer, err := markdown.NewTerminalMarkdownRenderer(atmosConfig)
 	if err != nil {
-		return "", err
+		return "", errors.Join(errUtils.ErrMarkdownRendererInit, err)
 	}
 
 	return renderer.Render(content)

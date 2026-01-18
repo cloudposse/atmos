@@ -154,8 +154,8 @@ func collectCommandAliases(cmd *cobra.Command, parentPath, cmdPath, rootName str
 
 	for _, alias := range cmd.Aliases {
 		// Build the alias path (replace command name with alias in path).
-		// For top-level commands: just the alias (e.g., "tf" for terraform)
-		// For nested commands: parent path (without root) + alias (e.g., "describe dependants")
+		// For top-level commands: just the alias (e.g., "tf" for terraform).
+		// For nested commands: parent path (without root) + alias (e.g., "describe dependants").
 		aliasPath := alias
 		if parentPath != rootName {
 			parentPathWithoutRoot := stripRootPrefix(parentPath, rootName)
