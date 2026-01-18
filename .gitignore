@@ -5,6 +5,7 @@
 **/*.tf.json
 **/planfile
 **/*.planfile
+**/.atmos-*.tfplan
 **/*.kubeconfig
 **/terraform.tfvars.json
 **/helmfile.vars.yaml

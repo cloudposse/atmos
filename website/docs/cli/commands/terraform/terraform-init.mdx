@@ -155,6 +155,19 @@ Atmos will:
         atmos terraform init vpc -s dev --init-pass-vars
         ```
     </dd>
+
+    <dt>`--ui` <em>(optional)</em></dt>
+    <dd>
+        Enable streaming UI mode for real-time progress display during initialization. Shows provider downloads and plugin installation progress.
+
+        The UI automatically disables when output is piped, in CI environments, or when running unsupported commands.
+
+        ```shell
+        atmos terraform init vpc -s dev --ui
+        ```
+
+        Use `--ui=false` to explicitly disable when enabled by config.
+    </dd>
 </dl>
 
 ## Native Terraform Flags

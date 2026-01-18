@@ -42,7 +42,7 @@ For complete Terraform/OpenTofu documentation, see:
 		}
 
 		// Parse base terraform options.
-		opts := ParseTerraformRunOptions(v)
+		opts := ParseTerraformRunOptions(v, cmd)
 
 		return terraformRunWithOptions(terraformCmd, cmd, args, opts)
 	},

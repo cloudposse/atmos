@@ -438,6 +438,12 @@ func FormatSuccess(text string) string {
 	return f.Success(text)
 }
 
+// FormatSuccessf returns a formatted success message with green checkmark as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatSuccessf(format string, a ...interface{}) string {
+	return FormatSuccess(fmt.Sprintf(format, a...))
+}
+
 // FormatError returns an error message with red X as a formatted string.
 // Use this when you need the formatted string without writing (e.g., in bubbletea views).
 func FormatError(text string) string {
@@ -447,6 +453,12 @@ func FormatError(text string) string {
 		return "✗ " + text
 	}
 	return f.Error(text)
+}
+
+// FormatErrorf returns a formatted error message with red X as a formatted string.
+// Use this when you need the formatted string without writing (e.g., in bubbletea views).
+func FormatErrorf(format string, a ...interface{}) string {
+	return FormatError(fmt.Sprintf(format, a...))
 }
 
 // Badge returns a styled badge with the given text, background color, and foreground color.

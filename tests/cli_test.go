@@ -626,9 +626,9 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 		done <- ptyError(err) // Wrap the error handling
 	}()
 
-	err = cmd.Wait()
-	if err != nil {
-		logger.Info("Command execution error", "err", err)
+	waitErr := cmd.Wait()
+	if waitErr != nil {
+		logger.Info("Command execution error", "err", waitErr)
 	}
 
 	if readErr := <-done; readErr != nil {
@@ -638,7 +638,8 @@ func simulateTtyCommand(t *testing.T, cmd *exec.Cmd, input string) (string, erro
 	output := buffer.String()
 	// t.Logf("Captured Output:\n%s", output)
 
-	return output, nil
+	// Return the wait error so exit codes can be captured.
+	return output, waitErr
 }
 
 // Linux kernel return EIO when attempting to read from a master pseudo

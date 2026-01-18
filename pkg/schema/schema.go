@@ -436,7 +436,27 @@ type Terraform struct {
 	PluginCache bool `yaml:"plugin_cache" json:"plugin_cache" mapstructure:"plugin_cache"`
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
-	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	PluginCacheDir string      `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	UI             TerraformUI `yaml:"ui" json:"ui" mapstructure:"ui"`
+}
+
+// TerraformUI contains streaming UI configuration.
+type TerraformUI struct {
+	// Enabled enables the streaming TUI mode for plan/apply/init/refresh commands.
+	// When enabled, terraform output is streamed in real-time with a progress display.
+	Enabled bool `yaml:"enabled" json:"enabled" mapstructure:"enabled"`
+
+	// Compact controls line padding between resource branches.
+	// true (default) = no blank lines, false = add blank lines for readability.
+	Compact *bool `yaml:"compact" json:"compact" mapstructure:"compact"`
+
+	// ShowAttributeBar controls the vertical "quote" line for attribute content.
+	// true = show ┃ bar alongside attributes, false (default) = clean indentation only.
+	ShowAttributeBar *bool `yaml:"show_attribute_bar" json:"show_attribute_bar" mapstructure:"show_attribute_bar"`
+
+	// MaxLines controls collapsing large JSON values in attribute rendering.
+	// 0 (default) = show all lines like Terraform, >0 = collapse after N lines.
+	MaxLines int `yaml:"max_lines" json:"max_lines" mapstructure:"max_lines"`
 }
 
 type TerraformInit struct {
@@ -826,6 +846,8 @@ type ConfigAndStacksInfo struct {
 	Components                []string
 	Identity                  string
 	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+	UIEnabled                 bool // Enable streaming UI mode for terraform commands.
+	UIFlagExplicitlySet       bool // Whether --ui flag was explicitly set (vs. config/default).
 }
 
 // GetComponentEnvSection returns the component's env section map.
