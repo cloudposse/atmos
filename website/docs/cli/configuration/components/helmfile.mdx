@@ -14,6 +14,10 @@ import DocCardList from '@theme/DocCardList'
 Configure how Atmos executes Helmfile commands for Kubernetes deployments, including EKS integration, kubeconfig management, and cluster name configuration.
 </Intro>
 
+:::warning Breaking Change in v1.x
+The `use_eks` setting now defaults to `false` (previously `true`). If you use helmfile with EKS clusters, you must explicitly add `use_eks: true` to your configuration. See the [Helmfile EKS Modernization](/blog/helmfile-eks-modernization) blog post for migration details.
+:::
+
 ## Configuration
 
 <File title="atmos.yaml">
@@ -276,3 +280,4 @@ atmos helmfile apply my-component -s prod --identity=prod-admin
 - [Component Configuration Overview](/cli/configuration/components)
 - [Helmfile Components](/components/helmfile)
 - [Stack Configuration](/cli/configuration/stacks)
+- [Helmfile EKS Modernization (Breaking Change)](/blog/helmfile-eks-modernization)
