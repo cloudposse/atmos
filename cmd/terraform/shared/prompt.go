@@ -4,8 +4,10 @@ package shared
 import (
 	"errors"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
@@ -15,12 +17,40 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Package-level variables for dependency injection (enables testing).
+var (
+	initCliConfig         = cfg.InitCliConfig
+	executeDescribeStacks = e.ExecuteDescribeStacks
+)
+
+// buildConfigAndStacksInfo creates a ConfigAndStacksInfo populated with global CLI flags.
+// This ensures --base-path, --config, --config-path, and --profile flags are respected.
+func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
+	if cmd == nil {
+		return schema.ConfigAndStacksInfo{}
+	}
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+}
+
 // PromptForComponent shows an interactive selector for component selection.
-func PromptForComponent(cmd *cobra.Command) (string, error) {
+// If stack is provided, filters components to only those in that stack.
+func PromptForComponent(cmd *cobra.Command, stack string) (string, error) {
+	// Create a completion function that respects the stack filter.
+	completionFunc := func(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
+		return componentsArgCompletionWithStack(cmd, args, toComplete, stack)
+	}
+
 	return flags.PromptForPositionalArg(
 		"component",
 		"Choose a component",
-		ComponentsArgCompletion,
+		completionFunc,
 		cmd,
 		nil,
 	)
@@ -59,15 +89,43 @@ func HandlePromptError(err error, name string) error {
 }
 
 // ComponentsArgCompletion provides shell completion for component positional arguments.
+// Checks for --stack flag and filters components accordingly.
 func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	if len(args) == 0 {
-		output, err := listTerraformComponents()
-		if err != nil {
-			return nil, cobra.ShellCompDirectiveNoFileComp
+		// Check if --stack flag was provided.
+		stack := ""
+		if cmd != nil {
+			if stackFlag := cmd.Flag("stack"); stackFlag != nil {
+				stack = stackFlag.Value.String()
+			}
 		}
-		return output, cobra.ShellCompDirectiveNoFileComp
+		return componentsArgCompletionWithStack(cmd, args, toComplete, stack)
 	}
 	return nil, cobra.ShellCompDirectiveNoFileComp
+}
+
+// componentsArgCompletionWithStack provides shell completion for component arguments with optional stack filtering.
+func componentsArgCompletionWithStack(cmd *cobra.Command, args []string, toComplete string, stack string) ([]string, cobra.ShellCompDirective) {
+	// toComplete kept for Cobra completion function signature compatibility.
+	_ = toComplete
+
+	if len(args) > 0 {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+
+	var output []string
+	var err error
+
+	if stack != "" {
+		output, err = listTerraformComponentsForStack(cmd, stack)
+	} else {
+		output, err = listTerraformComponents(cmd)
+	}
+
+	if err != nil {
+		return nil, cobra.ShellCompDirectiveNoFileComp
+	}
+	return output, cobra.ShellCompDirectiveNoFileComp
 }
 
 // StackFlagCompletion provides shell completion for the --stack flag.
@@ -76,7 +134,7 @@ func ComponentsArgCompletion(cmd *cobra.Command, args []string, toComplete strin
 func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {
 	// If a component was provided as the first argument, filter stacks by that component.
 	if len(args) > 0 && args[0] != "" {
-		output, err := listStacksForComponent(args[0])
+		output, err := listStacksForComponent(cmd, args[0])
 		if err != nil {
 			return nil, cobra.ShellCompDirectiveNoFileComp
 		}
@@ -84,34 +142,85 @@ func StackFlagCompletion(cmd *cobra.Command, args []string, toComplete string) (
 	}
 
 	// Otherwise, list all stacks.
-	output, err := listAllStacks()
+	output, err := listAllStacks(cmd)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 	return output, cobra.ShellCompDirectiveNoFileComp
 }
 
-// listTerraformComponents lists all terraform components.
-func listTerraformComponents() ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+// IsComponentDeployable checks if a component can be deployed (not abstract, not disabled).
+// Returns false for components with metadata.type: abstract or metadata.enabled: false.
+func IsComponentDeployable(componentConfig any) bool {
+	// Handle nil or non-map configs - assume deployable.
+	configMap, ok := componentConfig.(map[string]any)
+	if !ok {
+		return true
+	}
+
+	// Check metadata section.
+	metadata, ok := configMap["metadata"].(map[string]any)
+	if !ok {
+		return true // No metadata means deployable.
+	}
+
+	// Check if component is abstract.
+	if componentType, ok := metadata["type"].(string); ok && componentType == "abstract" {
+		return false
+	}
+
+	// Check if component is disabled.
+	if enabled, ok := metadata["enabled"].(bool); ok && !enabled {
+		return false
+	}
+
+	return true
+}
+
+// FilterDeployableComponents returns only components that can be deployed.
+// Filters out abstract and disabled components from the terraform components map.
+// Returns a sorted slice of deployable component names.
+func FilterDeployableComponents(terraformComponents map[string]any) []string {
+	if len(terraformComponents) == 0 {
+		return []string{}
+	}
+
+	var components []string
+	for name, config := range terraformComponents {
+		if IsComponentDeployable(config) {
+			components = append(components, name)
+		}
+	}
+
+	sort.Strings(components)
+	return components
+}
+
+// listTerraformComponents lists all deployable terraform components across all stacks.
+// Filters out abstract and disabled components.
+// The cmd parameter is used to respect global CLI flags (--base-path, --config, --config-path, --profile).
+func listTerraformComponents(cmd *cobra.Command) ([]string, error) {
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Collect unique component names from all stacks.
+	// Collect unique deployable component names from all stacks.
 	componentSet := make(map[string]struct{})
 	for _, stackData := range stacksMap {
 		if stackMap, ok := stackData.(map[string]any); ok {
 			if components, ok := stackMap["components"].(map[string]any); ok {
 				if terraform, ok := components["terraform"].(map[string]any); ok {
-					for componentName := range terraform {
-						componentSet[componentName] = struct{}{}
+					// Filter to only deployable components.
+					deployable := FilterDeployableComponents(terraform)
+					for _, name := range deployable {
+						componentSet[name] = struct{}{}
 					}
 				}
 			}
@@ -126,15 +235,61 @@ func listTerraformComponents() ([]string, error) {
 	return components, nil
 }
 
-// listStacksForComponent returns stacks that contain the specified component.
-func listStacksForComponent(component string) ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+// listTerraformComponentsForStack lists deployable terraform components for a specific stack.
+// Filters out abstract and disabled components.
+// If stack is empty, returns components from all stacks.
+// The cmd parameter is used to respect global CLI flags (--base-path, --config, --config-path, --profile).
+func listTerraformComponentsForStack(cmd *cobra.Command, stack string) ([]string, error) {
+	if stack == "" {
+		return listTerraformComponents(cmd)
+	}
+
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, stack, nil, nil, nil, false, false, false, false, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get components from the specified stack only.
+	stackData, exists := stacksMap[stack]
+	if !exists {
+		return []string{}, nil
+	}
+
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
+		return []string{}, nil
+	}
+
+	components, ok := stackMap["components"].(map[string]any)
+	if !ok {
+		return []string{}, nil
+	}
+
+	terraform, ok := components["terraform"].(map[string]any)
+	if !ok {
+		return []string{}, nil
+	}
+
+	// Filter to only deployable components and return sorted.
+	return FilterDeployableComponents(terraform), nil
+}
+
+// listStacksForComponent returns stacks that contain the specified component.
+// The cmd parameter is used to respect global CLI flags (--base-path, --config, --config-path, --profile).
+func listStacksForComponent(cmd *cobra.Command, component string) ([]string, error) {
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
+	if err != nil {
+		return nil, err
+	}
+
+	stacksMap, err := executeDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -169,14 +324,15 @@ func stackContainsComponent(stackData any, component string) bool {
 }
 
 // listAllStacks returns all stacks.
-func listAllStacks() ([]string, error) {
-	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+// The cmd parameter is used to respect global CLI flags (--base-path, --config, --config-path, --profile).
+func listAllStacks(cmd *cobra.Command) ([]string, error) {
+	configAndStacksInfo := buildConfigAndStacksInfo(cmd)
+	atmosConfig, err := initCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, err
 	}
 
-	stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
+	stacksMap, err := executeDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -187,4 +343,28 @@ func listAllStacks() ([]string, error) {
 	}
 	sort.Strings(stacks)
 	return stacks, nil
+}
+
+// ValidateStackExists checks if the provided stack name exists and returns
+// an error with suggestions if it doesn't.
+// The cmd parameter is used to respect global CLI flags (--base-path, --config, --config-path, --profile).
+func ValidateStackExists(cmd *cobra.Command, stack string) error {
+	stacks, err := listAllStacks(cmd)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range stacks {
+		if s == stack {
+			return nil // Stack exists.
+		}
+	}
+
+	// Stack not found - use ErrorBuilder pattern with sentinel error.
+	return errUtils.Build(errUtils.ErrInvalidStack).
+		WithCausef("stack `%s` does not exist", stack).
+		WithExplanation("The specified stack was not found in the configuration").
+		WithHintf("Available stacks: %s", strings.Join(stacks, ", ")).
+		WithContext("stack", stack).
+		Err()
 }

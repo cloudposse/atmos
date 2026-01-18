@@ -28,6 +28,11 @@ func ExecutePackerOutput(
 		return nil, err
 	}
 
+	// Validate packer configuration.
+	if err := checkPackerConfig(&atmosConfig); err != nil {
+		return nil, err
+	}
+
 	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return nil, err
@@ -50,9 +55,9 @@ func ExecutePackerOutput(
 
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
-		// Get the base path for error message, respecting user's actual config
+		// Get the base path for error message, respecting user's actual config.
 		basePath, _ := u.GetComponentBasePath(&atmosConfig, "packer")
-		return nil, fmt.Errorf("%w: Atmos component `%s` points to the Packer component `%s`, but it does not exist in `%s`",
+		return nil, fmt.Errorf("%w: '%s' points to the Packer component '%s', but it does not exist in '%s'",
 			errUtils.ErrInvalidComponent,
 			info.ComponentFromArg,
 			info.FinalComponent,

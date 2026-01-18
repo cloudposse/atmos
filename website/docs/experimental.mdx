@@ -1,0 +1,99 @@
+---
+title: Experimental Features
+sidebar_label: Experimental Features
+sidebar_position: 1000
+description: Learn about Atmos experimental features, how they work, and how to provide feedback.
+id: experimental
+slug: /experimental
+---
+import Intro from '@site/src/components/Intro'
+import ExperimentalFeaturesList from '@site/src/components/ExperimentalFeaturesList'
+
+# Experimental Features
+
+<Intro>
+Experimental features in Atmos are new capabilities on the path to becoming stable. They are under active development and being refined based on community feedback. While APIs may change, experimental features are intended to graduate to stable—removal would only occur in extreme circumstances.
+</Intro>
+
+## What "Experimental" Means
+
+Features marked as experimental:
+
+- **May not be fully functional** - Some documented functionality may not yet be implemented
+- **Are under active development** - Features are being refined and validated through community feedback
+- **May have breaking changes** - APIs or behavior might change without following semantic versioning guarantees
+- **May not have undergone extensive QA** - Testing coverage may be limited, and edge cases may not be fully addressed
+- **Are not recommended for critical production workflows** - Use at your own risk until they graduate to stable
+
+When the experimental annotation is removed, all documented functionality will be fully implemented and the feature will be considered stable.
+
+## Current Experimental Features
+
+The following features are currently marked as experimental. This list is automatically generated from our [roadmap](/roadmap).
+
+<ExperimentalFeaturesList />
+
+## We Need Your Help
+
+Experimental features rely on community feedback to mature into stable, production-ready capabilities. Your real-world testing and input are invaluable—you help us identify edge cases, improve usability, and prioritize what matters most.
+
+**Ways to contribute:**
+
+1. **Try experimental features** - Use them in non-critical workflows and share what works and what doesn't
+2. **Report issues** - File bugs or unexpected behavior via [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+3. **Share feedback** - Discuss your experiences in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
+4. **Join the conversation** - Connect with us on [Slack](/community/slack) for real-time discussions
+
+## Graduation Criteria
+
+Experimental features graduate to stable when:
+
+- All documented functionality is fully implemented
+- The API has been validated through real-world usage
+- Community feedback has been incorporated
+- Breaking changes are no longer expected
+
+## Controlling Experimental Features
+
+When you run an experimental command, Atmos displays a notification:
+
+```
+🧪 `toolchain` is an experimental feature. Learn more https://atmos.tools/experimental
+```
+
+You can control this behavior with the `settings.experimental` configuration in `atmos.yaml`:
+
+```yaml
+settings:
+  # Control experimental feature handling
+  # Values: "silence", "disable", "warn" (default), "error"
+  experimental: warn
+```
+
+| Mode | Behavior |
+|------|----------|
+| `silence` | Run without any notification |
+| `warn` | Show notification, then continue (default) |
+| `error` | Show notification and exit with error |
+| `disable` | Block experimental commands entirely |
+
+Or use the environment variable:
+
+```bash
+export ATMOS_EXPERIMENTAL=silence
+```
+
+For detailed configuration options, see [Experimental Settings](/cli/configuration/settings/experimental).
+
+## Help Us Prioritize
+
+Is an experimental feature working really well for you? **Let us know!** Your feedback helps us prioritize which features to promote to stable.
+
+- [Share feedback on GitHub Discussions](https://github.com/orgs/cloudposse/discussions)
+- [Report issues on GitHub](https://github.com/cloudposse/atmos/issues)
+- [Join us on Slack](/community/slack)
+
+## Related
+
+- [Roadmap](/roadmap) - View our product roadmap
+- [Changelog](/changelog) - View recent changes and releases

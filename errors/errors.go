@@ -80,6 +80,10 @@ var (
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
 
+	// Experimental feature errors.
+	ErrExperimentalDisabled   = errors.New("experimental command is disabled")
+	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
+
 	// Authentication and TTY errors.
 	ErrAuthConsole            = errors.New("auth console operation failed")
 	ErrProviderNotSupported   = errors.New("provider does not support this operation")
@@ -446,6 +450,9 @@ var (
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
 	ErrMissingHelmfileClusterName        = errors.New("helmfile cluster name is required")
 	ErrMissingHelmfileAuth               = errors.New("helmfile AWS authentication is required")
+
+	// Packer configuration errors.
+	ErrMissingPackerBasePath = errors.New("packer base path is required")
 
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")

@@ -68,3 +68,8 @@ func (a *AWSCommandProvider) GetPositionalArgsBuilder() *flags.PositionalArgsBui
 func (a *AWSCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (a *AWSCommandProvider) IsExperimental() bool {
+	return false
+}

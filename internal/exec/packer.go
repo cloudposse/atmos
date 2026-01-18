@@ -19,10 +19,17 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// PackerFlags type represents Packer command-line flags.
+// PackerFlags represents Packer command-line flags passed to ExecutePacker and ExecutePackerOutput.
 type PackerFlags struct {
+	// Template specifies the Packer template file or directory path.
+	// If empty, defaults to "." (component working directory), which tells Packer to load all *.pkr.hcl files.
+	// Can be set via --template/-t flag or settings.packer.template in stack manifest.
 	Template string
-	Query    string
+
+	// Query specifies a YQ expression to extract data from the Packer manifest.
+	// Used by ExecutePackerOutput to query the manifest.json file.
+	// Can be set via --query/-q flag.
+	Query string
 }
 
 // ExecutePacker executes Packer commands.
@@ -34,6 +41,11 @@ func ExecutePacker(
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
+		return err
+	}
+
+	// Validate packer configuration.
+	if err := checkPackerConfig(&atmosConfig); err != nil {
 		return err
 	}
 
@@ -115,14 +127,16 @@ func ExecutePacker(
 	}
 
 	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
-	if (info.SubCommand == "build") && info.ComponentIsAbstract {
+	// For Packer, only `build` creates external resources (AMIs, images, etc.).
+	// Other commands (init, validate, inspect, fmt, console) are read-only or local operations.
+	if info.ComponentIsAbstract && info.SubCommand == "build" {
 		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
 			errUtils.ErrAbstractComponentCantBeProvisioned,
 			filepath.Join(info.ComponentFolderPrefix, info.Component))
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true).
-	// Allow read-only commands, block modification commands.
+	// For Packer, only `build` modifies external resources.
 	if info.ComponentIsLocked && info.SubCommand == "build" {
 		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 			errUtils.ErrLockedComponentCantBeProvisioned,
@@ -188,8 +202,12 @@ func ExecutePacker(
 			template = packerSettingTemplate
 		}
 	}
+	// If no template specified, default to "." (component working directory).
+	// Packer will load all *.pkr.hcl files from the component directory.
+	// This allows users to organize Packer configurations across multiple files.
+	// For example: variables.pkr.hcl, main.pkr.hcl, locals.pkr.hcl.
 	if template == "" {
-		return errUtils.ErrMissingPackerTemplate
+		template = "."
 	}
 
 	// Print component variables.
@@ -199,13 +217,21 @@ func ExecutePacker(
 	varFile := constructPackerComponentVarfileName(info)
 	varFilePath := constructPackerComponentVarfilePath(&atmosConfig, info)
 
-	log.Debug("Writing the variables to file:", "file", varFilePath)
+	log.Debug("Writing the variables to file", "file", varFilePath)
 
 	if !info.DryRun {
 		err = u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
 			return err
 		}
+
+		// Defer cleanup of the variable file.
+		// Use a closure to capture varFilePath and ensure cleanup runs even on early errors.
+		defer func() {
+			if removeErr := os.Remove(varFilePath); removeErr != nil && !os.IsNotExist(removeErr) {
+				log.Trace("Failed to remove var file during cleanup", "error", removeErr, "file", varFilePath)
+			}
+		}()
 	}
 
 	var inheritance string
@@ -246,7 +272,7 @@ func ExecutePacker(
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	log.Debug("Using ENV", "variables", envVars)
 
-	err = ExecuteShellCommand(
+	return ExecuteShellCommand(
 		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
@@ -255,15 +281,4 @@ func ExecutePacker(
 		info.DryRun,
 		info.RedirectStdErr,
 	)
-	if err != nil {
-		return err
-	}
-
-	// Cleanup.
-	err = os.Remove(varFilePath)
-	if err != nil {
-		log.Warn(err.Error())
-	}
-
-	return nil
 }

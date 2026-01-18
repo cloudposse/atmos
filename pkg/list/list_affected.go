@@ -116,7 +116,7 @@ func ExecuteListAffectedCmd(opts *AffectedCommandOptions) error {
 	}
 
 	if len(result.Affected) == 0 {
-		_ = ui.Success("No affected components found")
+		ui.Success("No affected components found")
 		return nil
 	}
 

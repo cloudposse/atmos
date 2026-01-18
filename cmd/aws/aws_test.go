@@ -57,6 +57,13 @@ func TestAWSCommandProvider_GetCompatibilityFlags(t *testing.T) {
 	assert.Nil(t, flags)
 }
 
+func TestAWSCommandProvider_IsExperimental(t *testing.T) {
+	provider := &AWSCommandProvider{}
+	experimental := provider.IsExperimental()
+
+	assert.False(t, experimental)
+}
+
 func TestAWSCommand_HasEksSubcommand(t *testing.T) {
 	provider := &AWSCommandProvider{}
 	cmd := provider.GetCommand()

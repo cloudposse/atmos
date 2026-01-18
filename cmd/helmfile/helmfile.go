@@ -93,3 +93,8 @@ func (h *HelmfileCommandProvider) GetPositionalArgsBuilder() *flags.PositionalAr
 func (h *HelmfileCommandProvider) GetCompatibilityFlags() map[string]compat.CompatibilityFlag {
 	return nil // Helmfile uses pass-through flag parsing.
 }
+
+// IsExperimental returns whether this command is experimental.
+func (h *HelmfileCommandProvider) IsExperimental() bool {
+	return false
+}
