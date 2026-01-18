@@ -29,6 +29,8 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	// Import workdir provisioner to register workdir provisioner.
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	// Import generate package for early file generation.
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
 	"github.com/cloudposse/atmos/toolchain"
 )
@@ -209,12 +211,33 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check if the component (or base component) exists as a Terraform component.
+	// Get component path early - needed for both auto-generation and path validation.
 	componentPath, err := u.GetComponentPath(&atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
+	// Auto-generate files BEFORE path validation when the following conditions hold.
+	// 1. auto_generate_files is enabled.
+	// 2. Component has a generate section.
+	// 3. Not in dry-run mode (to avoid filesystem modifications).
+	// This allows generating entire components from stack configuration.
+	if atmosConfig.Components.Terraform.AutoGenerateFiles && !info.DryRun { //nolint:nestif
+		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		if generateSection != nil {
+			// Ensure component directory exists for file generation.
+			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+			}
+
+			// Generate files before path validation.
+			if genErr := generateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
+				return errors.Join(errUtils.ErrFileOperation, genErr)
+			}
+		}
+	}
+
+	// Check if the component (or base component) exists as a Terraform component.
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		// Check if component has source configured for JIT provisioning.

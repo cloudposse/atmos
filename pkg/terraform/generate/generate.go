@@ -5,6 +5,8 @@ package generate
 //go:generate go run go.uber.org/mock/mockgen@latest -typed -destination=mock_stack_processor_test.go -package=generate github.com/cloudposse/atmos/pkg/terraform/generate StackProcessor
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -106,6 +108,13 @@ func (s *Service) ExecuteForComponent(
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
+
+	// Ensure component directory exists (skip for dry-run and clean).
+	if !dryRun && !clean {
+		if err := os.MkdirAll(componentDir, 0o755); err != nil { //nolint:revive
+			return fmt.Errorf("failed to create component directory: %w", err)
+		}
+	}
 
 	// Generate files.
 	config := GenerateConfig{
