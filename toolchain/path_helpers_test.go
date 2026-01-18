@@ -44,9 +44,13 @@ func TestConstructFinalPath_BothEmpty(t *testing.T) {
 
 func TestResolveDirPath_RelativeReturnsDir(t *testing.T) {
 	// Test that relative flag returns the directory portion.
-	result, err := resolveDirPath("/home/user/.tools/terraform/1.5.0/bin/terraform", true)
+	// Use filepath.FromSlash to convert to platform-appropriate path separators.
+	inputPath := filepath.FromSlash("/home/user/.tools/terraform/1.5.0/bin/terraform")
+	expectedDir := filepath.FromSlash("/home/user/.tools/terraform/1.5.0/bin")
+
+	result, err := resolveDirPath(inputPath, true)
 	assert.NoError(t, err)
-	assert.Equal(t, "/home/user/.tools/terraform/1.5.0/bin", result)
+	assert.Equal(t, expectedDir, result)
 }
 
 func TestConstructFinalPath(t *testing.T) {
