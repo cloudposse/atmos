@@ -25,6 +25,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -165,7 +166,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: failed to assume role with SAML: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	log.Info("SAML authentication successful", "provider", p.name, logFieldRole, selectedRole.RoleARN)
+	_ = ui.Successf("SAML authentication successful for provider %s", p.name)
 
 	return awsCreds, nil
 }
