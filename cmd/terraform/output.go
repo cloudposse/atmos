@@ -131,13 +131,13 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 		Flatten:   flatten,
 	}
 
-	// Handle GitHub format special case - always writes to file.
-	if format == "github" {
-		return executeGitHubOutput(outputs, outputFile, opts)
-	}
-
 	// Check if a specific output name was requested (in AdditionalArgsAndFlags).
 	outputName := extractOutputName(info.AdditionalArgsAndFlags)
+
+	// Handle GitHub format special case - always writes to file.
+	if format == "github" {
+		return executeGitHubOutput(outputs, outputFile, outputName, opts)
+	}
 	var formatted string
 	if outputName != "" {
 		formatted, err = formatSingleOutput(outputs, outputName, format, opts)
@@ -155,7 +155,7 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 }
 
 // executeGitHubOutput handles the special github format that writes to $GITHUB_OUTPUT.
-func executeGitHubOutput(outputs map[string]any, outputFile string, opts tfoutput.FormatOptions) error {
+func executeGitHubOutput(outputs map[string]any, outputFile, outputName string, opts tfoutput.FormatOptions) error {
 	defer perf.Track(nil, "terraform.executeGitHubOutput")()
 
 	// Determine output file - use $GITHUB_OUTPUT if not specified.
@@ -169,15 +169,33 @@ func executeGitHubOutput(outputs map[string]any, outputFile string, opts tfoutpu
 		}
 	}
 
+	// Filter to single output if a specific output name was requested.
+	if outputName != "" {
+		value, exists := outputs[outputName]
+		if !exists {
+			return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+				WithExplanationf("Output %q not found.", outputName).
+				WithHint("Use 'atmos terraform output <component> -s <stack>' without an output name to see all available outputs.").
+				Err()
+		}
+		outputs = map[string]any{outputName: value}
+	}
+
 	// Format outputs for GitHub Actions.
 	formatted, err := tfoutput.FormatOutputsWithOptions(outputs, tfoutput.FormatGitHub, opts)
 	if err != nil {
-		return err
+		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanation("Failed to format terraform outputs for GitHub Actions.").
+			Err()
 	}
 
 	// Write to file (append mode).
 	if err := envfmt.WriteToFile(path, formatted); err != nil {
-		return err
+		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+			WithCause(err).
+			WithExplanationf("Failed to write GitHub Actions outputs to %q.", path).
+			Err()
 	}
 
 	// Emit success message to stderr.
