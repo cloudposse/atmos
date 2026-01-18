@@ -24,6 +24,31 @@ func TestGetCurrentPath_PreservesComplexPath(t *testing.T) {
 	assert.Equal(t, testPath, result)
 }
 
+func TestGetCurrentPath_EmptyFallback(t *testing.T) {
+	// Test that empty PATH returns fallback system paths.
+	t.Setenv("PATH", "")
+
+	result := getCurrentPath()
+	// Should return fallback paths containing standard system directories.
+	assert.Contains(t, result, "/usr/local/bin")
+	assert.Contains(t, result, "/usr/bin")
+	assert.Contains(t, result, "/bin")
+}
+
+func TestConstructFinalPath_BothEmpty(t *testing.T) {
+	// Edge case: both pathEntries and currentPath are empty.
+	result := constructFinalPath([]string{}, "")
+	// Should just be the separator.
+	assert.Equal(t, string(os.PathListSeparator), result)
+}
+
+func TestResolveDirPath_RelativeReturnsDir(t *testing.T) {
+	// Test that relative flag returns the directory portion.
+	result, err := resolveDirPath("/home/user/.tools/terraform/1.5.0/bin/terraform", true)
+	assert.NoError(t, err)
+	assert.Equal(t, "/home/user/.tools/terraform/1.5.0/bin", result)
+}
+
 func TestConstructFinalPath(t *testing.T) {
 	sep := string(os.PathListSeparator)
 	tests := []struct {

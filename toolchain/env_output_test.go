@@ -234,3 +234,221 @@ func TestEmitJSONPath_EmptyTools(t *testing.T) {
 	err := emitJSONPath([]ToolPath{}, "/usr/bin")
 	assert.NoError(t, err)
 }
+
+// Tests for format helper functions.
+
+func TestFormatBashContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "simple path",
+			path:     "/usr/bin:/usr/local/bin",
+			expected: "export PATH='/usr/bin:/usr/local/bin'\n",
+		},
+		{
+			name:     "path with single quote",
+			path:     "/path/with'quote:/bin",
+			expected: "export PATH='/path/with'\\''quote:/bin'\n",
+		},
+		{
+			name:     "empty path",
+			path:     "",
+			expected: "export PATH=''\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatBashContent(tt.path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatDotenvContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		expected string
+	}{
+		{
+			name:     "simple path",
+			path:     "/usr/bin:/usr/local/bin",
+			expected: "PATH='/usr/bin:/usr/local/bin'\n",
+		},
+		{
+			name:     "path with single quote",
+			path:     "/path/with'quote:/bin",
+			expected: "PATH='/path/with'\\''quote:/bin'\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatDotenvContent(tt.path)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatFishContent(t *testing.T) {
+	sep := string(os.PathListSeparator)
+	tests := []struct {
+		name     string
+		path     string
+		contains []string
+	}{
+		{
+			name:     "simple paths",
+			path:     "/usr/bin" + sep + "/usr/local/bin",
+			contains: []string{"set -gx PATH", "'/usr/bin'", "'/usr/local/bin'"},
+		},
+		{
+			name:     "path with single quote",
+			path:     "/path/with'quote" + sep + "/bin",
+			contains: []string{"set -gx PATH", `\'`, "'/bin'"},
+		},
+		{
+			name:     "single path",
+			path:     "/usr/bin",
+			contains: []string{"set -gx PATH", "'/usr/bin'"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatFishContent(tt.path)
+			for _, c := range tt.contains {
+				assert.Contains(t, result, c)
+			}
+		})
+	}
+}
+
+func TestFormatPowershellContent(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		contains []string
+	}{
+		{
+			name:     "simple path",
+			path:     "/usr/bin:/usr/local/bin",
+			contains: []string{"$env:PATH", "/usr/bin:/usr/local/bin"},
+		},
+		{
+			name:     "path with double quote",
+			path:     `/path/"quoted":/bin`,
+			contains: []string{"$env:PATH", "`\""},
+		},
+		{
+			name:     "path with dollar sign",
+			path:     "/path/$var:/bin",
+			contains: []string{"$env:PATH", "`$"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatPowershellContent(tt.path)
+			for _, c := range tt.contains {
+				assert.Contains(t, result, c)
+			}
+		})
+	}
+}
+
+func TestFormatGitHubContent(t *testing.T) {
+	tests := []struct {
+		name        string
+		pathEntries []string
+		expected    string
+	}{
+		{
+			name:        "multiple entries",
+			pathEntries: []string{"/path1", "/path2", "/path3"},
+			expected:    "/path1\n/path2\n/path3\n",
+		},
+		{
+			name:        "single entry",
+			pathEntries: []string{"/single"},
+			expected:    "/single\n",
+		},
+		{
+			name:        "empty entries",
+			pathEntries: []string{},
+			expected:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatGitHubContent(tt.pathEntries)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFormatContentForFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		format      string
+		pathEntries []string
+		finalPath   string
+		contains    string
+	}{
+		{
+			name:        "github format",
+			format:      "github",
+			pathEntries: []string{"/path1", "/path2"},
+			finalPath:   "",
+			contains:    "/path1\n/path2\n",
+		},
+		{
+			name:      "bash format",
+			format:    "bash",
+			finalPath: "/usr/bin",
+			contains:  "export PATH=",
+		},
+		{
+			name:      "dotenv format",
+			format:    "dotenv",
+			finalPath: "/usr/bin",
+			contains:  "PATH=",
+		},
+		{
+			name:      "fish format",
+			format:    "fish",
+			finalPath: "/usr/bin",
+			contains:  "set -gx PATH",
+		},
+		{
+			name:      "powershell format",
+			format:    "powershell",
+			finalPath: "/usr/bin",
+			contains:  "$env:PATH",
+		},
+		{
+			name:      "json format",
+			format:    "json",
+			finalPath: "/usr/bin",
+			contains:  "final_path",
+		},
+		{
+			name:      "unknown format defaults to bash",
+			format:    "unknown-format",
+			finalPath: "/usr/bin",
+			contains:  "export PATH=",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := formatContentForFile(tt.format, tt.pathEntries, tt.finalPath)
+			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
