@@ -119,4 +119,4 @@ generate-mocks:
 	@go generate ./pkg/http/...
 	@echo "Mocks regenerated successfully"
 
-.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks
+.PHONY: readme lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks

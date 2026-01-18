@@ -162,7 +162,7 @@ The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos 
 2. Launches a Geodesic container with:
    - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
    - Your infrastructure directory mounted to `/workspace`
-   - Atmos-managed AWS credentials from `~/.config/atmos/` (following XDG conventions)
+   - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
    - Standard XDG environment variables configured
 
 This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
