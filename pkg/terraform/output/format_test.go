@@ -85,9 +85,10 @@ func TestFormatOutputs_Dotenv(t *testing.T) {
 	result, err := FormatOutputs(outputs, FormatDotenv)
 	require.NoError(t, err)
 
-	assert.Contains(t, result, "url='https://example.com'\n")
-	assert.Contains(t, result, "port='8080'\n")
-	assert.Contains(t, result, "enabled='true'\n")
+	// shellescape.Quote only adds quotes when needed.
+	assert.Contains(t, result, "url=https://example.com\n")
+	assert.Contains(t, result, "port=8080\n")
+	assert.Contains(t, result, "enabled=true\n")
 }
 
 func TestFormatOutputs_Bash(t *testing.T) {
@@ -100,9 +101,10 @@ func TestFormatOutputs_Bash(t *testing.T) {
 	result, err := FormatOutputs(outputs, FormatBash)
 	require.NoError(t, err)
 
-	assert.Contains(t, result, "export url='https://example.com'\n")
-	assert.Contains(t, result, "export port='8080'\n")
-	assert.Contains(t, result, "export enabled='true'\n")
+	// shellescape.Quote only adds quotes when needed.
+	assert.Contains(t, result, "export url=https://example.com\n")
+	assert.Contains(t, result, "export port=8080\n")
+	assert.Contains(t, result, "export enabled=true\n")
 }
 
 func TestFormatOutputs_CSV(t *testing.T) {
@@ -176,13 +178,13 @@ func TestFormatOutputs_NullValues(t *testing.T) {
 	// Dotenv format should skip null values.
 	result, err = FormatOutputs(outputs, FormatDotenv)
 	require.NoError(t, err)
-	assert.Contains(t, result, "url='https://example.com'\n")
+	assert.Contains(t, result, "url=https://example.com\n")
 	assert.NotContains(t, result, "nullable")
 
 	// Bash format should skip null values.
 	result, err = FormatOutputs(outputs, FormatBash)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export url='https://example.com'\n")
+	assert.Contains(t, result, "export url=https://example.com\n")
 	assert.NotContains(t, result, "nullable")
 
 	// HCL format should skip null values.
@@ -231,15 +233,15 @@ func TestFormatOutputs_SpecialCharacters(t *testing.T) {
 		"with_backslash": `path\to\file`,
 	}
 
-	// Dotenv format should escape single quotes.
+	// Dotenv format should escape single quotes using shellescape pattern.
 	result, err := FormatOutputs(outputs, FormatDotenv)
 	require.NoError(t, err)
-	assert.Contains(t, result, `with_quote='it'\''s a test'`)
+	assert.Contains(t, result, `with_quote='it'"'"'s a test'`)
 
-	// Bash format should escape single quotes.
+	// Bash format should escape single quotes using shellescape pattern.
 	result, err = FormatOutputs(outputs, FormatBash)
 	require.NoError(t, err)
-	assert.Contains(t, result, `export with_quote='it'\''s a test'`)
+	assert.Contains(t, result, `export with_quote='it'"'"'s a test'`)
 
 	// HCL format should escape backslashes and quotes.
 	result, err = FormatOutputs(outputs, FormatHCL)
@@ -376,8 +378,8 @@ func TestFormatSingleValue_Scalar(t *testing.T) {
 		{"hcl number", "port", float64(8080), FormatHCL, "port = 8080\n"},
 		{"env string", "url", "https://example.com", FormatEnv, "url=https://example.com\n"},
 		{"env number", "port", float64(8080), FormatEnv, "port=8080\n"},
-		{"dotenv string", "url", "https://example.com", FormatDotenv, "url='https://example.com'\n"},
-		{"bash string", "url", "https://example.com", FormatBash, "export url='https://example.com'\n"},
+		{"dotenv string", "url", "https://example.com", FormatDotenv, "url=https://example.com\n"},
+		{"bash string", "url", "https://example.com", FormatBash, "export url=https://example.com\n"},
 		{"csv string", "url", "https://example.com", FormatCSV, "url,https://example.com\n"},
 		{"tsv string", "url", "https://example.com", FormatTSV, "url\thttps://example.com\n"},
 	}
@@ -541,8 +543,8 @@ func TestFormatOutputsWithOptions_Uppercase(t *testing.T) {
 	// Test bash format with uppercase.
 	result, err = FormatOutputsWithOptions(outputs, FormatBash, opts)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export VPC_ID='vpc-123'\n")
-	assert.Contains(t, result, "export SUBNET_ID='subnet-456'\n")
+	assert.Contains(t, result, "export VPC_ID=vpc-123\n")
+	assert.Contains(t, result, "export SUBNET_ID=subnet-456\n")
 
 	// Test JSON format with uppercase (keys should be uppercase).
 	result, err = FormatOutputsWithOptions(outputs, FormatJSON, opts)
@@ -568,7 +570,7 @@ func TestFormatSingleValueWithOptions_Uppercase(t *testing.T) {
 	// Test bash format with uppercase.
 	result, err = FormatSingleValueWithOptions("cluster_name", "my-cluster", FormatBash, opts)
 	require.NoError(t, err)
-	assert.Equal(t, "export CLUSTER_NAME='my-cluster'\n", result)
+	assert.Equal(t, "export CLUSTER_NAME=my-cluster\n", result)
 
 	// Test HCL format with uppercase.
 	result, err = FormatSingleValueWithOptions("port", float64(8080), FormatHCL, opts)
@@ -610,8 +612,8 @@ func TestFormatOutputsWithOptions_Flatten(t *testing.T) {
 	// Test bash format with flatten.
 	result, err = FormatOutputsWithOptions(outputs, FormatBash, opts)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export config_host='localhost'\n")
-	assert.Contains(t, result, "export config_port='3000'\n")
+	assert.Contains(t, result, "export config_host=localhost\n")
+	assert.Contains(t, result, "export config_port=3000\n")
 
 	// Test JSON format with flatten.
 	result, err = FormatOutputsWithOptions(outputs, FormatJSON, opts)
@@ -640,8 +642,8 @@ func TestFormatOutputsWithOptions_FlattenAndUppercase(t *testing.T) {
 	// Test bash format with both options.
 	result, err = FormatOutputsWithOptions(outputs, FormatBash, opts)
 	require.NoError(t, err)
-	assert.Contains(t, result, "export CONFIG_DB_HOST='localhost'\n")
-	assert.Contains(t, result, "export CONFIG_DB_PORT='5432'\n")
+	assert.Contains(t, result, "export CONFIG_DB_HOST=localhost\n")
+	assert.Contains(t, result, "export CONFIG_DB_PORT=5432\n")
 }
 
 func TestFormatOutputsWithOptions_FlattenArrays(t *testing.T) {
@@ -741,4 +743,226 @@ func TestFormatOutputsWithOptions_FlattenNestedArraysOfArrays(t *testing.T) {
 	assert.Contains(t, result, "matrix_0_1=b\n")
 	assert.Contains(t, result, "matrix_1_0=c\n")
 	assert.Contains(t, result, "matrix_1_1=d\n")
+}
+
+func TestFormatOutputs_GitHub(t *testing.T) {
+	outputs := map[string]any{
+		"url":     "https://example.com",
+		"port":    float64(8080),
+		"enabled": true,
+	}
+
+	result, err := FormatOutputs(outputs, FormatGitHub)
+	require.NoError(t, err)
+
+	assert.Contains(t, result, "url=https://example.com\n")
+	assert.Contains(t, result, "port=8080\n")
+	assert.Contains(t, result, "enabled=true\n")
+}
+
+func TestFormatOutputs_GitHub_MultilineValue(t *testing.T) {
+	outputs := map[string]any{
+		"multiline": "line1\nline2\nline3",
+		"simple":    "single line",
+	}
+
+	result, err := FormatOutputs(outputs, FormatGitHub)
+	require.NoError(t, err)
+
+	// Multiline values should use heredoc syntax.
+	assert.Contains(t, result, "multiline<<ATMOS_EOF_multiline\n")
+	assert.Contains(t, result, "line1\nline2\nline3\n")
+	assert.Contains(t, result, "ATMOS_EOF_multiline\n")
+
+	// Simple values should be key=value format.
+	assert.Contains(t, result, "simple=single line\n")
+}
+
+func TestFormatOutputs_GitHub_ComplexTypes(t *testing.T) {
+	outputs := map[string]any{
+		"list": []any{"a", "b", "c"},
+		"map":  map[string]any{"key": "value"},
+	}
+
+	result, err := FormatOutputs(outputs, FormatGitHub)
+	require.NoError(t, err)
+
+	// Complex types should be JSON-encoded.
+	assert.Contains(t, result, `list=["a","b","c"]`)
+	assert.Contains(t, result, `map={"key":"value"}`)
+}
+
+func TestFormatOutputs_GitHub_Uppercase(t *testing.T) {
+	outputs := map[string]any{
+		"vpc_id":    "vpc-12345",
+		"subnet_id": "subnet-67890",
+	}
+
+	opts := FormatOptions{Uppercase: true}
+	result, err := FormatOutputsWithOptions(outputs, FormatGitHub, opts)
+	require.NoError(t, err)
+
+	assert.Contains(t, result, "VPC_ID=vpc-12345\n")
+	assert.Contains(t, result, "SUBNET_ID=subnet-67890\n")
+}
+
+func TestFormatOutputs_GitHub_NullValues(t *testing.T) {
+	outputs := map[string]any{
+		"valid":    "value",
+		"null_val": nil,
+	}
+
+	result, err := FormatOutputs(outputs, FormatGitHub)
+	require.NoError(t, err)
+
+	// Null values should be skipped.
+	assert.Contains(t, result, "valid=value\n")
+	assert.NotContains(t, result, "null_val")
+}
+
+func TestFormatSingleValue_GitHub(t *testing.T) {
+	// Test single scalar value.
+	result, err := FormatSingleValue("vpc_id", "vpc-12345", FormatGitHub)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc_id=vpc-12345\n", result)
+
+	// Test single multiline value.
+	result, err = FormatSingleValue("cert", "line1\nline2", FormatGitHub)
+	require.NoError(t, err)
+	assert.Contains(t, result, "cert<<ATMOS_EOF_cert\n")
+	assert.Contains(t, result, "line1\nline2\n")
+	assert.Contains(t, result, "ATMOS_EOF_cert\n")
+
+	// Test single complex value (JSON-encoded).
+	result, err = FormatSingleValue("config", map[string]any{"host": "localhost"}, FormatGitHub)
+	require.NoError(t, err)
+	assert.Equal(t, `config={"host":"localhost"}`+"\n", result)
+}
+
+// TestFormatOutputs_KeysSorted verifies that all output formats produce
+// alphabetically sorted keys for consistent, deterministic output.
+func TestFormatOutputs_KeysSorted(t *testing.T) {
+	// Use keys that are intentionally out of order to verify sorting.
+	outputs := map[string]any{
+		"zebra":  "last",
+		"alpha":  "first",
+		"middle": "center",
+		"beta":   "second",
+	}
+
+	tests := []struct {
+		name     string
+		format   Format
+		contains []string // Ordered list of substrings that should appear in order.
+	}{
+		{
+			name:     "json sorted",
+			format:   FormatJSON,
+			contains: []string{`"alpha"`, `"beta"`, `"middle"`, `"zebra"`},
+		},
+		{
+			name:     "yaml sorted",
+			format:   FormatYAML,
+			contains: []string{"alpha:", "beta:", "middle:", "zebra:"},
+		},
+		{
+			name:     "hcl sorted",
+			format:   FormatHCL,
+			contains: []string{"alpha =", "beta =", "middle =", "zebra ="},
+		},
+		{
+			name:     "env sorted",
+			format:   FormatEnv,
+			contains: []string{"alpha=", "beta=", "middle=", "zebra="},
+		},
+		{
+			name:     "dotenv sorted",
+			format:   FormatDotenv,
+			contains: []string{"alpha=", "beta=", "middle=", "zebra="},
+		},
+		{
+			name:     "bash sorted",
+			format:   FormatBash,
+			contains: []string{"export alpha=", "export beta=", "export middle=", "export zebra="},
+		},
+		{
+			name:     "csv sorted",
+			format:   FormatCSV,
+			contains: []string{"alpha,", "beta,", "middle,", "zebra,"},
+		},
+		{
+			name:     "tsv sorted",
+			format:   FormatTSV,
+			contains: []string{"alpha\t", "beta\t", "middle\t", "zebra\t"},
+		},
+		{
+			name:     "github sorted",
+			format:   FormatGitHub,
+			contains: []string{"alpha=", "beta=", "middle=", "zebra="},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := FormatOutputs(outputs, tt.format)
+			require.NoError(t, err)
+
+			// Verify that keys appear in alphabetical order.
+			lastIndex := -1
+			for _, substr := range tt.contains {
+				idx := findSubstringIndex(result, substr, lastIndex+1)
+				require.True(t, idx > lastIndex, "Expected %q to appear after previous key in format %s, result:\n%s", substr, tt.format, result)
+				lastIndex = idx
+			}
+		})
+	}
+}
+
+// TestFormatOutputs_NestedKeysSorted verifies that nested maps also have sorted keys.
+func TestFormatOutputs_NestedKeysSorted(t *testing.T) {
+	outputs := map[string]any{
+		"outer": map[string]any{
+			"zebra": "last",
+			"alpha": "first",
+			"beta":  "second",
+		},
+	}
+
+	// Test JSON with nested sorted keys.
+	result, err := FormatOutputs(outputs, FormatJSON)
+	require.NoError(t, err)
+
+	// Verify nested keys are sorted: alpha, beta, zebra.
+	alphaIdx := findSubstringIndex(result, `"alpha"`, 0)
+	betaIdx := findSubstringIndex(result, `"beta"`, 0)
+	zebraIdx := findSubstringIndex(result, `"zebra"`, 0)
+
+	assert.True(t, alphaIdx < betaIdx, "alpha should appear before beta in JSON")
+	assert.True(t, betaIdx < zebraIdx, "beta should appear before zebra in JSON")
+
+	// Test YAML with nested sorted keys.
+	result, err = FormatOutputs(outputs, FormatYAML)
+	require.NoError(t, err)
+
+	alphaIdx = findSubstringIndex(result, "alpha:", 0)
+	betaIdx = findSubstringIndex(result, "beta:", 0)
+	zebraIdx = findSubstringIndex(result, "zebra:", 0)
+
+	assert.True(t, alphaIdx < betaIdx, "alpha should appear before beta in YAML")
+	assert.True(t, betaIdx < zebraIdx, "beta should appear before zebra in YAML")
+}
+
+// findSubstringIndex returns the index of substr in s starting from startIdx, or -1 if not found.
+func findSubstringIndex(s, substr string, startIdx int) int {
+	if startIdx >= len(s) {
+		return -1
+	}
+	idx := len(s[:startIdx]) + len(substr)
+	for i := startIdx; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	_ = idx // Avoid unused variable warning.
+	return -1
 }

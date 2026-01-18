@@ -29,10 +29,13 @@ const (
 	FormatCSV Format = "csv"
 	// FormatTSV outputs as TSV: key<tab>value.
 	FormatTSV Format = "tsv"
+	// FormatGitHub outputs for GitHub Actions $GITHUB_OUTPUT file.
+	// Uses KEY=value for simple values, heredoc syntax for multiline values.
+	FormatGitHub Format = "github"
 )
 
 // SupportedFormats lists all supported output formats.
-var SupportedFormats = []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv"}
+var SupportedFormats = []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv", "github"}
 
 // DefaultFileMode is the file mode for output files.
 const DefaultFileMode = 0o644
