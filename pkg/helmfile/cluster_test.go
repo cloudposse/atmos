@@ -209,6 +209,23 @@ func TestResolveClusterName(t *testing.T) {
 			expectedDeprecated: true,
 			expectedError:      nil,
 		},
+		{
+			name: "nil context with pattern returns error",
+			input: ClusterNameInput{
+				FlagValue:   "",
+				ConfigValue: "",
+				Template:    "",
+				Pattern:     "{namespace}-{stage}-eks",
+			},
+			context:            nil,
+			atmosConfig:        defaultAtmosConfig,
+			componentSection:   nil,
+			templateProcessor:  nil,
+			expectedCluster:    "",
+			expectedSource:     "",
+			expectedDeprecated: false,
+			expectedError:      errUtils.ErrNilParam,
+		},
 	}
 
 	for _, tt := range tests {
@@ -223,9 +240,12 @@ func TestResolveClusterName(t *testing.T) {
 
 			if tt.expectedError != nil {
 				require.Error(t, err)
-				if errors.Is(tt.expectedError, errUtils.ErrMissingHelmfileClusterName) {
+				switch {
+				case errors.Is(tt.expectedError, errUtils.ErrMissingHelmfileClusterName):
 					assert.ErrorIs(t, err, errUtils.ErrMissingHelmfileClusterName)
-				} else {
+				case errors.Is(tt.expectedError, errUtils.ErrNilParam):
+					assert.ErrorIs(t, err, errUtils.ErrNilParam)
+				default:
 					assert.Contains(t, err.Error(), tt.expectedError.Error())
 				}
 				assert.Nil(t, result)

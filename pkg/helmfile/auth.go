@@ -1,3 +1,5 @@
+// Package helmfile provides utilities for helmfile configuration and execution,
+// including EKS cluster name resolution and AWS authentication handling.
 package helmfile
 
 import (

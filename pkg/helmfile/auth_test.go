@@ -108,6 +108,19 @@ func TestResolveAWSAuth(t *testing.T) {
 			expectedDeprecated:      false,
 			expectedError:           nil,
 		},
+		{
+			name: "nil context with profile pattern returns error",
+			input: AuthInput{
+				Identity:       "",
+				ProfilePattern: "cp-{namespace}-{stage}-helm",
+			},
+			context:                 nil,
+			expectedUseIdentityAuth: false,
+			expectedProfile:         "",
+			expectedSource:          "",
+			expectedDeprecated:      false,
+			expectedError:           errUtils.ErrNilParam,
+		},
 	}
 
 	for _, tt := range tests {
