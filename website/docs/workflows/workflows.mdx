@@ -9,6 +9,7 @@ slug: /workflows
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import StepTypes from './_partials/_step-types.mdx'
 import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
@@ -269,7 +270,7 @@ Each workflow definition must confirm to the following schema:
   <dd>Step name (optional). It's used to find the first step from which to start executing the workflow when the command-line flag `--from-step` is specified. If the `name` is omitted, a friendly name will be generated for you consisting of a prefix of `step` and followed by the index of the step (the index starts with 1, so the first generated step name would be `step1`).</dd>
 
   <dt>`type`</dt>
-  <dd>The type of the command. Can be either `atmos` or `shell`. Type `atmos` is implicit, you don't have to specify it if the `command` is an Atmos [CLI command](/cli/commands). Type `shell` is required if the command is a shell script. When executing a step of type `atmos`, Atmos prepends the `atmos` binary name to the provided command before executing it</dd>
+  <dd>The type of the step. Can be `atmos`, `shell`, or any of the [interactive step types](#step-types) like `input`, `confirm`, `choose`, `filter`, `markdown`, `spin`, and more. Type `atmos` is implicit for command steps. Type `shell` is required for shell scripts. See the [Step Types](#step-types) section for all available types</dd>
 
   <dt>`stack`</dt>
   <dd>Step-level Atmos stack (optional). If specified, the `command` will be executed for this Atmos stack. It overrides the workflow-level `stack` attribute, and can itself be overridden on the command line by using the `--stack` flag (`-s` for shorthand)</dd>
@@ -284,6 +285,16 @@ A workflow command of type `shell` can be any simple or complex shell command or
 You can use [YAML Multiline Strings](https://yaml-multiline.info/) to create complex multi-line shell scripts.
 
 :::
+
+:::tip Interactive Workflows
+
+Atmos supports 25+ step types for building interactive CLI wizards. Use `input`, `confirm`, `choose`, and `filter` to collect user input, `markdown` and `success`/`info`/`warn`/`error` for rich output, `spin` for progress spinners, and `alert`/`title`/`env`/`exit` for terminal control. See the [Step Types](#step-types) section below for complete documentation.
+
+:::
+
+## Step Types
+
+<StepTypes />
 
 ## Executing Workflow from a Named Step
 
@@ -722,6 +733,8 @@ Use `.tool-versions` for project-wide tool defaults and workflow `dependencies` 
 
 ## Try It
 
-Explore a working example that demonstrates workflows in action.
+Explore working examples that demonstrate workflows in action.
 
 <EmbedExample example="demo-workflows" />
+
+<EmbedExample example="interactive-workflows" />
