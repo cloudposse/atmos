@@ -314,6 +314,35 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 			"count", len(configAndStacksInfo.ProfilesFromArg))
 	}
 
+	// Inject provisioned identities after profiles are loaded.
+	// This ensures auth.providers (which may be defined in profiles) is available for lookup.
+	if err := injectProvisionedIdentitiesPostLoad(v); err != nil {
+		log.Trace("Failed to inject provisioned identities post-load", "error", err)
+		// Non-fatal: continue with config loading even if injection fails.
+	}
+
+	// Re-apply user config after provisioned identities so user config takes precedence.
+	// This ensures manually configured identities override auto-provisioned ones.
+	// Re-apply main config sources.
+	if err := reapplyUserConfigForPrecedence(v); err != nil {
+		log.Trace("Failed to re-apply user config for precedence", "error", err)
+		// Non-fatal: continue with config loading.
+	}
+
+	// Re-apply profiles if any were specified.
+	if len(configAndStacksInfo.ProfilesFromArg) > 0 {
+		var tempConfig schema.AtmosConfiguration
+		if err := v.Unmarshal(&tempConfig); err != nil {
+			return atmosConfig, err
+		}
+		tempConfig.CliConfigPath = atmosConfig.CliConfigPath
+
+		if err := loadProfiles(v, configAndStacksInfo.ProfilesFromArg, &tempConfig); err != nil {
+			return atmosConfig, err
+		}
+		log.Trace("Re-applied profiles for precedence over provisioned identities")
+	}
+
 	// https://gist.github.com/chazcheadle/45bf85b793dea2b71bd05ebaa3c28644
 	// https://sagikazarmark.hu/blog/decoding-custom-formats-with-viper/
 	err := v.Unmarshal(&atmosConfig, atmosDecodeHook())
@@ -957,7 +986,23 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 	}
 
 	// Load and merge each file.
+	// For proper precedence, we:
+	// 1. First process any imports (so they are merged first)
+	// 2. Then merge the main file on top (so it takes precedence over its imports)
+	// This aligns with mergeConfig() semantics: "importing file always takes precedence over imported files".
+	//
+	// Note: All yaml files in the directory are loaded. If an import file is in the same directory
+	// as the importing file, it will be loaded twice (once via import, once via directory scan).
+	// For clean separation, place import files in subdirectories.
 	for _, filePath := range foundPaths {
+		// Process any imports in the file FIRST.
+		// This enables import: directives to work in profile files.
+		if err := processFileImportsIfPresent(filePath, filepath.Dir(filePath), dst); err != nil {
+			log.Debug("Failed to process imports in file", "file", filePath, "error", err)
+			// Non-fatal: continue loading even if import processing fails.
+		}
+
+		// Now merge the main file on top so it takes precedence over its imports.
 		if err := mergeConfigFile(filePath, dst); err != nil {
 			return fmt.Errorf("%w: failed to load configuration file from %s: %s: %w", errUtils.ErrParseFile, source, filePath, err)
 		}
@@ -971,6 +1016,38 @@ func loadAtmosConfigsFromDirectory(searchPattern string, dst *viper.Viper, sourc
 		"pattern", searchPattern)
 
 	return nil
+}
+
+// processFileImportsIfPresent checks if a config file has imports and processes them.
+// This enables import: directives to work in profile files and other config files
+// that are loaded via loadAtmosConfigsFromDirectory().
+func processFileImportsIfPresent(filePath string, basePath string, v *viper.Viper) error {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return err
+	}
+
+	// Parse to check for imports.
+	tempViper := viper.New()
+	tempViper.SetConfigType(yamlType)
+	if err := tempViper.ReadConfig(bytes.NewReader(content)); err != nil {
+		return err
+	}
+
+	importPaths := tempViper.GetStringSlice("import")
+	if len(importPaths) == 0 {
+		return nil // No imports to process.
+	}
+
+	log.Debug("Processing imports from file", "file", filePath, "imports", len(importPaths))
+
+	// Create temp config and process imports.
+	src := &schema.AtmosConfiguration{
+		Import:   importPaths,
+		BasePath: basePath,
+	}
+
+	return processConfigImports(src, v)
 }
 
 // mergeDefaultImports merges default imports (`atmos.d/`,`.atmos.d/`)
@@ -1065,7 +1142,7 @@ func mergeImports(dst *viper.Viper) error {
 
 	// Inject provisioned identity imports before processing.
 	if err := injectProvisionedIdentityImports(&src); err != nil {
-		log.Debug("Failed to inject provisioned identity imports", "error", err)
+		log.Trace("Failed to inject provisioned identity imports", "error", err)
 		// Non-fatal: continue with config loading even if injection fails.
 	}
 
@@ -1102,7 +1179,7 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 
 		// Check if provisioned file exists.
 		if _, err := os.Stat(provisionedFile); err == nil {
-			log.Debug("Found provisioned identities file", "provider", providerName, "file", provisionedFile)
+			log.Trace("Found provisioned identities file", "provider", providerName, "file", provisionedFile)
 			provisionedImports = append(provisionedImports, provisionedFile)
 		}
 	}
@@ -1110,10 +1187,88 @@ func injectProvisionedIdentityImports(src *schema.AtmosConfiguration) error {
 	// Inject provisioned imports BEFORE existing imports.
 	// This ensures manual config (in existing imports) takes precedence over provisioned config.
 	if len(provisionedImports) > 0 {
-		log.Debug("Injecting provisioned identity imports", "count", len(provisionedImports))
+		log.Trace("Injecting provisioned identity imports", "count", len(provisionedImports))
 		src.Import = append(provisionedImports, src.Import...)
 	}
 
+	return nil
+}
+
+// injectProvisionedIdentitiesPostLoad loads provisioned identity files after all config
+// sources (including profiles) have been loaded. This ensures auth.providers is populated
+// and that provisioned identity cache files from prior authentication are available.
+// This function runs after profiles are loaded but before the final unmarshal.
+func injectProvisionedIdentitiesPostLoad(v *viper.Viper) error {
+	// Unmarshal to get the fully loaded config with providers.
+	var tempConfig schema.AtmosConfiguration
+	if err := v.Unmarshal(&tempConfig); err != nil {
+		return err
+	}
+
+	// Check if there are any auth providers configured.
+	if len(tempConfig.Auth.Providers) == 0 {
+		log.Trace("No auth providers configured, skipping provisioned identity injection")
+		return nil
+	}
+
+	// Get XDG cache directory for provisioned identities.
+	const authSubDir = "auth"
+	const authDirPerms = 0o700
+	const providerKey = "provider"
+	baseProvisioningDir, err := xdg.GetXDGCacheDir(authSubDir, authDirPerms)
+	if err != nil {
+		return fmt.Errorf("failed to get provisioning cache directory: %w", err)
+	}
+
+	// For each provider, check for and load provisioned identities.
+	// Only load cached identities if the provider has auto_provision_identities enabled.
+	for providerName := range tempConfig.Auth.Providers {
+		provider := tempConfig.Auth.Providers[providerName]
+		// Skip providers that have auto_provision_identities disabled or not set.
+		// This ensures cached identities are only used when the feature is currently enabled.
+		if provider.AutoProvisionIdentities == nil || !*provider.AutoProvisionIdentities {
+			log.Trace("Skipping provisioned identity injection - auto_provision_identities not enabled",
+				providerKey, providerName)
+			continue
+		}
+
+		provisionedFile := filepath.Join(baseProvisioningDir, providerName, provisioning.ProvisionedFileName)
+
+		if _, err := os.Stat(provisionedFile); err == nil {
+			log.Trace("Loading provisioned identities post-load", providerKey, providerName, "file", provisionedFile)
+			if err := mergeConfigFile(provisionedFile, v); err != nil {
+				log.Trace("Failed to load provisioned identities", providerKey, providerName, "error", err)
+				// Non-fatal: continue with other providers.
+			}
+		} else {
+			log.Trace("No provisioned identities cache file found", providerKey, providerName, "file", provisionedFile)
+		}
+	}
+
+	return nil
+}
+
+// reapplyUserConfigForPrecedence re-applies user config files after provisioned identities.
+// This ensures user-defined configuration takes precedence over auto-provisioned identities.
+// It uses mergeConfig instead of mergeConfigFile to ensure imports are also re-processed,
+// so that overrides in imported files are properly applied.
+func reapplyUserConfigForPrecedence(v *viper.Viper) error {
+	// Re-apply config from the main config file if one was used.
+	configFile := v.ConfigFileUsed()
+	if configFile != "" {
+		log.Trace("Re-applying user config for precedence", "file", configFile)
+
+		// Extract directory and filename for mergeConfig.
+		dir := filepath.Dir(configFile)
+		base := filepath.Base(configFile)
+		name := strings.TrimSuffix(base, filepath.Ext(base))
+
+		// Re-merge using the full mergeConfig() pipeline so imports are processed consistently.
+		// This ensures that user overrides in imported files also take precedence over provisioned identities.
+		if err := mergeConfig(v, dir, name, true); err != nil {
+			return fmt.Errorf("failed to re-apply config file %s: %w", configFile, err)
+		}
+	}
 	return nil
 }
 
@@ -1330,6 +1485,12 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 
 	atmosConfig.CaseMaps = mergedCaseMaps
 	populateLegacyIdentityCaseMap(mergedCaseMaps, atmosConfig)
+
+	// Also preserve case from provisioned identity cache files.
+	if err := preserveProvisionedIdentityCase(atmosConfig); err != nil {
+		log.Trace("Failed to preserve provisioned identity case", "error", err)
+		// Non-fatal: continue without provisioned identity case preservation.
+	}
 
 	log.Trace("Preserved case-sensitive map keys", "paths", caseSensitivePaths, "files_processed", len(filesToProcess))
 }
