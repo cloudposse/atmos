@@ -2,6 +2,8 @@ package toolchain
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -10,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 func TestEnvCommandProvider(t *testing.T) {
@@ -452,5 +456,220 @@ func TestEnvCommand_CommandMetadata(t *testing.T) {
 
 	t.Run("command has RunE", func(t *testing.T) {
 		assert.NotNil(t, envCmd.RunE)
+	})
+}
+
+// setupEnvTestEnvironment creates a temp directory with an atmos config and tool-versions file.
+func setupEnvTestEnvironment(t *testing.T) (cleanup func(), tempDir string) {
+	t.Helper()
+
+	tempDir = t.TempDir()
+
+	// Create a minimal tool-versions file with a tool.
+	tvPath := filepath.Join(tempDir, ".tool-versions")
+	err := os.WriteFile(tvPath, []byte("terraform 1.5.0\n"), 0o644)
+	require.NoError(t, err)
+
+	// Save original config and set test config.
+	originalConfig := toolchain.GetAtmosConfig()
+
+	testConfig := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: tvPath,
+			InstallPath:  tempDir,
+		},
+	}
+	toolchain.SetAtmosConfig(testConfig)
+
+	cleanup = func() {
+		toolchain.SetAtmosConfig(originalConfig)
+		// Reset viper state.
+		viper.Reset()
+	}
+
+	return cleanup, tempDir
+}
+
+// TestEnvCommand_RunE tests the RunE function execution paths.
+func TestEnvCommand_RunE(t *testing.T) {
+	t.Run("RunE with default format executes", func(t *testing.T) {
+		cleanup, _ := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		// Reset flags to defaults.
+		envCmd.Flags().Set("format", "bash")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", "")
+
+		// Call RunE - exercises:
+		// - Line 27-30: Viper binding
+		// - Line 32-35: Format validation (bash is valid)
+		// - Line 37-38: Get flags
+		// - Line 46: Call EmitEnv
+		err := envCmd.RunE(envCmd, []string{})
+
+		// Expect ErrToolNotFound since no tools are installed.
+		require.Error(t, err)
+		assert.ErrorIs(t, err, toolchain.ErrToolNotFound)
+	})
+
+	t.Run("RunE with invalid format returns error", func(t *testing.T) {
+		cleanup, _ := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		// Set invalid format.
+		envCmd.Flags().Set("format", "invalid")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", "")
+
+		// Call RunE - exercises:
+		// - Line 32-35: Format validation with invalid format
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrInvalidArgumentError)
+		assert.Contains(t, err.Error(), "invalid")
+	})
+
+	t.Run("RunE with all supported formats validates correctly", func(t *testing.T) {
+		for _, format := range supportedFormats {
+			t.Run(format, func(t *testing.T) {
+				cleanup, _ := setupEnvTestEnvironment(t)
+				defer cleanup()
+
+				envCmd.Flags().Set("format", format)
+				envCmd.Flags().Set("relative", "false")
+				envCmd.Flags().Set("output", "")
+
+				// Call RunE - should pass format validation.
+				err := envCmd.RunE(envCmd, []string{})
+
+				// Error should be ErrToolNotFound (format validation passed).
+				require.Error(t, err)
+				assert.ErrorIs(t, err, toolchain.ErrToolNotFound)
+			})
+		}
+	})
+
+	t.Run("RunE with relative flag passes to EmitEnv", func(t *testing.T) {
+		cleanup, _ := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		envCmd.Flags().Set("format", "bash")
+		envCmd.Flags().Set("relative", "true")
+		envCmd.Flags().Set("output", "")
+
+		// Call RunE - exercises line 37.
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, toolchain.ErrToolNotFound)
+	})
+
+	t.Run("RunE with output flag passes to EmitEnv", func(t *testing.T) {
+		cleanup, tempDir := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		outputFile := filepath.Join(tempDir, "output.txt")
+
+		envCmd.Flags().Set("format", "bash")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", outputFile)
+
+		// Call RunE - exercises line 38.
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, toolchain.ErrToolNotFound)
+	})
+
+	t.Run("RunE with github format uses GITHUB_PATH env var", func(t *testing.T) {
+		cleanup, tempDir := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		githubPath := filepath.Join(tempDir, "github_path")
+		t.Setenv("GITHUB_PATH", githubPath)
+
+		envCmd.Flags().Set("format", "github")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", "")
+
+		// Call RunE - exercises lines 41-44 (GITHUB_PATH handling).
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, toolchain.ErrToolNotFound)
+	})
+
+	t.Run("RunE with github format and explicit output overrides GITHUB_PATH", func(t *testing.T) {
+		cleanup, tempDir := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		// Set GITHUB_PATH (should be ignored).
+		t.Setenv("GITHUB_PATH", "/ignored/path")
+
+		// Set explicit output (should be used).
+		outputFile := filepath.Join(tempDir, "explicit_output.txt")
+		envCmd.Flags().Set("format", "github")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", outputFile)
+
+		// Call RunE - output flag should be used, not GITHUB_PATH.
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.ErrorIs(t, err, toolchain.ErrToolNotFound)
+	})
+}
+
+// TestEnvCommand_RunE_ErrorMessages tests error messages from RunE.
+func TestEnvCommand_RunE_ErrorMessages(t *testing.T) {
+	t.Run("invalid format error includes supported formats", func(t *testing.T) {
+		cleanup, _ := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		envCmd.Flags().Set("format", "xml")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", "")
+
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "supported")
+	})
+
+	t.Run("invalid format error includes the invalid format", func(t *testing.T) {
+		cleanup, _ := setupEnvTestEnvironment(t)
+		defer cleanup()
+
+		envCmd.Flags().Set("format", "myformat")
+		envCmd.Flags().Set("relative", "false")
+		envCmd.Flags().Set("output", "")
+
+		err := envCmd.RunE(envCmd, []string{})
+
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "myformat")
+	})
+}
+
+// TestEnvCommand_OutputFlag tests the output flag behavior.
+func TestEnvCommand_OutputFlag(t *testing.T) {
+	t.Run("output flag exists", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("output")
+		require.NotNil(t, flag)
+		assert.Equal(t, "o", flag.Shorthand)
+	})
+
+	t.Run("output flag default is empty", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("output")
+		require.NotNil(t, flag)
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("output flag has description mentioning GITHUB_PATH", func(t *testing.T) {
+		flag := envCmd.Flags().Lookup("output")
+		require.NotNil(t, flag)
+		assert.Contains(t, flag.Usage, "GITHUB_PATH")
 	})
 }

@@ -18,7 +18,14 @@ type ToolPath struct {
 }
 
 // buildPathEntries constructs PATH entries from tool versions.
+// This is a backward-compatible wrapper around buildPathEntriesWithLocator.
 func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relativeFlag bool) ([]string, []ToolPath, error) {
+	return buildPathEntriesWithLocator(toolVersions, installer, relativeFlag)
+}
+
+// buildPathEntriesWithLocator constructs PATH entries from tool versions using an InstallLocator.
+// This function accepts an interface to allow mocking in tests.
+func buildPathEntriesWithLocator(toolVersions *ToolVersions, locator InstallLocator, relativeFlag bool) ([]string, []ToolPath, error) {
 	var pathEntries []string
 	var toolPaths []ToolPath
 	seen := make(map[string]struct{}) // Track seen paths to avoid duplicates.
@@ -31,14 +38,14 @@ func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relative
 		version := versions[0] // Default version.
 
 		// Resolve tool name to owner/repo using ParseToolSpec for consistency.
-		owner, repo, err := installer.ParseToolSpec(toolName)
+		owner, repo, err := locator.ParseToolSpec(toolName)
 		if err != nil {
 			// Skip tools that can't be resolved.
 			continue
 		}
 
 		// Find the actual binary path (handles path inconsistencies).
-		binaryPath, err := installer.FindBinaryPath(owner, repo, version)
+		binaryPath, err := locator.FindBinaryPath(owner, repo, version)
 		if err != nil {
 			// Tool not installed, skip it.
 			continue
