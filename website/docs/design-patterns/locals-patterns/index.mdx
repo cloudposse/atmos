@@ -50,9 +50,9 @@ Locals can reference values from the same file using Go template syntax:
 | Reference | Description |
 |-----------|-------------|
 | `{{ .locals.name }}` | Another local in the same file |
-| `{{ .settings.key }}` | Settings defined in the same file |
-| `{{ .vars.key }}` | Vars defined in the same file |
-| `{{ .env.key }}` | Env values defined in the same file (env section) |
+| `{{ .settings.key }}` | Settings from the same file (merged with global settings) |
+| `{{ .vars.key }}` | Vars from the same file (merged with global vars) |
+| `{{ .env.key }}` | Env values from the same file (merged with global env) |
 | `{{ env "VAR" }}` | OS environment variables (via Sprig) |
 
 ## Basic Example

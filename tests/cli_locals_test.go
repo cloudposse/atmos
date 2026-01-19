@@ -815,9 +815,9 @@ func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 // and can be used by downstream tooling.
 
 // =============================================================================
-// Settings Access Tests
+// Settings Access Tests.
 // =============================================================================
-// These tests verify that locals can access .settings, .vars, and .env
+// These tests verify that locals can access .settings, .vars, and .env.
 // from the SAME file during template resolution.
 
 // TestLocalsSettingsAccessSameFile tests that locals can access .settings from the same file.
@@ -1104,13 +1104,13 @@ func TestExampleLocalsDescribeLocals(t *testing.T) {
 }
 
 // =============================================================================
-// Advanced Locals Tests
+// Advanced Locals Tests.
 // =============================================================================
-// These tests verify advanced locals features:
-// - Environment variable access via {{ env "VAR" }}
-// - Nested value access {{ .settings.nested.key }}
-// - Helmfile section locals
-// - Conditional locals using Sprig functions
+// These tests verify advanced locals features.
+// - Environment variable access via {{ env "VAR" }}.
+// - Nested value access {{ .settings.nested.key }}.
+// - Helmfile section locals.
+// - Conditional locals using Sprig functions.
 
 // TestLocalsNestedSettingsAccess tests that locals can access nested settings values.
 func TestLocalsNestedSettingsAccess(t *testing.T) {
