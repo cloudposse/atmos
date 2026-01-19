@@ -450,18 +450,12 @@ func wrapSourcesConfigError(err error, stack string) error {
 	errMsg := err.Error()
 
 	// Detect "no stacks found" pattern from import failures.
+	// The context "paths" is automatically included from the source error.
 	if strings.Contains(errMsg, "failed to find import") ||
 		strings.Contains(errMsg, "no files match") {
-		builder := errUtils.Build(errUtils.ErrNoStacksFound).
+		return errUtils.Build(errUtils.ErrNoStacksFound).
 			WithCause(err).
-			WithExplanation("No stack configuration files were found matching the configured import patterns")
-
-		// Extract and show the searched path if available.
-		if path := extractSourcesSearchedPath(errMsg); path != "" {
-			builder = builder.WithContext("searched", path)
-		}
-
-		return builder.
+			WithExplanation("No stack configuration files were found matching the configured import patterns").
 			WithHint("Ensure your `stacks` directory contains valid YAML files and check `atmos.yaml` configuration").
 			WithHint("See https://atmos.tools/learn/stacks for stack configuration details").
 			Err()
@@ -485,16 +479,4 @@ func wrapSourcesConfigError(err error, stack string) error {
 		builder = builder.WithContext(keyStack, stack)
 	}
 	return builder.Err()
-}
-
-// extractSourcesSearchedPath extracts the file path from error messages.
-func extractSourcesSearchedPath(errMsg string) string {
-	// Pattern: "failed to find import: '/path/to/file'"
-	if idx := strings.Index(errMsg, "failed to find import: '"); idx != -1 {
-		start := idx + len("failed to find import: '")
-		if end := strings.Index(errMsg[start:], "'"); end != -1 {
-			return errMsg[start : start+end]
-		}
-	}
-	return ""
 }
