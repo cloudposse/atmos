@@ -31,7 +31,7 @@ const (
 type AliasInfo struct {
 	Alias   string
 	Command string
-	Type    string // "built-in" or "configured"
+	Type    string // "built-in" or "configured".
 }
 
 var aliasesParser *flags.StandardParser
@@ -220,8 +220,7 @@ func collectCommandAliases(cmd *cobra.Command, parentPath, cmdPath, rootName str
 }
 
 // collectBuiltInAliases recursively collects Cobra command aliases from the command tree.
-// It skips the root command name when building paths since aliases like "tf" should map
-// to "terraform", not "atmos terraform".
+// It skips the root command name when building paths so aliases like "tf" map to "terraform", not "atmos terraform".
 func collectBuiltInAliases(cmd *cobra.Command, parentPath string) []AliasInfo {
 	var aliases []AliasInfo
 
