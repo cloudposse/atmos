@@ -199,32 +199,30 @@ To understand why locals are file-scoped, it helps to know how Atmos processes s
 
 Since locals are resolved in step 2 (before imports are merged), they only have access to data from their own file. By the time imports are merged in step 3, locals resolution is already complete.
 
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ File: stacks/deploy/production.yaml                              │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ 1. Parse YAML                                                │ │
-│ │ 2. Resolve locals (only sees this file's settings/vars/env) │ │
-│ │ 3. Process templates in other sections                       │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────────┐
-│ File: stacks/catalog/defaults.yaml (imported)                    │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ 1. Parse YAML                                                │ │
-│ │ 2. Resolve locals (only sees this file's settings/vars/env) │ │
-│ │ 3. Process templates in other sections                       │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
-                               ↓
-┌──────────────────────────────────────────────────────────────────┐
-│ Merge Phase                                                      │
-│ ┌──────────────────────────────────────────────────────────────┐ │
-│ │ Merge vars, settings, env, components from all files        │ │
-│ │ (locals are NOT merged - they're already resolved per-file) │ │
-│ └──────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph file1["stacks/deploy/production.yaml"]
+        A1[1. Parse YAML]
+        A2[2. Resolve locals<br/><i>only sees this file's settings/vars/env</i>]
+        A3[3. Process templates in other sections]
+        A1 --> A2 --> A3
+    end
+
+    subgraph file2["stacks/catalog/defaults.yaml (imported)"]
+        B1[1. Parse YAML]
+        B2[2. Resolve locals<br/><i>only sees this file's settings/vars/env</i>]
+        B3[3. Process templates in other sections]
+        B1 --> B2 --> B3
+    end
+
+    subgraph merge["Merge Phase"]
+        C1[Merge vars, settings, env, components from all files]
+        C2[<i>locals are NOT merged - already resolved per-file</i>]
+        C1 --> C2
+    end
+
+    file1 --> merge
+    file2 --> merge
 ```
 
 This architecture ensures that locals resolution is fast, predictable, and free of cross-file dependencies.
