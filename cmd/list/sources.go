@@ -463,7 +463,7 @@ func wrapSourcesConfigError(err error, stack string) error {
 
 		return builder.
 			WithHint("Ensure your `stacks` directory contains valid YAML files and check `atmos.yaml` configuration").
-			WithHint("See https://atmos.tools/core-concepts/stacks for stack configuration details").
+			WithHint("See https://atmos.tools/learn/stacks for stack configuration details").
 			Err()
 	}
 
