@@ -95,7 +95,7 @@ tags:
 
 ## Example: Layered Tags
 
-Build tags incrementally for different resource types:
+Build tags incrementally for different resource types using Sprig's `merge` function:
 
 <File title="stacks/deploy/prod.yaml">
 ```yaml
@@ -132,37 +132,34 @@ locals:
     Encryption: required
     RetentionDays: "90"
 
+  # Merged tag sets for different resource types
+  # Use Sprig's merge function to combine tag maps (rightmost wins on conflicts)
+  compute_all_tags: '{{ merge .locals.required_tags .locals.compliance_tags .locals.compute_tags }}'
+  data_all_tags: '{{ merge .locals.required_tags .locals.compliance_tags .locals.data_tags }}'
+
 components:
   terraform:
-    # Compute resources get required + compliance + compute tags
+    # Compute resources get merged tags (required + compliance + compute)
     eks:
       vars:
-        tags:
-          Namespace: "{{ .locals.namespace }}"
-          Stage: "{{ .vars.stage }}"
-          Team: "{{ .settings.team }}"
-          ManagedBy: Atmos
-          DataClassification: internal
-          BackupRequired: "true"
-          DisasterRecovery: enabled
-          AutoShutdown: "false"
-          PatchGroup: production
+        tags: "{{ .locals.compute_all_tags }}"
 
-    # Data resources get required + compliance + data tags
+    # Data resources get merged tags (required + compliance + data)
     rds:
       vars:
-        tags:
-          Namespace: "{{ .locals.namespace }}"
-          Stage: "{{ .vars.stage }}"
-          Team: "{{ .settings.team }}"
-          ManagedBy: Atmos
-          DataClassification: internal
-          BackupRequired: "true"
-          DisasterRecovery: enabled
-          Encryption: required
-          RetentionDays: "90"
+        tags: "{{ .locals.data_all_tags }}"
 ```
 </File>
+
+:::tip Sprig Merge Function
+The `merge` function deep-merges maps from left to right. Later maps override earlier ones for conflicting keys. This is perfect for building layered tag sets without repetition.
+
+```yaml
+# merge takes multiple maps and combines them
+# {{ merge .locals.base .locals.override }}
+# Result: all keys from base, with override values taking precedence
+```
+:::
 
 ## Example: Environment-Aware Tags
 

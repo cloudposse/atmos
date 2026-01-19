@@ -29,7 +29,12 @@ atmos describe locals myapp -s dev
 ## Example Output
 
 ```shell
-$ atmos describe component myapp -s dev | grep -A5 vars:
+$ atmos describe component myapp -s dev
+```
+
+Output (vars section showing resolved locals):
+
+```yaml
 vars:
   environment: development
   full_name: acme-development-dev
@@ -53,7 +58,7 @@ locals:
   full_name: "{{ .locals.namespace }}-{{ .locals.environment }}"
 ```
 
-### Locals Access Settings and Vars
+### Locals Compose Values from Settings and Vars
 
 ```yaml
 settings:
@@ -63,22 +68,31 @@ vars:
   stage: dev
 
 locals:
-  # Access settings and vars
-  tag_team: "{{ .settings.team }}"
-  tag_stage: "{{ .vars.stage }}"
+  namespace: acme
+
+  # Compose values from settings, vars, and other locals
+  resource_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}"
+  owner_tag: "{{ .settings.team }}-team"
+
+  # Build a tags map combining multiple sources
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Stage: "{{ .vars.stage }}"
+    Owner: "{{ .locals.owner_tag }}"
 ```
 
 ### File-Scoped Isolation
 
 Locals are scoped to the file where they are defined. This means:
+
 - Locals defined in `dev.yaml` cannot be accessed from other files.
 - Each file has its own independent locals scope.
 - Use `vars` or `settings` for values that need to be shared across files.
 
 ## Key Files
 
-| File | Purpose |
-|------|---------|
-| `stacks/deploy/dev.yaml` | Development stack with locals |
-| `stacks/deploy/prod.yaml` | Production stack with different values |
-| `components/terraform/myapp/main.tf` | Mock component that outputs vars |
+| File                                 | Purpose                                |
+|--------------------------------------|----------------------------------------|
+| `stacks/deploy/dev.yaml`             | Development stack with locals          |
+| `stacks/deploy/prod.yaml`            | Production stack with different values |
+| `components/terraform/myapp/main.tf` | Mock component that outputs vars       |

@@ -106,7 +106,7 @@ components:
 ```
 
 :::tip Component-Level Locals
-Components can also define their own `locals:` section. Component-level locals inherit from global and section-level locals, and also support inheritance from base components via `metadata.inherits`. See the [describe locals command](/cli/commands/describe/locals) for inspecting component-level locals.
+Components can also define their own `locals:` section. Component-level locals inherit from global and section-level locals, and also support inheritance from base components via `metadata.inherits`. See [Component-Level Locals](#component-level-locals) for details and the [describe locals command](/cli/commands/describe/locals) for inspecting them.
 :::
 
 ## Scope Inheritance (Within a File)
@@ -446,6 +446,182 @@ components:
           Name: "{{ .locals.cluster_name }}"
 ```
 </File>
+
+## Component-Level Locals
+
+Components can define their own `locals:` section that inherits from global and section-level locals. Component-level locals also support inheritance from base components.
+
+### Basic Component Locals
+
+```yaml
+locals:
+  namespace: acme
+
+terraform:
+  locals:
+    backend_bucket: "{{ .locals.namespace }}-tfstate"
+
+components:
+  terraform:
+    vpc:
+      locals:
+        # Component-specific locals
+        vpc_type: production
+        cidr_prefix: "10.0"
+      vars:
+        name: "{{ .locals.namespace }}-{{ .locals.vpc_type }}-vpc"
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+```
+
+### Inheritance from Base Components
+
+Component-level locals support inheritance from base components via `metadata.inherits` or the `component` attribute. This follows the same inheritance pattern as `vars`:
+
+```yaml
+components:
+  terraform:
+    # Base component (abstract)
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: standard
+        cidr_prefix: "10.0"
+        enable_nat: false
+
+    # Derived component - inherits and overrides locals
+    vpc/production:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        vpc_type: production       # Overrides base
+        enable_nat: true           # Overrides base
+        # cidr_prefix inherited from base
+      vars:
+        name: "{{ .locals.vpc_type }}-vpc"
+        cidr: "{{ .locals.cidr_prefix }}.0.0/16"
+        nat_gateway_enabled: "{{ .locals.enable_nat }}"
+```
+
+### Full Locals Resolution Order
+
+For a component, locals are resolved in this order (later values override earlier):
+
+```
+1. Global locals (root level)
+2. Section locals (terraform/helmfile/packer)
+3. Base component locals (from metadata.inherits chain)
+4. Component locals (in the component definition)
+```
+
+:::note
+Component-level locals appear in the final component output and can be inspected with `atmos describe locals <component> -s <stack>`. They support the same template syntax as file-level locals.
+:::
+
+## Scope Merging for Settings and Vars
+
+When locals access `settings` or `vars`, the values come from the **same file** with section-level values merged on top of global values.
+
+### How Merging Works
+
+```yaml
+# Global settings
+settings:
+  region: us-east-1
+  team: platform
+
+# Global vars
+vars:
+  stage: dev
+  instance_type: t3.medium
+
+terraform:
+  # Section-level settings (merged with global)
+  settings:
+    team: terraform-team  # Overrides global
+
+  # Section-level vars (merged with global)
+  vars:
+    instance_type: t3.large  # Overrides global
+
+  locals:
+    # Locals in terraform section see MERGED values:
+    # - .settings.region = "us-east-1" (from global)
+    # - .settings.team = "terraform-team" (section overrides global)
+    # - .vars.stage = "dev" (from global)
+    # - .vars.instance_type = "t3.large" (section overrides global)
+    resource_name: "{{ .settings.team }}-{{ .vars.stage }}"
+```
+
+This merging only happens within the same file. Values from imported files are not available.
+
+## Debugging Locals
+
+Use the `atmos describe locals` command to inspect resolved locals values.
+
+### View Stack Locals
+
+```shell
+# Show all locals for a stack
+atmos describe locals -s dev
+
+# Output as JSON
+atmos describe locals -s dev --format json
+
+# Write to file
+atmos describe locals -s dev --file locals.yaml
+```
+
+### View Component Locals
+
+```shell
+# Show locals available to a specific component
+atmos describe locals vpc -s dev
+```
+
+This shows the merged locals (global + section + base component + component) that are available during template resolution for that component.
+
+### Example Output
+
+```shell
+$ atmos describe locals -s dev
+```
+
+```yaml
+locals:
+  namespace: acme
+  environment: dev
+  name_prefix: acme-dev
+terraform:
+  locals:
+    backend_bucket: acme-dev-tfstate
+helmfile:
+  locals:
+    release_prefix: acme-helm
+```
+
+### Debugging Template Errors
+
+If a local fails to resolve, check:
+
+1. **Is the referenced value defined in the same file?**
+   ```shell
+   # Look at the raw stack file
+   cat stacks/deploy/dev.yaml | grep -A5 "settings:"
+   ```
+
+2. **Is the syntax correct?**
+   - Use `{{ .settings.key }}` not `{{ settings.key }}`
+   - Use `{{ .locals.name }}` not `{{ locals.name }}`
+
+3. **Are you trying to access imported values?**
+   - Locals cannot access settings/vars from imported files
+   - Use `vars` in the template instead, which inherits across imports
+
+4. **Is there a circular dependency?**
+   - Run with `--logs-level Debug` to see dependency resolution
+   - Error messages show the dependency cycle if detected
 
 ## Locals vs Vars
 

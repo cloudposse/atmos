@@ -1,0 +1,270 @@
+---
+title: Conditional Values
+sidebar_position: 5
+sidebar_label: Conditional Values
+description: Use Go template conditionals to create environment-specific computed values
+id: conditional-values
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+**Conditional Values** use Go template conditionals within locals to create environment-specific configurations. This pattern enables a single stack file to produce different values based on stage, environment, or other context.
+</Intro>
+
+## Use-cases
+
+Use **Conditional Values** when:
+
+- Different environments need different configuration values
+- You want to toggle features on/off based on stage
+- Production and non-production have different security or compliance requirements
+- Resource sizing varies by environment
+
+## Benefits
+
+- **Single source of truth**: One file defines all environment variations
+- **Explicit logic**: The conditional logic is visible and auditable
+- **Reduced duplication**: No need for separate files for each environment variation
+- **Easy maintenance**: Change the logic in one place
+
+## Example: Environment-Based Values
+
+Use conditionals to set values based on the deployment stage:
+
+<File title="stacks/deploy/app.yaml">
+```yaml
+vars:
+  stage: prod  # or dev, staging
+
+locals:
+  namespace: acme
+
+  # Simple conditional: prod vs non-prod
+  is_production: '{{ eq .vars.stage "prod" }}'
+
+  # Environment suffix based on stage
+  env_suffix: '{{ if eq .vars.stage "prod" }}production{{ else }}{{ .vars.stage }}{{ end }}'
+
+  # Full environment name
+  env_name: "{{ .locals.namespace }}-{{ .locals.env_suffix }}"
+
+components:
+  terraform:
+    app:
+      vars:
+        environment_name: "{{ .locals.env_name }}"
+        is_production: "{{ .locals.is_production }}"
+```
+</File>
+
+**Result for `stage: prod`**:
+- `env_suffix`: `production`
+- `env_name`: `acme-production`
+- `is_production`: `true`
+
+**Result for `stage: dev`**:
+- `env_suffix`: `dev`
+- `env_name`: `acme-dev`
+- `is_production`: `false`
+
+## Example: Feature Toggles
+
+Enable or disable features based on environment:
+
+<File title="stacks/deploy/database.yaml">
+```yaml
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+
+  # Production-only features
+  enable_encryption: '{{ if eq .vars.stage "prod" }}true{{ else }}false{{ end }}'
+  enable_backups: '{{ if or (eq .vars.stage "prod") (eq .vars.stage "staging") }}true{{ else }}false{{ end }}'
+  multi_az: '{{ eq .vars.stage "prod" }}'
+
+  # Backup retention based on environment
+  backup_retention_days: '{{ if eq .vars.stage "prod" }}30{{ else if eq .vars.stage "staging" }}7{{ else }}1{{ end }}'
+
+components:
+  terraform:
+    rds:
+      vars:
+        storage_encrypted: "{{ .locals.enable_encryption }}"
+        backup_retention_period: "{{ .locals.backup_retention_days }}"
+        multi_az: "{{ .locals.multi_az }}"
+        skip_final_snapshot: '{{ ne .vars.stage "prod" }}'
+```
+</File>
+
+## Example: Resource Sizing
+
+Adjust resource sizes based on environment:
+
+<File title="stacks/deploy/compute.yaml">
+```yaml
+vars:
+  stage: prod
+
+locals:
+  # Instance sizing by environment
+  instance_type: '{{ if eq .vars.stage "prod" }}m5.xlarge{{ else if eq .vars.stage "staging" }}m5.large{{ else }}t3.medium{{ end }}'
+
+  # Replica counts
+  min_replicas: '{{ if eq .vars.stage "prod" }}3{{ else if eq .vars.stage "staging" }}2{{ else }}1{{ end }}'
+  max_replicas: '{{ if eq .vars.stage "prod" }}10{{ else if eq .vars.stage "staging" }}5{{ else }}2{{ end }}'
+
+  # Storage sizing
+  storage_size_gb: '{{ if eq .vars.stage "prod" }}500{{ else if eq .vars.stage "staging" }}100{{ else }}20{{ end }}'
+
+components:
+  terraform:
+    eks-nodegroup:
+      vars:
+        instance_types:
+          - "{{ .locals.instance_type }}"
+        scaling_config:
+          min_size: "{{ .locals.min_replicas }}"
+          max_size: "{{ .locals.max_replicas }}"
+
+    rds:
+      vars:
+        allocated_storage: "{{ .locals.storage_size_gb }}"
+```
+</File>
+
+## Example: Compliance Tags
+
+Add compliance-specific tags based on environment:
+
+<File title="stacks/deploy/resources.yaml">
+```yaml
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+
+  # Data classification varies by environment
+  data_classification: '{{ if eq .vars.stage "prod" }}confidential{{ else }}internal{{ end }}'
+
+  # Compliance requirements
+  pci_scope: '{{ if eq .vars.stage "prod" }}in-scope{{ else }}out-of-scope{{ end }}'
+
+  # Conditional compliance tags
+  compliance_tags:
+    DataClassification: "{{ .locals.data_classification }}"
+    PCIScope: "{{ .locals.pci_scope }}"
+    BackupRequired: '{{ if eq .vars.stage "prod" }}true{{ else }}false{{ end }}'
+    DisasterRecovery: '{{ if eq .vars.stage "prod" }}enabled{{ else }}disabled{{ end }}'
+
+components:
+  terraform:
+    database:
+      vars:
+        tags: "{{ .locals.compliance_tags }}"
+```
+</File>
+
+## Example: URL and Endpoint Configuration
+
+Build environment-specific URLs:
+
+<File title="stacks/deploy/api.yaml">
+```yaml
+vars:
+  stage: prod
+  region: us-east-1
+
+locals:
+  namespace: acme
+
+  # Domain varies by environment
+  domain_suffix: '{{ if eq .vars.stage "prod" }}example.com{{ else }}{{ .vars.stage }}.example.com{{ end }}'
+
+  # API endpoint
+  api_url: 'https://api.{{ .locals.domain_suffix }}'
+
+  # Internal service URLs
+  database_host: '{{ if eq .vars.stage "prod" }}db.internal.example.com{{ else }}db.{{ .vars.stage }}.internal.example.com{{ end }}'
+
+  # Log level based on environment
+  log_level: '{{ if eq .vars.stage "prod" }}warn{{ else if eq .vars.stage "staging" }}info{{ else }}debug{{ end }}'
+
+components:
+  terraform:
+    api-gateway:
+      vars:
+        domain_name: "api.{{ .locals.domain_suffix }}"
+        backend_url: "{{ .locals.api_url }}"
+
+    app:
+      vars:
+        database_url: "postgres://{{ .locals.database_host }}:5432/app"
+        log_level: "{{ .locals.log_level }}"
+```
+</File>
+
+## Sprig Functions for Conditionals
+
+Locals support all [Sprig functions](http://masterminds.github.io/sprig/). Common ones for conditionals:
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `eq` | Equals | `{{ eq .vars.stage "prod" }}` |
+| `ne` | Not equals | `{{ ne .vars.stage "dev" }}` |
+| `and` | Logical AND | `{{ and (eq .vars.stage "prod") (eq .vars.region "us-east-1") }}` |
+| `or` | Logical OR | `{{ or (eq .vars.stage "prod") (eq .vars.stage "staging") }}` |
+| `not` | Logical NOT | `{{ not (eq .vars.stage "dev") }}` |
+| `default` | Default value | `{{ .vars.region \| default "us-east-1" }}` |
+| `ternary` | Ternary operator | `{{ ternary "yes" "no" (eq .vars.stage "prod") }}` |
+
+## Anti-patterns
+
+### Avoid: Deeply nested conditionals
+
+```yaml
+# Hard to read and maintain
+locals:
+  value: '{{ if eq .vars.stage "prod" }}{{ if eq .vars.region "us-east-1" }}prod-east{{ else }}prod-west{{ end }}{{ else }}{{ if eq .vars.stage "staging" }}staging{{ else }}dev{{ end }}{{ end }}'
+```
+
+**Better**: Break into multiple locals:
+
+```yaml
+locals:
+  is_prod: '{{ eq .vars.stage "prod" }}'
+  is_east: '{{ eq .vars.region "us-east-1" }}'
+
+  # Clear, readable conditions
+  env_name: '{{ if and .locals.is_prod .locals.is_east }}prod-east{{ else if .locals.is_prod }}prod-west{{ else }}{{ .vars.stage }}{{ end }}'
+```
+
+### Avoid: Conditionals that should be separate files
+
+```yaml
+# If every value is different, use separate files instead
+locals:
+  db_host: '{{ if eq .vars.stage "prod" }}prod-db.example.com{{ else if eq .vars.stage "staging" }}staging-db.example.com{{ else }}dev-db.example.com{{ end }}'
+  api_key: '{{ if eq .vars.stage "prod" }}prod-key{{ else if eq .vars.stage "staging" }}staging-key{{ else }}dev-key{{ end }}'
+  # ... many more completely different values
+```
+
+**Better**: Use separate stack files for each environment when most values differ.
+
+## Related Patterns
+
+- [Computed Values](/design-patterns/locals-patterns/computed-values) - Build values from simpler components
+- [Tag Management](/design-patterns/locals-patterns/tag-management) - Apply conditional tags
+- [Naming Conventions](/design-patterns/locals-patterns/naming-conventions) - Environment-aware naming
+
+## References
+
+- [Locals](/core-concepts/stacks/locals) - Core concept documentation
+- [Sprig Functions](http://masterminds.github.io/sprig/) - Template function reference
+- [Stack Templating](/templating/stacks) - Go template syntax in stacks
