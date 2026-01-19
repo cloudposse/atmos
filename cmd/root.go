@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"syscall"
 
@@ -1423,12 +1422,14 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
-	cmd, err := RootCmd.ExecuteC()
+	cmd, err := internal.Execute(RootCmd)
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Handle sentinel errors with errors.Is().
 	if err != nil {
-		if strings.Contains(err.Error(), "unknown command") {
-			command := getInvalidCommandName(err.Error())
+		if errors.Is(err, errUtils.ErrCommandNotFound) {
+			command, _ := errUtils.GetContext(err, "command")
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
@@ -1478,22 +1479,6 @@ func preprocessCompatibilityFlags() {
 
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
-}
-
-// getInvalidCommandName extracts the invalid command name from an error message.
-func getInvalidCommandName(input string) string {
-	// Regular expression to match the command name inside quotes.
-	re := regexp.MustCompile(`unknown command "([^"]+)"`)
-
-	// Find the match.
-	match := re.FindStringSubmatch(input)
-
-	// Check if a match is found.
-	if len(match) > 1 {
-		command := match[1] // The first capturing group contains the command
-		return command
-	}
-	return ""
 }
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.

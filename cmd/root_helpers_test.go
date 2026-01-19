@@ -22,48 +22,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/terminal"
 )
 
-// TestGetInvalidCommandName tests extraction of command names from error messages.
-func TestGetInvalidCommandName(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "standard error format",
-			input:    `unknown command "foobar" for "atmos"`,
-			expected: "foobar",
-		},
-		{
-			name:     "command with hyphens",
-			input:    `unknown command "my-custom-cmd" for "atmos"`,
-			expected: "my-custom-cmd",
-		},
-		{
-			name:     "empty quotes",
-			input:    `unknown command "" for "atmos"`,
-			expected: "",
-		},
-		{
-			name:     "no match",
-			input:    "some other error message",
-			expected: "",
-		},
-		{
-			name:     "multiple quoted strings (should extract first)",
-			input:    `unknown command "first" and "second"`,
-			expected: "first",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getInvalidCommandName(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 // TestCleanupLogFile tests log file cleanup functionality.
 func TestCleanupLogFile(t *testing.T) {
 	tests := []struct {
