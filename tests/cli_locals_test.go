@@ -900,38 +900,31 @@ func TestLocalsSettingsAccessDescribeStacks(t *testing.T) {
 // TestLocalsSettingsAccessNotCrossFile verifies that locals CANNOT access
 // settings from imported files (only same-file access is supported).
 // This confirms the file-scoped design for settings access in locals.
+// When a local attempts to access .settings that doesn't exist in the same file,
+// the template engine produces an error (map has no entry for key "settings").
+// This test uses a separate fixture to isolate the error case from other tests.
 func TestLocalsSettingsAccessNotCrossFile(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/locals-settings-access")
+	t.Chdir("./fixtures/scenarios/locals-settings-cross-file")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
-	// The test.yaml file imports sandbox-dev mixin which has settings.
-	// But locals in test.yaml should NOT be able to access those imported settings.
-	// If cross-file access was attempted, it would fail or return "<no value>".
+	// The test-cross-file stack imports sandbox-dev mixin which has settings.substage = "dev".
+	// But locals in test-cross-file.yaml should NOT be able to access those imported settings.
+	// Since cross-file access is not supported, attempting to access .settings
+	// when no settings exist in the same file produces a template error.
 
-	// Get all stacks - this should work without errors.
-	result, err := exec.ExecuteDescribeStacks(
-		&atmosConfig,
-		"",    // filterByStack
-		nil,   // components
-		nil,   // componentTypes
-		nil,   // sections
-		true,  // ignoreMissingFiles
-		true,  // processTemplates
-		true,  // processYamlFunctions
-		false, // includeEmptyStacks
-		nil,   // skip
-		nil,   // authManager
-	)
-	require.NoError(t, err)
-	require.NotNil(t, result)
+	_, err = exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "cross-file-component",
+		Stack:                "test-cross-file",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
 
-	// The test-same-file stack works because settings are in the same file.
-	// This confirms that same-file access works while cross-file would fail.
-	stack, ok := result["test-same-file"].(map[string]any)
-	require.True(t, ok, "should find the 'test-same-file' stack")
-	require.NotNil(t, stack, "stack should not be nil")
+	// Verify that cross-file settings access produces an error.
+	require.Error(t, err, "cross-file settings access should produce an error")
+	assert.Contains(t, err.Error(), "settings",
+		"error should mention 'settings' as the missing key")
 }
 
 // TestComponentLevelLocals tests component-level locals functionality using table-driven tests.

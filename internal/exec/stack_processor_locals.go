@@ -184,7 +184,8 @@ func buildTemplateContextFromConfig(stackConfigMap map[string]any) map[string]an
 }
 
 // buildSectionTemplateContext merges global template context with section-specific settings/vars.
-// Section-level values override global values.
+// Section-level values are merged with global values (not replaced), so global keys are preserved
+// unless explicitly overridden by section-specific values.
 func buildSectionTemplateContext(globalContext map[string]any, sectionConfig map[string]any) map[string]any {
 	// Start with a copy of global context.
 	context := make(map[string]any, len(globalContext))
@@ -192,22 +193,41 @@ func buildSectionTemplateContext(globalContext map[string]any, sectionConfig map
 		context[k] = v
 	}
 
-	// Override with section-specific settings if present.
+	// Merge section-specific settings with global settings if present.
 	if settings, ok := sectionConfig[cfg.SettingsSectionName].(map[string]any); ok {
-		context[cfg.SettingsSectionName] = settings
+		globalSettings, _ := globalContext[cfg.SettingsSectionName].(map[string]any)
+		context[cfg.SettingsSectionName] = mergeStringAnyMaps(globalSettings, settings)
 	}
 
-	// Override with section-specific vars if present.
+	// Merge section-specific vars with global vars if present.
 	if vars, ok := sectionConfig[cfg.VarsSectionName].(map[string]any); ok {
-		context[cfg.VarsSectionName] = vars
+		globalVars, _ := globalContext[cfg.VarsSectionName].(map[string]any)
+		context[cfg.VarsSectionName] = mergeStringAnyMaps(globalVars, vars)
 	}
 
-	// Override with section-specific env if present.
+	// Merge section-specific env with global env if present.
 	if env, ok := sectionConfig[cfg.EnvSectionName].(map[string]any); ok {
-		context[cfg.EnvSectionName] = env
+		globalEnv, _ := globalContext[cfg.EnvSectionName].(map[string]any)
+		context[cfg.EnvSectionName] = mergeStringAnyMaps(globalEnv, env)
 	}
 
 	return context
+}
+
+// mergeStringAnyMaps performs a shallow merge of two maps, with overlay values taking precedence.
+// Returns nil if both inputs are nil.
+func mergeStringAnyMaps(base, overlay map[string]any) map[string]any {
+	if base == nil && overlay == nil {
+		return nil
+	}
+	result := make(map[string]any, len(base)+len(overlay))
+	for k, v := range base {
+		result[k] = v
+	}
+	for k, v := range overlay {
+		result[k] = v
+	}
+	return result
 }
 
 // LocalsContext holds resolved locals at different scopes within a stack file.

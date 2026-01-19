@@ -900,3 +900,174 @@ func TestMergeForTemplateContext_EmptyLocals(t *testing.T) {
 	assert.Equal(t, "prod", merged["environment"])
 	assert.Len(t, merged, 2, "merged should only contain global locals")
 }
+
+// =============================================================================
+// mergeStringAnyMaps Unit Tests
+// =============================================================================
+
+// TestMergeStringAnyMaps tests the mergeStringAnyMaps helper function.
+func TestMergeStringAnyMaps(t *testing.T) {
+	tests := []struct {
+		name     string
+		base     map[string]any
+		overlay  map[string]any
+		expected map[string]any
+	}{
+		{
+			name:     "both nil returns nil",
+			base:     nil,
+			overlay:  nil,
+			expected: nil,
+		},
+		{
+			name: "nil base returns overlay copy",
+			base: nil,
+			overlay: map[string]any{
+				"key1": "value1",
+			},
+			expected: map[string]any{
+				"key1": "value1",
+			},
+		},
+		{
+			name: "nil overlay returns base copy",
+			base: map[string]any{
+				"key1": "value1",
+			},
+			overlay:  nil,
+			expected: map[string]any{"key1": "value1"},
+		},
+		{
+			name: "overlay values override base",
+			base: map[string]any{
+				"key1": "base-value",
+				"key2": "base-only",
+			},
+			overlay: map[string]any{
+				"key1": "overlay-value",
+				"key3": "overlay-only",
+			},
+			expected: map[string]any{
+				"key1": "overlay-value",
+				"key2": "base-only",
+				"key3": "overlay-only",
+			},
+		},
+		{
+			name:     "empty base and overlay returns empty map",
+			base:     map[string]any{},
+			overlay:  map[string]any{},
+			expected: map[string]any{},
+		},
+		{
+			name: "preserves all base keys not in overlay",
+			base: map[string]any{
+				"a": 1,
+				"b": 2,
+				"c": 3,
+			},
+			overlay: map[string]any{
+				"b": 20,
+			},
+			expected: map[string]any{
+				"a": 1,
+				"b": 20,
+				"c": 3,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := mergeStringAnyMaps(tt.base, tt.overlay)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildSectionTemplateContext_MergesBehavior tests that buildSectionTemplateContext
+// merges section-specific settings/vars/env with global values instead of replacing them.
+func TestBuildSectionTemplateContext_MergesBehavior(t *testing.T) {
+	globalContext := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"global_setting": "global-value",
+			"shared_setting": "global-shared",
+		},
+		cfg.VarsSectionName: map[string]any{
+			"global_var": "global-var-value",
+			"shared_var": "global-shared-var",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"GLOBAL_ENV": "global-env-value",
+			"SHARED_ENV": "global-shared-env",
+		},
+	}
+
+	sectionConfig := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"shared_setting":  "section-shared",
+			"section_setting": "section-only",
+		},
+		cfg.VarsSectionName: map[string]any{
+			"shared_var":  "section-shared-var",
+			"section_var": "section-only-var",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"SHARED_ENV":  "section-shared-env",
+			"SECTION_ENV": "section-only-env",
+		},
+	}
+
+	result := buildSectionTemplateContext(globalContext, sectionConfig)
+
+	// Verify settings are merged (not replaced).
+	settings := result[cfg.SettingsSectionName].(map[string]any)
+	assert.Equal(t, "global-value", settings["global_setting"], "global-only setting should be preserved")
+	assert.Equal(t, "section-shared", settings["shared_setting"], "section value should override global")
+	assert.Equal(t, "section-only", settings["section_setting"], "section-only setting should be present")
+
+	// Verify vars are merged (not replaced).
+	vars := result[cfg.VarsSectionName].(map[string]any)
+	assert.Equal(t, "global-var-value", vars["global_var"], "global-only var should be preserved")
+	assert.Equal(t, "section-shared-var", vars["shared_var"], "section var should override global")
+	assert.Equal(t, "section-only-var", vars["section_var"], "section-only var should be present")
+
+	// Verify env are merged (not replaced).
+	env := result[cfg.EnvSectionName].(map[string]any)
+	assert.Equal(t, "global-env-value", env["GLOBAL_ENV"], "global-only env should be preserved")
+	assert.Equal(t, "section-shared-env", env["SHARED_ENV"], "section env should override global")
+	assert.Equal(t, "section-only-env", env["SECTION_ENV"], "section-only env should be present")
+}
+
+// TestBuildSectionTemplateContext_NoSectionOverrides tests that global values
+// are preserved when section doesn't define overrides.
+func TestBuildSectionTemplateContext_NoSectionOverrides(t *testing.T) {
+	globalContext := map[string]any{
+		cfg.SettingsSectionName: map[string]any{
+			"global_setting": "global-value",
+		},
+		cfg.VarsSectionName: map[string]any{
+			"global_var": "global-var-value",
+		},
+		cfg.EnvSectionName: map[string]any{
+			"GLOBAL_ENV": "global-env-value",
+		},
+	}
+
+	// Section config with no settings/vars/env.
+	sectionConfig := map[string]any{
+		"other_key": "other_value",
+	}
+
+	result := buildSectionTemplateContext(globalContext, sectionConfig)
+
+	// All global values should be preserved.
+	settings := result[cfg.SettingsSectionName].(map[string]any)
+	assert.Equal(t, "global-value", settings["global_setting"])
+
+	vars := result[cfg.VarsSectionName].(map[string]any)
+	assert.Equal(t, "global-var-value", vars["global_var"])
+
+	env := result[cfg.EnvSectionName].(map[string]any)
+	assert.Equal(t, "global-env-value", env["GLOBAL_ENV"])
+}

@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# Test fixture for cross-file settings access (error case).
+# This tests that locals CANNOT access settings from imported files.
+# The expected behavior is a template error when trying to access
+# .settings that doesn't exist in the same file.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/test-cross-file"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{stage}"
+
+logs:
+  level: Info

@@ -1723,11 +1723,20 @@ vars:
 	assert.Empty(t, result.locals)
 }
 
-// TestExtractLocalsFromRawYAML_SettingsAccess tests that locals can access .settings from the same file.
+// TestExtractLocalsFromRawYAML_ContextAccess tests that locals can access settings, vars, and env from the same file.
 // This addresses GitHub issue #1991: Locals Cannot Access .settings from Imported Mixins.
-func TestExtractLocalsFromRawYAML_SettingsAccess(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	yamlContent := `
+func TestExtractLocalsFromRawYAML_ContextAccess(t *testing.T) {
+	tests := []struct {
+		name           string
+		yamlContent    string
+		expectedLocals map[string]string
+		checkSettings  map[string]string
+		checkVars      map[string]string
+		checkEnv       map[string]string
+	}{
+		{
+			name: "settings access",
+			yamlContent: `
 settings:
   substage: dev
   environment: sandbox
@@ -1736,68 +1745,53 @@ locals:
   full_env: "{{ .settings.environment }}-{{ .settings.substage }}"
 vars:
   stage: test
-`
-	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// Locals should have access to settings from the same file.
-	assert.Equal(t, "dev.example.com", result.locals["domain"])
-	assert.Equal(t, "sandbox-dev", result.locals["full_env"])
-	// Settings should be extracted for template context.
-	assert.NotNil(t, result.settings)
-	assert.Equal(t, "dev", result.settings["substage"])
-	assert.Equal(t, "sandbox", result.settings["environment"])
-}
-
-// TestExtractLocalsFromRawYAML_VarsAccess tests that locals can access .vars from the same file.
-func TestExtractLocalsFromRawYAML_VarsAccess(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	yamlContent := `
+`,
+			expectedLocals: map[string]string{
+				"domain":   "dev.example.com",
+				"full_env": "sandbox-dev",
+			},
+			checkSettings: map[string]string{
+				"substage":    "dev",
+				"environment": "sandbox",
+			},
+		},
+		{
+			name: "vars access",
+			yamlContent: `
 vars:
   stage: us-east-1
   region: us-east-1
 locals:
   resource_prefix: "{{ .vars.stage }}-app"
   full_name: "{{ .vars.region }}-{{ .vars.stage }}"
-`
-	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// Locals should have access to vars from the same file.
-	assert.Equal(t, "us-east-1-app", result.locals["resource_prefix"])
-	assert.Equal(t, "us-east-1-us-east-1", result.locals["full_name"])
-	// Vars should be extracted for template context.
-	assert.NotNil(t, result.vars)
-	assert.Equal(t, "us-east-1", result.vars["stage"])
-}
-
-// TestExtractLocalsFromRawYAML_EnvAccess tests that locals can access .env from the same file.
-func TestExtractLocalsFromRawYAML_EnvAccess(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	yamlContent := `
+`,
+			expectedLocals: map[string]string{
+				"resource_prefix": "us-east-1-app",
+				"full_name":       "us-east-1-us-east-1",
+			},
+			checkVars: map[string]string{
+				"stage": "us-east-1",
+			},
+		},
+		{
+			name: "env access",
+			yamlContent: `
 env:
   AWS_REGION: us-west-2
   TF_VAR_enabled: "true"
 locals:
   region_specific: "app-{{ .env.AWS_REGION }}"
-`
-	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
-
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// Locals should have access to env from the same file.
-	assert.Equal(t, "app-us-west-2", result.locals["region_specific"])
-	// Env should be extracted for template context.
-	assert.NotNil(t, result.env)
-	assert.Equal(t, "us-west-2", result.env["AWS_REGION"])
-}
-
-// TestExtractLocalsFromRawYAML_CombinedContextAccess tests that locals can access settings, vars, env and other locals.
-func TestExtractLocalsFromRawYAML_CombinedContextAccess(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{}
-	yamlContent := `
+`,
+			expectedLocals: map[string]string{
+				"region_specific": "app-us-west-2",
+			},
+			checkEnv: map[string]string{
+				"AWS_REGION": "us-west-2",
+			},
+		},
+		{
+			name: "combined context access",
+			yamlContent: `
 settings:
   substage: dev
 vars:
@@ -1807,12 +1801,50 @@ env:
 locals:
   namespace: "acme"
   combined: "{{ .locals.namespace }}-{{ .settings.substage }}-{{ .vars.stage }}"
-`
-	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+`,
+			expectedLocals: map[string]string{
+				"namespace": "acme",
+				"combined":  "acme-dev-us-east-1",
+			},
+		},
+	}
 
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	// Locals should have access to locals, settings, and vars.
-	assert.Equal(t, "acme", result.locals["namespace"])
-	assert.Equal(t, "acme-dev-us-east-1", result.locals["combined"])
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			result, err := extractLocalsFromRawYAML(atmosConfig, tt.yamlContent, "test.yaml")
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			// Check expected locals.
+			for key, expected := range tt.expectedLocals {
+				assert.Equal(t, expected, result.locals[key], "locals[%s] mismatch", key)
+			}
+
+			// Check settings if specified.
+			if tt.checkSettings != nil {
+				assert.NotNil(t, result.settings, "settings should be extracted")
+				for key, expected := range tt.checkSettings {
+					assert.Equal(t, expected, result.settings[key], "settings[%s] mismatch", key)
+				}
+			}
+
+			// Check vars if specified.
+			if tt.checkVars != nil {
+				assert.NotNil(t, result.vars, "vars should be extracted")
+				for key, expected := range tt.checkVars {
+					assert.Equal(t, expected, result.vars[key], "vars[%s] mismatch", key)
+				}
+			}
+
+			// Check env if specified.
+			if tt.checkEnv != nil {
+				assert.NotNil(t, result.env, "env should be extracted")
+				for key, expected := range tt.checkEnv {
+					assert.Equal(t, expected, result.env[key], "env[%s] mismatch", key)
+				}
+			}
+		})
+	}
 }
