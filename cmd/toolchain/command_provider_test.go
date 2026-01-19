@@ -56,6 +56,49 @@ func testCommandProvider(t *testing.T, provider testableCommandProvider, expecte
 	})
 }
 
+// testCommandArgsValidation runs standard Args validation tests for any command.
+func testCommandArgsValidation(t *testing.T, cmd *cobra.Command, expectNoArgs bool, minArgs, maxArgs int) {
+	t.Helper()
+
+	if expectNoArgs {
+		t.Run("Args is set to NoArgs", func(t *testing.T) {
+			require.NotNil(t, cmd.Args, "Args should be set")
+		})
+
+		t.Run("accepts zero arguments", func(t *testing.T) {
+			err := cmd.Args(cmd, []string{})
+			assert.NoError(t, err)
+		})
+
+		t.Run("rejects unexpected arguments", func(t *testing.T) {
+			err := cmd.Args(cmd, []string{"unexpected"})
+			assert.Error(t, err)
+		})
+	} else {
+		t.Run("Args is set", func(t *testing.T) {
+			require.NotNil(t, cmd.Args, "Args should be set")
+		})
+
+		if minArgs == 0 {
+			t.Run("accepts zero arguments", func(t *testing.T) {
+				err := cmd.Args(cmd, []string{})
+				assert.NoError(t, err)
+			})
+		}
+
+		if maxArgs > 0 {
+			t.Run("accepts valid number of arguments", func(t *testing.T) {
+				args := make([]string, maxArgs)
+				for i := range args {
+					args[i] = "arg"
+				}
+				err := cmd.Args(cmd, args)
+				assert.NoError(t, err)
+			})
+		}
+	}
+}
+
 // testCommandStructure runs standard structure tests for any command.
 func testCommandStructure(t *testing.T, cmd *cobra.Command, expectedUse string, shortContains, longContains string) {
 	t.Helper()
@@ -185,6 +228,46 @@ func TestAllCommandStructures(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			testCommandStructure(t, tt.cmd, tt.expectedUse, tt.shortContains, tt.longContains)
+		})
+	}
+}
+
+// TestAllCommandArgsValidation tests Args validation for all commands.
+func TestAllCommandArgsValidation(t *testing.T) {
+	tests := []struct {
+		name         string
+		cmd          *cobra.Command
+		expectNoArgs bool
+		minArgs      int
+		maxArgs      int
+	}{
+		{
+			name:         "list command accepts no args",
+			cmd:          listCmd,
+			expectNoArgs: true,
+		},
+		{
+			name:         "clean command accepts no args",
+			cmd:          cleanCmd,
+			expectNoArgs: true,
+		},
+		{
+			name:         "path command accepts no args",
+			cmd:          pathCmd,
+			expectNoArgs: true,
+		},
+		{
+			name:         "get command accepts zero or one arg",
+			cmd:          getCmd,
+			expectNoArgs: false,
+			minArgs:      0,
+			maxArgs:      1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			testCommandArgsValidation(t, tt.cmd, tt.expectNoArgs, tt.minArgs, tt.maxArgs)
 		})
 	}
 }

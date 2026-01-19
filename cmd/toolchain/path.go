@@ -15,6 +15,7 @@ var pathCmd = &cobra.Command{
 	Use:   "path",
 	Short: "Print PATH entries for installed tools (alias for 'toolchain env')",
 	Long:  `Print PATH entries for all tools configured in .tool-versions. This is an alias for 'toolchain env'.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind flags to Viper for precedence handling.
 		v := viper.GetViper()
