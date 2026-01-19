@@ -1,0 +1,49 @@
+# Development Environment Stack
+#
+# This stack demonstrates locals for reducing repetition and building
+# computed values. Locals are file-scoped and resolved before imports.
+
+# Settings defined in this file (accessible to locals)
+settings:
+  version: v1
+  team: platform
+
+# Vars defined in this file (accessible to locals)
+vars:
+  stage: dev
+
+# Locals are resolved within this file only.
+# They can reference other locals, settings, and vars from the SAME file.
+locals:
+  # Basic values
+  namespace: acme
+  environment: development
+
+  # Reference other locals
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+  # Access settings from this file
+  app_version: "{{ .settings.version }}"
+
+  # Access vars from this file
+  stage_name: "{{ .vars.stage }}"
+
+  # Build complex computed values
+  full_name: "{{ .locals.name_prefix }}-{{ .locals.stage_name }}"
+
+  # Maps work too
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Environment: "{{ .locals.environment }}"
+    Team: "{{ .settings.team }}"
+    ManagedBy: Atmos
+
+# Components use the resolved locals
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.namespace }}"
+        environment: "{{ .locals.environment }}"
+        full_name: "{{ .locals.full_name }}"
+        tags: "{{ .locals.default_tags }}"

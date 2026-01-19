@@ -8,6 +8,7 @@ id: locals
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 The `locals` section defines file-scoped temporary variables for use within templates. Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file boundaries—they are resolved within a single file and can reference each other with automatic dependency resolution.
@@ -492,6 +493,100 @@ This is useful when importing files that contain:
 - Literal strings that happen to contain template-like patterns
 :::
 
+## Error Handling
+
+When a template reference cannot be resolved, Atmos produces a clear error message rather than silently returning an empty string or passing through the literal template syntax.
+
+### Unresolved Template References
+
+If you reference a key that doesn't exist in the current scope, you'll get an error:
+
+```yaml
+# This file has NO settings section defined
+locals:
+  domain: "{{ .settings.region }}.example.com"  # Error!
+```
+
+**Error output:**
+```
+Error: failed to resolve local "domain" in stacks/deploy/example.yaml:
+  template: domain:1:12: executing "domain" at <.settings.region>:
+  map has no entry for key "settings"
+
+Available locals at this scope: (none)
+Available context:
+  • .vars
+```
+
+The error message tells you:
+- Which local failed to resolve
+- Which key was missing
+- What context is actually available
+
+### Common Error Scenarios
+
+| Scenario | Error Message |
+|----------|---------------|
+| Accessing `.settings` when no settings defined | `map has no entry for key "settings"` |
+| Accessing `.settings.foo` when `foo` doesn't exist | `map has no entry for key "foo"` |
+| Accessing `.vars` when no vars defined | `map has no entry for key "vars"` |
+| Referencing `.locals.undefined` | `map has no entry for key "undefined"` |
+
+### Handling Optional Values
+
+If you need to handle cases where a value might not exist, use Go template conditionals:
+
+```yaml
+settings:
+  # region might or might not be defined
+  region: us-east-1
+
+locals:
+  # Using 'with' for conditional access
+  safe_region: '{{ with .settings }}{{ .region }}{{ else }}us-west-2{{ end }}'
+
+  # Using index with default (requires the parent key to exist)
+  domain: '{{ index .settings "region" | default "us-west-2" }}.example.com'
+
+  # Checking if a key exists before using it
+  log_path: '{{ if .settings }}{{ .settings.region }}{{ else }}default{{ end }}'
+```
+
+### Cross-File Access Errors
+
+A common mistake is attempting to access `settings`, `vars`, or `env` from an imported file:
+
+```yaml
+import:
+  - catalog/defaults  # This file has settings.region = us-east-1
+
+locals:
+  # ❌ This will fail with "map has no entry for key 'settings'"
+  # because the imported settings aren't available during locals resolution
+  region: "{{ .settings.region }}"
+```
+
+**Why this happens:** Locals are resolved *before* imports are merged. At the time locals are processed, only the current file's `settings`, `vars`, and `env` are available.
+
+**Solution:** Define the values you need in the same file, or use `vars` which properly inherit across imports:
+
+```yaml
+import:
+  - catalog/defaults  # Has vars.region = us-east-1
+
+# Option 1: Define settings in this file
+settings:
+  region: us-east-1
+
+locals:
+  domain: "{{ .settings.region }}.example.com"  # ✅ Works
+
+# Option 2: Use vars in templates (not locals)
+vars:
+  # vars can access imported values after merge
+  domain: "{{ .vars.region }}.example.com"  # ✅ Works
+```
+
 ## Best Practices
 
 1. **Use for Repetition:** If you find yourself repeating the same value or expression, extract it to a local.
@@ -527,6 +622,12 @@ This is useful when importing files that contain:
      # Can reference vars from imported files
      bucket_name: "assets-{{ .vars.shared_region }}"
    ```
+
+## Try It
+
+Explore a working example that demonstrates locals in action.
+
+<EmbedExample example="locals" />
 
 ## Related
 
