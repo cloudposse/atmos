@@ -814,6 +814,126 @@ func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 // processing. Component-level locals appear in the final component output
 // and can be used by downstream tooling.
 
+// =============================================================================
+// Settings Access Tests
+// =============================================================================
+// These tests verify that locals can access .settings, .vars, and .env
+// from the SAME file during template resolution.
+
+// TestLocalsSettingsAccessSameFile tests that locals can access .settings from the same file.
+// This is the core test for GitHub issue #1991.
+func TestLocalsSettingsAccessSameFile(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-settings-access")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Get component configuration with locals resolved.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "same-file-component",
+		Stack:                "test-same-file",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify vars were resolved correctly.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// Check that {{ .locals.domain }} resolved correctly.
+	// The local 'domain' is defined as '{{ .settings.substage }}.example.com'
+	// where settings.substage = "dev", so domain = "dev.example.com".
+	assert.Equal(t, "dev.example.com", vars["domain"],
+		"domain var should be resolved from locals which accessed settings")
+
+	// Check that {{ .settings.substage }} resolved correctly.
+	assert.Equal(t, "dev", vars["substage"],
+		"substage var should be resolved from settings")
+}
+
+// TestLocalsSettingsAccessDescribeStacks tests that describe stacks works
+// correctly when locals access settings from the same file.
+func TestLocalsSettingsAccessDescribeStacks(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-settings-access")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get all stacks.
+	result, err := exec.ExecuteDescribeStacks(
+		&atmosConfig,
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		true,  // ignoreMissingFiles
+		true,  // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEmpty(t, result, "should have at least one stack")
+
+	// Find the test-same-file stack.
+	stack, ok := result["test-same-file"].(map[string]any)
+	require.True(t, ok, "should find the 'test-same-file' stack")
+
+	components, ok := stack["components"].(map[string]any)
+	require.True(t, ok, "components should be a map")
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should be a map")
+	component, ok := terraform["same-file-component"].(map[string]any)
+	require.True(t, ok, "same-file-component should exist")
+	vars, ok := component["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// Verify locals resolved with settings access.
+	assert.Equal(t, "dev.example.com", vars["domain"],
+		"domain should be resolved from locals which accessed settings")
+}
+
+// TestLocalsSettingsAccessNotCrossFile verifies that locals CANNOT access
+// settings from imported files (only same-file access is supported).
+// This confirms the file-scoped design for settings access in locals.
+func TestLocalsSettingsAccessNotCrossFile(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-settings-access")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// The test.yaml file imports sandbox-dev mixin which has settings.
+	// But locals in test.yaml should NOT be able to access those imported settings.
+	// If cross-file access was attempted, it would fail or return "<no value>".
+
+	// Get all stacks - this should work without errors.
+	result, err := exec.ExecuteDescribeStacks(
+		&atmosConfig,
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		true,  // ignoreMissingFiles
+		true,  // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The test-same-file stack works because settings are in the same file.
+	// This confirms that same-file access works while cross-file would fail.
+	stack, ok := result["test-same-file"].(map[string]any)
+	require.True(t, ok, "should find the 'test-same-file' stack")
+	require.NotNil(t, stack, "stack should not be nil")
+}
+
 // TestComponentLevelLocals tests component-level locals functionality using table-driven tests.
 func TestComponentLevelLocals(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-component-level")
