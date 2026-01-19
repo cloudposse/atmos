@@ -1,19 +1,16 @@
 # Development Environment Stack
 #
 # This stack demonstrates locals for reducing repetition and building
-# computed values. Locals are file-scoped and resolved before imports.
+# computed values. Locals are file-scoped (cannot be accessed from other files).
 
-# Settings defined in this file (accessible to locals)
 settings:
   version: v1
   team: platform
 
-# Vars defined in this file (accessible to locals)
 vars:
   stage: dev
 
-# Locals are resolved within this file only.
-# They can reference other locals, settings, and vars from the SAME file.
+# Locals can reference other locals, settings, and vars.
 locals:
   # Basic values
   namespace: acme
@@ -22,10 +19,10 @@ locals:
   # Reference other locals
   name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
 
-  # Access settings from this file
+  # Access settings
   app_version: "{{ .settings.version }}"
 
-  # Access vars from this file
+  # Access vars
   stage_name: "{{ .vars.stage }}"
 
   # Build complex computed values

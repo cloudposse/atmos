@@ -1017,3 +1017,88 @@ func TestComponentLevelLocals(t *testing.T) {
 		})
 	}
 }
+
+// TestExampleLocals tests the examples/locals example to ensure it works correctly.
+// This validates the example used in documentation.
+func TestExampleLocals(t *testing.T) {
+	t.Chdir("../examples/locals")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		stack        string
+		expectedVars map[string]string
+	}{
+		{
+			name:  "dev stack resolves locals correctly",
+			stack: "dev",
+			expectedVars: map[string]string{
+				"name":        "acme",
+				"environment": "development",
+				"full_name":   "acme-development-dev",
+			},
+		},
+		{
+			name:  "prod stack resolves locals correctly",
+			stack: "prod",
+			expectedVars: map[string]string{
+				"name":        "acme",
+				"environment": "production",
+				"full_name":   "acme-production-prod",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+				Component:            "myapp",
+				Stack:                tt.stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			// Verify vars were resolved from locals.
+			vars, ok := result["vars"].(map[string]any)
+			require.True(t, ok, "vars should be a map")
+
+			for key, expected := range tt.expectedVars {
+				assert.Equal(t, expected, vars[key], "vars[%s] mismatch for stack %s", key, tt.stack)
+			}
+
+			// Verify tags exist (they are resolved from locals.default_tags).
+			assert.NotNil(t, vars["tags"], "tags should be present in vars")
+		})
+	}
+}
+
+// TestExampleLocalsDescribeLocals tests the describe locals command on the example.
+func TestExampleLocalsDescribeLocals(t *testing.T) {
+	t.Chdir("../examples/locals")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Use ExecuteDescribeLocals to get locals output.
+	// The examples/locals fixture uses name_template: "{{ .vars.stage }}" so the stack name is "dev".
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The result structure has: locals:, components.terraform.<component>.locals.
+	// Check root-level locals section.
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok, "locals should be a map")
+
+	// Verify key locals were resolved.
+	assert.Equal(t, "acme", locals["namespace"], "locals.namespace mismatch")
+	assert.Equal(t, "development", locals["environment"], "locals.environment mismatch")
+	assert.Equal(t, "acme-development", locals["name_prefix"], "locals.name_prefix mismatch")
+	assert.Equal(t, "acme-development-dev", locals["full_name"], "locals.full_name mismatch")
+	assert.Equal(t, "v1", locals["app_version"], "locals.app_version should access settings.version")
+	assert.Equal(t, "dev", locals["stage_name"], "locals.stage_name should access vars.stage")
+}

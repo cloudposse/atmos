@@ -17,8 +17,4 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  excluded_paths: []
   name_template: "{{ .vars.stage }}"
-
-logs:
-  level: Info

@@ -8,7 +8,7 @@ Learn more about [Locals](https://atmos.tools/core-concepts/stacks/locals/).
 
 - **Basic locals**: Define reusable values within a file
 - **Dependency resolution**: Locals can reference other locals
-- **Context access**: Locals can access `settings`, `vars`, and `env` from the same file
+- **Context access**: Locals can access `settings`, `vars`, and `env`
 - **Computed values**: Build complex values from simpler components
 
 ## Try It
@@ -53,7 +53,7 @@ locals:
   full_name: "{{ .locals.namespace }}-{{ .locals.environment }}"
 ```
 
-### Locals Access Same-File Settings/Vars
+### Locals Access Settings and Vars
 
 ```yaml
 settings:
@@ -63,17 +63,17 @@ vars:
   stage: dev
 
 locals:
-  # Access settings and vars from THIS file only
+  # Access settings and vars
   tag_team: "{{ .settings.team }}"
   tag_stage: "{{ .vars.stage }}"
 ```
 
 ### File-Scoped Isolation
 
-Locals are resolved per-file before imports are merged. This means:
-- Locals in `dev.yaml` cannot access settings from imported files.
+Locals are scoped to the file where they are defined. This means:
+- Locals defined in `dev.yaml` cannot be accessed from other files.
 - Each file has its own independent locals scope.
-- Use `vars` or `settings` for cross-file sharing.
+- Use `vars` or `settings` for values that need to be shared across files.
 
 ## Key Files
 

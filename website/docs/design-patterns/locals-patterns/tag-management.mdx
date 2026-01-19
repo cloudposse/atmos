@@ -1,0 +1,358 @@
+---
+title: Tag Management
+sidebar_position: 3
+sidebar_label: Tag Management
+description: Centralize resource tagging logic using locals for consistent tagging across components
+id: tag-management
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+**Tag Management** uses locals to centralize resource tagging logic. Define your tagging strategy once in locals, then apply it consistently across all components in the stack.
+</Intro>
+
+## Use-cases
+
+Use **Tag Management** when:
+
+- You need consistent tags across all resources in a stack
+
+- Tags should be computed from multiple sources (settings, vars, environment)
+
+- Different components need the same base tags plus component-specific additions
+
+- You want to enforce tagging compliance without repetition
+
+## Benefits
+
+- **Consistency**: All resources get the same base tags automatically
+
+- **Single source of truth**: Update tagging logic in one place
+
+- **Compliance**: Easier to enforce required tags (cost center, owner, environment)
+
+- **Flexibility**: Components can extend base tags with specific additions
+
+## Example: Basic Tag Set
+
+Define a standard tag set that applies to all resources:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+settings:
+  team: platform
+  cost_center: engineering
+
+vars:
+  stage: dev
+  region: us-east-2
+
+locals:
+  namespace: acme
+  environment: development
+
+  # Centralized tag definition
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Environment: "{{ .locals.environment }}"
+    Stage: "{{ .vars.stage }}"
+    Region: "{{ .vars.region }}"
+    Team: "{{ .settings.team }}"
+    CostCenter: "{{ .settings.cost_center }}"
+    ManagedBy: Atmos
+
+components:
+  terraform:
+    vpc:
+      vars:
+        tags: "{{ .locals.default_tags }}"
+
+    s3-bucket:
+      vars:
+        tags: "{{ .locals.default_tags }}"
+
+    rds:
+      vars:
+        tags: "{{ .locals.default_tags }}"
+```
+</File>
+
+**Result**: Every resource gets identical tags:
+```yaml
+tags:
+  Namespace: acme
+  Environment: development
+  Stage: dev
+  Region: us-east-2
+  Team: platform
+  CostCenter: engineering
+  ManagedBy: Atmos
+```
+
+## Example: Layered Tags
+
+Build tags incrementally for different resource types:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+settings:
+  team: platform
+  version: v2.1.0
+
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+
+  # Layer 1: Required tags for all resources
+  required_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Stage: "{{ .vars.stage }}"
+    Team: "{{ .settings.team }}"
+    ManagedBy: Atmos
+
+  # Layer 2: Add compliance tags for production
+  compliance_tags:
+    DataClassification: internal
+    BackupRequired: "true"
+    DisasterRecovery: enabled
+
+  # Layer 3: Compute-specific tags
+  compute_tags:
+    AutoShutdown: "false"
+    PatchGroup: production
+
+  # Layer 4: Data-specific tags
+  data_tags:
+    Encryption: required
+    RetentionDays: "90"
+
+components:
+  terraform:
+    # Compute resources get required + compliance + compute tags
+    eks:
+      vars:
+        tags:
+          Namespace: "{{ .locals.namespace }}"
+          Stage: "{{ .vars.stage }}"
+          Team: "{{ .settings.team }}"
+          ManagedBy: Atmos
+          DataClassification: internal
+          BackupRequired: "true"
+          DisasterRecovery: enabled
+          AutoShutdown: "false"
+          PatchGroup: production
+
+    # Data resources get required + compliance + data tags
+    rds:
+      vars:
+        tags:
+          Namespace: "{{ .locals.namespace }}"
+          Stage: "{{ .vars.stage }}"
+          Team: "{{ .settings.team }}"
+          ManagedBy: Atmos
+          DataClassification: internal
+          BackupRequired: "true"
+          DisasterRecovery: enabled
+          Encryption: required
+          RetentionDays: "90"
+```
+</File>
+
+## Example: Environment-Aware Tags
+
+Adjust tags based on environment:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+vars:
+  stage: dev
+
+locals:
+  namespace: acme
+
+  # Environment-specific values
+  is_production: '{{ eq .vars.stage "prod" }}'
+  backup_required: '{{ if eq .vars.stage "prod" }}true{{ else }}false{{ end }}'
+  data_classification: '{{ if eq .vars.stage "prod" }}confidential{{ else }}internal{{ end }}'
+
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Stage: "{{ .vars.stage }}"
+    BackupRequired: "{{ .locals.backup_required }}"
+    DataClassification: "{{ .locals.data_classification }}"
+    ManagedBy: Atmos
+
+components:
+  terraform:
+    rds:
+      vars:
+        tags: "{{ .locals.default_tags }}"
+```
+</File>
+
+**Result for dev**:
+```yaml
+tags:
+  BackupRequired: "false"
+  DataClassification: internal
+```
+
+**Result for prod**:
+```yaml
+tags:
+  BackupRequired: "true"
+  DataClassification: confidential
+```
+
+## Example: Component-Specific Tag Extensions
+
+Start with base tags and add component-specific ones:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+settings:
+  team: platform
+
+vars:
+  stage: dev
+
+locals:
+  namespace: acme
+
+  # Base tags for all resources
+  base_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Stage: "{{ .vars.stage }}"
+    Team: "{{ .settings.team }}"
+    ManagedBy: Atmos
+
+components:
+  terraform:
+    vpc:
+      vars:
+        # Base tags plus VPC-specific
+        tags:
+          Namespace: "{{ .locals.namespace }}"
+          Stage: "{{ .vars.stage }}"
+          Team: "{{ .settings.team }}"
+          ManagedBy: Atmos
+          Component: networking
+          Layer: infrastructure
+
+    eks:
+      vars:
+        # Base tags plus EKS-specific
+        tags:
+          Namespace: "{{ .locals.namespace }}"
+          Stage: "{{ .vars.stage }}"
+          Team: "{{ .settings.team }}"
+          ManagedBy: Atmos
+          Component: kubernetes
+          Layer: platform
+          KubernetesCluster: "{{ .locals.namespace }}-{{ .vars.stage }}"
+
+    app:
+      vars:
+        # Base tags plus app-specific
+        tags:
+          Namespace: "{{ .locals.namespace }}"
+          Stage: "{{ .vars.stage }}"
+          Team: "{{ .settings.team }}"
+          ManagedBy: Atmos
+          Component: application
+          Layer: workload
+          Application: myapp
+```
+</File>
+
+## Example: Timestamp and Version Tags
+
+Include dynamic metadata in tags:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+settings:
+  version: v2.1.0
+  team: platform
+
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Stage: "{{ .vars.stage }}"
+    Team: "{{ .settings.team }}"
+    Version: "{{ .settings.version }}"
+    ManagedBy: Atmos
+
+components:
+  terraform:
+    app:
+      vars:
+        tags: "{{ .locals.default_tags }}"
+```
+</File>
+
+## Tagging Best Practices
+
+| Tag | Purpose | Example |
+|-----|---------|---------|
+| `Namespace` | Organization/project identifier | `acme` |
+| `Environment` | Logical environment name | `development`, `production` |
+| `Stage` | Deployment stage | `dev`, `staging`, `prod` |
+| `Team` | Owning team | `platform`, `security` |
+| `CostCenter` | Cost allocation | `engineering`, `ops` |
+| `ManagedBy` | Management tool | `Atmos` |
+| `Component` | Logical component type | `networking`, `compute` |
+| `Application` | Application name | `api`, `web` |
+
+## Anti-patterns
+
+### Avoid: Hardcoded tags repeated in each component
+
+```yaml
+# Repetitive and error-prone
+components:
+  terraform:
+    vpc:
+      vars:
+        tags:
+          Environment: dev
+          Team: platform
+    rds:
+      vars:
+        tags:
+          Environment: dev
+          Team: platform  # Easy to forget or mistype
+```
+
+**Better**: Use locals for the common tags.
+
+### Avoid: Sensitive data in tags
+
+```yaml
+# Never put secrets in tags - they're visible in AWS console/API
+locals:
+  default_tags:
+    DatabasePassword: secret123  # Never do this!
+```
+
+## Related Patterns
+
+- [Computed Values](/design-patterns/locals-patterns/computed-values) - Build tag values from components
+- [Naming Conventions](/design-patterns/locals-patterns/naming-conventions) - Consistent naming for tag values
+- [Mixins](/design-patterns/component-catalog/mixins) - Share tag definitions across files via vars
+
+## References
+
+- [Locals](/core-concepts/stacks/locals) - Core concept documentation
+- [AWS Tagging Best Practices](https://docs.aws.amazon.com/whitepapers/latest/tagging-best-practices/tagging-best-practices.html)

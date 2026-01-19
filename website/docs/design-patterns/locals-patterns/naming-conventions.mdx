@@ -1,0 +1,321 @@
+---
+title: Naming Conventions
+sidebar_position: 4
+sidebar_label: Naming Conventions
+description: Enforce consistent resource naming across components using locals
+id: naming-conventions
+---
+import File from '@site/src/components/File'
+import PillBox from '@site/src/components/PillBox'
+import Intro from '@site/src/components/Intro'
+
+<PillBox>Atmos Design Pattern</PillBox>
+
+<Intro>
+**Naming Conventions** use locals to enforce consistent resource naming across all components in a stack. Define naming patterns once, then apply them to ensure resources follow organizational standards.
+</Intro>
+
+## Use-cases
+
+Use **Naming Conventions** when:
+
+- Resources need consistent naming across your organization
+
+- Names must include specific components (namespace, environment, region)
+
+- Different resource types have different naming constraints (length, allowed characters)
+
+- You want to prevent naming collisions across environments
+
+## Benefits
+
+- **Consistency**: All resources follow the same naming pattern
+
+- **Predictability**: Resource names can be derived from context
+
+- **Collision prevention**: Environment/region prefixes prevent name conflicts
+
+- **Compliance**: Enforce organizational naming standards
+
+## Example: Standard Naming Pattern
+
+Define a naming pattern that includes namespace, environment, and component:
+
+<File title="stacks/deploy/dev.yaml">
+```yaml
+vars:
+  stage: dev
+  region: us-east-2
+
+locals:
+  namespace: acme
+  environment: dev
+
+  # Standard naming pattern: namespace-environment-component
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+
+  # Resource-specific names using the pattern
+  vpc_name: "{{ .locals.name_prefix }}-vpc"
+  eks_cluster_name: "{{ .locals.name_prefix }}-eks"
+  rds_identifier: "{{ .locals.name_prefix }}-db"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "{{ .locals.vpc_name }}"
+
+    eks:
+      vars:
+        cluster_name: "{{ .locals.eks_cluster_name }}"
+
+    rds:
+      vars:
+        identifier: "{{ .locals.rds_identifier }}"
+```
+</File>
+
+**Result**: Predictable, consistent names:
+- VPC: `acme-dev-vpc`
+- EKS: `acme-dev-eks`
+- RDS: `acme-dev-db`
+
+## Example: Multi-Region Naming
+
+Include region in names to prevent collisions across regions:
+
+<File title="stacks/deploy/us-east-2/prod.yaml">
+```yaml
+vars:
+  stage: prod
+  region: us-east-2
+
+locals:
+  namespace: acme
+
+  # Short region code for names
+  region_code: ue2
+
+  # Include region in prefix for global uniqueness
+  name_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}-{{ .locals.region_code }}"
+
+  # S3 buckets must be globally unique
+  logs_bucket: "{{ .locals.name_prefix }}-logs"
+  artifacts_bucket: "{{ .locals.name_prefix }}-artifacts"
+
+  # Other resources use the same pattern
+  vpc_name: "{{ .locals.name_prefix }}-vpc"
+
+components:
+  terraform:
+    s3-logs:
+      vars:
+        bucket_name: "{{ .locals.logs_bucket }}"
+
+    s3-artifacts:
+      vars:
+        bucket_name: "{{ .locals.artifacts_bucket }}"
+
+    vpc:
+      vars:
+        name: "{{ .locals.vpc_name }}"
+```
+</File>
+
+**Result** (us-east-2):
+- Logs bucket: `acme-prod-ue2-logs`
+- Artifacts bucket: `acme-prod-ue2-artifacts`
+- VPC: `acme-prod-ue2-vpc`
+
+## Example: Resource-Type Specific Patterns
+
+Different resource types may have different naming requirements:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+
+  # Base prefix for most resources
+  standard_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}"
+
+  # IAM resources: use path-style naming
+  iam_path: "/{{ .locals.namespace }}/{{ .vars.stage }}/"
+  iam_role_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}"
+
+  # S3: lowercase with hyphens (no underscores)
+  s3_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}"
+
+  # RDS: lowercase, alphanumeric, hyphens only, max 63 chars
+  rds_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}"
+
+  # CloudWatch: can use forward slashes for hierarchy
+  cloudwatch_prefix: "/{{ .locals.namespace }}/{{ .vars.stage }}"
+
+components:
+  terraform:
+    iam-role:
+      vars:
+        role_name: "{{ .locals.iam_role_prefix }}-app-role"
+        path: "{{ .locals.iam_path }}"
+
+    s3-bucket:
+      vars:
+        bucket_name: "{{ .locals.s3_prefix }}-data"
+
+    rds:
+      vars:
+        identifier: "{{ .locals.rds_prefix }}-postgres"
+
+    cloudwatch:
+      vars:
+        log_group_name: "{{ .locals.cloudwatch_prefix }}/app/logs"
+```
+</File>
+
+## Example: Instance-Based Naming
+
+When deploying multiple instances of the same component:
+
+<File title="stacks/deploy/prod.yaml">
+```yaml
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+  name_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}"
+
+components:
+  terraform:
+    # Primary database
+    rds/primary:
+      vars:
+        identifier: "{{ .locals.name_prefix }}-db-primary"
+
+    # Read replica
+    rds/replica:
+      vars:
+        identifier: "{{ .locals.name_prefix }}-db-replica"
+
+    # Multiple S3 buckets for different purposes
+    s3/logs:
+      vars:
+        bucket_name: "{{ .locals.name_prefix }}-logs"
+
+    s3/backups:
+      vars:
+        bucket_name: "{{ .locals.name_prefix }}-backups"
+
+    s3/artifacts:
+      vars:
+        bucket_name: "{{ .locals.name_prefix }}-artifacts"
+```
+</File>
+
+## Example: Tenant-Aware Naming
+
+For multi-tenant deployments, include tenant in the naming pattern:
+
+<File title="stacks/deploy/tenant-a/prod.yaml">
+```yaml
+vars:
+  stage: prod
+  tenant: tenant-a
+
+locals:
+  namespace: acme
+
+  # Include tenant in naming pattern
+  name_prefix: "{{ .locals.namespace }}-{{ .vars.tenant }}-{{ .vars.stage }}"
+
+  vpc_name: "{{ .locals.name_prefix }}-vpc"
+  eks_name: "{{ .locals.name_prefix }}-eks"
+
+components:
+  terraform:
+    vpc:
+      vars:
+        name: "{{ .locals.vpc_name }}"
+
+    eks:
+      vars:
+        cluster_name: "{{ .locals.eks_name }}"
+```
+</File>
+
+**Result**:
+- VPC: `acme-tenant-a-prod-vpc`
+- EKS: `acme-tenant-a-prod-eks`
+
+## Naming Convention Reference
+
+| Resource Type | Constraints | Example Pattern |
+|---------------|-------------|-----------------|
+| S3 Bucket | Lowercase, 3-63 chars, globally unique | `acme-prod-ue2-logs` |
+| RDS | Lowercase, alphanumeric + hyphens, 1-63 chars | `acme-prod-postgres` |
+| EKS Cluster | Alphanumeric + hyphens, 1-100 chars | `acme-prod-eks` |
+| IAM Role | Alphanumeric + some special chars, 1-64 chars | `acme-prod-app-role` |
+| VPC | No strict constraints | `acme-prod-vpc` |
+| CloudWatch Log Group | 1-512 chars, supports `/` | `/acme/prod/app/logs` |
+
+## Anti-patterns
+
+### Avoid: Inconsistent naming across stacks
+
+```yaml
+# dev.yaml
+locals:
+  vpc_name: dev-vpc  # Missing namespace
+
+# prod.yaml
+locals:
+  vpc_name: acme-production-network  # Different pattern
+```
+
+**Better**: Use the same pattern everywhere, varying only the inputs.
+
+### Avoid: Names without environment context
+
+```yaml
+# Risk of collision between environments
+locals:
+  bucket_name: logs  # Which environment?
+```
+
+**Better**: Always include environment/stage:
+
+```yaml
+locals:
+  bucket_name: "{{ .locals.namespace }}-{{ .vars.stage }}-logs"
+```
+
+### Avoid: Overly long names
+
+```yaml
+# May hit resource name length limits
+locals:
+  name: "acme-organization-platform-team-production-us-east-2-application-service-database-primary"
+```
+
+**Better**: Use abbreviations for long components:
+
+```yaml
+locals:
+  # ue2 instead of us-east-2, prod instead of production
+  name: "acme-platform-prod-ue2-app-db-primary"
+```
+
+## Related Patterns
+
+- [Computed Values](/design-patterns/locals-patterns/computed-values) - Build names from components
+- [Tag Management](/design-patterns/locals-patterns/tag-management) - Apply naming to tags
+- [Multi-Region Configuration](/design-patterns/stack-organization/multi-region-configuration) - Region-aware naming
+
+## References
+
+- [Locals](/core-concepts/stacks/locals) - Core concept documentation
+- [AWS Resource Naming Limits](https://docs.aws.amazon.com/general/latest/gr/aws-arns-and-namespaces.html)
