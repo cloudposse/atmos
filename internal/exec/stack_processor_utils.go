@@ -28,11 +28,19 @@ import (
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
 var importsConfigLock = &sync.Mutex{}
 
+// extractLocalsResult holds the results of parsing raw YAML and extracting locals.
+type extractLocalsResult struct {
+	locals   map[string]any // Resolved locals.
+	settings map[string]any // Settings section (for template context).
+	vars     map[string]any // Vars section (for template context).
+	env      map[string]any // Env section (for template context).
+}
+
 // extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
 // This function is called BEFORE template processing to make locals available during template execution.
 // The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
 // The locals resolver handles resolving self-references between locals.
-// Returns the resolved locals map or nil if no locals section exists.
+// Returns the resolved locals and other sections (settings, vars, env) that should be available during template processing.
 //
 // Locals are extracted and merged in order of specificity:
 // 1. Global locals (root level)
@@ -40,7 +48,7 @@ var importsConfigLock = &sync.Mutex{}
 //
 // Section-specific locals inherit from and can override global locals.
 // All resolved locals are flattened into a single map for template processing.
-func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (map[string]any, error) {
+func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
 	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
 
 	// Parse raw YAML to extract the structure.
@@ -59,7 +67,7 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	}
 
 	if rawConfig == nil {
-		return nil, nil
+		return &extractLocalsResult{}, nil
 	}
 
 	// Use ProcessStackLocals which handles global and section-level scopes.
@@ -68,13 +76,31 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
-	return localsCtx.MergeForTemplateContext(), nil
+	// Build result with locals and context sections.
+	result := &extractLocalsResult{
+		locals: localsCtx.MergeForTemplateContext(),
+	}
+
+	// Extract settings, vars, env sections for template context.
+	// These allow templates in the file to reference these sections.
+	if settings, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
+		result.settings = settings
+	}
+	if vars, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		result.vars = vars
+	}
+	if env, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
+		result.env = env
+	}
+
+	return result, nil
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
 // Returns the updated context and any error encountered during locals extraction.
 // Note: The "locals" key in context is reserved for file-scoped locals and will override
 // any user-provided "locals" key in the import context.
+// Settings, vars, and env sections are also added to the context so templates can reference them.
 // For template files (.tmpl), YAML parse errors are logged and the function continues
 // without locals, since template files may contain Go template syntax that isn't valid YAML
 // until after template processing.
@@ -94,7 +120,7 @@ func extractAndAddLocalsToContext(
 		delete(context, "locals")
 	}
 
-	resolvedLocals, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
 	if localsErr != nil {
 		// For template files (.tmpl), YAML parse errors are expected since the raw content
 		// may contain Go template syntax that isn't valid YAML until after processing.
@@ -118,16 +144,38 @@ func extractAndAddLocalsToContext(
 		return context, localsErr
 	}
 
-	if len(resolvedLocals) == 0 {
+	// Only modify context if there are actually locals to add.
+	// This preserves the original behavior where files without locals don't trigger
+	// template processing (see the len(context) > 0 check in ProcessBaseStackConfig).
+	if len(extractResult.locals) == 0 {
 		return context, nil
 	}
 
-	// Add resolved locals to the template context.
+	// Initialize context if nil.
 	if context == nil {
 		context = make(map[string]any)
 	}
-	context["locals"] = resolvedLocals
-	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(resolvedLocals))
+
+	// Add settings, vars, env from the file to the context.
+	// These allow templates in the file (including locals) to reference these sections.
+	// This enables patterns like:
+	//   settings:
+	//     substage: dev
+	//   locals:
+	//     domain: '{{ .settings.substage }}.example.com'
+	if extractResult.settings != nil {
+		context[cfg.SettingsSectionName] = extractResult.settings
+	}
+	if extractResult.vars != nil {
+		context[cfg.VarsSectionName] = extractResult.vars
+	}
+	if extractResult.env != nil {
+		context[cfg.EnvSectionName] = extractResult.env
+	}
+
+	// Add resolved locals to the template context.
+	context["locals"] = extractResult.locals
+	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
 
 	return context, nil
 }
