@@ -1156,9 +1156,11 @@ func TestLocalsNestedSettingsAccess(t *testing.T) {
 
 // TestLocalsEnvironmentVariableAccess tests that locals can access environment variables.
 func TestLocalsEnvironmentVariableAccess(t *testing.T) {
-	// Use a unique env var to avoid caching issues from previous tests.
+	// Set known values for deterministic assertions.
 	testValue := "atmos-test-value-12345"
+	homeValue := "/tmp/atmos-test-home"
 	t.Setenv("ATMOS_TEST_ENV_VAR", testValue)
+	t.Setenv("HOME", homeValue)
 
 	t.Chdir("./fixtures/scenarios/locals-env-test")
 
@@ -1184,10 +1186,10 @@ func TestLocalsEnvironmentVariableAccess(t *testing.T) {
 	require.True(t, ok, "test_env_value should be a string")
 	assert.Equal(t, testValue, testEnvValue, "test_env_value should come from ATMOS_TEST_ENV_VAR env var")
 
-	// Also verify HOME is accessible (will be whatever the system has).
+	// Verify HOME is accessible via Sprig's env function.
 	homeDir, ok := vars["home_dir"].(string)
 	require.True(t, ok, "home_dir should be a string")
-	assert.NotEmpty(t, homeDir, "home_dir should not be empty (HOME env var)")
+	assert.Equal(t, homeValue, homeDir, "home_dir should come from HOME env var")
 }
 
 // TestLocalsHelmfileSectionLocals tests that helmfile section can have its own locals.
