@@ -42,6 +42,7 @@ func init() {
 	listCmd.AddCommand(settingsCmd)
 	listCmd.AddCommand(valuesCmd)
 	listCmd.AddCommand(varsCmd)
+	listCmd.AddCommand(sourcesCmd)
 
 	// Register with registry
 	internal.Register(&ListCommandProvider{})

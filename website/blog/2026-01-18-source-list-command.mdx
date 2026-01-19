@@ -1,0 +1,110 @@
+---
+slug: source-list-command
+title: "List Components with Source Configuration"
+authors: [osterman]
+tags: [feature, dx]
+date: 2026-01-18
+---
+
+Atmos now includes a `source list` command to display components with source configuration. Both `--stack` and `[component]` arguments are optional, allowing flexible filtering across your infrastructure.
+
+<!--truncate-->
+
+## What Changed
+
+Two new commands are available with flexible filtering:
+
+```bash
+# List all terraform sources across all stacks
+atmos terraform source list
+
+# List terraform sources in a specific stack
+atmos terraform source list --stack dev
+
+# List sources for a specific component across all stacks
+atmos terraform source list vpc
+
+# List sources for a specific component in a specific stack
+atmos terraform source list vpc --stack dev
+
+# Alias: list sources across all component types
+atmos list sources
+atmos list sources --stack dev
+atmos list sources vpc
+```
+
+## Dynamic Output Columns
+
+The output adapts to your query:
+
+**Listing all stacks** - Shows Stack column:
+
+```
+STACK        COMPONENT    URI                                                           VERSION
+plat-dev     vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-prod    vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+```
+
+**Filtering by --stack** - Omits Stack column since it's redundant:
+
+```
+COMPONENT    URI                                                           VERSION
+eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
+rds          github.com/cloudposse/terraform-aws-components//modules/rds   1.449.0
+vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+```
+
+**With derived components** - Shows Folder column when component names differ from their base component:
+
+```
+COMPONENT        FOLDER    URI                                                           VERSION
+vpc/production   vpc       github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+vpc/staging      vpc       github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+```
+
+The Folder column only appears when there's a difference to show, keeping output clean for simple cases.
+
+## Multi-Type Listing
+
+The `atmos list sources` alias includes a Type column since it lists sources across all component types (terraform, helmfile, packer):
+
+```
+STACK        TYPE        COMPONENT    URI                                                           VERSION
+plat-dev     helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx       1.0.0
+plat-dev     terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-prod    terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+```
+
+## Why This Matters
+
+With the source provisioner, components can declare their source inline in stack configuration for just-in-time vendoring. The `source list` command helps you:
+
+- **Audit** which components have source configured across your infrastructure
+- **Compare** versions across stacks (same component, different versions)
+- **Debug** source configuration issues
+- **Discover** vendorable components in unfamiliar stacks
+
+## Output Formats
+
+Multiple output formats are supported for integration with other tools:
+
+```bash
+# Table (default, human-readable)
+atmos list sources --format table
+
+# JSON (for scripting)
+atmos list sources --format json
+
+# YAML (for configuration)
+atmos list sources --format yaml
+
+# CSV (for spreadsheets)
+atmos list sources --format csv
+
+# TSV (for tab-separated pipelines)
+atmos list sources --format tsv
+```
+
+## Documentation
+
+- [Source Provisioner](/cli/commands/terraform/source) - JIT vendoring overview
