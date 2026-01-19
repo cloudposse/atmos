@@ -1156,7 +1156,11 @@ func TestLocalsNestedSettingsAccess(t *testing.T) {
 
 // TestLocalsEnvironmentVariableAccess tests that locals can access environment variables.
 func TestLocalsEnvironmentVariableAccess(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/locals-advanced")
+	// Use a unique env var to avoid caching issues from previous tests.
+	testValue := "atmos-test-value-12345"
+	t.Setenv("ATMOS_TEST_ENV_VAR", testValue)
+
+	t.Chdir("./fixtures/scenarios/locals-env-test")
 
 	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
@@ -1164,7 +1168,7 @@ func TestLocalsEnvironmentVariableAccess(t *testing.T) {
 	// Get component configuration with locals resolved.
 	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
 		Component:            "env-test",
-		Stack:                "advanced",
+		Stack:                "test",
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
 	})
@@ -1175,16 +1179,15 @@ func TestLocalsEnvironmentVariableAccess(t *testing.T) {
 	vars, ok := result["vars"].(map[string]any)
 	require.True(t, ok, "vars should be a map")
 
-	// Check that env variables are accessible via Sprig's env function.
-	// HOME should be set on all Unix systems.
+	// Check that env variable is accessible via Sprig's env function.
+	testEnvValue, ok := vars["test_env_value"].(string)
+	require.True(t, ok, "test_env_value should be a string")
+	assert.Equal(t, testValue, testEnvValue, "test_env_value should come from ATMOS_TEST_ENV_VAR env var")
+
+	// Also verify HOME is accessible (will be whatever the system has).
 	homeDir, ok := vars["home_dir"].(string)
 	require.True(t, ok, "home_dir should be a string")
 	assert.NotEmpty(t, homeDir, "home_dir should not be empty (HOME env var)")
-
-	// USER should be set on most Unix systems.
-	username, ok := vars["username"].(string)
-	require.True(t, ok, "username should be a string")
-	assert.NotEmpty(t, username, "username should not be empty (USER env var)")
 }
 
 // TestLocalsHelmfileSectionLocals tests that helmfile section can have its own locals.
