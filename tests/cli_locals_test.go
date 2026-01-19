@@ -817,7 +817,7 @@ func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 // =============================================================================
 // Settings Access Tests.
 // =============================================================================
-// These tests verify that locals can access .settings, .vars, and .env.
+// These tests verify that locals can access .settings, .vars, and .env
 // from the SAME file during template resolution.
 
 // TestLocalsSettingsAccessSameFile tests that locals can access .settings from the same file.
