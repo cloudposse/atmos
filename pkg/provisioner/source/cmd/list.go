@@ -342,7 +342,9 @@ func extractSourcesFromStack(stacksMap map[string]any, stack, componentType stri
 
 	// Sort by component name for consistent output.
 	sort.Slice(sources, func(i, j int) bool {
-		return sources[i][keyComponent].(string) < sources[j][keyComponent].(string)
+		compI, _ := sources[i][keyComponent].(string)
+		compJ, _ := sources[j][keyComponent].(string)
+		return compI < compJ
 	})
 
 	return sources
@@ -420,12 +422,14 @@ func extractSingleSourceEntry(stackName, componentName string, componentData any
 // sortSourcesByStackComponent sorts sources by stack, then component.
 func sortSourcesByStackComponent(sources []map[string]any) {
 	sort.Slice(sources, func(i, j int) bool {
-		stackI := sources[i][keyStack].(string)
-		stackJ := sources[j][keyStack].(string)
+		stackI, _ := sources[i][keyStack].(string)
+		stackJ, _ := sources[j][keyStack].(string)
 		if stackI != stackJ {
 			return stackI < stackJ
 		}
-		return sources[i][keyComponent].(string) < sources[j][keyComponent].(string)
+		compI, _ := sources[i][keyComponent].(string)
+		compJ, _ := sources[j][keyComponent].(string)
+		return compI < compJ
 	})
 }
 

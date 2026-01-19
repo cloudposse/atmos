@@ -304,12 +304,14 @@ func extractAllSourcesFromStack(stacksMap map[string]any, stack string) []map[st
 // sortSourcesByTypeComponent sorts sources by type, then component.
 func sortSourcesByTypeComponent(sources []map[string]any) {
 	sort.Slice(sources, func(i, j int) bool {
-		typeI := sources[i][keyType].(string)
-		typeJ := sources[j][keyType].(string)
+		typeI, _ := sources[i][keyType].(string)
+		typeJ, _ := sources[j][keyType].(string)
 		if typeI != typeJ {
 			return typeI < typeJ
 		}
-		return sources[i][keyComponent].(string) < sources[j][keyComponent].(string)
+		compI, _ := sources[i][keyComponent].(string)
+		compJ, _ := sources[j][keyComponent].(string)
+		return compI < compJ
 	})
 }
 
@@ -399,17 +401,19 @@ func extractSourceEntry(stackName, componentType, componentName string, componen
 // sortSourcesByStackTypeComponent sorts sources by stack, type, then component.
 func sortSourcesByStackTypeComponent(sources []map[string]any) {
 	sort.Slice(sources, func(i, j int) bool {
-		stackI := sources[i][keyStack].(string)
-		stackJ := sources[j][keyStack].(string)
+		stackI, _ := sources[i][keyStack].(string)
+		stackJ, _ := sources[j][keyStack].(string)
 		if stackI != stackJ {
 			return stackI < stackJ
 		}
-		typeI := sources[i][keyType].(string)
-		typeJ := sources[j][keyType].(string)
+		typeI, _ := sources[i][keyType].(string)
+		typeJ, _ := sources[j][keyType].(string)
 		if typeI != typeJ {
 			return typeI < typeJ
 		}
-		return sources[i][keyComponent].(string) < sources[j][keyComponent].(string)
+		compI, _ := sources[i][keyComponent].(string)
+		compJ, _ := sources[j][keyComponent].(string)
+		return compI < compJ
 	})
 }
 
