@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -127,13 +128,43 @@ func initListCommand(cmd *cobra.Command, args []string, cfg *Config, parser *fla
 	configInfo := schema.ConfigAndStacksInfo{Stack: opts.stack}
 	atmosConfig, err := initCliConfigForPrompt(configInfo, true)
 	if err != nil {
-		return nil, nil, errUtils.Build(errUtils.ErrFailedToInitConfig).
-			WithCause(err).
-			WithContext("stack", opts.stack).
-			Err()
+		return nil, nil, wrapConfigError(err, opts.stack)
 	}
 
 	return opts, &atmosConfig, nil
+}
+
+// wrapConfigError wraps configuration errors with user-friendly messages.
+func wrapConfigError(err error, stack string) error {
+	errMsg := err.Error()
+
+	// Detect "no stacks found" pattern from import failures.
+	if strings.Contains(errMsg, "failed to find import") ||
+		strings.Contains(errMsg, "no files match") {
+		return errUtils.Build(errUtils.ErrNoStacksFound).
+			WithCause(err).
+			WithExplanation("No stack configuration files were found matching the configured import patterns").
+			WithHint("Ensure your stacks directory contains valid YAML files and check the 'stacks' settings in atmos.yaml").
+			Err()
+	}
+
+	// Detect missing atmos.yaml or stacks directory.
+	if strings.Contains(errMsg, "stacks directory does not exist") ||
+		strings.Contains(errMsg, "atmos.yaml") {
+		return errUtils.Build(errUtils.ErrMissingAtmosConfig).
+			WithCause(err).
+			WithExplanation("The Atmos configuration or stacks directory could not be found").
+			WithHint("Run 'atmos' from a directory containing atmos.yaml, or set ATMOS_BASE_PATH").
+			Err()
+	}
+
+	// Default: generic config error.
+	builder := errUtils.Build(errUtils.ErrFailedToInitConfig).
+		WithCause(err)
+	if stack != "" {
+		builder = builder.WithContext(keyStack, stack)
+	}
+	return builder.Err()
 }
 
 // fetchAndFilterListSources fetches stack data and extracts filtered sources.
