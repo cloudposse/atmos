@@ -71,9 +71,9 @@ locals:
 ### File-Scoped Isolation
 
 Locals are resolved per-file before imports are merged. This means:
-- Locals in `dev.yaml` cannot access settings from imported files
-- Each file has its own independent locals scope
-- Use `vars` or `settings` for cross-file sharing
+- Locals in `dev.yaml` cannot access settings from imported files.
+- Each file has its own independent locals scope.
+- Use `vars` or `settings` for cross-file sharing.
 
 ## Key Files
 
