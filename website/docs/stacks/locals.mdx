@@ -187,6 +187,47 @@ This design is intentional:
 - **No Hidden Dependencies:** You can understand a file without tracing imports
 - **Flexibility:** Each file can define locals that make sense for its context
 
+### Processing Order
+
+To understand why locals are file-scoped, it helps to know how Atmos processes stack files:
+
+1. **Per-File Processing:** Each file (including imported files) is processed independently
+2. **Locals Resolution:** Within each file, locals are resolved first using only that file's context
+3. **Import Merging:** After all files are processed, their sections (`vars`, `settings`, `env`, `components`) are merged according to import precedence
+4. **Final Template Processing:** Templates in `vars`, `settings`, and other sections are processed with the fully merged context
+
+Since locals are resolved in step 2 (before imports are merged), they only have access to data from their own file. By the time imports are merged in step 3, locals resolution is already complete.
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  File: stacks/deploy/production.yaml                                │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ 1. Parse YAML                                                 │  │
+│  │ 2. Resolve locals (only sees this file's settings/vars/env)  │  │
+│  │ 3. Process templates in other sections                        │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│  File: stacks/catalog/defaults.yaml (imported)                      │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ 1. Parse YAML                                                 │  │
+│  │ 2. Resolve locals (only sees this file's settings/vars/env)  │  │
+│  │ 3. Process templates in other sections                        │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+                                    ↓
+┌─────────────────────────────────────────────────────────────────────┐
+│  Merge Phase                                                        │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Merge vars, settings, env, components from all files         │  │
+│  │ (locals are NOT merged - they're already resolved per-file)  │  │
+│  └───────────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+This architecture ensures that locals resolution is fast, predictable, and free of cross-file dependencies
+
 ## Dependency Resolution
 
 Locals can reference other locals, and Atmos automatically resolves them in the correct order using topological sorting:
@@ -225,6 +266,74 @@ circular dependency in locals at stacks/example.yaml
 Dependency cycle detected:
   a → b → c → a
 ```
+
+## Accessing Other Sections
+
+Locals can access other sections defined in the **same file**. This is useful for building computed values based on your configuration.
+
+### Available Template Context
+
+Within a file, locals have access to:
+
+| Section | Syntax | Description |
+|---------|--------|-------------|
+| `locals` | `{{ .locals.name }}` | Other locals in the same file |
+| `settings` | `{{ .settings.key }}` | Settings defined in the same file |
+| `vars` | `{{ .vars.key }}` | Variables defined in the same file |
+| `env` | `{{ .env.KEY }}` | Environment variables defined in the same file |
+
+### Example: Accessing Settings
+
+```yaml
+settings:
+  version: v1
+  validation:
+    enabled: true
+    strict_mode: false
+
+locals:
+  # Access settings from the same file
+  api_version: "{{ .settings.version }}"
+  validation_level: '{{ if .settings.validation.strict_mode }}strict{{ else }}standard{{ end }}'
+
+vars:
+  version: "{{ .locals.api_version }}"
+```
+
+### Example: Accessing Vars
+
+```yaml
+vars:
+  base_name: myapp
+  environment: production
+
+locals:
+  # Access vars from the same file
+  full_name: "{{ .vars.base_name }}-{{ .vars.environment }}"
+  log_path: "/var/log/{{ .vars.base_name }}"
+```
+
+:::warning Same-File Access Only
+Locals can only access `settings`, `vars`, and `env` defined in the **same file**. Values from imported files are not available during locals resolution because imports are processed separately.
+
+If you need to share values across files, use `vars` or `settings` instead of `locals`. These sections properly inherit across imports.
+
+```yaml
+# ❌ This won't work - settings from imported file not available
+import:
+  - catalog/defaults  # Has settings.region = us-east-1
+
+locals:
+  region: "{{ .settings.region }}"  # Error: settings.region not found
+
+# ✅ Instead, use vars which inherit across imports
+import:
+  - catalog/defaults  # Has vars.region = us-east-1
+
+vars:
+  computed_name: "{{ .vars.region }}-cluster"  # Works!
+```
+:::
 
 ## Using Templates in Locals
 
@@ -346,10 +455,23 @@ components:
 | **Scope** | File-scoped only | Inherits across imports |
 | **Purpose** | Temporary values for DRY | Input variables for components |
 | **Output** | Not passed to components | Passed to Terraform/Helmfile/Packer |
-| **Dependencies** | Can reference other locals | Can reference locals |
+| **Dependencies** | Can reference other locals, settings, vars, env from same file | Can reference locals after they're resolved |
 | **Visibility** | Internal to stack config | Visible in component execution |
+| **Cross-File Access** | Cannot access imported values | Can access merged values from all imports |
 
-Use `locals` for intermediate computations and `vars` for values that need to be passed to your components.
+Use `locals` for intermediate computations within a single file, and `vars` for values that need to be passed to your components or shared across files.
+
+### When to Use Each
+
+**Use `locals` when:**
+- You need temporary values to reduce repetition within a single file
+- You're building computed values from other data in the same file
+- The values are only relevant to template processing, not component execution
+
+**Use `vars` when:**
+- Values need to be passed to Terraform/Helmfile/Packer components
+- Values need to be shared across multiple files via imports
+- You need to reference values from imported catalog files
 
 ## Template Processing Behavior
 
@@ -390,6 +512,21 @@ This is useful when importing files that contain:
 5. **Avoid Deep Nesting:** If you have many levels of local dependencies, consider simplifying or restructuring.
 
 6. **Remember File Scope:** Don't expect locals from imported files—define what you need in each file.
+
+7. **Use Vars for Cross-File Sharing:** If you need values available across multiple files, put them in `vars` or `settings` instead of `locals`. These sections properly merge across imports:
+   ```yaml
+   # stacks/catalog/defaults.yaml
+   vars:
+     shared_region: us-east-1  # Available to all files that import this
+
+   # stacks/deploy/production.yaml
+   import:
+     - catalog/defaults
+
+   vars:
+     # Can reference vars from imported files
+     bucket_name: "assets-{{ .vars.shared_region }}"
+   ```
 
 ## Related
 

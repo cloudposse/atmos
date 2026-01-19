@@ -26,10 +26,11 @@ import (
 // Resolver handles dependency resolution and cycle detection for locals.
 // It uses topological sorting to determine the order in which locals should be resolved.
 type Resolver struct {
-	locals       map[string]any      // Raw local definitions.
-	resolved     map[string]any      // Resolved local values.
-	dependencies map[string][]string // Dependency graph: local -> locals it depends on.
-	filePath     string              // Source file path for error messages.
+	locals          map[string]any      // Raw local definitions.
+	resolved        map[string]any      // Resolved local values.
+	dependencies    map[string][]string // Dependency graph: local -> locals it depends on.
+	filePath        string              // Source file path for error messages.
+	templateContext map[string]any      // Additional context available during template resolution (e.g., settings, vars).
 }
 
 // NewResolver creates a resolver for a set of locals.
@@ -38,11 +39,24 @@ func NewResolver(locals map[string]any, filePath string) *Resolver {
 	defer perf.Track(nil, "locals.NewResolver")()
 
 	return &Resolver{
-		locals:       locals,
-		resolved:     make(map[string]any),
-		dependencies: make(map[string][]string),
-		filePath:     filePath,
+		locals:          locals,
+		resolved:        make(map[string]any),
+		dependencies:    make(map[string][]string),
+		filePath:        filePath,
+		templateContext: make(map[string]any),
 	}
+}
+
+// WithTemplateContext sets additional context available during template resolution.
+// This allows locals to reference other sections like .settings and .vars from the same file.
+// Returns the resolver for method chaining.
+func (r *Resolver) WithTemplateContext(context map[string]any) *Resolver {
+	defer perf.Track(nil, "locals.Resolver.WithTemplateContext")()
+
+	if context != nil {
+		r.templateContext = context
+	}
+	return r
 }
 
 // Resolve processes all locals in dependency order, returning resolved values.
@@ -396,10 +410,14 @@ func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 		return strVal, nil
 	}
 
-	// Build template context with resolved locals.
-	context := map[string]any{
-		"locals": r.resolved,
+	// Build template context with resolved locals and additional context (settings, vars, etc.).
+	// Start with additional template context from the same file.
+	context := make(map[string]any, len(r.templateContext)+1)
+	for k, v := range r.templateContext {
+		context[k] = v
 	}
+	// Add resolved locals (these take precedence over template context).
+	context["locals"] = r.resolved
 
 	// Parse and execute the template.
 	tmpl, err := template.New(localName).Funcs(sprig.FuncMap()).Parse(strVal)
@@ -412,10 +430,11 @@ func (r *Resolver) resolveString(strVal, localName string) (any, error) {
 
 	var buf bytes.Buffer
 	if err := tmpl.Execute(&buf, context); err != nil {
-		// Provide helpful error message with available locals.
+		// Provide helpful error message with available locals and context.
 		availableLocals := r.getAvailableLocals()
-		return nil, fmt.Errorf("failed to resolve local %q in %s: %w\n\nAvailable locals at this scope:\n%s",
-			localName, r.filePath, err, availableLocals)
+		availableContext := r.getAvailableContext()
+		return nil, fmt.Errorf("failed to resolve local %q in %s: %w\n\nAvailable locals at this scope:\n%s\nAvailable context:\n%s",
+			localName, r.filePath, err, availableLocals, availableContext)
 	}
 
 	return buf.String(), nil
@@ -436,6 +455,27 @@ func (r *Resolver) getAvailableLocals() string {
 	var sb strings.Builder
 	for _, name := range names {
 		sb.WriteString("  - ")
+		sb.WriteString(name)
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}
+
+// getAvailableContext returns a formatted string of available template context keys for error messages.
+func (r *Resolver) getAvailableContext() string {
+	if len(r.templateContext) == 0 {
+		return "  (none)"
+	}
+
+	names := make([]string, 0, len(r.templateContext))
+	for name := range r.templateContext {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var sb strings.Builder
+	for _, name := range names {
+		sb.WriteString("  - .")
 		sb.WriteString(name)
 		sb.WriteString("\n")
 	}
