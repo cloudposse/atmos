@@ -452,10 +452,18 @@ func wrapSourcesConfigError(err error, stack string) error {
 	// Detect "no stacks found" pattern from import failures.
 	if strings.Contains(errMsg, "failed to find import") ||
 		strings.Contains(errMsg, "no files match") {
-		return errUtils.Build(errUtils.ErrNoStacksFound).
+		builder := errUtils.Build(errUtils.ErrNoStacksFound).
 			WithCause(err).
-			WithExplanation("No stack configuration files were found matching the configured import patterns").
-			WithHint("Ensure your stacks directory contains valid YAML files and check the 'stacks' settings in atmos.yaml").
+			WithExplanation("No stack configuration files were found matching the configured import patterns")
+
+		// Extract and show the searched path if available.
+		if path := extractSourcesSearchedPath(errMsg); path != "" {
+			builder = builder.WithContext("searched", path)
+		}
+
+		return builder.
+			WithHint("Ensure your `stacks` directory contains valid YAML files and check `atmos.yaml` configuration").
+			WithHint("See https://atmos.tools/core-concepts/stacks for stack configuration details").
 			Err()
 	}
 
@@ -465,7 +473,8 @@ func wrapSourcesConfigError(err error, stack string) error {
 		return errUtils.Build(errUtils.ErrMissingAtmosConfig).
 			WithCause(err).
 			WithExplanation("The Atmos configuration or stacks directory could not be found").
-			WithHint("Run 'atmos' from a directory containing atmos.yaml, or set ATMOS_BASE_PATH").
+			WithHint("Run `atmos` from a directory containing `atmos.yaml`, or set `ATMOS_BASE_PATH`").
+			WithHint("See https://atmos.tools/cli/configuration for configuration details").
 			Err()
 	}
 
@@ -476,4 +485,16 @@ func wrapSourcesConfigError(err error, stack string) error {
 		builder = builder.WithContext(keyStack, stack)
 	}
 	return builder.Err()
+}
+
+// extractSourcesSearchedPath extracts the file path from error messages.
+func extractSourcesSearchedPath(errMsg string) string {
+	// Pattern: "failed to find import: '/path/to/file'"
+	if idx := strings.Index(errMsg, "failed to find import: '"); idx != -1 {
+		start := idx + len("failed to find import: '")
+		if end := strings.Index(errMsg[start:], "'"); end != -1 {
+			return errMsg[start : start+end]
+		}
+	}
+	return ""
 }
