@@ -306,7 +306,7 @@ var defaultCliConfig = schema.AtmosConfiguration{
 
 ## Related Documentation
 
-- **Blog Post:** [Modernizing Helmfile EKS Integration](/blog/helmfile-eks-modernization)
+- **Blog Post:** [Modernizing Helmfile EKS Integration](/changelog/helmfile-eks-modernization)
 - **Helmfile Configuration:** `/cli/configuration/components/helmfile`
 - **Identity System:** `/stacks/auth`
 - **PR #1903:** https://github.com/cloudposse/atmos/pull/1903

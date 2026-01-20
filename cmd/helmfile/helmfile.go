@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/helmfile/generate"
+	"github.com/cloudposse/atmos/cmd/helmfile/source"
 	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -32,6 +33,9 @@ func init() {
 
 	// Add generate subcommand from the generate subpackage.
 	helmfileCmd.AddCommand(generate.GenerateCmd)
+
+	// Add source subcommand from the source subpackage.
+	helmfileCmd.AddCommand(source.GetSourceCommand())
 
 	// Register this command with the registry.
 	internal.Register(&HelmfileCommandProvider{})
