@@ -119,6 +119,9 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 			Margin: uintPtr(1),
 		},
 		List: ansi.StyleList{
+			StyleBlock: ansi.StyleBlock{
+				Indent: uintPtr(2),
+			},
 			LevelIndent: 4,
 		},
 		Heading: ansi.StyleBlock{
@@ -272,4 +275,24 @@ func boolPtr(b bool) *bool {
 
 func uintPtr(u uint) *uint {
 	return &u
+}
+
+// GetListIndentStyle returns a minimal style configuration with only list indentation settings.
+// This is used for ASCII rendering to add list indentation without colors.
+func GetListIndentStyle() ([]byte, error) {
+	style := ansi.StyleConfig{
+		List: ansi.StyleList{
+			StyleBlock: ansi.StyleBlock{
+				Indent: uintPtr(2),
+			},
+			LevelIndent: 4,
+		},
+		Item: ansi.StylePrimitive{
+			BlockPrefix: "• ",
+		},
+		Enumeration: ansi.StylePrimitive{
+			BlockPrefix: ". ",
+		},
+	}
+	return json.Marshal(style)
 }
