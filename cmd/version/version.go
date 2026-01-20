@@ -34,7 +34,7 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 }
 
 // versionCmd represents the version command.
-// Args validator is auto-applied by the command registry for parent commands with subcommands.
+// Args validator is auto-applied by the command registry for commands without PositionalArgsBuilder.
 var versionCmd = &cobra.Command{
 	Use:     "version",
 	Short:   "Display the version of Atmos you are running and check for updates",

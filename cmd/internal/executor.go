@@ -7,12 +7,15 @@ import (
 	"github.com/spf13/cobra"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // Execute runs the Cobra command and converts Cobra errors to sentinel errors.
 // This is the boundary between Cobra's string-based errors and our sentinel errors.
 // The command registry owns both registration and execution of commands.
 func Execute(cmd *cobra.Command) (*cobra.Command, error) {
+	defer perf.Track(nil, "internal.Execute")()
+
 	executedCmd, err := cmd.ExecuteC()
 	if err != nil {
 		err = convertCobraError(err)

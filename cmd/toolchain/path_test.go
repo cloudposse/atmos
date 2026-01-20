@@ -91,9 +91,9 @@ func TestPathCommand_RunE(t *testing.T) {
 		defer cleanup()
 
 		// Reset flags to defaults.
-		pathCmd.Flags().Set("export", "false")
-		pathCmd.Flags().Set("json", "false")
-		pathCmd.Flags().Set("relative", "false")
+		require.NoError(t, pathCmd.Flags().Set("export", "false"))
+		require.NoError(t, pathCmd.Flags().Set("json", "false"))
+		require.NoError(t, pathCmd.Flags().Set("relative", "false"))
 
 		// Call RunE - will return error if no tools are installed.
 		// This exercises:
@@ -114,9 +114,9 @@ func TestPathCommand_RunE(t *testing.T) {
 		defer cleanup()
 
 		// Set export flag.
-		pathCmd.Flags().Set("export", "true")
-		pathCmd.Flags().Set("json", "false")
-		pathCmd.Flags().Set("relative", "false")
+		require.NoError(t, pathCmd.Flags().Set("export", "true"))
+		require.NoError(t, pathCmd.Flags().Set("json", "false"))
+		require.NoError(t, pathCmd.Flags().Set("relative", "false"))
 
 		// This exercises the exportFlag path (line 37-38).
 		err := pathCmd.RunE(pathCmd, []string{})
@@ -130,9 +130,9 @@ func TestPathCommand_RunE(t *testing.T) {
 		defer cleanup()
 
 		// Set json flag.
-		pathCmd.Flags().Set("export", "false")
-		pathCmd.Flags().Set("json", "true")
-		pathCmd.Flags().Set("relative", "false")
+		require.NoError(t, pathCmd.Flags().Set("export", "false"))
+		require.NoError(t, pathCmd.Flags().Set("json", "true"))
+		require.NoError(t, pathCmd.Flags().Set("relative", "false"))
 
 		// This exercises the jsonFlag path (line 35-36).
 		err := pathCmd.RunE(pathCmd, []string{})
@@ -146,9 +146,9 @@ func TestPathCommand_RunE(t *testing.T) {
 		defer cleanup()
 
 		// Set both flags - json should take precedence.
-		pathCmd.Flags().Set("export", "true")
-		pathCmd.Flags().Set("json", "true")
-		pathCmd.Flags().Set("relative", "false")
+		require.NoError(t, pathCmd.Flags().Set("export", "true"))
+		require.NoError(t, pathCmd.Flags().Set("json", "true"))
+		require.NoError(t, pathCmd.Flags().Set("relative", "false"))
 
 		// This exercises the precedence logic (line 35-39).
 		err := pathCmd.RunE(pathCmd, []string{})
@@ -162,9 +162,9 @@ func TestPathCommand_RunE(t *testing.T) {
 		defer cleanup()
 
 		// Set relative flag.
-		pathCmd.Flags().Set("export", "false")
-		pathCmd.Flags().Set("json", "false")
-		pathCmd.Flags().Set("relative", "true")
+		require.NoError(t, pathCmd.Flags().Set("export", "false"))
+		require.NoError(t, pathCmd.Flags().Set("json", "false"))
+		require.NoError(t, pathCmd.Flags().Set("relative", "true"))
 
 		// This exercises the relativeFlag path (line 32, 41).
 		err := pathCmd.RunE(pathCmd, []string{})
