@@ -449,6 +449,20 @@ func FormatError(text string) string {
 	return f.Error(text)
 }
 
+// FormatInline renders inline markdown (backticks, bold, etc.) without icons or newlines.
+// Use this for spinner progress messages or other single-line styled text.
+func FormatInline(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		return text
+	}
+	rendered, err := f.renderToastMarkdownInline(text)
+	if err != nil {
+		return text
+	}
+	return rendered
+}
+
 // Badge returns a styled badge with the given text, background color, and foreground color.
 // Badges are compact labels with background styling, typically used for status indicators.
 // The background and foreground should be hex colors (e.g., "#FF9800", "#000000").
@@ -875,36 +889,25 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 	return result, nil
 }
 
-// renderToastMarkdown renders markdown with a compact stylesheet for toast messages.
-func (f *formatter) renderToastMarkdown(content string) (string, error) {
-	// Build glamour options with compact toast stylesheet
+// renderToastMarkdownFromStylesheet renders markdown using a provided stylesheet getter.
+// This is the shared implementation used by both renderToastMarkdown and renderToastMarkdownInline.
+func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesheet func(string) ([]byte, error), wordWrap int) (string, error) {
 	var opts []glamour.TermRendererOption
 
-	// Enable word wrap for toast messages to respect terminal width.
-	// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
-	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
-	if maxWidth == 0 {
-		// Use terminal width if available
-		termWidth := f.terminal.Width(terminal.Stdout)
-		if termWidth > 0 {
-			maxWidth = termWidth
-		}
+	if wordWrap > 0 {
+		opts = append(opts, glamour.WithWordWrap(wordWrap))
+		opts = append(opts, glamour.WithPreservedNewLines())
+	} else {
+		opts = append(opts, glamour.WithWordWrap(0))
 	}
-	if maxWidth > 0 {
-		opts = append(opts, glamour.WithWordWrap(maxWidth))
-	}
-	opts = append(opts, glamour.WithPreservedNewLines())
 
-	// Get theme-based glamour style and modify it for compact toast rendering
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
 			themeName = "default"
 		}
-		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
+		glamourStyle, err := getStylesheet(themeName)
 		if err == nil {
-			// Modify the theme style to have zero margins
-			// Parse the existing theme and override margin settings
 			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
 		}
 	} else {
@@ -913,18 +916,42 @@ func (f *formatter) renderToastMarkdown(content string) (string, error) {
 
 	renderer, err := glamour.NewTermRenderer(opts...)
 	if err != nil {
-		// Degrade gracefully: return plain content if renderer creation fails
+		// Degrade gracefully: return plain content if renderer creation fails.
 		return content, err
 	}
 	defer renderer.Close()
 
 	rendered, err := renderer.Render(content)
 	if err != nil {
-		// Degrade gracefully: return plain content if rendering fails
+		// Degrade gracefully: return plain content if rendering fails.
 		return content, err
 	}
 
 	return rendered, nil
+}
+
+// renderToastMarkdown renders markdown with the standard toast stylesheet.
+// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
+func (f *formatter) renderToastMarkdown(content string) (string, error) {
+	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 {
+		// Use terminal width if available.
+		termWidth := f.terminal.Width(terminal.Stdout)
+		if termWidth > 0 {
+			maxWidth = termWidth
+		}
+	}
+	return f.renderToastMarkdownFromStylesheet(content, theme.GetGlamourStyleForTheme, maxWidth)
+}
+
+// renderToastMarkdownInline renders markdown with the inline stylesheet (no newlines).
+// This is designed for single-line output like spinner progress messages.
+func (f *formatter) renderToastMarkdownInline(content string) (string, error) {
+	rendered, err := f.renderToastMarkdownFromStylesheet(content, theme.GetGlamourStyleForInline, 0)
+	if err != nil {
+		return content, err
+	}
+	return strings.TrimSpace(rendered), nil
 }
 
 // Semantic formatting - all use toastMarkdown for markdown rendering and icon styling.
