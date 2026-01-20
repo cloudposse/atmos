@@ -820,7 +820,8 @@ func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
 	}
 
 	// Check global env section in atmos.yaml.
-	if globalEnvDir, inGlobalEnv := atmosConfig.Env["TF_PLUGIN_CACHE_DIR"]; inGlobalEnv {
+	envVars := atmosConfig.GetCaseSensitiveEnvVars()
+	if globalEnvDir, inGlobalEnv := envVars["TF_PLUGIN_CACHE_DIR"]; inGlobalEnv {
 		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
 			return globalEnvDir
 		}

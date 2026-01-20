@@ -31,10 +31,12 @@ func NewWorkflowCommandRunner(_ *schema.RetryConfig) *WorkflowCommandRunner {
 }
 
 // RunShell executes a shell command using ExecuteShell.
+// Note: atmosConfig is nil here because workflows call RunAtmos for atmos commands,
+// and shell commands don't need atmosConfig for basic execution.
 func (r *WorkflowCommandRunner) RunShell(command, name, dir string, env []string, dryRun bool) error {
 	defer perf.Track(nil, "exec.WorkflowCommandRunner.RunShell")()
 
-	return ExecuteShell(command, name, dir, env, dryRun)
+	return ExecuteShell(nil, command, name, dir, env, dryRun)
 }
 
 // RunAtmos executes an atmos command using ExecuteShellCommand.
