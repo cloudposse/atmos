@@ -144,7 +144,8 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 		opts.Component = args[0]
 	}
 
-	configInfo := schema.ConfigAndStacksInfo{Stack: opts.Stack}
+	configInfo := buildConfigAndStacksInfo(&opts.Flags)
+	configInfo.Stack = opts.Stack
 	atmosConfig, err := initCliConfigForSources(configInfo, true)
 	if err != nil {
 		return nil, wrapSourcesConfigError(err, opts.Stack)
