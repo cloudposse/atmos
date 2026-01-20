@@ -153,7 +153,7 @@ Default built-in registries:
 
 Use 'atmos toolchain registry list aqua' to see tools in the Aqua registry.
 `
-	_ = ui.MarkdownMessage(message)
+	ui.MarkdownMessage(message)
 
 	return nil
 }
@@ -190,12 +190,12 @@ func displayToolsTable(params *displayTableParams) error {
 	// Show info toast before pager content.
 	if end == total {
 		// Showing all tools.
-		_ = ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
+		ui.Infof("Showing **%d tools** from registry `%s` (%s)", total, registryName, meta.Type)
 	} else {
 		// Showing a subset.
-		_ = ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
+		ui.Infof("Showing **%d-%d** of **%d tools** from registry `%s` (%s)", start, end, total, registryName, meta.Type)
 	}
-	_ = ui.Writef("Source: %s\n\n", meta.Source)
+	ui.Writef("Source: %s\n\n", meta.Source)
 
 	// Get table content.
 	tableContent := buildToolsTable(tools)
@@ -208,9 +208,9 @@ func displayToolsTable(params *displayTableParams) error {
 	}
 
 	// Show helpful hints after pager closes (so they're visible).
-	_ = ui.Writeln("")
-	_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
-	_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+	ui.Writeln("")
+	ui.Hintf("Use `atmos toolchain info <tool>` for details")
+	ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
 
 	return nil
 }
@@ -242,7 +242,7 @@ func listRegistryTools(ctx context.Context, registryName string, opts *ListOptio
 	}
 
 	if len(tools) == 0 {
-		_ = ui.Infof("No tools found in registry '%s'", registryName)
+		ui.Infof("No tools found in registry '%s'", registryName)
 		return nil
 	}
 
@@ -293,7 +293,7 @@ func loadToolVersionsAndInstaller() (*toolchain.ToolVersions, *toolchain.Install
 	toolVersionsFile := toolchain.GetToolVersionsFilePath()
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
-		_ = ui.Warningf("Could not load .tool-versions: %v", err)
+		ui.Warningf("Could not load .tool-versions: %v", err)
 	}
 	return toolVersions, installer
 }

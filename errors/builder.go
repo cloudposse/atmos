@@ -140,6 +140,21 @@ func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 	return b
 }
 
+// WithCausef wraps the builder's error with a formatted cause message.
+// This is a convenience method that creates a new error from the format string
+// and passes it to WithCause.
+//
+// Example:
+//
+//	return errUtils.Build(errUtils.ErrInvalidStack).
+//	    WithCausef("stack '%s' does not exist", stackName).
+//	    WithHint("Check your stack configuration").
+//	    Err()
+func (b *ErrorBuilder) WithCausef(format string, args ...interface{}) *ErrorBuilder {
+	//nolint:err113 // WithCausef intentionally creates dynamic errors for cause messages.
+	return b.WithCause(fmt.Errorf(format, args...))
+}
+
 // Err finalizes and returns the enriched error.
 func (b *ErrorBuilder) Err() error {
 	if b.err == nil {
