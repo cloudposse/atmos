@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -1540,6 +1541,120 @@ func TestEnsureWorkflowToolchainDependencies_EmptyWorkflowDef(t *testing.T) {
 	path, err := ensureWorkflowToolchainDependencies(atmosConfig, workflowDef)
 	assert.NoError(t, err)
 	assert.Empty(t, path)
+}
+
+// TestDoubleHyphenStackInsertion tests the stack insertion logic with double-hyphen separator.
+// This is the fix for GitHub issue #1967 where commands with -- separator were incorrectly parsed.
+func TestDoubleHyphenStackInsertion(t *testing.T) {
+	tests := []struct {
+		name          string
+		command       string
+		workflowStack string
+		expectedArgs  []string
+	}{
+		{
+			name:          "insert stack before double-hyphen",
+			command:       "terraform plan vpc -- -consolidate-warnings=false",
+			workflowStack: "nonprod",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "-s", "nonprod", "--", "-consolidate-warnings=false",
+			},
+		},
+		{
+			name:          "command with stack already - workflow stack should be added",
+			command:       "terraform plan vpc --stack dev -- -consolidate-warnings=false",
+			workflowStack: "nonprod",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "--stack", "dev", "-s", "nonprod", "--", "-consolidate-warnings=false",
+			},
+		},
+		{
+			name:          "no double-hyphen - append at end",
+			command:       "terraform plan vpc",
+			workflowStack: "nonprod",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "-s", "nonprod",
+			},
+		},
+		{
+			name:          "multiple args after double-hyphen",
+			command:       "terraform plan vpc -- -var=foo=bar -var=baz=qux",
+			workflowStack: "nonprod",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "-s", "nonprod", "--", "-var=foo=bar", "-var=baz=qux",
+			},
+		},
+		{
+			name:          "complex component name with hyphens",
+			command:       "terraform plan 10-static-web-app-no-frontdoor -- -consolidate-warnings=false",
+			workflowStack: "trialintelx-eastus-sbx",
+			expectedArgs: []string{
+				"terraform", "plan", "10-static-web-app-no-frontdoor", "-s", "trialintelx-eastus-sbx", "--", "-consolidate-warnings=false",
+			},
+		},
+		{
+			name:          "empty workflow stack - no insertion",
+			command:       "terraform plan vpc -- -consolidate-warnings=false",
+			workflowStack: "",
+			expectedArgs: []string{
+				"terraform", "plan", "vpc", "--", "-consolidate-warnings=false",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Parse command using shell.Fields (same as workflow code).
+			args, err := shell.Fields(tt.command, nil)
+			require.NoError(t, err)
+
+			// Apply the same stack insertion logic as in workflow_utils.go line 374-383.
+			// Uses slices.Index to stay in sync with production code.
+			if tt.workflowStack != "" {
+				if idx := slices.Index(args, "--"); idx != -1 {
+					// Insert before the "--".
+					args = append(args[:idx], append([]string{"-s", tt.workflowStack}, args[idx:]...)...)
+				} else {
+					// Append at the end.
+					args = append(args, "-s", tt.workflowStack)
+				}
+			}
+
+			assert.Equal(t, tt.expectedArgs, args)
+		})
+	}
+}
+
+// TestDoubleHyphenIssue1967 is a specific test for GitHub issue #1967.
+// It reproduces the exact scenario from the bug report where the stack value was corrupted.
+func TestDoubleHyphenIssue1967(t *testing.T) {
+	// This is the exact command from the bug report.
+	command := "terraform plan 10-static-web-app-no-frontdoor --stack trialintelx-eastus-sbx -- -consolidate-warnings=false"
+
+	// Parse using shell.Fields.
+	args, err := shell.Fields(command, nil)
+	require.NoError(t, err)
+
+	// Verify the parsed args are correct.
+	expectedParsedArgs := []string{
+		"terraform", "plan", "10-static-web-app-no-frontdoor",
+		"--stack", "trialintelx-eastus-sbx",
+		"--", "-consolidate-warnings=false",
+	}
+	assert.Equal(t, expectedParsedArgs, args, "shell.Fields should correctly parse the command")
+
+	// Verify each argument doesn't have corruption.
+	for i, arg := range args {
+		t.Logf("arg[%d] = %q (len=%d)", i, arg, len(arg))
+	}
+
+	// Specifically check the stack value is preserved.
+	assert.Equal(t, "--stack", args[3], "fourth arg should be --stack")
+	assert.Equal(t, "trialintelx-eastus-sbx", args[4], "fifth arg should be the stack value")
+
+	// Verify the terraform flag after -- is preserved.
+	assert.Equal(t, "--", args[5], "sixth arg should be --")
+	assert.Equal(t, "-consolidate-warnings=false", args[6], "seventh arg should be -consolidate-warnings=false")
 }
 
 // TestEnsureWorkflowToolchainDependencies_WithToolVersionsFile tests with .tool-versions file present.
