@@ -16,14 +16,23 @@ Learn more about [Locals](https://atmos.tools/core-concepts/stacks/locals/).
 ```shell
 cd examples/locals
 
-# See how locals are resolved for dev
+# View resolved locals for `dev` stack
+atmos describe locals --stack dev
+
+# View resolved locals for `prod` stack
+atmos describe locals --stack prod
+
+# View resolved variables for the component in `dev` stack
+atmos list vars myapp --stack dev
+
+# View resolved variables for the component in `prod` stack
+atmos list vars myapp --stack prod
+
+# View full component configuration in `dev` stack
 atmos describe component myapp -s dev
 
-# Compare with prod (different values, same pattern)
+# View full component configuration in `prod` stack
 atmos describe component myapp -s prod
-
-# View all resolved locals
-atmos describe locals myapp -s dev
 ```
 
 ## Example Output
@@ -86,13 +95,13 @@ locals:
 Locals are scoped to the file where they are defined. This means:
 
 - Locals defined in `dev.yaml` cannot be accessed from other files.
-- Each file has its own independent locals scope.
+- Each file has its own independent `locals` scope.
 - Use `vars` or `settings` for values that need to be shared across files.
 
 ## Key Files
 
-| File                                 | Purpose                                |
-|--------------------------------------|----------------------------------------|
-| `stacks/deploy/dev.yaml`             | Development stack with locals          |
-| `stacks/deploy/prod.yaml`            | Production stack with different values |
-| `components/terraform/myapp/main.tf` | Mock component that outputs vars       |
+| File                                 | Purpose                       |
+|--------------------------------------|-------------------------------|
+| `stacks/deploy/dev.yaml`             | Development stack with locals |
+| `stacks/deploy/prod.yaml`            | Production stack with locals  |
+| `components/terraform/myapp/main.tf` | Terraform component           |
