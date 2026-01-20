@@ -16,43 +16,91 @@ Learn more about [Locals](https://atmos.tools/core-concepts/stacks/locals/).
 ```shell
 cd examples/locals
 
-# View resolved locals for `dev` stack
+# View the resolved locals defined in the `dev` stack
 atmos describe locals --stack dev
 
-# View resolved locals for `prod` stack
-atmos describe locals --stack prod
+# View the resolved locals defined in the `prod` stack
+atmos describe locals -s prod
 
-# View resolved variables for the component in `dev` stack
+# View the resolved locals for the `myapp` component in the `dev` stack
+atmos describe locals myapp --stack dev
+
+# View the resolved locals for the `myapp` component in the `prod` stack
+atmos describe locals myapp --stack prod
+
+# View the resolved variables for the `myapp` component in `dev` stack
 atmos list vars myapp --stack dev
 
-# View resolved variables for the component in `prod` stack
+# View the resolved variables for the `myapp` component in `prod` stack
 atmos list vars myapp --stack prod
 
-# View full component configuration in `dev` stack
+# View the full `myapp` component configuration in `dev` stack
 atmos describe component myapp -s dev
 
-# View full component configuration in `prod` stack
+# View the full `myapp` component configuration in `prod` stack
 atmos describe component myapp -s prod
 ```
 
 ## Example Output
 
+The output below shows the resolved `locals` defined in the `dev` stack:
+
 ```shell
-$ atmos describe component myapp -s dev
+$ atmos describe locals --stack dev
 ```
 
-Output (vars section showing resolved locals):
-
 ```yaml
-vars:
-  environment: development
-  full_name: acme-development-dev
-  name: acme
-  tags:
+locals:
+  app_version: v1
+  default_tags:
     Environment: development
     ManagedBy: Atmos
     Namespace: acme
     Team: platform
+  environment: development
+  full_name: acme-development-dev
+  name_prefix: acme-development
+  namespace: acme
+  stage_name: dev
+```
+
+The output below shows the resolved `locals` for the `myapp` component in the `dev` stack:
+
+```shell
+$ atmos describe locals myapp --stack dev
+```
+
+```yaml
+components:
+  terraform:
+    myapp:
+      locals:
+        app_version: v1
+        default_tags:
+          Environment: development
+          ManagedBy: Atmos
+          Namespace: acme
+          Team: platform
+        environment: development
+        full_name: acme-development-dev
+        name_prefix: acme-development
+        namespace: acme
+        stage_name: dev
+```
+
+The output below shows the resolved variables for the `myapp` component in the `dev` stack:
+
+```shell
+$ atmos list vars myapp -s dev
+```
+
+```text
+Key          dev
+────────────────────────────────────
+ environment  development
+ full_name    acme-development-dev
+ name         acme
+ stage        dev
 ```
 
 ## Key Concepts

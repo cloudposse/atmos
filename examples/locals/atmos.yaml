@@ -1,7 +1,4 @@
 # Atmos Locals Example
-#
-# This example demonstrates the locals feature for reducing repetition
-# and building computed values within stack configuration files.
 
 base_path: "."
 
