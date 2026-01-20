@@ -1,0 +1,33 @@
+# Test fixture for YAML functions in locals.
+# This tests that locals can use YAML functions like !env and !exec.
+
+vars:
+  stage: test
+
+# Locals that use YAML functions.
+locals:
+  # Fetch a value from environment variable using !env
+  env_endpoint: !env TEST_GRAFANA_ENDPOINT
+
+  # Fetch another value from environment
+  env_db_host: !env TEST_DB_HOST
+
+  # Static value for comparison
+  static_value: "static-test-value"
+
+  # Build computed values from YAML function results
+  dashboard_url: "https://{{ .locals.env_endpoint }}/d/ray-workers"
+  db_connection: "postgresql://{{ .locals.env_db_host }}:5432/mydb"
+
+components:
+  terraform:
+    # Consumer component that uses locals with YAML function results
+    consumer-component:
+      metadata:
+        component: mock
+      vars:
+        # Use locals that were populated via !env
+        dashboard_url: "{{ .locals.dashboard_url }}"
+        db_connection: "{{ .locals.db_connection }}"
+        env_endpoint: "{{ .locals.env_endpoint }}"
+        static_value: "{{ .locals.static_value }}"

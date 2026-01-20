@@ -20,7 +20,7 @@ func TestExtractAndResolveLocals_Basic(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "myapp", result["name"])
@@ -36,7 +36,7 @@ func TestExtractAndResolveLocals_NoLocalsSection(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Nil(t, result)
@@ -48,7 +48,7 @@ func TestExtractAndResolveLocals_EmptyLocals(t *testing.T) {
 		"locals": map[string]any{},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -66,7 +66,7 @@ func TestExtractAndResolveLocals_WithParentLocals(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "parent-value", result["global"])
@@ -79,7 +79,7 @@ func TestExtractAndResolveLocals_NoSectionWithParent(t *testing.T) {
 		"parent": "value",
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, nil, parentLocals, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, nil, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "value", result["parent"])
@@ -91,7 +91,7 @@ func TestExtractAndResolveLocals_InvalidLocalsType(t *testing.T) {
 		"locals": "not a map",
 	}
 
-	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "locals must be a map")
@@ -106,7 +106,7 @@ func TestExtractAndResolveLocals_CycleDetection(t *testing.T) {
 		},
 	}
 
-	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	_, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
@@ -135,7 +135,7 @@ func TestProcessStackLocals_AllScopes(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -164,7 +164,7 @@ func TestProcessStackLocals_NoLocals(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -207,7 +207,7 @@ func TestResolveComponentLocals(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml", nil)
+	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "us-east-1", result["region"])
@@ -259,7 +259,7 @@ func TestExtractAndResolveLocals_EmptyLocalsWithParent(t *testing.T) {
 		"locals": map[string]any{},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -270,7 +270,7 @@ func TestExtractAndResolveLocals_NilSection(t *testing.T) {
 	// Test with nil section.
 	atmosConfig := &schema.AtmosConfiguration{}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, nil, nil, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, nil, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Nil(t, result)
@@ -286,7 +286,7 @@ func TestProcessStackLocals_GlobalError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve global locals")
@@ -307,7 +307,7 @@ func TestProcessStackLocals_TerraformError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve terraform locals")
@@ -328,7 +328,7 @@ func TestProcessStackLocals_HelmfileError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve helmfile locals")
@@ -349,7 +349,7 @@ func TestProcessStackLocals_PackerError(t *testing.T) {
 		},
 	}
 
-	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	_, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to resolve packer locals")
@@ -369,7 +369,7 @@ func TestProcessStackLocals_OnlyTerraformSection(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -399,7 +399,7 @@ func TestProcessStackLocals_OnlyHelmfileSection(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -426,7 +426,7 @@ func TestProcessStackLocals_OnlyPackerSection(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -451,7 +451,7 @@ func TestProcessStackLocals_NonMapSections(t *testing.T) {
 		"packer":    []string{"not", "a", "map"},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -474,7 +474,7 @@ func TestResolveComponentLocals_NoLocalsSection(t *testing.T) {
 		},
 	}
 
-	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml", nil)
+	result, err := ResolveComponentLocals(atmosConfig, componentConfig, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "value", result["parent"])
@@ -490,7 +490,7 @@ func TestResolveComponentLocals_Error(t *testing.T) {
 		},
 	}
 
-	_, err := ResolveComponentLocals(atmosConfig, componentConfig, nil, "test.yaml", nil)
+	_, err := ResolveComponentLocals(atmosConfig, componentConfig, nil, "test.yaml", nil, "")
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "circular dependency")
@@ -627,7 +627,7 @@ func TestProcessStackLocals_SectionLocalsOverrideGlobal(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -748,7 +748,7 @@ func TestProcessStackLocals_HasFlagsSetCorrectly(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			ctx, err := ProcessStackLocals(atmosConfig, tt.stackConfig, "test.yaml")
+			ctx, err := ProcessStackLocals(atmosConfig, tt.stackConfig, "test.yaml", "")
 
 			require.NoError(t, err)
 			require.NotNil(t, ctx)
@@ -773,7 +773,7 @@ func TestExtractAndResolveLocals_NestedTemplateReferences(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "base", result["a"])
@@ -796,7 +796,7 @@ func TestExtractAndResolveLocals_MixedStaticAndTemplateValues(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, nil, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 	assert.Equal(t, "hello", result["static_string"])
@@ -819,7 +819,7 @@ func TestExtractAndResolveLocals_ParentLocalsNotModified(t *testing.T) {
 		},
 	}
 
-	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil)
+	result, err := ExtractAndResolveLocals(atmosConfig, section, parentLocals, "test.yaml", nil, "")
 
 	require.NoError(t, err)
 
@@ -851,7 +851,7 @@ func TestProcessStackLocals_IsolationBetweenSections(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
@@ -885,7 +885,7 @@ func TestMergeForTemplateContext_EmptyLocals(t *testing.T) {
 		},
 	}
 
-	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml")
+	ctx, err := ProcessStackLocals(atmosConfig, stackConfig, "test.yaml", "")
 	require.NoError(t, err)
 	require.NotNil(t, ctx)
 

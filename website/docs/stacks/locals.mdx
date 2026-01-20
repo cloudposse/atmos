@@ -359,6 +359,128 @@ locals:
   resource_name: "{{ .locals.name }}-{{ .locals.environment | lower | trunc 4 }}"
 ```
 
+## YAML Functions in Locals
+
+Locals support all Atmos [YAML functions](/functions/yaml), enabling dynamic value resolution from external sources:
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `!env` | Environment variables | `!env API_ENDPOINT` |
+| `!exec` | Command execution | `!exec echo hello` |
+| `!store` | Store lookups | `!store secrets/db .password` |
+| `!terraform.state` | Terraform state queries | `!terraform.state vpc .vpc_id` |
+| `!terraform.output` | Terraform outputs | `!terraform.output vpc .vpc_id` |
+
+### Example: Environment Variables
+
+Use `!env` to inject environment-specific values into locals:
+
+```yaml
+locals:
+  # Fetch from environment variables
+  api_endpoint: !env API_ENDPOINT
+  db_host: !env DATABASE_HOST
+
+  # Combine with Go templates
+  api_url: "https://{{ .locals.api_endpoint }}/api/v1"
+  connection_string: "postgresql://app@{{ .locals.db_host }}:5432/mydb"
+
+components:
+  terraform:
+    backend:
+      vars:
+        api_url: "{{ .locals.api_url }}"
+        database_url: "{{ .locals.connection_string }}"
+```
+
+### Example: Cross-Component References
+
+Use `!terraform.state` or `!terraform.output` to reference outputs from other components:
+
+```yaml
+locals:
+  # Fetch VPC outputs from another component's state
+  vpc_id: !terraform.state vpc .vpc_id
+  private_subnets: !terraform.state vpc .private_subnet_ids
+
+  # Build derived values
+  cluster_name: "eks-{{ .locals.vpc_id }}"
+
+components:
+  terraform:
+    eks:
+      vars:
+        vpc_id: "{{ .locals.vpc_id }}"
+        subnet_ids: "{{ .locals.private_subnets }}"
+        name: "{{ .locals.cluster_name }}"
+```
+
+### Example: Secret Management
+
+Use `!store` to fetch secrets from your configured store:
+
+```yaml
+locals:
+  # Fetch secrets from store
+  db_password: !store secrets/database .password
+  api_key: !store secrets/api .key
+
+  # Build connection strings
+  database_url: "postgresql://app:{{ .locals.db_password }}@db.example.com/mydb"
+
+components:
+  terraform:
+    app:
+      vars:
+        database_url: "{{ .locals.database_url }}"
+        api_key: "{{ .locals.api_key }}"
+```
+
+### Example: Dynamic Values with Exec
+
+Use `!exec` to run commands and capture output:
+
+```yaml
+locals:
+  # Get current git commit
+  git_commit: !exec git rev-parse --short HEAD
+
+  # Get current timestamp
+  build_time: !exec date -u +%Y%m%d%H%M%S
+
+  # Build version string
+  version: "{{ .locals.git_commit }}-{{ .locals.build_time }}"
+
+components:
+  terraform:
+    app:
+      vars:
+        image_tag: "{{ .locals.version }}"
+```
+
+### Combining YAML Functions with Templates
+
+YAML functions are resolved first, then Go templates are processed. This allows you to build complex values:
+
+```yaml
+locals:
+  # Step 1: YAML function fetches the base value
+  endpoint: !env GRAFANA_ENDPOINT
+
+  # Step 2: Go template uses the resolved value
+  dashboard_url: "https://{{ .locals.endpoint }}/d/ray-workers"
+  metrics_url: "https://{{ .locals.endpoint }}/api/v1/query"
+
+vars:
+  monitoring:
+    dashboard: "{{ .locals.dashboard_url }}"
+    metrics: "{{ .locals.metrics_url }}"
+```
+
+:::tip YAML Function Processing Order
+YAML functions in locals are processed during stack configuration loading. The resolved values become available to other locals and component vars through Go templates.
+:::
+
 ## Complex Values
 
 Locals can contain maps and lists, not just strings:

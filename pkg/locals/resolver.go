@@ -23,14 +23,21 @@ import (
 	atmostmpl "github.com/cloudposse/atmos/pkg/template"
 )
 
+// YamlFunctionProcessor is a callback for processing YAML function tags in locals.
+// It takes a string value (e.g., "!terraform.state component .output") and returns
+// the resolved value. If the string is not a YAML function, it should return (nil, nil)
+// to indicate no processing was done.
+type YamlFunctionProcessor func(value string) (any, error)
+
 // Resolver handles dependency resolution and cycle detection for locals.
 // It uses topological sorting to determine the order in which locals should be resolved.
 type Resolver struct {
-	locals          map[string]any      // Raw local definitions.
-	resolved        map[string]any      // Resolved local values.
-	dependencies    map[string][]string // Dependency graph: local -> locals it depends on.
-	filePath        string              // Source file path for error messages.
-	templateContext map[string]any      // Additional context available during template resolution (e.g., settings, vars).
+	locals                map[string]any        // Raw local definitions.
+	resolved              map[string]any        // Resolved local values.
+	dependencies          map[string][]string   // Dependency graph: local -> locals it depends on.
+	filePath              string                // Source file path for error messages.
+	templateContext       map[string]any        // Additional context available during template resolution (e.g., settings, vars).
+	yamlFunctionProcessor YamlFunctionProcessor // Optional callback for processing YAML functions.
 }
 
 // NewResolver creates a resolver for a set of locals.
@@ -56,6 +63,16 @@ func (r *Resolver) WithTemplateContext(context map[string]any) *Resolver {
 	if context != nil {
 		r.templateContext = context
 	}
+	return r
+}
+
+// WithYamlFunctionProcessor sets a callback for processing YAML function tags.
+// This allows locals to use YAML functions like !terraform.state and !terraform.output.
+// Returns the resolver for method chaining.
+func (r *Resolver) WithYamlFunctionProcessor(processor YamlFunctionProcessor) *Resolver {
+	defer perf.Track(nil, "locals.Resolver.WithYamlFunctionProcessor")()
+
+	r.yamlFunctionProcessor = processor
 	return r
 }
 
@@ -405,6 +422,22 @@ func (r *Resolver) resolveValue(value any, localName string) (any, error) {
 
 // resolveString resolves template expressions in a string value.
 func (r *Resolver) resolveString(strVal, localName string) (any, error) {
+	// Check for YAML function tags (e.g., !terraform.state, !terraform.output).
+	// Process these first before Go template processing.
+	if r.yamlFunctionProcessor != nil && strings.HasPrefix(strVal, "!") {
+		result, err := r.yamlFunctionProcessor(strVal)
+		if err != nil {
+			return nil, fmt.Errorf("%w %q in %s: %w", errUtils.ErrLocalsYamlFunctionFailed, localName, r.filePath, err)
+		}
+		// If the processor returned a value, use it.
+		// The result could be any type (string, map, slice, etc.).
+		if result != nil {
+			return result, nil
+		}
+		// If result is nil, the string was not a recognized YAML function.
+		// Fall through to normal template processing.
+	}
+
 	// Quick check - if no template delimiters, return as-is.
 	if !strings.Contains(strVal, "{{") {
 		return strVal, nil

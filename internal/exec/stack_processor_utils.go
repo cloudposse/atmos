@@ -14,7 +14,6 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
-	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -54,8 +53,15 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	// Parse raw YAML to extract the structure.
 	// YAML treats template expressions like {{ .locals.X }} as plain strings,
 	// so parsing succeeds even with unresolved templates.
-	var rawConfig map[string]any
-	if err := yaml.Unmarshal([]byte(yamlContent), &rawConfig); err != nil {
+	// Use Atmos's YAML unmarshaling which properly handles custom tags like !terraform.state
+	// by converting them to strings (e.g., "!terraform.state component .output").
+	// Create a default config if nil (UnmarshalYAMLFromFile requires non-nil config).
+	configToUse := atmosConfig
+	if configToUse == nil {
+		configToUse = &schema.AtmosConfiguration{}
+	}
+	rawConfig, err := u.UnmarshalYAMLFromFile[map[string]any](configToUse, yamlContent, filePath)
+	if err != nil {
 		// Provide a helpful hint if the file might contain Go template directives
 		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
 		// as templates first, which allows non-YAML-valid Go template syntax.
@@ -71,7 +77,9 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 	}
 
 	// Use ProcessStackLocals which handles global and section-level scopes.
-	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath)
+	// Note: At this early stage, stack name is not yet determined, so we pass empty string.
+	// YAML functions that require stack context won't work here, but Go templates will.
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, "")
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}

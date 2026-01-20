@@ -1,0 +1,89 @@
+---
+slug: locals-yaml-functions
+title: 'YAML Functions in Locals'
+authors:
+  - aknysh
+tags:
+  - feature
+date: 2026-01-20T00:00:00.000Z
+---
+
+Locals now support YAML functions like `!env`, `!exec`, `!store`, `!terraform.state`, and `!terraform.output`.
+
+<!--truncate-->
+
+## The Feature
+
+Locals can now use all Atmos YAML functions to fetch dynamic values:
+
+- `!env` - Environment variables
+- `!exec` - Command execution
+- `!store` - Store lookups
+- `!terraform.state` - Terraform state queries
+- `!terraform.output` - Terraform outputs from other components
+
+### Example with Environment Variables
+
+```yaml
+locals:
+  api_endpoint: !env API_ENDPOINT
+  api_url: "https://{{ .locals.api_endpoint }}/api/v1"
+
+components:
+  terraform:
+    myapp:
+      vars:
+        api_url: "{{ .locals.api_url }}"
+```
+
+### Example with Terraform State
+
+```yaml
+locals:
+  # Fetch from another component's terraform state
+  vpc_id: !terraform.state vpc .vpc_id
+  subnet_ids: !terraform.state vpc .private_subnet_ids
+
+components:
+  terraform:
+    eks:
+      vars:
+        vpc_id: "{{ .locals.vpc_id }}"
+        subnet_ids: "{{ .locals.subnet_ids }}"
+```
+
+### Example with Store
+
+```yaml
+locals:
+  db_password: !store secrets/database .password
+  connection_string: "postgresql://app:{{ .locals.db_password }}@db.example.com/mydb"
+
+components:
+  terraform:
+    backend:
+      vars:
+        database_url: "{{ .locals.connection_string }}"
+```
+
+## How It Works
+
+1. YAML functions in locals are processed during stack configuration loading
+2. The resolved values are available to other locals and component vars
+3. Locals can combine YAML function results with Go templates
+
+## Use Cases
+
+- **Environment-specific configuration**: Use `!env` to inject environment-specific values
+- **Cross-component references**: Use `!terraform.state` to reference outputs from other components
+- **Secret management**: Use `!store` to fetch secrets from your configured store
+- **Dynamic values**: Use `!exec` to run commands and capture output
+
+## Upgrade
+
+Upgrade Atmos to get this feature. Existing locals configurations continue to work unchanged.
+
+## References
+
+- [Locals Documentation](/stacks/locals)
+- [YAML Functions Documentation](/stacks/yaml-functions)

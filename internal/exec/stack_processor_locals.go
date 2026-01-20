@@ -14,12 +14,14 @@ import (
 // Returns resolved locals map (merged with parent locals) or nil if no locals section.
 // If there's an error resolving locals, it returns the error.
 // The templateContext parameter provides additional context (like settings, vars) available during template resolution.
+// The currentStack parameter is used for YAML function processing in locals.
 func ExtractAndResolveLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	section map[string]any,
 	parentLocals map[string]any,
 	filePath string,
 	templateContext map[string]any,
+	currentStack string,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ExtractAndResolveLocals")()
 
@@ -45,7 +47,12 @@ func ExtractAndResolveLocals(
 	}
 
 	// Resolve locals with dependency ordering and cycle detection.
-	return resolveLocalsWithDependencies(localsMap, parentLocals, filePath, templateContext)
+	opts := localsResolveOptions{
+		atmosConfig:     atmosConfig,
+		currentStack:    currentStack,
+		templateContext: templateContext,
+	}
+	return resolveLocalsWithDependencies(localsMap, parentLocals, filePath, opts)
 }
 
 // copyParentLocals creates a copy of parent locals or returns nil if no parent locals.
@@ -72,10 +79,29 @@ func copyOrCreateParentLocals(parentLocals map[string]any) map[string]any {
 	return result
 }
 
+// localsResolveOptions contains options for resolving locals with dependencies.
+type localsResolveOptions struct {
+	atmosConfig     *schema.AtmosConfiguration
+	currentStack    string
+	templateContext map[string]any
+}
+
 // resolveLocalsWithDependencies resolves locals using dependency ordering and cycle detection.
-// The templateContext parameter provides additional context (like settings, vars) available during template resolution.
-func resolveLocalsWithDependencies(localsMap, parentLocals map[string]any, filePath string, templateContext map[string]any) (map[string]any, error) {
-	resolver := locals.NewResolver(localsMap, filePath).WithTemplateContext(templateContext)
+// The options parameter provides additional context for YAML function and template processing.
+func resolveLocalsWithDependencies(
+	localsMap, parentLocals map[string]any,
+	filePath string,
+	opts localsResolveOptions,
+) (map[string]any, error) {
+	resolver := locals.NewResolver(localsMap, filePath).WithTemplateContext(opts.templateContext)
+
+	// Add YAML function processor when atmosConfig is available.
+	// This enables YAML functions like !terraform.state and !terraform.output in locals.
+	if opts.atmosConfig != nil {
+		yamlFuncProcessor := createYamlFunctionProcessor(opts.atmosConfig, opts.currentStack)
+		resolver = resolver.WithYamlFunctionProcessor(yamlFuncProcessor)
+	}
+
 	resolved, err := resolver.Resolve(parentLocals)
 	if err != nil {
 		return nil, err
@@ -83,13 +109,33 @@ func resolveLocalsWithDependencies(localsMap, parentLocals map[string]any, fileP
 	return resolved, nil
 }
 
+// createYamlFunctionProcessor creates a callback for processing YAML function tags in locals.
+func createYamlFunctionProcessor(atmosConfig *schema.AtmosConfiguration, currentStack string) locals.YamlFunctionProcessor {
+	return func(value string) (any, error) {
+		// Process YAML functions using the existing ProcessCustomYamlTags infrastructure.
+		// We wrap the value in a map and process it.
+		input := map[string]any{"_value": value}
+		result, err := ProcessCustomYamlTags(atmosConfig, input, currentStack, nil, nil)
+		if err != nil {
+			return nil, err
+		}
+		// Extract the processed value.
+		if processedValue, ok := result["_value"]; ok {
+			return processedValue, nil
+		}
+		return nil, nil
+	}
+}
+
 // ProcessStackLocals extracts and resolves all locals from a stack config file.
 // Returns a LocalsContext with resolved locals at each scope (global, terraform, helmfile, packer).
 // Locals can reference .settings and .vars from the same file during template resolution.
+// The currentStack parameter is used for YAML function processing (e.g., !terraform.state).
 func ProcessStackLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	stackConfigMap map[string]any,
 	filePath string,
+	currentStack string,
 ) (*LocalsContext, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStackLocals")()
 
@@ -100,7 +146,7 @@ func ProcessStackLocals(
 	templateContext := buildTemplateContextFromConfig(stackConfigMap)
 
 	// Extract global locals (available to all sections).
-	globalLocals, err := ExtractAndResolveLocals(atmosConfig, stackConfigMap, nil, filePath, templateContext)
+	globalLocals, err := ExtractAndResolveLocals(atmosConfig, stackConfigMap, nil, filePath, templateContext, currentStack)
 	if err != nil {
 		return nil, fmt.Errorf("failed to resolve global locals: %w", err)
 	}
@@ -110,7 +156,7 @@ func ProcessStackLocals(
 	if terraformSection, ok := stackConfigMap[cfg.TerraformSectionName].(map[string]any); ok {
 		// Build section-specific template context (merge global with section-level settings/vars).
 		sectionContext := buildSectionTemplateContext(templateContext, terraformSection)
-		terraformLocals, err := ExtractAndResolveLocals(atmosConfig, terraformSection, ctx.Global, filePath, sectionContext)
+		terraformLocals, err := ExtractAndResolveLocals(atmosConfig, terraformSection, ctx.Global, filePath, sectionContext, currentStack)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve terraform locals: %w", err)
 		}
@@ -127,7 +173,7 @@ func ProcessStackLocals(
 	if helmfileSection, ok := stackConfigMap[cfg.HelmfileSectionName].(map[string]any); ok {
 		// Build section-specific template context (merge global with section-level settings/vars).
 		sectionContext := buildSectionTemplateContext(templateContext, helmfileSection)
-		helmfileLocals, err := ExtractAndResolveLocals(atmosConfig, helmfileSection, ctx.Global, filePath, sectionContext)
+		helmfileLocals, err := ExtractAndResolveLocals(atmosConfig, helmfileSection, ctx.Global, filePath, sectionContext, currentStack)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve helmfile locals: %w", err)
 		}
@@ -144,7 +190,7 @@ func ProcessStackLocals(
 	if packerSection, ok := stackConfigMap[cfg.PackerSectionName].(map[string]any); ok {
 		// Build section-specific template context (merge global with section-level settings/vars).
 		sectionContext := buildSectionTemplateContext(templateContext, packerSection)
-		packerLocals, err := ExtractAndResolveLocals(atmosConfig, packerSection, ctx.Global, filePath, sectionContext)
+		packerLocals, err := ExtractAndResolveLocals(atmosConfig, packerSection, ctx.Global, filePath, sectionContext, currentStack)
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve packer locals: %w", err)
 		}
@@ -330,16 +376,18 @@ func (ctx *LocalsContext) GetForComponentType(componentType string) map[string]a
 // ResolveComponentLocals resolves locals from a config section and merges with parent locals.
 // This is used for component-level locals which inherit from stack-level locals and base components.
 // The templateContext parameter provides additional context (like settings, vars) available during template resolution.
+// The currentStack parameter is used for YAML function processing (e.g., !terraform.state).
 func ResolveComponentLocals(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	parentLocals map[string]any,
 	filePath string,
 	templateContext map[string]any,
+	currentStack string,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ResolveComponentLocals")()
 
-	return ExtractAndResolveLocals(atmosConfig, componentConfig, parentLocals, filePath, templateContext)
+	return ExtractAndResolveLocals(atmosConfig, componentConfig, parentLocals, filePath, templateContext, currentStack)
 }
 
 // StripLocalsFromSection removes the locals section from a map.

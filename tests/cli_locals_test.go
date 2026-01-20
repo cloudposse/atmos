@@ -1271,3 +1271,48 @@ func TestLocalsDescribeLocalsAdvanced(t *testing.T) {
 	assert.Equal(t, "acme-helm", hfLocals["release_prefix"],
 		"release_prefix should be resolved in helmfile section locals")
 }
+
+// =============================================================================
+// YAML Functions in Locals Tests.
+// =============================================================================
+// These tests verify that locals can use YAML functions like !env.
+
+// TestLocalsWithYamlFunctionsEnv tests that locals can use
+// !env to fetch values from environment variables.
+func TestLocalsWithYamlFunctionsEnv(t *testing.T) {
+	// Set environment variables for the test.
+	t.Setenv("TEST_GRAFANA_ENDPOINT", "grafana.test.com")
+	t.Setenv("TEST_DB_HOST", "db.test.com")
+
+	t.Chdir("./fixtures/scenarios/locals-yaml-functions")
+
+	// Describe the consumer component which uses locals with !env.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "consumer-component",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify locals with YAML function results were resolved correctly.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// The env_endpoint local should have fetched the value from environment variable.
+	assert.Equal(t, "grafana.test.com", vars["env_endpoint"],
+		"env_endpoint should be resolved from !env")
+
+	// The dashboard_url local should use the env_endpoint local.
+	assert.Equal(t, "https://grafana.test.com/d/ray-workers", vars["dashboard_url"],
+		"dashboard_url should be computed from env_endpoint local")
+
+	// The db_connection local should be computed from env_db_host.
+	assert.Equal(t, "postgresql://db.test.com:5432/mydb", vars["db_connection"],
+		"db_connection should be computed from env_db_host local")
+
+	// Static value should pass through unchanged.
+	assert.Equal(t, "static-test-value", vars["static_value"],
+		"static_value should be passed through unchanged")
+}
