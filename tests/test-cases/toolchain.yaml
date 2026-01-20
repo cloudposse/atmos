@@ -126,6 +126,7 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "toolchain"
@@ -148,6 +149,7 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "toolchain"
@@ -171,6 +173,7 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "toolchain"
@@ -199,6 +202,7 @@ tests:
     workdir: "fixtures/scenarios/toolchain-registry"
     env:
       ATMOS_VERSION_CHECK_ENABLED: "false"
+      ATMOS_FORCE_TTY: "true"
     command: "atmos"
     args:
       - "toolchain"

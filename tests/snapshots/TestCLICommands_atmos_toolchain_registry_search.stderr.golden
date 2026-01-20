@@ -1,10 +1,9 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-🧪 toolchain is an experimental feature. Learn more
-   https://atmos.tools/experimental
-ℹ Found **20 tools** matching terraform:
+[38;5;59m🧪[0m toolchain[0m[38;2;247;250;252m is an experimental feature. [0m[38;2;155;81;224;1mLearn more[0m[38;2;247;250;252m [0m[38;2;0;163;224;4mhttps://atmos.tools/experimental[0m[38;2;247;250;252m
+[38;5;68mℹ[0m [38;2;247;250;252m[0m[38;2;247;250;252m[0m[38;2;247;250;252mFound [0m[38;2;155;81;224;1m20 tools[0m[38;2;247;250;252m matching [0m[38;2;0;255;255;1m terraform[0m[38;2;247;250;252m:[0m[38;2;247;250;252m
 
-      TOOL                                          TYPE                REGISTRY        
-────────────────────────────────────────────────────────────────────────────────────────
+ [1m   [0m  [1mTOOL                                        [0m  [1mTYPE              [0m  [1mREGISTRY       [0m 
+[38;5;62m─────[0m[38;5;62m──────────────────────────────────────────────[0m[38;5;62m────────────────────[0m[38;5;62m─────────────────[0m
        terraform-docs/terraform-docs                 github_release      aqua-public      
       hashicorp/terraform                           http                aqua-public       
       plumber-cd/terraform-backend-git              github_release      aqua-public       
@@ -26,5 +25,5 @@
       kreuzwerker/m1-terraform-provider-helper      github_release      aqua-public       
       terraform-linters/tflint                      github_release      aqua-public       
 
-💡 Use atmos toolchain info <tool> for details
-💡 Use atmos toolchain install <tool>@<version> to install
+[38;5;59m💡[0m [38;5;59m[38;2;247;250;252m[0m[38;2;247;250;252m[0m[38;2;247;250;252mUse [0m[38;2;0;255;255;1m atmos toolchain info <tool>[0m[38;2;247;250;252m for[0m[38;2;247;250;252m details[0m[38;2;247;250;252m[0m
+[38;5;59m💡[0m [38;5;59m[38;2;247;250;252m[0m[38;2;247;250;252m[0m[38;2;247;250;252mUse [0m[38;2;0;255;255;1m atmos toolchain install <tool>@<version>[0m[38;2;247;250;252m to[0m[38;2;247;250;252m install[0m[38;2;247;250;252m[0m

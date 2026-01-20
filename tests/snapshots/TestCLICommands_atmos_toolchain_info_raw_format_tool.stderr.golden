@@ -1,6 +1,5 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-🧪 toolchain is an experimental feature. Learn more
-   https://atmos.tools/experimental
+[38;5;59m🧪[0m toolchain[0m[38;2;247;250;252m is an experimental feature. [0m[38;2;155;81;224;1mLearn more[0m[38;2;247;250;252m [0m[38;2;0;163;224;4mhttps://atmos.tools/experimental[0m[38;2;247;250;252m
 jqlang/jq (registry: atmos-inline)
 Type: http
 Repository: https://github.com/jqlang/jq
@@ -8,17 +7,17 @@ Repository: https://github.com/jqlang/jq
 No versions installed
 
 Available Versions (latest 10):
-               VERSION      DATE         TITLE                          
-────────────────────────────────────────────────────────────────────────
-               jq-X.X     YYYY-MM-DD   Security fixes                 
-               jq-X.X     YYYY-MM-DD   Releasing                      
-               jq-X.X     YYYY-MM-DD   Security                       
-               jq-X.X       YYYY-MM-DD   What's Changed                 
-               jq-X.X       YYYY-MM-DD   New in this release since 1.5: 
-               jq-X.X       YYYY-MM-DD   jq 1.5                         
-               jq-X.X       YYYY-MM-DD   jq 1.4                         
-               jq-X.X       YYYY-MM-DD   jq 1.3                         
-               jq-X.X       YYYY-MM-DD   jq 1.2                         
-               jq-X.X       YYYY-MM-DD   jq 1.1                         
+ [1m[0m              [1mVERSION[0m      [1mDATE[0m         [1mTITLE[0m                          
+[90m──────────────[0m[90m─────────────[0m[90m─────────────[0m[90m────────────────────────────────[0m
+               jq-X.X     [90mYYYY-MM-DD[0m   Security fixes                 
+               jq-X.X     [90mYYYY-MM-DD[0m   Releasing                      
+               jq-X.X     [90mYYYY-MM-DD[0m   Security                       
+               jq-X.X       [90mYYYY-MM-DD[0m   What's Changed                 
+               jq-X.X       [90mYYYY-MM-DD[0m   New in this release since 1.5: 
+               jq-X.X       [90mYYYY-MM-DD[0m   jq 1.5                         
+               jq-X.X       [90mYYYY-MM-DD[0m   jq 1.4                         
+               jq-X.X       [90mYYYY-MM-DD[0m   jq 1.3                         
+               jq-X.X       [90mYYYY-MM-DD[0m   jq 1.2                         
+               jq-X.X       [90mYYYY-MM-DD[0m   jq 1.1                         
 
-💡 Use atmos toolchain install jqlang/jq@<version> to install
+[38;5;59m💡[0m [38;5;59m[38;2;247;250;252m[0m[38;2;247;250;252m[0m[38;2;247;250;252mUse [0m[38;2;0;255;255;1m atmos toolchain install jqlang/jq@<version>[0m[38;2;247;250;252m to[0m[38;2;247;250;252m install[0m[38;2;247;250;252m[0m
