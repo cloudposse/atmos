@@ -7,24 +7,30 @@
 
 💡 No workflow exists with name no-workflow-exists
 
-💡 Available workflows in test.yaml: - fail
+💡 Available workflows in test.yaml: - double-hyphen-multiple-flags
 
-• fail-with-stack
-• invalid-step-type
-• multi-component-all
-• multi-component-list
-• multi-component-query
-• multi-component-query-double-quotes
-• no-steps
-• pass
-• shell-command-not-found
-• shell-echo-args
-• shell-failure
-• shell-pass
-• shell-var-echo
-• shell-with-path
-• terraform-var-double-quotes
-• terraform-var-equals-in-value
-• terraform-var-multiple
-• terraform-var-single-quotes
-• terraform-var-with-spaces
+  • double-hyphen-stack-precedence
+  • double-hyphen-step-stack
+  • double-hyphen-with-stack
+  • double-hyphen-workflow-stack
+  • fail
+  • fail-with-stack
+  • invalid-step-type
+  • multi-component-all
+  • multi-component-list
+  • multi-component-query
+  • multi-component-query-double-quotes
+  • no-steps
+  • pass
+  • shell-command-not-found
+  • shell-double-hyphen-echo
+  • shell-echo-args
+  • shell-failure
+  • shell-pass
+  • shell-var-echo
+  • shell-with-path
+  • terraform-var-double-quotes
+  • terraform-var-equals-in-value
+  • terraform-var-multiple
+  • terraform-var-single-quotes
+  • terraform-var-with-spaces

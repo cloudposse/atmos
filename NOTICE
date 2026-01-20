@@ -119,7 +119,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/feature/s3/manager
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.20.18/feature/s3/manager/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.20.19/feature/s3/manager/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/configsources
     License: Apache-2.0
@@ -1130,7 +1130,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.3/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.4/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
@@ -1150,7 +1150,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/clipperhouse/displaywidth
     License: MIT
-    URL: https://github.com/clipperhouse/displaywidth/blob/v0.6.1/LICENSE
+    URL: https://github.com/clipperhouse/displaywidth/blob/v0.7.0/LICENSE
 
   - github.com/clipperhouse/stringish
     License: MIT
