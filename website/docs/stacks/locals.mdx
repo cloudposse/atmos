@@ -768,114 +768,13 @@ vars:
 
 ## Limitations
 
-Locals have intentional limitations that stem from their file-scoped design and the order in which Atmos processes stack files.
+Locals are file-scoped by design. Key limitations:
 
-### Cannot Access Inherited Settings, Vars, or Env
+- **Cannot access inherited values**: Locals only see `settings`, `vars`, and `env` from the same file, not from imports.
+- **Cannot be shared across files**: Locals defined in one file aren't accessible from other files.
+- **No lazy evaluation**: All locals resolve during file processing, before imports merge.
 
-Locals can only access `settings`, `vars`, and `env` from the **same file**. Values from imported files are not available during locals resolution:
-
-```yaml
-import:
-  - catalog/defaults  # Has settings.region = us-east-1
-
-locals:
-  # ❌ This fails with "map has no entry for key 'settings'"
-  region: "{{ .settings.region }}"
-```
-
-**Why this happens:** Locals are resolved in step 2 of file processing, before imports are merged in step 3. At the time locals are processed, the inherited values don't exist yet.
-
-**Workarounds:**
-
-1. **Define values in the same file:**
-   ```yaml
-   settings:
-     region: us-east-1  # Define here instead of importing
-
-   locals:
-     domain: "{{ .settings.region }}.example.com"  # ✅ Works
-   ```
-
-2. **Use vars for cross-file values (not locals):**
-   ```yaml
-   import:
-     - catalog/defaults  # Has vars.region = us-east-1
-
-   vars:
-     # vars can access inherited values after merge
-     domain: "{{ .vars.region }}.example.com"  # ✅ Works
-   ```
-
-### Cannot Be Shared Across Files
-
-Locals defined in one file are not accessible from other files. Each file has its own isolated locals scope:
-
-```yaml
-# catalog/base.yaml
-locals:
-  namespace: acme  # Only available in THIS file
-  prefix: "{{ .locals.namespace }}-platform"
-
-# deploy/prod.yaml
-import:
-  - catalog/base
-
-locals:
-  # ❌ Cannot access namespace or prefix from catalog/base.yaml
-  name: "{{ .locals.prefix }}-prod"
-```
-
-**Workaround:** Use `vars` or `settings` for values that need to be shared:
-
-```yaml
-# catalog/base.yaml
-vars:
-  namespace: acme
-  prefix: acme-platform  # Pre-computed, shared via vars
-
-# deploy/prod.yaml
-import:
-  - catalog/base
-
-vars:
-  # ✅ Can access inherited vars
-  name: "{{ .vars.prefix }}-prod"
-```
-
-### No Lazy Evaluation
-
-All locals are resolved eagerly during file processing. There's no way to defer resolution to access values that become available later in the processing pipeline.
-
-This means:
-- Locals cannot reference values from component inheritance chains
-- Locals cannot access the final merged state of vars/settings
-- Locals cannot use values computed during component processing
-
-### No Cross-File Dependency Resolution
-
-Circular dependency detection only works within a single file. If you have implicit dependencies across files (via vars that reference locals), those won't be detected:
-
-```yaml
-# file-a.yaml
-vars:
-  foo: some-value
-
-# file-b.yaml (imports file-a.yaml)
-locals:
-  bar: "{{ .vars.foo }}"  # This works if vars.foo is defined in THIS file
-                           # but NOT if it only comes from file-a.yaml
-```
-
-### Why These Limitations Exist
-
-These limitations are intentional design decisions that provide:
-
-1. **Predictability:** You can understand a file's locals by looking only at that file
-2. **Performance:** Each file is processed independently without waiting for others
-3. **Simplicity:** No complex cross-file dependency graphs to debug
-4. **Encapsulation:** Files are self-contained units with clear boundaries
-
-If you need values shared across files or access to inherited configuration, use `vars` and `settings` which are designed for cross-file inheritance.
+**Workaround:** Use `vars` or `settings` for values that need cross-file access—they properly inherit across imports.
 
 ## Best Practices
 

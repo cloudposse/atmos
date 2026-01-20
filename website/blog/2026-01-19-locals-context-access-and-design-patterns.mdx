@@ -185,59 +185,7 @@ locals:
 
 ## Limitations
 
-While locals are powerful for reducing repetition within a file, they have intentional limitations:
-
-### Cannot Access Inherited Values
-
-Locals can only access `settings`, `vars`, and `env` from the **same file**. Values from imported files are not available:
-
-```yaml
-import:
-  - catalog/defaults  # Has settings.region = us-east-1
-
-locals:
-  # ❌ This fails - settings from imported file not accessible
-  region: "{{ .settings.region }}"
-```
-
-**Why?** Locals are resolved *before* imports are merged. At resolution time, only the current file's context exists.
-
-**Workaround:** Define values in the same file, or use `vars` which properly inherit across imports:
-
-```yaml
-import:
-  - catalog/defaults  # Has vars.region = us-east-1
-
-vars:
-  # ✅ Works - vars can access inherited values after merge
-  domain: "{{ .vars.region }}.example.com"
-```
-
-### Cannot Be Shared Across Files
-
-Locals defined in one file cannot be accessed from other files:
-
-```yaml
-# catalog/base.yaml
-locals:
-  namespace: acme  # Only available in THIS file
-
-# deploy/prod.yaml
-import:
-  - catalog/base
-
-locals:
-  # ❌ Cannot access namespace from imported file
-  name: "{{ .locals.namespace }}-prod"
-```
-
-**Workaround:** Use `vars` or `settings` for values that need to be shared across files.
-
-### No Lazy Evaluation
-
-All locals are resolved during file processing, before template processing of other sections. There's no way to defer resolution to access values that become available later.
-
-For a detailed explanation of these limitations and the architectural reasons behind them, see the [Locals Documentation](/stacks/locals#limitations).
+Locals are file-scoped by design: they can only access values from the same file, not from imports, and cannot be shared across files. For values that need cross-file access, use `vars` or `settings` instead. See the [Locals Documentation](/stacks/locals#limitations) for details.
 
 ## Upgrade
 
