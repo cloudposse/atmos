@@ -158,15 +158,10 @@ func executeOutputWithFormat(atmosConfig *schema.AtmosConfiguration, info *schem
 func executeGitHubOutput(outputs map[string]any, outputFile, outputName string, opts tfoutput.FormatOptions) error {
 	defer perf.Track(nil, "terraform.executeGitHubOutput")()
 
-	// Determine output file - use $GITHUB_OUTPUT if not specified.
+	// Determine output file - use $GITHUB_OUTPUT if available, otherwise stdout.
 	path := outputFile
 	if path == "" {
 		path = ghactions.GetOutputPath()
-		if path == "" {
-			return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-				WithExplanation("`--format=github` requires `GITHUB_OUTPUT` environment variable to be set, or use `--output-file` to specify a file path.").
-				Err()
-		}
 	}
 
 	// Filter to single output if a specific output name was requested.
@@ -190,17 +185,19 @@ func executeGitHubOutput(outputs map[string]any, outputFile, outputName string, 
 			Err()
 	}
 
-	// Write to file (append mode).
-	if err := envfmt.WriteToFile(path, formatted); err != nil {
-		return errUtils.Build(errUtils.ErrTerraformOutputFailed).
-			WithCause(err).
-			WithExplanationf("Failed to write GitHub Actions outputs to %q.", path).
-			Err()
+	// Write to file if path specified, otherwise stdout.
+	if path != "" {
+		if err := envfmt.WriteToFile(path, formatted); err != nil {
+			return errUtils.Build(errUtils.ErrTerraformOutputFailed).
+				WithCause(err).
+				WithExplanationf("Failed to write GitHub Actions outputs to %q.", path).
+				Err()
+		}
+		ui.Successf("Wrote %d outputs to %s", len(outputs), path)
+		return nil
 	}
 
-	// Emit success message to stderr.
-	ui.Successf("Wrote %d outputs to %s", len(outputs), path)
-	return nil
+	return data.Write(formatted)
 }
 
 // extractOutputName extracts the output name from additional args.

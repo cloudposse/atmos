@@ -77,11 +77,20 @@ atmos terraform output vpc -s dev -raw vpc_id
 
 ### GitHub Actions Integration
 
-The `--format=github` option is specifically designed for GitHub Actions workflows. It automatically writes to `$GITHUB_OUTPUT` (unless `--output-file` is specified) and handles multiline values using heredoc syntax:
+The `--format=github` option is specifically designed for GitHub Actions workflows. It formats outputs using heredoc syntax for multiline values and writes to:
+1. `--output-file` if specified
+2. `$GITHUB_OUTPUT` environment variable if set
+3. stdout otherwise (useful for previewing output locally)
 
 ```shell
 # Automatically writes to $GITHUB_OUTPUT in GitHub Actions
 atmos terraform output vpc -s dev --format=github
+
+# Preview output locally (writes to stdout when $GITHUB_OUTPUT is not set)
+atmos terraform output vpc -s dev --format=github
+
+# Export a single output to GitHub Actions
+atmos terraform output vpc -s dev vpc_id --format=github
 
 # Or specify a custom output file
 atmos terraform output vpc -s dev --format=github --output-file=outputs.txt
@@ -200,7 +209,7 @@ Scalar-only formats (`env`, `dotenv`, `bash`, `csv`, `tsv`) will return an error
         | `bash` | `export key='value'` | Shell sourcing with `eval $(...)` |
         | `csv` | `key,value` | Spreadsheets, data processing |
         | `tsv` | `key<tab>value` | Tab-delimited for easy parsing |
-        | `github` | `key=value` or heredoc | GitHub Actions step outputs (`$GITHUB_OUTPUT`) |
+        | `github` | `key=value` or heredoc | GitHub Actions step outputs (writes to `$GITHUB_OUTPUT` if set, otherwise stdout) |
 
         ```shell
         atmos terraform output vpc -s dev --format=env
