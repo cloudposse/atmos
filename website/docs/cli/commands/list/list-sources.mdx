@@ -74,7 +74,7 @@ Example output:
 STACK              TYPE        COMPONENT    URI                                                           VERSION
 plat-ue2-dev       terraform   eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
 plat-ue2-dev       terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
-plat-ue2-dev       helmfile    nginx        github.com/cloudposse/helmfiles//releases/nginx               1.0.0
+plat-ue2-dev       helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx               1.0.0
 plat-ue2-prod      terraform   eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.451.0
 plat-ue2-prod      terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
 ```
@@ -90,7 +90,7 @@ When filtering by stack, the Stack column is omitted:
 TYPE        COMPONENT    URI                                                           VERSION
 terraform   eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
 terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
-helmfile    nginx        github.com/cloudposse/helmfiles//releases/nginx               1.0.0
+helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx               1.0.0
 ```
 
 ### List Sources for a Specific Component
@@ -124,7 +124,7 @@ atmos list sources --format csv
 
 <dl>
   <dt>`component` <em>(optional)</em></dt>
-  <dd>Filter results to a specific component name. When provided, only shows sources for components matching this name across all stacks.</dd>
+  <dd>Filter results to a specific component name or folder (`metadata.component`). When provided, only shows matching sources across all stacks.</dd>
 </dl>
 
 ## Flags

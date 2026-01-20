@@ -127,11 +127,15 @@ func initSourcesCommand(cmd *cobra.Command, args []string) (*SourcesOptions, err
 	v := viper.GetViper()
 
 	if err := checkAtmosConfig(cmd, v); err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithCause(err).
+			Err()
 	}
 
 	if err := sourcesParser.BindFlagsToViper(cmd, v); err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrInvalidConfig).
+			WithCause(err).
+			Err()
 	}
 
 	opts := &SourcesOptions{
