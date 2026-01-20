@@ -1,10 +1,9 @@
 **Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
-🧪 toolchain is an experimental feature. Learn more
-   https://atmos.tools/experimental
+[38;5;59m🧪[0m toolchain[0m[38;2;247;250;252m is an experimental feature. [0m[38;2;155;81;224;1mLearn more[0m[38;2;247;250;252m [0m[38;2;0;163;224;4mhttps://atmos.tools/experimental[0m[38;2;247;250;252m
 aws/aws-cli (registry: atmos-inline)
 Type: http
 Repository: https://github.com/aws/aws-cli
 
 No versions installed
 
-💡 Use atmos toolchain install aws/aws-cli@<version> to install
+[38;5;59m💡[0m [38;5;59m[38;2;247;250;252m[0m[38;2;247;250;252m[0m[38;2;247;250;252mUse [0m[38;2;0;255;255;1m atmos toolchain install aws/aws-cli@<version>[0m[38;2;247;250;252m to[0m[38;2;247;250;252m install[0m[38;2;247;250;252m[0m
