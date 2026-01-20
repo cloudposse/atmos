@@ -151,6 +151,63 @@ func convertToAnyMap(envVars map[string]string) map[string]any {
 	return result
 }
 
+// formatDotenv formats environment variables in .env format.
+func formatDotenv(envVars map[string]string) string {
+	keys := sortedKeys(envVars)
+	var sb strings.Builder
+	for _, key := range keys {
+		value := envVars[key]
+		// Use the same safe single-quoted escaping as bash output.
+		safe := strings.ReplaceAll(value, "'", "'\\''")
+		sb.WriteString(fmt.Sprintf("%s='%s'\n", key, safe))
+	}
+	return sb.String()
+}
+
+// formatGitHub formats environment variables for GitHub Actions $GITHUB_ENV file.
+// Uses KEY=value format without quoting. For multiline values, GitHub uses heredoc syntax.
+func formatGitHub(envVars map[string]string) string {
+	keys := sortedKeys(envVars)
+	var sb strings.Builder
+	for _, key := range keys {
+		value := envVars[key]
+		// Check if value contains newlines - use heredoc syntax.
+		// Use ATMOS_EOF_ prefix to avoid collision with values containing "EOF".
+		if strings.Contains(value, "\n") {
+			sb.WriteString(fmt.Sprintf("%s<<ATMOS_EOF_%s\n%s\nATMOS_EOF_%s\n", key, key, value, key))
+		} else {
+			sb.WriteString(fmt.Sprintf("%s=%s\n", key, value))
+		}
+	}
+	return sb.String()
+}
+
+// writeEnvToFile writes formatted environment variables to a file (append mode).
+func writeEnvToFile(envVars map[string]string, filePath string, formatter func(map[string]string) string) error {
+	// Open file in append mode, create if doesn't exist.
+	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFileMode)
+	if err != nil {
+		return fmt.Errorf("%w: '%s': %w", errUtils.ErrOpenFile, filePath, err)
+	}
+	defer f.Close()
+
+	content := formatter(envVars)
+	if _, err := f.WriteString(content); err != nil {
+		return fmt.Errorf("%w: '%s': %w", errUtils.ErrWriteFile, filePath, err)
+	}
+	return nil
+}
+
+// sortedKeys returns the keys of a map sorted alphabetically.
+func sortedKeys(m map[string]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 func init() {
 	// Create parser with env-specific flags using functional options.
 	envParser = flags.NewStandardParser(
