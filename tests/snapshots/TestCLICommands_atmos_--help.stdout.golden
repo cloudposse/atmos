@@ -21,7 +21,7 @@ AVAILABLE COMMANDS
 
       about                                  Learn about Atmos
       atlantis [command]                     Generate and manage Atlantis configurations
-      auth [command]                         Authenticate with cloud providers and identity services.
+      auth [command] [EXPERIMENTAL]          Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources
       completion [command]                   Generate autocompletion scripts for Bash, Zsh, Fish, and PowerShell
       describe [command]                     Show details about Atmos configurations and components

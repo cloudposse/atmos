@@ -4,16 +4,16 @@
 
 Valid subcommands are:
 
-• console
-• env
-• exec
-• list
-• login
-• logout
-• shell
-• user
-• validate
-• whoami
+  • console
+  • env
+  • exec
+  • list
+  • login
+  • logout
+  • shell
+  • user
+  • validate
+  • whoami
 
 ## Hints
 
