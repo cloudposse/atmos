@@ -452,8 +452,8 @@ func TestCopyToTargetWithPatterns(t *testing.T) {
 		IncludedPaths: []string{"**/*.test"},
 		ExcludedPaths: []string{"**/skip.test"},
 	}
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
-		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
+	if err := CopyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+		t.Fatalf("CopyToTargetWithPatterns failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "sub", "keep.test")); os.IsNotExist(err) {
 		t.Errorf("Expected keep.test to exist")
@@ -475,8 +475,8 @@ func TestCopyToTargetWithPatterns_NoPatterns(t *testing.T) {
 		IncludedPaths: []string{},
 		ExcludedPaths: []string{},
 	}
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
-		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
+	if err := CopyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+		t.Fatalf("CopyToTargetWithPatterns failed: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(dstDir, "file.txt")); os.IsNotExist(err) {
 		t.Errorf("Expected file.txt to exist in destination")
@@ -499,8 +499,8 @@ func TestCopyToTargetWithPatterns_LocalFileBranch(t *testing.T) {
 		IncludedPaths: []string{"**/*.txt"},
 		ExcludedPaths: []string{},
 	}
-	if err := copyToTargetWithPatterns(srcDir, targetFile, dummy, true); err != nil {
-		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
+	if err := CopyToTargetWithPatterns(srcDir, targetFile, dummy, true); err != nil {
+		t.Fatalf("CopyToTargetWithPatterns failed: %v", err)
 	}
 	if _, err := os.Stat(targetFile); os.IsNotExist(err) {
 		t.Errorf("Expected %q to exist in destination", targetFile)
@@ -728,8 +728,8 @@ func TestCopyToTargetWithPatterns_UseCpCopy(t *testing.T) {
 		IncludedPaths: []string{},
 		ExcludedPaths: []string{},
 	}
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
-		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
+	if err := CopyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+		t.Fatalf("CopyToTargetWithPatterns failed: %v", err)
 	}
 	if !called {
 		t.Errorf("Expected cp.Copy to be called, but it was not")
@@ -1012,8 +1012,8 @@ func TestCopyToTargetWithPatterns_InclusionOnly(t *testing.T) {
 		ExcludedPaths: []string{}, // No exclusions
 	}
 
-	if err := copyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
-		t.Fatalf("copyToTargetWithPatterns failed: %v", err)
+	if err := CopyToTargetWithPatterns(srcDir, dstDir, dummy, false); err != nil {
+		t.Fatalf("CopyToTargetWithPatterns failed: %v", err)
 	}
 
 	// Only .md file should be copied.

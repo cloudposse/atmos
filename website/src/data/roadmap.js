@@ -298,6 +298,7 @@ export const roadmapConfig = {
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
         { label: 'Version constraints for vendor updates', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/vendor', changelog: 'version-constraint-validation', version: 'v1.201.0', description: 'Semantic versioning constraints to control which versions are pulled during vendor updates.', benefits: 'Control upgrade behavior. Pin to major versions or allow patches automatically.' },
+        { label: 'Vendor diff command', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/vendor/diff', changelog: 'vendor-update-and-diff', description: 'Show Git diffs between vendored component versions to preview changes before updating.', category: 'featured', priority: 'high', benefits: 'Review exactly what changed in upstream components before pulling updates. Make informed upgrade decisions.' },
         { label: 'Vendor registry pattern migration', status: 'in-progress', quarter: 'q4-2025', pr: 1889, description: 'Refactoring vendoring to use a pluggable registry pattern for different source types.', benefits: 'Add new source types (OCI, custom registries) without modifying core vendoring code.' },
         { label: 'Just-in-time vendoring', status: 'shipped', quarter: 'q4-2025', pr: 1877, changelog: 'terraform-source-provisioner', docs: '/cli/commands/terraform/source', description: 'Automatically vendor components on first use—no separate vendor step needed.', category: 'featured', priority: 'high', benefits: 'Reference a component and deploy. No manual vendor step or CI job required.', experimental: true },
         { label: 'Component workdir provisioning', status: 'shipped', quarter: 'q4-2025', pr: 1876, changelog: 'component-workdir-isolation', description: 'Isolated working directories for each component instance with `atmos terraform workdir` commands to manage them—eliminating conflicts when multiple instances share the same component source.', benefits: 'Enables concurrent component execution and just-in-time vendoring. Multiple component instances no longer conflict by overwriting each other in the same directory. Use list, describe, show, and clean subcommands to inspect and manage workdirs.', experimental: true },
@@ -305,6 +306,7 @@ export const roadmapConfig = {
       ],
       issues: [],
       prs: [
+        { number: 1694, title: 'Add vendor diff and update commands' },
         { number: 1889, title: 'Migrate vendor to registry pattern + implement --stack flag' },
         { number: 1877, title: 'Implement source provisioner for JIT component vendoring' },
         { number: 1876, title: 'Implement component workdir provisioning and CRUD commands' },

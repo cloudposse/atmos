@@ -59,7 +59,7 @@ func TestProcessOciImage_InvalidReference(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
 	// Test with invalid image reference.
-	err := processOciImage(atmosConfig, "invalid::image//name", "/tmp/dest")
+	err := ProcessOciImage(atmosConfig, "invalid::image//name", "/tmp/dest")
 
 	assert.Error(t, err)
 	assert.True(t, errors.Is(err, errUtils.ErrInvalidImageReference), "Expected ErrInvalidImageReference, got: %v", err)
@@ -168,24 +168,24 @@ func TestRemoveTempDir_OCIUtils(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Remove the directory.
-	removeTempDir(tempDir)
+	RemoveTempDir(tempDir)
 
 	// Verify directory was removed.
 	_, err = os.Stat(tempDir)
 	assert.True(t, os.IsNotExist(err))
 }
 
-// TestRemoveTempDir_NonExistent tests removeTempDir with non-existent directory.
+// TestRemoveTempDir_NonExistent tests RemoveTempDir with non-existent directory.
 func TestRemoveTempDir_NonExistent(t *testing.T) {
 	// This should not panic when removing a non-existent directory.
 	// Use defer/recover to verify no panic occurs.
 	defer func() {
 		if r := recover(); r != nil {
-			t.Errorf("removeTempDir panicked on non-existent directory: %v", r)
+			t.Errorf("RemoveTempDir panicked on non-existent directory: %v", r)
 		}
 	}()
 
-	removeTempDir("/nonexistent/directory/path")
+	RemoveTempDir("/nonexistent/directory/path")
 
 	// Test passes if no panic occurs.
 	assert.True(t, true, "Function executed without panic on non-existent directory")

@@ -1,4 +1,4 @@
-package exec
+package vendoring
 
 import (
 	"fmt"
@@ -8,19 +8,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/hashicorp/go-getter"
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -128,7 +128,7 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	}
 
 	if model.failedPkg > 0 {
-		return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
+		return fmt.Errorf("%w: %d", errUtils.ErrVendorComponents, model.failedPkg)
 	}
 	return nil
 }
@@ -356,12 +356,12 @@ func downloadAndInstall(p *pkgAtmosVendor, dryRun bool, atmosConfig *schema.Atmo
 			return newInstallError(err, p.name)
 		}
 
-		defer removeTempDir(tempDir)
+		defer exec.RemoveTempDir(tempDir)
 		if err := p.installer(&tempDir, atmosConfig); err != nil {
 			return newInstallError(err, p.name)
 		}
 
-		if err := copyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
+		if err := exec.CopyToTargetWithPatterns(tempDir, p.targetPath, &p.atmosVendorSource, p.sourceIsLocalFile); err != nil {
 			return newInstallError(fmt.Errorf("failed to copy package: %w", err), p.name)
 		}
 		return installedPkgMsg{
@@ -385,7 +385,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 
 	case pkgTypeOci:
 		// Process OCI images
-		if err := processOciImage(atmosConfig, p.uri, *tempDir); err != nil {
+		if err := exec.ProcessOciImage(atmosConfig, p.uri, *tempDir); err != nil {
 			return fmt.Errorf("failed to process OCI image: %w", err)
 		}
 
@@ -397,7 +397,7 @@ func (p *pkgAtmosVendor) installer(tempDir *string, atmosConfig *schema.AtmosCon
 			OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
 		}
 		if p.sourceIsLocalFile {
-			*tempDir = filepath.Join(*tempDir, SanitizeFileName(p.uri))
+			*tempDir = filepath.Join(*tempDir, exec.SanitizeFileName(p.uri))
 		}
 		if err := cp.Copy(p.uri, *tempDir, copyOptions); err != nil {
 			return fmt.Errorf("failed to copy package: %w", err)

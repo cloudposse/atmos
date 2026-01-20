@@ -594,7 +594,7 @@ func TestCopyToTargetWithPatterns_InitFinalTargetError(t *testing.T) {
 
 	s := &schema.AtmosVendorSource{}
 
-	err = copyToTargetWithPatterns(tempDir, targetPath, s, false)
+	err = CopyToTargetWithPatterns(tempDir, targetPath, s, false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "creating target directory")
 }
@@ -609,7 +609,7 @@ func TestCopyToTargetWithPatterns_ProcessIncludedPatternError(t *testing.T) {
 	}
 
 	// Should succeed even with no matches
-	err := copyToTargetWithPatterns(tempDir, dstDir, s, false)
+	err := CopyToTargetWithPatterns(tempDir, dstDir, s, false)
 	assert.NoError(t, err)
 }
 
@@ -632,7 +632,7 @@ func TestCopyToTargetWithPatterns_CopyDirRecursiveError(t *testing.T) {
 	require.NoError(t, err)
 
 	dstDir := filepath.Join(tempDir, "dst2")
-	err = copyToTargetWithPatterns(srcDir, dstDir, s, false)
+	err = CopyToTargetWithPatterns(srcDir, dstDir, s, false)
 	assert.NoError(t, err)
 }
 

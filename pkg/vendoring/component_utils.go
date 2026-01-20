@@ -1,9 +1,8 @@
-package exec
+package vendoring
 
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -12,33 +11,21 @@ import (
 	"text/template"
 	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hairyhenderson/gomplate/v3"
 	"github.com/jfrog/jfrog-client-go/utils/log"
 	cp "github.com/otiai10/copy"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/downloader"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const ociScheme = "oci://"
-
-var (
-	ErrMissingMixinURI             = errors.New("'uri' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMissingMixinFilename        = errors.New("'filename' must be specified for each 'mixin' in the 'component.yaml' file")
-	ErrMixinEmpty                  = errors.New("mixin URI cannot be empty")
-	ErrMixinNotImplemented         = errors.New("local mixin installation not implemented")
-	ErrStackPullNotSupported       = errors.New("command 'atmos vendor pull --stack <stack>' is not supported yet")
-	ErrComponentConfigFileNotFound = errors.New("component vendoring config file does not exist in the folder")
-	ErrFolderNotFound              = errors.New("folder does not exist")
-	ErrInvalidComponentKind        = errors.New("invalid 'kind' in the component vendoring config file. Supported kinds: 'ComponentVendorConfig'")
-	ErrUriMustSpecified            = errors.New("'uri' must be specified in 'source.uri' in the component vendoring config file")
-)
 
 type ComponentSkipFunc func(os.FileInfo, string, string) (bool, error)
 
@@ -52,7 +39,7 @@ func findComponentConfigFile(basePath, fileName string) (string, error) {
 			return configFilePath, nil
 		}
 	}
-	return "", fmt.Errorf("%w:%s", ErrComponentConfigFileNotFound, basePath)
+	return "", fmt.Errorf("%w:%s", errUtils.ErrComponentConfigFileNotFound, basePath)
 }
 
 // ReadAndProcessComponentVendorConfigFile reads and processes the component vendoring config file `component.yaml`.
@@ -85,7 +72,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	}
 
 	if !dirExists {
-		return componentConfig, "", fmt.Errorf("%w:%s", ErrFolderNotFound, componentPath)
+		return componentConfig, "", fmt.Errorf("%w:%s", errUtils.ErrFolderNotFound, componentPath)
 	}
 
 	componentConfigFile, err := findComponentConfigFile(componentPath, strings.TrimSuffix(cfg.ComponentVendorConfigFileName, ".yaml"))
@@ -104,7 +91,7 @@ func ReadAndProcessComponentVendorConfigFile(
 	}
 
 	if componentConfig.Kind != "ComponentVendorConfig" {
-		return componentConfig, "", fmt.Errorf("%w: '%s' in file '%s'", ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
+		return componentConfig, "", fmt.Errorf("%w: '%s' in file '%s'", errUtils.ErrInvalidComponentKind, componentConfig.Kind, cfg.ComponentVendorConfigFileName)
 	}
 
 	return componentConfig, componentPath, nil
@@ -127,7 +114,7 @@ func ExecuteStackVendorInternal(
 ) error {
 	defer perf.Track(nil, "exec.ExecuteStackVendorInternal")()
 
-	return ErrStackPullNotSupported
+	return errUtils.ErrStackPullNotSupported
 }
 
 func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
@@ -153,7 +140,7 @@ func copyComponentToDestination(tempDir, componentPath string, vendorComponentSp
 	componentPath2 := componentPath
 	if sourceIsLocalFile {
 		if filepath.Ext(componentPath) == "" {
-			componentPath2 = filepath.Join(componentPath, SanitizeFileName(uri))
+			componentPath2 = filepath.Join(componentPath, exec.SanitizeFileName(uri))
 		}
 	}
 
@@ -237,12 +224,12 @@ func ExecuteComponentVendorInternal(
 	defer perf.Track(atmosConfig, "exec.ExecuteComponentVendorInternal")()
 
 	if vendorComponentSpec.Source.Uri == "" {
-		return fmt.Errorf("%w:'%s'", ErrUriMustSpecified, cfg.ComponentVendorConfigFileName)
+		return fmt.Errorf("%w:'%s'", errUtils.ErrURIMustBeSpecified, cfg.ComponentVendorConfigFileName)
 	}
 	uri := vendorComponentSpec.Source.Uri
 	// Parse 'uri' template
 	if vendorComponentSpec.Source.Version != "" {
-		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
+		t, err := template.New(fmt.Sprintf("source-uri-%s", vendorComponentSpec.Source.Version)).Funcs(exec.GetSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(vendorComponentSpec.Source.Uri)
 		if err != nil {
 			return err
 		}
@@ -322,11 +309,11 @@ func processComponentMixins(vendorComponentSpec *schema.VendorComponentSpec, com
 	var packages []pkgComponentVendor
 	for _, mixin := range vendorComponentSpec.Mixins {
 		if mixin.Uri == "" {
-			return nil, ErrMissingMixinURI
+			return nil, errUtils.ErrMissingMixinURI
 		}
 
 		if mixin.Filename == "" {
-			return nil, ErrMissingMixinFilename
+			return nil, errUtils.ErrMissingMixinFilename
 		}
 
 		// Parse 'uri' template
@@ -380,7 +367,7 @@ func parseMixinURI(mixin *schema.VendorComponentMixins) (string, error) {
 		return mixin.Uri, nil
 	}
 
-	tmpl, err := template.New("mixin-uri").Funcs(getSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
+	tmpl, err := template.New("mixin-uri").Funcs(exec.GetSprigFuncMap()).Funcs(gomplate.CreateFuncs(context.Background(), nil)).Parse(mixin.Uri)
 	if err != nil {
 		return "", err
 	}
@@ -459,11 +446,11 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 		return err
 	}
 
-	defer removeTempDir(tempDir)
+	defer exec.RemoveTempDir(tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
-		tempDir = filepath.Join(tempDir, SanitizeFileName(p.uri))
+		tempDir = filepath.Join(tempDir, exec.SanitizeFileName(p.uri))
 
 		opts := []downloader.GoGetterOption{}
 		if p.vendorComponentSpec != nil && p.vendorComponentSpec.Source.Retry != nil {
@@ -475,7 +462,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		if err := processOciImage(atmosConfig, p.uri, tempDir); err != nil {
+		if err := exec.ProcessOciImage(atmosConfig, p.uri, tempDir); err != nil {
 			return fmt.Errorf("Failed to process OCI image %s error %w", p.name, err)
 		}
 
@@ -506,7 +493,7 @@ func handlePkgTypeLocalComponent(tempDir string, p *pkgComponentVendor) error {
 
 	tempDir2 := tempDir
 	if p.sourceIsLocalFile {
-		tempDir2 = filepath.Join(tempDir, SanitizeFileName(p.uri))
+		tempDir2 = filepath.Join(tempDir, exec.SanitizeFileName(p.uri))
 	}
 
 	if err := cp.Copy(p.uri, tempDir2, copyOptions); err != nil {
@@ -521,7 +508,7 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		return fmt.Errorf("Failed to create temp directory %w", err)
 	}
 
-	defer removeTempDir(tempDir)
+	defer exec.RemoveTempDir(tempDir)
 
 	switch p.pkgType {
 	case pkgTypeRemote:
@@ -535,17 +522,17 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 
 	case pkgTypeOci:
 		// Download the Image from the OCI-compatible registry, extract the layers from the tarball, and write to the destination directory
-		err = processOciImage(atmosConfig, p.uri, tempDir)
+		err = exec.ProcessOciImage(atmosConfig, p.uri, tempDir)
 		if err != nil {
 			return fmt.Errorf("failed to process OCI image %s error %w", p.name, err)
 		}
 
 	case pkgTypeLocal:
 		if p.uri == "" {
-			return ErrMixinEmpty
+			return errUtils.ErrMixinEmpty
 		}
 		// Implement local mixin installation logic
-		return ErrMixinNotImplemented
+		return errUtils.ErrMixinNotImplemented
 
 	default:
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
