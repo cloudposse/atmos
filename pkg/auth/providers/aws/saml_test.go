@@ -157,6 +157,7 @@ func (s stubSamlMgr) Whoami(context.Context, string) (*types.WhoamiInfo, error) 
 func (s stubSamlMgr) Validate() error                                           { return nil }
 func (s stubSamlMgr) GetDefaultIdentity(_ bool) (string, error)                 { return "", nil }
 func (s stubSamlMgr) ListIdentities() []string                                  { return nil }
+func (s stubSamlMgr) GetIdentityDisplayName(name string) string                 { return name }
 func (s stubSamlMgr) GetProviderForIdentity(string) string                      { return "" }
 func (s stubSamlMgr) GetFilesDisplayPath(string) string                         { return "~/.aws/atmos" }
 func (s stubSamlMgr) GetProviderKindForIdentity(string) (string, error)         { return "", nil }
