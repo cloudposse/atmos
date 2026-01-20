@@ -204,25 +204,30 @@ flowchart TB
     subgraph file1["stacks/deploy/production.yaml"]
         A1[1. Parse YAML]
         A2[2. Resolve locals<br/><i>only sees this file's settings/vars/env</i>]
-        A3[3. Process templates in other sections]
-        A1 --> A2 --> A3
+        A1 --> A2
     end
 
     subgraph file2["stacks/catalog/defaults.yaml (imported)"]
         B1[1. Parse YAML]
         B2[2. Resolve locals<br/><i>only sees this file's settings/vars/env</i>]
-        B3[3. Process templates in other sections]
-        B1 --> B2 --> B3
+        B1 --> B2
     end
 
-    subgraph merge["Merge Phase"]
+    subgraph merge["3. Merge Phase"]
         C1[Merge vars, settings, env, components from all files]
         C2[<i>locals are NOT merged - already resolved per-file</i>]
         C1 --> C2
     end
 
+    subgraph templates["4. Template Processing"]
+        D1[Process templates in vars, settings, etc.]
+        D2[<i>uses fully merged context</i>]
+        D1 --> D2
+    end
+
     file1 --> merge
     file2 --> merge
+    merge --> templates
 ```
 
 This architecture ensures that locals resolution is fast, predictable, and free of cross-file dependencies.
@@ -612,16 +617,16 @@ If a local fails to resolve, check:
    ```
 
 2. **Is the syntax correct?**
-   - Use `{{ .settings.key }}` not `{{ settings.key }}`
-   - Use `{{ .locals.name }}` not `{{ locals.name }}`
+   - Use `{{ .settings.key }}` not `{{ settings.key }}`.
+   - Use `{{ .locals.name }}` not `{{ locals.name }}`.
 
 3. **Are you trying to access imported values?**
-   - Locals cannot access settings/vars from imported files
-   - Use `vars` in the template instead, which inherits across imports
+   - Locals cannot access settings/vars from imported files.
+   - Use `vars` in the template instead, which inherits across imports.
 
 4. **Is there a circular dependency?**
-   - Run with `--logs-level Debug` to see dependency resolution
-   - Error messages show the dependency cycle if detected
+   - Run with `--logs-level Debug` to see dependency resolution.
+   - Error messages show the dependency cycle if detected.
 
 ## Locals vs Vars
 
