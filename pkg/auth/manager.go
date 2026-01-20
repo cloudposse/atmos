@@ -728,11 +728,24 @@ func (m *manager) ResolvePrincipalSetting(identityName, key string) (interface{}
 
 	// Walk chain backwards: current identity → parents (skip index 0 which is provider).
 	for i := len(chain) - 1; i >= 1; i-- {
-		if identity, exists := m.config.Identities[chain[i]]; exists {
-			if val, ok := identity.Principal[key]; ok && val != nil && val != "" {
-				return val, true
-			}
+		identity, exists := m.config.Identities[chain[i]]
+		if !exists {
+			continue
 		}
+		val, ok := identity.Principal[key]
+		if !ok || val == nil {
+			continue
+		}
+		// Use type assertion to safely handle string values.
+		// For strings, skip empty values to allow inheritance from parent.
+		// For non-string types (maps, etc.), any non-nil value is valid.
+		if s, isString := val.(string); isString {
+			if s == "" {
+				continue
+			}
+			return s, true
+		}
+		return val, true
 	}
 	return nil, false
 }
