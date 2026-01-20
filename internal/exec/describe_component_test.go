@@ -595,3 +595,214 @@ func TestFilterComputedFields(t *testing.T) {
 		})
 	}
 }
+
+func TestFilterAbstractComponents(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected []string
+	}{
+		{
+			name:     "nil input returns empty slice",
+			input:    nil,
+			expected: []string{},
+		},
+		{
+			name:     "empty map returns empty slice",
+			input:    map[string]any{},
+			expected: []string{},
+		},
+		{
+			name: "components without metadata are included",
+			input: map[string]any{
+				"vpc": map[string]any{
+					"vars": map[string]any{"enabled": true},
+				},
+				"eks": map[string]any{
+					"vars": map[string]any{"cluster_name": "test"},
+				},
+			},
+			expected: []string{"vpc", "eks"},
+		},
+		{
+			name: "abstract components are excluded",
+			input: map[string]any{
+				"base-component": map[string]any{
+					"metadata": map[string]any{
+						"type": "abstract",
+					},
+				},
+				"real-component": map[string]any{
+					"metadata": map[string]any{
+						"type": "real",
+					},
+				},
+			},
+			expected: []string{"real-component"},
+		},
+		{
+			name: "disabled components are excluded",
+			input: map[string]any{
+				"disabled-component": map[string]any{
+					"metadata": map[string]any{
+						"enabled": false,
+					},
+				},
+				"enabled-component": map[string]any{
+					"metadata": map[string]any{
+						"enabled": true,
+					},
+				},
+			},
+			expected: []string{"enabled-component"},
+		},
+		{
+			name: "non-map component values are included",
+			input: map[string]any{
+				"simple-value": "not-a-map",
+				"real-component": map[string]any{
+					"vars": map[string]any{},
+				},
+			},
+			expected: []string{"simple-value", "real-component"},
+		},
+		{
+			name: "mixed abstract and real components",
+			input: map[string]any{
+				"abstract-base": map[string]any{
+					"metadata": map[string]any{"type": "abstract"},
+				},
+				"concrete-vpc": map[string]any{
+					"metadata": map[string]any{"type": "real"},
+				},
+				"disabled-rds": map[string]any{
+					"metadata": map[string]any{"enabled": false},
+				},
+				"active-eks": map[string]any{
+					"vars": map[string]any{"name": "cluster"},
+				},
+			},
+			expected: []string{"concrete-vpc", "active-eks"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := FilterAbstractComponents(tt.input)
+			// Sort both slices for consistent comparison since map iteration order is random.
+			assert.ElementsMatch(t, tt.expected, result)
+		})
+	}
+}
+
+func TestWriteOutputToFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		file        string
+		content     string
+		expectWrite bool
+		expectError bool
+	}{
+		{
+			name:        "empty file path returns nil without writing",
+			file:        "",
+			content:     "test content",
+			expectWrite: false,
+			expectError: false,
+		},
+		{
+			name:        "valid file path writes content",
+			file:        "test-output.txt",
+			content:     "test content to write",
+			expectWrite: true,
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectWrite {
+				tempDir := t.TempDir()
+				filePath := filepath.Join(tempDir, tt.file)
+
+				err := writeOutputToFile(filePath, tt.content)
+
+				if tt.expectError {
+					assert.Error(t, err)
+				} else {
+					assert.NoError(t, err)
+					// Verify file was written.
+					content, readErr := os.ReadFile(filePath)
+					assert.NoError(t, readErr)
+					assert.Equal(t, tt.content, string(content))
+				}
+			} else {
+				err := writeOutputToFile(tt.file, tt.content)
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestWriteOutputToFile_InvalidPath(t *testing.T) {
+	// Test writing to an invalid path.
+	err := writeOutputToFile("/nonexistent/directory/file.txt", "content")
+	assert.Error(t, err)
+}
+
+func TestExtractImportsList(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		expected []string
+	}{
+		{
+			name:     "missing imports key returns nil",
+			input:    map[string]any{"vars": map[string]any{}},
+			expected: nil,
+		},
+		{
+			name:     "empty []any imports returns nil",
+			input:    map[string]any{"imports": []any{}},
+			expected: nil,
+		},
+		{
+			name:     "empty []string imports returns nil",
+			input:    map[string]any{"imports": []string{}},
+			expected: nil,
+		},
+		{
+			name: "[]any with string values converted correctly",
+			input: map[string]any{
+				"imports": []any{"base.yaml", "common.yaml", "overrides.yaml"},
+			},
+			expected: []string{"base.yaml", "common.yaml", "overrides.yaml"},
+		},
+		{
+			name: "[]string passed through correctly",
+			input: map[string]any{
+				"imports": []string{"stack1.yaml", "stack2.yaml"},
+			},
+			expected: []string{"stack1.yaml", "stack2.yaml"},
+		},
+		{
+			name: "non-string elements in []any are skipped",
+			input: map[string]any{
+				"imports": []any{"valid.yaml", 123, "another.yaml", nil},
+			},
+			expected: []string{"valid.yaml", "another.yaml"},
+		},
+		{
+			name:     "nil imports returns nil",
+			input:    map[string]any{"imports": nil},
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractImportsList(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

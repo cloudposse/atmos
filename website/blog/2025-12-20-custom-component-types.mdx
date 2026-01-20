@@ -1,0 +1,192 @@
+---
+slug: custom-component-types
+title: 'Introducing Custom Component Types for Custom Commands'
+authors:
+  - osterman
+tags:
+  - feature
+date: 2025-12-20T00:00:00.000Z
+---
+
+Atmos custom commands can now define their own component types beyond `terraform`, `helmfile`, and `packer`. Use Atmos's stack configuration system with any tool: Ansible, Kubernetes manifests, shell scripts, CDK, and more.
+
+<!--truncate-->
+
+## The Challenge
+
+Atmos has always excelled at managing Terraform, Helmfile, and Packer components through its powerful stack configuration system. But what if you want to manage other tools the same way?
+
+Previously, custom commands could access Terraform component configuration using `component_config`, but this was limited to the `terraform` component type. If you wanted to run Ansible playbooks or deploy Kubernetes manifests with the same configuration-driven approach, you were out of luck.
+
+## The Solution: Custom Component Types
+
+Now you can define your own component types directly in custom commands. Here's a simple example:
+
+```yaml
+commands:
+  - name: script
+    description: "Run script components"
+    arguments:
+      - name: component
+        type: component        # Semantic type - this provides the component name
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack   # Semantic type - this provides the stack name
+        required: true
+    component:
+      type: script             # Your custom component type
+    steps:
+      - 'echo "App: {{ .Component.vars.app_name }}"'
+      - 'echo "Version: {{ .Component.vars.version }}"'
+```
+
+Then define your component in stack manifests just like Terraform:
+
+```yaml
+# stacks/deploy/dev.yaml
+components:
+  script:                      # Matches component.type
+    deploy-app:
+      vars:
+        app_name: "myapp"
+        version: "1.0.0"
+```
+
+Run it:
+
+```bash
+atmos script deploy-app -s dev
+# Output:
+# App: myapp
+# Version: 1.0.0
+```
+
+## Key Features
+
+### Typed Arguments and Flags
+
+Tell Atmos which argument provides the component name and which provides the stack name:
+
+- **Arguments**: Use `type: component` or `type: stack`
+- **Flags**: Use `semantic_type: component` or `semantic_type: stack`
+
+Note: For flags, we use `semantic_type` because `type` already specifies the data type (`string`, `bool`).
+
+### Full Stack Inheritance
+
+Custom components inherit from catalog files just like Terraform components:
+
+```yaml
+# stacks/catalog/script/deploy-app.yaml
+components:
+  script:
+    deploy-app:
+      vars:
+        app_name: "myapp"
+        version: "1.0.0"
+        replicas: 3
+```
+
+```yaml
+# stacks/deploy/dev.yaml
+import:
+  - catalog/script/deploy-app
+
+components:
+  script:
+    deploy-app:
+      vars:
+        replicas: 1  # Override for dev
+```
+
+### Global Vars Merged Automatically
+
+Global `vars`, `settings`, and `env` from your stack are automatically merged into custom components.
+
+### Template Variables
+
+Access all component configuration through `{{ .Component.* }}`:
+
+| Variable | Description |
+|----------|-------------|
+| `{{ .Component.component }}` | Component name |
+| `{{ .Component.vars.* }}` | Component variables |
+| `{{ .Component.settings.* }}` | Component settings |
+| `{{ .Component.env.* }}` | Environment variables |
+
+## Real-World Examples
+
+### Ansible Playbook Runner
+
+```yaml
+commands:
+  - name: ansible
+    description: "Run Ansible playbooks"
+    arguments:
+      - name: component
+        type: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack
+        required: true
+      - name: check
+        type: bool
+        description: "Dry-run mode"
+    component:
+      type: ansible
+      base_path: components/ansible
+    steps:
+      - |
+        ansible-playbook {{ .Component.vars.playbook }} \
+          -i {{ .Component.vars.inventory }} \
+          {{ if .Flags.check }}--check{{ end }}
+```
+
+### Kubernetes Manifest Deployer
+
+```yaml
+commands:
+  - name: manifest
+    description: "Apply Kubernetes manifests"
+    arguments:
+      - name: component
+        type: component
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        semantic_type: stack
+        required: true
+    component:
+      type: manifest
+    steps:
+      - |
+        kubectl apply \
+          --context {{ .Component.vars.cluster_context }} \
+          --namespace {{ .Component.vars.namespace }} \
+          -f {{ .Component.vars.manifest_path }}
+```
+
+## Comparison with component_config
+
+| Feature | `component:` (new) | `component_config:` (legacy) |
+|---------|-------------------|------------------------------|
+| Component types | Any custom type | Terraform only |
+| Component/stack source | Inferred from typed args/flags | Explicit templates |
+| Template variable | `{{ .Component.* }}` | `{{ .ComponentConfig.* }}` |
+
+The legacy `component_config` continues to work for backward compatibility.
+
+## Getting Started
+
+1. Update to the latest Atmos version
+2. Define a custom command with `component.type`
+3. Add typed arguments/flags with `type: component` and `semantic_type: stack`
+4. Create component configurations under `components.<your-type>` in stack manifests
+5. Access configuration via `{{ .Component.* }}` in your command steps
+
+See the [Custom Component Types documentation](/cli/configuration/commands#custom-component-types) for complete details.
