@@ -34,7 +34,14 @@ func SetAtmosConfig(config *schema.AtmosConfiguration) {
 }
 
 // versionCmd represents the version command.
-// Args validator is auto-applied by the command registry for commands without PositionalArgsBuilder.
+//
+// Note: The command registry (cmd/internal/registry.go) automatically applies cobra.NoArgs
+// to any command that meets BOTH conditions:
+//  1. The command does not define an Args field (cmd.Args == nil)
+//  2. The CommandProvider does not return a PositionalArgsBuilder (GetPositionalArgsBuilder() == nil)
+//
+// Since versionCmd has no Args field and VersionCommandProvider.GetPositionalArgsBuilder()
+// returns nil, the registry will apply NoArgs validation automatically.
 var versionCmd = &cobra.Command{
 	Use:     "version",
 	Short:   "Display the version of Atmos you are running and check for updates",
