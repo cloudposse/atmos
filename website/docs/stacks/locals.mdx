@@ -317,10 +317,9 @@ locals:
   log_path: "/var/log/{{ .vars.base_name }}"
 ```
 
-:::warning Same-File Access Only
-Locals can only access `settings`, `vars`, and `env` defined in the **same file**. Values from imported files are not available during locals resolution because imports are processed separately.
-
-If you need to share values across files, use `vars` or `settings` instead of `locals`. These sections properly inherit across imports.
+:::warning[Same-File Access Only]
+Locals can only access `settings`, `vars`, and `env` defined in the **same file**. Values from imported files are not available during locals resolution because imports are processed separately. If you need to share values across files, use `vars` or `settings` instead of `locals`.
+:::
 
 ```yaml
 # ❌ This won't work - settings from imported file not available
@@ -329,7 +328,9 @@ import:
 
 locals:
   region: "{{ .settings.region }}"  # Error: settings.region not found
+```
 
+```yaml
 # ✅ Instead, use vars which inherit across imports
 import:
   - catalog/defaults  # Has vars.region = us-east-1
@@ -337,7 +338,6 @@ import:
 vars:
   computed_name: "{{ .vars.region }}-cluster"  # Works!
 ```
-:::
 
 ## Using Templates in Locals
 
