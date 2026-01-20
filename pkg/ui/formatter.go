@@ -1087,6 +1087,14 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		}
 	}
 
+	// Account for document left indent to prevent text overflow.
+	// The glamour stylesheet adds theme.DocumentIndent spaces on the left.
+	// Must match the Indent value in pkg/ui/theme/converter.go.
+	const documentIndent = 2
+	if maxWidth > documentIndent {
+		maxWidth -= documentIndent
+	}
+
 	// Build glamour options with theme-aware styling
 	var opts []glamour.TermRendererOption
 
