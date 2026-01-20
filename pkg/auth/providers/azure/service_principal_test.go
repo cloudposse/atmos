@@ -171,6 +171,100 @@ func TestServicePrincipalProvider_ClientSecretSources(t *testing.T) {
 	})
 }
 
+func TestServicePrincipalProvider_CertificateSources(t *testing.T) {
+	// Clear environment variables for consistent test results.
+	t.Setenv("AZURE_CLIENT_SECRET", "")
+	os.Unsetenv("AZURE_CLIENT_SECRET")
+	t.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", "")
+	os.Unsetenv("AZURE_CLIENT_CERTIFICATE_PATH")
+	t.Setenv("AZURE_CLIENT_CERTIFICATE_PASSWORD", "")
+	os.Unsetenv("AZURE_CLIENT_CERTIFICATE_PASSWORD")
+
+	t.Run("certificate path from config", func(t *testing.T) {
+		config := &schema.Provider{
+			Kind: "azure/service-principal",
+			Spec: map[string]interface{}{
+				"tenant_id":               "tenant-123",
+				"client_id":               "client-456",
+				"client_certificate_path": "/path/to/cert.pem",
+			},
+		}
+
+		provider, err := NewServicePrincipalProvider("azure-sp", config)
+		require.NoError(t, err)
+		assert.Equal(t, "/path/to/cert.pem", provider.clientCertificatePath)
+		assert.Empty(t, provider.clientCertificatePassword)
+	})
+
+	t.Run("certificate with password from config", func(t *testing.T) {
+		config := &schema.Provider{
+			Kind: "azure/service-principal",
+			Spec: map[string]interface{}{
+				"tenant_id":                   "tenant-123",
+				"client_id":                   "client-456",
+				"client_certificate_path":     "/path/to/cert.pfx",
+				"client_certificate_password": "cert-password-123",
+			},
+		}
+
+		provider, err := NewServicePrincipalProvider("azure-sp", config)
+		require.NoError(t, err)
+		assert.Equal(t, "/path/to/cert.pfx", provider.clientCertificatePath)
+		assert.Equal(t, "cert-password-123", provider.clientCertificatePassword)
+	})
+
+	t.Run("certificate from environment variable", func(t *testing.T) {
+		t.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", "/env/path/to/cert.pem")
+
+		config := &schema.Provider{
+			Kind: "azure/service-principal",
+			Spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"client_id": "client-456",
+			},
+		}
+
+		provider, err := NewServicePrincipalProvider("azure-sp", config)
+		require.NoError(t, err)
+		assert.Equal(t, "/env/path/to/cert.pem", provider.clientCertificatePath)
+	})
+
+	t.Run("config certificate path overrides env var", func(t *testing.T) {
+		t.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", "/env/path/to/cert.pem")
+
+		config := &schema.Provider{
+			Kind: "azure/service-principal",
+			Spec: map[string]interface{}{
+				"tenant_id":               "tenant-123",
+				"client_id":               "client-456",
+				"client_certificate_path": "/config/path/to/cert.pem",
+			},
+		}
+
+		provider, err := NewServicePrincipalProvider("azure-sp", config)
+		require.NoError(t, err)
+		assert.Equal(t, "/config/path/to/cert.pem", provider.clientCertificatePath)
+	})
+
+	t.Run("certificate password from environment variable", func(t *testing.T) {
+		t.Setenv("AZURE_CLIENT_CERTIFICATE_PATH", "/path/to/cert.pfx")
+		t.Setenv("AZURE_CLIENT_CERTIFICATE_PASSWORD", "env-cert-password")
+
+		config := &schema.Provider{
+			Kind: "azure/service-principal",
+			Spec: map[string]interface{}{
+				"tenant_id": "tenant-123",
+				"client_id": "client-456",
+			},
+		}
+
+		provider, err := NewServicePrincipalProvider("azure-sp", config)
+		require.NoError(t, err)
+		assert.Equal(t, "/path/to/cert.pfx", provider.clientCertificatePath)
+		assert.Equal(t, "env-cert-password", provider.clientCertificatePassword)
+	})
+}
+
 func TestServicePrincipalProvider_InterfaceMethods(t *testing.T) {
 	provider := &servicePrincipalProvider{
 		name:     "test-sp",
@@ -254,24 +348,71 @@ func TestServicePrincipalProvider_Environment(t *testing.T) {
 }
 
 func TestServicePrincipalProvider_PrepareEnvironment(t *testing.T) {
-	provider := &servicePrincipalProvider{
-		tenantID:       "tenant-123",
-		clientID:       "client-456",
-		clientSecret:   "secret-789",
-		subscriptionID: "sub-789",
-		location:       "eastus",
-	}
+	t.Run("with client secret", func(t *testing.T) {
+		provider := &servicePrincipalProvider{
+			tenantID:       "tenant-123",
+			clientID:       "client-456",
+			clientSecret:   "secret-789",
+			subscriptionID: "sub-789",
+			location:       "eastus",
+		}
 
-	result, err := provider.PrepareEnvironment(context.Background(), map[string]string{"HOME": "/home/user"})
-	require.NoError(t, err)
+		result, err := provider.PrepareEnvironment(context.Background(), map[string]string{"HOME": "/home/user"})
+		require.NoError(t, err)
 
-	// Check key environment variables are set.
-	assert.Equal(t, "/home/user", result["HOME"])
-	assert.Equal(t, "false", result["ARM_USE_CLI"])
-	assert.Equal(t, "client-456", result["ARM_CLIENT_ID"])
-	assert.Equal(t, "secret-789", result["ARM_CLIENT_SECRET"])
-	assert.Equal(t, "sub-789", result["ARM_SUBSCRIPTION_ID"])
-	assert.Equal(t, "tenant-123", result["ARM_TENANT_ID"])
+		// Check key environment variables are set.
+		assert.Equal(t, "/home/user", result["HOME"])
+		assert.Equal(t, "false", result["ARM_USE_CLI"])
+		assert.Equal(t, "false", result["ARM_USE_OIDC"])
+		assert.Equal(t, "client-456", result["ARM_CLIENT_ID"])
+		assert.Equal(t, "secret-789", result["ARM_CLIENT_SECRET"])
+		assert.Equal(t, "sub-789", result["ARM_SUBSCRIPTION_ID"])
+		assert.Equal(t, "tenant-123", result["ARM_TENANT_ID"])
+	})
+
+	t.Run("with certificate", func(t *testing.T) {
+		provider := &servicePrincipalProvider{
+			tenantID:              "tenant-123",
+			clientID:              "client-456",
+			clientCertificatePath: "/path/to/cert.pem",
+			subscriptionID:        "sub-789",
+			location:              "eastus",
+		}
+
+		result, err := provider.PrepareEnvironment(context.Background(), map[string]string{"HOME": "/home/user"})
+		require.NoError(t, err)
+
+		// Check certificate environment variables are set.
+		assert.Equal(t, "false", result["ARM_USE_CLI"])
+		assert.Equal(t, "false", result["ARM_USE_OIDC"])
+		assert.Equal(t, "/path/to/cert.pem", result["ARM_CLIENT_CERTIFICATE_PATH"])
+		assert.Equal(t, "/path/to/cert.pem", result["AZURE_CLIENT_CERTIFICATE_PATH"])
+		// No password should be set.
+		_, hasPassword := result["ARM_CLIENT_CERTIFICATE_PASSWORD"]
+		assert.False(t, hasPassword)
+	})
+
+	t.Run("with certificate and password", func(t *testing.T) {
+		provider := &servicePrincipalProvider{
+			tenantID:                  "tenant-123",
+			clientID:                  "client-456",
+			clientCertificatePath:     "/path/to/cert.pfx",
+			clientCertificatePassword: "cert-password",
+			subscriptionID:            "sub-789",
+			location:                  "eastus",
+		}
+
+		result, err := provider.PrepareEnvironment(context.Background(), map[string]string{"HOME": "/home/user"})
+		require.NoError(t, err)
+
+		// Check certificate environment variables are set.
+		assert.Equal(t, "false", result["ARM_USE_CLI"])
+		assert.Equal(t, "false", result["ARM_USE_OIDC"])
+		assert.Equal(t, "/path/to/cert.pfx", result["ARM_CLIENT_CERTIFICATE_PATH"])
+		assert.Equal(t, "/path/to/cert.pfx", result["AZURE_CLIENT_CERTIFICATE_PATH"])
+		assert.Equal(t, "cert-password", result["ARM_CLIENT_CERTIFICATE_PASSWORD"])
+		assert.Equal(t, "cert-password", result["AZURE_CLIENT_CERTIFICATE_PASSWORD"])
+	})
 }
 
 func TestServicePrincipalProvider_ExchangeToken(t *testing.T) {
@@ -406,6 +547,31 @@ func TestServicePrincipalProvider_Authenticate(t *testing.T) {
 		require.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	})
+
+	t.Run("certificate-only authentication succeeds", func(t *testing.T) {
+		provider := &servicePrincipalProvider{
+			name:                  "test-sp",
+			tenantID:              "tenant-123",
+			clientID:              "client-456",
+			clientCertificatePath: "/path/to/cert.pem",
+			subscriptionID:        "sub-789",
+			location:              "eastus",
+		}
+
+		creds, err := provider.Authenticate(context.Background())
+		require.NoError(t, err)
+		require.NotNil(t, creds)
+
+		azureCreds, ok := creds.(*authTypes.AzureCredentials)
+		require.True(t, ok, "expected AzureCredentials type")
+
+		// Certificate-only auth returns credentials without access token.
+		assert.Empty(t, azureCreds.AccessToken)
+		assert.Equal(t, "tenant-123", azureCreds.TenantID)
+		assert.Equal(t, "sub-789", azureCreds.SubscriptionID)
+		assert.Equal(t, "client-456", azureCreds.ClientID)
+		assert.True(t, azureCreds.IsServicePrincipal)
+	})
 }
 
 func TestServicePrincipalProvider_HTTPClientAndEndpoint(t *testing.T) {
@@ -433,19 +599,42 @@ func TestServicePrincipalProvider_HTTPClientAndEndpoint(t *testing.T) {
 }
 
 func TestExtractServicePrincipalConfig(t *testing.T) {
-	cfg := extractServicePrincipalConfig(map[string]interface{}{
-		"tenant_id":       "tenant-123",
-		"client_id":       "client-456",
-		"client_secret":   "secret-789",
-		"subscription_id": "sub-abc",
-		"location":        "eastus",
+	t.Run("with client secret", func(t *testing.T) {
+		cfg := extractServicePrincipalConfig(map[string]interface{}{
+			"tenant_id":       "tenant-123",
+			"client_id":       "client-456",
+			"client_secret":   "secret-789",
+			"subscription_id": "sub-abc",
+			"location":        "eastus",
+		})
+
+		assert.Equal(t, "tenant-123", cfg.TenantID)
+		assert.Equal(t, "client-456", cfg.ClientID)
+		assert.Equal(t, "secret-789", cfg.ClientSecret)
+		assert.Equal(t, "sub-abc", cfg.SubscriptionID)
+		assert.Equal(t, "eastus", cfg.Location)
+		assert.Empty(t, cfg.ClientCertificatePath)
+		assert.Empty(t, cfg.ClientCertificatePassword)
 	})
 
-	assert.Equal(t, "tenant-123", cfg.TenantID)
-	assert.Equal(t, "client-456", cfg.ClientID)
-	assert.Equal(t, "secret-789", cfg.ClientSecret)
-	assert.Equal(t, "sub-abc", cfg.SubscriptionID)
-	assert.Equal(t, "eastus", cfg.Location)
+	t.Run("with client certificate", func(t *testing.T) {
+		cfg := extractServicePrincipalConfig(map[string]interface{}{
+			"tenant_id":                   "tenant-123",
+			"client_id":                   "client-456",
+			"client_certificate_path":     "/path/to/cert.pfx",
+			"client_certificate_password": "cert-password",
+			"subscription_id":             "sub-abc",
+			"location":                    "eastus",
+		})
+
+		assert.Equal(t, "tenant-123", cfg.TenantID)
+		assert.Equal(t, "client-456", cfg.ClientID)
+		assert.Empty(t, cfg.ClientSecret)
+		assert.Equal(t, "/path/to/cert.pfx", cfg.ClientCertificatePath)
+		assert.Equal(t, "cert-password", cfg.ClientCertificatePassword)
+		assert.Equal(t, "sub-abc", cfg.SubscriptionID)
+		assert.Equal(t, "eastus", cfg.Location)
+	})
 }
 
 func TestExtractServicePrincipalConfig_Empty(t *testing.T) {

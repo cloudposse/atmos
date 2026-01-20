@@ -24,19 +24,26 @@ import (
 const (
 	// ServicePrincipalTimeout is the timeout for HTTP requests.
 	ServicePrincipalTimeout = 30 * time.Second
+
+	// LogKeyProvider is the key used for provider name in log messages.
+	logKeyProvider = "provider"
+	// EnvValueFalse is the value "false" used for boolean environment variables.
+	envValueFalse = "false"
 )
 
 // servicePrincipalProvider implements Azure Service Principal authentication.
-// This provider uses client credentials (client_id + client_secret) to obtain
-// Azure access tokens, suitable for automated/CI environments.
+// This provider uses client credentials (client_id + client_secret or client_certificate)
+// to obtain Azure access tokens, suitable for automated/CI environments.
 type servicePrincipalProvider struct {
-	name           string
-	config         *schema.Provider
-	tenantID       string
-	clientID       string
-	clientSecret   string
-	subscriptionID string
-	location       string
+	name                      string
+	config                    *schema.Provider
+	tenantID                  string
+	clientID                  string
+	clientSecret              string
+	clientCertificatePath     string
+	clientCertificatePassword string
+	subscriptionID            string
+	location                  string
 
 	// httpClient is the HTTP client used for requests. If nil, a default client is used.
 	httpClient httpClient.Client
@@ -46,11 +53,13 @@ type servicePrincipalProvider struct {
 
 // servicePrincipalConfig holds extracted Azure service principal configuration from provider spec.
 type servicePrincipalConfig struct {
-	TenantID       string
-	ClientID       string
-	ClientSecret   string
-	SubscriptionID string
-	Location       string
+	TenantID                  string
+	ClientID                  string
+	ClientSecret              string
+	ClientCertificatePath     string
+	ClientCertificatePassword string
+	SubscriptionID            string
+	Location                  string
 }
 
 // extractServicePrincipalConfig extracts Azure service principal config from provider spec.
@@ -69,6 +78,12 @@ func extractServicePrincipalConfig(spec map[string]interface{}) servicePrincipal
 	}
 	if cs, ok := spec["client_secret"].(string); ok {
 		config.ClientSecret = cs
+	}
+	if ccp, ok := spec["client_certificate_path"].(string); ok {
+		config.ClientCertificatePath = ccp
+	}
+	if ccpw, ok := spec["client_certificate_password"].(string); ok {
+		config.ClientCertificatePassword = ccpw
 	}
 	if sid, ok := spec["subscription_id"].(string); ok {
 		config.SubscriptionID = sid
@@ -110,14 +125,32 @@ func NewServicePrincipalProvider(name string, config *schema.Provider) (*service
 		clientSecret = os.Getenv("AZURE_CLIENT_SECRET")
 	}
 
+	// Client certificate path can come from config or environment variable.
+	// AZURE_CLIENT_CERTIFICATE_PATH is a standard Azure SDK env var for certificate authentication.
+	clientCertificatePath := cfg.ClientCertificatePath
+	if clientCertificatePath == "" {
+		//nolint:forbidigo // AZURE_CLIENT_CERTIFICATE_PATH is a standard Azure SDK env var, not Atmos config
+		clientCertificatePath = os.Getenv("AZURE_CLIENT_CERTIFICATE_PATH")
+	}
+
+	// Client certificate password can come from config or environment variable.
+	// AZURE_CLIENT_CERTIFICATE_PASSWORD is a standard Azure SDK env var for PFX certificates.
+	clientCertificatePassword := cfg.ClientCertificatePassword
+	if clientCertificatePassword == "" {
+		//nolint:forbidigo // AZURE_CLIENT_CERTIFICATE_PASSWORD is a standard Azure SDK env var, not Atmos config
+		clientCertificatePassword = os.Getenv("AZURE_CLIENT_CERTIFICATE_PASSWORD")
+	}
+
 	return &servicePrincipalProvider{
-		name:           name,
-		config:         config,
-		tenantID:       cfg.TenantID,
-		clientID:       cfg.ClientID,
-		clientSecret:   clientSecret,
-		subscriptionID: cfg.SubscriptionID,
-		location:       cfg.Location,
+		name:                      name,
+		config:                    config,
+		tenantID:                  cfg.TenantID,
+		clientID:                  cfg.ClientID,
+		clientSecret:              clientSecret,
+		clientCertificatePath:     clientCertificatePath,
+		clientCertificatePassword: clientCertificatePassword,
+		subscriptionID:            cfg.SubscriptionID,
+		location:                  cfg.Location,
 	}, nil
 }
 
@@ -153,35 +186,54 @@ func (p *servicePrincipalProvider) getTokenEndpoint() string {
 }
 
 // Authenticate performs Azure service principal authentication using client credentials.
-// This acquires tokens for multiple scopes to ensure Azure CLI and Terraform compatibility.
-// - Management API (ARM operations).
-// - Graph API (azuread provider and some az commands).
-// - KeyVault API (optional, for KeyVault operations).
+// This supports two authentication methods:
+// 1. Client secret: acquires tokens for Azure CLI and Terraform compatibility.
+// 2. Client certificate: returns credentials for Terraform (token exchange not supported).
 func (p *servicePrincipalProvider) Authenticate(ctx context.Context) (authTypes.ICredentials, error) {
 	defer perf.Track(nil, "azure.servicePrincipalProvider.Authenticate")()
 
 	log.Debug("Authenticating with Azure service principal",
-		"provider", p.name,
-		"tenant", p.tenantID,
-		"client", p.clientID,
-	)
+		logKeyProvider, p.name, "tenant", p.tenantID, "client", p.clientID,
+		"hasCertificate", p.clientCertificatePath != "")
 
-	// Validate client secret is available.
-	if p.clientSecret == "" {
-		return nil, fmt.Errorf("%w: client_secret is required for Azure service principal provider. Set it in spec.client_secret or AZURE_CLIENT_SECRET environment variable", errUtils.ErrAuthenticationFailed)
+	// Certificate-only authentication path (Terraform only, no token exchange).
+	if p.clientCertificatePath != "" && p.clientSecret == "" {
+		return p.buildCertificateCredentials(), nil
 	}
 
-	// Exchange client credentials for the primary Azure Management API token.
+	// Client secret authentication path (full token exchange).
+	return p.authenticateWithClientSecret(ctx)
+}
+
+// buildCertificateCredentials creates credentials for certificate-only authentication.
+// Token exchange is not supported; Terraform providers use ARM_CLIENT_CERTIFICATE_PATH directly.
+func (p *servicePrincipalProvider) buildCertificateCredentials() *authTypes.AzureCredentials {
+	log.Debug("Using certificate-only authentication",
+		logKeyProvider, p.name, "certificatePath", p.clientCertificatePath,
+		"note", "Token exchange not supported; Terraform will authenticate directly")
+
+	return &authTypes.AzureCredentials{
+		TenantID:           p.tenantID,
+		SubscriptionID:     p.subscriptionID,
+		Location:           p.location,
+		ClientID:           p.clientID,
+		IsServicePrincipal: true,
+	}
+}
+
+// authenticateWithClientSecret performs token exchange using client credentials.
+// Acquires tokens for Management API, Graph API, and KeyVault API scopes.
+func (p *servicePrincipalProvider) authenticateWithClientSecret(ctx context.Context) (*authTypes.AzureCredentials, error) {
+	if p.clientSecret == "" {
+		return nil, fmt.Errorf("%w: client_secret or client_certificate_path is required for Azure service principal provider", errUtils.ErrAuthenticationFailed)
+	}
+
 	tokenResp, err := p.exchangeToken(ctx, azureManagementScope)
 	if err != nil {
 		return nil, err
 	}
 
-	// Calculate expiration time.
 	expiresOn := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-
-	// Create Azure credentials with the primary management token.
-	// Mark as service principal for correct MSAL cache format.
 	creds := &authTypes.AzureCredentials{
 		AccessToken:        tokenResp.AccessToken,
 		TokenType:          tokenResp.TokenType,
@@ -193,18 +245,12 @@ func (p *servicePrincipalProvider) Authenticate(ctx context.Context) (authTypes.
 		IsServicePrincipal: true,
 	}
 
-	// Acquire additional tokens for Azure CLI and Terraform provider compatibility.
-	// These are acquired in parallel for efficiency.
 	p.acquireAdditionalTokens(ctx, creds)
 
 	log.Debug("Successfully authenticated with Azure service principal",
-		"provider", p.name,
-		"tenant", p.tenantID,
-		"subscription", p.subscriptionID,
+		logKeyProvider, p.name, "tenant", p.tenantID, "subscription", p.subscriptionID,
 		"expiresOn", expiresOn.Format(time.RFC3339),
-		"hasGraphToken", creds.GraphAPIToken != "",
-		"hasKeyVaultToken", creds.KeyVaultToken != "",
-	)
+		"hasGraphToken", creds.GraphAPIToken != "", "hasKeyVaultToken", creds.KeyVaultToken != "")
 
 	return creds, nil
 }
@@ -315,7 +361,8 @@ func (p *servicePrincipalProvider) Validate() error {
 	if p.clientID == "" {
 		return fmt.Errorf("%w: client_id is required", errUtils.ErrInvalidProviderConfig)
 	}
-	// Note: client_secret validation happens at authentication time to allow environment variable configuration.
+	// Note: client_secret/client_certificate_path validation happens at authentication time
+	// to allow environment variable configuration (AZURE_CLIENT_SECRET, AZURE_CLIENT_CERTIFICATE_PATH).
 	return nil
 }
 
@@ -350,10 +397,12 @@ func (p *servicePrincipalProvider) PrepareEnvironment(ctx context.Context, envir
 		Location:       p.location,
 	})
 
-	// Explicitly disable CLI auth mode for service principal authentication.
+	// Explicitly disable CLI and OIDC auth modes for service principal authentication.
 	// ARM_USE_CLI=true only works for user accounts, not service principals.
-	// The azurerm/azapi providers will use the ARM_CLIENT_ID/ARM_CLIENT_SECRET credentials we set below for service principal auth.
-	result["ARM_USE_CLI"] = "false"
+	// ARM_USE_OIDC=true is for federated credentials, not client secret/certificate.
+	// The azurerm/azapi providers will use the ARM_CLIENT_ID/ARM_CLIENT_SECRET credentials we set below.
+	result["ARM_USE_CLI"] = envValueFalse
+	result["ARM_USE_OIDC"] = envValueFalse
 
 	// Set client credentials for Terraform providers (azurerm, azapi).
 	if p.clientID != "" {
@@ -363,19 +412,28 @@ func (p *servicePrincipalProvider) PrepareEnvironment(ctx context.Context, envir
 		result["ARM_CLIENT_SECRET"] = p.clientSecret
 	}
 
+	// Set certificate credentials for Terraform providers.
+	// Azure SDK and Terraform support both PEM and PFX certificate formats.
+	if p.clientCertificatePath != "" {
+		result["ARM_CLIENT_CERTIFICATE_PATH"] = p.clientCertificatePath
+		result["AZURE_CLIENT_CERTIFICATE_PATH"] = p.clientCertificatePath
+		if p.clientCertificatePassword != "" {
+			result["ARM_CLIENT_CERTIFICATE_PASSWORD"] = p.clientCertificatePassword
+			result["AZURE_CLIENT_CERTIFICATE_PASSWORD"] = p.clientCertificatePassword
+		}
+	}
+
 	log.Debug("Azure service principal environment prepared",
-		"ARM_USE_CLI", "false",
-		"ARM_CLIENT_ID", p.clientID,
-		"subscription", p.subscriptionID,
-		"tenant", p.tenantID,
-	)
+		"ARM_USE_CLI", envValueFalse, "ARM_USE_OIDC", envValueFalse,
+		"ARM_CLIENT_ID", p.clientID, "hasCertificate", p.clientCertificatePath != "",
+		"subscription", p.subscriptionID, "tenant", p.tenantID)
 
 	return result, nil
 }
 
 // Logout clears cached credentials for this provider.
 func (p *servicePrincipalProvider) Logout(ctx context.Context) error {
-	log.Debug("Azure service principal provider logout", "provider", p.name)
+	log.Debug("Azure service principal provider logout", logKeyProvider, p.name)
 	// Service principal credentials are typically managed externally.
 	// Return ErrLogoutNotSupported to indicate successful no-op (exit 0).
 	return errUtils.ErrLogoutNotSupported
