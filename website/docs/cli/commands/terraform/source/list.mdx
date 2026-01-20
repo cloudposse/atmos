@@ -3,7 +3,7 @@ title: atmos terraform source list
 sidebar_label: source list
 sidebar_class_name: command
 id: list
-description: List components with source in a stack
+description: List Terraform components with source configuration
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
@@ -11,7 +11,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-Use this command to list all Terraform components that have `source` configured in a stack. This shows which components can be vendored using the source provisioner.
+Use this command to list all Terraform components that have `source` configured. This shows which components can be vendored using the source provisioner.
 </Intro>
 
 <ActionCard title="Source-Based Version Pinning">
@@ -26,51 +26,98 @@ Use this command to list all Terraform components that have `source` configured 
 ## Usage
 
 ```shell
-atmos terraform source list --stack <stack>
+atmos terraform source list [component] [flags]
 ```
 
 ## Description
 
-The `list` command scans a stack's component configurations and displays all components that have `source` defined. This helps identify:
+The `list` command scans component configurations and displays all Terraform components that have `source` defined. This helps identify:
 
 - Which components are configured for JIT vendoring
 - The source URIs and versions for each component
 - Components that may need to be vendored before use
 
-:::note
-This command is planned for a future release. Currently it returns a "not implemented" message.
+:::tip
+To list sources across all component types (Terraform, Helmfile, Packer) in a unified view, use [`atmos list sources`](/cli/commands/list/sources).
 :::
 
 ## Examples
 
-### List Components with Sources
+### List All Terraform Sources Across All Stacks
 
 ```shell
-atmos terraform source list --stack dev
+atmos terraform source list
 ```
 
-Expected output (when implemented):
+Output:
+```
+STACK              COMPONENT    URI                                                           VERSION
+plat-ue2-dev       eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
+plat-ue2-dev       vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-ue2-prod      eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.451.0
+plat-ue2-prod      vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
+```
+
+### List Sources in a Specific Stack
+
+```shell
+atmos terraform source list --stack plat-ue2-dev
+```
+
+When filtering by stack, the Stack column is omitted:
 ```
 COMPONENT    URI                                                           VERSION
-vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
 eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
-rds          github.com/cloudposse/terraform-aws-components//modules/rds   1.449.0
+vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+```
+
+### List Sources for a Specific Component
+
+```shell
+atmos terraform source list vpc
+```
+
+Shows the component across all stacks:
+```
+STACK              COMPONENT    URI                                                           VERSION
+plat-ue2-dev       vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-ue2-prod      vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
+```
+
+### Output in Different Formats
+
+```shell
+# JSON format
+atmos terraform source list --format json
+
+# YAML format
+atmos terraform source list --format yaml
+
+# CSV format
+atmos terraform source list --format csv
 ```
 
 ## Arguments
 
-This command takes no positional arguments.
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Filter results to a specific component name. When provided, only shows sources for components matching this name across all stacks.</dd>
+</dl>
 
 ## Flags
 
 <dl>
-  <dt>`--stack` / `-s`</dt>
-  <dd>**Required.** The Atmos stack name. Can also be set via `ATMOS_STACK` environment variable.</dd>
+  <dt>`--stack` / `-s` <em>(optional)</em></dt>
+  <dd>Filter by stack name. When provided, only shows sources within that stack and omits the Stack column from output.<br/>Environment variable: `ATMOS_STACK`</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`).<br/>Environment variable: `ATMOS_FORMAT`</dd>
 </dl>
 
 ## See Also
 
-- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) — Design pattern for per-environment version control
-- [`atmos terraform source`](/cli/commands/terraform/source) — Parent command overview
-- [`atmos terraform source describe`](/cli/commands/terraform/source/describe) — View source configuration for a specific component
-- [`atmos terraform source pull`](/cli/commands/terraform/source/pull) — Vendor a specific component
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) - Design pattern for per-environment version control
+- [`atmos list sources`](/cli/commands/list/sources) - Unified view across all component types
+- [`atmos terraform source`](/cli/commands/terraform/source) - Parent command overview
+- [`atmos terraform source describe`](/cli/commands/terraform/source/describe) - View source configuration for a specific component
+- [`atmos terraform source pull`](/cli/commands/terraform/source/pull) - Vendor a specific component

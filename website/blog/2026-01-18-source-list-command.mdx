@@ -27,7 +27,7 @@ atmos terraform source list vpc
 # List sources for a specific component in a specific stack
 atmos terraform source list vpc --stack dev
 
-# Alias: list sources across all component types
+# Unified view: list sources across all component types
 atmos list sources
 atmos list sources --stack dev
 atmos list sources vpc
@@ -66,7 +66,7 @@ The Folder column only appears when there's a difference to show, keeping output
 
 ## Multi-Type Listing
 
-The `atmos list sources` alias includes a Type column since it lists sources across all component types (terraform, helmfile, packer):
+The `atmos list sources` command includes a Type column since it lists sources across all component types (terraform, helmfile, packer) in a unified view:
 
 ```
 STACK        TYPE        COMPONENT    URI                                                           VERSION

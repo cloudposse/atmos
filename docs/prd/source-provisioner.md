@@ -149,9 +149,9 @@ atmos packer source describe <component> --stack <stack>
 atmos packer source delete <component> --stack <stack> --force
 ```
 
-### Alias Command: `atmos list sources`
+### Unified View: `atmos list sources`
 
-For convenience, `atmos list sources [component] [--stack <stack>]` is an alias that lists components with source configuration across ALL component types (terraform, helmfile, packer) in a single view:
+For convenience, `atmos list sources [component] [--stack <stack>]` provides a unified view that lists components with source configuration across ALL component types (terraform, helmfile, packer) in a single table with a "Type" column:
 
 ```bash
 # List all sources across all stacks and component types
@@ -933,7 +933,7 @@ atmos terraform source list --stack dev --format yaml
 # Output as CSV
 atmos terraform source list --stack dev --format csv
 
-# Alias: List sources across all component types
+# Unified view: List sources across all component types
 atmos list sources --stack dev
 ```
 
