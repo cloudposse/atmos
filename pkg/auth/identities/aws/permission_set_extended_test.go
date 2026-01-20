@@ -73,6 +73,105 @@ func TestPermissionSetIdentity_Environment_WithoutRegion(t *testing.T) {
 	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
 }
 
+// mockManagerForRegion implements the manager interface methods needed for region resolution.
+type mockManagerForRegion struct {
+	types.AuthManager
+	principalSettings map[string]map[string]interface{}
+	providerConfig    *schema.Provider
+	providerName      string
+}
+
+func (m *mockManagerForRegion) GetProviderForIdentity(_ string) string {
+	return m.providerName
+}
+
+func (m *mockManagerForRegion) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	if m.principalSettings != nil {
+		if settings, ok := m.principalSettings[identityName]; ok {
+			if val, ok := settings[key]; ok {
+				return val, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func (m *mockManagerForRegion) ResolveProviderConfig(_ string) (*schema.Provider, bool) {
+	if m.providerConfig != nil {
+		return m.providerConfig, true
+	}
+	return nil, false
+}
+
+func TestPermissionSetIdentity_Environment_InheritsProviderRegion(t *testing.T) {
+	// When identity has NO region but provider HAS region, identity should inherit provider's region.
+	// This is the user's specific problem scenario: region only at provider level.
+	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+		Kind: "aws/permission-set",
+		Principal: map[string]interface{}{
+			"name":    "DevAccess",
+			"account": map[string]interface{}{"id": "123456789012"},
+			// NOTE: No "region" field here - that's the key to this test.
+		},
+	})
+	require.NoError(t, err)
+
+	// Create mock manager that returns provider with region.
+	mockMgr := &mockManagerForRegion{
+		providerName:      "aws-sso",
+		principalSettings: nil, // No region in identity chain.
+		providerConfig: &schema.Provider{
+			Region: "us-west-2", // Provider has region.
+		},
+	}
+
+	// Set the manager on the identity.
+	psIdentity := identity.(*permissionSetIdentity)
+	psIdentity.manager = mockMgr
+
+	env, err := identity.Environment()
+	assert.NoError(t, err)
+
+	// Should inherit region from provider.
+	assert.Equal(t, "us-west-2", env["AWS_REGION"], "AWS_REGION should inherit from provider when not set on identity")
+	assert.Equal(t, "us-west-2", env["AWS_DEFAULT_REGION"], "AWS_DEFAULT_REGION should inherit from provider when not set on identity")
+}
+
+func TestPermissionSetIdentity_Environment_IdentityRegionOverridesProvider(t *testing.T) {
+	// When identity HAS region AND provider HAS region, identity's region should win.
+	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
+		Kind: "aws/permission-set",
+		Principal: map[string]interface{}{
+			"name":    "DevAccess",
+			"account": map[string]interface{}{"id": "123456789012"},
+			"region":  "eu-west-1", // Identity has region.
+		},
+	})
+	require.NoError(t, err)
+
+	// Create mock manager that returns both identity and provider region.
+	mockMgr := &mockManagerForRegion{
+		providerName: "aws-sso",
+		principalSettings: map[string]map[string]interface{}{
+			"test-ps": {"region": "eu-west-1"}, // Identity has region in chain.
+		},
+		providerConfig: &schema.Provider{
+			Region: "us-west-2", // Provider also has region.
+		},
+	}
+
+	// Set the manager on the identity.
+	psIdentity := identity.(*permissionSetIdentity)
+	psIdentity.manager = mockMgr
+
+	env, err := identity.Environment()
+	assert.NoError(t, err)
+
+	// Identity region should take precedence over provider region.
+	assert.Equal(t, "eu-west-1", env["AWS_REGION"], "AWS_REGION should use identity's region, not provider's")
+	assert.Equal(t, "eu-west-1", env["AWS_DEFAULT_REGION"], "AWS_DEFAULT_REGION should use identity's region, not provider's")
+}
+
 func TestPermissionSetIdentity_PrepareEnvironment_NoProvider(t *testing.T) {
 	identity, err := NewPermissionSetIdentity("test-ps", &schema.Identity{
 		Kind: "aws/permission-set",
