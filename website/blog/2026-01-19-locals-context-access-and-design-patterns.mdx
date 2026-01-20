@@ -1,16 +1,14 @@
 ---
-slug: locals-context-access-and-design-patterns
-title: 'Locals Context Access and Design Patterns'
+slug: locals-context-access
+title: 'Locals Context Access'
 authors:
   - aknysh
 tags:
   - enhancement
-  - documentation
 date: 2026-01-19T00:00:00.000Z
 ---
 
-Locals can now access `{{ .settings }}`, `{{ .vars }}`, and `{{ .env }}` from the same file during template resolution.
-We've also added comprehensive [Locals Design Patterns](/design-patterns/locals-patterns) to help you get the most out of locals.
+Locals can access `{{ .settings }}`, `{{ .vars }}`, and `{{ .env }}` from the same file during template resolution.
 
 <!--truncate-->
 
@@ -22,177 +20,37 @@ Previously, locals could only reference other locals via `{{ .locals.* }}`. Now 
 - `{{ .vars.* }}` - Vars defined in the same file
 - `{{ .env.* }}` - Environment variables
 
-This makes locals much more powerful for building computed values that depend on your stack configuration.
-
-### Example: Building Tags from Multiple Sources
+### Example
 
 ```yaml
 settings:
   version: v1
-  team: platform
 
 vars:
   stage: dev
 
 locals:
   namespace: acme
-  environment: development
-
-  # Access settings from the same file
-  app_version: "{{ .settings.version }}"
-
-  # Access vars from the same file
-  stage_name: "{{ .vars.stage }}"
-
-  # Build computed values from multiple sources
-  full_name: "{{ .locals.namespace }}-{{ .locals.environment }}-{{ .locals.stage_name }}"
-
-  # Build tags that combine settings, vars, and locals
-  default_tags:
-    Namespace: "{{ .locals.namespace }}"
-    Environment: "{{ .locals.environment }}"
-    Team: "{{ .settings.team }}"
-    Version: "{{ .settings.version }}"
-    Stage: "{{ .vars.stage }}"
-    ManagedBy: Atmos
+  label: "{{ .locals.namespace }}-{{ .vars.stage }}-{{ .settings.version }}"
 
 components:
   terraform:
     myapp:
       vars:
-        name: "{{ .locals.full_name }}"
-        tags: "{{ .locals.default_tags }}"
+        name: "{{ .locals.label }}"
 ```
 
-### File-Scoped Context
+## File-Scoped Context
 
-The context available to locals (settings, vars, env) comes from **the same file only**. Locals cannot access settings or vars from imported files. This maintains the file-scoped isolation that makes locals predictable and easy to reason about.
+The context available to locals comes from **the same file only**. Locals cannot access settings or vars from imported files.
 
-If you need values from imported files, those values should be in `vars` or `settings` (which do inherit across imports), and your locals can then reference them.
-
-## New Example: `examples/locals`
-
-We've added a complete working example demonstrating locals:
-
-```shell
-cd examples/locals
-
-# See how locals are resolved for dev
-atmos describe component myapp -s dev
-
-# Compare with prod (different values, same pattern)
-atmos describe component myapp -s prod
-
-# View all resolved locals
-atmos describe locals myapp -s dev
-```
-
-The example shows:
-- Basic locals that define reusable values
-- Dependency resolution (locals referencing other locals)
-- Context access (locals accessing settings and vars)
-- Computed values (building complex values from simpler components)
-
-## New Design Patterns for Locals
-
-We've added a new [Locals Patterns](/design-patterns/locals-patterns) section to the design patterns documentation with three practical patterns:
-
-### Computed Values Pattern
-
-Build complex configuration from simpler components:
-
-```yaml
-locals:
-  namespace: acme
-  environment: prod
-  region_code: ue2
-
-  # Build prefixes step by step
-  env_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
-  resource_prefix: "{{ .locals.env_prefix }}-{{ .locals.region_code }}"
-
-  # Use prefix for specific resources
-  logs_bucket: "{{ .locals.resource_prefix }}-logs"
-  artifacts_bucket: "{{ .locals.resource_prefix }}-artifacts"
-```
-
-[Read more about Computed Values](/design-patterns/locals-patterns/computed-values)
-
-### Tag Management Pattern
-
-Centralize resource tagging logic:
-
-```yaml
-settings:
-  team: platform
-  cost_center: engineering
-
-vars:
-  stage: prod
-
-locals:
-  namespace: acme
-
-  default_tags:
-    Namespace: "{{ .locals.namespace }}"
-    Stage: "{{ .vars.stage }}"
-    Team: "{{ .settings.team }}"
-    CostCenter: "{{ .settings.cost_center }}"
-    ManagedBy: Atmos
-
-components:
-  terraform:
-    vpc:
-      vars:
-        tags: "{{ .locals.default_tags }}"
-    rds:
-      vars:
-        tags: "{{ .locals.default_tags }}"
-```
-
-[Read more about Tag Management](/design-patterns/locals-patterns/tag-management)
-
-### Naming Conventions Pattern
-
-Enforce consistent resource naming:
-
-```yaml
-vars:
-  stage: prod
-  region: us-east-2
-
-locals:
-  namespace: acme
-  region_code: ue2
-
-  # Standard naming pattern
-  name_prefix: "{{ .locals.namespace }}-{{ .vars.stage }}-{{ .locals.region_code }}"
-
-  # Resource-specific names
-  vpc_name: "{{ .locals.name_prefix }}-vpc"
-  eks_name: "{{ .locals.name_prefix }}-eks"
-  rds_identifier: "{{ .locals.name_prefix }}-db"
-```
-
-[Read more about Naming Conventions](/design-patterns/locals-patterns/naming-conventions)
-
-## Key Points
-
-1. **File-scoped context**: Settings, vars, and env available to locals come from the same file only
-2. **Not cross-file**: Locals defined in one file cannot be accessed from other files
-3. **Dependency resolution**: Locals can reference other locals, and Atmos resolves them in the correct order
-4. **Section-level merging**: When settings or vars exist both globally and in a section (terraform/helmfile/packer), the section values are merged with global values
-
-## Limitations
-
-Locals are file-scoped by design: they can only access values from the same file, not from imports, and cannot be shared across files. For values that need cross-file access, use `vars` or `settings` instead. See the [Locals Documentation](/stacks/locals#limitations) for details.
+If you need values from imported files, use `vars` or `settings` (which inherit across imports).
 
 ## Upgrade
 
-Upgrade Atmos to get this enhancement. No configuration changes are required. Existing locals configurations will continue to work, and you can now add `{{ .settings.* }}` and `{{ .vars.* }}` references.
+Upgrade Atmos to get this enhancement. Existing locals configurations will continue to work.
 
 ## References
 
 - [Locals Documentation](/stacks/locals)
-- [Locals Design Patterns](/design-patterns/locals-patterns)
-- [Example: Locals](https://github.com/cloudposse/atmos/tree/main/examples/locals)
+- [DRY Configuration with Locals](/design-patterns/stack-organization/locals)
