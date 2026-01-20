@@ -1469,6 +1469,14 @@ func (m *mockAuthManager) GetIntegration(_ string) (*schema.Integration, error) 
 	return nil, nil
 }
 
+func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface{}, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManager) ResolveProviderConfig(_ string) (*schema.Provider, bool) {
+	return nil, false
+}
+
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {
 	// Test when we can't resolve the provider name.
 	i := &assumeRootIdentity{

@@ -186,9 +186,9 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 		}
 	}
 
-	// Include region ONLY if explicitly configured in principal (not default fallback).
-	// This enables users to reference AWS_REGION via !env in stack configurations.
-	if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+	// Resolve region through identity chain inheritance.
+	// First checks identity principal, then parent identities, then provider.
+	if region := i.resolveRegion(); region != "" {
 		env["AWS_REGION"] = region
 		env["AWS_DEFAULT_REGION"] = region
 	}
@@ -227,13 +227,8 @@ func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ 
 	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
 	configFile := awsFileManager.GetConfigPath(providerName)
 
-	// Get region from identity config if available.
-	region := ""
-	if i.config.Principal != nil {
-		if r, ok := i.config.Principal["region"].(string); ok {
-			region = r
-		}
-	}
+	// Resolve region through identity chain inheritance.
+	region := i.resolveRegion()
 
 	// Use shared AWS environment preparation helper.
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
@@ -259,6 +254,33 @@ func (i *permissionSetIdentity) resolveRootProviderName() (string, error) {
 
 	// Fall back to cached value or config.
 	return i.getRootProviderFromVia()
+}
+
+// resolveRegion resolves the AWS region by traversing the identity chain.
+// First checks identity chain for region setting, then falls back to provider's region.
+// This uses the manager's generic chain resolution methods to support inheritance.
+func (i *permissionSetIdentity) resolveRegion() string {
+	// If manager is not available, fall back to direct config check.
+	if i.manager == nil {
+		if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+			return region
+		}
+		return ""
+	}
+
+	// First check identity chain for region setting.
+	if val, ok := i.manager.ResolvePrincipalSetting(i.name, "region"); ok {
+		if region, ok := val.(string); ok && region != "" {
+			return region
+		}
+	}
+
+	// Fall back to provider's region.
+	if provider, ok := i.manager.ResolveProviderConfig(i.name); ok {
+		return provider.Region
+	}
+
+	return ""
 }
 
 // getRootProviderFromVia gets the root provider name using available information.

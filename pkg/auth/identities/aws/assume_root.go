@@ -307,11 +307,11 @@ func (i *assumeRootIdentity) Environment() (map[string]string, error) {
 		env[envVar.Key] = envVar.Value
 	}
 
-	// Include region ONLY if explicitly configured (not default fallback).
-	// This enables users to reference AWS_REGION via !env in stack configurations.
-	if i.region != "" {
-		env["AWS_REGION"] = i.region
-		env["AWS_DEFAULT_REGION"] = i.region
+	// Resolve region through identity chain inheritance.
+	// First checks identity principal, then parent identities, then provider.
+	if region := i.resolveRegion(); region != "" {
+		env["AWS_REGION"] = region
+		env["AWS_DEFAULT_REGION"] = region
 	}
 
 	// Add environment variables from identity config.
@@ -346,8 +346,8 @@ func (i *assumeRootIdentity) PrepareEnvironment(ctx context.Context, environ map
 	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
 	configFile := awsFileManager.GetConfigPath(providerName)
 
-	// Get region from identity if available.
-	region := i.region
+	// Resolve region through identity chain inheritance.
+	region := i.resolveRegion()
 
 	// Use shared AWS environment preparation helper.
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
@@ -391,6 +391,36 @@ func (i *assumeRootIdentity) getRootProviderFromVia() (string, error) {
 
 	// Can't determine root provider.
 	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
+}
+
+// resolveRegion resolves the AWS region by traversing the identity chain.
+// First checks identity chain for region setting, then falls back to provider's region.
+// This uses the manager's generic chain resolution methods to support inheritance.
+func (i *assumeRootIdentity) resolveRegion() string {
+	// If manager is not available, fall back to direct config check or cached region.
+	if i.manager == nil {
+		if i.region != "" {
+			return i.region
+		}
+		if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+			return region
+		}
+		return ""
+	}
+
+	// First check identity chain for region setting.
+	if val, ok := i.manager.ResolvePrincipalSetting(i.name, "region"); ok {
+		if region, ok := val.(string); ok && region != "" {
+			return region
+		}
+	}
+
+	// Fall back to provider's region.
+	if provider, ok := i.manager.ResolveProviderConfig(i.name); ok {
+		return provider.Region
+	}
+
+	return ""
 }
 
 // SetManagerAndProvider sets the manager and root provider name on the identity.

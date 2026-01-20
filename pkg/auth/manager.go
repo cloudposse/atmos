@@ -713,3 +713,43 @@ func (m *manager) GetProviders() map[string]schema.Provider {
 func (m *manager) GetConfig() *schema.ConfigAndStacksInfo {
 	return m.stackInfo
 }
+
+// ResolvePrincipalSetting traverses the identity chain and returns the first
+// non-empty value for the given key in Principal configuration.
+// The chain is traversed from the target identity backwards through parent identities.
+// This is a provider-agnostic mechanism for inheriting settings through the chain.
+func (m *manager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	defer perf.Track(nil, "auth.Manager.ResolvePrincipalSetting")()
+
+	chain, err := m.buildAuthenticationChain(identityName)
+	if err != nil || len(chain) == 0 {
+		return nil, false
+	}
+
+	// Walk chain backwards: current identity → parents (skip index 0 which is provider).
+	for i := len(chain) - 1; i >= 1; i-- {
+		if identity, exists := m.config.Identities[chain[i]]; exists {
+			if val, ok := identity.Principal[key]; ok && val != nil && val != "" {
+				return val, true
+			}
+		}
+	}
+	return nil, false
+}
+
+// ResolveProviderConfig returns the provider configuration at the root of
+// the identity's authentication chain.
+// This allows identities to access provider-level settings without knowing
+// the specific provider name.
+func (m *manager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	defer perf.Track(nil, "auth.Manager.ResolveProviderConfig")()
+
+	providerName := m.GetProviderForIdentity(identityName)
+	if providerName == "" {
+		return nil, false
+	}
+	if provider, exists := m.config.Providers[providerName]; exists {
+		return &provider, true
+	}
+	return nil, false
+}

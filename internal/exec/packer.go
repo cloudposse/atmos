@@ -158,7 +158,6 @@ func ExecutePacker(
 	}
 
 	// Check if the component is locked (`metadata.locked` is set to true).
-	// For Packer, only `build` modifies external resources.
 	if info.ComponentIsLocked && info.SubCommand == "build" {
 		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
 			errUtils.ErrLockedComponentCantBeProvisioned,
