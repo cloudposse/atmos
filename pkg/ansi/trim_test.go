@@ -132,6 +132,25 @@ func TestTrimRight(t *testing.T) {
 			desc:                "H1 badge should preserve styled suffix but trim following Glamour padding",
 			preservesStyledText: true, // Trailing space is part of styled badge content
 		},
+		// Edge cases for loop iteration coverage.
+		{
+			name:     "consecutive resets then styled space",
+			input:    "hello\x1b[0m\x1b[0m\x1b[38;2;100;100;100m \x1b[0m",
+			expected: "hello\x1b[0m",
+			desc:     "Tests loop iteration: trimConsecutiveResets then trimTrailingStyledSpace",
+		},
+		{
+			name:     "styled space then bare ANSI",
+			input:    "hello\x1b[38;2;100;100;100m \x1b[0m\x1b[38;2;100;100;100m",
+			expected: "hello",
+			desc:     "Tests loop iteration: trimTrailingStyledSpace then trimTrailingBareANSI",
+		},
+		{
+			name:     "multiple styled spaces in sequence",
+			input:    "hello\x1b[38;2;100;100;100m \x1b[0m\x1b[38;2;100;100;100m \x1b[0m\x1b[38;2;100;100;100m \x1b[0m",
+			expected: "hello",
+			desc:     "Tests multiple iterations of trimTrailingStyledSpace",
+		},
 	}
 
 	for _, tt := range tests {
@@ -338,6 +357,13 @@ func TestTrimLeftSpaces(t *testing.T) {
 			expected: "\x1b[38;2;247;250;252m• \x1b[0m\x1b[38;2;247;250;252mItem one\x1b[0m",
 			desc:     "Real Glamour bullet list output should have leading spaces trimmed",
 		},
+		// Edge case: non-space content encountered during skip loop (break skipLoop).
+		{
+			name:     "non-space found during skip loop",
+			input:    "  X  hello",
+			expected: "X  hello",
+			desc:     "Non-space 'X' found during skip loop triggers break",
+		},
 	}
 
 	for _, tt := range tests {
@@ -475,6 +501,21 @@ func TestTrimTrailingWhitespace(t *testing.T) {
 			indentWidth:   2,
 			expectedLines: []string{"line one", "  ", "line three"},
 		},
+		// Edge case: fewer spaces than indent width.
+		{
+			name:          "empty line with one space less than indent width",
+			input:         "line one\n \nline three",
+			indent:        "  ",
+			indentWidth:   2,
+			expectedLines: []string{"line one", " ", "line three"},
+		},
+		{
+			name:          "empty string",
+			input:         "",
+			indent:        "  ",
+			indentWidth:   2,
+			expectedLines: []string{""},
+		},
 	}
 
 	for _, tt := range tests {
@@ -583,6 +624,32 @@ func TestTrimTrailingStyledSpace(t *testing.T) {
 			input:    "hello\x1b[38;2;247;250;252;48;2;0;163;224m \x1b[0m",
 			expected: "hello\x1b[38;2;247;250;252;48;2;0;163;224m \x1b[0m",
 		},
+		// Edge cases for early return coverage.
+		{
+			name:     "just reset code",
+			input:    "\x1b[0m",
+			expected: "\x1b[0m",
+		},
+		{
+			name:     "non-space before reset",
+			input:    "hello\x1b[38;2;247;250;252mX\x1b[0m",
+			expected: "hello\x1b[38;2;247;250;252mX\x1b[0m",
+		},
+		{
+			name:     "plain space before reset no ANSI",
+			input:    " \x1b[0m",
+			expected: " \x1b[0m",
+		},
+		{
+			name:     "malformed ANSI no m terminator",
+			input:    "hello\x1b[38;2;247 \x1b[0m",
+			expected: "hello\x1b[38;2;247 \x1b[0m",
+		},
+		{
+			name:     "does not end with reset",
+			input:    "hello world",
+			expected: "hello world",
+		},
 	}
 
 	for _, tt := range tests {
@@ -623,6 +690,22 @@ func TestTrimTrailingBareANSI(t *testing.T) {
 			name:     "complex color at end - trim",
 			input:    "hello\x1b[38;2;247;250;252m",
 			expected: "hello",
+		},
+		// Edge cases for coverage.
+		{
+			name:     "empty string",
+			input:    "",
+			expected: "",
+		},
+		{
+			name:     "malformed ANSI no terminator",
+			input:    "hello\x1b[38;2;247",
+			expected: "hello\x1b[38;2;247",
+		},
+		{
+			name:     "ANSI sequence in middle",
+			input:    "\x1b[31mhello\x1b[0m world",
+			expected: "\x1b[31mhello\x1b[0m world",
 		},
 	}
 
