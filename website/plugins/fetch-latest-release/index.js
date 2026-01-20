@@ -1,3 +1,29 @@
+async function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout per attempt
+    try {
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeout);
+      return response;
+    } catch (error) {
+      clearTimeout(timeout);
+      lastError = error;
+      if (attempt < maxRetries) {
+        const delay = Math.pow(2, attempt - 1) * 1000; // 1s, 2s, 4s
+        console.warn(`[fetch-latest-release] Attempt ${attempt} failed, retrying in ${delay}ms...`);
+        await sleep(delay);
+      }
+    }
+  }
+  throw lastError;
+}
+
 async function fetchLatestRelease() {
   const headers = {
     'Accept': 'application/vnd.github.v3+json'
@@ -10,15 +36,13 @@ async function fetchLatestRelease() {
     headers['Authorization'] = `token ${token}`;
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
   const isDev = process.env.NODE_ENV !== 'production';
 
   try {
-    const response = await fetch(`https://api.github.com/repos/cloudposse/atmos/releases/latest`, {
-      headers,
-      signal: controller.signal
-    });
+    const response = await fetchWithRetry(
+      `https://api.github.com/repos/cloudposse/atmos/releases/latest`,
+      { headers }
+    );
 
     if (!response.ok) {
       const errorMsg = token
@@ -51,8 +75,6 @@ async function fetchLatestRelease() {
 
     console.error(`[fetch-latest-release] ${message}`);
     throw error;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
