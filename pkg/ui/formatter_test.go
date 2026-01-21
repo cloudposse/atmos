@@ -2185,3 +2185,77 @@ func TestWriteln_PackageLevel(t *testing.T) {
 		Writeln("Line of text")
 	})
 }
+
+// TestFormatInline tests the FormatInline package-level function.
+func TestFormatInline(t *testing.T) {
+	t.Run("plain text passes through", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		result := FormatInline("plain text")
+		if result == "" {
+			t.Error("FormatInline() returned empty string")
+		}
+		// Plain text should remain intact (possibly with whitespace trimmed).
+		if !strings.Contains(result, "plain text") {
+			t.Errorf("FormatInline() = %q, should contain 'plain text'", result)
+		}
+	})
+
+	t.Run("backticks render as code", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		result := FormatInline("Installing `component`")
+		if result == "" {
+			t.Error("FormatInline() returned empty string")
+		}
+		// Should contain the word "component" (backticks are rendered, not literal).
+		if !strings.Contains(result, "component") {
+			t.Errorf("FormatInline() = %q, should contain 'component'", result)
+		}
+		// Should NOT contain literal backticks (they should be rendered).
+		if strings.Contains(result, "`") {
+			t.Errorf("FormatInline() = %q, should NOT contain literal backticks", result)
+		}
+	})
+
+	t.Run("no trailing newlines", func(t *testing.T) {
+		ioCtx := createTestIOContext()
+		term := createMockTerminal(terminal.ColorNone)
+		InitFormatter(ioCtx)
+		globalFormatter = NewFormatter(ioCtx, term).(*formatter)
+
+		result := FormatInline("test message")
+		if strings.HasSuffix(result, "\n") {
+			t.Errorf("FormatInline() = %q, should not have trailing newline", result)
+		}
+	})
+}
+
+// TestFormatInline_FallbackBehavior tests FormatInline when formatter is not initialized.
+func TestFormatInline_FallbackBehavior(t *testing.T) {
+	t.Run("returns input unchanged when not initialized", func(t *testing.T) {
+		// Temporarily clear global formatter.
+		formatterMu.Lock()
+		oldFormatter := globalFormatter
+		globalFormatter = nil
+		formatterMu.Unlock()
+
+		defer func() {
+			formatterMu.Lock()
+			globalFormatter = oldFormatter
+			formatterMu.Unlock()
+		}()
+
+		input := "test `code` message"
+		result := FormatInline(input)
+		if result != input {
+			t.Errorf("FormatInline() = %q, want %q (unchanged)", result, input)
+		}
+	})
+}

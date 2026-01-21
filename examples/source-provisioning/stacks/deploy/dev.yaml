@@ -8,7 +8,8 @@ components:
     # Component with source provisioning
     myapp:
       source:
-        uri: "github.com/cloudposse/terraform-null-label?ref=0.25.0"
+        uri: "github.com/cloudposse/terraform-null-label"
+        version: "0.25.0"
       provision:
         workdir:
           enabled: true

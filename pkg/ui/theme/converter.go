@@ -268,6 +268,185 @@ func GetGlamourStyleForTheme(themeName string) ([]byte, error) {
 	return ConvertToGlamourStyle(theme)
 }
 
+// GetGlamourStyleForInline returns a glamour style for inline rendering (no newlines).
+func GetGlamourStyleForInline(themeName string) ([]byte, error) {
+	registry, err := NewRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create theme registry: %w", err)
+	}
+
+	theme := registry.GetOrDefault(themeName)
+	return ConvertToGlamourStyleInline(theme)
+}
+
+// ConvertToGlamourStyleInline converts a theme to a glamour style for inline rendering.
+// Unlike the standard style, this has no block prefixes/suffixes or margins.
+func ConvertToGlamourStyleInline(t *Theme) ([]byte, error) {
+	style := createGlamourStyleInlineFromTheme(t)
+	return json.Marshal(style)
+}
+
+// createGlamourStyleInlineFromTheme creates a glamour style for inline rendering.
+// This style has no block suffixes, prefixes, or margins - designed for single-line output.
+//
+//nolint:funlen // Complex style configuration better kept together.
+func createGlamourStyleInlineFromTheme(t *Theme) *ansi.StyleConfig {
+	// Use the theme's foreground and background as base colors.
+	docColor := t.Foreground
+
+	// Determine primary colors based on theme.
+	primaryColor := t.Blue
+	secondaryColor := t.Magenta
+	accentColor := t.Cyan
+
+	style := &ansi.StyleConfig{
+		Document: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				BlockPrefix: "",
+				BlockSuffix: "", // No trailing newline for inline.
+				Color:       &docColor,
+			},
+			Margin: uintPtr(0),
+		},
+		BlockQuote: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Color: &secondaryColor,
+			},
+			Indent:      uintPtr(0),
+			IndentToken: stringPtr(""),
+		},
+		Paragraph: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				BlockPrefix: "",
+				BlockSuffix: "",
+				Color:       &docColor,
+			},
+			Margin: uintPtr(0),
+		},
+		List: ansi.StyleList{
+			LevelIndent: 0,
+		},
+		Heading: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				BlockPrefix: "",
+				BlockSuffix: "",
+				Color:       &primaryColor,
+				Bold:        boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		H1: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Prefix: "",
+				Color:  &primaryColor,
+				Bold:   boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		H2: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Prefix: "",
+				Color:  &secondaryColor,
+				Bold:   boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		H3: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Prefix: "",
+				Color:  &primaryColor,
+				Bold:   boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		H4: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Prefix: "",
+				Color:  &primaryColor,
+				Bold:   boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		H5: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Prefix: "",
+				Color:  &primaryColor,
+				Bold:   boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		H6: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Prefix: "",
+				Color:  &primaryColor,
+				Bold:   boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		Text: ansi.StylePrimitive{
+			Color: &docColor,
+		},
+		Strong: ansi.StylePrimitive{
+			Color: &secondaryColor,
+			Bold:  boolPtr(true),
+		},
+		Emph: ansi.StylePrimitive{
+			Color:  &secondaryColor,
+			Italic: boolPtr(true),
+		},
+		HorizontalRule: ansi.StylePrimitive{
+			Color:  &secondaryColor,
+			Format: "",
+		},
+		Item: ansi.StylePrimitive{
+			BlockPrefix: "",
+		},
+		Enumeration: ansi.StylePrimitive{
+			BlockPrefix: "",
+		},
+		Code: ansi.StyleBlock{
+			StylePrimitive: ansi.StylePrimitive{
+				Color: &accentColor,
+				Bold:  boolPtr(true),
+			},
+			Margin: uintPtr(0),
+		},
+		CodeBlock: ansi.StyleCodeBlock{
+			StyleBlock: ansi.StyleBlock{
+				StylePrimitive: ansi.StylePrimitive{
+					Color: &primaryColor,
+				},
+				Margin: uintPtr(0),
+				Indent: uintPtr(0),
+			},
+			Chroma: createChromaStyle(t),
+		},
+		Table: ansi.StyleTable{
+			StyleBlock:      ansi.StyleBlock{},
+			CenterSeparator: stringPtr(""),
+			ColumnSeparator: stringPtr(""),
+			RowSeparator:    stringPtr(""),
+		},
+		DefinitionList: ansi.StyleBlock{},
+		DefinitionTerm: ansi.StylePrimitive{},
+		DefinitionDescription: ansi.StylePrimitive{
+			BlockPrefix: "",
+		},
+		HTMLBlock: ansi.StyleBlock{},
+		HTMLSpan:  ansi.StyleBlock{},
+		Link: ansi.StylePrimitive{
+			Color:     &primaryColor,
+			Underline: boolPtr(true),
+		},
+		LinkText: ansi.StylePrimitive{
+			Color: &secondaryColor,
+			Bold:  boolPtr(true),
+		},
+	}
+
+	return style
+}
+
 // Helper functions for creating pointers.
 func stringPtr(s string) *string {
 	return &s
