@@ -151,6 +151,21 @@ func TestDetermineTargetDirectory(t *testing.T) {
 			expectError:     nil,
 		},
 		{
+			name: "default packer base path",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						BasePath: "components/packer",
+					},
+				},
+			},
+			componentType:   "packer",
+			component:       "ami",
+			componentConfig: map[string]any{},
+			expectedDir:     filepath.Join("components", "packer", "ami"),
+			expectError:     nil,
+		},
+		{
 			name: "no base path configured for terraform",
 			atmosConfig: &schema.AtmosConfiguration{
 				Components: schema.Components{
@@ -238,6 +253,18 @@ func TestGetComponentBasePath(t *testing.T) {
 			expected:      "components/helmfile",
 		},
 		{
+			name: "packer component type",
+			atmosConfig: &schema.AtmosConfiguration{
+				Components: schema.Components{
+					Packer: schema.Packer{
+						BasePath: "components/packer",
+					},
+				},
+			},
+			componentType: "packer",
+			expected:      "components/packer",
+		},
+		{
 			name: "unknown component type",
 			atmosConfig: &schema.AtmosConfiguration{
 				Components: schema.Components{
@@ -246,7 +273,7 @@ func TestGetComponentBasePath(t *testing.T) {
 					},
 				},
 			},
-			componentType: "packer",
+			componentType: "unknown",
 			expected:      "",
 		},
 		{
@@ -435,35 +462,6 @@ func TestProvision_ForceOverwritesExisting(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrSourceProvision, "Error should be from provisioning attempt")
 }
 
-// TestGetComponentBasePath_Packer tests packer component type base path.
-func TestGetComponentBasePath_Packer(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		Components: schema.Components{
-			Packer: schema.Packer{
-				BasePath: "components/packer",
-			},
-		},
-	}
-
-	result := getComponentBasePath(atmosConfig, "packer")
-	assert.Equal(t, "components/packer", result)
-}
-
-// TestDetermineTargetDirectory_Packer tests target directory for packer components.
-func TestDetermineTargetDirectory_Packer(t *testing.T) {
-	atmosConfig := &schema.AtmosConfiguration{
-		Components: schema.Components{
-			Packer: schema.Packer{
-				BasePath: "components/packer",
-			},
-		},
-	}
-
-	result, err := DetermineTargetDirectory(atmosConfig, "packer", "ami", map[string]any{})
-	require.NoError(t, err)
-	assert.Equal(t, filepath.Join("components", "packer", "ami"), result)
-}
-
 // TestDetermineTargetDirectory_WorkdirEnabled tests workdir path when provision.workdir.enabled is true.
 func TestDetermineTargetDirectory_WorkdirEnabled(t *testing.T) {
 	tempDir := t.TempDir()
@@ -534,28 +532,30 @@ func TestGetResolvedAbsPath(t *testing.T) {
 
 // TestDetermineTargetDirectory_PreResolvedAbsPath tests using pre-resolved absolute paths.
 func TestDetermineTargetDirectory_PreResolvedAbsPath(t *testing.T) {
+	absPath := filepath.Join(t.TempDir(), "terraform")
 	atmosConfig := &schema.AtmosConfiguration{
-		TerraformDirAbsolutePath: "/abs/path/terraform",
+		TerraformDirAbsolutePath: absPath,
 	}
 
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", map[string]any{})
 	require.NoError(t, err)
-	assert.Equal(t, "/abs/path/terraform/vpc", result)
+	assert.Equal(t, filepath.Join(absPath, "vpc"), result)
 }
 
 // TestBuildComponentPath_AbsolutePath tests building path when config base path is absolute.
 func TestBuildComponentPath_AbsolutePath(t *testing.T) {
+	absPath := filepath.Join(t.TempDir(), "components", "terraform")
 	atmosConfig := &schema.AtmosConfiguration{
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "/absolute/path/components/terraform",
+				BasePath: absPath,
 			},
 		},
 	}
 
 	result, err := buildComponentPath(atmosConfig, "terraform")
 	require.NoError(t, err)
-	assert.Equal(t, "/absolute/path/components/terraform", result)
+	assert.Equal(t, absPath, result)
 }
 
 // TestBuildComponentPath_RelativePathWithBasePath tests building path with relative config and base path.

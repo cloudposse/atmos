@@ -4,7 +4,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,24 +35,13 @@ func TestSourcesCommand_AcceptsOptionalComponent(t *testing.T) {
 
 // TestSourcesCommandFlags tests that the sources command has the expected flags.
 func TestSourcesCommandFlags(t *testing.T) {
-	// Create a fresh command with flags to test the pattern.
-	cmd := &cobra.Command{
-		Use:   "sources [component]",
-		Short: "List components with source configuration",
-		Long:  "List all components that have source configured in stacks.",
-		Args:  cobra.RangeArgs(0, 1),
-	}
-
-	cmd.PersistentFlags().String("format", "", "Output format: table, json, yaml, csv, tsv")
-	cmd.PersistentFlags().String("stack", "", "Filter by stack pattern")
-
-	// Check format flag exists.
-	formatFlag := cmd.PersistentFlags().Lookup("format")
+	// Check flags on the actual command.
+	formatFlag := sourcesCmd.Flags().Lookup("format")
 	require.NotNil(t, formatFlag, "Expected format flag to exist")
 	assert.Equal(t, "", formatFlag.DefValue)
 
 	// Check stack flag exists.
-	stackFlag := cmd.PersistentFlags().Lookup("stack")
+	stackFlag := sourcesCmd.Flags().Lookup("stack")
 	require.NotNil(t, stackFlag, "Expected stack flag to exist")
 	assert.Equal(t, "", stackFlag.DefValue)
 }

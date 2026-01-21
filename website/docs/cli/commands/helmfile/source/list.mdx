@@ -94,13 +94,27 @@ atmos helmfile source list --format yaml
 
 # CSV format
 atmos helmfile source list --format csv
+
+# TSV format (tab-separated, for pipelines)
+atmos helmfile source list --format tsv
 ```
+
+## Dynamic Columns
+
+The command automatically adjusts columns based on context:
+
+| Context | Columns Shown |
+|---------|---------------|
+| All stacks | Stack, Component, Folder*, URI, Version |
+| Single stack (`--stack`) | Component, Folder*, URI, Version |
+
+*The Folder column only appears when any component uses `metadata.component` to specify a different folder name than the component instance name.
 
 ## Arguments
 
 <dl>
   <dt>`component` <em>(optional)</em></dt>
-  <dd>Filter results to a specific component name. When provided, only shows sources for components matching this name across all stacks.</dd>
+  <dd>Filter results to a specific component name or folder (`metadata.component`). When provided, only shows sources for components matching this name across all stacks.</dd>
 </dl>
 
 ## Flags
