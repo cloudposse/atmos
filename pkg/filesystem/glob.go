@@ -1,7 +1,6 @@
 package filesystem
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -60,7 +59,9 @@ func GetGlobMatches(pattern string) ([]string, error) {
 	// os.DirFS will panic if the directory doesn't exist.
 	if _, err := os.Stat(base); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w: '%s' ('%s' + '%s')", errUtils.ErrFailedToFindImport, normalizedPattern, base, cleanPattern)
+			return nil, errUtils.Build(errUtils.ErrFailedToFindImport).
+				WithContext("paths", normalizedPattern).
+				Err()
 		}
 		return nil, err
 	}

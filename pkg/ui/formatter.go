@@ -7,10 +7,10 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -471,6 +471,20 @@ func FormatError(text string) string {
 	return f.Error(text)
 }
 
+// FormatInline renders inline markdown (backticks, bold, etc.) without icons or newlines.
+// Use this for spinner progress messages or other single-line styled text.
+func FormatInline(text string) string {
+	f, err := getFormatter()
+	if err != nil {
+		return text
+	}
+	rendered, err := f.renderToastMarkdownInline(text)
+	if err != nil {
+		return text
+	}
+	return rendered
+}
+
 // Badge returns a styled badge with the given text, background color, and foreground color.
 // Badges are compact labels with background styling, typically used for status indicators.
 // The background and foreground should be hex colors (e.g., "#FF9800", "#000000").
@@ -620,219 +634,6 @@ func (f *formatter) Badge(text, background, foreground string) string {
 		Render(text)
 }
 
-// isANSIStart checks if position i marks the start of an ANSI escape sequence.
-func isANSIStart(s string, i int) bool {
-	return s[i] == '\x1b' && i+1 < len(s) && s[i+1] == '['
-}
-
-// skipANSISequence advances past an ANSI escape sequence starting at position i.
-// Returns the index after the sequence terminator.
-func skipANSISequence(s string, i int) int {
-	i += 2 // Skip ESC and [.
-	for i < len(s) && !isANSITerminator(s[i]) {
-		i++
-	}
-	if i < len(s) {
-		i++ // Skip terminator.
-	}
-	return i
-}
-
-// isANSITerminator checks if byte b is an ANSI sequence terminator (A-Z or a-z).
-func isANSITerminator(b byte) bool {
-	return (b >= 'A' && b <= 'Z') || (b >= 'a' && b <= 'z')
-}
-
-// copyContentAndANSI copies characters and ANSI codes from s until plainIdx reaches targetLen.
-// Returns the result builder pointer and the final position in s.
-func copyContentAndANSI(s string, targetLen int) (*strings.Builder, int) {
-	result := &strings.Builder{}
-	plainIdx := 0
-	i := 0
-
-	for i < len(s) && plainIdx < targetLen {
-		if isANSIStart(s, i) {
-			start := i
-			i = skipANSISequence(s, i)
-			result.WriteString(s[start:i])
-		} else {
-			result.WriteByte(s[i])
-			plainIdx++
-			i++
-		}
-	}
-
-	return result, i
-}
-
-// trimRightSpaces removes only trailing spaces (not tabs) from an ANSI-coded string while
-// preserving all ANSI escape sequences on the actual content.
-// This is useful for removing Glamour's padding spaces while preserving intentional tabs.
-func trimRightSpaces(s string) string {
-	stripped := ansi.Strip(s)
-	trimmed := strings.TrimRight(stripped, " ")
-
-	if trimmed == stripped {
-		return s
-	}
-	if trimmed == "" {
-		return ""
-	}
-
-	result, i := copyContentAndANSI(s, len(trimmed))
-
-	// Capture any trailing ANSI codes that immediately follow the last character.
-	for i < len(s) && isANSIStart(s, i) {
-		start := i
-		i = skipANSISequence(s, i)
-		result.WriteString(s[start:i])
-	}
-
-	return result.String()
-}
-
-// trimLeftSpaces removes only leading spaces from an ANSI-coded string while
-// preserving all ANSI escape sequences on the remaining content.
-// This is useful for removing Glamour's paragraph indent while preserving styled content.
-func trimLeftSpaces(s string) string {
-	stripped := ansi.Strip(s)
-	trimmed := strings.TrimLeft(stripped, " ")
-
-	if trimmed == stripped {
-		return s // No leading spaces to remove.
-	}
-	if trimmed == "" {
-		return "" // All spaces.
-	}
-
-	// Calculate how many leading spaces to skip.
-	leadingSpaces := len(stripped) - len(trimmed)
-
-	// Walk through original string, skipping ANSI codes and counting spaces.
-	spacesSkipped := 0
-	i := 0
-
-	// Skip leading ANSI codes and spaces until we've skipped the required amount.
-skipLoop:
-	for i < len(s) && spacesSkipped < leadingSpaces {
-		switch {
-		case isANSIStart(s, i):
-			// Skip ANSI sequence (don't output it since it's styling skipped content).
-			i = skipANSISequence(s, i)
-		case s[i] == ' ':
-			spacesSkipped++
-			i++
-		default:
-			break skipLoop // Non-space content found.
-		}
-	}
-
-	// Return remaining content (including any ANSI codes).
-	return s[i:]
-}
-
-// isWhitespace checks if byte b is a space or tab.
-func isWhitespace(b byte) bool {
-	return b == ' ' || b == '\t'
-}
-
-// processTrailingANSICodes processes ANSI codes after content, preserving reset codes
-// but not color codes that wrap trailing whitespace.
-func processTrailingANSICodes(s string, i int, result *strings.Builder) {
-	for i < len(s) && isANSIStart(s, i) {
-		start := i
-		i = skipANSISequence(s, i)
-
-		// Check what comes after this ANSI code.
-		if shouldIncludeTrailingANSI(s, i, start, result) {
-			return
-		}
-	}
-}
-
-// shouldIncludeTrailingANSI determines whether to include a trailing ANSI code and stop processing.
-// Returns true if processing should stop.
-func shouldIncludeTrailingANSI(s string, i, start int, result *strings.Builder) bool {
-	// Whitespace or end of string directly after this code - include and stop.
-	if i >= len(s) || isWhitespace(s[i]) {
-		result.WriteString(s[start:i])
-		return true
-	}
-
-	// Another ANSI code follows - peek ahead.
-	if isANSIStart(s, i) {
-		nextEnd := skipANSISequence(s, i)
-		if nextEnd < len(s) && isWhitespace(s[nextEnd]) {
-			// Next code wraps whitespace - include current and stop.
-			result.WriteString(s[start:i])
-			return true
-		}
-		// Next code doesn't wrap whitespace - include and continue.
-		result.WriteString(s[start:i])
-		return false
-	}
-
-	// Other content follows - include the code.
-	result.WriteString(s[start:i])
-	return false
-}
-
-// TrimRight removes trailing whitespace from an ANSI-coded string while
-// preserving all ANSI escape sequences on the actual content.
-// This is useful for removing Glamour's padding spaces that are wrapped in ANSI codes.
-func TrimRight(s string) string {
-	stripped := ansi.Strip(s)
-	trimmed := strings.TrimRight(stripped, " \t")
-
-	if trimmed == stripped {
-		return s
-	}
-	if trimmed == "" {
-		return ""
-	}
-
-	result, i := copyContentAndANSI(s, len(trimmed))
-	processTrailingANSICodes(s, i, result)
-
-	return result.String()
-}
-
-// TrimLinesRight trims trailing whitespace from each line in a multi-line string.
-// This is useful after lipgloss.Render() which pads all lines to the same width.
-// Uses ANSI-aware TrimRight to handle whitespace wrapped in ANSI codes.
-func TrimLinesRight(s string) string {
-	lines := strings.Split(s, newline)
-	for i, line := range lines {
-		lines[i] = TrimRight(line)
-	}
-	return strings.Join(lines, newline)
-}
-
-// trimTrailingWhitespace splits rendered markdown by newlines and trims trailing spaces
-// that Glamour adds for padding (including ANSI-wrapped spaces). For empty lines (all whitespace),
-// it preserves the leading indent (first 2 spaces) to maintain paragraph structure.
-func trimTrailingWhitespace(rendered string) []string {
-	lines := strings.Split(rendered, newline)
-	for i := range lines {
-		// Use trimRightSpaces to remove trailing spaces while preserving tabs
-		line := trimRightSpaces(lines[i])
-
-		// If line became empty after trimming but had content before,
-		// it was an empty line with indent - preserve the indent
-		if line == "" && len(lines[i]) > 0 {
-			// Preserve up to 2 leading spaces for paragraph indent
-			if len(lines[i]) >= paragraphIndentWidth {
-				lines[i] = paragraphIndent
-			} else {
-				lines[i] = lines[i][:len(lines[i])] // Keep whatever spaces there were
-			}
-		} else {
-			lines[i] = line
-		}
-	}
-	return lines
-}
-
 // toastMarkdown renders markdown text with preserved newlines, an icon prefix, and auto-indents multi-line content.
 // Uses a compact stylesheet for toast-style inline formatting.
 func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text string) (string, error) {
@@ -861,7 +662,7 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 	}
 
 	// Split by newlines and trim trailing padding that Glamour adds.
-	lines := trimTrailingWhitespace(rendered)
+	lines := atmosansi.TrimTrailingWhitespace(rendered, paragraphIndent, paragraphIndentWidth)
 
 	// Remove trailing empty/whitespace-only lines that Glamour may add.
 	// Glamour can output extra padded lines before trailing newlines.
@@ -880,63 +681,54 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 		// For single line: trim leading spaces from Glamour's paragraph indent
 		// since the icon+space already provides visual separation.
 		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-		line := trimLeftSpaces(lines[0])
+		line := atmosansi.TrimLeftSpaces(lines[0])
 		return fmt.Sprintf(iconMessageFormat, styledIcon, line), nil
 	}
 
 	// Multi-line: trim leading spaces from first line (goes next to icon).
 	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-	lines[0] = trimLeftSpaces(lines[0])
+	lines[0] = atmosansi.TrimLeftSpaces(lines[0])
 
-	// Multi-line: first line with icon, rest indented to align under first line's text
+	// Multi-line: first line with icon, rest indented to align under first line's text.
 	result := fmt.Sprintf(iconMessageFormat, styledIcon, lines[0])
 
-	// Calculate indent: icon width + 1 space from iconMessageFormat
-	// Use lipgloss.Width to handle multi-cell characters like emojis
+	// Calculate indent: icon width + 1 space from iconMessageFormat.
+	// Use lipgloss.Width to handle multi-cell characters like emojis.
 	iconWidth := lipgloss.Width(icon)
-	indent := strings.Repeat(space, iconWidth+1) // +1 for the space in "%s %s" format
+	indent := strings.Repeat(space, iconWidth+1) // +1 for the space in "%s %s" format.
 
 	for i := 1; i < len(lines); i++ {
 		// Glamour already added 2-space paragraph indent, replace with our calculated indent.
 		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-		line := trimLeftSpaces(lines[i])
+		line := atmosansi.TrimLeftSpaces(lines[i])
 		result += newline + indent + line
 	}
 
 	return result, nil
 }
 
-// renderToastMarkdown renders markdown with a compact stylesheet for toast messages.
+// renderToastMarkdownFromStylesheet renders markdown using a provided stylesheet getter.
+// This is the shared implementation used by both renderToastMarkdown and renderToastMarkdownInline.
 // Uses the custom markdown renderer with extended syntax support (highlight, badge, admonitions).
-func (f *formatter) renderToastMarkdown(content string) (string, error) {
-	// Build custom renderer options.
+func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesheet func(string) ([]byte, error), wordWrap int) (string, error) {
 	var opts []markdown.CustomRendererOption
 
-	// Enable word wrap for toast messages to respect terminal width.
-	// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
-	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
-	if maxWidth == 0 {
-		// Use terminal width if available.
-		termWidth := f.terminal.Width(terminal.Stdout)
-		if termWidth > 0 {
-			maxWidth = termWidth
-		}
+	if wordWrap > 0 {
+		opts = append(opts, markdown.WithWordWrap(wordWrap))
+		opts = append(opts, markdown.WithPreservedNewLines())
+	} else {
+		opts = append(opts, markdown.WithWordWrap(0))
 	}
-	if maxWidth > 0 {
-		opts = append(opts, markdown.WithWordWrap(maxWidth))
-	}
-	opts = append(opts, markdown.WithPreservedNewLines())
 
 	// Set color profile using lipgloss's detected profile.
 	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
 
-	// Get theme-based glamour style and apply it.
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
 		if themeName == "" {
 			themeName = "default"
 		}
-		glamourStyle, err := theme.GetGlamourStyleForTheme(themeName)
+		glamourStyle, err := getStylesheet(themeName)
 		if err == nil {
 			opts = append(opts, markdown.WithStylesFromJSONBytes(glamourStyle))
 		}
@@ -956,6 +748,30 @@ func (f *formatter) renderToastMarkdown(content string) (string, error) {
 	}
 
 	return rendered, nil
+}
+
+// renderToastMarkdown renders markdown with the standard toast stylesheet.
+// Note: Glamour adds padding to fill width - we trim it with trimTrailingWhitespace().
+func (f *formatter) renderToastMarkdown(content string) (string, error) {
+	maxWidth := f.ioCtx.Config().AtmosConfig.Settings.Terminal.MaxWidth
+	if maxWidth == 0 {
+		// Use terminal width if available.
+		termWidth := f.terminal.Width(terminal.Stdout)
+		if termWidth > 0 {
+			maxWidth = termWidth
+		}
+	}
+	return f.renderToastMarkdownFromStylesheet(content, theme.GetGlamourStyleForTheme, maxWidth)
+}
+
+// renderToastMarkdownInline renders markdown with the inline stylesheet (no newlines).
+// This is designed for single-line output like spinner progress messages.
+func (f *formatter) renderToastMarkdownInline(content string) (string, error) {
+	rendered, err := f.renderToastMarkdownFromStylesheet(content, theme.GetGlamourStyleForInline, 0)
+	if err != nil {
+		return content, err
+	}
+	return strings.TrimSpace(rendered), nil
 }
 
 // Semantic formatting - all use toastMarkdown for markdown rendering and icon styling.
@@ -1044,7 +860,7 @@ func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipglos
 	rendered = strings.TrimSuffix(rendered, newline)
 
 	// Trim trailing padding and leading indent from Glamour.
-	lines := trimTrailingWhitespace(rendered)
+	lines := atmosansi.TrimTrailingWhitespace(rendered, paragraphIndent, paragraphIndentWidth)
 	if len(lines) == 0 {
 		return ""
 	}
@@ -1052,11 +868,11 @@ func (f *formatter) renderInlineMarkdownWithBase(text string, baseStyle *lipglos
 	// For single line, trim leading spaces.
 	// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
 	if len(lines) == 1 {
-		rendered = trimLeftSpaces(lines[0])
+		rendered = atmosansi.TrimLeftSpaces(lines[0])
 	} else {
 		// Multi-line: trim first line and rejoin.
 		// Use ANSI-aware trimming since Glamour may wrap spaces in color codes.
-		lines[0] = trimLeftSpaces(lines[0])
+		lines[0] = atmosansi.TrimLeftSpaces(lines[0])
 		rendered = strings.Join(lines, newline)
 	}
 
@@ -1118,6 +934,14 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 		}
 	}
 
+	// Account for document left indent to prevent text overflow.
+	// The glamour stylesheet adds theme.DocumentIndent spaces on the left.
+	// Must match the Indent value in pkg/ui/theme/converter.go.
+	const documentIndent = 2
+	if maxWidth > documentIndent {
+		maxWidth -= documentIndent
+	}
+
 	// Build glamour options with theme-aware styling
 	var opts []glamour.TermRendererOption
 
@@ -1159,5 +983,5 @@ func (f *formatter) renderMarkdown(content string, preserveNewlines bool) (strin
 	}
 
 	// Remove trailing whitespace that glamour adds for padding.
-	return TrimLinesRight(rendered), nil
+	return atmosansi.TrimLinesRight(rendered), nil
 }

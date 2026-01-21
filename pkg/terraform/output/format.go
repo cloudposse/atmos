@@ -9,23 +9,15 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	envfmt "github.com/cloudposse/atmos/pkg/env"
 	listformat "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// singleQuoteEscape is the escape sequence for single quotes in shell literals.
-// Shell technique: end string, add escaped quote, reopen string (see constant value).
-const singleQuoteEscape = `'\''`
-
 // defaultFmt is the default format verb for generic value formatting.
 const defaultFmt = "%v"
-
-// escapeSingleQuotes escapes single quotes for safe shell literal strings.
-func escapeSingleQuotes(s string) string {
-	return strings.ReplaceAll(s, "'", singleQuoteEscape)
-}
 
 // FormatOutputs converts terraform outputs map to the specified format.
 func FormatOutputs(outputs map[string]any, format Format) (string, error) {
@@ -61,6 +53,7 @@ var simpleFormatters = map[Format]simpleFormatter{
 	FormatBash:   formatBash,
 	FormatCSV:    formatCSV,
 	FormatTSV:    formatTSV,
+	FormatGitHub: formatGitHub,
 }
 
 // formatWithOptions applies the specified format to transformed outputs.
@@ -185,6 +178,8 @@ func dispatchSingleValueFormat(key string, value any, format Format) (string, er
 		return formatSingleDelimited(key, value, ",")
 	case FormatTSV:
 		return formatSingleDelimited(key, value, "\t")
+	case FormatGitHub:
+		return formatSingleGitHub(key, value)
 	default:
 		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
 			WithExplanationf("Unsupported format %q.", format).
@@ -222,31 +217,17 @@ func formatSingleHCL(key string, value any) (string, error) {
 
 // formatSingleEnv outputs a single value as key=value.
 func formatSingleEnv(key string, value any) (string, error) {
-	strVal, err := valueToString(value)
-	if err != nil {
-		return "", err
-	}
-	return fmt.Sprintf("%s=%s\n", key, strVal), nil
+	return envfmt.FormatValue(key, value, envfmt.FormatEnv)
 }
 
 // formatSingleDotenv outputs a single value as key='value'.
 func formatSingleDotenv(key string, value any) (string, error) {
-	strVal, err := valueToString(value)
-	if err != nil {
-		return "", err
-	}
-	safe := escapeSingleQuotes(strVal)
-	return fmt.Sprintf("%s='%s'\n", key, safe), nil
+	return envfmt.FormatValue(key, value, envfmt.FormatDotenv)
 }
 
 // formatSingleBash outputs a single value as export key='value'.
 func formatSingleBash(key string, value any) (string, error) {
-	strVal, err := valueToString(value)
-	if err != nil {
-		return "", err
-	}
-	safe := escapeSingleQuotes(strVal)
-	return fmt.Sprintf("export %s='%s'\n", key, safe), nil
+	return envfmt.FormatValue(key, value, envfmt.FormatBash)
 }
 
 // formatSingleDelimited outputs a single value as key<delimiter>value (no header).
@@ -259,18 +240,24 @@ func formatSingleDelimited(key string, value any, delimiter string) (string, err
 	return key + delimiter + escapedVal + "\n", nil
 }
 
-// formatJSON outputs as a JSON object.
+// formatJSON outputs as a JSON object with keys sorted alphabetically.
+// While encoding/json sorts keys by default since Go 1.12, we build the
+// output explicitly to ensure consistent behavior across all formats.
 func formatJSON(outputs map[string]any) (string, error) {
-	jsonBytes, err := json.MarshalIndent(outputs, "", "  ")
+	sorted := sortMapRecursive(outputs)
+	jsonBytes, err := json.MarshalIndent(sorted, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal outputs to JSON: %w", err)
 	}
 	return string(jsonBytes) + "\n", nil
 }
 
-// formatYAML outputs as YAML.
+// formatYAML outputs as YAML with keys sorted alphabetically.
+// While gopkg.in/yaml.v3 sorts keys by default, we build the output
+// explicitly to ensure consistent behavior across all formats.
 func formatYAML(outputs map[string]any) (string, error) {
-	yamlBytes, err := yaml.Marshal(outputs)
+	sorted := sortMapRecursive(outputs)
+	yamlBytes, err := yaml.Marshal(sorted)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal outputs to YAML: %w", err)
 	}
@@ -301,72 +288,17 @@ func formatHCL(outputs map[string]any) (string, error) {
 
 // formatEnv outputs key=value (no quotes, no export) - ideal for $GITHUB_OUTPUT.
 func formatEnv(outputs map[string]any) (string, error) {
-	keys := sortedKeys(outputs)
-	var sb strings.Builder
-
-	for _, key := range keys {
-		value := outputs[key]
-		if value == nil {
-			continue // Skip null values.
-		}
-
-		strVal, err := valueToString(value)
-		if err != nil {
-			return "", err
-		}
-
-		sb.WriteString(fmt.Sprintf("%s=%s\n", key, strVal))
-	}
-
-	return sb.String(), nil
+	return envfmt.FormatData(outputs, envfmt.FormatEnv)
 }
 
 // formatDotenv outputs key='value' for .env files.
 func formatDotenv(outputs map[string]any) (string, error) {
-	keys := sortedKeys(outputs)
-	var sb strings.Builder
-
-	for _, key := range keys {
-		value := outputs[key]
-		if value == nil {
-			continue // Skip null values.
-		}
-
-		strVal, err := valueToString(value)
-		if err != nil {
-			return "", err
-		}
-
-		// Escape single quotes for safe single-quoted shell literals: ' -> '\''.
-		safe := escapeSingleQuotes(strVal)
-		sb.WriteString(fmt.Sprintf("%s='%s'\n", key, safe))
-	}
-
-	return sb.String(), nil
+	return envfmt.FormatData(outputs, envfmt.FormatDotenv)
 }
 
 // formatBash outputs export key='value' for shell sourcing.
 func formatBash(outputs map[string]any) (string, error) {
-	keys := sortedKeys(outputs)
-	var sb strings.Builder
-
-	for _, key := range keys {
-		value := outputs[key]
-		if value == nil {
-			continue // Skip null values.
-		}
-
-		strVal, err := valueToString(value)
-		if err != nil {
-			return "", err
-		}
-
-		// Escape single quotes for safe single-quoted shell literals: ' -> '\''.
-		safe := escapeSingleQuotes(strVal)
-		sb.WriteString(fmt.Sprintf("export %s='%s'\n", key, safe))
-	}
-
-	return sb.String(), nil
+	return envfmt.FormatData(outputs, envfmt.FormatBash)
 }
 
 // formatCSV outputs key,value with proper CSV escaping.
@@ -576,4 +508,51 @@ func highlightValue(s string, config *schema.AtmosConfiguration) string {
 		return s
 	}
 	return highlighted
+}
+
+// sortMapRecursive creates a new map with keys sorted alphabetically at all levels.
+// This ensures consistent output ordering for formats like JSON and YAML.
+func sortMapRecursive(m map[string]any) map[string]any {
+	result := make(map[string]any, len(m))
+	keys := sortedKeys(m)
+
+	for _, k := range keys {
+		v := m[k]
+		result[k] = sortValueRecursive(v)
+	}
+
+	return result
+}
+
+// sortValueRecursive recursively sorts maps and slices containing maps.
+func sortValueRecursive(v any) any {
+	switch val := v.(type) {
+	case map[string]any:
+		return sortMapRecursive(val)
+	case []any:
+		return sortSliceRecursive(val)
+	default:
+		return v
+	}
+}
+
+// sortSliceRecursive recursively sorts maps within a slice.
+func sortSliceRecursive(s []any) []any {
+	result := make([]any, len(s))
+	for i, v := range s {
+		result[i] = sortValueRecursive(v)
+	}
+	return result
+}
+
+// formatGitHub formats outputs for GitHub Actions $GITHUB_OUTPUT file.
+// Uses KEY=value for simple values, heredoc syntax for multiline values.
+// See: https://docs.github.com/en/actions/reference/workflow-commands-for-github-actions#multiline-strings
+func formatGitHub(outputs map[string]any) (string, error) {
+	return envfmt.FormatData(outputs, envfmt.FormatGitHub)
+}
+
+// formatSingleGitHub outputs a single value in GitHub Actions format.
+func formatSingleGitHub(key string, value any) (string, error) {
+	return envfmt.FormatValue(key, value, envfmt.FormatGitHub)
 }

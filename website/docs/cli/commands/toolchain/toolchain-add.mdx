@@ -20,39 +20,44 @@ Add new toolchain dependencies that your Atmos components, commands, and workflo
 Execute the `atmos toolchain add` command like this:
 
 ```shell
-atmos toolchain add <tool> <version>
+atmos toolchain add <tool[@version]>...
 ```
 
 ## Examples
 
 ```shell
-atmos toolchain add suzuki-shunsuke/github-comment 3.5.0
-atmos toolchain add hashicorp/terraform 1.5.0
+# Add a tool with a specific version
+atmos toolchain add hashicorp/terraform@1.5.0
+
+# Add a tool (defaults to latest version)
+atmos toolchain add terraform
+
+# Add multiple tools at once
+atmos toolchain add terraform@1.5.0 kubectl@1.28.0 opentofu@1.7.0
+
+# Use a custom tool-versions file
+atmos toolchain add --tool-versions ./custom/.tool-versions terraform@1.5.0
 ```
 
 ## Arguments
 
 <dl>
-    <dt>`tool` <em>(required)</em></dt>
+    <dt>`tool[@version]` <em>(required, repeatable)</em></dt>
     <dd>
         Tool to add from the registry. Can be a short name (alias) or full `owner/repo` format.
+        Version is optional - if omitted, defaults to `latest`.
 
-        Examples: `terraform`, `kubectl`, `hashicorp/terraform`, `kubernetes-sigs/kubectl`
-    </dd>
-    <dt>`version` <em>(required)</em></dt>
-    <dd>
-        The version to add. Use semantic versioning without the `v` prefix.
+        Format: `tool@version` or `owner/repo@version`
 
-        Examples: `1.9.8`, `1.28.0`, `latest`
+        Examples: `terraform`, `terraform@1.5.0`, `hashicorp/terraform@1.5.0`
     </dd>
 </dl>
 
 ## Flags
 
 <dl>
-    <dt>`--file`  <em>(optional)</em></dt>
+    <dt>`--tool-versions` <em>(optional, global)</em></dt>
     <dd>
-        Path to tool-versions file (defaults to global --tool-versions-file)
+        Path to tool-versions file (default: `.tool-versions`)
     </dd>
-
 </dl>

@@ -1,0 +1,36 @@
+# Production Environment Stack
+#
+# This stack shows locals with different values for production.
+# Each file has its own isolated locals scope.
+
+settings:
+  version: v2
+  team: platform
+
+vars:
+  stage: prod
+
+locals:
+  namespace: acme
+  environment: production
+
+  # Same pattern, different values
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-{{ .vars.stage }}"
+
+  # Production-specific tags
+  default_tags:
+    Namespace: "{{ .locals.namespace }}"
+    Environment: "{{ .locals.environment }}"
+    Team: "{{ .settings.team }}"
+    ManagedBy: Atmos
+    CostCenter: production
+
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.namespace }}"
+        environment: "{{ .locals.environment }}"
+        full_name: "{{ .locals.full_name }}"
+        tags: "{{ .locals.default_tags }}"

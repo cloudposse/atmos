@@ -32,10 +32,13 @@ const (
 	FormatTSV Format = "tsv"
 	// FormatTable outputs as a styled table with Key/Value columns.
 	FormatTable Format = "table"
+	// FormatGitHub outputs for GitHub Actions $GITHUB_OUTPUT file.
+	// Uses KEY=value for simple values, heredoc syntax for multiline values.
+	FormatGitHub Format = "github"
 )
 
 // SupportedFormats lists all supported output formats.
-var SupportedFormats = []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv", "table"}
+var SupportedFormats = []string{"json", "yaml", "hcl", "env", "dotenv", "bash", "csv", "tsv", "table", "github"}
 
 // DefaultFileMode is the file mode for output files.
 const DefaultFileMode = 0o644
