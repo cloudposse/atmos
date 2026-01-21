@@ -487,8 +487,10 @@ func formatValueForTable(value any, config *schema.AtmosConfiguration) string {
 	case nil:
 		return ""
 	default:
-		// Complex types (maps, slices) - compact JSON.
-		jsonBytes, err := json.Marshal(v)
+		// Complex types (maps, slices) - compact JSON with deterministic key ordering.
+		// Apply sorting for consistent output across runs (matches formatJSON/formatYAML behavior).
+		sorted := sortValueRecursive(v)
+		jsonBytes, err := json.Marshal(sorted)
 		if err != nil {
 			return fmt.Sprintf(defaultFmt, v)
 		}
