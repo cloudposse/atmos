@@ -1,6 +1,8 @@
 package terraform
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -351,10 +353,15 @@ func TestExecuteGitHubOutput(t *testing.T) {
 
 		// Create temp dir and file path.
 		tmpDir := t.TempDir()
-		outputFile := tmpDir + "/github_output"
+		outputFile := filepath.Join(tmpDir, "github_output")
 
 		err := executeGitHubOutput(outputs, outputFile, "", opts)
 		require.NoError(t, err)
+
+		// Verify file contents.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "vpc_id=vpc-12345")
 	})
 
 	t.Run("format single output to file", func(t *testing.T) {
@@ -363,11 +370,17 @@ func TestExecuteGitHubOutput(t *testing.T) {
 
 		// Create temp dir and file path.
 		tmpDir := t.TempDir()
-		outputFile := tmpDir + "/github_output"
+		outputFile := filepath.Join(tmpDir, "github_output")
 
 		// Request a specific output name.
 		err := executeGitHubOutput(outputs, outputFile, "vpc_id", opts)
 		require.NoError(t, err)
+
+		// Verify file contains only the requested output.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "vpc_id=vpc-12345")
+		assert.NotContains(t, string(content), "subnet_id")
 	})
 
 	t.Run("format with uppercase option to file", func(t *testing.T) {
@@ -376,18 +389,42 @@ func TestExecuteGitHubOutput(t *testing.T) {
 
 		// Create temp dir and file path.
 		tmpDir := t.TempDir()
-		outputFile := tmpDir + "/github_output"
+		outputFile := filepath.Join(tmpDir, "github_output")
 
 		err := executeGitHubOutput(outputs, outputFile, "", opts)
 		require.NoError(t, err)
+
+		// Verify file contains uppercase key.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "VPC_ID=vpc-12345")
+	})
+
+	t.Run("format multiline value uses heredoc", func(t *testing.T) {
+		outputs := map[string]any{"config": "line1\nline2\nline3"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file uses heredoc syntax for multiline values.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "config<<ATMOS_EOF")
+		assert.Contains(t, string(content), "line1\nline2\nline3")
 	})
 
 	t.Run("write to file error", func(t *testing.T) {
 		outputs := map[string]any{"vpc_id": "vpc-12345"}
 		opts := tfoutput.FormatOptions{}
 
-		// Use an invalid path that can't be written to.
-		err := executeGitHubOutput(outputs, "/nonexistent/dir/file.txt", "", opts)
+		// Use an invalid path that can't be written to (nonexistent subdirectory).
+		tmpDir := t.TempDir()
+		err := executeGitHubOutput(outputs, filepath.Join(tmpDir, "nonexistent", "file.txt"), "", opts)
 		require.Error(t, err)
 		// Error is wrapped: contains "failed to open file".
 		assert.Contains(t, err.Error(), "failed to open file")

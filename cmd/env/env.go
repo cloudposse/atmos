@@ -102,7 +102,10 @@ var envCmd = &cobra.Command{
 			dataMap := convertToAnyMap(envVars)
 			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
 			if err != nil {
-				return err
+				return errUtils.Build(errUtils.ErrInvalidArgumentError).
+					WithCause(err).
+					WithExplanation("Failed to format environment variables for GitHub output.").
+					Err()
 			}
 			return envfmt.WriteToFile(path, formatted)
 		}
@@ -110,14 +113,20 @@ var envCmd = &cobra.Command{
 		// Parse format string to Format type.
 		format, err := envfmt.ParseFormat(formatStr)
 		if err != nil {
-			return err
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithCause(err).
+				WithExplanationf("Invalid --format value %q.", formatStr).
+				Err()
 		}
 
 		// Format the environment variables with export option.
 		dataMap := convertToAnyMap(envVars)
 		formatted, err := envfmt.FormatData(dataMap, format, envfmt.WithExport(exportPrefix))
 		if err != nil {
-			return err
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithCause(err).
+				WithExplanation("Failed to format environment variables.").
+				Err()
 		}
 
 		// Output to file or stdout.
