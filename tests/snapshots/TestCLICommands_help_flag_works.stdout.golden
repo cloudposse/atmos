@@ -43,7 +43,7 @@ AVAILABLE COMMANDS
       validate [command]                     Validate configurations against OPA policies and JSON schemas
       vendor [command]                       Manage external dependencies for components or stacks
       version [command]                      Display the version of Atmos you are running and check for updates
-      workflow                               Run predefined tasks using workflows
+      workflow [command]                     Run predefined tasks using workflows
 
 FLAGS
 
