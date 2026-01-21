@@ -16,7 +16,7 @@ locals:
   static_value: "static-test-value"
 
   # Build computed values from YAML function results
-  dashboard_url: "https://{{ .locals.env_endpoint }}/d/ray-workers"
+  dashboard_url: "https://{{ .locals.env_endpoint }}/d/workers"
   db_connection: "postgresql://{{ .locals.env_db_host }}:5432/mydb"
 
 components:

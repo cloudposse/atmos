@@ -1305,7 +1305,7 @@ func TestLocalsWithYamlFunctionsEnv(t *testing.T) {
 		"env_endpoint should be resolved from !env")
 
 	// The dashboard_url local should use the env_endpoint local.
-	assert.Equal(t, "https://grafana.test.com/d/ray-workers", vars["dashboard_url"],
+	assert.Equal(t, "https://grafana.test.com/d/workers", vars["dashboard_url"],
 		"dashboard_url should be computed from env_endpoint local")
 
 	// The db_connection local should be computed from env_db_host.
