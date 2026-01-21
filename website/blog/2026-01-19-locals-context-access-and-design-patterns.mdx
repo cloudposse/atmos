@@ -1,0 +1,56 @@
+---
+slug: locals-context-access
+title: 'Locals Context Access'
+authors:
+  - aknysh
+tags:
+  - enhancement
+date: 2026-01-19T00:00:00.000Z
+---
+
+Locals can access `{{ .settings }}`, `{{ .vars }}`, and `{{ .env }}` from the same file during template resolution.
+
+<!--truncate-->
+
+## The Enhancement
+
+Previously, locals could only reference other locals via `{{ .locals.* }}`. Now they can also access:
+
+- `{{ .settings.* }}` - Settings defined in the same file
+- `{{ .vars.* }}` - Vars defined in the same file
+- `{{ .env.* }}` - Environment variables
+
+### Example
+
+```yaml
+settings:
+  version: v1
+
+vars:
+  stage: dev
+
+locals:
+  namespace: acme
+  label: "{{ .locals.namespace }}-{{ .vars.stage }}-{{ .settings.version }}"
+
+components:
+  terraform:
+    myapp:
+      vars:
+        name: "{{ .locals.label }}"
+```
+
+## File-Scoped Context
+
+The context available to locals comes from **the same file only**. Locals cannot access settings or vars from imported files.
+
+If you need values from imported files, use `vars` or `settings` (which inherit across imports).
+
+## Upgrade
+
+Upgrade Atmos to get this enhancement. Existing locals configurations will continue to work.
+
+## References
+
+- [Locals Documentation](/stacks/locals)
+- [DRY Configuration with Locals](/design-patterns/configuration-composition/locals)
