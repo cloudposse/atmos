@@ -3,6 +3,7 @@ package env
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -134,9 +135,12 @@ func TestOutput(t *testing.T) {
 		assert.Contains(t, string(content), `"VAR1": "value1"`)
 
 		// Verify file permissions.
-		info, err := os.Stat(outputFile)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(CredentialFileMode), info.Mode().Perm())
+		// Skip permission check on Windows: Windows uses ACLs instead of Unix-style permissions.
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(outputFile)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(CredentialFileMode), info.Mode().Perm())
+		}
 	})
 
 	t.Run("invalid format returns error", func(t *testing.T) {
@@ -160,9 +164,12 @@ func TestOutput(t *testing.T) {
 		err := Output(data, "bash", outputFile, WithFileMode(CredentialFileMode))
 		require.NoError(t, err)
 
-		info, err := os.Stat(outputFile)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(CredentialFileMode), info.Mode().Perm())
+		// Skip permission check on Windows: Windows uses ACLs instead of Unix-style permissions.
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(outputFile)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(CredentialFileMode), info.Mode().Perm())
+		}
 	})
 
 	t.Run("appends to existing file", func(t *testing.T) {
@@ -194,9 +201,12 @@ func TestWriteToFileWithMode(t *testing.T) {
 		err := writeToFileWithMode(filePath, "content", CredentialFileMode)
 		require.NoError(t, err)
 
-		info, err := os.Stat(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(CredentialFileMode), info.Mode().Perm())
+		// Skip permission check on Windows: Windows uses ACLs instead of Unix-style permissions.
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(filePath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(CredentialFileMode), info.Mode().Perm())
+		}
 
 		content, err := os.ReadFile(filePath)
 		require.NoError(t, err)
