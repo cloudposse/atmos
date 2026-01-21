@@ -315,7 +315,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
-			[]string{tempDir + "/components/terraform/vpc/main.tf"},
+			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf")},
 			false, false, "", false, "",
 		)
 
@@ -323,7 +323,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		require.Len(t, affected, 1)
 		assert.Equal(t, "vpc", affected[0].Component)
 		assert.Equal(t, "component", affected[0].Affected)
-		assert.Equal(t, tempDir+"/components/terraform/vpc", affected[0].ComponentPath)
+		assert.Equal(t, filepath.Join(tempDir, "components", "terraform", "vpc"), affected[0].ComponentPath)
 	})
 
 	t.Run("Should detect component folder changes with inherited base component", func(t *testing.T) {
@@ -336,7 +336,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
-			[]string{tempDir + "/components/terraform/vpc/variables.tf"},
+			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "variables.tf")},
 			false, false, "", false, "",
 		)
 
@@ -344,7 +344,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		require.Len(t, affected, 1)
 		assert.Equal(t, "vpc-production", affected[0].Component)
 		assert.Equal(t, "component", affected[0].Affected)
-		assert.Equal(t, tempDir+"/components/terraform/vpc", affected[0].ComponentPath)
+		assert.Equal(t, filepath.Join(tempDir, "components", "terraform", "vpc"), affected[0].ComponentPath)
 	})
 
 	t.Run("Should detect changes for JIT vendored component with source - simple config", func(t *testing.T) {
@@ -359,7 +359,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
-			[]string{tempDir + "/components/terraform/vpc-sourced/main.tf"},
+			[]string{filepath.Join(tempDir, "components", "terraform", "vpc-sourced", "main.tf")},
 			false, false, "", false, "",
 		)
 
@@ -396,7 +396,7 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 
 		affected, err := findAffected(
 			&stacks, &stacks, atmosConfig,
-			[]string{tempDir + "/components/terraform/vpc-map/main.tf"},
+			[]string{filepath.Join(tempDir, "components", "terraform", "vpc-map", "main.tf")},
 			false, false, "", false, "",
 		)
 

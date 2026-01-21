@@ -1320,7 +1320,7 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 	t.Run("empty git repo root falls back to filepath.Abs", func(t *testing.T) {
 		// When gitRepoRoot is empty, fallback to filepath.Abs (current working directory).
 		// This maintains backward compatibility for tests that use absolute paths.
-		absolutePath := filepath.Join(atmosBaseDir, "components/terraform/second_component/main.tf")
+		absolutePath := filepath.Join(atmosBaseDir, "components", "terraform", "second_component", "main.tf")
 		changedFiles := []string{absolutePath}
 
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, "")
@@ -1333,7 +1333,7 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 	t.Run("relative path with empty gitRepoRoot uses filepath.Abs", func(t *testing.T) {
 		// When gitRepoRoot is empty and path is relative, filepath.Abs resolves against cwd.
 		// This exercises the filepath.Abs() branch in newChangedFilesIndex.
-		relativePath := "some/relative/path/main.tf"
+		relativePath := filepath.Join("some", "relative", "path", "main.tf")
 		changedFiles := []string{relativePath}
 
 		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, "")
@@ -1342,8 +1342,8 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 		require.Len(t, allFiles, 1)
 		// The result should be absolute (resolved against current working directory).
 		assert.True(t, filepath.IsAbs(allFiles[0]), "Relative path should be converted to absolute via filepath.Abs")
-		// The result should end with the original relative path.
-		assert.True(t, strings.HasSuffix(allFiles[0], relativePath), "Resolved path should end with original relative path")
+		// The result should end with the original relative path (use filepath.ToSlash for cross-platform comparison).
+		assert.True(t, strings.HasSuffix(filepath.ToSlash(allFiles[0]), filepath.ToSlash(relativePath)), "Resolved path should end with original relative path")
 	})
 }
 
