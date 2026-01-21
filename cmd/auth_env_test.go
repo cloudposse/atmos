@@ -391,45 +391,6 @@ func TestFormatEnvironmentVariables(t *testing.T) {
 	}
 }
 
-func TestWriteCredentialsToFile(t *testing.T) {
-	_ = NewTestKit(t)
-
-	t.Run("creates and writes to new file", func(t *testing.T) {
-		tempDir := t.TempDir()
-		filePath := filepath.Join(tempDir, "env_file")
-
-		content := "AWS_PROFILE=test-profile\nAWS_REGION=us-east-1\n"
-
-		err := writeCredentialsToFile(filePath, content)
-		require.NoError(t, err)
-
-		result, err := os.ReadFile(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, content, string(result))
-
-		// Verify file permissions are 0600.
-		info, err := os.Stat(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
-	})
-
-	t.Run("appends to existing file", func(t *testing.T) {
-		tempDir := t.TempDir()
-		filePath := filepath.Join(tempDir, "env_file")
-
-		// Write initial content.
-		err := os.WriteFile(filePath, []byte("EXISTING_VAR=existing\n"), 0o644)
-		require.NoError(t, err)
-
-		err = writeCredentialsToFile(filePath, "NEW_VAR=new-value\n")
-		require.NoError(t, err)
-
-		content, err := os.ReadFile(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, "EXISTING_VAR=existing\nNEW_VAR=new-value\n", string(content))
-	})
-}
-
 func TestGitHubEnvAutoDetect(t *testing.T) {
 	_ = NewTestKit(t)
 
@@ -444,7 +405,7 @@ func TestGitHubEnvAutoDetect(t *testing.T) {
 		// Set GITHUB_ENV environment variable.
 		t.Setenv("GITHUB_ENV", githubEnvFile)
 
-		envVars := map[string]any{
+		envVars := map[string]string{
 			"NEW_VAR": "new-value",
 		}
 
@@ -452,10 +413,8 @@ func TestGitHubEnvAutoDetect(t *testing.T) {
 		output := os.Getenv("GITHUB_ENV")
 		require.NotEmpty(t, output, "GITHUB_ENV should be set")
 
-		formatted, err := env.FormatData(envVars, env.FormatGitHub)
-		require.NoError(t, err)
-
-		err = writeCredentialsToFile(output, formatted)
+		// Use unified env.Output() which handles format and file writing.
+		err = env.Output(envVars, "github", output, env.WithFileMode(env.CredentialFileMode))
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(githubEnvFile)
@@ -471,15 +430,14 @@ func TestGitHubEnvAutoDetect(t *testing.T) {
 
 		t.Setenv("GITHUB_ENV", githubEnvFile)
 
-		envVars := map[string]any{
+		envVars := map[string]string{
 			"CERT": "-----BEGIN CERT-----\ndata\n-----END CERT-----",
 		}
 
 		output := os.Getenv("GITHUB_ENV")
-		formatted, err := env.FormatData(envVars, env.FormatGitHub)
-		require.NoError(t, err)
 
-		err = writeCredentialsToFile(output, formatted)
+		// Use unified env.Output() which handles format and file writing.
+		err := env.Output(envVars, "github", output, env.WithFileMode(env.CredentialFileMode))
 		require.NoError(t, err)
 
 		content, err := os.ReadFile(githubEnvFile)

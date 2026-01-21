@@ -9,10 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/data"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
-	iolib "github.com/cloudposse/atmos/pkg/io"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestFormatBash(t *testing.T) {
@@ -67,7 +64,7 @@ func TestFormatBash(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dataMap := convertToAnyMap(tt.envVars)
+			dataMap := envfmt.ConvertMapStringToAny(tt.envVars)
 			result, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -104,7 +101,7 @@ func TestFormatDotenv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dataMap := convertToAnyMap(tt.envVars)
+			dataMap := envfmt.ConvertMapStringToAny(tt.envVars)
 			result, err := envfmt.FormatData(dataMap, envfmt.FormatDotenv)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -156,7 +153,7 @@ func TestFormatGitHub(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dataMap := convertToAnyMap(tt.envVars)
+			dataMap := envfmt.ConvertMapStringToAny(tt.envVars)
 			result, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
@@ -169,7 +166,7 @@ func TestWriteEnvToFile(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "test.env")
 
-		dataMap := convertToAnyMap(map[string]string{"FOO": "bar"})
+		dataMap := envfmt.ConvertMapStringToAny(map[string]string{"FOO": "bar"})
 		formatted, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
 		require.NoError(t, err)
 
@@ -190,7 +187,7 @@ func TestWriteEnvToFile(t *testing.T) {
 		require.NoError(t, err)
 
 		// Append env vars.
-		dataMap := convertToAnyMap(map[string]string{"FOO": "bar"})
+		dataMap := envfmt.ConvertMapStringToAny(map[string]string{"FOO": "bar"})
 		formatted, err := envfmt.FormatData(dataMap, envfmt.FormatBash)
 		require.NoError(t, err)
 
@@ -206,7 +203,7 @@ func TestWriteEnvToFile(t *testing.T) {
 		tmpDir := t.TempDir()
 		filePath := filepath.Join(tmpDir, "github_env")
 
-		dataMap := convertToAnyMap(map[string]string{
+		dataMap := envfmt.ConvertMapStringToAny(map[string]string{
 			"GITHUB_TOKEN": "ghp_xxxx",
 			"AWS_REGION":   "us-east-1",
 		})
@@ -267,11 +264,6 @@ func TestEnvCommandProvider(t *testing.T) {
 }
 
 func TestOutputEnvAsJSON(t *testing.T) {
-	// Initialize I/O context for data package.
-	ioCtx, err := iolib.NewContext()
-	require.NoError(t, err)
-	data.InitWriter(ioCtx)
-
 	tests := []struct {
 		name    string
 		envVars map[string]string
@@ -297,10 +289,15 @@ func TestOutputEnvAsJSON(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// outputEnvAsJSON writes to stdout via u.PrintAsJSON.
-			// We just verify it doesn't error.
-			atmosConfig := &schema.AtmosConfiguration{}
-			err := outputEnvAsJSON(atmosConfig, tt.envVars)
+			// Test JSON format output to file (stdout tests are in pkg/env).
+			tmpDir := t.TempDir()
+			filePath := filepath.Join(tmpDir, "test.json")
+
+			err := envfmt.Output(tt.envVars, "json", filePath)
+			assert.NoError(t, err)
+
+			// Verify file was created.
+			_, err = os.Stat(filePath)
 			assert.NoError(t, err)
 		})
 	}
@@ -337,7 +334,7 @@ func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 	})
 }
 
-func TestConvertToAnyMap(t *testing.T) {
+func TestConvertMapStringToAny(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    map[string]string
@@ -362,7 +359,7 @@ func TestConvertToAnyMap(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := convertToAnyMap(tt.input)
+			result := envfmt.ConvertMapStringToAny(tt.input)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -412,7 +409,7 @@ func TestFormatBashWithExportOption(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			dataMap := convertToAnyMap(tt.envVars)
+			dataMap := envfmt.ConvertMapStringToAny(tt.envVars)
 			result, err := envfmt.FormatData(dataMap, envfmt.FormatBash, envfmt.WithExport(tt.exportPrefix))
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)

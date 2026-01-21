@@ -14,13 +14,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/github/actions"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-const (
-	// CredentialFileMode is used for output files containing credentials.
-	// Owner read/write only (0o600) to protect sensitive credential data.
-	credentialFileMode = 0o600
 )
 
 // authEnvCmd exports authentication environment variables.
@@ -31,26 +24,11 @@ var authEnvCmd = &cobra.Command{
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get output format from Viper (honors CLI > ENV > config > defaults).
+		// Get output format and file from Viper (honors CLI > ENV > config > defaults).
 		formatStr := viper.GetString("auth_env_format")
 		if formatStr == "" {
 			formatStr = "bash"
 		}
-
-		// JSON is handled separately since pkg/env doesn't support it.
-		isJSON := formatStr == "json"
-
-		// Parse format using pkg/env (for non-JSON formats).
-		var format env.Format
-		if !isJSON {
-			var parseErr error
-			format, parseErr = env.ParseFormat(formatStr)
-			if parseErr != nil {
-				return fmt.Errorf("%w: %w", errUtils.ErrInvalidArgumentError, parseErr)
-			}
-		}
-
-		// Get output file path from Viper (honors CLI > ENV > config > defaults).
 		outputFile := viper.GetString("auth_env_output_file")
 
 		// Get login flag.
@@ -120,74 +98,23 @@ var authEnvCmd = &cobra.Command{
 			}
 		}
 
-		// Convert map[string]string to map[string]any for env.FormatData.
-		data := make(map[string]any, len(envVars))
-		for k, v := range envVars {
-			data[k] = v
-		}
-
 		// Handle GitHub format special case (requires file output).
-		if format == env.FormatGitHub {
+		if formatStr == "github" && outputFile == "" {
+			// Auto-detect GITHUB_ENV in GitHub Actions environment.
+			outputFile = actions.GetEnvPath()
 			if outputFile == "" {
-				// Auto-detect GITHUB_ENV in GitHub Actions environment.
-				outputFile = actions.GetEnvPath()
-				if outputFile == "" {
-					return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-						WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output-file to specify a file path.").
-						Err()
-				}
+				return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+					WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output-file to specify a file path.").
+					Err()
 			}
-			formatted, err := env.FormatData(data, format)
-			if err != nil {
-				return err
-			}
-			return writeCredentialsToFile(outputFile, formatted)
 		}
 
-		// Handle file output for other formats.
-		if outputFile != "" {
-			if isJSON {
-				// For JSON file output, use the utility function.
-				return u.WriteToFileAsJSON(outputFile, envVars, credentialFileMode)
-			}
-			formatted, err := env.FormatData(data, format)
-			if err != nil {
-				return err
-			}
-			return writeCredentialsToFile(outputFile, formatted)
-		}
-
-		// Output to stdout.
-		if isJSON {
-			return outputEnvAsJSON(&atmosConfig, envVars)
-		}
-		formatted, err := env.FormatData(data, format)
-		if err != nil {
-			return err
-		}
-		fmt.Print(formatted)
-		return nil
+		// Use unified env.Output() for all format/output combinations.
+		return env.Output(envVars, formatStr, outputFile,
+			env.WithFileMode(env.CredentialFileMode),
+			env.WithAtmosConfig(&atmosConfig),
+		)
 	},
-}
-
-// outputEnvAsJSON outputs environment variables as JSON.
-func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]string) error {
-	return u.PrintAsJSON(atmosConfig, envVars)
-}
-
-// writeCredentialsToFile writes content to a file with secure permissions (0600).
-// Creates the file if it doesn't exist, appends if it does.
-func writeCredentialsToFile(filePath string, content string) error {
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, credentialFileMode)
-	if err != nil {
-		return fmt.Errorf("%w '%s': %w", errUtils.ErrOpenFile, filePath, err)
-	}
-	defer f.Close()
-
-	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("%w '%s': %w", errUtils.ErrWriteFile, filePath, err)
-	}
-	return nil
 }
 
 func init() {
