@@ -1,6 +1,32 @@
-// Sleep helper for retry delays.
-function sleep(ms) {
+// Delay helper for retry backoff.
+function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// Single fetch attempt with timeout.
+async function attemptFetch(headers, timeoutMs) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`https://api.github.com/repos/cloudposse/atmos/releases/latest`, {
+      headers,
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const token = headers['Authorization'];
+      const errorMsg = token
+        ? `GitHub API responded with ${response.status} (authenticated request)`
+        : `GitHub API responded with ${response.status} - likely rate limited. Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable.`;
+      throw new Error(errorMsg);
+    }
+
+    const release = await response.json();
+    return release.tag_name;
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function fetchLatestRelease() {
@@ -17,31 +43,14 @@ async function fetchLatestRelease() {
 
   const isDev = process.env.NODE_ENV !== 'production';
   const maxRetries = 3;
+  const timeoutMs = 30000; // 30 second timeout per attempt
   let lastError;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
-
     try {
-      const response = await fetch(`https://api.github.com/repos/cloudposse/atmos/releases/latest`, {
-        headers,
-        signal: controller.signal
-      });
-
-      if (!response.ok) {
-        const errorMsg = token
-          ? `GitHub API responded with ${response.status} (authenticated request)`
-          : `GitHub API responded with ${response.status} - likely rate limited. Set GITHUB_TOKEN or ATMOS_GITHUB_TOKEN environment variable.`;
-        throw new Error(errorMsg);
-      }
-
-      const release = await response.json();
-      return release.tag_name;
+      return await attemptFetch(headers, timeoutMs);
     } catch (error) {
       lastError = error;
-      clearTimeout(timeout);
-
       const errorCode = error.code || error.cause?.code;
       const isRetryable = errorCode === 'UND_ERR_CONNECT_TIMEOUT' ||
                           error.name === 'AbortError' ||
@@ -49,41 +58,37 @@ async function fetchLatestRelease() {
                           errorCode === 'ECONNRESET';
 
       if (isRetryable && attempt < maxRetries) {
-        const delay = Math.pow(2, attempt) * 1000; // Exponential backoff: 2s, 4s.
-        console.warn(`[fetch-latest-release] Attempt ${attempt} failed: ${error.message}. Retrying in ${delay/1000}s...`);
-        await sleep(delay);
-        continue;
+        const backoffMs = Math.min(1000 * Math.pow(2, attempt - 1), 10000);
+        console.warn(`[fetch-latest-release] Attempt ${attempt}/${maxRetries} failed: ${error.message}. Retrying in ${backoffMs}ms...`);
+        await delay(backoffMs);
+      } else if (!isRetryable) {
+        break; // Don't retry non-transient errors.
       }
-
-      let message = `Failed to fetch latest release: ${error.message}`;
-
-      if (errorCode === 'UND_ERR_CONNECT_TIMEOUT' || error.name === 'AbortError') {
-        message += '\nThis may be a network issue. Check your internet connection.';
-      } else if (errorCode === 'ENOTFOUND') {
-        message += '\nDNS resolution failed. Check your network configuration.';
-      } else if (!token) {
-        message += '\nConsider setting GITHUB_TOKEN to avoid rate limits.';
-      }
-
-      // In dev mode, use placeholder so local development isn't blocked.
-      if (isDev) {
-        console.warn(`[fetch-latest-release] ${message}`);
-        console.warn(`[fetch-latest-release] Using placeholder 'latest' for development.`);
-        return 'latest';
-      }
-
-      // In production, log error but use 'latest' as fallback to avoid build failures.
-      console.error(`[fetch-latest-release] ${message}`);
-      console.warn(`[fetch-latest-release] Using fallback 'latest' to avoid build failure.`);
-      return 'latest';
-    } finally {
-      clearTimeout(timeout);
     }
   }
 
-  // Should not reach here, but just in case.
-  console.error(`[fetch-latest-release] All ${maxRetries} attempts failed.`);
-  return 'latest';
+  // All retries exhausted or non-retryable error.
+  const errorCode = lastError.code || lastError.cause?.code;
+  let message = `Failed to fetch latest release: ${lastError.message}`;
+
+  if (errorCode === 'UND_ERR_CONNECT_TIMEOUT' || lastError.name === 'AbortError') {
+    message += '\nThis may be a network issue. Check your internet connection.';
+  } else if (errorCode === 'ENOTFOUND') {
+    message += '\nDNS resolution failed. Check your network configuration.';
+  } else if (!token) {
+    message += '\nConsider setting GITHUB_TOKEN to avoid rate limits.';
+  }
+
+  // In dev mode, use placeholder so local development isn't blocked.
+  // In production (CI/build), always fail to surface errors.
+  if (isDev) {
+    console.warn(`[fetch-latest-release] ${message}`);
+    console.warn(`[fetch-latest-release] Using placeholder 'latest' for development.`);
+    return 'latest';
+  }
+
+  console.error(`[fetch-latest-release] ${message}`);
+  throw lastError;
 }
 
 module.exports = function(context, options) {

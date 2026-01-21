@@ -209,6 +209,16 @@ func TestValueToString(t *testing.T) {
 			expected: "1234567890",
 		},
 		{
+			name:     "float32",
+			value:    float32(3.14),
+			expected: "3.14",
+		},
+		{
+			name:     "float32 whole number",
+			value:    float32(42),
+			expected: "42",
+		},
+		{
 			name:     "float64",
 			value:    3.14,
 			expected: "3.14",
@@ -251,6 +261,16 @@ func TestValueToString(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestValueToString_JSONMarshalError tests the fallback when JSON marshaling fails.
+func TestValueToString_JSONMarshalError(t *testing.T) {
+	// Channels cannot be marshaled to JSON.
+	ch := make(chan int)
+	result := ValueToString(ch)
+
+	// Should fall back to %v format.
+	assert.Contains(t, result, "0x") // Channels are formatted as pointers.
 }
 
 func TestWriteToFile(t *testing.T) {

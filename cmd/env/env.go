@@ -26,11 +26,11 @@ var SupportedFormats = []string{"bash", "json", "dotenv", "github"}
 var envParser *flags.StandardParser
 
 // envCmd outputs environment variables from atmos.yaml.
+// Args validator is auto-applied by the command registry for commands without PositionalArgsBuilder.
 var envCmd = &cobra.Command{
 	Use:   "env",
 	Short: "Output environment variables configured in atmos.yaml",
 	Long:  `Outputs environment variables from the 'env' section of atmos.yaml in various formats suitable for shell evaluation, .env files, JSON consumption, or GitHub Actions workflows.`,
-	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Parse flags using Viper (respects precedence: flags > env > config > defaults).
 		v := viper.GetViper()
