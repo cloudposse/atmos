@@ -913,7 +913,7 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
   - github.com/hashicorp/terraform-config-inspect/tfconfig
     License: MPL-2.0
-    URL: https://github.com/hashicorp/terraform-config-inspect/blob/225c06ed5fd9/LICENSE
+    URL: https://github.com/hashicorp/terraform-config-inspect/blob/785479628bd7/LICENSE
 
   - github.com/hashicorp/terraform-exec
     License: MPL-2.0
