@@ -113,7 +113,8 @@ func (m spinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(m.completedMsg) + newline
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
 }
 
 func newSpinnerModel(progressMsg, completedMsg string) spinnerModel {
@@ -236,7 +237,8 @@ func (m dynamicSpinnerModel) View() string {
 		return terminal.EscResetLine + ui.FormatSuccess(displayMsg) + newline
 	}
 	// Show progress message with spinner.
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
 }
 
 func newDynamicSpinnerModel(progressMsg string) dynamicSpinnerModel {
@@ -408,5 +410,6 @@ func (m manualSpinnerModel) View() string {
 		}
 		return terminal.EscResetLine + ui.FormatError(m.finalMsg) + newline
 	}
-	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), m.progressMsg)
+	// Use FormatInline for proper markdown rendering (e.g., backtick code styling).
+	return fmt.Sprintf("%s%s %s", terminal.EscResetLine, m.spinner.View(), ui.FormatInline(m.progressMsg))
 }

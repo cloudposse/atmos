@@ -5,6 +5,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
@@ -16,12 +17,8 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	var logFunc func(msg any, keyvals ...any)
-	if info.DryRun {
-		logFunc = log.Info
-	} else {
-		logFunc = log.Debug
-	}
+	// Always use debug level for internal logging.
+	logFunc := log.Debug
 
 	stacks, err := ExecuteDescribeStacks(
 		&atmosConfig,
@@ -40,11 +37,23 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// Track how many components were processed.
+	processedCount := 0
+
 	err = walkTerraformComponents(stacks, func(stackName, componentName string, componentSection map[string]any) error {
-		return processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, info, stackName, componentName, componentSection, logFunc)
+		if processed {
+			processedCount++
+		}
+		return err
 	})
 	if err != nil {
 		return err
+	}
+
+	// Show success message if no components matched the criteria.
+	if processedCount == 0 {
+		ui.Success("No components matched")
 	}
 
 	return nil
