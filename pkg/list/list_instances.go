@@ -475,7 +475,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	if upload {
 		proInstances := filterProEnabledInstances(instances)
 		if len(proInstances) == 0 {
-			_ = ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
+			ui.Info("No Atmos Pro-enabled instances found; nothing to upload.")
 			return nil
 		}
 		return uploadInstances(proInstances)

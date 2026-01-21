@@ -224,6 +224,10 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		return err
 	}
 
+	// Apply parsed options to info BEFORE prompting, so hasMultiComponentFlags() works correctly.
+	// This fixes issue #1945: --all flag must be set before resolveAndPromptForArgs checks it.
+	applyOptionsToInfo(&info, opts)
+
 	// Resolve paths and prompt for missing component/stack interactively.
 	if err := resolveAndPromptForArgs(&info, actualCmd); err != nil {
 		return err
@@ -234,8 +238,6 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
-
-	applyOptionsToInfo(&info, opts)
 
 	// Handle --identity flag for interactive selection when used without a value.
 	if info.Identity == cfg.IdentityFlagSelectValue {
@@ -359,14 +361,22 @@ func handleInteractiveComponentStackSelection(info *schema.ConfigAndStacksInfo, 
 		return nil
 	}
 
+	// Validate stack exists if provided via flag (fail fast before prompting or execution).
+	if info.Stack != "" && info.ComponentFromArg == "" {
+		if err := shared.ValidateStackExists(cmd, info.Stack); err != nil {
+			return err
+		}
+	}
+
 	// Both provided - nothing to do.
 	if info.ComponentFromArg != "" && info.Stack != "" {
 		return nil
 	}
 
 	// Prompt for component if missing.
+	// If stack is already provided (via --stack flag), filter components to that stack.
 	if info.ComponentFromArg == "" {
-		component, err := promptForComponent(cmd)
+		component, err := promptForComponent(cmd, info.Stack)
 		if err = handlePromptError(err, "component"); err != nil {
 			return err
 		}
@@ -391,8 +401,9 @@ func handlePromptError(err error, name string) error {
 }
 
 // promptForComponent delegates to shared.PromptForComponent.
-func promptForComponent(cmd *cobra.Command) (string, error) {
-	return shared.PromptForComponent(cmd)
+// If stack is provided, filters components to only those in that stack.
+func promptForComponent(cmd *cobra.Command, stack string) (string, error) {
+	return shared.PromptForComponent(cmd, stack)
 }
 
 // promptForStack delegates to shared.PromptForStack.
