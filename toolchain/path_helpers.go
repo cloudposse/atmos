@@ -1,19 +1,31 @@
 package toolchain
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
-	"github.com/spf13/viper"
-
-	"github.com/cloudposse/atmos/pkg/data"
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// ToolPath represents a tool with its version and path.
+type ToolPath struct {
+	Tool    string `json:"tool"`
+	Version string `json:"version"`
+	Path    string `json:"path"`
+}
+
 // buildPathEntries constructs PATH entries from tool versions.
+// This is a backward-compatible wrapper around buildPathEntriesWithLocator.
 func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relativeFlag bool) ([]string, []ToolPath, error) {
+	return buildPathEntriesWithLocator(toolVersions, installer, relativeFlag)
+}
+
+// buildPathEntriesWithLocator constructs PATH entries from tool versions using an InstallLocator.
+// This function accepts an interface to allow mocking in tests.
+func buildPathEntriesWithLocator(toolVersions *ToolVersions, locator InstallLocator, relativeFlag bool) ([]string, []ToolPath, error) {
 	var pathEntries []string
 	var toolPaths []ToolPath
 	seen := make(map[string]struct{}) // Track seen paths to avoid duplicates.
@@ -26,14 +38,14 @@ func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relative
 		version := versions[0] // Default version.
 
 		// Resolve tool name to owner/repo using ParseToolSpec for consistency.
-		owner, repo, err := installer.ParseToolSpec(toolName)
+		owner, repo, err := locator.ParseToolSpec(toolName)
 		if err != nil {
 			// Skip tools that can't be resolved.
 			continue
 		}
 
 		// Find the actual binary path (handles path inconsistencies).
-		binaryPath, err := installer.FindBinaryPath(owner, repo, version)
+		binaryPath, err := locator.FindBinaryPath(owner, repo, version)
 		if err != nil {
 			// Tool not installed, skip it.
 			continue
@@ -59,7 +71,10 @@ func buildPathEntries(toolVersions *ToolVersions, installer *Installer, relative
 	}
 
 	if len(pathEntries) == 0 {
-		return nil, nil, fmt.Errorf("%w: no installed tools found from tool-versions file", ErrToolNotFound)
+		return nil, nil, errUtils.Build(ErrToolNotFound).
+			WithExplanation("no installed tools found from tool-versions file").
+			WithHint("Run 'atmos toolchain add <tool@version>' to add and install tools").
+			Err()
 	}
 
 	// Sort for consistent output.
@@ -88,11 +103,28 @@ func resolveDirPath(binaryPath string, relativeFlag bool) (string, error) {
 
 // getCurrentPath gets the current PATH environment variable with fallback.
 func getCurrentPath() string {
-	// Use viper which checks environment variables automatically.
-	currentPath := viper.GetString("PATH")
+	//nolint:forbidigo // PATH is a system env var, not an Atmos config
+	currentPath := os.Getenv("PATH")
 	if currentPath == "" {
-		// Default PATH for Unix-like systems (Windows uses PATH from environment).
-		currentPath = strings.Join([]string{"/usr/local/bin", "/usr/bin", "/bin"}, string(os.PathListSeparator))
+		// Fallback for edge cases where PATH isn't set (rare).
+		// Use OS-specific default paths.
+		if runtime.GOOS == "windows" {
+			//nolint:forbidigo // SystemRoot/WINDIR are Windows system env vars, not Atmos config
+			systemRoot := os.Getenv("SystemRoot")
+			if systemRoot == "" {
+				//nolint:forbidigo // SystemRoot/WINDIR are Windows system env vars, not Atmos config
+				systemRoot = os.Getenv("WINDIR")
+			}
+			if systemRoot != "" {
+				currentPath = strings.Join([]string{
+					filepath.Join(systemRoot, "System32"),
+					filepath.Join(systemRoot, "System32", "Wbem"),
+					filepath.Join(systemRoot, "System32", "WindowsPowerShell", "v1.0"),
+				}, string(os.PathListSeparator))
+			}
+		} else {
+			currentPath = strings.Join([]string{"/usr/local/bin", "/usr/bin", "/bin"}, string(os.PathListSeparator))
+		}
 	}
 	return currentPath
 }
@@ -100,16 +132,4 @@ func getCurrentPath() string {
 // constructFinalPath constructs the final PATH by prepending tool paths to current PATH.
 func constructFinalPath(pathEntries []string, currentPath string) string {
 	return strings.Join(pathEntries, string(os.PathListSeparator)) + string(os.PathListSeparator) + currentPath
-}
-
-// emitPathOutput outputs the PATH in the requested format.
-func emitPathOutput(toolPaths []ToolPath, finalPath string, exportFlag, jsonFlag bool) error {
-	switch {
-	case jsonFlag:
-		return emitJSONPath(toolPaths, finalPath)
-	case exportFlag:
-		return data.Writef("export PATH=\"%s\"\n", finalPath)
-	default:
-		return data.Writeln(finalPath)
-	}
 }

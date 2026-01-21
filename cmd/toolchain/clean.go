@@ -18,6 +18,7 @@ var cleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean tools and cache directories",
 	Long:  `Remove all installed tools and cached downloads.`,
+	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		toolsDir := toolchain.GetInstallPath()
 

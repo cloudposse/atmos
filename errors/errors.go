@@ -745,10 +745,11 @@ var (
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
 	// Locals-related errors.
-	ErrLocalsInvalidType       = errors.New("locals must be a map")
-	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
-	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
-	ErrLocalsResolution        = errors.New("failed to resolve local")
+	ErrLocalsInvalidType        = errors.New("locals must be a map")
+	ErrLocalsCircularDep        = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract  = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution         = errors.New("failed to resolve local")
+	ErrLocalsYamlFunctionFailed = errors.New("failed to process YAML function in local")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")
