@@ -7,6 +7,11 @@ import (
 	"github.com/charmbracelet/glamour/ansi"
 )
 
+// DocumentIndent is the left indentation (in spaces) for markdown documents.
+// This value is used in the glamour stylesheet and must be synchronized with
+// the word wrap calculation in pkg/ui/formatter.go to prevent text overflow.
+const DocumentIndent = 2
+
 // ConvertToGlamourStyle converts a terminal theme to a glamour style configuration.
 func ConvertToGlamourStyle(t *Theme) ([]byte, error) {
 	style := createGlamourStyleFromTheme(t)
@@ -41,6 +46,7 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 				Color:       &docColor,
 			},
 			Margin: uintPtr(0),
+			Indent: uintPtr(DocumentIndent),
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -71,7 +77,8 @@ func createGlamourStyleFromTheme(t *Theme) *ansi.StyleConfig {
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "",
+				Prefix:          " ",
+				Suffix:          " ",
 				Color:           &h1Color,
 				BackgroundColor: &h1BgColor,
 				Bold:            boolPtr(true),

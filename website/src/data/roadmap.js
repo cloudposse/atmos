@@ -319,16 +319,18 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 35,
+      progress: 45,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
+        { label: 'Native GitHub Actions PATH integration', status: 'shipped', quarter: 'q1-2026', pr: 1979, docs: '/cli/commands/toolchain/toolchain-env', changelog: 'github-actions-toolchain-path', description: 'Native `github` format for `atmos toolchain env` that outputs paths compatible with $GITHUB_PATH, with automatic file detection and append mode.', category: 'featured', priority: 'high', benefits: 'Add toolchain paths to GitHub Actions PATH with a single command. No shell tricks or manual file handling required.' },
         { label: 'Easily sharing outputs between GitHub Actions steps', status: 'planned', quarter: 'q1-2026', description: 'Pass Terraform outputs between GitHub Actions workflow steps without manual JSON parsing.', category: 'featured', priority: 'high', benefits: 'Use Terraform outputs in subsequent steps naturally. No jq parsing or file juggling.' },
         { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'CLI auto-detects CI environments and generates rich job summaries with resource badges, collapsible diffs, and status checks. Replaces separate actions like github-action-atmos-terraform-plan.', category: 'featured', priority: 'high', benefits: 'No wrapper scripts needed. Same command works locally and in CI. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.' },
       ],
       issues: [],
       prs: [
         { number: 1891, title: 'Native CI Integration with Summary Templates and Terraform Command Registry' },
+        { number: 1979, title: 'Native GitHub Actions PATH integration for toolchain env' },
       ],
     },
     {
