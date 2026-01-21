@@ -260,6 +260,7 @@ func TestFindAffected(t *testing.T) {
 				tt.includeSettings,
 				tt.stackToFilter,
 				false,
+				"", // gitRepoRoot - empty for unit tests with absolute paths
 			)
 
 			if tt.expectedError {
@@ -479,6 +480,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 				true, // includeSettings
 				"",
 				tt.excludeLocked,
+				"", // gitRepoRoot - empty for unit tests with absolute paths
 			)
 
 			assert.NoError(t, err)
@@ -566,6 +568,7 @@ func TestFindAffectedWithIncludeSettings(t *testing.T) {
 				tt.includeSettings,
 				"",
 				false,
+				"", // gitRepoRoot - empty for unit tests with absolute paths
 			)
 
 			assert.NoError(t, err)
@@ -587,6 +590,7 @@ func TestFindAffectedWithNilStacks(t *testing.T) {
 			false,
 			"",
 			false,
+			"", // gitRepoRoot - empty for unit tests
 		)
 
 		assert.NoError(t, err)
@@ -627,6 +631,7 @@ func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 			false,
 			"",
 			false,
+			"", // gitRepoRoot - empty for unit tests
 		)
 
 		assert.NoError(t, err)

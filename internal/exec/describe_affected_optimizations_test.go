@@ -624,7 +624,7 @@ func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
 		require.NoError(t, err)
 
 		changedFiles := []string{helmfileFile}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Verify the file is correctly indexed under the helmfile base path,
 		// NOT under the root basePath.
@@ -670,7 +670,7 @@ func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
 		require.NoError(t, err)
 
 		changedFiles := []string{helmfileFile}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		// Test that component folder change detection works.
@@ -703,7 +703,7 @@ func TestChangedFilesIndex_EmptyBasePaths(t *testing.T) {
 			filepath.Join(tempDir, "some/file.txt"),
 		}
 
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Verify no base paths were indexed.
 		index.mu.RLock()
@@ -887,7 +887,7 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 		filepath.Join(tempDir, "other/file.txt"), // Outside all base paths, NOT indexed
 	}
 
-	index := newChangedFilesIndex(atmosConfig, changedFiles)
+	index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 	t.Run("get terraform files", func(t *testing.T) {
 		files := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
@@ -926,7 +926,7 @@ func TestChangedFilesIndex_GetRelevantFiles(t *testing.T) {
 			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
 			filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"),
 		}
-		matchedIndex := newChangedFilesIndex(atmosConfig, matchedFiles)
+		matchedIndex := newChangedFilesIndex(atmosConfig, matchedFiles, tempDir)
 
 		tfFiles := matchedIndex.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 		assert.Len(t, tfFiles, 1)
@@ -968,7 +968,7 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 		changedFiles := []string{
 			filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
 		}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 		assert.Contains(t, tfFiles, filepath.Join(tempDir, "components/terraform/vpc/main.tf"))
@@ -989,7 +989,7 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 			filepath.Join(tempDir, "components/terraform-backup/old/data.tf"), // Sibling, should NOT match
 			filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml"),   // Matches helmfile
 		}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 		helmFiles := index.getRelevantFiles(cfg.HelmfileComponentType, atmosConfig)
@@ -1015,7 +1015,7 @@ func TestChangedFilesIndex_PathCollisionPrevention(t *testing.T) {
 		changedFiles := []string{
 			filepath.Join(tempDir, "components/file.tf"), // Parent of terraform/helmfile, doesn't match any base path
 		}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 
@@ -1041,7 +1041,7 @@ func TestChangedFilesIndex_ThreadSafety(t *testing.T) {
 		filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
 	}
 
-	index := newChangedFilesIndex(atmosConfig, changedFiles)
+	index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 	// Run concurrent reads.
 	var wg sync.WaitGroup
@@ -1093,7 +1093,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 		absPath2 := filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml")
 
 		changedFiles := []string{absPath1, absPath2}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		allFiles := index.getAllFiles()
 
@@ -1112,7 +1112,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 		absPath2 := filepath.Join(tempDir, "components/terraform/eks/main.tf")
 
 		changedFiles := []string{absPath1, absPath2}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		tfFiles := index.getRelevantFiles(cfg.TerraformComponentType, atmosConfig)
 
@@ -1132,7 +1132,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 		helmPath := filepath.Join(tempDir, "components/helmfile/app/helmfile.yaml")
 
 		changedFiles := []string{tfPath, helmPath}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Get all files - should be absolute.
 		allFiles := index.getAllFiles()
@@ -1164,7 +1164,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 		eksFile := filepath.Join(tempDir, "components/terraform/eks/main.tf")
 
 		changedFiles := []string{vpcFile, eksFile}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		// Pattern matching should work correctly with absolute paths.
@@ -1189,7 +1189,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 
 		// Use absolute path in changed files.
 		changedFiles := []string{depFile}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Dependencies use absolute paths.
 		deps := schema.DependsOn{
@@ -1212,7 +1212,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 		absPath2 := filepath.Join(tempDir, "components/terraform/eks/main.tf")
 
 		changedFiles := []string{absPath1, absPath2}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Verify both paths are in the index as absolute.
 		index.mu.RLock()
@@ -1232,7 +1232,7 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	t.Run("empty input paths are handled correctly", func(t *testing.T) {
 		// Edge case: empty changed files list.
 		changedFiles := []string{}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		allFiles := index.getAllFiles()
 		assert.Empty(t, allFiles, "should return empty slice for empty input")
@@ -1244,13 +1244,89 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 	t.Run("single dot path is normalized", func(t *testing.T) {
 		// Edge case: single dot representing current directory.
 		changedFiles := []string{"."}
-		index := newChangedFilesIndex(atmosConfig, changedFiles)
+		index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		allFiles := index.getAllFiles()
 		assert.Len(t, allFiles, 1)
 
 		// Single dot should be converted to absolute path.
 		assert.True(t, filepath.IsAbs(allFiles[0]), "Single dot should be normalized to absolute path")
+	})
+}
+
+// TestChangedFilesIndex_GitRepoRootResolution tests that changed files from git diff
+// (which are relative to the git repo root) are correctly resolved against the
+// git repo root, not the current working directory.
+// This is a regression test for issue #1978: atmos describe affected doesn't detect component changes.
+func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
+	// Simulate a scenario where:
+	// - Git repo root is /repo
+	// - Atmos base path is /repo/atmos_test (a subdirectory)
+	// - Changed file from git diff is "atmos_test/components/terraform/second_component/main.tf"
+	//   (relative to git root, not to atmos base path)
+	gitRepoRoot := t.TempDir()
+	atmosBaseDir := filepath.Join(gitRepoRoot, "atmos_test")
+
+	// Create the component directory structure.
+	componentPath := filepath.Join(atmosBaseDir, "components/terraform/second_component")
+	err := os.MkdirAll(componentPath, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# component"), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: atmosBaseDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	t.Run("relative paths from git diff are resolved against git repo root", func(t *testing.T) {
+		// This is the relative path that git diff would return.
+		// It's relative to the git repo root, not the atmos base path.
+		changedFiles := []string{
+			"atmos_test/components/terraform/second_component/main.tf",
+		}
+
+		// When gitRepoRoot is provided, relative paths should be resolved against it.
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, gitRepoRoot)
+		patternCache := newComponentPathPatternCache()
+
+		// The component should be detected as changed.
+		changed, err := isComponentFolderChangedIndexed("second_component", cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
+		require.NoError(t, err)
+		assert.True(t, changed, "Component should be detected as changed when file path is relative to git repo root (issue #1978 fix)")
+	})
+
+	t.Run("verifies correct path resolution", func(t *testing.T) {
+		// Relative path from git diff.
+		changedFiles := []string{
+			"atmos_test/components/terraform/second_component/main.tf",
+		}
+
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, gitRepoRoot)
+
+		// Get all files and verify they're absolute paths resolved against git repo root.
+		allFiles := filesIndex.getAllFiles()
+		require.Len(t, allFiles, 1)
+
+		expectedPath := filepath.Join(gitRepoRoot, "atmos_test/components/terraform/second_component/main.tf")
+		assert.Equal(t, expectedPath, allFiles[0], "Path should be resolved relative to git repo root")
+	})
+
+	t.Run("empty git repo root falls back to filepath.Abs", func(t *testing.T) {
+		// When gitRepoRoot is empty, fallback to filepath.Abs (current working directory).
+		// This maintains backward compatibility for tests that use absolute paths.
+		absolutePath := filepath.Join(atmosBaseDir, "components/terraform/second_component/main.tf")
+		changedFiles := []string{absolutePath}
+
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, "")
+
+		allFiles := filesIndex.getAllFiles()
+		require.Len(t, allFiles, 1)
+		assert.True(t, filepath.IsAbs(allFiles[0]), "Path should still be absolute")
 	})
 }
 
@@ -1280,7 +1356,7 @@ func TestIsComponentFolderChangedIndexed(t *testing.T) {
 		filepath.Join(tempDir, "other/file.txt"),
 	}
 
-	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+	filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 	patternCache := newComponentPathPatternCache()
 
 	t.Run("changed file in component folder", func(t *testing.T) {
@@ -1329,7 +1405,7 @@ module "subnets" {
 			filepath.Join(modulePath, "main.tf"),
 		}
 
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		changed, err := areTerraformComponentModulesChangedIndexed("vpc", atmosConfig, filesIndex, patternCache)
@@ -1342,7 +1418,7 @@ module "subnets" {
 			filepath.Join(tempDir, "other/file.txt"),
 		}
 
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		changed, err := areTerraformComponentModulesChangedIndexed("vpc", atmosConfig, filesIndex, patternCache)
@@ -1371,7 +1447,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		require.NoError(t, err)
 
 		changedFiles := []string{depFile}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		deps := schema.DependsOn{
 			"dep1": schema.Context{File: depFile},
@@ -1393,7 +1469,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		require.NoError(t, err)
 
 		changedFiles := []string{depFile}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		deps := schema.DependsOn{
 			"dep1": schema.Context{Folder: depFolder},
@@ -1410,7 +1486,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		changedFiles := []string{
 			filepath.Join(tempDir, "other/unrelated.txt"),
 		}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		deps := schema.DependsOn{
 			"dep1": schema.Context{File: filepath.Join(tempDir, "config/settings.yaml")},
@@ -1430,7 +1506,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		require.NoError(t, err)
 
 		changedFiles := []string{depFile1}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		deps := schema.DependsOn{
 			"dep1": schema.Context{File: depFile1},
@@ -1449,7 +1525,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		changedFiles := []string{
 			filepath.Join(tempDir, "some/file.txt"),
 		}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		deps := schema.DependsOn{}
 
@@ -1469,7 +1545,7 @@ func TestIsComponentDependentFolderOrFileChangedIndexed(t *testing.T) {
 		require.NoError(t, err)
 
 		changedFiles := []string{depFile}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 		// Create dependencies with both valid and empty entries.
 		deps := schema.DependsOn{
@@ -1547,7 +1623,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 		}
 
 		changedFiles := []string{}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
@@ -1611,7 +1687,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 		changedFiles := []string{
 			filepath.Join(helmfilePath, "helmfile.yaml"),
 		}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
@@ -1668,7 +1744,7 @@ func TestProcessHelmfileComponentsIndexed(t *testing.T) {
 		}
 
 		changedFiles := []string{}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		helmfileSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.HelmfileComponentType].(map[string]any)
@@ -1750,7 +1826,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 		}
 
 		changedFiles := []string{}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
@@ -1808,7 +1884,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 		changedFiles := []string{
 			filepath.Join(packerPath, "template.pkr.hcl"),
 		}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
@@ -1851,7 +1927,7 @@ func TestProcessPackerComponentsIndexed(t *testing.T) {
 
 		remoteStacks := &map[string]any{}
 		changedFiles := []string{}
-		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles)
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 		patternCache := newComponentPathPatternCache()
 
 		packerSection := (*currentStacks)["dev-stack"].(map[string]any)["components"].(map[string]any)[cfg.PackerComponentType].(map[string]any)
@@ -2149,7 +2225,7 @@ func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 		filepath.Join(tempDir, "components/terraform/vpc/main.tf"),
 	}
 
-	index := newChangedFilesIndex(atmosConfig, changedFiles)
+	index := newChangedFilesIndex(atmosConfig, changedFiles, tempDir)
 
 	t.Run("unknown component type returns all files", func(t *testing.T) {
 		files := index.getRelevantFiles("unknown-type", atmosConfig)
@@ -2168,7 +2244,7 @@ func TestChangedFilesIndex_GetRelevantFiles_EdgeCases(t *testing.T) {
 			},
 		}
 
-		emptyIndex := newChangedFilesIndex(emptyConfig, []string{})
+		emptyIndex := newChangedFilesIndex(emptyConfig, []string{}, emptyConfig.BasePath)
 		files := emptyIndex.getRelevantFiles(cfg.TerraformComponentType, emptyConfig)
 		// Should return all files (empty in this case) as fallback.
 		assert.Equal(t, emptyIndex.allFiles, files)
@@ -2306,7 +2382,7 @@ func TestProcessStackAffected_EdgeCases(t *testing.T) {
 		},
 	}
 
-	filesIndex := newChangedFilesIndex(atmosConfig, []string{})
+	filesIndex := newChangedFilesIndex(atmosConfig, []string{}, tempDir)
 	patternCache := newComponentPathPatternCache()
 
 	t.Run("invalid stack section returns empty", func(t *testing.T) {
