@@ -7,7 +7,8 @@ components:
   terraform:
     myapp:
       source:
-        uri: "github.com/cloudposse/terraform-null-label?ref=0.24.1"
+        uri: "github.com/cloudposse/terraform-null-label"
+        version: "0.24.1"
       provision:
         workdir:
           enabled: true

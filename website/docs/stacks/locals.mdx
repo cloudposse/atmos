@@ -8,6 +8,7 @@ id: locals
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 The `locals` section defines file-scoped temporary variables for use within templates. Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file boundaries—they are resolved within a single file and can reference each other with automatic dependency resolution.
@@ -33,53 +34,15 @@ Locals are similar to [Terraform locals](https://developer.hashicorp.com/terrafo
 
 ## Configuration Scopes
 
-The `locals` section can be defined at multiple levels within a single file. Each scope inherits from its parent scope within that file.
+Locals can be defined at three levels within a file, each inheriting from its parent:
 
-### Global Level
-
-Locals defined at the root level are available to all sections in the file:
-
-```yaml
-# stacks/orgs/acme/plat/prod/us-east-1.yaml
-locals:
-  namespace: acme
-  environment: prod
-  stage: us-east-1
-  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
-
-vars:
-  cluster_name: "{{ .locals.name_prefix }}-eks"
+```
+Global locals → Component-type locals (terraform/helmfile/packer) → Component-level locals
 ```
 
-### Component-Type Level
-
-Locals defined under `terraform`, `helmfile`, or `packer` inherit from global locals and are available to all components of that type:
+When the same key exists at multiple levels, the most specific scope wins.
 
 ```yaml
-# stacks/orgs/acme/plat/prod/us-east-1.yaml
-locals:
-  namespace: acme
-  environment: prod
-
-terraform:
-  locals:
-    # Inherits namespace and environment from global
-    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
-    backend_key_prefix: "{{ .locals.environment }}"
-
-  backend_type: s3
-  backend:
-    s3:
-      bucket: "{{ .locals.backend_bucket }}"
-      key: "{{ .locals.backend_key_prefix }}/terraform.tfstate"
-```
-
-### Using Locals in Components
-
-Components can reference merged locals (global + component-type) in their `vars`. When the same key is defined at multiple scopes, later scopes take precedence: component-type locals override global locals, and component-level locals override both.
-
-```yaml
-# stacks/orgs/acme/plat/prod/us-east-1.yaml
 locals:
   namespace: acme
   environment: prod
@@ -87,146 +50,137 @@ locals:
 
 terraform:
   locals:
+    # Inherits from global, adds terraform-specific locals
     backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
 
 components:
   terraform:
     vpc:
+      locals:
+        # Component-specific locals (inherits from global + terraform)
+        vpc_type: production
       vars:
-        # Uses merged locals (global + terraform section)
-        vpc_name: "{{ .locals.name_prefix }}-vpc"
+        name: "{{ .locals.name_prefix }}-{{ .locals.vpc_type }}-vpc"
         bucket: "{{ .locals.backend_bucket }}"
-
-    eks:
-      vars:
-        # Same merged locals available to all terraform components
-        cluster_name: "{{ .locals.name_prefix }}-eks"
-        bucket: "{{ .locals.backend_bucket }}"
-```
-
-:::tip Component-Level Locals
-Components can also define their own `locals:` section. Component-level locals inherit from global and section-level locals, and also support inheritance from base components via `metadata.inherits`. See the [describe locals command](/cli/commands/describe/locals) for inspecting component-level locals.
-:::
-
-## Scope Inheritance (Within a File)
-
-Within a single file, locals follow this inheritance chain:
-
-```
-Global locals
-    ↓
-Component-type locals (terraform/helmfile/packer)
-    ↓
-Component-level locals (inside component definitions)
-```
-
-Each level can:
-- Access locals from parent scopes
-- Define new locals
-- Override parent locals with new values
-
-Component-level locals also inherit from base components via `metadata.inherits` or `component` attribute.
-
-:::note Precedence
-When the same key exists at multiple levels, the most specific scope wins. For terraform components, the full precedence chain is:
-
-**Global → Terraform Section → Base Component → Component**
-
-This means component-level locals override section-level, which override global locals.
-:::
-
-### Example
-
-```yaml
-locals:
-  env: prod              # Global
-
-terraform:
-  locals:
-    env: production      # Overrides global for terraform components
-    tf_version: "1.5"
-
-components:
-  terraform:
-    vpc:
-      vars:
-        # Uses merged locals: env = "production", tf_version = "1.5"
-        name: "{{ .locals.env }}-vpc"
-        terraform_version: "{{ .locals.tf_version }}"
 ```
 
 ## File-Scoped Isolation
 
-**Important:** Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file imports. Each file has its own isolated locals scope.
+Unlike `vars`, `settings`, and `env`, locals do **not** inherit across file imports. Each file has its own isolated locals scope.
 
 <File title="stacks/catalog/defaults.yaml">
 ```yaml
 # These locals are ONLY available in this file
 locals:
   default_region: us-east-1
-  default_tags:
-    ManagedBy: Atmos
 ```
 </File>
 
-<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+<File title="stacks/deploy/production.yaml">
 ```yaml
 import:
   - catalog/defaults
 
 # The locals from catalog/defaults are NOT available here
-# You must define your own locals in this file
 locals:
-  namespace: acme
-  environment: prod
+  namespace: acme  # Define your own locals
 ```
 </File>
 
-This design is intentional:
-- **Predictability:** Locals in a file only come from that file
-- **No Hidden Dependencies:** You can understand a file without tracing imports
-- **Flexibility:** Each file can define locals that make sense for its context
+This design ensures predictability—you can understand a file without tracing imports.
+
+<details>
+<summary>How does processing work?</summary>
+
+Locals are resolved before imports are merged:
+
+1. **Per-File Processing:** Each file is processed independently
+2. **Locals Resolution:** Locals are resolved using only that file's context
+3. **Import Merging:** Sections (`vars`, `settings`, `env`, `components`) are merged
+4. **Final Template Processing:** Templates in other sections use the merged context
+
+```mermaid
+flowchart TB
+    subgraph file1["stacks/deploy/production.yaml"]
+        A1[1. Parse YAML]
+        A2[2. Resolve locals<br/><i>only sees this file's settings/vars/env</i>]
+        A1 --> A2
+    end
+
+    subgraph file2["stacks/catalog/defaults.yaml (imported)"]
+        B1[1. Parse YAML]
+        B2[2. Resolve locals<br/><i>only sees this file's settings/vars/env</i>]
+        B1 --> B2
+    end
+
+    subgraph merge["3. Merge Phase"]
+        C1[Merge vars, settings, env, components]
+        C2[<i>locals already resolved per-file</i>]
+        C1 --> C2
+    end
+
+    file1 --> merge
+    file2 --> merge
+    merge --> D1[4. Process templates in vars, settings, etc.]
+```
+
+</details>
 
 ## Dependency Resolution
 
-Locals can reference other locals, and Atmos automatically resolves them in the correct order using topological sorting:
+Locals can reference other locals in any order—Atmos resolves them automatically:
 
 ```yaml
 locals:
-  # These can be defined in any order
-  full_name: "{{ .locals.name_prefix }}-{{ .locals.component }}"
-  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}"
+  full_name: "{{ .locals.name_prefix }}-{{ .locals.component }}"  # Resolved last
+  name_prefix: "{{ .locals.namespace }}-{{ .locals.environment }}" # Resolved second
+  namespace: acme      # Resolved first
+  environment: prod    # Resolved first
+  component: vpc       # Resolved first
+```
+
+Circular references are detected and reported with clear error messages showing the dependency cycle.
+
+## Accessing Other Sections
+
+Locals can access `settings`, `vars`, and `env` defined in the **same file**:
+
+| Section | Syntax | Description |
+|---------|--------|-------------|
+| `locals` | `{{ .locals.name }}` | Other locals in the same file |
+| `settings` | `{{ .settings.key }}` | Settings defined in the same file |
+| `vars` | `{{ .vars.key }}` | Variables defined in the same file |
+| `env` | `{{ .env.KEY }}` | Environment variables defined in the same file |
+
+```yaml
+settings:
+  version: v1
+
+vars:
+  stage: dev
+
+locals:
   namespace: acme
-  environment: prod
-  component: vpc
+  label: "{{ .locals.namespace }}-{{ .vars.stage }}-{{ .settings.version }}"
 ```
 
-Atmos resolves these in dependency order:
-1. `namespace` and `environment` (no dependencies)
-2. `component` (no dependencies)
-3. `name_prefix` (depends on `namespace`, `environment`)
-4. `full_name` (depends on `name_prefix`, `component`)
-
-## Circular Dependency Detection
-
-Atmos detects circular references and provides clear error messages:
+:::warning Same-File Access Only
+Locals cannot access `settings`, `vars`, or `env` from imported files. If you need values from imports, use `vars` instead—they inherit across files.
+:::
 
 ```yaml
+# ❌ Won't work - imported settings not available to locals
+import:
+  - catalog/defaults  # Has settings.region = us-east-1
 locals:
-  a: "{{ .locals.b }}"
-  b: "{{ .locals.c }}"
-  c: "{{ .locals.a }}"  # Creates a cycle!
+  region: "{{ .settings.region }}"  # Error!
+
+# ✅ Use vars instead - they inherit across imports
+vars:
+  computed_name: "{{ .vars.region }}-cluster"
 ```
 
-Error output:
-```
-circular dependency in locals at stacks/example.yaml
-
-Dependency cycle detected:
-  a → b → c → a
-```
-
-## Using Templates in Locals
+## Using Templates
 
 Locals support full Go template syntax with [Sprig functions](http://masterminds.github.io/sprig/):
 
@@ -234,110 +188,206 @@ Locals support full Go template syntax with [Sprig functions](http://masterminds
 locals:
   name: myapp
   environment: production
-
-  # String manipulation
   upper_name: "{{ .locals.name | upper }}"
-  quoted_env: '{{ .locals.environment | quote }}'
-
-  # Conditionals
   log_level: '{{ if eq .locals.environment "production" }}warn{{ else }}debug{{ end }}'
-
-  # Complex expressions
-  resource_name: "{{ .locals.name }}-{{ .locals.environment | lower | trunc 4 }}"
 ```
+
+## YAML Functions in Locals
+
+Locals support all Atmos [YAML functions](/functions/yaml), enabling dynamic value resolution from external sources:
+
+| Function | Description | Example |
+|----------|-------------|---------|
+| `!env` | Environment variables | `!env API_ENDPOINT` |
+| `!exec` | Command execution | `!exec echo hello` |
+| `!store` | Store lookups | `!store secrets/db .password` |
+| `!terraform.state` | Terraform state queries | `!terraform.state vpc .vpc_id` |
+| `!terraform.output` | Terraform outputs | `!terraform.output vpc .vpc_id` |
+
+### Example: Environment Variables
+
+Use `!env` to inject environment-specific values into locals:
+
+```yaml
+locals:
+  # Fetch from environment variables
+  api_endpoint: !env API_ENDPOINT
+  db_host: !env DATABASE_HOST
+
+  # Combine with Go templates
+  api_url: "https://{{ .locals.api_endpoint }}/api/v1"
+  connection_string: "postgresql://app@{{ .locals.db_host }}:5432/mydb"
+
+components:
+  terraform:
+    backend:
+      vars:
+        api_url: "{{ .locals.api_url }}"
+        database_url: "{{ .locals.connection_string }}"
+```
+
+### Example: Cross-Component References
+
+Use `!terraform.state` or `!terraform.output` to reference outputs from other components:
+
+```yaml
+locals:
+  # Fetch VPC outputs from another component's state
+  vpc_id: !terraform.state vpc .vpc_id
+  private_subnets: !terraform.state vpc .private_subnet_ids
+
+  # Build derived values
+  cluster_name: "eks-{{ .locals.vpc_id }}"
+
+components:
+  terraform:
+    eks:
+      vars:
+        vpc_id: "{{ .locals.vpc_id }}"
+        subnet_ids: "{{ .locals.private_subnets }}"
+        name: "{{ .locals.cluster_name }}"
+```
+
+### Example: Secret Management
+
+Use `!store` to fetch secrets from your configured store:
+
+```yaml
+locals:
+  # Fetch secrets from store
+  db_password: !store secrets/database .password
+  api_key: !store secrets/api .key
+
+  # Build connection strings
+  database_url: "postgresql://app:{{ .locals.db_password }}@db.example.com/mydb"
+
+components:
+  terraform:
+    app:
+      vars:
+        database_url: "{{ .locals.database_url }}"
+        api_key: "{{ .locals.api_key }}"
+```
+
+### Example: Dynamic Values with Exec
+
+Use `!exec` to run commands and capture output:
+
+```yaml
+locals:
+  # Get current git commit
+  git_commit: !exec git rev-parse --short HEAD
+
+  # Get current timestamp
+  build_time: !exec date -u +%Y%m%d%H%M%S
+
+  # Build version string
+  version: "{{ .locals.git_commit }}-{{ .locals.build_time }}"
+
+components:
+  terraform:
+    app:
+      vars:
+        image_tag: "{{ .locals.version }}"
+```
+
+### Combining YAML Functions with Templates
+
+YAML functions are resolved first, then Go templates are processed. This allows you to build complex values:
+
+```yaml
+locals:
+  # Step 1: YAML function fetches the base value
+  endpoint: !env GRAFANA_ENDPOINT
+
+  # Step 2: Go template uses the resolved value
+  dashboard_url: "https://{{ .locals.endpoint }}/d/ray-workers"
+  metrics_url: "https://{{ .locals.endpoint }}/api/v1/query"
+
+vars:
+  monitoring:
+    dashboard: "{{ .locals.dashboard_url }}"
+    metrics: "{{ .locals.metrics_url }}"
+```
+
+:::tip YAML Function Processing Order
+YAML functions in locals are processed during stack configuration loading. The resolved values become available to other locals and component vars through Go templates.
+:::
 
 ## Complex Values
 
-Locals can contain maps and lists, not just strings:
+Locals can contain maps and lists:
 
 ```yaml
 locals:
   namespace: acme
   environment: prod
 
-  # Map value
   default_tags:
     Namespace: "{{ .locals.namespace }}"
     Environment: "{{ .locals.environment }}"
     ManagedBy: Atmos
 
-  # List value
   availability_zones:
     - us-east-1a
     - us-east-1b
-    - us-east-1c
-
-  # Nested structure
-  backend_config:
-    bucket: "{{ .locals.namespace }}-tfstate"
-    region: us-east-1
-    encrypt: true
 
 vars:
   tags: "{{ .locals.default_tags }}"
-  azs: "{{ .locals.availability_zones }}"
 ```
 
-## Complete Example
+## Component-Level Locals
 
-<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
+Components can define their own locals that inherit from global and section-level locals. They also support inheritance from base components via `metadata.inherits`:
+
 ```yaml
-# Global locals - available throughout this file
-locals:
-  # Base identifiers
-  namespace: acme
-  tenant: platform
-  environment: prod
-  stage: us-east-1
-
-  # Computed values
-  name_prefix: "{{ .locals.namespace }}-{{ .locals.tenant }}-{{ .locals.environment }}"
-  full_name: "{{ .locals.name_prefix }}-{{ .locals.stage }}"
-
-  # Shared tags
-  default_tags:
-    Namespace: "{{ .locals.namespace }}"
-    Tenant: "{{ .locals.tenant }}"
-    Environment: "{{ .locals.environment }}"
-    Stage: "{{ .locals.stage }}"
-    ManagedBy: Atmos
-
-# Use locals in global vars
-vars:
-  region: "{{ .locals.stage }}"
-  tags: "{{ .locals.default_tags }}"
-
-terraform:
-  # Terraform-specific locals (inherit from global)
-  locals:
-    backend_bucket: "{{ .locals.namespace }}-{{ .locals.environment }}-tfstate"
-    vpc_name: "{{ .locals.full_name }}-vpc"
-    cluster_name: "{{ .locals.full_name }}-eks"
-
-  backend_type: s3
-  backend:
-    s3:
-      bucket: "{{ .locals.backend_bucket }}"
-      region: "{{ .locals.stage }}"
-      key: terraform.tfstate
-
-# Components use merged locals (global + terraform section)
 components:
   terraform:
-    vpc:
-      vars:
-        name: "{{ .locals.vpc_name }}"
-        cidr_block: "10.0.0.0/16"
-        tags:
-          Name: "{{ .locals.vpc_name }}"
+    vpc/base:
+      metadata:
+        type: abstract
+      locals:
+        vpc_type: standard
+        enable_nat: false
 
-    eks:
+    vpc/production:
+      metadata:
+        inherits:
+          - vpc/base
+      locals:
+        vpc_type: production  # Overrides base
+        enable_nat: true      # Overrides base
       vars:
-        cluster_name: "{{ .locals.cluster_name }}"
-        tags:
-          Name: "{{ .locals.cluster_name }}"
+        name: "{{ .locals.vpc_type }}-vpc"
+        nat_enabled: "{{ .locals.enable_nat }}"
 ```
-</File>
+
+Resolution order (later overrides earlier): **Global → Section → Base Component → Component**
+
+## Debugging
+
+Use `atmos describe locals` to inspect resolved values:
+
+```shell
+atmos describe locals -s dev              # All locals for a stack
+atmos describe locals vpc -s dev          # Locals for a specific component
+atmos describe locals -s dev --format json # Output as JSON
+```
+
+<details>
+<summary>Example output</summary>
+
+```yaml
+locals:
+  namespace: acme
+  environment: dev
+  name_prefix: acme-dev
+terraform:
+  locals:
+    backend_bucket: acme-dev-tfstate
+```
+
+</details>
 
 ## Locals vs Vars
 
@@ -346,50 +396,54 @@ components:
 | **Scope** | File-scoped only | Inherits across imports |
 | **Purpose** | Temporary values for DRY | Input variables for components |
 | **Output** | Not passed to components | Passed to Terraform/Helmfile/Packer |
-| **Dependencies** | Can reference other locals | Can reference locals |
-| **Visibility** | Internal to stack config | Visible in component execution |
+| **Cross-File Access** | Cannot access imported values | Can access merged values from all imports |
 
-Use `locals` for intermediate computations and `vars` for values that need to be passed to your components.
+Use `locals` for intermediate computations within a single file, and `vars` for values that need to be passed to components or shared across files.
 
-## Template Processing Behavior
+## Template Processing
 
-When a file defines locals, template processing is automatically enabled for that file. This means any `{{ ... }}` syntax in the file will be processed as Go templates.
+When a file defines locals, template processing is automatically enabled. Any `{{ ... }}` syntax will be processed.
 
 :::warning Conflicting Template Syntax
-If your YAML files contain non-Atmos template syntax (such as Helm's `{{ ... }}`), adding locals will cause those templates to be processed incorrectly. To prevent this, you can disable template processing for specific imports:
+If your YAML files contain Helm templates or other `{{ }}` syntax, use `skip_templates_processing`:
 
 ```yaml
 import:
   - path: catalog/helm-values
-    skip_templates_processing: true  # Preserves {{ ... }} syntax as literal text
+    skip_templates_processing: true
+```
+:::
+
+## Error Handling
+
+Unresolved template references produce clear error messages:
+
+```yaml
+locals:
+  domain: "{{ .settings.region }}.example.com"  # Error if no settings defined
 ```
 
-This is useful when importing files that contain:
-- Helm chart values with Go template syntax
-- Other templating systems that use `{{ }}`
-- Literal strings that happen to contain template-like patterns
-:::
+```
+Error: map has no entry for key "settings"
+```
+
+For optional values, use Go template conditionals:
+
+```yaml
+locals:
+  safe_region: '{{ with .settings }}{{ .region }}{{ else }}us-west-2{{ end }}'
+```
 
 ## Best Practices
 
-1. **Use for Repetition:** If you find yourself repeating the same value or expression, extract it to a local.
+1. **Extract repetition** to locals instead of duplicating values.
+2. **Build incrementally**—compose complex values from simpler locals.
+3. **Keep locals close** to where they're used (component-level when possible).
+4. **Use vars for cross-file sharing**—locals are file-scoped by design.
 
-2. **Build Incrementally:** Start with simple locals and compose them into more complex values:
-   ```yaml
-   locals:
-     namespace: acme
-     env: prod
-     prefix: "{{ .locals.namespace }}-{{ .locals.env }}"  # Build on simpler locals
-     bucket: "{{ .locals.prefix }}-assets"                # Build on prefix
-   ```
+## Try It
 
-3. **Keep Locals Close:** Define locals near where they're used. If a local is only used in one component, define it at the component level.
-
-4. **Use Descriptive Names:** Choose names that describe what the value represents, not how it's computed.
-
-5. **Avoid Deep Nesting:** If you have many levels of local dependencies, consider simplifying or restructuring.
-
-6. **Remember File Scope:** Don't expect locals from imported files—define what you need in each file.
+<EmbedExample example="locals" />
 
 ## Related
 
@@ -397,4 +451,3 @@ This is useful when importing files that contain:
 - [Environment Variables (env)](/stacks/env)
 - [Settings](/stacks/settings)
 - [Imports](/stacks/imports)
-- [YAML Functions](/functions/yaml)

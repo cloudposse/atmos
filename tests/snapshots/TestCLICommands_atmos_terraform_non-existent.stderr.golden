@@ -1,56 +1,51 @@
-**Notice:** Telemetry Enabled - Atmos now collects anonymous telemetry regarding usage. This information is used to shape the Atmos roadmap and prioritize features. You can learn more, including how to opt out if you'd prefer not to participate in this anonymous program, by visiting: https://atmos.tools/cli/telemetry
 # Incorrect Usage
 
-**Error:** unknown subcommand
-
-## Explanation
-
-Unknown command non-existent for atmos terraform
+**Error:** Unknown command non-existent for atmos terraform
 
 Valid subcommands are:
 
-• apply
-• backend
-• clean
-• console
-• deploy
-• destroy
-• fmt
-• force-unlock
-• generate
-• get
-• graph
-• help
-• import
-• init
-• login
-• logout
-• metadata
-• modules
-• output
-• plan
-• plan-diff
-• providers
-• refresh
-• shell
-• show
-• source
-• state
-• taint
-• test
-• untaint
-• validate
-• varfile
-• version
-• workdir
-• workspace
-• write
+  • apply
+  • backend
+  • clean
+  • console
+  • deploy
+  • destroy
+  • fmt
+  • force-unlock
+  • generate
+  • get
+  • graph
+  • help
+  • import
+  • init
+  • login
+  • logout
+  • metadata
+  • modules
+  • output
+  • plan
+  • plan-diff
+  • providers
+  • refresh
+  • shell
+  • show
+  • source
+  • state
+  • taint
+  • test
+  • untaint
+  • validate
+  • varfile
+  • version
+  • workdir
+  • workspace
+  • write
 
 ## Usage Examples:
 
 – Execute a terraform subcommand
 
-$ atmos terraform [subcommand]  -s
+  $ atmos terraform [subcommand] <component-name> -s <stack-name>
 
 ## Hints
 

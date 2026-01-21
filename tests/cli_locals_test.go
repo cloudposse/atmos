@@ -814,6 +814,119 @@ func TestDescribeLocalsDifferentOutputStructures(t *testing.T) {
 // processing. Component-level locals appear in the final component output
 // and can be used by downstream tooling.
 
+// =============================================================================
+// Settings Access Tests.
+// =============================================================================
+// These tests verify that locals can access .settings, .vars, and .env
+// from the SAME file during template resolution.
+
+// TestLocalsSettingsAccessSameFile tests that locals can access .settings from the same file.
+// This is the core test for GitHub issue #1991.
+func TestLocalsSettingsAccessSameFile(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-settings-access")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Get component configuration with locals resolved.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "same-file-component",
+		Stack:                "test-same-file",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify vars were resolved correctly.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// Check that {{ .locals.domain }} resolved correctly.
+	// The local 'domain' is defined as '{{ .settings.substage }}.example.com'
+	// where settings.substage = "dev", so domain = "dev.example.com".
+	assert.Equal(t, "dev.example.com", vars["domain"],
+		"domain var should be resolved from locals which accessed settings")
+
+	// Check that {{ .settings.substage }} resolved correctly.
+	assert.Equal(t, "dev", vars["substage"],
+		"substage var should be resolved from settings")
+}
+
+// TestLocalsSettingsAccessDescribeStacks tests that describe stacks works
+// correctly when locals access settings from the same file.
+func TestLocalsSettingsAccessDescribeStacks(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-settings-access")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get all stacks.
+	result, err := exec.ExecuteDescribeStacks(
+		&atmosConfig,
+		"",    // filterByStack
+		nil,   // components
+		nil,   // componentTypes
+		nil,   // sections
+		true,  // ignoreMissingFiles
+		true,  // processTemplates
+		true,  // processYamlFunctions
+		false, // includeEmptyStacks
+		nil,   // skip
+		nil,   // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.NotEmpty(t, result, "should have at least one stack")
+
+	// Find the test-same-file stack.
+	stack, ok := result["test-same-file"].(map[string]any)
+	require.True(t, ok, "should find the 'test-same-file' stack")
+
+	components, ok := stack["components"].(map[string]any)
+	require.True(t, ok, "components should be a map")
+	terraform, ok := components["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should be a map")
+	component, ok := terraform["same-file-component"].(map[string]any)
+	require.True(t, ok, "same-file-component should exist")
+	vars, ok := component["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// Verify locals resolved with settings access.
+	assert.Equal(t, "dev.example.com", vars["domain"],
+		"domain should be resolved from locals which accessed settings")
+}
+
+// TestLocalsSettingsAccessNotCrossFile verifies that locals CANNOT access
+// settings from imported files (only same-file access is supported).
+// This confirms the file-scoped design for settings access in locals.
+// When a local attempts to access .settings that doesn't exist in the same file,
+// the template engine produces an error (map has no entry for key "settings").
+// This test uses a separate fixture to isolate the error case from other tests.
+func TestLocalsSettingsAccessNotCrossFile(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-settings-cross-file")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// The test-cross-file stack imports sandbox-dev mixin which has settings.substage = "dev".
+	// But locals in test-cross-file.yaml should NOT be able to access those imported settings.
+	// Since cross-file access is not supported, attempting to access .settings
+	// when no settings exist in the same file produces a template error.
+
+	_, err = exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "cross-file-component",
+		Stack:                "test-cross-file",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+
+	// Verify that cross-file settings access produces an error.
+	require.Error(t, err, "cross-file settings access should produce an error")
+	assert.Contains(t, err.Error(), "settings",
+		"error should mention 'settings' as the missing key")
+}
+
 // TestComponentLevelLocals tests component-level locals functionality using table-driven tests.
 func TestComponentLevelLocals(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-component-level")
@@ -903,4 +1016,303 @@ func TestComponentLevelLocals(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestExampleLocals tests the examples/locals example to ensure it works correctly.
+// This validates the example used in documentation.
+func TestExampleLocals(t *testing.T) {
+	t.Chdir("../examples/locals")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name         string
+		stack        string
+		expectedVars map[string]string
+	}{
+		{
+			name:  "dev stack resolves locals correctly",
+			stack: "dev",
+			expectedVars: map[string]string{
+				"name":        "acme",
+				"environment": "development",
+				"full_name":   "acme-development-dev",
+			},
+		},
+		{
+			name:  "prod stack resolves locals correctly",
+			stack: "prod",
+			expectedVars: map[string]string{
+				"name":        "acme",
+				"environment": "production",
+				"full_name":   "acme-production-prod",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+				Component:            "myapp",
+				Stack:                tt.stack,
+				ProcessTemplates:     true,
+				ProcessYamlFunctions: true,
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			// Verify vars were resolved from locals.
+			vars, ok := result["vars"].(map[string]any)
+			require.True(t, ok, "vars should be a map")
+
+			for key, expected := range tt.expectedVars {
+				assert.Equal(t, expected, vars[key], "vars[%s] mismatch for stack %s", key, tt.stack)
+			}
+
+			// Verify tags exist (they are resolved from locals.default_tags).
+			assert.NotNil(t, vars["tags"], "tags should be present in vars")
+		})
+	}
+}
+
+// TestExampleLocalsDescribeLocals tests the describe locals command on the example.
+func TestExampleLocalsDescribeLocals(t *testing.T) {
+	t.Chdir("../examples/locals")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Use ExecuteDescribeLocals to get locals output.
+	// The examples/locals fixture uses name_template: "{{ .vars.stage }}" so the stack name is "dev".
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "dev")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The result structure has: locals: plus per-section locals (e.g., terraform.locals).
+	// Check root-level locals section.
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok, "locals should be a map")
+
+	// Verify key locals were resolved.
+	assert.Equal(t, "acme", locals["namespace"], "locals.namespace mismatch")
+	assert.Equal(t, "development", locals["environment"], "locals.environment mismatch")
+	assert.Equal(t, "acme-development", locals["name_prefix"], "locals.name_prefix mismatch")
+	assert.Equal(t, "acme-development-dev", locals["full_name"], "locals.full_name mismatch")
+	assert.Equal(t, "v1", locals["app_version"], "locals.app_version should access settings.version")
+	assert.Equal(t, "dev", locals["stage_name"], "locals.stage_name should access vars.stage")
+}
+
+// =============================================================================
+// Advanced Locals Tests.
+// =============================================================================
+// These tests verify advanced locals features.
+// - Environment variable access via {{ env "VAR" }}.
+// - Nested value access {{ .settings.nested.key }}.
+// - Helmfile section locals.
+// - Conditional locals using Sprig functions.
+
+// TestLocalsNestedSettingsAccess tests that locals can access nested settings values.
+func TestLocalsNestedSettingsAccess(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-advanced")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Get component configuration with locals resolved.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "vpc",
+		Stack:                "advanced",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify vars were resolved correctly.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// Check nested settings access: {{ .settings.region.primary }}
+	assert.Equal(t, "us-east-1", vars["region"],
+		"region should be resolved from nested settings.region.primary")
+
+	// Check computed value from nested settings: {{ .locals.namespace }}-{{ .locals.db_engine }}-{{ .locals.db_version }}
+	assert.Equal(t, "acme-postgres-15", vars["db_identifier"],
+		"db_identifier should be computed from nested settings")
+
+	// Check nested vars access: {{ .vars.network.vpc_cidr }}
+	assert.Equal(t, "10.0.0.0/16", vars["cidr"],
+		"cidr should be resolved from nested vars.network.vpc_cidr")
+
+	// Check terraform section locals: {{ .locals.backend_bucket }}
+	assert.Equal(t, "acme-advanced-tfstate", vars["backend_bucket"],
+		"backend_bucket should be resolved from terraform section locals")
+
+	// Check conditional locals: {{ if eq .vars.stage "prod" }}production{{ else }}{{ .vars.stage }}{{ end }}
+	assert.Equal(t, "advanced", vars["env_suffix"],
+		"env_suffix should be 'advanced' for non-prod stage")
+}
+
+// TestLocalsEnvironmentVariableAccess tests that locals can access environment variables.
+func TestLocalsEnvironmentVariableAccess(t *testing.T) {
+	// Set known values for deterministic assertions.
+	testValue := "atmos-test-value-12345"
+	homeValue := "/tmp/atmos-test-home"
+	t.Setenv("ATMOS_TEST_ENV_VAR", testValue)
+	t.Setenv("HOME", homeValue)
+
+	t.Chdir("./fixtures/scenarios/locals-env-test")
+
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	require.NoError(t, err)
+
+	// Get component configuration with locals resolved.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "env-test",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify vars were resolved correctly.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// Check that env variable is accessible via Sprig's env function.
+	testEnvValue, ok := vars["test_env_value"].(string)
+	require.True(t, ok, "test_env_value should be a string")
+	assert.Equal(t, testValue, testEnvValue, "test_env_value should come from ATMOS_TEST_ENV_VAR env var")
+
+	// Verify HOME is accessible via Sprig's env function.
+	homeDir, ok := vars["home_dir"].(string)
+	require.True(t, ok, "home_dir should be a string")
+	assert.Equal(t, homeValue, homeDir, "home_dir should come from HOME env var")
+}
+
+// TestLocalsHelmfileSectionLocals tests that helmfile section can have its own locals.
+// This test verifies helmfile section locals via the describe locals command since
+// ExecuteDescribeComponent auto-detects component type.
+func TestLocalsHelmfileSectionLocals(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-advanced")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get locals for the advanced stack to verify helmfile section locals.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "advanced")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Check helmfile section locals.
+	helmfile, ok := result["helmfile"].(map[string]any)
+	require.True(t, ok, "helmfile section should exist")
+	hfLocals, ok := helmfile["locals"].(map[string]any)
+	require.True(t, ok, "helmfile.locals should be a map")
+
+	// Check helmfile section locals: {{ .locals.namespace }}-helm
+	assert.Equal(t, "acme-helm", hfLocals["release_prefix"],
+		"release_prefix should be resolved from helmfile section locals")
+
+	// Check helmfile section locals: chart_repo
+	assert.Equal(t, "https://charts.example.com", hfLocals["chart_repo"],
+		"chart_repo should be set in helmfile section locals")
+
+	// Verify terraform section locals are separate.
+	terraform, ok := result["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should exist")
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "terraform.locals should be a map")
+	assert.Equal(t, "acme-advanced-tfstate", tfLocals["backend_bucket"],
+		"backend_bucket should be resolved in terraform section locals")
+}
+
+// TestLocalsDescribeLocalsAdvanced tests describe locals command with advanced features.
+func TestLocalsDescribeLocalsAdvanced(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/locals-advanced")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+
+	// Get locals for the advanced stack.
+	result, err := exec.ExecuteDescribeLocals(&atmosConfig, "advanced")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Check root-level locals section.
+	locals, ok := result["locals"].(map[string]any)
+	require.True(t, ok, "locals should be a map")
+
+	// Verify nested settings access was resolved.
+	assert.Equal(t, "us-east-1", locals["primary_region"],
+		"primary_region should be resolved from nested settings")
+	assert.Equal(t, "postgres", locals["db_engine"],
+		"db_engine should be resolved from nested settings")
+
+	// Verify nested vars access was resolved.
+	assert.Equal(t, "10.0.0.0/16", locals["vpc_cidr"],
+		"vpc_cidr should be resolved from nested vars")
+
+	// Check terraform section locals.
+	terraform, ok := result["terraform"].(map[string]any)
+	require.True(t, ok, "terraform section should exist")
+	tfLocals, ok := terraform["locals"].(map[string]any)
+	require.True(t, ok, "terraform.locals should be a map")
+	assert.Equal(t, "acme-advanced-tfstate", tfLocals["backend_bucket"],
+		"backend_bucket should be resolved in terraform section locals")
+
+	// Check helmfile section locals.
+	helmfile, ok := result["helmfile"].(map[string]any)
+	require.True(t, ok, "helmfile section should exist")
+	hfLocals, ok := helmfile["locals"].(map[string]any)
+	require.True(t, ok, "helmfile.locals should be a map")
+	assert.Equal(t, "acme-helm", hfLocals["release_prefix"],
+		"release_prefix should be resolved in helmfile section locals")
+}
+
+// =============================================================================
+// YAML Functions in Locals Tests.
+// =============================================================================
+// These tests verify that locals can use YAML functions like !env.
+
+// TestLocalsWithYamlFunctionsEnv tests that locals can use
+// !env to fetch values from environment variables.
+func TestLocalsWithYamlFunctionsEnv(t *testing.T) {
+	// Set environment variables for the test.
+	t.Setenv("TEST_GRAFANA_ENDPOINT", "grafana.test.com")
+	t.Setenv("TEST_DB_HOST", "db.test.com")
+
+	t.Chdir("./fixtures/scenarios/locals-yaml-functions")
+
+	// Describe the consumer component which uses locals with !env.
+	result, err := exec.ExecuteDescribeComponent(&exec.ExecuteDescribeComponentParams{
+		Component:            "consumer-component",
+		Stack:                "test",
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify locals with YAML function results were resolved correctly.
+	vars, ok := result["vars"].(map[string]any)
+	require.True(t, ok, "vars should be a map")
+
+	// The env_endpoint local should have fetched the value from environment variable.
+	assert.Equal(t, "grafana.test.com", vars["env_endpoint"],
+		"env_endpoint should be resolved from !env")
+
+	// The dashboard_url local should use the env_endpoint local.
+	assert.Equal(t, "https://grafana.test.com/d/workers", vars["dashboard_url"],
+		"dashboard_url should be computed from env_endpoint local")
+
+	// The db_connection local should be computed from env_db_host.
+	assert.Equal(t, "postgresql://db.test.com:5432/mydb", vars["db_connection"],
+		"db_connection should be computed from env_db_host local")
+
+	// Static value should pass through unchanged.
+	assert.Equal(t, "static-test-value", vars["static_value"],
+		"static_value should be passed through unchanged")
 }
