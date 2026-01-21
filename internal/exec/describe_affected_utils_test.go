@@ -410,6 +410,107 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 	})
 }
 
+// buildComponentStackData creates stack data structure for any component type.
+func buildComponentStackData(componentType, stackName, componentName string, componentConfig map[string]any) map[string]any {
+	return map[string]any{
+		stackName: map[string]any{
+			"components": map[string]any{
+				componentType: map[string]any{
+					componentName: componentConfig,
+				},
+			},
+		},
+	}
+}
+
+// TestFindAffectedHelmfileAndPackerComponents tests component folder detection for Helmfile and Packer.
+// This tests the fix for detecting vendored component changes across all component types.
+func TestFindAffectedHelmfileAndPackerComponents(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentType     string
+		basePath          string
+		componentName     string
+		changedFile       string
+		hasExplicitField  bool
+		expectedComponent string
+	}{
+		{
+			name:              "Helmfile with explicit component field",
+			componentType:     "helmfile",
+			basePath:          "components/helmfile",
+			componentName:     "nginx",
+			changedFile:       "helmfile.yaml",
+			hasExplicitField:  true,
+			expectedComponent: "nginx",
+		},
+		{
+			name:              "Helmfile JIT vendored with source",
+			componentType:     "helmfile",
+			basePath:          "components/helmfile",
+			componentName:     "nginx-sourced",
+			changedFile:       "helmfile.yaml",
+			hasExplicitField:  false,
+			expectedComponent: "nginx-sourced",
+		},
+		{
+			name:              "Packer with explicit component field",
+			componentType:     "packer",
+			basePath:          "components/packer",
+			componentName:     "ami-builder",
+			changedFile:       "main.pkr.hcl",
+			hasExplicitField:  true,
+			expectedComponent: "ami-builder",
+		},
+		{
+			name:              "Packer JIT vendored with source",
+			componentType:     "packer",
+			basePath:          "components/packer",
+			componentName:     "ami-sourced",
+			changedFile:       "build.pkr.hcl",
+			hasExplicitField:  false,
+			expectedComponent: "ami-sourced",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+
+			// Build atmosConfig with the appropriate component type.
+			atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
+			switch tt.componentType {
+			case "helmfile":
+				atmosConfig.Components.Helmfile.BasePath = tt.basePath
+			case "packer":
+				atmosConfig.Components.Packer.BasePath = tt.basePath
+			}
+
+			// Build component config.
+			componentConfig := map[string]any{
+				"metadata": map[string]any{"enabled": true},
+				"vars":     map[string]any{"name": "test"},
+			}
+			if tt.hasExplicitField {
+				componentConfig["component"] = tt.componentName
+			} else {
+				componentConfig["source"] = map[string]any{"uri": "github.com/example/test", "version": "1.0.0"}
+			}
+
+			stacks := buildComponentStackData(tt.componentType, "dev", tt.componentName, componentConfig)
+			changedFilePath := filepath.Join(tempDir, tt.basePath, tt.componentName, tt.changedFile)
+
+			affected, err := findAffected(&stacks, &stacks, atmosConfig, []string{changedFilePath}, false, false, "", false, "")
+
+			assert.NoError(t, err)
+			require.Len(t, affected, 1)
+			assert.Equal(t, tt.expectedComponent, affected[0].Component)
+			assert.Equal(t, tt.componentType, affected[0].ComponentType)
+			assert.Equal(t, "component", affected[0].Affected)
+		})
+	}
+}
+
 // TestFindAffectedWithGitRepoRoot tests path resolution with non-empty gitRepoRoot.
 // This verifies the fix for issue #1978 where relative paths from git diff
 // need to be resolved against the git repository root, not the current working directory.
