@@ -102,6 +102,7 @@ func Output(data map[string]string, formatStr string, outputFile string, opts ..
 		return writeToFileWithMode(outputFile, formatted, cfg.fileMode)
 	}
 
+	// lgtm[go/clear-text-logging] - Intentional stdout output for shell evaluation.
 	fmt.Print(formatted)
 	return nil
 }
