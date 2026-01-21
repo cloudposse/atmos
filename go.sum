@@ -913,6 +913,8 @@ github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 h1:Jamvg5psRI
 github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2/go.mod h1:iKH77koFhYxTK1pcRnkKkqfTogsbg7gZNVY4sRDYZ/4=
 github.com/posthog/posthog-go v1.9.0 h1:7tRfnaHqPNrBNTnSnFLQwJ5aVz6LOBngiwl15lD8bHU=
 github.com/posthog/posthog-go v1.9.0/go.mod h1:0i1H2BlsK9mHvHGc9Kp6oenUlHUqPl45hWzRtR/2PVI=
+github.com/posthog/posthog-go v1.9.1 h1:9bkcRnYSvcgMxL2s9QlCnd1DVnm2qWXxWu5o0HSF0xM=
+github.com/posthog/posthog-go v1.9.1/go.mod h1:wB3/9Q7d9gGb1P/yf/Wri9VBlbP8oA8z++prRzL5OcY=
 github.com/prometheus/client_golang v0.9.1/go.mod h1:7SWBe2y4D6OKWSNQJUaRYU/AaXPKyh/dDVn+NZz0KFw=
 github.com/prometheus/client_golang v0.9.3/go.mod h1:/TN21ttK/J9q6uSwhBd54HahCDft0ttaMvbicHlPoso=
 github.com/prometheus/client_golang v1.0.0/go.mod h1:db9x61etRT2tGnBNRi70OPL5FsnadC4Ky3P0J6CfImo=
