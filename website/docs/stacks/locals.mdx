@@ -164,7 +164,7 @@ locals:
   label: "{{ .locals.namespace }}-{{ .vars.stage }}-{{ .settings.version }}"
 ```
 
-:::warning[Same-File Access Only]
+:::warning Same-File Access Only
 Locals cannot access `settings`, `vars`, or `env` from imported files. If you need values from imports, use `vars` instead—they inherit across files.
 :::
 
