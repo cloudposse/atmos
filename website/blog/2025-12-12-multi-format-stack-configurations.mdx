@@ -1,0 +1,215 @@
+---
+slug: multi-format-stack-configurations
+title: "Define Stacks in YAML, JSON, or HCL: Your Configuration, Your Choice"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+Atmos now supports defining stack configurations in **YAML**, **JSON**, and **HCL** formats. Use the format that best fits your workflow, tooling, and team preferences.
+
+<!--truncate-->
+
+## The Challenge with Configuration Formats
+
+YAML has been the default choice for infrastructure configuration, and for good reason—it's human-readable, concise, and widely supported. But every format has trade-offs:
+
+- **YAML's implicit typing** can surprise you: `yes`, `no`, `on`, `off` become booleans; `1.0` might be a string or a float depending on context
+- **Whitespace sensitivity** means invisible characters can break your configuration
+- **Multi-line strings** require learning multiple syntax variants (`|`, `>`, `|+`, `>-`)
+- **Complex nested structures** can become difficult to navigate without IDE support
+
+These aren't reasons to abandon YAML—it remains excellent for many use cases. But having options means you can choose the right tool for each situation.
+
+## Why Multiple Formats?
+
+### HCL: Native to Terraform
+
+If you're already writing Terraform, HCL feels natural:
+
+<Tabs>
+  <TabItem value="with-name" label="With Explicit Name" default>
+
+```hcl
+# stacks/deploy/production.hcl
+stack "production" {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          cidr_block         = "10.0.0.0/16"
+          availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+          enable_nat_gateway = true
+        }
+      }
+    }
+  }
+}
+```
+
+The block label `"production"` becomes the explicit stack name, overriding any `name_template` or `name_pattern`.
+
+  </TabItem>
+  <TabItem value="without-name" label="Without Explicit Name">
+
+```hcl
+# stacks/deploy/production.hcl
+stack {
+  components {
+    terraform {
+      component "vpc" {
+        vars {
+          cidr_block         = "10.0.0.0/16"
+          availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+          enable_nat_gateway = true
+        }
+      }
+    }
+  }
+}
+```
+
+Without a label, the stack name is derived from `name_template`, `name_pattern`, or the filename.
+
+  </TabItem>
+</Tabs>
+
+HCL uses labeled block syntax—`component "vpc"` instead of a nested object—which aligns with how Terraform resources are defined. No context switching required.
+
+### JSON: Machine-Friendly and Strict
+
+JSON is universally supported, strictly typed, and works seamlessly with automation:
+
+```json
+{
+  "components": {
+    "terraform": {
+      "vpc": {
+        "vars": {
+          "cidr_block": "10.0.0.0/16",
+          "availability_zones": ["us-east-1a", "us-east-1b", "us-east-1c"],
+          "enable_nat_gateway": true
+        }
+      }
+    }
+  }
+}
+```
+
+JSON's strict syntax means errors are caught immediately. It's ideal for generated configurations, API responses, and tooling integration.
+
+### YAML: Human-Friendly and Concise
+
+YAML remains fully supported and is often the most readable choice:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+          - us-east-1c
+        enable_nat_gateway: true
+```
+
+YAML's minimal syntax keeps configuration files clean and approachable.
+
+## How It Works
+
+Atmos automatically detects the format based on file extension:
+
+| Extension | Format | Notes |
+|-----------|--------|-------|
+| `.yaml`, `.yml` | YAML | Default, human-friendly |
+| `.yaml.tmpl`, `.yml.tmpl` | YAML Template | With Go templating |
+| `.json` | JSON | Strict, machine-friendly |
+| `.hcl` | HCL | Native Terraform syntax |
+
+### Mix and Match
+
+You can use different formats across your stack configurations. Each file is parsed independently:
+
+```
+stacks/
+├── catalog/
+│   ├── vpc.yaml           # Shared defaults in YAML
+│   └── eks.hcl            # EKS config in HCL
+├── deploy/
+│   ├── dev.yaml           # Dev environment in YAML
+│   ├── staging.json       # Generated staging config
+│   └── production.hcl     # Production in HCL
+```
+
+Stack inheritance works across formats. A YAML catalog can be imported by an HCL stack configuration.
+
+## HCL Function Support
+
+HCL configurations support Atmos functions in the `atmos::` namespace:
+
+```hcl
+stack {
+  components {
+    terraform {
+      component "app" {
+        vars {
+          # Use environment variables
+          api_key = atmos::env("API_KEY")
+
+          # Execute shell commands
+          git_sha = atmos::exec("git rev-parse --short HEAD")
+
+          # Get repository root
+          base_path = atmos::repo_root()
+        }
+      }
+    }
+  }
+}
+```
+
+## When to Use Each Format
+
+| Use Case | Recommended Format |
+|----------|-------------------|
+| Hand-written configs | YAML or HCL |
+| Generated configs | JSON |
+| Terraform-heavy teams | HCL |
+| CI/CD integration | JSON |
+| Documentation examples | YAML |
+| Strict typing needed | JSON or HCL |
+
+## Migration Path
+
+No migration required. Your existing YAML configurations continue to work exactly as before. Add HCL or JSON files alongside them as needed.
+
+## Technical Details
+
+The stack loader registry uses a plugin architecture, making it easy to add new formats in the future. Each loader handles:
+
+- **Parsing** - Format-specific syntax handling
+- **Position tracking** - Error messages point to exact line numbers
+- **Caching** - Parsed configurations are cached for performance
+- **Template support** - Go templating for YAML files (`.yaml.tmpl`)
+
+## Get Started
+
+1. **Try HCL** - Rename a stack file from `.yaml` to `.hcl` and convert the syntax
+2. **Generate JSON** - Use `atmos describe stacks -f json` to see your current config in JSON format
+3. **Mix formats** - Keep catalog files in YAML, write environment-specific configs in HCL
+
+## Learn More
+
+- [Stack Configuration Reference](/stacks) - Complete stack syntax documentation
+- [HCL Syntax Guide](https://developer.hashicorp.com/terraform/language/syntax/configuration) - HashiCorp's HCL reference
+
+---
+
+Questions or feedback? Join the discussion in [GitHub Discussions](https://github.com/orgs/cloudposse/discussions) or [Slack](https://slack.cloudposse.com).

@@ -2,87 +2,134 @@ package function
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestExecFunction_Execute_InvalidArgs(t *testing.T) {
-	fn := NewExecFunction()
-
-	tests := []struct {
-		name string
-		args string
-	}{
-		{name: "empty args", args: ""},
-		{name: "whitespace only", args: "   "},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			_, err := fn.Execute(context.Background(), tt.args, nil)
-			require.Error(t, err)
-			assert.ErrorIs(t, err, ErrInvalidArguments)
-		})
-	}
+// mockShellExecutor implements ShellExecutor for testing.
+type mockShellExecutor struct {
+	output string
+	err    error
 }
 
-func TestExecFunction_Execute_OutputParsing(t *testing.T) {
-	fn := NewExecFunction()
-
-	tests := []struct {
-		name      string
-		command   string
-		checkFunc func(t *testing.T, result any)
-	}{
-		{
-			name:    "simple string output",
-			command: "echo hello",
-			checkFunc: func(t *testing.T, result any) {
-				assert.Equal(t, "hello\n", result)
-			},
-		},
-		{
-			name:    "JSON object output",
-			command: `echo '{"key": "value"}'`,
-			checkFunc: func(t *testing.T, result any) {
-				m, ok := result.(map[string]any)
-				require.True(t, ok)
-				assert.Equal(t, "value", m["key"])
-			},
-		},
-		{
-			name:    "JSON array output",
-			command: `echo '[1, 2, 3]'`,
-			checkFunc: func(t *testing.T, result any) {
-				arr, ok := result.([]any)
-				require.True(t, ok)
-				assert.Len(t, arr, 3)
-			},
-		},
-		{
-			name:    "non-JSON output",
-			command: "echo 'not json'",
-			checkFunc: func(t *testing.T, result any) {
-				assert.Equal(t, "not json\n", result)
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result, err := fn.Execute(context.Background(), tt.command, nil)
-			require.NoError(t, err)
-			tt.checkFunc(t, result)
-		})
-	}
+func (m *mockShellExecutor) Execute(ctx context.Context, command, workingDir string, env []string) (string, error) {
+	return m.output, m.err
 }
 
-func TestExecFunction_Metadata(t *testing.T) {
-	fn := NewExecFunction()
-	require.NotNil(t, fn)
-	assert.Equal(t, TagExec, fn.Name())
+func TestNewExecFunction(t *testing.T) {
+	fn := NewExecFunction(nil)
+
+	assert.Equal(t, "exec", fn.Name())
+	assert.Empty(t, fn.Aliases())
 	assert.Equal(t, PreMerge, fn.Phase())
-	assert.Nil(t, fn.Aliases())
+}
+
+func TestExecFunctionExecute(t *testing.T) {
+	tests := []struct {
+		name        string
+		args        string
+		output      string
+		execError   error
+		expected    any
+		expectError bool
+	}{
+		{
+			name:     "simple string output",
+			args:     "echo hello",
+			output:   "hello",
+			expected: "hello",
+		},
+		{
+			name:     "JSON output parsed",
+			args:     "echo json",
+			output:   `{"key": "value"}`,
+			expected: map[string]any{"key": "value"},
+		},
+		{
+			name:     "JSON array output",
+			args:     "echo array",
+			output:   `[1, 2, 3]`,
+			expected: []any{float64(1), float64(2), float64(3)},
+		},
+		{
+			name:        "empty args returns error",
+			args:        "",
+			expectError: true,
+		},
+		{
+			name:        "execution failure",
+			args:        "failing-command",
+			execError:   errors.New("command failed"),
+			expectError: true,
+		},
+		{
+			name:     "invalid JSON returns string",
+			args:     "echo partial",
+			output:   `{invalid json`,
+			expected: `{invalid json`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			executor := &mockShellExecutor{
+				output: tt.output,
+				err:    tt.execError,
+			}
+			fn := NewExecFunction(executor)
+
+			result, err := fn.Execute(context.Background(), tt.args, nil)
+
+			if tt.expectError {
+				require.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExecFunctionWithoutExecutor(t *testing.T) {
+	fn := NewExecFunction(nil)
+
+	_, err := fn.Execute(context.Background(), "echo hello", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrExecutionFailed)
+}
+
+func TestExecFunctionWithContext(t *testing.T) {
+	var capturedWorkingDir string
+	var capturedEnv []string
+
+	fn := NewExecFunction(&capturingExecutor{
+		capturedWorkingDir: &capturedWorkingDir,
+		capturedEnv:        &capturedEnv,
+	})
+
+	execCtx := &ExecutionContext{
+		WorkingDir: "/custom/path",
+		Env:        map[string]string{"KEY": "value"},
+	}
+
+	_, _ = fn.Execute(context.Background(), "test command", execCtx)
+
+	assert.Equal(t, "/custom/path", capturedWorkingDir)
+	assert.Contains(t, capturedEnv, "KEY=value")
+}
+
+// capturingExecutor captures execution parameters for testing.
+type capturingExecutor struct {
+	capturedWorkingDir *string
+	capturedEnv        *[]string
+}
+
+func (c *capturingExecutor) Execute(ctx context.Context, command, workingDir string, env []string) (string, error) {
+	*c.capturedWorkingDir = workingDir
+	*c.capturedEnv = env
+	return "", nil
 }

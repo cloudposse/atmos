@@ -1,7 +1,6 @@
 package utils
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -13,8 +12,6 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
-
-var ErrFailedToProcessHclFile = errors.New("failed to process HCL file")
 
 // IsDirectory checks if the path is a directory.
 func IsDirectory(path string) (bool, error) {

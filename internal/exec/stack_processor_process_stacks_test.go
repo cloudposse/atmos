@@ -11,6 +11,46 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// TestTrimStackExtensions verifies that trimStackExtensions correctly removes
+// supported stack config extensions, including compound extensions (.yaml.tmpl).
+func TestTrimStackExtensions(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		// Simple extensions.
+		{name: "yaml extension", input: "prod.yaml", expected: "prod"},
+		{name: "yml extension", input: "prod.yml", expected: "prod"},
+		{name: "json extension", input: "prod.json", expected: "prod"},
+		{name: "hcl extension", input: "prod.hcl", expected: "prod"},
+
+		// Compound extensions (template files).
+		{name: "yaml.tmpl extension", input: "prod.yaml.tmpl", expected: "prod"},
+		{name: "yml.tmpl extension", input: "prod.yml.tmpl", expected: "prod"},
+
+		// No extension.
+		{name: "no extension", input: "prod", expected: "prod"},
+
+		// Unknown extension.
+		{name: "unknown extension", input: "prod.tf", expected: "prod.tf"},
+
+		// Path with directory.
+		{name: "path with yaml", input: "stacks/deploy/prod.yaml", expected: "stacks/deploy/prod"},
+		{name: "path with yaml.tmpl", input: "stacks/deploy/prod.yaml.tmpl", expected: "stacks/deploy/prod"},
+
+		// Edge case: file named with hyphenated extension-like suffix.
+		{name: "hyphenated name", input: "my-stack-yaml", expected: "my-stack-yaml"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := trimStackExtensions(tt.input)
+			assert.Equal(t, tt.expected, result, "trimStackExtensions(%q) should return %q", tt.input, tt.expected)
+		})
+	}
+}
+
 func TestProcessStackConfig_ErrorPaths(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 

@@ -26,10 +26,7 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	var err error
 	var tmpl string
 
-	// Stack name precedence: name (from manifest) > name_template > name_pattern > filename.
 	switch {
-	case configAndStacksInfo.StackManifestName != "":
-		contextPrefix = configAndStacksInfo.StackManifestName
 	case atmosConfig.Stacks.NameTemplate != "":
 		tmpl, err = ProcessTmpl(atmosConfig, "terraform-workspace-stacks-name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
 		if err != nil {

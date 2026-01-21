@@ -14,8 +14,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// filePermissions is the standard file permission mode for generated files.
-const filePermissions = 0o644
+// shellFilePermissions is the standard file permission mode for generated shell var files.
+const shellFilePermissions = 0o644
 
 // shellConfig holds the configuration needed for shell execution.
 type shellConfig struct {
@@ -91,7 +91,7 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 	}
 
 	varFilePath := constructTerraformComponentVarfilePath(atmosConfig, &info)
-	if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, filePermissions); err != nil {
+	if err := u.WriteToFileAsJSON(varFilePath, info.ComponentVarsSection, shellFilePermissions); err != nil {
 		return err
 	}
 

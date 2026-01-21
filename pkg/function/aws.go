@@ -3,180 +3,116 @@ package function
 import (
 	"context"
 
-	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// errMsgAWSIdentityFailed is a constant for the AWS identity error message.
-const errMsgAWSIdentityFailed = "Failed to get AWS caller identity"
+// AWS function tags are defined in tags.go.
+// Use YAMLTag(TagAwsAccountID) etc. to get the YAML tag format.
 
-// getAWSIdentity is a helper that retrieves the AWS caller identity from the execution context.
-func getAWSIdentity(ctx context.Context, execCtx *ExecutionContext) (*awsIdentity.CallerIdentity, error) {
-	defer perf.Track(nil, "function.getAWSIdentity")()
-
-	// Get auth context from stack info if available.
-	var authContext *schema.AWSAuthContext
-	if execCtx != nil && execCtx.StackInfo != nil &&
-		execCtx.StackInfo.AuthContext != nil && execCtx.StackInfo.AuthContext.AWS != nil {
-		authContext = execCtx.StackInfo.AuthContext.AWS
-	}
-
-	// Get AtmosConfig from execution context.
-	var atmosConfig *schema.AtmosConfiguration
-	if execCtx != nil {
-		atmosConfig = execCtx.AtmosConfig
-	}
-
-	// Get the AWS caller identity (cached).
-	return awsIdentity.GetCallerIdentityCached(ctx, atmosConfig, authContext)
-}
-
-// AwsAccountIDFunction implements the aws.account_id function.
+// AwsAccountIDFunction implements the !aws.account_id YAML function.
+// It returns the AWS account ID via STS GetCallerIdentity.
+// Note: During HCL parsing (PreMerge), this returns a placeholder.
+// The actual resolution happens during PostMerge processing.
 type AwsAccountIDFunction struct {
 	BaseFunction
 }
 
-// NewAwsAccountIDFunction creates a new aws.account_id function handler.
+// NewAwsAccountIDFunction creates a new AwsAccountIDFunction.
 func NewAwsAccountIDFunction() *AwsAccountIDFunction {
 	defer perf.Track(nil, "function.NewAwsAccountIDFunction")()
 
 	return &AwsAccountIDFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagAwsAccountID,
+			FunctionName:    "aws.account_id",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the aws.account_id function.
-// Usage:
-//
-//	!aws.account_id   - Returns the AWS account ID of the current caller identity
+// Execute returns a placeholder for post-merge resolution.
+// The actual AWS API call is made during YAML post-merge processing.
 func (f *AwsAccountIDFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.AwsAccountIDFunction.Execute")()
 
-	log.Debug("Executing aws.account_id function")
-
-	identity, err := getAWSIdentity(ctx, execCtx)
-	if err != nil {
-		log.Error(errMsgAWSIdentityFailed, "error", err)
-		return nil, err
-	}
-
-	log.Debug("Resolved !aws.account_id", "account_id", identity.Account)
-	return identity.Account, nil
+	// Return placeholder for post-merge resolution.
+	return TagAwsAccountID, nil
 }
 
-// AwsCallerIdentityArnFunction implements the aws.caller_identity_arn function.
+// AwsCallerIdentityArnFunction implements the !aws.caller_identity_arn YAML function.
+// It returns the AWS caller identity ARN via STS GetCallerIdentity.
 type AwsCallerIdentityArnFunction struct {
 	BaseFunction
 }
 
-// NewAwsCallerIdentityArnFunction creates a new aws.caller_identity_arn function handler.
+// NewAwsCallerIdentityArnFunction creates a new AwsCallerIdentityArnFunction.
 func NewAwsCallerIdentityArnFunction() *AwsCallerIdentityArnFunction {
 	defer perf.Track(nil, "function.NewAwsCallerIdentityArnFunction")()
 
 	return &AwsCallerIdentityArnFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagAwsCallerIdentityArn,
+			FunctionName:    "aws.caller_identity_arn",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the aws.caller_identity_arn function.
-// Usage:
-//
-//	!aws.caller_identity_arn   - Returns the ARN of the current caller identity
+// Execute returns a placeholder for post-merge resolution.
 func (f *AwsCallerIdentityArnFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.AwsCallerIdentityArnFunction.Execute")()
 
-	log.Debug("Executing aws.caller_identity_arn function")
-
-	identity, err := getAWSIdentity(ctx, execCtx)
-	if err != nil {
-		log.Error(errMsgAWSIdentityFailed, "error", err)
-		return nil, err
-	}
-
-	log.Debug("Resolved !aws.caller_identity_arn", "arn", identity.Arn)
-	return identity.Arn, nil
+	return TagAwsCallerIdentityArn, nil
 }
 
-// AwsCallerIdentityUserIDFunction implements the aws.caller_identity_user_id function.
+// AwsCallerIdentityUserIDFunction implements the !aws.caller_identity_user_id YAML function.
+// It returns the AWS caller identity user ID via STS GetCallerIdentity.
 type AwsCallerIdentityUserIDFunction struct {
 	BaseFunction
 }
 
-// NewAwsCallerIdentityUserIDFunction creates a new aws.caller_identity_user_id function handler.
+// NewAwsCallerIdentityUserIDFunction creates a new AwsCallerIdentityUserIDFunction.
 func NewAwsCallerIdentityUserIDFunction() *AwsCallerIdentityUserIDFunction {
 	defer perf.Track(nil, "function.NewAwsCallerIdentityUserIDFunction")()
 
 	return &AwsCallerIdentityUserIDFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagAwsCallerIdentityUserID,
+			FunctionName:    "aws.caller_identity_user_id",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the aws.caller_identity_user_id function.
-// Usage:
-//
-//	!aws.caller_identity_user_id   - Returns the user ID of the current caller identity
+// Execute returns a placeholder for post-merge resolution.
 func (f *AwsCallerIdentityUserIDFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.AwsCallerIdentityUserIDFunction.Execute")()
 
-	log.Debug("Executing aws.caller_identity_user_id function")
-
-	identity, err := getAWSIdentity(ctx, execCtx)
-	if err != nil {
-		log.Error(errMsgAWSIdentityFailed, "error", err)
-		return nil, err
-	}
-
-	log.Debug("Resolved !aws.caller_identity_user_id", "user_id", identity.UserID)
-	return identity.UserID, nil
+	return TagAwsCallerIdentityUserID, nil
 }
 
-// AwsRegionFunction implements the aws.region function.
+// AwsRegionFunction implements the !aws.region YAML function.
+// It returns the AWS region from the SDK configuration.
 type AwsRegionFunction struct {
 	BaseFunction
 }
 
-// NewAwsRegionFunction creates a new aws.region function handler.
+// NewAwsRegionFunction creates a new AwsRegionFunction.
 func NewAwsRegionFunction() *AwsRegionFunction {
 	defer perf.Track(nil, "function.NewAwsRegionFunction")()
 
 	return &AwsRegionFunction{
 		BaseFunction: BaseFunction{
-			FunctionName:    TagAwsRegion,
+			FunctionName:    "aws.region",
 			FunctionAliases: nil,
 			FunctionPhase:   PostMerge,
 		},
 	}
 }
 
-// Execute processes the aws.region function.
-// Usage:
-//
-//	!aws.region   - Returns the AWS region from the current configuration
+// Execute returns a placeholder for post-merge resolution.
 func (f *AwsRegionFunction) Execute(ctx context.Context, args string, execCtx *ExecutionContext) (any, error) {
 	defer perf.Track(nil, "function.AwsRegionFunction.Execute")()
 
-	log.Debug("Executing aws.region function")
-
-	identity, err := getAWSIdentity(ctx, execCtx)
-	if err != nil {
-		log.Error(errMsgAWSIdentityFailed, "error", err)
-		return nil, err
-	}
-
-	log.Debug("Resolved !aws.region", "region", identity.Region)
-	return identity.Region, nil
+	return TagAwsRegion, nil
 }

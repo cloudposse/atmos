@@ -1,0 +1,18 @@
+{
+  "vars": {
+    "stage": "staging"
+  },
+  "import": [
+    "catalog/base",
+    "catalog/overrides"
+  ],
+  "components": {
+    "terraform": {
+      "mock": {
+        "vars": {
+          "bar": "staging bar"
+        }
+      }
+    }
+  }
+}

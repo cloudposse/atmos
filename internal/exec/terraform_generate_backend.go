@@ -11,6 +11,9 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// filePermissions is the standard file permission mode for generated backend files.
+const filePermissions = 0o644
+
 // validateBackendConfig validates the backend configuration for the component.
 func validateBackendConfig(info *schema.ConfigAndStacksInfo) error {
 	if info.ComponentBackendType == "" {

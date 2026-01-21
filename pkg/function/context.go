@@ -25,6 +25,21 @@ type ExecutionContext struct {
 
 	// StackInfo contains additional stack and component information.
 	StackInfo *schema.ConfigAndStacksInfo
+
+	// Env contains environment variables available for function execution.
+	Env map[string]string
+
+	// WorkingDir is the current working directory.
+	WorkingDir string
+
+	// SourceFile is the file containing this function call.
+	SourceFile string
+}
+
+// StackInfo contains information about the stack being processed.
+type StackInfo struct {
+	// AuthContext contains authentication context for cloud providers.
+	AuthContext *schema.AuthContext
 }
 
 // NewExecutionContext creates a new ExecutionContext with the given parameters.
@@ -40,6 +55,8 @@ func NewExecutionContext(atmosConfig *schema.AtmosConfiguration, stack, componen
 
 // WithFile returns a copy of the context with the file path set.
 func (ctx *ExecutionContext) WithFile(file string) *ExecutionContext {
+	defer perf.Track(nil, "function.ExecutionContext.WithFile")()
+
 	newCtx := *ctx
 	newCtx.File = file
 	return &newCtx
@@ -47,6 +64,8 @@ func (ctx *ExecutionContext) WithFile(file string) *ExecutionContext {
 
 // WithBaseDir returns a copy of the context with the base directory set.
 func (ctx *ExecutionContext) WithBaseDir(baseDir string) *ExecutionContext {
+	defer perf.Track(nil, "function.ExecutionContext.WithBaseDir")()
+
 	newCtx := *ctx
 	newCtx.BaseDir = baseDir
 	return &newCtx
@@ -54,7 +73,30 @@ func (ctx *ExecutionContext) WithBaseDir(baseDir string) *ExecutionContext {
 
 // WithStackInfo returns a copy of the context with stack info set.
 func (ctx *ExecutionContext) WithStackInfo(stackInfo *schema.ConfigAndStacksInfo) *ExecutionContext {
+	defer perf.Track(nil, "function.ExecutionContext.WithStackInfo")()
+
 	newCtx := *ctx
 	newCtx.StackInfo = stackInfo
 	return &newCtx
+}
+
+// GetEnv returns the value of an environment variable, or empty string if not found.
+func (c *ExecutionContext) GetEnv(key string) string {
+	defer perf.Track(nil, "function.ExecutionContext.GetEnv")()
+
+	if c == nil || c.Env == nil {
+		return ""
+	}
+	return c.Env[key]
+}
+
+// HasEnv returns true if the environment variable is set.
+func (c *ExecutionContext) HasEnv(key string) bool {
+	defer perf.Track(nil, "function.ExecutionContext.HasEnv")()
+
+	if c == nil || c.Env == nil {
+		return false
+	}
+	_, ok := c.Env[key]
+	return ok
 }

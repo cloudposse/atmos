@@ -1,0 +1,103 @@
+/**
+ * StackExample component styles.
+ * Provides styling for the multi-format code block viewer.
+ */
+
+.stack-example {
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.stack-example__title {
+  padding: 0.75rem 1rem;
+  background: var(--ifm-color-emphasis-100);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+html[data-theme='dark'] .stack-example__title {
+  background: var(--ifm-color-emphasis-100);
+  border-bottom-color: var(--ifm-color-emphasis-200);
+}
+
+.stack-example__code {
+  margin: 0;
+}
+
+/* Prevent layout shift when switching tabs by using CSS grid. */
+/* All tab panels occupy the same grid cell, so the container height */
+/* equals the tallest panel. Hidden panels are invisible but still */
+/* contribute to the layout. */
+.stack-example .tabs-container > div:last-child {
+  display: grid;
+}
+
+.stack-example [role='tabpanel'] {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+/* Override the hidden attribute so panels still contribute to grid height. */
+.stack-example [role='tabpanel'][hidden] {
+  display: block !important;
+  visibility: hidden;
+}
+
+/* Ensure code blocks inside tabs have no extra margin. */
+.stack-example__code > div {
+  margin: 0 !important;
+  border-radius: 0 !important;
+}
+
+/* Tab styling adjustments for consistency. */
+.stack-example [role='tablist'] {
+  padding: 0 0.5rem;
+  background: var(--ifm-color-emphasis-100);
+  border-bottom: 1px solid var(--ifm-color-emphasis-200);
+}
+
+html[data-theme='dark'] .stack-example [role='tablist'] {
+  background: var(--ifm-color-emphasis-100);
+}
+
+.stack-example [role='tab'] {
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 4px 4px 0 0;
+}
+
+.stack-example [role='tab'][aria-selected='true'] {
+  background: var(--ifm-background-surface-color);
+  border-bottom: 2px solid var(--ifm-color-primary);
+}
+
+/* Format indicator badges. */
+.stack-example__format-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  margin-left: 0.5rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+.stack-example__format-badge--yaml {
+  background: #cb4b16;
+  color: white;
+}
+
+.stack-example__format-badge--json {
+  background: #268bd2;
+  color: white;
+}
+
+.stack-example__format-badge--hcl {
+  background: #7c3aed;
+  color: white;
+}

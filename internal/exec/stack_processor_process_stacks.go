@@ -3,6 +3,7 @@ package exec
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 
@@ -21,6 +22,23 @@ const (
 	// ErrFormatWithFile is the error format string for errors with file context.
 	errFormatWithFile = "%w in file '%s'"
 )
+
+// trimStackExtensions removes any supported stack config extension from the stack path.
+// Extensions are sorted by length descending to ensure compound extensions
+// (like .yaml.tmpl) are matched before their base extensions (like .yaml).
+func trimStackExtensions(stack string) string {
+	exts := u.StackConfigExtensions()
+	// Sort by length descending to match compound extensions first.
+	sort.Slice(exts, func(i, j int) bool {
+		return len(exts[i]) > len(exts[j])
+	})
+	for _, ext := range exts {
+		if strings.HasSuffix(stack, ext) {
+			return strings.TrimSuffix(stack, ext)
+		}
+	}
+	return stack
+}
 
 // ProcessStackConfig processes a stack configuration.
 //
@@ -42,12 +60,7 @@ func ProcessStackConfig(
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.ProcessStackConfig")()
 
-	stackName := strings.TrimSuffix(
-		strings.TrimSuffix(
-			u.TrimBasePathFromPath(stacksBasePath+"/", stack),
-			u.DefaultStackConfigFileExtension),
-		".yml",
-	)
+	stackName := trimStackExtensions(u.TrimBasePathFromPath(stacksBasePath+"/", stack))
 
 	// Extract the stack-level 'name' field (logical name override) if present.
 	var stackManifestName string

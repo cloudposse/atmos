@@ -11,8 +11,63 @@ import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-Stacks are YAML files that configure your environments. They define which components to deploy, with what settings, and how they relate to each other. This is where configuration lives—separate from your Terraform code.
+Stacks are configuration files that define your environments. They specify which components to deploy, with what settings, and how they relate to each other. This is where configuration lives—separate from your Terraform code. Write stacks in YAML, JSON, or HCL.
 </Intro>
+
+## Example
+
+A typical stack configuration imports reusable defaults from a catalog and defines environment-specific components:
+
+```yaml title="stacks/production.yaml" stack-example
+import:
+  - catalog/vpc/defaults
+  - catalog/eks/defaults
+
+vars:
+  environment: production
+  region: us-east-2
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        availability_zones:
+          - us-east-2a
+          - us-east-2b
+    eks:
+      metadata:
+        component: eks/cluster
+      vars:
+        cluster_name: production
+        node_count: 3
+```
+
+## Multi-Stack Files
+
+A single configuration file can define multiple stacks, allowing you to group related environments or configurations together. Each stack should have an explicit `name` field to identify it:
+
+```yaml title="stacks/environments.yaml" stack-example
+name: dev
+vars:
+  environment: development
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.1.0.0/16"
+---
+name: staging
+vars:
+  environment: staging
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.2.0.0/16"
+```
+
+This approach is useful for managing related environments together or for organizing stacks by team or project.
 
 ## Configuration Sections
 

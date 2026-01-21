@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
 	"github.com/samber/lo"
-	"mvdan.cc/sh/v3/shell"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -24,155 +22,37 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/validation"
 	"github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
-	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/retry"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
-	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	wfpkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
-// Workflow error title for formatted output.
-const WorkflowErrTitle = "Workflow Error"
-
-// Local errors not in shared package (workflow-specific internal errors).
+// Workflow error aliases from errors package for backward compatibility.
 var (
-	ErrNoWorkflowFilesToSelect = errors.New("no workflow files to select from")
-	ErrNonTTYWorkflowSelection = errors.New("interactive workflow selection not available in non-TTY or CI environments")
+	WorkflowErrTitle           = "Workflow Error"
+	ErrWorkflowNoSteps         = errUtils.ErrWorkflowNoSteps
+	ErrInvalidWorkflowStepType = errUtils.ErrInvalidWorkflowStepType
+	ErrInvalidFromStep         = errUtils.ErrInvalidFromStep
+	ErrWorkflowStepFailed      = errUtils.ErrWorkflowStepFailed
+	ErrWorkflowNoWorkflow      = errUtils.ErrWorkflowNoWorkflow
+	ErrWorkflowFileNotFound    = errUtils.ErrWorkflowFileNotFound
+	ErrInvalidWorkflowManifest = errUtils.ErrInvalidWorkflowManifest
+	ErrNoWorkflowFilesToSelect = errUtils.ErrNoWorkflowFilesToSelect
+	ErrNonTTYWorkflowSelection = errUtils.ErrNonTTYWorkflowSelection
+
+	KnownWorkflowErrors = []error{
+		errUtils.ErrWorkflowNoSteps,
+		errUtils.ErrInvalidWorkflowStepType,
+		errUtils.ErrInvalidFromStep,
+		errUtils.ErrWorkflowStepFailed,
+		errUtils.ErrWorkflowNoWorkflow,
+		errUtils.ErrWorkflowFileNotFound,
+		errUtils.ErrInvalidWorkflowManifest,
+	}
 )
-
-// KnownWorkflowErrors contains all known workflow sentinel errors for error handling.
-var KnownWorkflowErrors = []error{
-	errUtils.ErrWorkflowNoSteps,
-	errUtils.ErrInvalidWorkflowStepType,
-	errUtils.ErrInvalidFromStep,
-	errUtils.ErrWorkflowStepFailed,
-	errUtils.ErrWorkflowNoWorkflow,
-	errUtils.ErrWorkflowFileNotFound,
-	errUtils.ErrInvalidWorkflowManifest,
-}
-
-// workflowStepErrorContext contains context needed to build workflow step errors.
-type workflowStepErrorContext struct {
-	WorkflowPath     string
-	WorkflowBasePath string
-	Workflow         string
-	StepName         string
-	Command          string
-	CommandType      string
-	FinalStack       string
-}
-
-// buildWorkflowStepError builds an error with resume hints when a workflow step fails.
-func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
-	log.Debug("Workflow failed", "error", err)
-
-	// Remove the workflow base path, stacks/workflows.
-	workflowFileName := strings.TrimPrefix(filepath.ToSlash(ctx.WorkflowPath), filepath.ToSlash(ctx.WorkflowBasePath))
-	// Remove the leading slash.
-	workflowFileName = strings.TrimPrefix(workflowFileName, "/")
-	// Remove the file extension.
-	workflowFileName = strings.TrimSuffix(workflowFileName, filepath.Ext(workflowFileName))
-
-	resumeCommand := fmt.Sprintf(
-		"%s workflow %s -f %s --from-step '%s'",
-		config.AtmosCommand,
-		ctx.Workflow,
-		workflowFileName,
-		ctx.StepName,
-	)
-
-	// Add stack parameter to resume command if a stack was used.
-	if ctx.FinalStack != "" {
-		resumeCommand = fmt.Sprintf("%s -s '%s'", resumeCommand, ctx.FinalStack)
-	}
-
-	failedCmd := ctx.Command
-	if ctx.CommandType == config.AtmosCommand {
-		failedCmd = config.AtmosCommand + " " + ctx.Command
-		// Add stack parameter to failed command if a stack was used.
-		if ctx.FinalStack != "" {
-			failedCmd = fmt.Sprintf("%s -s '%s'", failedCmd, ctx.FinalStack)
-		}
-	}
-
-	// Build error with context about the failed command.
-	// Use fmt.Errorf with %w to wrap the underlying error while adding ErrWorkflowStepFailed to the chain.
-	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
-	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrWorkflowStepFailed, err)
-
-	// Now build the error with hints using the wrapped error.
-	// This preserves the error chain while adding formatted hints.
-	// Commands are wrapped in code fences for proper formatting and copy-paste.
-	// Single quotes are used for shell safety (step names and stacks can contain spaces).
-	builder := errUtils.Build(wrappedErr).
-		WithTitle("Workflow Error").
-		WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
-		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
-
-	// Extract exit code from the underlying error if available.
-	if exitCode := errUtils.GetExitCode(err); exitCode != 0 {
-		builder = builder.WithExitCode(exitCode)
-	}
-
-	return builder.Err()
-}
-
-// prepareStepEnvironment prepares environment variables for a workflow step.
-// Starts with system env + global env from atmos.yaml.
-// If identity is specified, it authenticates and adds credentials to the environment.
-// Returns the environment variables to use for the step.
-func prepareStepEnvironment(
-	stepIdentity string,
-	stepName string,
-	authManager auth.AuthManager,
-	globalEnv map[string]string,
-) ([]string, error) {
-	// Prepare base environment: system env + global env from atmos.yaml.
-	// Global env has lowest priority and can be overridden by identity auth env vars.
-	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), globalEnv)
-
-	// No identity specified, use base environment (system + global env).
-	if stepIdentity == "" {
-		return baseEnv, nil
-	}
-
-	if authManager == nil {
-		return nil, errUtils.Build(errUtils.ErrAuthManager).
-			WithExplanation("auth manager is not initialized").
-			WithContext("identity", stepIdentity).
-			WithContext("step", stepName).
-			Err()
-	}
-
-	ctx := context.Background()
-
-	// Try to use cached credentials first (passive check, no prompts).
-	// Only authenticate if cached credentials are not available or expired.
-	if _, err := authManager.GetCachedCredentials(ctx, stepIdentity); err != nil {
-		log.Debug("No valid cached credentials found, authenticating", "identity", stepIdentity, "error", err)
-		// No valid cached credentials - perform full authentication.
-		if _, err = authManager.Authenticate(ctx, stepIdentity); err != nil {
-			// Check for user cancellation - return clean error without wrapping.
-			if errors.Is(err, errUtils.ErrUserAborted) {
-				return nil, errUtils.ErrUserAborted
-			}
-			return nil, fmt.Errorf("%w for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, err)
-		}
-	}
-
-	// Prepare shell environment with authentication credentials.
-	// Start with base environment (system + global) and let PrepareShellEnvironment configure auth.
-	stepEnv, err := authManager.PrepareShellEnvironment(ctx, stepIdentity, baseEnv)
-	if err != nil {
-		return nil, fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, stepName, err)
-	}
-
-	log.Debug("Prepared environment with identity", "identity", stepIdentity, "step", stepName)
-	return stepEnv, nil
-}
 
 // IsKnownWorkflowError returns true if the error matches any known workflow error.
 // This includes ExitCodeError which indicates a subcommand failure that's already been reported.
@@ -228,10 +108,11 @@ func checkAndMergeDefaultIdentity(atmosConfig *schema.AtmosConfiguration) bool {
 	return false
 }
 
-// ExecuteWorkflow executes an Atmos workflow.
+// ExecuteWorkflow executes an Atmos workflow using the pkg/workflow executor.
+// This function creates the appropriate adapters and delegates to the Executor.
 func ExecuteWorkflow(
 	atmosConfig schema.AtmosConfiguration,
-	workflow string,
+	workflowName string,
 	workflowPath string,
 	workflowDefinition *schema.WorkflowDefinition,
 	dryRun bool,
@@ -241,21 +122,7 @@ func ExecuteWorkflow(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
 
-	steps := workflowDefinition.Steps
-
-	if len(steps) == 0 {
-		return errUtils.Build(errUtils.ErrWorkflowNoSteps).
-			WithTitle(WorkflowErrTitle).
-			WithExplanationf("Workflow `%s` is empty and requires at least one step to execute.", workflow).
-			WithContext("workflow", workflow).
-			WithExitCode(1).
-			Err()
-	}
-
-	// Check if the workflow steps have the `name` attribute
-	checkAndGenerateWorkflowStepNames(workflowDefinition)
-
-	log.Debug("Executing workflow", "workflow", workflow, "path", workflowPath)
+	log.Debug("Executing workflow", "workflow", workflowName, "path", workflowPath)
 
 	if atmosConfig.Logs.Level == u.LogLevelTrace || atmosConfig.Logs.Level == u.LogLevelDebug {
 		err := u.PrintAsYAMLToFileDescriptor(&atmosConfig, workflowDefinition)
@@ -264,153 +131,93 @@ func ExecuteWorkflow(
 		}
 	}
 
-	// If `--from-step` is specified, skip all the previous steps
-	if fromStep != "" {
-		steps = lo.DropWhile[schema.WorkflowStep](steps, func(step schema.WorkflowStep) bool {
-			return step.Name != fromStep
-		})
+	// Create auth provider if needed.
+	var authProvider wfpkg.AuthProvider
 
-		if len(steps) == 0 {
-			stepNames := lo.Map(workflowDefinition.Steps, func(step schema.WorkflowStep, _ int) string { return step.Name })
-			return errUtils.Build(errUtils.ErrInvalidFromStep).
-				WithTitle(WorkflowErrTitle).
-				WithExplanationf("The `--from-step` flag was set to `%s`, but this step does not exist in workflow `%s`.\n\n### Available steps:\n\n%s", fromStep, workflow, u.FormatList(stepNames)).
-				WithContext("from_step", fromStep).
-				WithContext("workflow", workflow).
-				WithExitCode(1).
-				Err()
-		}
+	// Validate workflow definition exists and has steps.
+	if workflowDefinition == nil || len(workflowDefinition.Steps) == 0 {
+		return errUtils.Build(errUtils.ErrWorkflowNoSteps).
+			WithTitle(WorkflowErrTitle).
+			WithExplanationf("Workflow `%s` has no steps defined", workflowName).
+			WithContext("workflow", workflowName).
+			WithContext("path", workflowPath).
+			WithExitCode(1).
+			Err()
 	}
 
+	steps := workflowDefinition.Steps
+
 	// Ensure toolchain dependencies are installed and build PATH for workflow steps.
-	toolchainPATH, err := ensureWorkflowToolchainDependencies(&atmosConfig, workflowDefinition)
+	_, err := ensureWorkflowToolchainDependencies(&atmosConfig, workflowDefinition)
 	if err != nil {
 		return err
 	}
 
-	// Create auth manager if any step has an identity or if command-line identity is specified.
-	// We check once upfront to avoid repeated initialization.
-	var authManager auth.AuthManager
-	var authStackInfo *schema.ConfigAndStacksInfo
+	// Check if any step needs authentication.
 	needsAuth := commandLineIdentity != "" || lo.SomeBy(steps, func(step schema.WorkflowStep) bool {
 		return strings.TrimSpace(step.Identity) != ""
 	})
+
+	// Also check if there's a default identity configured (in atmos.yaml or stack configs).
+	if !needsAuth {
+		needsAuth = checkAndMergeDefaultIdentity(&atmosConfig)
+	}
+
 	if needsAuth {
 		// Create a ConfigAndStacksInfo for the auth manager to populate with AuthContext.
-		// This enables YAML template functions to access authenticated credentials.
-		authStackInfo = &schema.ConfigAndStacksInfo{
+		authStackInfo := &schema.ConfigAndStacksInfo{
 			AuthContext: &schema.AuthContext{},
 		}
 
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		var err error
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 		}
+		authProvider = NewWorkflowAuthProvider(authManager)
 	}
 
-	for stepIdx, step := range steps {
-		command := strings.TrimSpace(step.Command)
-		commandType := strings.TrimSpace(step.Type)
-		stepIdentity := strings.TrimSpace(step.Identity)
+	// Create command runner - we need to handle retry per-step.
+	// The runner will be created for each step with the step's retry config.
+	runner := NewWorkflowCommandRunner(nil)
 
-		// If step doesn't specify identity, use command-line identity (if provided).
-		if stepIdentity == "" && commandLineIdentity != "" {
-			stepIdentity = commandLineIdentity
-		}
+	// Create UI provider.
+	uiProvider := NewWorkflowUIProvider()
 
-		finalStack := ""
+	// Create executor with dependencies.
+	executor := wfpkg.NewExecutor(runner, authProvider, uiProvider)
 
-		log.Debug("Executing workflow step", "step", stepIdx, "name", step.Name, "command", command)
+	// Build execution options.
+	opts := wfpkg.ExecuteOptions{
+		DryRun:              dryRun,
+		CommandLineStack:    commandLineStack,
+		FromStep:            fromStep,
+		CommandLineIdentity: commandLineIdentity,
+	}
 
-		if commandType == "" {
-			commandType = "atmos"
-		}
-
-		// Prepare environment variables: start with system env + global env from atmos.yaml.
-		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.Env)
-		if err != nil {
-			return err
-		}
-
-		// Add toolchain PATH if dependencies were installed.
-		if toolchainPATH != "" {
-			stepEnv = append(stepEnv, fmt.Sprintf("PATH=%s", toolchainPATH))
-		}
-
-		switch commandType {
-		case "shell":
-			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
-		case "atmos":
-			// Parse command using shell.Fields for proper quote handling.
-			// This correctly handles arguments like -var="foo=bar" by stripping quotes.
-			args, parseErr := shell.Fields(command, nil)
-			if parseErr != nil {
-				log.Debug("Shell parsing failed, falling back to strings.Fields", "error", parseErr, "command", command)
-				args = strings.Fields(command)
-			}
-
-			workflowStack := strings.TrimSpace(workflowDefinition.Stack)
-			stepStack := strings.TrimSpace(step.Stack)
-
-			// The workflow `stack` attribute overrides the stack in the `command` (if specified)
-			// The step `stack` attribute overrides the stack in the `command` and the workflow `stack` attribute
-			// The stack defined on the command line (`atmos workflow <name> -f <file> -s <stack>`) has the highest priority,
-			// it overrides all other stacks attributes
-			if workflowStack != "" {
-				finalStack = workflowStack
-			}
-			if stepStack != "" {
-				finalStack = stepStack
-			}
-			if commandLineStack != "" {
-				finalStack = commandLineStack
-			}
-
-			if finalStack != "" {
-				if idx := slices.Index(args, "--"); idx != -1 {
-					// Insert before the "--"
-					// Take everything up to idx, then add "-s", finalStack, then tack on the rest
-					args = append(args[:idx], append([]string{"-s", finalStack}, args[idx:]...)...)
-				} else {
-					// just append at the end
-					args = append(args, []string{"-s", finalStack}...)
-				}
-
-				log.Debug("Using stack", "stack", finalStack)
-			}
-
-			ui.Infof("Executing command: `atmos %s`", command)
-			err = retry.With7Params(context.Background(), step.Retry,
-				ExecuteShellCommand,
-				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
-		default:
-			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
-				WithTitle(WorkflowErrTitle).
-				WithHintf("Step type '%s' is not supported", commandType).
-				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
-				WithExitCode(1).
-				Err()
-		}
-
-		if err != nil {
-			return buildWorkflowStepError(err, &workflowStepErrorContext{
-				WorkflowPath:     workflowPath,
-				WorkflowBasePath: atmosConfig.Workflows.BasePath,
-				Workflow:         workflow,
-				StepName:         step.Name,
-				Command:          command,
-				CommandType:      commandType,
-				FinalStack:       finalStack,
-			})
-		}
+	// Execute the workflow.
+	params := &wfpkg.WorkflowParams{
+		Ctx:                context.Background(),
+		AtmosConfig:        &atmosConfig,
+		Workflow:           workflowName,
+		WorkflowPath:       workflowPath,
+		WorkflowDefinition: workflowDefinition,
+		Opts:               opts,
+	}
+	result, err := executor.Execute(params)
+	if err != nil {
+		log.Debug("Workflow failed", "error", err, "resumeCommand", result.ResumeCommand)
+		return err
 	}
 
 	return nil
+}
+
+// FormatList formats a list of strings into a markdown bullet list.
+// This is an alias to u.FormatList for backward compatibility.
+func FormatList(items []string) string {
+	return u.FormatList(items)
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.
@@ -456,32 +263,31 @@ func ExecuteDescribeWorkflows(
 
 		fileContent, err := os.ReadFile(workflowPath)
 		if err != nil {
-			// Skip files that can't be read (permission issues, etc.).
-			log.Warn("Skipping workflow file", "file", f, "error", err)
-			continue
+			return nil, nil, nil, err
 		}
 
 		workflowManifest, err := u.UnmarshalYAML[schema.WorkflowManifest](string(fileContent))
 		if err != nil {
-			// Skip files that can't be parsed as YAML.
-			log.Warn("Skipping invalid workflow file", "file", f, "error", err)
-			continue
+			return nil, nil, nil, errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
+				WithCause(err).
+				WithExplanation(fmt.Sprintf("error parsing the workflow manifest '%s'", f)).
+				Err()
 		}
 
 		if workflowManifest.Workflows == nil {
-			// Skip files without the workflows key.
-			log.Warn("Skipping workflow file without 'workflows:' key", "file", f)
-			continue
+			return nil, nil, nil, errUtils.Build(errUtils.ErrInvalidWorkflowManifest).
+				WithExplanation(fmt.Sprintf("the workflow manifest '%s' must be a map with the top-level 'workflows:' key", workflowPath)).
+				Err()
 		}
 
 		workflowConfig := workflowManifest.Workflows
 		allWorkflowsInFile := lo.Keys(workflowConfig)
 		sort.Strings(allWorkflowsInFile)
 
-		// Check if the workflow steps have the `name` attribute
+		// Check if the workflow steps have the `name` attribute.
 		lo.ForEach(allWorkflowsInFile, func(item string, _ int) {
 			workflowDefinition := workflowConfig[item]
-			checkAndGenerateWorkflowStepNames(&workflowDefinition)
+			wfpkg.CheckAndGenerateWorkflowStepNames(&workflowDefinition)
 		})
 
 		mapResult[f] = allWorkflowsInFile
