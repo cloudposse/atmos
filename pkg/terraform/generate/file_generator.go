@@ -37,12 +37,12 @@ const (
 // labeledBlockTypes defines Terraform block types that require labels.
 // The value indicates the number of labels required.
 var labeledBlockTypes = map[string]int{
-	"variable": 1, // variable "name" {}
-	"output":   1, // output "name" {}
-	"provider": 1, // provider "aws" {}
-	"module":   1, // module "name" {}
-	"resource": 2, // resource "type" "name" {}
-	"data":     2, // data "type" "name" {}
+	"variable": 1, // variable "name" {}.
+	"output":   1, // output "name" {}.
+	"provider": 1, // provider "aws" {}.
+	"module":   1, // module "name" {}.
+	"resource": 2, // resource "type" "name" {}.
+	"data":     2, // data "type" "name" {}.
 }
 
 // GenerateConfig contains configuration for file generation.
@@ -471,32 +471,49 @@ func serializeToTFVars(content map[string]any) ([]byte, error) {
 	return f.Bytes(), nil
 }
 
-// writeHCLBlock writes content to an HCL body.
+// knownBlockTypes lists HCL block types that should be rendered as blocks at the top level.
+// Maps with these keys become unlabeled blocks (e.g., locals {}, terraform {}).
+var knownBlockTypes = map[string]bool{
+	"locals":    true,
+	"terraform": true,
+}
+
+// writeHCLBlock writes content to an HCL body at the top level.
 // Handles both labeled blocks (variable, output, resource, data, etc.) and
-// unlabeled blocks (locals, terraform).
+// unlabeled blocks (locals, terraform). Maps inside blocks are rendered as attributes.
 func writeHCLBlock(body *hclwrite.Body, content map[string]any) error {
 	// Iterate in sorted order for deterministic output.
 	for _, key := range sortedKeys(content) {
 		value := content[key]
-		switch v := value.(type) {
-		case map[string]any:
-			// Check if this is a labeled block type.
-			labelCount, isLabeled := labeledBlockTypes[key]
-			if isLabeled {
-				// Write labeled blocks (e.g., variable "name" {}, resource "type" "name" {}).
-				if err := writeLabeledBlocks(body, key, v, labelCount); err != nil {
-					return err
-				}
-			} else {
-				// Create an unlabeled block for non-labeled types (e.g., locals {}, terraform {}).
-				block := body.AppendNewBlock(key, nil)
-				if err := writeHCLBlock(block.Body(), v); err != nil {
-					return err
-				}
+		mapValue, isMap := value.(map[string]any)
+		if !isMap {
+			// Non-map values are always attributes.
+			ctyVal, err := toCtyValue(value)
+			if err != nil {
+				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
+			}
+			body.SetAttributeValue(key, ctyVal)
+			continue
+		}
+
+		// Handle map values based on block type.
+		labelCount, isLabeled := labeledBlockTypes[key]
+		switch {
+		case isLabeled:
+			// Write labeled blocks (e.g., variable "name" {}, resource "type" "name" {}).
+			if err := writeLabeledBlocks(body, key, mapValue, labelCount); err != nil {
+				return err
+			}
+		case knownBlockTypes[key]:
+			// Create an unlabeled block for known block types (e.g., locals {}, terraform {}).
+			// Inside these blocks, nested maps become attributes, not blocks.
+			block := body.AppendNewBlock(key, nil)
+			if err := writeBlockBody(block.Body(), mapValue); err != nil {
+				return err
 			}
 		default:
-			// Convert value to cty and set as attribute.
-			ctyVal, err := toCtyValue(value)
+			// Unknown map at top level - treat as attribute value.
+			ctyVal, err := toCtyValue(mapValue)
 			if err != nil {
 				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
 			}
@@ -507,15 +524,15 @@ func writeHCLBlock(body *hclwrite.Body, content map[string]any) error {
 }
 
 // writeLabeledBlocks writes HCL blocks that require labels.
-// For single-label types (variable, output, module, provider):
+// For single-label types (variable, output, module, provider).
 //
-//	Input: {"app_name": {"type": "string"}}
-//	Output: variable "app_name" { type = "string" }
+//	Input: {"app_name": {"type": "string"}}.
+//	Output: variable "app_name" { type = "string" }.
 //
-// For double-label types (resource, data):
+// For double-label types (resource, data).
 //
-//	Input: {"aws_instance": {"my_instance": {"ami": "ami-123"}}}
-//	Output: resource "aws_instance" "my_instance" { ami = "ami-123" }
+//	Input: {"aws_instance": {"my_instance": {"ami": "ami-123"}}}.
+//	Output: resource "aws_instance" "my_instance" { ami = "ami-123" }.
 func writeLabeledBlocks(body *hclwrite.Body, blockType string, content map[string]any, labelCount int) error {
 	// Iterate in sorted order for deterministic output.
 	for _, firstLabel := range sortedKeys(content) {
@@ -552,26 +569,19 @@ func writeLabeledBlocks(body *hclwrite.Body, blockType string, content map[strin
 }
 
 // writeBlockBody writes the body content of an HCL block.
-// Maps are written as unlabeled nested blocks, other values as attributes.
+// All values including maps are written as attributes using toCtyValue.
+// This ensures maps like tags = { Name = "value" } render correctly with "=".
 func writeBlockBody(body *hclwrite.Body, content map[string]any) error {
 	// Iterate in sorted order for deterministic output.
 	for _, key := range sortedKeys(content) {
 		value := content[key]
-		switch v := value.(type) {
-		case map[string]any:
-			// Nested map becomes an unlabeled block within this block body.
-			block := body.AppendNewBlock(key, nil)
-			if err := writeBlockBody(block.Body(), v); err != nil {
-				return err
-			}
-		default:
-			// Convert value to cty and set as attribute.
-			ctyVal, err := toCtyValue(value)
-			if err != nil {
-				return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
-			}
-			body.SetAttributeValue(key, ctyVal)
+		// Convert all values to cty and set as attributes.
+		// Maps will be rendered as object values: key = { ... }.
+		ctyVal, err := toCtyValue(value)
+		if err != nil {
+			return fmt.Errorf("%w: error converting %s to HCL: %w", errUtils.ErrInvalidConfig, key, err)
 		}
+		body.SetAttributeValue(key, ctyVal)
 	}
 	return nil
 }

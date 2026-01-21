@@ -354,6 +354,21 @@ func TestGenerateFiles_HCLSpecialCases(t *testing.T) {
 			},
 			wantContains: []string{"locals", "big_number"},
 		},
+		{
+			name:     "Map attributes render with equals sign",
+			filename: "tags.tf",
+			content: map[string]any{
+				"locals": map[string]any{
+					"tags": map[string]any{
+						"Name":        "example",
+						"Environment": "dev",
+					},
+				},
+			},
+			// Verify maps are rendered as attributes (key = {}) not blocks (key {}).
+			// HCL attribute names don't have quotes, so we check for Name = and Environment =.
+			wantContains: []string{"tags = {", "Name", "Environment", `"example"`, `"dev"`},
+		},
 	}
 
 	for _, tt := range tests {
