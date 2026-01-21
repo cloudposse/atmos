@@ -4,6 +4,7 @@ package exec
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -1327,6 +1328,22 @@ func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
 		allFiles := filesIndex.getAllFiles()
 		require.Len(t, allFiles, 1)
 		assert.True(t, filepath.IsAbs(allFiles[0]), "Path should still be absolute")
+	})
+
+	t.Run("relative path with empty gitRepoRoot uses filepath.Abs", func(t *testing.T) {
+		// When gitRepoRoot is empty and path is relative, filepath.Abs resolves against cwd.
+		// This exercises the filepath.Abs() branch in newChangedFilesIndex.
+		relativePath := "some/relative/path/main.tf"
+		changedFiles := []string{relativePath}
+
+		filesIndex := newChangedFilesIndex(atmosConfig, changedFiles, "")
+
+		allFiles := filesIndex.getAllFiles()
+		require.Len(t, allFiles, 1)
+		// The result should be absolute (resolved against current working directory).
+		assert.True(t, filepath.IsAbs(allFiles[0]), "Relative path should be converted to absolute via filepath.Abs")
+		// The result should end with the original relative path.
+		assert.True(t, strings.HasSuffix(allFiles[0], relativePath), "Resolved path should end with original relative path")
 	})
 }
 

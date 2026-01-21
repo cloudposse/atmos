@@ -4,11 +4,14 @@ package exec
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -93,7 +96,7 @@ func TestFindAffected(t *testing.T) {
 					ComponentType: "terraform",
 					Stack:         "dev",
 					Affected:      "stack.metadata",
-					AffectedAll:   []string{"stack.metadata"},
+					AffectedAll:   []string{"stack.metadata", "component"},
 					StackSlug:     "dev-vpc",
 				},
 			},
@@ -136,7 +139,7 @@ func TestFindAffected(t *testing.T) {
 					Stack:         "staging",
 					StackSlug:     "staging-ingress",
 					Affected:      "stack.metadata",
-					AffectedAll:   []string{"stack.metadata"},
+					AffectedAll:   []string{"stack.metadata", "component"},
 				},
 			},
 			expectedError: false,
@@ -178,7 +181,7 @@ func TestFindAffected(t *testing.T) {
 					Stack:         "prod",
 					StackSlug:     "prod-custom-ami",
 					Affected:      "stack.metadata",
-					AffectedAll:   []string{"stack.metadata"},
+					AffectedAll:   []string{"stack.metadata", "component"},
 				},
 			},
 			expectedError: false,
@@ -234,7 +237,7 @@ func TestFindAffected(t *testing.T) {
 					Stack:         "prod",
 					StackSlug:     "prod-vpc",
 					Affected:      "stack.metadata",
-					AffectedAll:   []string{"stack.metadata"},
+					AffectedAll:   []string{"stack.metadata", "component"},
 				},
 				{
 					Component:     "ingress",
@@ -242,7 +245,7 @@ func TestFindAffected(t *testing.T) {
 					Stack:         "prod",
 					StackSlug:     "prod-ingress",
 					Affected:      "stack.metadata",
-					AffectedAll:   []string{"stack.metadata"},
+					AffectedAll:   []string{"stack.metadata", "component"},
 				},
 			},
 			expectedError: false,
@@ -260,7 +263,7 @@ func TestFindAffected(t *testing.T) {
 				tt.includeSettings,
 				tt.stackToFilter,
 				false,
-				"", // gitRepoRoot - empty for unit tests with absolute paths
+				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
 			if tt.expectedError {
@@ -269,6 +272,295 @@ func TestFindAffected(t *testing.T) {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.expectedAffected, affected)
 			}
+		})
+	}
+}
+
+// buildTerraformStackData creates stack data structure for testing.
+// This helper reduces code duplication in component folder change tests.
+func buildTerraformStackData(stackName, componentName string, componentConfig map[string]any) map[string]any {
+	return map[string]any{
+		stackName: map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					componentName: componentConfig,
+				},
+			},
+		},
+	}
+}
+
+// TestFindAffectedComponentFolderChanges tests component folder detection with the top-level component field.
+// This tests the scenario where stack processing sets componentSection["component"] = BaseComponentName.
+func TestFindAffectedComponentFolderChanges(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Common atmosConfig for all tests.
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	t.Run("Should detect component folder changes with explicit component field", func(t *testing.T) {
+		componentConfig := map[string]any{
+			"component": "vpc",
+			"metadata":  map[string]any{"enabled": true},
+			"vars":      map[string]any{"name": "test-vpc"},
+		}
+		stacks := buildTerraformStackData("dev", "vpc", componentConfig)
+
+		affected, err := findAffected(
+			&stacks, &stacks, atmosConfig,
+			[]string{tempDir + "/components/terraform/vpc/main.tf"},
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc", affected[0].Component)
+		assert.Equal(t, "component", affected[0].Affected)
+		assert.Equal(t, tempDir+"/components/terraform/vpc", affected[0].ComponentPath)
+	})
+
+	t.Run("Should detect component folder changes with inherited base component", func(t *testing.T) {
+		componentConfig := map[string]any{
+			"component": "vpc", // Points to "vpc" folder, not "vpc-production".
+			"metadata":  map[string]any{"enabled": true},
+			"vars":      map[string]any{"name": "prod-vpc"},
+		}
+		stacks := buildTerraformStackData("prod", "vpc-production", componentConfig)
+
+		affected, err := findAffected(
+			&stacks, &stacks, atmosConfig,
+			[]string{tempDir + "/components/terraform/vpc/variables.tf"},
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc-production", affected[0].Component)
+		assert.Equal(t, "component", affected[0].Affected)
+		assert.Equal(t, tempDir+"/components/terraform/vpc", affected[0].ComponentPath)
+	})
+
+	t.Run("Should detect changes for JIT vendored component with source - simple config", func(t *testing.T) {
+		// Component with source for JIT vendoring (no explicit component field).
+		// This tests the fix for detecting vendored component changes.
+		componentConfig := map[string]any{
+			"metadata": map[string]any{"enabled": true},
+			"source":   map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+			"vars":     map[string]any{"name": "sourced-vpc"},
+		}
+		stacks := buildTerraformStackData("dev", "vpc-sourced", componentConfig)
+
+		affected, err := findAffected(
+			&stacks, &stacks, atmosConfig,
+			[]string{tempDir + "/components/terraform/vpc-sourced/main.tf"},
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc-sourced", affected[0].Component)
+		assert.Equal(t, "component", affected[0].Affected)
+		// ComponentPath is empty because BuildComponentPath doesn't have component name fallback.
+		assert.Empty(t, affected[0].ComponentPath)
+	})
+
+	t.Run("Should detect changes for JIT vendored component with source - full config", func(t *testing.T) {
+		// Component with full source configuration (mirrors real fixture structure).
+		// This tests JIT vendoring with included_paths, excluded_paths, etc.
+		componentConfig := map[string]any{
+			"metadata": map[string]any{"enabled": true},
+			"source": map[string]any{
+				"uri":     "github.com/cloudposse/terraform-null-label//exports",
+				"version": "0.25.0",
+				"included_paths": []string{
+					"*.tf",
+				},
+				"excluded_paths": []string{
+					"*.md",
+					"examples/**",
+				},
+			},
+			"vars": map[string]any{
+				"enabled":     true,
+				"environment": "prod",
+			},
+		}
+		stacks := buildTerraformStackData("prod", "vpc-map", componentConfig)
+
+		affected, err := findAffected(
+			&stacks, &stacks, atmosConfig,
+			[]string{tempDir + "/components/terraform/vpc-map/main.tf"},
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc-map", affected[0].Component)
+		assert.Equal(t, "terraform", affected[0].ComponentType)
+		assert.Equal(t, "prod", affected[0].Stack)
+		assert.Equal(t, "component", affected[0].Affected)
+		assert.Contains(t, affected[0].AffectedAll, "component")
+	})
+}
+
+// TestFindAffectedWithGitRepoRoot tests path resolution with non-empty gitRepoRoot.
+// This verifies the fix for issue #1978 where relative paths from git diff
+// need to be resolved against the git repository root, not the current working directory.
+func TestFindAffectedWithGitRepoRoot(t *testing.T) {
+	// Create a temp directory structure simulating a git repo with atmos in a subdirectory.
+	gitRepoRoot := t.TempDir()
+	atmosBaseDir := filepath.Join(gitRepoRoot, "infra")
+
+	// Create component directories.
+	componentDir := filepath.Join(atmosBaseDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	// Create a dummy file in the component directory.
+	err = os.WriteFile(filepath.Join(componentDir, "main.tf"), []byte("# vpc"), 0o644)
+	require.NoError(t, err)
+
+	tests := []struct {
+		name             string
+		currentStacks    map[string]any
+		remoteStacks     map[string]any
+		atmosConfig      *schema.AtmosConfiguration
+		changedFiles     []string // Relative to git repo root (as git diff returns).
+		gitRepoRoot      string
+		expectedAffected []schema.Affected
+	}{
+		{
+			name: "Should detect component changes with relative paths resolved against gitRepoRoot",
+			currentStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+								"metadata": map[string]any{
+									"enabled": true,
+								},
+								"vars": map[string]any{
+									"name": "test-vpc",
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+								"metadata": map[string]any{
+									"enabled": true,
+								},
+								"vars": map[string]any{
+									"name": "test-vpc",
+								},
+							},
+						},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: atmosBaseDir,
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			// Changed files as returned by git diff (relative to git repo root).
+			changedFiles: []string{
+				"infra/components/terraform/vpc/main.tf",
+			},
+			gitRepoRoot: gitRepoRoot,
+			expectedAffected: []schema.Affected{
+				{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					ComponentPath: filepath.Join(atmosBaseDir, "components", "terraform", "vpc"),
+					Stack:         "dev",
+					StackSlug:     "dev-vpc",
+					Affected:      "component",
+					AffectedAll:   []string{"component"},
+				},
+			},
+		},
+		{
+			name: "Should NOT detect changes when gitRepoRoot is empty and paths are relative",
+			currentStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+								"metadata": map[string]any{
+									"enabled": true,
+								},
+							},
+						},
+					},
+				},
+			},
+			remoteStacks: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"component": "vpc",
+								"metadata": map[string]any{
+									"enabled": true,
+								},
+							},
+						},
+					},
+				},
+			},
+			atmosConfig: &schema.AtmosConfiguration{
+				BasePath: atmosBaseDir,
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: "components/terraform",
+					},
+				},
+			},
+			// Relative paths without gitRepoRoot - will be resolved against cwd (wrong).
+			changedFiles: []string{
+				"infra/components/terraform/vpc/main.tf",
+			},
+			gitRepoRoot: "", // Empty - paths will be resolved against cwd.
+			// No affected expected because paths won't match (cwd != gitRepoRoot).
+			expectedAffected: []schema.Affected{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			affected, err := findAffected(
+				&tt.currentStacks,
+				&tt.remoteStacks,
+				tt.atmosConfig,
+				tt.changedFiles,
+				false, // includeSpaceliftAdminStacks.
+				false, // includeSettings.
+				"",    // stackToFilter.
+				false, // excludeLocked.
+				tt.gitRepoRoot,
+			)
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.expectedAffected, affected)
 		})
 	}
 }
@@ -480,7 +772,7 @@ func TestFindAffectedWithExcludeLocked(t *testing.T) {
 				true, // includeSettings
 				"",
 				tt.excludeLocked,
-				"", // gitRepoRoot - empty for unit tests with absolute paths
+				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
 			assert.NoError(t, err)
@@ -568,7 +860,7 @@ func TestFindAffectedWithIncludeSettings(t *testing.T) {
 				tt.includeSettings,
 				"",
 				false,
-				"", // gitRepoRoot - empty for unit tests with absolute paths
+				"", // gitRepoRoot - empty for unit tests with absolute paths.
 			)
 
 			assert.NoError(t, err)
@@ -590,7 +882,7 @@ func TestFindAffectedWithNilStacks(t *testing.T) {
 			false,
 			"",
 			false,
-			"", // gitRepoRoot - empty for unit tests
+			"", // gitRepoRoot - empty for unit tests.
 		)
 
 		assert.NoError(t, err)
@@ -631,7 +923,7 @@ func TestFindAffectedWithSpaceliftAdminStacks(t *testing.T) {
 			false,
 			"",
 			false,
-			"", // gitRepoRoot - empty for unit tests
+			"", // gitRepoRoot - empty for unit tests.
 		)
 
 		assert.NoError(t, err)
