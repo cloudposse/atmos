@@ -1,10 +1,7 @@
 package env
 
 import (
-	"fmt"
-	"os"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,15 +11,12 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
+	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
-)
-
-const (
-	// DefaultFileMode is the file mode for output files.
-	defaultFileMode = 0o644
 )
 
 // SupportedFormats lists all supported output formats.
@@ -45,16 +39,17 @@ var envCmd = &cobra.Command{
 		}
 
 		// Get output format.
-		format := v.GetString("format")
-		if !slices.Contains(SupportedFormats, format) {
+		formatStr := v.GetString("format")
+		if !slices.Contains(SupportedFormats, formatStr) {
 			return errUtils.Build(errUtils.ErrInvalidArgumentError).
-				WithExplanationf("Invalid --format value %q.", format).
+				WithExplanationf("Invalid --format value %q.", formatStr).
 				WithHintf("Supported formats: %s.", strings.Join(SupportedFormats, ", ")).
 				Err()
 		}
 
-		// Get output file path.
+		// Get output file path and export flag.
 		output := v.GetString("output")
+		exportPrefix := v.GetBool("export")
 
 		// Build ConfigAndStacksInfo with CLI overrides (--config, --config-path, --base-path).
 		// These are persistent flags inherited from the root command.
@@ -85,50 +80,60 @@ var envCmd = &cobra.Command{
 			envVars = make(map[string]string)
 		}
 
-		// Handle GitHub format special case.
-		if format == "github" {
-			if output == "" {
-				// GITHUB_ENV is an external CI environment variable set by GitHub Actions,
-				// not an Atmos configuration variable, so os.Getenv is appropriate here.
-				//nolint:forbidigo // GITHUB_ENV is an external CI env var, not Atmos config
-				output = os.Getenv("GITHUB_ENV")
-				if output == "" {
+		// Handle JSON format separately (not supported by pkg/env).
+		if formatStr == "json" {
+			if output != "" {
+				return u.WriteToFileAsJSON(output, envVars, 0o644)
+			}
+			return outputEnvAsJSON(&atmosConfig, envVars)
+		}
+
+		// Handle GitHub format special case (requires output path).
+		if formatStr == "github" {
+			path := output
+			if path == "" {
+				path = ghactions.GetEnvPath()
+				if path == "" {
 					return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
 						WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output to specify a file path.").
 						Err()
 				}
 			}
-			return writeEnvToFile(envVars, output, formatGitHub)
-		}
-
-		// Handle file output for other formats.
-		if output != "" {
-			var formatter func(map[string]string) string
-			switch format {
-			case "bash":
-				formatter = formatBash
-			case "dotenv":
-				formatter = formatDotenv
-			case "json":
-				// For JSON file output, use the utility function.
-				return u.WriteToFileAsJSON(output, envVars, defaultFileMode)
-			default:
-				formatter = formatBash
+			dataMap := convertToAnyMap(envVars)
+			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
+			if err != nil {
+				return errUtils.Build(errUtils.ErrInvalidArgumentError).
+					WithCause(err).
+					WithExplanation("Failed to format environment variables for GitHub output.").
+					Err()
 			}
-			return writeEnvToFile(envVars, output, formatter)
+			return envfmt.WriteToFile(path, formatted)
 		}
 
-		// Output to stdout.
-		switch format {
-		case "json":
-			return outputEnvAsJSON(&atmosConfig, envVars)
-		case "bash":
-			return outputEnvAsBash(envVars)
-		case "dotenv":
-			return outputEnvAsDotenv(envVars)
-		default:
-			return outputEnvAsBash(envVars)
+		// Parse format string to Format type.
+		format, err := envfmt.ParseFormat(formatStr)
+		if err != nil {
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithCause(err).
+				WithExplanationf("Invalid --format value %q.", formatStr).
+				Err()
 		}
+
+		// Format the environment variables with export option.
+		dataMap := convertToAnyMap(envVars)
+		formatted, err := envfmt.FormatData(dataMap, format, envfmt.WithExport(exportPrefix))
+		if err != nil {
+			return errUtils.Build(errUtils.ErrInvalidArgumentError).
+				WithCause(err).
+				WithExplanation("Failed to format environment variables.").
+				Err()
+		}
+
+		// Output to file or stdout.
+		if output != "" {
+			return envfmt.WriteToFile(output, formatted)
+		}
+		return data.Write(formatted)
 	},
 }
 
@@ -137,84 +142,13 @@ func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]
 	return u.PrintAsJSON(atmosConfig, envVars)
 }
 
-// outputEnvAsBash outputs environment variables as shell export statements.
-func outputEnvAsBash(envVars map[string]string) error {
-	return data.Write(formatBash(envVars))
-}
-
-// outputEnvAsDotenv outputs environment variables in .env format.
-func outputEnvAsDotenv(envVars map[string]string) error {
-	return data.Write(formatDotenv(envVars))
-}
-
-// formatBash formats environment variables as shell export statements.
-func formatBash(envVars map[string]string) string {
-	keys := sortedKeys(envVars)
-	var sb strings.Builder
-	for _, key := range keys {
-		value := envVars[key]
-		// Escape single quotes for safe single-quoted shell literals: ' -> '\''.
-		safe := strings.ReplaceAll(value, "'", "'\\''")
-		sb.WriteString(fmt.Sprintf("export %s='%s'\n", key, safe))
+// convertToAnyMap converts a map[string]string to map[string]any for use with env formatters.
+func convertToAnyMap(envVars map[string]string) map[string]any {
+	result := make(map[string]any, len(envVars))
+	for k, v := range envVars {
+		result[k] = v
 	}
-	return sb.String()
-}
-
-// formatDotenv formats environment variables in .env format.
-func formatDotenv(envVars map[string]string) string {
-	keys := sortedKeys(envVars)
-	var sb strings.Builder
-	for _, key := range keys {
-		value := envVars[key]
-		// Use the same safe single-quoted escaping as bash output.
-		safe := strings.ReplaceAll(value, "'", "'\\''")
-		sb.WriteString(fmt.Sprintf("%s='%s'\n", key, safe))
-	}
-	return sb.String()
-}
-
-// formatGitHub formats environment variables for GitHub Actions $GITHUB_ENV file.
-// Uses KEY=value format without quoting. For multiline values, GitHub uses heredoc syntax.
-func formatGitHub(envVars map[string]string) string {
-	keys := sortedKeys(envVars)
-	var sb strings.Builder
-	for _, key := range keys {
-		value := envVars[key]
-		// Check if value contains newlines - use heredoc syntax.
-		// Use ATMOS_EOF_ prefix to avoid collision with values containing "EOF".
-		if strings.Contains(value, "\n") {
-			sb.WriteString(fmt.Sprintf("%s<<ATMOS_EOF_%s\n%s\nATMOS_EOF_%s\n", key, key, value, key))
-		} else {
-			sb.WriteString(fmt.Sprintf("%s=%s\n", key, value))
-		}
-	}
-	return sb.String()
-}
-
-// writeEnvToFile writes formatted environment variables to a file (append mode).
-func writeEnvToFile(envVars map[string]string, filePath string, formatter func(map[string]string) string) error {
-	// Open file in append mode, create if doesn't exist.
-	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, defaultFileMode)
-	if err != nil {
-		return fmt.Errorf("failed to open file '%s': %w", filePath, err)
-	}
-	defer f.Close()
-
-	content := formatter(envVars)
-	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to file '%s': %w", filePath, err)
-	}
-	return nil
-}
-
-// sortedKeys returns the keys of a map sorted alphabetically.
-func sortedKeys(m map[string]string) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+	return result
 }
 
 func init() {
@@ -222,8 +156,10 @@ func init() {
 	envParser = flags.NewStandardParser(
 		flags.WithStringFlag("format", "f", "bash", "Output format: bash, json, dotenv, github"),
 		flags.WithStringFlag("output", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
+		flags.WithBoolFlag("export", "", true, "Include 'export' prefix in bash format (default: true)"),
 		flags.WithEnvVars("format", "ATMOS_ENV_FORMAT"),
 		flags.WithEnvVars("output", "ATMOS_ENV_OUTPUT"),
+		flags.WithEnvVars("export", "ATMOS_ENV_EXPORT"),
 	)
 
 	// Register flags using the standard RegisterFlags method.

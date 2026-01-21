@@ -948,6 +948,10 @@ MOZILLA PUBLIC LICENSE (MPL) 2.0 DEPENDENCIES
 
 MIT LICENSED DEPENDENCIES
 
+  - al.essio.dev/pkg/shellescape
+    License: MIT
+    URL: https://github.com/alessio/shellescape/blob/v1.5.1/LICENSE
+
   - github.com/99designs/keyring
     License: MIT
     URL: https://github.com/99designs/keyring/blob/v1.2.2/LICENSE
