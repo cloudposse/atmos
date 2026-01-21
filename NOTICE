@@ -1506,7 +1506,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/posthog/posthog-go
     License: MIT
-    URL: https://github.com/posthog/posthog-go/blob/v1.9.0/LICENSE.md
+    URL: https://github.com/posthog/posthog-go/blob/v1.9.1/LICENSE.md
 
   - github.com/rivo/uniseg
     License: MIT
