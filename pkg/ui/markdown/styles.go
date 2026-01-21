@@ -101,6 +101,7 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 				Color:       stringPtr(White),
 			},
 			Margin: uintPtr(0),
+			Indent: uintPtr(2), // Match theme.DocumentIndent for left padding.
 		},
 		BlockQuote: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
@@ -134,7 +135,8 @@ func getBuiltinDefaultStyle() ([]byte, error) {
 		},
 		H1: ansi.StyleBlock{
 			StylePrimitive: ansi.StylePrimitive{
-				Prefix:          "",
+				Prefix:          " ",
+				Suffix:          " ",
 				Color:           stringPtr(White),
 				BackgroundColor: stringPtr(Purple),
 				Bold:            boolPtr(true),

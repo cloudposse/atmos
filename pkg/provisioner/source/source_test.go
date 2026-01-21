@@ -434,3 +434,160 @@ func TestProvision_ForceOverwritesExisting(t *testing.T) {
 	require.Error(t, err, "Expected error from download attempt, not skip")
 	assert.ErrorIs(t, err, errUtils.ErrSourceProvision, "Error should be from provisioning attempt")
 }
+
+// TestGetComponentBasePath_Packer tests packer component type base path.
+func TestGetComponentBasePath_Packer(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+	}
+
+	result := getComponentBasePath(atmosConfig, "packer")
+	assert.Equal(t, "components/packer", result)
+}
+
+// TestDetermineTargetDirectory_Packer tests target directory for packer components.
+func TestDetermineTargetDirectory_Packer(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+	}
+
+	result, err := DetermineTargetDirectory(atmosConfig, "packer", "ami", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join("components", "packer", "ami"), result)
+}
+
+// TestDetermineTargetDirectory_WorkdirEnabled tests workdir path when provision.workdir.enabled is true.
+func TestDetermineTargetDirectory_WorkdirEnabled(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
+	require.NoError(t, err)
+	// Expecting: <tempDir>/.workdir/terraform/dev-vpc/
+	expected := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-vpc")
+	assert.Equal(t, expected, result)
+}
+
+// TestDetermineTargetDirectory_WorkdirEnabledNoStack tests workdir path error when stack is missing.
+func TestDetermineTargetDirectory_WorkdirEnabledNoStack(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// workdir enabled but no atmos_stack in config.
+	componentConfig := map[string]any{
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	_, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrSourceProvision)
+}
+
+// TestGetResolvedAbsPath tests retrieval of pre-resolved absolute paths.
+func TestGetResolvedAbsPath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath: "/abs/path/terraform",
+		HelmfileDirAbsolutePath:  "/abs/path/helmfile",
+		PackerDirAbsolutePath:    "/abs/path/packer",
+	}
+
+	assert.Equal(t, "/abs/path/terraform", getResolvedAbsPath(atmosConfig, "terraform"))
+	assert.Equal(t, "/abs/path/helmfile", getResolvedAbsPath(atmosConfig, "helmfile"))
+	assert.Equal(t, "/abs/path/packer", getResolvedAbsPath(atmosConfig, "packer"))
+	assert.Equal(t, "", getResolvedAbsPath(atmosConfig, "unknown"))
+}
+
+// TestDetermineTargetDirectory_PreResolvedAbsPath tests using pre-resolved absolute paths.
+func TestDetermineTargetDirectory_PreResolvedAbsPath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath: "/abs/path/terraform",
+	}
+
+	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", map[string]any{})
+	require.NoError(t, err)
+	assert.Equal(t, "/abs/path/terraform/vpc", result)
+}
+
+// TestBuildComponentPath_AbsolutePath tests building path when config base path is absolute.
+func TestBuildComponentPath_AbsolutePath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "/absolute/path/components/terraform",
+			},
+		},
+	}
+
+	result, err := buildComponentPath(atmosConfig, "terraform")
+	require.NoError(t, err)
+	assert.Equal(t, "/absolute/path/components/terraform", result)
+}
+
+// TestBuildComponentPath_RelativePathWithBasePath tests building path with relative config and base path.
+func TestBuildComponentPath_RelativePathWithBasePath(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	result, err := buildComponentPath(atmosConfig, "terraform")
+	require.NoError(t, err)
+	expected := filepath.Join(tempDir, "components", "terraform")
+	assert.Equal(t, expected, result)
+}
+
+// TestBuildComponentPath_RelativePathNoBasePath tests building path with relative config and no base path.
+func TestBuildComponentPath_RelativePathNoBasePath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	result, err := buildComponentPath(atmosConfig, "terraform")
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Join(".", "components", "terraform"), result)
+}

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -496,4 +497,227 @@ func TestExtractComponentFolder(t *testing.T) {
 	}
 	folder = extractComponentFolder(componentMap, "vpc")
 	assert.Equal(t, "vpc", folder, "should default to component name when metadata.component not set")
+}
+
+// TestBuildListSorters tests the sorter building function.
+func TestBuildListSorters(t *testing.T) {
+	// With stack column.
+	sorters := buildListSorters(true)
+	require.Len(t, sorters, 2)
+	assert.Equal(t, "Stack", sorters[0].Column)
+	assert.Equal(t, "Component", sorters[1].Column)
+
+	// Without stack column.
+	sorters = buildListSorters(false)
+	require.Len(t, sorters, 1)
+	assert.Equal(t, "Component", sorters[0].Column)
+}
+
+// TestSortSourcesByStackComponent tests sorting by stack and component.
+func TestSortSourcesByStackComponent(t *testing.T) {
+	sources := []map[string]any{
+		{"stack": "prod", "component": "vpc"},
+		{"stack": "dev", "component": "nginx"},
+		{"stack": "dev", "component": "eks"},
+		{"stack": "prod", "component": "app"},
+	}
+
+	sortSourcesByStackComponent(sources)
+
+	// Should be sorted by stack, then component.
+	assert.Equal(t, "dev", sources[0]["stack"])
+	assert.Equal(t, "eks", sources[0]["component"])
+
+	assert.Equal(t, "dev", sources[1]["stack"])
+	assert.Equal(t, "nginx", sources[1]["component"])
+
+	assert.Equal(t, "prod", sources[2]["stack"])
+	assert.Equal(t, "app", sources[2]["component"])
+
+	assert.Equal(t, "prod", sources[3]["stack"])
+	assert.Equal(t, "vpc", sources[3]["component"])
+}
+
+// TestExtractSingleSourceEntry tests extraction of a single source entry.
+func TestExtractSingleSourceEntry(t *testing.T) {
+	// Valid source entry.
+	componentData := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/vpc",
+			"version": "1.0.0",
+		},
+		"metadata": map[string]any{
+			"component": "base-vpc",
+		},
+	}
+
+	entry := extractSingleSourceEntry("dev", "vpc/production", componentData)
+	require.NotNil(t, entry)
+	assert.Equal(t, "dev", entry["stack"])
+	assert.Equal(t, "vpc/production", entry["component"])
+	assert.Equal(t, "base-vpc", entry["folder"])
+	assert.Equal(t, "github.com/example/vpc", entry["uri"])
+	assert.Equal(t, "1.0.0", entry["version"])
+
+	// Component data is not a map.
+	entry = extractSingleSourceEntry("dev", "vpc", "invalid")
+	assert.Nil(t, entry)
+
+	// No source configured.
+	componentData = map[string]any{
+		"vars": map[string]any{"enabled": true},
+	}
+	entry = extractSingleSourceEntry("dev", "vpc", componentData)
+	assert.Nil(t, entry)
+
+	// Invalid source (nil source spec from ExtractSource).
+	componentData = map[string]any{
+		"source": 12345, // Invalid type.
+	}
+	entry = extractSingleSourceEntry("dev", "vpc", componentData)
+	assert.Nil(t, entry)
+}
+
+// TestExtractSourcesFromSingleStackData tests extraction from a single stack's data.
+func TestExtractSourcesFromSingleStackData(t *testing.T) {
+	// Valid stack data.
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+				},
+				"no-source": map[string]any{
+					"vars": map[string]any{"enabled": true},
+				},
+			},
+		},
+	}
+
+	sources := extractSourcesFromSingleStackData("dev", stackData, "terraform")
+	require.Len(t, sources, 1)
+	assert.Equal(t, "vpc", sources[0]["component"])
+
+	// Stack data is not a map.
+	sources = extractSourcesFromSingleStackData("dev", "invalid", "terraform")
+	assert.Len(t, sources, 0)
+
+	// Stack data has no components key.
+	stackData = map[string]any{
+		"vars": map[string]any{"region": "us-east-1"},
+	}
+	sources = extractSourcesFromSingleStackData("dev", stackData, "terraform")
+	assert.Len(t, sources, 0)
+
+	// Components is not a map.
+	stackData = map[string]any{
+		"components": "invalid",
+	}
+	sources = extractSourcesFromSingleStackData("dev", stackData, "terraform")
+	assert.Len(t, sources, 0)
+
+	// Component type not in components.
+	stackData = map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+				},
+			},
+		},
+	}
+	sources = extractSourcesFromSingleStackData("dev", stackData, "helmfile")
+	assert.Len(t, sources, 0)
+}
+
+// TestWrapConfigError tests error wrapping for configuration errors.
+func TestWrapConfigError(t *testing.T) {
+	tests := []struct {
+		name        string
+		errMsg      string
+		stack       string
+		wantErrType error
+	}{
+		{
+			name:        "import failure error",
+			errMsg:      "failed to find import: some-stack.yaml",
+			stack:       "",
+			wantErrType: errUtils.ErrNoStacksFound,
+		},
+		{
+			name:        "no files match error",
+			errMsg:      "no files match the pattern",
+			stack:       "dev",
+			wantErrType: errUtils.ErrNoStacksFound,
+		},
+		{
+			name:        "stacks directory does not exist",
+			errMsg:      "stacks directory does not exist: /path/to/stacks",
+			stack:       "",
+			wantErrType: errUtils.ErrMissingAtmosConfig,
+		},
+		{
+			name:        "atmos.yaml error",
+			errMsg:      "cannot find atmos.yaml in any of the paths",
+			stack:       "",
+			wantErrType: errUtils.ErrMissingAtmosConfig,
+		},
+		{
+			name:        "generic config error without stack",
+			errMsg:      "some other configuration error",
+			stack:       "",
+			wantErrType: errUtils.ErrFailedToInitConfig,
+		},
+		{
+			name:        "generic config error with stack",
+			errMsg:      "some other configuration error",
+			stack:       "dev",
+			wantErrType: errUtils.ErrFailedToInitConfig,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create an error with the message in the error itself.
+			inputErr := errors.New(tt.errMsg)
+
+			wrappedErr := wrapConfigError(inputErr, tt.stack)
+
+			require.Error(t, wrappedErr)
+			assert.ErrorIs(t, wrappedErr, tt.wantErrType)
+		})
+	}
+}
+
+// TestExtractSourcesFromStack_ComponentDataNotMap tests edge case where component data is not a map.
+func TestExtractSourcesFromStack_ComponentDataNotMap(t *testing.T) {
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": "invalid-not-a-map",
+				},
+			},
+		},
+	}
+
+	sources := extractSourcesFromStack(stacksMap, "dev", "terraform")
+	assert.Len(t, sources, 0)
+}
+
+// TestExtractSourcesFromAllStacks_EmptyStacks tests extraction from empty stacks map.
+func TestExtractSourcesFromAllStacks_EmptyStacks(t *testing.T) {
+	stacksMap := map[string]any{}
+	sources := extractSourcesFromAllStacks(stacksMap, "terraform")
+	assert.Len(t, sources, 0)
+}
+
+// TestExtractSourcesFromAllStacks_InvalidStackData tests extraction with invalid stack data.
+func TestExtractSourcesFromAllStacks_InvalidStackData(t *testing.T) {
+	stacksMap := map[string]any{
+		"dev":  "invalid-string-data",
+		"prod": nil,
+	}
+	sources := extractSourcesFromAllStacks(stacksMap, "terraform")
+	assert.Len(t, sources, 0)
 }

@@ -9,12 +9,12 @@ import (
 )
 
 // listCmd commands list stacks and components.
+// Args validator is auto-applied by the command registry for parent commands with subcommands.
 var listCmd = &cobra.Command{
 	Use:                "list",
 	Short:              "List available stacks and components",
 	Long:               `Display a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
 }
 
 func init() {

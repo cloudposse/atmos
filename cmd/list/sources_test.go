@@ -1,11 +1,14 @@
 package list
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 // TestSourcesCommand tests that the sources command has the correct structure.
@@ -605,4 +608,249 @@ func TestExtractAllSourcesFromStack_ExtractedFields(t *testing.T) {
 	assert.Equal(t, "vpc", source["folder"])
 	assert.Equal(t, "github.com/cloudposse/terraform-aws-components//modules/vpc", source["uri"])
 	assert.Equal(t, "1.450.0", source["version"])
+}
+
+// TestBuildSourcesSorters tests the sorter building function.
+func TestBuildSourcesSorters(t *testing.T) {
+	// With stack column.
+	sorters := buildSourcesSorters(true)
+	require.Len(t, sorters, 3)
+	assert.Equal(t, "Stack", sorters[0].Column)
+	assert.Equal(t, "Type", sorters[1].Column)
+	assert.Equal(t, "Component", sorters[2].Column)
+
+	// Without stack column.
+	sorters = buildSourcesSorters(false)
+	require.Len(t, sorters, 2)
+	assert.Equal(t, "Type", sorters[0].Column)
+	assert.Equal(t, "Component", sorters[1].Column)
+}
+
+// TestSortSourcesByTypeComponent tests sorting by type and component.
+func TestSortSourcesByTypeComponent(t *testing.T) {
+	sources := []map[string]any{
+		{"type": "terraform", "component": "zulu"},
+		{"type": "helmfile", "component": "bravo"},
+		{"type": "terraform", "component": "alpha"},
+		{"type": "helmfile", "component": "alpha"},
+	}
+
+	sortSourcesByTypeComponent(sources)
+
+	// Should be sorted by type first, then component.
+	assert.Equal(t, "helmfile", sources[0]["type"])
+	assert.Equal(t, "alpha", sources[0]["component"])
+	assert.Equal(t, "helmfile", sources[1]["type"])
+	assert.Equal(t, "bravo", sources[1]["component"])
+	assert.Equal(t, "terraform", sources[2]["type"])
+	assert.Equal(t, "alpha", sources[2]["component"])
+	assert.Equal(t, "terraform", sources[3]["type"])
+	assert.Equal(t, "zulu", sources[3]["component"])
+}
+
+// TestSortSourcesByStackTypeComponent tests sorting by stack, type, and component.
+func TestSortSourcesByStackTypeComponent(t *testing.T) {
+	sources := []map[string]any{
+		{"stack": "prod", "type": "terraform", "component": "vpc"},
+		{"stack": "dev", "type": "helmfile", "component": "nginx"},
+		{"stack": "dev", "type": "terraform", "component": "eks"},
+		{"stack": "prod", "type": "helmfile", "component": "app"},
+	}
+
+	sortSourcesByStackTypeComponent(sources)
+
+	// Should be sorted by stack, then type, then component.
+	assert.Equal(t, "dev", sources[0]["stack"])
+	assert.Equal(t, "helmfile", sources[0]["type"])
+	assert.Equal(t, "nginx", sources[0]["component"])
+
+	assert.Equal(t, "dev", sources[1]["stack"])
+	assert.Equal(t, "terraform", sources[1]["type"])
+	assert.Equal(t, "eks", sources[1]["component"])
+
+	assert.Equal(t, "prod", sources[2]["stack"])
+	assert.Equal(t, "helmfile", sources[2]["type"])
+	assert.Equal(t, "app", sources[2]["component"])
+
+	assert.Equal(t, "prod", sources[3]["stack"])
+	assert.Equal(t, "terraform", sources[3]["type"])
+	assert.Equal(t, "vpc", sources[3]["component"])
+}
+
+// TestExtractSourcesFromComponentType tests extraction from a specific component type.
+func TestExtractSourcesFromComponentType(t *testing.T) {
+	components := map[string]any{
+		"terraform": map[string]any{
+			"vpc": map[string]any{
+				"source": map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+			},
+			"no-source": map[string]any{
+				"vars": map[string]any{"enabled": true},
+			},
+		},
+		"helmfile": map[string]any{
+			"nginx": map[string]any{
+				"source": map[string]any{"uri": "github.com/example/nginx", "version": "2.0.0"},
+			},
+		},
+	}
+
+	// Extract terraform components.
+	sources := extractSourcesFromComponentType("dev", "terraform", components)
+	require.Len(t, sources, 1)
+	assert.Equal(t, "vpc", sources[0]["component"])
+
+	// Extract helmfile components.
+	sources = extractSourcesFromComponentType("dev", "helmfile", components)
+	require.Len(t, sources, 1)
+	assert.Equal(t, "nginx", sources[0]["component"])
+
+	// Extract non-existent type.
+	sources = extractSourcesFromComponentType("dev", "packer", components)
+	assert.Len(t, sources, 0)
+}
+
+// TestExtractSourceEntry tests extraction of a single source entry.
+func TestExtractSourceEntry(t *testing.T) {
+	// Valid source entry.
+	componentData := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/vpc",
+			"version": "1.0.0",
+		},
+		"metadata": map[string]any{
+			"component": "base-vpc",
+		},
+	}
+
+	entry := extractSourceEntry("dev", "terraform", "vpc/production", componentData)
+	require.NotNil(t, entry)
+	assert.Equal(t, "dev", entry["stack"])
+	assert.Equal(t, "terraform", entry["type"])
+	assert.Equal(t, "vpc/production", entry["component"])
+	assert.Equal(t, "base-vpc", entry["folder"])
+	assert.Equal(t, "github.com/example/vpc", entry["uri"])
+	assert.Equal(t, "1.0.0", entry["version"])
+
+	// Component data is not a map.
+	entry = extractSourceEntry("dev", "terraform", "vpc", "invalid")
+	assert.Nil(t, entry)
+
+	// No source configured.
+	componentData = map[string]any{
+		"vars": map[string]any{"enabled": true},
+	}
+	entry = extractSourceEntry("dev", "terraform", "vpc", componentData)
+	assert.Nil(t, entry)
+
+	// Invalid source (nil source spec from ExtractSource).
+	componentData = map[string]any{
+		"source": 12345, // Invalid type.
+	}
+	entry = extractSourceEntry("dev", "terraform", "vpc", componentData)
+	assert.Nil(t, entry)
+}
+
+// TestExtractSourcesFromStackData tests extraction from a single stack's data.
+func TestExtractSourcesFromStackData(t *testing.T) {
+	// Valid stack data with multiple component types.
+	stackData := map[string]any{
+		"components": map[string]any{
+			"terraform": map[string]any{
+				"vpc": map[string]any{
+					"source": map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+				},
+			},
+			"helmfile": map[string]any{
+				"nginx": map[string]any{
+					"source": map[string]any{"uri": "github.com/example/nginx", "version": "2.0.0"},
+				},
+			},
+			"packer": map[string]any{
+				"ami": map[string]any{
+					"source": map[string]any{"uri": "github.com/example/ami", "version": "3.0.0"},
+				},
+			},
+		},
+	}
+
+	sources := extractSourcesFromStackData("dev", stackData)
+	require.Len(t, sources, 3)
+
+	// Stack data is not a map.
+	sources = extractSourcesFromStackData("dev", "invalid")
+	assert.Len(t, sources, 0)
+
+	// Stack data has no components key.
+	stackData = map[string]any{
+		"vars": map[string]any{"region": "us-east-1"},
+	}
+	sources = extractSourcesFromStackData("dev", stackData)
+	assert.Len(t, sources, 0)
+
+	// Components is not a map.
+	stackData = map[string]any{
+		"components": "invalid",
+	}
+	sources = extractSourcesFromStackData("dev", stackData)
+	assert.Len(t, sources, 0)
+}
+
+// TestWrapSourcesConfigError tests error wrapping for configuration errors.
+func TestWrapSourcesConfigError(t *testing.T) {
+	tests := []struct {
+		name        string
+		errMsg      string
+		stack       string
+		wantErrType error
+	}{
+		{
+			name:        "import failure error",
+			errMsg:      "failed to find import: some-stack.yaml",
+			stack:       "",
+			wantErrType: errUtils.ErrNoStacksFound,
+		},
+		{
+			name:        "no files match error",
+			errMsg:      "no files match the pattern",
+			stack:       "dev",
+			wantErrType: errUtils.ErrNoStacksFound,
+		},
+		{
+			name:        "stacks directory does not exist",
+			errMsg:      "stacks directory does not exist: /path/to/stacks",
+			stack:       "",
+			wantErrType: errUtils.ErrMissingAtmosConfig,
+		},
+		{
+			name:        "atmos.yaml error",
+			errMsg:      "cannot find atmos.yaml in any of the paths",
+			stack:       "",
+			wantErrType: errUtils.ErrMissingAtmosConfig,
+		},
+		{
+			name:        "generic config error without stack",
+			errMsg:      "some other configuration error",
+			stack:       "",
+			wantErrType: errUtils.ErrFailedToInitConfig,
+		},
+		{
+			name:        "generic config error with stack",
+			errMsg:      "some other configuration error",
+			stack:       "dev",
+			wantErrType: errUtils.ErrFailedToInitConfig,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create an error with the message in the error itself.
+			inputErr := errors.New(tt.errMsg)
+
+			wrappedErr := wrapSourcesConfigError(inputErr, tt.stack)
+
+			require.Error(t, wrappedErr)
+			assert.ErrorIs(t, wrappedErr, tt.wantErrType)
+		})
+	}
 }
