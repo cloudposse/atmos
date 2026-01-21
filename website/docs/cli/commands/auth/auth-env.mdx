@@ -23,7 +23,7 @@ Quickly generate temporary cloud credentials as environment variables so you can
 ## Usage
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv|github] [--output <file>] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|github] [--output-file <file>] [--login]
 ```
 
 ## How It Works
@@ -151,7 +151,7 @@ atmos auth env --format dotenv
 atmos auth env --identity prod-admin --format github
 
 # GitHub Actions format with explicit output file
-atmos auth env --identity prod-admin --format github --output /path/to/env/file
+atmos auth env --identity prod-admin --format github --output-file /path/to/env/file
 
 # Automatically login if credentials don't exist or are expired
 atmos auth env --login
@@ -282,11 +282,11 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
     - **`github`**: Prints `KEY=value` lines for GitHub Actions `$GITHUB_ENV` file. Multiline values use GitHub's heredoc syntax.
   </dd>
 
-  <dt>`--output` <em>(alias `-o`)</em></dt>
+  <dt>`--output-file` <em>(alias `-o`)</em></dt>
   <dd>
     Write output to a file instead of stdout. When used with `--format=github`, this specifies the target file for environment variables.
 
-    If `--format=github` is used without `--output`, the command automatically writes to the file specified by the `$GITHUB_ENV` environment variable (set automatically in GitHub Actions).
+    If `--format=github` is used without `--output-file`, the command automatically writes to the file specified by the `$GITHUB_ENV` environment variable (set automatically in GitHub Actions).
   </dd>
 
   <dt>`--login`</dt>
@@ -311,8 +311,8 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
   <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
   <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`, `github`.</dd>
 
-  <dt>`ATMOS_AUTH_ENV_OUTPUT`</dt>
-  <dd>Default output file path when `--output` is not provided. For `--format=github`, this defaults to the value of `$GITHUB_ENV` if set.</dd>
+  <dt>`ATMOS_AUTH_ENV_OUTPUT_FILE`</dt>
+  <dd>Default output file path when `--output-file` is not provided. For `--format=github`, this defaults to the value of `$GITHUB_ENV` if set.</dd>
 </dl>
 
 ### Output Variables (Exported by this command)
