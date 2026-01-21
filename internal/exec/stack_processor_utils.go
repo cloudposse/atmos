@@ -29,10 +29,11 @@ var importsConfigLock = &sync.Mutex{}
 
 // extractLocalsResult holds the results of parsing raw YAML and extracting locals.
 type extractLocalsResult struct {
-	locals   map[string]any // Resolved locals.
-	settings map[string]any // Settings section (for template context).
-	vars     map[string]any // Vars section (for template context).
-	env      map[string]any // Env section (for template context).
+	locals    map[string]any // Resolved locals.
+	settings  map[string]any // Settings section (for template context).
+	vars      map[string]any // Vars section (for template context).
+	env       map[string]any // Env section (for template context).
+	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
 }
 
 // extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
@@ -84,13 +85,30 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
 	}
 
-	// Build result with locals and context sections.
+	return buildLocalsResult(rawConfig, localsCtx), nil
+}
+
+// buildLocalsResult builds an extractLocalsResult from raw config and resolved locals context.
+func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extractLocalsResult {
 	result := &extractLocalsResult{
 		locals: localsCtx.MergeForTemplateContext(),
 	}
 
+	// Detect locals section presence (including empty locals).
+	// This allows empty locals: {} to still enable template context.
+	if _, ok := rawConfig[cfg.LocalsSectionName]; ok {
+		result.hasLocals = true
+	}
+	if localsCtx.HasTerraformLocals || localsCtx.HasHelmfileLocals || localsCtx.HasPackerLocals {
+		result.hasLocals = true
+	}
+
+	// Ensure locals map is never nil when hasLocals is true.
+	if result.hasLocals && result.locals == nil {
+		result.locals = make(map[string]any)
+	}
+
 	// Extract settings, vars, env sections for template context.
-	// These allow templates in the file to reference these sections.
 	if settings, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
 		result.settings = settings
 	}
@@ -101,7 +119,7 @@ func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlConten
 		result.env = env
 	}
 
-	return result, nil
+	return result
 }
 
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
@@ -152,10 +170,12 @@ func extractAndAddLocalsToContext(
 		return context, localsErr
 	}
 
-	// Only modify context if there are actually locals to add.
+	// Only modify context if a locals section exists in the file.
 	// This preserves the original behavior where files without locals don't trigger
 	// template processing (see the len(context) > 0 check in ProcessBaseStackConfig).
-	if len(extractResult.locals) == 0 {
+	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
+	// which should still enable template context.
+	if !extractResult.hasLocals {
 		return context, nil
 	}
 

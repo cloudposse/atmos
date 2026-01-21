@@ -1089,7 +1089,7 @@ func TestExampleLocalsDescribeLocals(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// The result structure has: locals:, components.terraform.<component>.locals.
+	// The result structure has: locals: plus per-section locals (e.g., terraform.locals).
 	// Check root-level locals section.
 	locals, ok := result["locals"].(map[string]any)
 	require.True(t, ok, "locals should be a map")

@@ -1848,3 +1848,126 @@ locals:
 		})
 	}
 }
+
+// TestExtractLocalsFromRawYAML_SectionOnlyLocals tests that section-only locals (without global locals)
+// are properly detected and processed. This covers the HasTerraformLocals/HasHelmfileLocals/HasPackerLocals
+// branches in buildLocalsResult.
+func TestExtractLocalsFromRawYAML_SectionOnlyLocals(t *testing.T) {
+	tests := []struct {
+		name           string
+		yamlContent    string
+		expectedLocals map[string]string
+	}{
+		{
+			name: "terraform_only_locals",
+			yamlContent: `
+terraform:
+  locals:
+    backend_bucket: "my-tfstate-bucket"
+    backend_key: "state.tfstate"
+vars:
+  stage: dev
+`,
+			expectedLocals: map[string]string{
+				"backend_bucket": "my-tfstate-bucket",
+				"backend_key":    "state.tfstate",
+			},
+		},
+		{
+			name: "helmfile_only_locals",
+			yamlContent: `
+helmfile:
+  locals:
+    release_name: "my-release"
+    namespace: "default"
+vars:
+  stage: dev
+`,
+			expectedLocals: map[string]string{
+				"release_name": "my-release",
+				"namespace":    "default",
+			},
+		},
+		{
+			name: "packer_only_locals",
+			yamlContent: `
+packer:
+  locals:
+    ami_name: "my-ami"
+    ami_prefix: "acme"
+vars:
+  stage: dev
+`,
+			expectedLocals: map[string]string{
+				"ami_name":   "my-ami",
+				"ami_prefix": "acme",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			result, err := extractLocalsFromRawYAML(atmosConfig, tt.yamlContent, "test.yaml")
+
+			require.NoError(t, err)
+			require.NotNil(t, result)
+			// hasLocals should be true even without global locals.
+			assert.True(t, result.hasLocals, "hasLocals should be true for section-only locals")
+			// Check expected locals.
+			for key, expected := range tt.expectedLocals {
+				assert.Equal(t, expected, result.locals[key], "locals[%s] mismatch", key)
+			}
+		})
+	}
+}
+
+// TestExtractLocalsFromRawYAML_EmptyLocalsHasLocalsFlag tests that empty locals: {} still sets hasLocals to true.
+// This ensures that template context is enabled even when locals section is empty.
+func TestExtractLocalsFromRawYAML_EmptyLocalsHasLocalsFlag(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	yamlContent := `
+locals: {}
+vars:
+  stage: "dev"
+settings:
+  enabled: true
+`
+	result, err := extractLocalsFromRawYAML(atmosConfig, yamlContent, "test.yaml")
+
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	// hasLocals should be true even though locals section is empty.
+	assert.True(t, result.hasLocals, "hasLocals should be true for empty locals: {}")
+	// locals should be an empty map, not nil.
+	assert.NotNil(t, result.locals, "locals should not be nil for empty locals: {}")
+	assert.Empty(t, result.locals, "locals should be empty")
+	// Context sections should still be populated.
+	assert.NotNil(t, result.vars, "vars should be extracted")
+	assert.NotNil(t, result.settings, "settings should be extracted")
+}
+
+// TestBuildLocalsResult_NilLocalsWithHasLocals tests that buildLocalsResult initializes locals map
+// when hasLocals is true but MergeForTemplateContext returns nil.
+func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
+	// Create a LocalsContext where HasTerraformLocals is true but no actual locals.
+	localsCtx := &LocalsContext{
+		Global:             nil,
+		Terraform:          nil,
+		Helmfile:           nil,
+		Packer:             nil,
+		HasTerraformLocals: true,
+		HasHelmfileLocals:  false,
+		HasPackerLocals:    false,
+	}
+	rawConfig := map[string]any{
+		"vars": map[string]any{"stage": "dev"},
+	}
+
+	result := buildLocalsResult(rawConfig, localsCtx)
+
+	// hasLocals should be true due to HasTerraformLocals.
+	assert.True(t, result.hasLocals, "hasLocals should be true when HasTerraformLocals is true")
+	// locals should be initialized to empty map, not nil.
+	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
+}

@@ -117,13 +117,13 @@ func createYamlFunctionProcessor(atmosConfig *schema.AtmosConfiguration, current
 		input := map[string]any{"_value": value}
 		result, err := ProcessCustomYamlTags(atmosConfig, input, currentStack, nil, nil)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%w: %w", errUtils.ErrLocalsYamlFunctionFailed, err)
 		}
 		// Extract the processed value.
 		if processedValue, ok := result["_value"]; ok {
 			return processedValue, nil
 		}
-		return nil, nil
+		return nil, fmt.Errorf("%w: processed value missing", errUtils.ErrLocalsYamlFunctionFailed)
 	}
 }
 
