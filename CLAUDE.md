@@ -358,7 +358,7 @@ New configs support Go templating with `FuncMap()` from `internal/exec/template_
 Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
 ### Cross-Platform (MANDATORY)
-Linux/macOS/Windows compatible. Use SDKs over binaries.
+Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
 
 **Path handling in tests:**
 - **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`
