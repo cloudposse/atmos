@@ -177,6 +177,10 @@ func NewAtmosHuhTheme() *huh.Theme {
 	buttonBackground := styles.Interactive.ButtonBackground.GetBackground()
 	primaryColor := styles.Selected.GetForeground()
 
+	// Add top and bottom margin for spacing from surrounding content.
+	t.Focused.Base = t.Focused.Base.MarginTop(1).MarginBottom(1)
+	t.Blurred.Base = t.Blurred.Base.MarginTop(1).MarginBottom(1)
+
 	// Use theme's colors for interactive elements.
 	t.Focused.FocusedButton = t.Focused.FocusedButton.
 		Foreground(buttonForeground).

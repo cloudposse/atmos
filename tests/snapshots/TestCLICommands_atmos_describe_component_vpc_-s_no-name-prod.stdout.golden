@@ -20,7 +20,13 @@
         "plan": {
           "skip_planfile": false
         },
-        "plugin_cache": true
+        "plugin_cache": true,
+        "ui": {
+          "enabled": false,
+          "compact": null,
+          "show_attribute_bar": null,
+          "max_lines": 0
+        }
       },
       "helmfile": {
         "base_path": "",

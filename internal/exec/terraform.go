@@ -20,6 +20,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/pro"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfui "github.com/cloudposse/atmos/pkg/terraform/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/xdg"
 
@@ -492,15 +493,49 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			log.Debug("Using workdir path", "workdirPath", workdirPath)
 		}
 
-		err = ExecuteShellCommand(
-			atmosConfig,
-			info.Command,
-			initCommandWithArguments,
-			componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			info.RedirectStdErr,
+		// Check if streaming UI should be used for init.
+		useStreamingUIForInit := tfui.ShouldUseStreamingUI(
+			info.UIFlagExplicitlySet,
+			info.UIEnabled,
+			atmosConfig.Components.Terraform.UI.Enabled,
+			"init",
 		)
+
+		if useStreamingUIForInit {
+			initOpts := &tfui.ExecuteOptions{
+				Command:    info.Command,
+				Args:       initCommandWithArguments,
+				WorkingDir: componentPath,
+				Env:        info.ComponentEnvList,
+				Component:  info.FinalComponent,
+				Stack:      info.Stack,
+				SubCommand: "init",
+				DryRun:     info.DryRun,
+			}
+			err = tfui.ExecuteInit(context.Background(), initOpts)
+			// If streaming not supported, fall back to regular execution.
+			if errors.Is(err, errUtils.ErrStreamingNotSupported) {
+				err = ExecuteShellCommand(
+					atmosConfig,
+					info.Command,
+					initCommandWithArguments,
+					componentPath,
+					info.ComponentEnvList,
+					info.DryRun,
+					info.RedirectStdErr,
+				)
+			}
+		} else {
+			err = ExecuteShellCommand(
+				atmosConfig,
+				info.Command,
+				initCommandWithArguments,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+		}
 		if err != nil {
 			return err
 		}
@@ -645,15 +680,50 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					workspaceSelectRedirectStdErr = info.RedirectStdErr
 				}
 
-				err = ExecuteShellCommand(
-					atmosConfig,
-					info.Command,
-					[]string{"workspace", "select", info.TerraformWorkspace},
-					componentPath,
-					info.ComponentEnvList,
-					info.DryRun,
-					workspaceSelectRedirectStdErr,
+				// Check if streaming UI should be used for workspace commands.
+				useStreamingUIForWorkspace := tfui.ShouldUseStreamingUI(
+					info.UIFlagExplicitlySet,
+					info.UIEnabled,
+					atmosConfig.Components.Terraform.UI.Enabled,
+					"init", // Use init check since workspace is part of the init phase.
 				)
+
+				if useStreamingUIForWorkspace {
+					workspaceOpts := &tfui.ExecuteOptions{
+						Command:    info.Command,
+						Args:       []string{"workspace", "select", info.TerraformWorkspace},
+						WorkingDir: componentPath,
+						Env:        info.ComponentEnvList,
+						Component:  info.FinalComponent,
+						Stack:      info.Stack,
+						SubCommand: "workspace",
+						Workspace:  info.TerraformWorkspace,
+						DryRun:     info.DryRun,
+					}
+					err = tfui.ExecuteInit(context.Background(), workspaceOpts)
+					// If streaming not supported, fall back to regular execution.
+					if errors.Is(err, errUtils.ErrStreamingNotSupported) {
+						err = ExecuteShellCommand(
+							atmosConfig,
+							info.Command,
+							[]string{"workspace", "select", info.TerraformWorkspace},
+							componentPath,
+							info.ComponentEnvList,
+							info.DryRun,
+							workspaceSelectRedirectStdErr,
+						)
+					}
+				} else {
+					err = ExecuteShellCommand(
+						atmosConfig,
+						info.Command,
+						[]string{"workspace", "select", info.TerraformWorkspace},
+						componentPath,
+						info.ComponentEnvList,
+						info.DryRun,
+						workspaceSelectRedirectStdErr,
+					)
+				}
 				if err != nil {
 					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)
 					var exitCodeErr errUtils.ExitCodeError
@@ -661,16 +731,43 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 						// Different error or different exit code
 						return err
 					}
-					// Workspace doesn't exist, try to create it
-					err = ExecuteShellCommand(
-						atmosConfig,
-						info.Command,
-						[]string{"workspace", "new", info.TerraformWorkspace},
-						componentPath,
-						info.ComponentEnvList,
-						info.DryRun,
-						info.RedirectStdErr,
-					)
+					// Workspace doesn't exist, try to create it.
+					if useStreamingUIForWorkspace {
+						workspaceOpts := &tfui.ExecuteOptions{
+							Command:    info.Command,
+							Args:       []string{"workspace", "new", info.TerraformWorkspace},
+							WorkingDir: componentPath,
+							Env:        info.ComponentEnvList,
+							Component:  info.FinalComponent,
+							Stack:      info.Stack,
+							SubCommand: "workspace",
+							Workspace:  info.TerraformWorkspace,
+							DryRun:     info.DryRun,
+						}
+						err = tfui.ExecuteInit(context.Background(), workspaceOpts)
+						// If streaming not supported, fall back to regular execution.
+						if errors.Is(err, errUtils.ErrStreamingNotSupported) {
+							err = ExecuteShellCommand(
+								atmosConfig,
+								info.Command,
+								[]string{"workspace", "new", info.TerraformWorkspace},
+								componentPath,
+								info.ComponentEnvList,
+								info.DryRun,
+								info.RedirectStdErr,
+							)
+						}
+					} else {
+						err = ExecuteShellCommand(
+							atmosConfig,
+							info.Command,
+							[]string{"workspace", "new", info.TerraformWorkspace},
+							componentPath,
+							info.ComponentEnvList,
+							info.DryRun,
+							info.RedirectStdErr,
+						)
+					}
 					if err != nil {
 						return err
 					}
@@ -698,15 +795,69 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Execute the provided command (except for `terraform workspace` which was executed above).
 	if !(info.SubCommand == "workspace" && info.SubCommand2 == "") {
-		err = ExecuteShellCommand(
-			atmosConfig,
-			info.Command,
-			allArgsAndFlags,
-			componentPath,
-			info.ComponentEnvList,
-			info.DryRun,
-			info.RedirectStdErr,
+		// Check if streaming UI should be used.
+		useStreamingUI := tfui.ShouldUseStreamingUI(
+			info.UIFlagExplicitlySet,
+			info.UIEnabled,
+			atmosConfig.Components.Terraform.UI.Enabled,
+			info.SubCommand,
 		)
+
+		if useStreamingUI {
+			// Use streaming TUI executor.
+			execOpts := &tfui.ExecuteOptions{
+				Command:    info.Command,
+				Args:       allArgsAndFlags,
+				WorkingDir: componentPath,
+				Env:        info.ComponentEnvList,
+				Component:  info.FinalComponent,
+				Stack:      info.Stack,
+				SubCommand: info.SubCommand,
+				DryRun:     info.DryRun,
+			}
+
+			// Route to appropriate executor based on subcommand.
+			switch {
+			case info.SubCommand == "apply" && !info.DryRun:
+				// Use two-phase execution with confirmation for apply.
+				err = tfui.ExecuteApply(context.Background(), execOpts)
+			case info.SubCommand == "destroy" && !info.DryRun:
+				// Use two-phase execution with confirmation for destroy.
+				err = tfui.ExecuteDestroy(context.Background(), execOpts)
+			case info.SubCommand == "plan" && !info.DryRun:
+				// Use ExecutePlan to show dependency tree after plan.
+				err = tfui.ExecutePlan(context.Background(), execOpts)
+			case info.SubCommand == "init" && !info.DryRun:
+				// Use ExecuteInit for spinner with viewport.
+				err = tfui.ExecuteInit(context.Background(), execOpts)
+			default:
+				err = tfui.Execute(context.Background(), execOpts)
+			}
+
+			// If streaming not supported, fall back to regular execution.
+			if errors.Is(err, errUtils.ErrStreamingNotSupported) {
+				log.Debug("Streaming UI not supported, falling back to regular execution")
+				err = ExecuteShellCommand(
+					atmosConfig,
+					info.Command,
+					allArgsAndFlags,
+					componentPath,
+					info.ComponentEnvList,
+					info.DryRun,
+					info.RedirectStdErr,
+				)
+			}
+		} else {
+			err = ExecuteShellCommand(
+				atmosConfig,
+				info.Command,
+				allArgsAndFlags,
+				componentPath,
+				info.ComponentEnvList,
+				info.DryRun,
+				info.RedirectStdErr,
+			)
+		}
 		// Compute exitCode for upload, whether or not err is set.
 		var exitCode int
 		if err != nil {
