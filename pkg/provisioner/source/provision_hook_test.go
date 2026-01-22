@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -188,10 +189,17 @@ func TestIsWorkdirEnabled(t *testing.T) {
 }
 
 func TestNeedsProvisioning(t *testing.T) {
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:     "github.com/test/repo//src",
+		Version: "1.0.0",
+	}
+
 	tests := []struct {
-		name     string
-		setup    func(t *testing.T) string // Returns path to test.
-		expected bool
+		name           string
+		setup          func(t *testing.T) string // Returns path to test.
+		sourceSpec     *schema.VendorComponentSource
+		expected       bool
+		expectedReason string
 	}{
 		{
 			name: "non-existent directory",
@@ -199,7 +207,9 @@ func TestNeedsProvisioning(t *testing.T) {
 				tempDir := t.TempDir()
 				return filepath.Join(tempDir, "nonexistent")
 			},
-			expected: true,
+			sourceSpec:     sourceSpec,
+			expected:       true,
+			expectedReason: "",
 		},
 		{
 			name: "path is a file not directory",
@@ -210,7 +220,9 @@ func TestNeedsProvisioning(t *testing.T) {
 				require.NoError(t, err)
 				return filePath
 			},
-			expected: true,
+			sourceSpec:     sourceSpec,
+			expected:       true,
+			expectedReason: "",
 		},
 		{
 			name: "empty directory",
@@ -221,10 +233,12 @@ func TestNeedsProvisioning(t *testing.T) {
 				require.NoError(t, err)
 				return emptyDir
 			},
-			expected: true,
+			sourceSpec:     sourceSpec,
+			expected:       true,
+			expectedReason: "",
 		},
 		{
-			name: "directory with files",
+			name: "directory with files but no metadata",
 			setup: func(t *testing.T) string {
 				tempDir := t.TempDir()
 				dirPath := filepath.Join(tempDir, "component")
@@ -234,27 +248,84 @@ func TestNeedsProvisioning(t *testing.T) {
 				require.NoError(t, err)
 				return dirPath
 			},
-			expected: false,
+			sourceSpec:     sourceSpec,
+			expected:       true,
+			expectedReason: "No metadata found, re-provisioning",
 		},
 		{
-			name: "directory with subdirectory",
+			name: "directory with metadata and matching version",
 			setup: func(t *testing.T) string {
 				tempDir := t.TempDir()
 				dirPath := filepath.Join(tempDir, "component")
-				subDir := filepath.Join(dirPath, "subdir")
-				err := os.MkdirAll(subDir, 0o755)
+				err := os.MkdirAll(dirPath, 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644)
+				require.NoError(t, err)
+				// Write metadata with matching version.
+				metadata := &workdir.WorkdirMetadata{
+					SourceURI:     "github.com/test/repo//src",
+					SourceVersion: "1.0.0",
+				}
+				err = workdir.WriteMetadata(dirPath, metadata)
 				require.NoError(t, err)
 				return dirPath
 			},
-			expected: false,
+			sourceSpec:     sourceSpec,
+			expected:       false,
+			expectedReason: "",
+		},
+		{
+			name: "directory with metadata but version changed",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				dirPath := filepath.Join(tempDir, "component")
+				err := os.MkdirAll(dirPath, 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644)
+				require.NoError(t, err)
+				// Write metadata with old version.
+				metadata := &workdir.WorkdirMetadata{
+					SourceURI:     "github.com/test/repo//src",
+					SourceVersion: "0.9.0",
+				}
+				err = workdir.WriteMetadata(dirPath, metadata)
+				require.NoError(t, err)
+				return dirPath
+			},
+			sourceSpec:     sourceSpec,
+			expected:       true,
+			expectedReason: "Source version changed (0.9.0 → 1.0.0)",
+		},
+		{
+			name: "directory with metadata but URI changed",
+			setup: func(t *testing.T) string {
+				tempDir := t.TempDir()
+				dirPath := filepath.Join(tempDir, "component")
+				err := os.MkdirAll(dirPath, 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644)
+				require.NoError(t, err)
+				// Write metadata with different URI.
+				metadata := &workdir.WorkdirMetadata{
+					SourceURI:     "github.com/other/repo//src",
+					SourceVersion: "1.0.0",
+				}
+				err = workdir.WriteMetadata(dirPath, metadata)
+				require.NoError(t, err)
+				return dirPath
+			},
+			sourceSpec:     sourceSpec,
+			expected:       true,
+			expectedReason: "Source URI changed (github.com/other/repo//src → github.com/test/repo//src)",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.setup(t)
-			result := needsProvisioning(path)
+			result, reason := needsProvisioning(path, tt.sourceSpec)
 			assert.Equal(t, tt.expected, result)
+			assert.Equal(t, tt.expectedReason, reason)
 		})
 	}
 }

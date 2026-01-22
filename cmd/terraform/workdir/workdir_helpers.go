@@ -1,7 +1,6 @@
 package workdir
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -32,6 +31,15 @@ type WorkdirInfo struct {
 	// Source is the source path (component folder).
 	Source string `json:"source" yaml:"source"`
 
+	// SourceType is the type of source ("local" or "remote").
+	SourceType string `json:"source_type" yaml:"source_type"`
+
+	// SourceURI is the remote source URI (only for remote sources).
+	SourceURI string `json:"source_uri,omitempty" yaml:"source_uri,omitempty"`
+
+	// SourceVersion is the remote source version (only for remote sources).
+	SourceVersion string `json:"source_version,omitempty" yaml:"source_version,omitempty"`
+
 	// Path is the workdir path relative to project root.
 	Path string `json:"path" yaml:"path"`
 
@@ -43,6 +51,9 @@ type WorkdirInfo struct {
 
 	// UpdatedAt is when the workdir was last updated.
 	UpdatedAt time.Time `json:"updated_at" yaml:"updated_at"`
+
+	// LastAccessed is when the workdir was last accessed.
+	LastAccessed time.Time `json:"last_accessed" yaml:"last_accessed"`
 }
 
 // WorkdirManager defines the interface for workdir operations.
@@ -64,6 +75,10 @@ type WorkdirManager interface {
 
 	// CleanAllWorkdirs removes all workdirs.
 	CleanAllWorkdirs(atmosConfig *schema.AtmosConfiguration) error
+
+	// CleanExpiredWorkdirs removes workdirs older than the specified TTL.
+	// If dryRun is true, only reports what would be cleaned.
+	CleanExpiredWorkdirs(atmosConfig *schema.AtmosConfiguration, ttl string, dryRun bool) error
 }
 
 // DefaultWorkdirManager is the default implementation of WorkdirManager.
@@ -100,22 +115,26 @@ func (m *DefaultWorkdirManager) ListWorkdirs(atmosConfig *schema.AtmosConfigurat
 			continue
 		}
 
-		metadataPath := filepath.Join(workdirBase, entry.Name(), provWorkdir.WorkdirMetadataFile)
-		metadata, err := readWorkdirMetadata(metadataPath)
-		if err != nil {
+		workdirPath := filepath.Join(workdirBase, entry.Name())
+		metadata, err := provWorkdir.ReadMetadata(workdirPath)
+		if err != nil || metadata == nil {
 			// Skip directories without valid metadata.
 			continue
 		}
 
 		workdirs = append(workdirs, WorkdirInfo{
-			Name:        entry.Name(),
-			Component:   metadata.Component,
-			Stack:       metadata.Stack,
-			Source:      metadata.Source,
-			Path:        filepath.Join(provWorkdir.WorkdirPath, terraformSubdir, entry.Name()),
-			ContentHash: metadata.ContentHash,
-			CreatedAt:   metadata.CreatedAt,
-			UpdatedAt:   metadata.UpdatedAt,
+			Name:          entry.Name(),
+			Component:     metadata.Component,
+			Stack:         metadata.Stack,
+			Source:        metadata.Source,
+			SourceType:    string(metadata.SourceType),
+			SourceURI:     metadata.SourceURI,
+			SourceVersion: metadata.SourceVersion,
+			Path:          filepath.Join(provWorkdir.WorkdirPath, terraformSubdir, entry.Name()),
+			ContentHash:   metadata.ContentHash,
+			CreatedAt:     metadata.CreatedAt,
+			UpdatedAt:     metadata.UpdatedAt,
+			LastAccessed:  metadata.LastAccessed,
 		})
 	}
 
@@ -128,10 +147,9 @@ func (m *DefaultWorkdirManager) GetWorkdirInfo(atmosConfig *schema.AtmosConfigur
 
 	workdirName := fmt.Sprintf("%s-%s", stack, component)
 	workdirPath := filepath.Join(atmosConfig.BasePath, provWorkdir.WorkdirPath, terraformSubdir, workdirName)
-	metadataPath := filepath.Join(workdirPath, provWorkdir.WorkdirMetadataFile)
 
-	metadata, err := readWorkdirMetadata(metadataPath)
-	if err != nil {
+	metadata, err := provWorkdir.ReadMetadata(workdirPath)
+	if err != nil || metadata == nil {
 		return nil, errUtils.Build(errUtils.ErrWorkdirMetadata).
 			WithCause(err).
 			WithExplanation(fmt.Sprintf("Workdir not found for component '%s' in stack '%s'", component, stack)).
@@ -142,14 +160,18 @@ func (m *DefaultWorkdirManager) GetWorkdirInfo(atmosConfig *schema.AtmosConfigur
 	}
 
 	return &WorkdirInfo{
-		Name:        workdirName,
-		Component:   metadata.Component,
-		Stack:       metadata.Stack,
-		Source:      metadata.Source,
-		Path:        filepath.Join(provWorkdir.WorkdirPath, terraformSubdir, workdirName),
-		ContentHash: metadata.ContentHash,
-		CreatedAt:   metadata.CreatedAt,
-		UpdatedAt:   metadata.UpdatedAt,
+		Name:          workdirName,
+		Component:     metadata.Component,
+		Stack:         metadata.Stack,
+		Source:        metadata.Source,
+		SourceType:    string(metadata.SourceType),
+		SourceURI:     metadata.SourceURI,
+		SourceVersion: metadata.SourceVersion,
+		Path:          filepath.Join(provWorkdir.WorkdirPath, terraformSubdir, workdirName),
+		ContentHash:   metadata.ContentHash,
+		CreatedAt:     metadata.CreatedAt,
+		UpdatedAt:     metadata.UpdatedAt,
+		LastAccessed:  metadata.LastAccessed,
 	}, nil
 }
 
@@ -242,19 +264,13 @@ func (m *DefaultWorkdirManager) CleanAllWorkdirs(atmosConfig *schema.AtmosConfig
 	return nil
 }
 
-// readWorkdirMetadata reads and parses the workdir metadata file.
-func readWorkdirMetadata(path string) (*provWorkdir.WorkdirMetadata, error) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
+// CleanExpiredWorkdirs removes workdirs older than the specified TTL.
+// If dryRun is true, only reports what would be cleaned.
+func (m *DefaultWorkdirManager) CleanExpiredWorkdirs(atmosConfig *schema.AtmosConfiguration, ttl string, dryRun bool) error {
+	defer perf.Track(atmosConfig, "workdir.CleanExpiredWorkdirs")()
 
-	var metadata provWorkdir.WorkdirMetadata
-	if err := json.Unmarshal(data, &metadata); err != nil {
-		return nil, err
-	}
-
-	return &metadata, nil
+	// Use the provisioner workdir package's CleanExpiredWorkdirs.
+	return provWorkdir.CleanExpiredWorkdirs(atmosConfig, ttl, dryRun)
 }
 
 // workdirManager is the default manager used by commands.

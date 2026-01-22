@@ -1,0 +1,117 @@
+---
+slug: version-aware-jit-provisioning
+title: "Version-Aware JIT Source Provisioning with TTL"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports intelligent version-aware JIT (Just-In-Time) source provisioning with automatic re-provisioning on version changes and TTL-based cleanup for stale workdirs.
+
+<!--truncate-->
+
+## What Changed
+
+The workdir provisioning system has been enhanced with version tracking and intelligent re-provisioning:
+
+- **Version-aware re-provisioning** - When a remote source version changes in your configuration, Atmos automatically re-provisions the workdir with the new version
+- **URI change detection** - Changing the source URI triggers re-provisioning to ensure you always have the correct source
+- **Incremental local sync** - Local component changes are synced using per-file checksums, copying only modified files
+- **TTL-based cleanup** - Stale workdirs can be cleaned up automatically based on last-accessed time
+- **Enhanced metadata** - Workdirs now track `source_uri`, `source_version`, and `last_accessed` timestamps
+
+## Why This Matters
+
+Previously, if you updated a component's source version in your stack configuration, you had to manually clean the workdir before the change would take effect. Now Atmos handles this automatically:
+
+- **Seamless version upgrades** - Change `version: "0.24.0"` to `version: "0.25.0"` and run `terraform plan` - Atmos detects the mismatch and re-provisions automatically
+- **Reduced disk usage** - The `--expired` cleanup option removes workdirs that haven't been accessed within a configurable TTL
+- **Faster local iteration** - Only modified files are synced to workdirs, making local development faster
+- **Full visibility** - The `workdir list` and `workdir show` commands now display version and access information
+
+## How to Use It
+
+### Version-Aware Provisioning
+
+Configure a component with a source version:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      source:
+        uri: "github.com/cloudposse/terraform-aws-vpc//src"
+        version: "0.25.0"
+      provision:
+        workdir:
+          enabled: true
+```
+
+When you change the version, Atmos automatically re-provisions:
+
+```bash
+$ atmos terraform plan vpc -s dev
+# Output: "Source version changed (0.24.0 → 0.25.0)"
+# Workdir is re-provisioned with the new version
+```
+
+### TTL-Based Cleanup
+
+Clean workdirs that haven't been accessed in a week:
+
+```bash
+$ atmos terraform workdir clean --expired --ttl=7d
+Cleaning expired workdirs (TTL: 7d)...
+  ✓ Removed dev-nginx (last accessed 14 days ago)
+  ✓ Removed staging-api (last accessed 10 days ago)
+Cleaned 2 expired workdirs
+```
+
+Preview what would be cleaned with dry-run:
+
+```bash
+$ atmos terraform workdir clean --expired --ttl=7d --dry-run
+Dry run: would clean 2 expired workdir(s) (TTL: 7d):
+  - dev-nginx (last accessed 14d 2h)
+  - staging-api (last accessed 10d 5h)
+```
+
+### Enhanced Workdir Information
+
+View detailed workdir information:
+
+```bash
+$ atmos terraform workdir show vpc --stack dev
+✓ Workdir Status
+
+  Name            dev-vpc
+  Component       vpc
+  Stack           dev
+  Source Type     remote
+  Source URI      github.com/cloudposse/terraform-aws-vpc//src
+  Source Version  0.25.0
+  Path            .workdir/terraform/dev-vpc
+  Created         2025-01-20 10:00:00 UTC
+  Updated         2025-01-22 14:30:00 UTC
+  Last Accessed   2025-01-22 14:30:00 UTC
+```
+
+List workdirs with version and access information:
+
+```bash
+$ atmos terraform workdir list
+COMPONENT   STACK   TYPE     VERSION   LAST_ACCESSED        PATH
+vpc         dev     remote   0.25.0    2025-01-22 14:30     .workdir/terraform/dev-vpc
+my-local    dev     local    -         2025-01-22 10:15     .workdir/terraform/dev-my-local
+```
+
+## TTL Format
+
+The `--ttl` flag supports various duration formats:
+
+- **Time units**: `30m`, `2h`, `7d` (minutes, hours, days)
+- **Keywords**: `hourly`, `daily`, `weekly`, `monthly`
+- **Seconds**: `3600` (plain integers are interpreted as seconds)
+
+## Get Involved
+
+Have feedback on the version-aware provisioning feature? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues) or join the discussion in our [Slack community](https://slack.cloudposse.com).

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
@@ -74,17 +76,30 @@ func AutoProvisionSource(
 		return nil // No source configured - skip.
 	}
 
+	stack, _ := componentConfig["atmos_stack"].(string)
+
 	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return wrapProvisionError(err, "Failed to determine target directory", component)
 	}
 
-	// Skip if target exists - set workdir path if needed and return.
-	if !needsProvisioning(targetDir) {
+	// Check if provisioning is needed (version change, URI change, or fresh workdir).
+	needs, reason := needsProvisioning(targetDir, sourceSpec)
+	if !needs {
+		// No provisioning needed - touch LastAccessed and return.
 		if isWorkdir {
+			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
+				// Non-critical error - log and continue.
+				ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
+			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
 		return nil
+	}
+
+	// Log reason for re-provisioning.
+	if reason != "" {
+		ui.Info(reason)
 	}
 
 	// Vendor the source to target directory.
@@ -92,8 +107,12 @@ func AutoProvisionSource(
 		return err
 	}
 
-	// Set workdir path for terraform execution if applicable.
+	// Write workdir metadata for remote sources (when workdir is enabled).
 	if isWorkdir {
+		if err := writeRemoteMetadata(targetDir, component, stack, sourceSpec); err != nil {
+			// Non-critical error - log and continue.
+			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
+		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 	}
 	return nil
@@ -218,25 +237,81 @@ func isWorkdirEnabled(componentConfig map[string]any) bool {
 }
 
 // needsProvisioning checks if the target directory needs provisioning.
-// Returns true if directory doesn't exist or is empty.
-func needsProvisioning(targetDir string) bool {
+// Returns (true, reason) if:
+//   - Directory doesn't exist or is empty
+//   - Version has changed from what's in metadata
+//   - URI has changed from what's in metadata
+//   - No metadata exists (fresh workdir)
+//
+// Returns (false, "") if the existing workdir is up-to-date.
+func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource) (bool, string) {
 	info, err := os.Stat(targetDir)
 	if os.IsNotExist(err) {
-		return true
+		return true, ""
 	}
 	if err != nil {
-		return true // Error accessing, assume needs provisioning.
+		return true, "" // Error accessing, assume needs provisioning.
 	}
 	if !info.IsDir() {
-		return true // Not a directory, needs provisioning.
+		return true, "" // Not a directory, needs provisioning.
 	}
 
 	// Check if directory is empty.
 	entries, err := os.ReadDir(targetDir)
 	if err != nil {
-		return true
+		return true, ""
 	}
-	return len(entries) == 0
+	if len(entries) == 0 {
+		return true, ""
+	}
+
+	// Directory exists and has content - check metadata for version/URI changes.
+	metadata, err := workdir.ReadMetadata(targetDir)
+	if err != nil || metadata == nil {
+		// No metadata = needs provisioning (can't determine if up-to-date).
+		return true, "No metadata found, re-provisioning"
+	}
+
+	// Check if version changed.
+	if sourceSpec.Version != "" && sourceSpec.Version != metadata.SourceVersion {
+		return true, fmt.Sprintf("Source version changed (%s → %s)", metadata.SourceVersion, sourceSpec.Version)
+	}
+
+	// Check if URI changed.
+	if sourceSpec.Uri != metadata.SourceURI {
+		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
+	}
+
+	// Workdir is up-to-date.
+	return false, ""
+}
+
+// writeRemoteMetadata writes workdir metadata for a remote source.
+func writeRemoteMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource) error {
+	now := time.Now()
+
+	// Read existing metadata to preserve CreatedAt if it exists.
+	existingMetadata, _ := workdir.ReadMetadata(workdirPath)
+
+	metadata := &workdir.WorkdirMetadata{
+		Component:     component,
+		Stack:         stack,
+		SourceType:    workdir.SourceTypeRemote,
+		Source:        sourceSpec.Uri, // Keep source field for backward compatibility.
+		SourceURI:     sourceSpec.Uri,
+		SourceVersion: sourceSpec.Version,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		LastAccessed:  now,
+		ContentHash:   "", // Remote sources don't track content hash.
+	}
+
+	// Preserve original CreatedAt if metadata already existed.
+	if existingMetadata != nil {
+		metadata.CreatedAt = existingMetadata.CreatedAt
+	}
+
+	return workdir.WriteMetadata(workdirPath, metadata)
 }
 
 // extractComponentName extracts the component name from config.

@@ -98,17 +98,34 @@ func printListTable(workdirs []WorkdirInfo) {
 	// Build rows.
 	var rows [][]string
 	for i := range workdirs {
+		sourceType := workdirs[i].SourceType
+		if sourceType == "" {
+			sourceType = "local"
+		}
+
+		version := workdirs[i].SourceVersion
+		if version == "" {
+			version = "-"
+		}
+
+		// Format last accessed time, fall back to created if not set.
+		lastAccessed := workdirs[i].LastAccessed
+		if lastAccessed.IsZero() {
+			lastAccessed = workdirs[i].CreatedAt
+		}
+
 		rows = append(rows, []string{
 			workdirs[i].Component,
 			workdirs[i].Stack,
-			workdirs[i].Source,
-			workdirs[i].CreatedAt.Format("2006-01-02 15:04"),
+			sourceType,
+			version,
+			lastAccessed.Format("2006-01-02 15:04"),
 			workdirs[i].Path,
 		})
 	}
 
 	// Create table with lipgloss.
-	headers := []string{"COMPONENT", "STACK", "SOURCE", "CREATED", "PATH"}
+	headers := []string{"COMPONENT", "STACK", "TYPE", "VERSION", "LAST_ACCESSED", "PATH"}
 
 	t := table.New().
 		Headers(headers...).

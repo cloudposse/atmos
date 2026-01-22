@@ -72,6 +72,113 @@ func (f *DefaultFileSystem) CopyDir(src, dst string) error {
 	return copyDir(src, dst)
 }
 
+// SyncDir performs a true sync: copies changed files, adds new files, deletes removed files.
+// Returns true if any changes were made, false if directories were already in sync.
+// Skips the .atmos/ directory which contains Atmos metadata.
+func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
+	defer perf.Track(nil, "workdir.DefaultFileSystem.SyncDir")()
+
+	anyChanged := false
+
+	// Track source files for deletion detection.
+	srcFiles := make(map[string]bool)
+
+	// Copy new/changed files from src to dst.
+	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		dstPath := filepath.Join(dst, relPath)
+
+		if d.IsDir() {
+			return os.MkdirAll(dstPath, DirPermissions)
+		}
+
+		srcFiles[relPath] = true
+
+		// Compare checksums.
+		srcHash, err := hasher.HashFile(path)
+		if err != nil {
+			return err
+		}
+
+		dstHash, dstErr := hasher.HashFile(dstPath)
+		if dstErr == nil && srcHash == dstHash {
+			return nil // Skip - file unchanged.
+		}
+
+		// Copy changed/new file.
+		anyChanged = true
+		return copyFile(path, dstPath)
+	})
+	if err != nil {
+		return anyChanged, err
+	}
+
+	// Delete files in dst that no longer exist in src.
+	// Skip the .atmos/ directory which contains metadata.
+	err = filepath.WalkDir(dst, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+
+		relPath, err := filepath.Rel(dst, path)
+		if err != nil {
+			return err
+		}
+
+		// Skip .atmos/ directory entirely (contains Atmos metadata).
+		if d.IsDir() && relPath == AtmosDir {
+			return filepath.SkipDir
+		}
+
+		if d.IsDir() {
+			return nil
+		}
+
+		if !srcFiles[relPath] {
+			anyChanged = true
+			return os.Remove(path)
+		}
+		return nil
+	})
+
+	return anyChanged, err
+}
+
+// copyFile copies a single file from src to dst.
+func copyFile(src, dst string) error {
+	// Ensure parent directory exists.
+	if err := os.MkdirAll(filepath.Dir(dst), DirPermissions); err != nil {
+		return err
+	}
+
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+
+	srcInfo, err := srcFile.Stat()
+	if err != nil {
+		return err
+	}
+
+	dstFile, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, srcInfo.Mode())
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+
+	_, err = io.Copy(dstFile, srcFile)
+	return err
+}
+
 // Walk walks the file tree rooted at root, calling fn for each file or directory.
 func (f *DefaultFileSystem) Walk(root string, fn fs.WalkDirFunc) error {
 	defer perf.Track(nil, "workdir.DefaultFileSystem.Walk")()

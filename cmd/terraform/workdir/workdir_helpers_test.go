@@ -313,10 +313,12 @@ func TestDefaultWorkdirManager_DescribeWorkdir_NotFound(t *testing.T) {
 	assert.Empty(t, manifest)
 }
 
-// Test readWorkdirMetadata function directly.
+// Test provWorkdir.ReadMetadata function through the package API.
 
 func TestReadWorkdirMetadata(t *testing.T) {
+	// Create a workdir with metadata in the expected .atmos/metadata.json location.
 	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "dev-vpc")
 
 	metadata := provWorkdir.WorkdirMetadata{
 		Component:   "test-component",
@@ -331,10 +333,13 @@ func TestReadWorkdirMetadata(t *testing.T) {
 	metadataBytes, err := json.Marshal(metadata)
 	require.NoError(t, err)
 
-	metadataPath := filepath.Join(tmpDir, "metadata.json")
+	// Create the .atmos directory and metadata file.
+	atmosDir := filepath.Join(workdirPath, provWorkdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	metadataPath := provWorkdir.MetadataPath(workdirPath)
 	require.NoError(t, os.WriteFile(metadataPath, metadataBytes, 0o644))
 
-	result, err := readWorkdirMetadata(metadataPath)
+	result, err := provWorkdir.ReadMetadata(workdirPath)
 	require.NoError(t, err)
 	assert.Equal(t, "test-component", result.Component)
 	assert.Equal(t, "test-stack", result.Stack)
@@ -342,18 +347,24 @@ func TestReadWorkdirMetadata(t *testing.T) {
 }
 
 func TestReadWorkdirMetadata_FileNotFound(t *testing.T) {
-	result, err := readWorkdirMetadata("/nonexistent/path/metadata.json")
-	assert.Error(t, err)
+	result, err := provWorkdir.ReadMetadata("/nonexistent/path")
+	// ReadMetadata returns nil, nil when metadata file doesn't exist (not an error).
+	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestReadWorkdirMetadata_InvalidJSON(t *testing.T) {
+	// Create a workdir with invalid metadata.
 	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "dev-vpc")
 
-	metadataPath := filepath.Join(tmpDir, "metadata.json")
+	// Create the .atmos directory and invalid metadata file.
+	atmosDir := filepath.Join(workdirPath, provWorkdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	metadataPath := provWorkdir.MetadataPath(workdirPath)
 	require.NoError(t, os.WriteFile(metadataPath, []byte("{invalid json"), 0o644))
 
-	result, err := readWorkdirMetadata(metadataPath)
+	result, err := provWorkdir.ReadMetadata(workdirPath)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }

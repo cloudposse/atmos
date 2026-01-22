@@ -2,7 +2,6 @@ package workdir
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -121,21 +120,25 @@ func (s *Service) Provision(
 		return err
 	}
 
-	// 2. Copy local component files to workdir.
-	metadata, err := s.copyLocalToWorkdir(atmosConfig, componentConfig, workdirPath, component, stack)
+	// 2. Sync local component files to workdir (incremental, per-file checksum).
+	metadata, changed, err := s.syncLocalToWorkdir(atmosConfig, componentConfig, workdirPath, component, stack)
 	if err != nil {
 		return err
 	}
 
-	// 3. Write workdir metadata.
-	if err := s.writeMetadata(workdirPath, metadata); err != nil {
+	// 3. Write workdir metadata (uses atomic write to .atmos/metadata.json).
+	if err := WriteMetadata(workdirPath, metadata); err != nil {
 		return err
 	}
 
 	// 4. Store workdir path for terraform execution.
 	componentConfig[WorkdirPathKey] = workdirPath
 
-	ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+	if changed {
+		ui.Success(fmt.Sprintf("Workdir provisioned: %s", workdirPath))
+	} else {
+		ui.Success(fmt.Sprintf("Workdir ready (no changes): %s", workdirPath))
+	}
 	return nil
 }
 
@@ -164,18 +167,19 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 	return workdirPath, nil
 }
 
-// copyLocalToWorkdir copies local component files to workdir.
-func (s *Service) copyLocalToWorkdir(
+// syncLocalToWorkdir syncs local component files to workdir using incremental per-file checksums.
+// Returns the metadata and a boolean indicating if any changes were made.
+func (s *Service) syncLocalToWorkdir(
 	atmosConfig *schema.AtmosConfiguration,
 	componentConfig map[string]any,
 	workdirPath, component, stack string,
-) (*WorkdirMetadata, error) {
-	defer perf.Track(atmosConfig, "workdir.Service.copyLocalToWorkdir")()
+) (*WorkdirMetadata, bool, error) {
+	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
 
 	// Get component path.
 	componentPath := extractComponentPath(atmosConfig, componentConfig, component)
 	if componentPath == "" {
-		return nil, errUtils.Build(errUtils.ErrWorkdirProvision).
+		return nil, false, errUtils.Build(errUtils.ErrWorkdirProvision).
 			WithExplanation("cannot determine local component path").
 			WithContext("component", component).
 			Err()
@@ -183,65 +187,59 @@ func (s *Service) copyLocalToWorkdir(
 
 	// Verify source exists.
 	if !s.fs.Exists(componentPath) {
-		return nil, errUtils.Build(errUtils.ErrWorkdirProvision).
+		return nil, false, errUtils.Build(errUtils.ErrWorkdirProvision).
 			WithExplanation("local component path does not exist").
 			WithContext("path", componentPath).
 			WithHint("Check that the component exists in components/terraform/").
 			Err()
 	}
 
-	ui.Info(fmt.Sprintf("Copying local component: %s", componentPath))
+	// Read existing metadata to preserve CreatedAt if it exists.
+	existingMetadata, _ := ReadMetadata(workdirPath)
 
-	// Copy to workdir.
-	if err := s.fs.CopyDir(componentPath, workdirPath); err != nil {
-		return nil, errUtils.Build(errUtils.ErrWorkdirSync).
+	// Use per-file checksum comparison for incremental sync.
+	changed, err := s.fs.SyncDir(componentPath, workdirPath, s.hasher)
+	if err != nil {
+		return nil, false, errUtils.Build(errUtils.ErrWorkdirSync).
 			WithCause(err).
-			WithExplanation("failed to copy local component to workdir").
+			WithExplanation("failed to sync local component to workdir").
 			WithContext("source", componentPath).
 			WithContext("dest", workdirPath).
 			Err()
 	}
 
-	// Compute content hash.
+	if changed {
+		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
+	}
+
+	// Compute content hash for the synced workdir.
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
 		ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
 	}
 
 	now := time.Now()
-	return &WorkdirMetadata{
-		Component:   component,
-		Stack:       stack,
-		SourceType:  SourceTypeLocal,
-		Source:      componentPath,
-		CreatedAt:   now,
-		UpdatedAt:   now,
-		ContentHash: contentHash,
-	}, nil
-}
-
-// writeMetadata writes workdir metadata to the metadata file.
-func (s *Service) writeMetadata(workdirPath string, metadata *WorkdirMetadata) error {
-	defer perf.Track(nil, "workdir.Service.writeMetadata")()
-
-	metadataPath := filepath.Join(workdirPath, WorkdirMetadataFile)
-	data, err := json.MarshalIndent(metadata, "", "  ")
-	if err != nil {
-		return errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithCause(err).
-			WithExplanation("failed to marshal workdir metadata").
-			Err()
+	metadata := &WorkdirMetadata{
+		Component:    component,
+		Stack:        stack,
+		SourceType:   SourceTypeLocal,
+		Source:       componentPath,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+		LastAccessed: now,
+		ContentHash:  contentHash,
 	}
 
-	if err := s.fs.WriteFile(metadataPath, data, FilePermissionsStandard); err != nil {
-		return errUtils.Build(errUtils.ErrWorkdirMetadata).
-			WithCause(err).
-			WithExplanation("failed to write workdir metadata").
-			WithContext("path", metadataPath).
-			Err()
+	// Preserve original CreatedAt if metadata already existed.
+	if existingMetadata != nil {
+		metadata.CreatedAt = existingMetadata.CreatedAt
+		// Only update UpdatedAt if content actually changed.
+		if !changed {
+			metadata.UpdatedAt = existingMetadata.UpdatedAt
+		}
 	}
 
-	return nil
+	return metadata, changed, nil
 }
 
 // isWorkdirEnabled checks if provision.workdir.enabled is set to true.
