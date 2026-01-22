@@ -37,6 +37,10 @@ The affected detection now defaults to using the component name (the YAML key, e
 - Components without explicit `component` field inheritance are detected
 - All component types (Terraform, Helmfile, Packer) benefit from this fix
 
+## What About Workdir?
+
+If you use [`provision.workdir`](/cli/commands/terraform/workdir) with your vendored components, the detection still works correctly. The `describe affected` command tracks changes in the **source** files (`components/terraform/<component>/`), not the runtime workdir (`.workdir/`). Since `.workdir/` is in `.gitignore` and created at runtime, it doesn't affect change detection.
+
 ## Example
 
 Now when you modify vendored component files, `atmos describe affected` correctly identifies them:

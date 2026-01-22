@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/go-git/go-git/v5"
@@ -276,6 +277,54 @@ func TestFindAffected(t *testing.T) {
 	}
 }
 
+// TestGetComponentFolder tests the GetComponentFolder helper function.
+func TestGetComponentFolder(t *testing.T) {
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		componentName    string
+		expected         string
+	}{
+		{
+			name:             "returns explicit component field when set",
+			componentSection: map[string]any{"component": "vpc"},
+			componentName:    "vpc-production",
+			expected:         "vpc",
+		},
+		{
+			name:             "returns componentName when component field is empty string",
+			componentSection: map[string]any{"component": ""},
+			componentName:    "vpc-production",
+			expected:         "vpc-production",
+		},
+		{
+			name:             "returns componentName when component field is missing",
+			componentSection: map[string]any{"source": map[string]any{"uri": "github.com/test"}},
+			componentName:    "vpc-sourced",
+			expected:         "vpc-sourced",
+		},
+		{
+			name:             "returns componentName when section is empty",
+			componentSection: map[string]any{},
+			componentName:    "my-component",
+			expected:         "my-component",
+		},
+		{
+			name:             "returns empty when no component field and no fallback",
+			componentSection: map[string]any{"vars": map[string]any{}},
+			componentName:    "",
+			expected:         "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetComponentFolder(&tt.componentSection, tt.componentName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // buildTerraformStackData creates stack data structure for testing.
 // This helper reduces code duplication in component folder change tests.
 func buildTerraformStackData(stackName, componentName string, componentConfig map[string]any) map[string]any {
@@ -408,6 +457,89 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		assert.Equal(t, "component", affected[0].Affected)
 		assert.Contains(t, affected[0].AffectedAll, "component")
 	})
+
+	t.Run("Should detect stack vars changes for component without explicit component field", func(t *testing.T) {
+		// Component with source but different vars between current and remote.
+		currentConfig := map[string]any{
+			"metadata": map[string]any{"enabled": true},
+			"source":   map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+			"vars":     map[string]any{"name": "updated-vpc"},
+		}
+		remoteConfig := map[string]any{
+			"metadata": map[string]any{"enabled": true},
+			"source":   map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+			"vars":     map[string]any{"name": "original-vpc"},
+		}
+		currentStacks := buildTerraformStackData("dev", "vpc-sourced", currentConfig)
+		remoteStacks := buildTerraformStackData("dev", "vpc-sourced", remoteConfig)
+
+		affected, err := findAffected(
+			&currentStacks, &remoteStacks, atmosConfig,
+			[]string{}, // No file changes, only stack config changes.
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc-sourced", affected[0].Component)
+		assert.Equal(t, "stack.vars", affected[0].Affected)
+	})
+
+	t.Run("Should detect both component file and stack vars changes", func(t *testing.T) {
+		// Component with both file changes and vars changes.
+		currentConfig := map[string]any{
+			"component": "vpc",
+			"metadata":  map[string]any{"enabled": true},
+			"vars":      map[string]any{"name": "updated-vpc"},
+		}
+		remoteConfig := map[string]any{
+			"component": "vpc",
+			"metadata":  map[string]any{"enabled": true},
+			"vars":      map[string]any{"name": "original-vpc"},
+		}
+		currentStacks := buildTerraformStackData("dev", "vpc", currentConfig)
+		remoteStacks := buildTerraformStackData("dev", "vpc", remoteConfig)
+
+		affected, err := findAffected(
+			&currentStacks, &remoteStacks, atmosConfig,
+			[]string{filepath.Join(tempDir, "components", "terraform", "vpc", "main.tf")},
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc", affected[0].Component)
+		// Should have both reasons in AffectedAll.
+		assert.Contains(t, affected[0].AffectedAll, "component")
+		assert.Contains(t, affected[0].AffectedAll, "stack.vars")
+	})
+
+	t.Run("Should detect metadata changes for component without explicit component field", func(t *testing.T) {
+		// Component with source but different metadata between current and remote.
+		currentConfig := map[string]any{
+			"metadata": map[string]any{"enabled": true, "custom_field": "new_value"},
+			"source":   map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+			"vars":     map[string]any{"name": "vpc"},
+		}
+		remoteConfig := map[string]any{
+			"metadata": map[string]any{"enabled": true, "custom_field": "old_value"},
+			"source":   map[string]any{"uri": "github.com/example/vpc", "version": "1.0.0"},
+			"vars":     map[string]any{"name": "vpc"},
+		}
+		currentStacks := buildTerraformStackData("dev", "vpc-meta", currentConfig)
+		remoteStacks := buildTerraformStackData("dev", "vpc-meta", remoteConfig)
+
+		affected, err := findAffected(
+			&currentStacks, &remoteStacks, atmosConfig,
+			[]string{},
+			false, false, "", false, "",
+		)
+
+		assert.NoError(t, err)
+		require.Len(t, affected, 1)
+		assert.Equal(t, "vpc-meta", affected[0].Component)
+		assert.Equal(t, "stack.metadata", affected[0].Affected)
+	})
 }
 
 // buildComponentStackData creates stack data structure for any component type.
@@ -471,6 +603,34 @@ func TestFindAffectedHelmfileAndPackerComponents(t *testing.T) {
 			hasExplicitField:  false,
 			expectedComponent: "ami-sourced",
 		},
+		// Test cases for components with source AND provision.workdir (from source-provisioner-workdir fixture).
+		{
+			name:              "Terraform with source and workdir",
+			componentType:     "terraform",
+			basePath:          "components/terraform",
+			componentName:     "vpc-remote-workdir",
+			changedFile:       "main.tf",
+			hasExplicitField:  false,
+			expectedComponent: "vpc-remote-workdir",
+		},
+		{
+			name:              "Helmfile with source and workdir",
+			componentType:     "helmfile",
+			basePath:          "components/helmfile",
+			componentName:     "nginx-workdir",
+			changedFile:       "helmfile.yaml",
+			hasExplicitField:  false,
+			expectedComponent: "nginx-workdir",
+		},
+		{
+			name:              "Packer with source and workdir",
+			componentType:     "packer",
+			basePath:          "components/packer",
+			componentName:     "ami-workdir",
+			changedFile:       "main.pkr.hcl",
+			hasExplicitField:  false,
+			expectedComponent: "ami-workdir",
+		},
 	}
 
 	for _, tt := range tests {
@@ -480,6 +640,8 @@ func TestFindAffectedHelmfileAndPackerComponents(t *testing.T) {
 			// Build atmosConfig with the appropriate component type.
 			atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 			switch tt.componentType {
+			case "terraform":
+				atmosConfig.Components.Terraform.BasePath = tt.basePath
 			case "helmfile":
 				atmosConfig.Components.Helmfile.BasePath = tt.basePath
 			case "packer":
@@ -494,7 +656,14 @@ func TestFindAffectedHelmfileAndPackerComponents(t *testing.T) {
 			if tt.hasExplicitField {
 				componentConfig["component"] = tt.componentName
 			} else {
+				// Component with source (JIT vendoring) - no explicit component field.
 				componentConfig["source"] = map[string]any{"uri": "github.com/example/test", "version": "1.0.0"}
+				// Also add provision.workdir for workdir test cases.
+				if strings.Contains(tt.componentName, "workdir") {
+					componentConfig["provision"] = map[string]any{
+						"workdir": map[string]any{"enabled": true},
+					}
+				}
 			}
 
 			stacks := buildComponentStackData(tt.componentType, "dev", tt.componentName, componentConfig)

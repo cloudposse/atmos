@@ -124,17 +124,10 @@ func processTerraformComponentsIndexed(
 			}
 		}
 
-		// Determine the component folder path.
-		// Use explicit "component" field if set, otherwise default to the component name.
-		// This ensures components with "source" (vendored) or without explicit "component" field
-		// still have their folder changes detected.
-		component := componentName
-		if comp, ok := componentSection[cfg.ComponentSectionName].(string); ok && comp != "" {
-			component = comp
-		}
+		// Resolve the component folder for path matching.
+		component := GetComponentFolder(&componentSection, componentName)
 
 		// Check component folder and module changes.
-		// Check terraform modules.
 		changed, err := areTerraformComponentModulesChangedIndexed(component, atmosConfig, filesIndex, patternCache)
 		if err != nil {
 			return nil, err
@@ -234,12 +227,8 @@ func processHelmfileComponentsIndexed(
 			}
 		}
 
-		// Determine the component folder path.
-		// Use explicit "component" field if set, otherwise default to the component name.
-		component := componentName
-		if comp, ok := componentSection[cfg.ComponentSectionName].(string); ok && comp != "" {
-			component = comp
-		}
+		// Resolve the component folder for path matching.
+		component := GetComponentFolder(&componentSection, componentName)
 
 		changed, err := isComponentFolderChangedIndexed(component, cfg.HelmfileComponentType, atmosConfig, filesIndex, patternCache)
 		if err != nil {
@@ -326,12 +315,8 @@ func processPackerComponentsIndexed(
 			}
 		}
 
-		// Determine the component folder path.
-		// Use explicit "component" field if set, otherwise default to the component name.
-		component := componentName
-		if comp, ok := componentSection[cfg.ComponentSectionName].(string); ok && comp != "" {
-			component = comp
-		}
+		// Resolve the component folder for path matching.
+		component := GetComponentFolder(&componentSection, componentName)
 
 		changed, err := isComponentFolderChangedIndexed(component, cfg.PackerComponentType, atmosConfig, filesIndex, patternCache)
 		if err != nil {
