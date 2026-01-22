@@ -38,49 +38,55 @@ func TestListAliasesValidatesArgs(t *testing.T) {
 	assert.Error(t, err, "Validation should fail with arguments")
 }
 
-// TestAliasesOptions tests the AliasesOptions structure.
-func TestAliasesOptions(t *testing.T) {
-	opts := &AliasesOptions{}
-	assert.NotNil(t, opts)
-}
-
-// TestAliasInfo tests the AliasInfo structure.
-func TestAliasInfo(t *testing.T) {
-	alias := AliasInfo{
-		Alias:   "tf",
-		Command: "terraform",
-		Type:    aliasTypeBuiltIn,
+// TestGetAliasColumns tests getAliasColumns with various inputs.
+func TestGetAliasColumns(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         []string
+		expectedLen   int
+		expectedNames []string
+	}{
+		{
+			name:          "nil returns all defaults",
+			input:         nil,
+			expectedLen:   3,
+			expectedNames: []string{"Alias", "Command", "Type"},
+		},
+		{
+			name:          "custom column selection",
+			input:         []string{"alias", "command"},
+			expectedLen:   2,
+			expectedNames: []string{"Alias", "Command"},
+		},
+		{
+			name:          "invalid columns fall back to defaults",
+			input:         []string{"invalid", "unknown"},
+			expectedLen:   3,
+			expectedNames: []string{"Alias", "Command", "Type"},
+		},
+		{
+			name:          "case insensitive matching",
+			input:         []string{"ALIAS", "Command", "TYPE"},
+			expectedLen:   3,
+			expectedNames: []string{"Alias", "Command", "Type"},
+		},
+		{
+			name:          "partial valid columns",
+			input:         []string{"alias", "invalid", "type"},
+			expectedLen:   2,
+			expectedNames: []string{"Alias", "Type"},
+		},
 	}
-	assert.Equal(t, "tf", alias.Alias)
-	assert.Equal(t, "terraform", alias.Command)
-	assert.Equal(t, "built-in", alias.Type)
-}
 
-// TestGetAliasColumnsDefault tests getAliasColumns with no custom columns.
-func TestGetAliasColumnsDefault(t *testing.T) {
-	columns := getAliasColumns(nil)
-
-	assert.Len(t, columns, 3)
-	assert.Equal(t, "Alias", columns[0].Name)
-	assert.Equal(t, "Command", columns[1].Name)
-	assert.Equal(t, "Type", columns[2].Name)
-}
-
-// TestGetAliasColumnsCustom tests getAliasColumns with custom column selection.
-func TestGetAliasColumnsCustom(t *testing.T) {
-	columns := getAliasColumns([]string{"alias", "command"})
-
-	assert.Len(t, columns, 2)
-	assert.Equal(t, "Alias", columns[0].Name)
-	assert.Equal(t, "Command", columns[1].Name)
-}
-
-// TestGetAliasColumnsInvalidFallback tests getAliasColumns falls back to default with invalid columns.
-func TestGetAliasColumnsInvalidFallback(t *testing.T) {
-	columns := getAliasColumns([]string{"invalid", "unknown"})
-
-	// Should fall back to defaults when no valid columns found.
-	assert.Len(t, columns, 3)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			columns := getAliasColumns(tt.input)
+			assert.Len(t, columns, tt.expectedLen)
+			for i, expectedName := range tt.expectedNames {
+				assert.Equal(t, expectedName, columns[i].Name)
+			}
+		})
+	}
 }
 
 // TestBuildAliasSortersDefault tests buildAliasSorters with empty spec (default sort).
@@ -171,14 +177,6 @@ func TestAliasesToData(t *testing.T) {
 	assert.Equal(t, "zulu", data[2]["alias"])
 	assert.Equal(t, "last command", data[2]["command"])
 	assert.Equal(t, "configured", data[2]["type"])
-}
-
-// TestAliasesOptionsFormat tests that AliasesOptions includes Format field.
-func TestAliasesOptionsFormat(t *testing.T) {
-	opts := &AliasesOptions{
-		Format: "json",
-	}
-	assert.Equal(t, "json", opts.Format)
 }
 
 // TestAliasesExamples tests that the command examples include format flag usage.
@@ -435,27 +433,6 @@ func TestCollectBuiltInAliasesSkipsHelp(t *testing.T) {
 	}
 }
 
-// TestGetAliasColumnsCaseInsensitive tests getAliasColumns with mixed case column names.
-func TestGetAliasColumnsCaseInsensitive(t *testing.T) {
-	columns := getAliasColumns([]string{"ALIAS", "Command", "TYPE"})
-
-	// Should handle case-insensitive column names.
-	assert.Len(t, columns, 3)
-	assert.Equal(t, "Alias", columns[0].Name)
-	assert.Equal(t, "Command", columns[1].Name)
-	assert.Equal(t, "Type", columns[2].Name)
-}
-
-// TestGetAliasColumnsPartialValid tests getAliasColumns with some valid and some invalid columns.
-func TestGetAliasColumnsPartialValid(t *testing.T) {
-	columns := getAliasColumns([]string{"alias", "invalid", "type"})
-
-	// Should return only valid columns.
-	assert.Len(t, columns, 2)
-	assert.Equal(t, "Alias", columns[0].Name)
-	assert.Equal(t, "Type", columns[1].Name)
-}
-
 // TestBuildAliasSortersInvalidSpec tests buildAliasSorters with an invalid sort spec.
 func TestBuildAliasSortersInvalidSpec(t *testing.T) {
 	_, err := buildAliasSorters("invalid::spec")
@@ -483,16 +460,4 @@ func TestAliasesToDataEmpty(t *testing.T) {
 
 	assert.Len(t, data, 0)
 	assert.NotNil(t, data)
-}
-
-// TestAliasesOptionsAllFields tests AliasesOptions with all fields populated.
-func TestAliasesOptionsAllFields(t *testing.T) {
-	opts := &AliasesOptions{
-		Format:  "yaml",
-		Columns: []string{"alias", "command"},
-		Sort:    "alias:asc",
-	}
-	assert.Equal(t, "yaml", opts.Format)
-	assert.Equal(t, []string{"alias", "command"}, opts.Columns)
-	assert.Equal(t, "alias:asc", opts.Sort)
 }

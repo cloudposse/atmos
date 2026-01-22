@@ -1072,7 +1072,11 @@ func TestFormatValueForTable(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Pass nil config to skip highlighting.
 			result := formatValueForTable(tt.value, nil)
-			assert.Contains(t, result, tt.contains)
+			if tt.contains == "" {
+				assert.Equal(t, "", result)
+			} else {
+				assert.Contains(t, result, tt.contains)
+			}
 		})
 	}
 }

@@ -15,6 +15,13 @@
  * - Versions are sourced from blog post `release:` fields and git tag research
  * - Not all shipped milestones have versions; older features pre-date version tracking
  * - When adding a new shipped milestone, include the version if known
+ *
+ * Demo video metadata:
+ * - The optional `demoId` field references a scene in demos/scenes.yaml
+ * - The DemoVideo component is currently a placeholder (returns null)
+ * - When the demo infrastructure is added, demoIds will render embedded demo videos
+ * - Valid demoIds: auth-shell, devcontainer, list-components, list-stacks, profile,
+ *   terraform-plan, theme, toolchain, workflow-list
  */
 
 export const roadmapConfig = {
@@ -225,7 +232,7 @@ export const roadmapConfig = {
         { label: '`atmos list affected` to identify changes for targeted CI/CD', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/affected', changelog: 'list-affected-command', description: 'Identify which stacks and components are affected by changes, enabling targeted CI/CD pipelines.', category: 'featured', priority: 'high', benefits: 'CI only plans/applies what changed. Large monorepos deploy in minutes instead of hours.', experimental: true },
         { label: 'Customizable list columns for tailored views', status: 'shipped', quarter: 'q4-2025', changelog: 'customizable-list-command-output', version: 'v1.201.0', description: 'Configure which columns appear in list output to show the data relevant to your workflow.', category: 'featured', priority: 'high', benefits: 'Show exactly the information you need—environment, region, component status—without noise.' },
         { label: 'Easy filter output using jq-like queries (`--query`)', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/stacks', description: 'Filter and transform list output with familiar jq-style expressions (powered by JMESPath) for precise data extraction.', codeExample: 'atmos list stacks --query "[?components.terraform.vpc]"', category: 'featured', priority: 'high', benefits: 'Query your infrastructure like a database. Find stacks with specific components or configurations instantly.' },
-        { label: '`atmos list aliases` shows built-in and configured aliases', status: 'shipped', quarter: 'q1-2026', pr: 1954, description: 'List all command aliases including built-in shortcuts (tf→terraform, hf→helmfile) and user-configured aliases from atmos.yaml.', codeExample: 'atmos list aliases --format json', benefits: 'Discover all available shortcuts without reading docs. See both built-in and custom aliases in one place.' },
+        { label: '`atmos list aliases` shows built-in and configured aliases', status: 'shipped', quarter: 'q1-2026', pr: 1954, changelog: 'list-and-toolchain-enhancements', description: 'List all command aliases including built-in shortcuts (tf→terraform, hf→helmfile) and user-configured aliases from atmos.yaml.', codeExample: 'atmos list aliases --format json', benefits: 'Discover all available shortcuts without reading docs. See both built-in and custom aliases in one place.' },
       ],
       issues: [],
       prs: [

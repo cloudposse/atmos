@@ -73,7 +73,11 @@ func TestInstallCommand_CommandStructure(t *testing.T) {
 	})
 
 	t.Run("command accepts multiple arguments", func(t *testing.T) {
-		assert.NotNil(t, installCmd.Args)
+		require.NotNil(t, installCmd.Args)
+		// Verify the command accepts zero, one, or multiple arguments.
+		assert.NoError(t, installCmd.Args(installCmd, []string{}))
+		assert.NoError(t, installCmd.Args(installCmd, []string{"tool1"}))
+		assert.NoError(t, installCmd.Args(installCmd, []string{"tool1", "tool2", "tool3"}))
 	})
 }
 
@@ -123,19 +127,6 @@ func TestInstallCommand_ViperIntegration(t *testing.T) {
 			assert.Equal(t, tt.defaultVersion, v.GetBool("default"))
 		})
 	}
-}
-
-// TestInstallCommand_EnvVars tests that environment variables are configured.
-func TestInstallCommand_EnvVars(t *testing.T) {
-	t.Run("reinstall env var is configured", func(t *testing.T) {
-		// The parser is configured with WithEnvVars("reinstall", "ATMOS_TOOLCHAIN_REINSTALL").
-		require.NotNil(t, installParser)
-	})
-
-	t.Run("default env var is configured", func(t *testing.T) {
-		// The parser is configured with WithEnvVars("default", "ATMOS_TOOLCHAIN_DEFAULT").
-		require.NotNil(t, installParser)
-	})
 }
 
 // TestInstallCommand_FlagDefaults tests default flag values.
