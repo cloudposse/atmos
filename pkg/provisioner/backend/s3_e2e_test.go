@@ -50,7 +50,7 @@ func TestE2E_CreateS3Backend_WithMockAWSProvider(t *testing.T) {
 
 	// Create mock-aws identity.
 	identity := mockaws.NewIdentity("e2e-test-identity", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "mock-provider"},
 	})
 
@@ -110,7 +110,7 @@ func TestE2E_DeleteS3Backend_WithMockAWSProvider(t *testing.T) {
 
 	// Create mock-aws identity.
 	identity := mockaws.NewIdentity("e2e-delete-identity", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "mock-provider"},
 	})
 
@@ -209,7 +209,7 @@ func TestE2E_AuthContext_EnvVarsPopulated(t *testing.T) {
 
 	// Create mock-aws identity.
 	identity := mockaws.NewIdentity("env-test-identity", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "mock-provider"},
 	})
 
@@ -264,11 +264,11 @@ func TestE2E_MultipleIdentities_IsolatedCredentials(t *testing.T) {
 
 	// Create two mock-aws identities.
 	identity1 := mockaws.NewIdentity("identity-1", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "provider-1"},
 	})
 	identity2 := mockaws.NewIdentity("identity-2", &schema.Identity{
-		Kind: "mock-aws",
+		Kind: "mock/aws",
 		Via:  &schema.IdentityVia{Provider: "provider-2"},
 	})
 

@@ -1,8 +1,10 @@
+//nolint:revive // File length justified: describe_stacks is core stack processing with complex logic.
 package exec
 
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-viper/mapstructure/v2"
@@ -18,6 +20,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// componentInfoKey is the key used for component info in stack sections.
+const componentInfoKey = "component_info"
 
 // logFieldStack is the log field key for stack names.
 const logFieldStack = "stack"
@@ -436,6 +441,11 @@ func ExecuteDescribeStacks(
 							componentSection["workspace"] = workspace
 							configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+							// Add componentInfoKey with component_path.
+							componentInfo := buildComponentInfo(atmosConfig, componentSection, cfg.TerraformSectionName)
+							componentSection[componentInfoKey] = componentInfo
+							configAndStacksInfo.ComponentSection[componentInfoKey] = componentInfo
+
 							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -680,6 +690,11 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
+							// Add componentInfoKey with component_path.
+							componentInfo := buildComponentInfo(atmosConfig, componentSection, cfg.HelmfileSectionName)
+							componentSection[componentInfoKey] = componentInfo
+							configAndStacksInfo.ComponentSection[componentInfoKey] = componentInfo
+
 							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -909,6 +924,11 @@ func ExecuteDescribeStacks(
 							componentSection["atmos_stack_file"] = stackFileName
 							componentSection["atmos_manifest"] = stackFileName
 
+							// Add componentInfoKey with component_path.
+							componentInfo := buildComponentInfo(atmosConfig, componentSection, cfg.PackerSectionName)
+							componentSection[componentInfoKey] = componentInfo
+							configAndStacksInfo.ComponentSection[componentInfoKey] = componentInfo
+
 							// Process `Go` templates.
 							if processTemplates {
 								componentSectionStr, err := u.ConvertToYAML(componentSection)
@@ -1033,4 +1053,70 @@ func ExecuteDescribeStacks(
 	}
 
 	return finalStacksMap, nil
+}
+
+// getComponentBasePath returns the base path for a component kind from atmos config.
+func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind string) string {
+	switch componentKind {
+	case cfg.TerraformSectionName:
+		return atmosConfig.Components.Terraform.BasePath
+	case cfg.HelmfileSectionName:
+		return atmosConfig.Components.Helmfile.BasePath
+	case cfg.PackerSectionName:
+		return atmosConfig.Components.Packer.BasePath
+	default:
+		return ""
+	}
+}
+
+// buildComponentInfo constructs the component_info map with component_path for a component.
+// It uses the base component name from componentSection[cfg.ComponentSectionName] to resolve the path,
+// which handles both base components and derived components correctly.
+// The component_path is returned as a relative path from the project root using forward slashes.
+func buildComponentInfo(atmosConfig *schema.AtmosConfiguration, componentSection map[string]any, componentKind string) map[string]any {
+	defer perf.Track(atmosConfig, "exec.buildComponentInfo")()
+
+	componentInfo := map[string]any{
+		"component_type": componentKind,
+	}
+
+	// Get the actual component name to use for path resolution.
+	// For derived components, this is the base component from componentSection[cfg.ComponentSectionName].
+	// For base components, this is just the component name itself.
+	finalComponent := ""
+	if comp, ok := componentSection[cfg.ComponentSectionName].(string); ok && comp != "" {
+		finalComponent = comp
+	}
+
+	if finalComponent == "" {
+		return componentInfo
+	}
+
+	// Get the component folder prefix if it exists in metadata.
+	componentFolderPrefix := ""
+	if metadata, ok := componentSection[cfg.MetadataSectionName].(map[string]any); ok {
+		if prefix, ok := metadata["component_folder_prefix"].(string); ok {
+			componentFolderPrefix = strings.TrimSpace(prefix)
+		}
+	}
+
+	// Build the relative component path directly from config.
+	// This avoids returning absolute paths which are environment-specific.
+	basePath := getComponentBasePath(atmosConfig, componentKind)
+	if basePath == "" {
+		return componentInfo
+	}
+
+	// Build path parts, filtering empty strings.
+	parts := []string{basePath}
+	if componentFolderPrefix != "" {
+		parts = append(parts, componentFolderPrefix)
+	}
+	parts = append(parts, finalComponent)
+
+	// Join parts and normalize to forward slashes for consistent cross-platform output.
+	relativePath := filepath.ToSlash(filepath.Clean(filepath.Join(parts...)))
+	componentInfo[cfg.ComponentPathSectionName] = relativePath
+
+	return componentInfo
 }
