@@ -7,7 +7,8 @@ This document describes two user-reported issues on Windows:
 1. **Issue #1**: Auto-import of `.atmos.d` directory not working on Windows
 2. **Issue #2**: Toolchain installation failures and PATH/config issues on Windows
 
-Both issues appear to be related to Windows-specific path handling (case sensitivity, path separators, PATH environment variable format).
+Both issues appear to be related to Windows-specific path handling (case sensitivity, path separators, PATH environment
+variable format).
 
 ---
 
@@ -15,11 +16,13 @@ Both issues appear to be related to Windows-specific path handling (case sensiti
 
 ### Problem Description
 
-Users report that configurations placed in the `.atmos.d/` directory are not being loaded on Windows, even though the directory exists and contains valid YAML configuration files.
+Users report that configurations placed in the `.atmos.d/` directory are not being loaded on Windows, even though the
+directory exists and contains valid YAML configuration files.
 
 ### Expected Behavior
 
-The `.atmos.d/` directory (and `atmos.d/`) should be automatically discovered and its contents merged into the Atmos configuration, regardless of the operating system.
+The `.atmos.d/` directory (and `atmos.d/`) should be automatically discovered and its contents merged into the Atmos
+configuration, regardless of the operating system.
 
 ### Symptoms
 
@@ -31,13 +34,15 @@ The `.atmos.d/` directory (and `atmos.d/`) should be automatically discovered an
 
 Based on code review, the most likely cause is:
 
-**Silent error handling**: Errors during `.atmos.d` loading are logged at `Trace` level and silently swallowed, making it impossible for users to diagnose why configs aren't being loaded.
+**Silent error handling**: Errors during `.atmos.d` loading are logged at `Trace` level and silently swallowed, making
+it impossible for users to diagnose why configs aren't being loaded.
 
 The code in `loadAtmosDFromDirectory()` catches all errors and only logs them at Trace level:
+
 ```go
 if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-    log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
-    // Don't return error - just log and continue.
+log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
+// Don't return error - just log and continue.
 }
 ```
 
@@ -51,28 +56,30 @@ Additional potential causes include:
 
 ```go
 func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
-    // Search for `atmos.d/` configurations.
-    searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-    if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-        log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
-    }
+// Search for `atmos.d/` configurations.
+searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
+if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
+log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
+}
 
-    // Search for `.atmos.d` configurations.
-    searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-    // ...
+// Search for `.atmos.d` configurations.
+searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
+// ...
 }
 ```
 
-The glob pattern `**/*` may not work correctly on Windows if the underlying glob library does not handle Windows path separators properly. The pattern uses forward slashes (`**/*`) but Windows paths use backslashes (`\`).
+The glob pattern `**/*` may not work correctly on Windows if the underlying glob library does not handle Windows path
+separators properly. The pattern uses forward slashes (`**/*`) but Windows paths use backslashes (`\`).
 
 #### 2. Case-Insensitive Path Matching
 
-Windows file systems (NTFS) are case-insensitive by default. The code at `pkg/config/load.go:1020-1023` handles case-insensitivity for exclusion paths:
+Windows file systems (NTFS) are case-insensitive by default. The code at `pkg/config/load.go:1020-1023` handles
+case-insensitivity for exclusion paths:
 
 ```go
 // Use case-insensitive comparison on Windows where paths may differ only in casing.
 if runtime.GOOS == "windows" {
-    // Case-insensitive comparison logic
+// Case-insensitive comparison logic
 }
 ```
 
@@ -82,7 +89,8 @@ However, this may not be consistently applied throughout the `.atmos.d` loading 
 
 **File**: `pkg/config/git_root.go:85-104`
 
-The `hasLocalAtmosConfig()` function checks for `.atmos.d/` using `os.Stat()`, which should work on Windows. However, if the git root discovery fails silently, `.atmos.d` at the repo root won't be discovered.
+The `hasLocalAtmosConfig()` function checks for `.atmos.d/` using `os.Stat()`, which should work on Windows. However, if
+the git root discovery fails silently, `.atmos.d` at the repo root won't be discovered.
 
 ### Affected Files
 
@@ -136,6 +144,7 @@ $env:ATMOS_LOGS_LEVEL = "Debug"
 ```
 
 **Fixture Structure** (`tests/fixtures/scenarios/atmos-configuration`):
+
 ```
 atmos-configuration/
 ├── atmos.yaml           # Main config with base_path: "./"
@@ -230,11 +239,13 @@ Users report multiple toolchain-related issues on Windows:
 **Files**: `toolchain/install.go:356`, `toolchain/install_helpers.go:130,139`
 
 The hint message after installation always shows Unix/bash syntax, even on Windows:
+
 ```go
 ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
 ```
 
 Windows/PowerShell users should see:
+
 ```
 Invoke-Expression (atmos --chdir /path/to/project toolchain env --format powershell)
 ```
@@ -249,12 +260,13 @@ The `getCurrentPath()` and `constructFinalPath()` functions use `os.PathListSepa
 
 ```go
 func constructFinalPath(pathEntries []string, currentPath string) string {
-    return strings.Join(pathEntries, string(os.PathListSeparator)) +
-           string(os.PathListSeparator) + currentPath
+return strings.Join(pathEntries, string(os.PathListSeparator)) +
+string(os.PathListSeparator) + currentPath
 }
 ```
 
-This should correctly use `;` on Windows. However, the issue may be in how the path is quoted or escaped in PowerShell output.
+This should correctly use `;` on Windows. However, the issue may be in how the path is quoted or escaped in PowerShell
+output.
 
 #### 2. PowerShell Output Format
 
@@ -262,13 +274,14 @@ This should correctly use `;` on Windows. However, the issue may be in how the p
 
 ```go
 func formatPowershellContent(finalPath string) string {
-    safe := strings.ReplaceAll(finalPath, "\"", "`\"")
-    safe = strings.ReplaceAll(safe, "$", "`$")
-    return fmt.Sprintf("$env:PATH = \"%s\"\n", safe)
+safe := strings.ReplaceAll(finalPath, "\"", "`\"")
+safe = strings.ReplaceAll(safe, "$", "`$")
+return fmt.Sprintf("$env:PATH = \"%s\"\n", safe)
 }
 ```
 
 This may not handle all Windows path edge cases:
+
 - Paths with spaces (e.g., `C:\Program Files\...`)
 - UNC paths (e.g., `\\server\share`)
 - Very long paths (Windows MAX_PATH limit)
@@ -281,22 +294,24 @@ The `GetInstallPath()` function uses XDG directories:
 
 ```go
 func GetInstallPath() string {
-    // If explicitly configured, use that path
-    if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
-        return atmosConfig.Toolchain.InstallPath
-    }
+// If explicitly configured, use that path
+if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
+return atmosConfig.Toolchain.InstallPath
+}
 
-    // Try to use XDG-compliant data directory
-    dataDir, err := xdg.GetXDGDataDir("toolchain", defaultDirPermissions)
-    // ...
+// Try to use XDG-compliant data directory
+dataDir, err := xdg.GetXDGDataDir("toolchain", defaultDirPermissions)
+// ...
 }
 ```
 
-On Windows, `xdg.GetXDGDataDir()` may return a path in `%LOCALAPPDATA%` or `%APPDATA%` which could have permission or path format issues.
+On Windows, `xdg.GetXDGDataDir()` may return a path in `%LOCALAPPDATA%` or `%APPDATA%` which could have permission or
+path format issues.
 
 #### 4. Binary Extraction and Permissions
 
-Windows doesn't have Unix-style executable permissions. The toolchain installer needs to handle Windows `.exe` extensions and may need to handle Windows Defender/SmartScreen issues.
+Windows doesn't have Unix-style executable permissions. The toolchain installer needs to handle Windows `.exe`
+extensions and may need to handle Windows Defender/SmartScreen issues.
 
 ### Affected Files
 
@@ -366,6 +381,7 @@ terraform --version
 ```
 
 **Fixture Structure** (`tests/fixtures/scenarios/toolchain-terraform-integration`):
+
 ```
 toolchain-terraform-integration/
 ├── .tool-versions       # k9s 0.32.7, kubectl 1.28.0, terraform 1.9.8
@@ -509,6 +525,7 @@ Get-ChildItem Env: | Where-Object { $_.Name -like "ATMOS*" }
 ### Fix 1: Platform-Aware PATH Hint Message
 
 **Files Modified**:
+
 - `toolchain/install_helpers.go` - Added `getPlatformPathHint()` function and updated hint calls
 - `toolchain/install.go` - Updated `printSuccessSummary()` to use platform-aware hint
 
@@ -524,11 +541,13 @@ The hint message after `atmos toolchain install` now shows platform-appropriate 
 
 **Change**:
 The `loadAtmosDFromDirectory()` function now:
+
 1. Explicitly checks if `atmos.d/` or `.atmos.d/` directories exist before searching
 2. Logs at **Debug** level when directories are found (previously only logged errors at Trace level)
 3. Users can now see `.atmos.d` discovery by setting `ATMOS_LOGS_LEVEL=Debug` instead of requiring Trace
 
 **Debug output example**:
+
 ```
 DEBUG Found .atmos.d directory, loading configurations path=C:\Users\user\project\.atmos.d
 ```
@@ -544,15 +563,15 @@ DEBUG Found .atmos.d directory, loading configurations path=C:\Users\user\projec
 
 ## Related Code Locations
 
-| Component | File | Key Functions |
-|-----------|------|---------------|
-| .atmos.d loading | `pkg/config/load.go` | `loadAtmosDFromDirectory()`, `mergeDefaultImports()` |
-| Git root discovery | `pkg/config/git_root.go` | `hasLocalAtmosConfig()`, `applyGitRootBasePath()` |
-| Toolchain install | `toolchain/install.go` | `InstallSingleTool()`, `RunInstall()` |
-| PATH helpers | `toolchain/path_helpers.go` | `buildPathEntries()`, `constructFinalPath()` |
-| Env output | `toolchain/env.go` | `EmitEnv()`, `formatPowershellContent()` |
-| XDG directories | `pkg/xdg/xdg.go` | `GetXDGDataDir()` |
-| Windows tests | `pkg/config/load_windows_test.go` | Existing Windows path tests |
+| Component          | File                              | Key Functions                                        |
+|--------------------|-----------------------------------|------------------------------------------------------|
+| .atmos.d loading   | `pkg/config/load.go`              | `loadAtmosDFromDirectory()`, `mergeDefaultImports()` |
+| Git root discovery | `pkg/config/git_root.go`          | `hasLocalAtmosConfig()`, `applyGitRootBasePath()`    |
+| Toolchain install  | `toolchain/install.go`            | `InstallSingleTool()`, `RunInstall()`                |
+| PATH helpers       | `toolchain/path_helpers.go`       | `buildPathEntries()`, `constructFinalPath()`         |
+| Env output         | `toolchain/env.go`                | `EmitEnv()`, `formatPowershellContent()`             |
+| XDG directories    | `pkg/xdg/xdg.go`                  | `GetXDGDataDir()`                                    |
+| Windows tests      | `pkg/config/load_windows_test.go` | Existing Windows path tests                          |
 
 ## Success Criteria
 
