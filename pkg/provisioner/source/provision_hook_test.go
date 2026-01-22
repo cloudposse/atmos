@@ -323,7 +323,8 @@ func TestNeedsProvisioning(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			path := tt.setup(t)
-			result, reason := needsProvisioning(path, tt.sourceSpec)
+			// Test with isWorkdir=true since these tests verify metadata behavior.
+			result, reason := needsProvisioning(path, tt.sourceSpec, true)
 			assert.Equal(t, tt.expected, result)
 			assert.Equal(t, tt.expectedReason, reason)
 		})

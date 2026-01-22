@@ -84,7 +84,7 @@ func AutoProvisionSource(
 	}
 
 	// Check if provisioning is needed (version change, URI change, or fresh workdir).
-	needs, reason := needsProvisioning(targetDir, sourceSpec)
+	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
 	if !needs {
 		// No provisioning needed - touch LastAccessed and return.
 		if isWorkdir {
@@ -238,16 +238,21 @@ func isWorkdirEnabled(componentConfig map[string]any) bool {
 
 // needsProvisioning checks if the target directory needs provisioning.
 // Returns (true, reason) if:
-//   - Directory doesn't exist or is empty
-//   - Version has changed from what's in metadata
-//   - URI has changed from what's in metadata
-//   - No metadata exists (fresh workdir)
+//   - Directory doesn't exist or is empty.
+//   - Version has changed from what's in metadata.
+//   - URI has changed from what's in metadata.
+//   - No metadata exists (fresh workdir).
 //
 // Returns (false, "") if the existing workdir is up-to-date.
-func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource) (bool, string) {
+func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource, isWorkdir bool) (bool, string) {
 	// Check if directory exists and has content.
 	if !isNonEmptyDir(targetDir) {
 		return true, ""
+	}
+
+	// For non-workdir targets, existence is sufficient - no metadata tracking.
+	if !isWorkdir {
+		return false, ""
 	}
 
 	// Directory exists and has content - check metadata for version/URI changes.
@@ -260,7 +265,8 @@ func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSourc
 	return checkMetadataChanges(metadata, sourceSpec)
 }
 
-// isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry.
+// isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry
+// (excluding the .atmos metadata directory).
 func isNonEmptyDir(path string) bool {
 	info, err := os.Stat(path)
 	if err != nil || !info.IsDir() {
@@ -268,14 +274,33 @@ func isNonEmptyDir(path string) bool {
 	}
 
 	entries, err := os.ReadDir(path)
-	return err == nil && len(entries) > 0
+	if err != nil {
+		return false
+	}
+
+	// Count entries excluding .atmos metadata directory.
+	for _, entry := range entries {
+		if entry.Name() != workdir.AtmosDir {
+			return true
+		}
+	}
+	return false
 }
 
 // checkMetadataChanges compares metadata with source spec for version/URI changes.
 // Returns (true, reason) if changes detected, (false, "") if up-to-date.
 func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.VendorComponentSource) (bool, string) {
-	if sourceSpec.Version != "" && sourceSpec.Version != metadata.SourceVersion {
-		return true, fmt.Sprintf("Source version changed (%s → %s)", metadata.SourceVersion, sourceSpec.Version)
+	// Check for version changes (including version removal).
+	if sourceSpec.Version != metadata.SourceVersion {
+		oldVer := metadata.SourceVersion
+		newVer := sourceSpec.Version
+		if oldVer == "" {
+			oldVer = "(none)"
+		}
+		if newVer == "" {
+			newVer = "(none)"
+		}
+		return true, fmt.Sprintf("Source version changed (%s → %s)", oldVer, newVer)
 	}
 
 	if sourceSpec.Uri != metadata.SourceURI {

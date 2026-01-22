@@ -89,6 +89,7 @@ func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error
 
 // syncSourceToDest copies new/changed files from src to dst.
 // Returns a map of relative paths for deletion detection, and whether any changes were made.
+// Skips the .atmos/ directory which contains Atmos metadata.
 func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, error) {
 	srcFiles := make(map[string]bool)
 	anyChanged := false
@@ -102,6 +103,12 @@ func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, er
 		if err != nil {
 			return err
 		}
+
+		// Skip .atmos/ directory entirely (contains Atmos metadata).
+		if d.IsDir() && relPath == AtmosDir {
+			return filepath.SkipDir
+		}
+
 		dstPath := filepath.Join(dst, relPath)
 
 		if d.IsDir() {

@@ -126,6 +126,10 @@ func parseWithSuffix(s string) (int64, error) {
 	return valInt * multiplier, nil
 }
 
+// maxDurationSeconds is the maximum seconds value that won't overflow time.Duration.
+// time.Duration is int64 nanoseconds, so max is ~292 years in seconds.
+const maxDurationSeconds = int64(^uint64(0)>>1) / int64(time.Second)
+
 // ParseDuration parses a duration string and returns a time.Duration.
 //
 // This is a convenience wrapper around Parse that converts the result
@@ -143,5 +147,15 @@ func ParseDuration(s string) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
+
+	// Guard against time.Duration overflow.
+	if seconds > maxDurationSeconds {
+		return 0, errUtils.Build(errUtils.ErrInvalidDuration).
+			WithExplanation("Duration value too large").
+			WithContext("seconds", seconds).
+			WithHint("Maximum supported duration is approximately 292 years").
+			Err()
+	}
+
 	return time.Duration(seconds) * time.Second, nil
 }
