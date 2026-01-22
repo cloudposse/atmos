@@ -1,0 +1,86 @@
+---
+slug: describe-affected-source-vendoring
+title: 'Fixed: Describe Affected Now Detects Vendored Component Changes'
+authors:
+  - aknysh
+tags:
+  - bugfix
+date: 2026-01-21T00:00:00.000Z
+---
+
+Atmos now correctly detects file changes in components that use the `source` attribute for [just-in-time vendoring](https://atmos.tools/cli/commands/terraform/source/). Previously, components vendored from remote sources were not properly tracked for affected detection.
+
+<!--truncate-->
+
+## The Problem
+
+When using [Atmos vendoring](https://atmos.tools/vendor/) with the `source` attribute to pull components from remote repositories, the `atmos describe affected` command was not detecting changes to those component files. This occurred because the affected detection logic required an explicit `component` field to determine which folder to monitor for changes.
+
+Components configured like this were not being tracked:
+
+```yaml
+components:
+  terraform:
+    vpc-remote:
+      source:
+        uri: "github.com/cloudposse/terraform-aws-vpc//."
+        version: "4.0.0"
+      vars:
+        enabled: true
+```
+
+## The Fix
+
+The affected detection now defaults to using the component name (the YAML key, e.g., `vpc-remote`) as the component folder path when no explicit `component` field is specified. This ensures that:
+
+- Components using [`source`](https://atmos.tools/vendor/config/sources/) for vendoring are properly tracked
+- Components without explicit `component` field inheritance are detected
+- All component types (Terraform, Helmfile, Packer) benefit from this fix
+
+## What About Workdir?
+
+If you use [`provision.workdir`](/cli/commands/terraform/workdir) with your vendored components, the detection still works correctly. The `describe affected` command tracks changes in the **source** files (`components/terraform/<component>/`), not the runtime workdir (`.workdir/`). Since `.workdir/` is in `.gitignore` and created at runtime, it doesn't affect change detection.
+
+## Example
+
+Now when you modify vendored component files, `atmos describe affected` correctly identifies them:
+
+```yaml
+# Stack configuration with source vendoring
+components:
+  terraform:
+    vpc-production:
+      source:
+        uri: "github.com/cloudposse/terraform-aws-vpc//."
+        version: "4.0.0"
+        included_paths:
+          - "**/*.tf"
+      vars:
+        environment: "production"
+```
+
+After running [`atmos vendor pull`](https://atmos.tools/cli/commands/vendor/pull/) and making changes:
+
+```bash
+# Modify a vendored component file
+echo "# update" >> components/terraform/vpc-production/main.tf
+
+# Run describe affected
+atmos describe affected --ref refs/heads/main
+
+# Output now includes the vpc-production component
+[
+  {
+    "component": "vpc-production",
+    "stack": "prod-us-east-1",
+    "affected": "component"
+  }
+]
+```
+
+## Related Documentation
+
+- [Vendoring Overview](https://atmos.tools/vendor/) - Learn about Atmos vendoring capabilities
+- [Source Configuration](https://atmos.tools/vendor/config/sources/) - Configure source URIs and protocols
+- [Just-in-Time Vendoring](https://atmos.tools/cli/commands/terraform/source/) - Inline source declarations
+- [Vendor Pull Command](https://atmos.tools/cli/commands/vendor/pull/) - Download vendored components
