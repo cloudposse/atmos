@@ -1033,6 +1033,59 @@ func TestProcessStacks_ExplicitNameWorksWhenPatternVarsMissing(t *testing.T) {
 	assert.Equal(t, "vpc", result.ComponentFromArg)
 }
 
+// TestDescribeStacks_PatternValidationFallsBackToFilename verifies that when name_pattern
+// validation fails (missing required vars), ExecuteDescribeStacks falls back to using
+// the filename as the stack name instead of returning an error.
+//
+// Scenario:
+// - name_pattern: "{tenant}-{environment}-{stage}" (requires tenant)
+// - Stack "no-explicit-name.yaml" has NO tenant var and NO explicit name
+// - Expected: Stack is processed using "no-explicit-name" as its name (fallback to filename).
+func TestDescribeStacks_PatternValidationFallsBackToFilename(t *testing.T) {
+	// Change to the test fixture with pattern requiring vars the stack doesn't have.
+	testDir := "../../tests/fixtures/scenarios/stack-name-pattern-missing-vars"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Initialize the CLI config.
+	configAndStacksInfo := schema.ConfigAndStacksInfo{}
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	require.NoError(t, err)
+
+	// Verify fixture is configured correctly.
+	require.NotEmpty(t, atmosConfig.Stacks.NamePattern, "name_pattern should be configured")
+	require.Contains(t, atmosConfig.Stacks.NamePattern, "{tenant}", "pattern should require tenant")
+
+	// Call ExecuteDescribeStacks - this exercises the fallback path in describe_stacks.go
+	// when pattern validation fails for a stack without explicit name.
+	result, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",         // filterByStack
+		[]string{}, // components
+		[]string{}, // componentTypes
+		[]string{}, // sections
+		false,      // ignoreMissingFiles
+		false,      // processTemplates
+		false,      // processYamlFunctions
+		false,      // includeEmptyStacks
+		[]string{}, // skip
+		nil,        // authManager
+	)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// The stack "no-explicit-name.yaml" should be processed using its filename as the stack name
+	// because pattern validation fails (missing tenant var).
+	_, hasFilenameStack := result["no-explicit-name"]
+	assert.True(t, hasFilenameStack, "Stack without explicit name should fall back to filename when pattern validation fails")
+
+	// The stack with explicit name should still work.
+	_, hasExplicitStack := result["my-explicit-stack"]
+	assert.True(t, hasExplicitStack, "Stack with explicit name should still be processed")
+}
+
 // TestDescribeStacks_IncludeEmptyStacks verifies that includeEmptyStacks parameter works.
 func TestDescribeStacks_IncludeEmptyStacks(t *testing.T) {
 	// Change to the test fixture directory.

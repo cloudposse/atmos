@@ -345,7 +345,9 @@ func processStackContextPrefix(
 ) error {
 	// If stack has explicit name, skip template/pattern processing.
 	// The explicit name takes precedence over any generated name.
+	// Still populate Context from vars to avoid stale values from previous iterations.
 	if stackManifestName != "" {
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
 		configAndStacksInfo.ContextPrefix = stackManifestName
 		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
 		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
