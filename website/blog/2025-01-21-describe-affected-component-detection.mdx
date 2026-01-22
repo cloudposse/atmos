@@ -9,7 +9,7 @@ date: 2025-01-21T00:00:00.000Z
 ---
 
 Atmos now correctly detects component file changes when running `atmos describe affected`.
-A regression in previous Atmos releases caused changes to Terraform, Helmfile, or Packer component files to not be detected in certain scenarios.
+A regression introduced in v1.195.0 caused changes to Terraform, Helmfile, or Packer component files to not be detected when `atmos.yaml` was located in a subdirectory of the git repository (e.g., when using `atmos -C path/to/project`).
 
 <!--truncate-->
 
@@ -17,7 +17,11 @@ A regression in previous Atmos releases caused changes to Terraform, Helmfile, o
 
 When using `atmos describe affected` to identify components impacted by code changes, the command was only detecting stack configuration changes but missing actual component file changes. For example, modifying a `main.tf` file inside a Terraform component folder would not mark that component as affected.
 
-This issue occurred because git diff returns file paths relative to the git repository root, while the path resolution was using the current working directory. When Atmos was run from a subdirectory (e.g., using `atmos -C examples/demo-stacks`), these paths would not match, causing component changes to go undetected.
+This issue occurred because git diff returns file paths relative to the git repository root, while the path resolution was using the current working directory. This caused path mismatches in the following scenarios:
+
+- **Using `-C` flag**: Running `atmos -C path/to/project describe affected` from a parent directory
+- **Subdirectory projects**: When `atmos.yaml` is located in a subdirectory of the git repository
+- **Monorepo setups**: When multiple Atmos projects share a single git repository
 
 ## The Fix
 
