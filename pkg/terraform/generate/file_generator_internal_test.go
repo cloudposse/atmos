@@ -1,8 +1,11 @@
 package generate
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/hashicorp/hcl/v2/hclwrite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/zclconf/go-cty/cty"
@@ -937,4 +940,259 @@ func TestProcessGenerateFile_InvalidTemplate(t *testing.T) {
 
 	assert.Error(t, result.Error)
 	assert.Contains(t, result.Error.Error(), "failed to render")
+}
+
+// Test relativePath function.
+func TestRelativePath(t *testing.T) {
+	tests := []struct {
+		name    string
+		absPath string
+	}{
+		{
+			name:    "valid path",
+			absPath: "/tmp/test",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := relativePath(tt.absPath)
+			// The result should be non-empty.
+			assert.NotEmpty(t, result)
+		})
+	}
+}
+
+// Test processCleanFile with actual file deletion.
+func TestProcessCleanFile_ActualDeletion(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.txt")
+
+	// Create a test file.
+	require.NoError(t, os.WriteFile(testFile, []byte("content"), 0o644))
+
+	result := GenerateResult{Filename: "test.txt"}
+	processCleanFile(&result, testFile, false)
+
+	assert.True(t, result.Deleted)
+	assert.False(t, result.Skipped)
+	assert.NoError(t, result.Error)
+
+	// Verify file was deleted.
+	_, err := os.Stat(testFile)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// Test processGenerateFile with successful file update.
+func TestProcessGenerateFile_Update(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.txt")
+
+	// Create a test file with old content.
+	require.NoError(t, os.WriteFile(testFile, []byte("old content"), 0o644))
+
+	result := GenerateResult{Filename: "test.txt"}
+	ctx := fileContext{
+		filename:        "test.txt",
+		filePath:        testFile,
+		content:         "new content",
+		templateContext: nil,
+		dryRun:          false,
+	}
+
+	processGenerateFile(&result, ctx)
+
+	assert.False(t, result.Created)
+	assert.False(t, result.Skipped)
+	assert.NoError(t, result.Error)
+
+	// Verify file was updated.
+	content, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	assert.Equal(t, "new content", string(content))
+}
+
+// Test processGenerateFile with unchanged content.
+func TestProcessGenerateFile_Unchanged(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.txt")
+
+	// Create a test file with same content.
+	require.NoError(t, os.WriteFile(testFile, []byte("same content"), 0o644))
+
+	result := GenerateResult{Filename: "test.txt"}
+	ctx := fileContext{
+		filename:        "test.txt",
+		filePath:        testFile,
+		content:         "same content",
+		templateContext: nil,
+		dryRun:          false,
+	}
+
+	processGenerateFile(&result, ctx)
+
+	assert.True(t, result.Skipped)
+	assert.False(t, result.Created)
+	assert.NoError(t, result.Error)
+}
+
+// Test processGenerateFile with new file creation.
+func TestProcessGenerateFile_Create(t *testing.T) {
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "new_file.txt")
+
+	result := GenerateResult{Filename: "new_file.txt"}
+	ctx := fileContext{
+		filename:        "new_file.txt",
+		filePath:        testFile,
+		content:         "new file content",
+		templateContext: nil,
+		dryRun:          false,
+	}
+
+	processGenerateFile(&result, ctx)
+
+	assert.True(t, result.Created)
+	assert.False(t, result.Skipped)
+	assert.NoError(t, result.Error)
+
+	// Verify file was created.
+	content, err := os.ReadFile(testFile)
+	require.NoError(t, err)
+	assert.Equal(t, "new file content", string(content))
+}
+
+// Test writeLabeledBlocks with invalid first label value.
+func TestWriteLabeledBlocks_InvalidFirstLabel(t *testing.T) {
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+
+	// First label value should be a map, but we pass a string.
+	content := map[string]any{
+		"my_var": "not a map",
+	}
+
+	err := writeLabeledBlocks(body, "variable", content, 1)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expects a map")
+}
+
+// Test writeLabeledBlocks with invalid second label value.
+func TestWriteLabeledBlocks_InvalidSecondLabel(t *testing.T) {
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+
+	// For resource/data blocks with 2 labels, the second level should be a map.
+	content := map[string]any{
+		"aws_instance": map[string]any{
+			"web": "not a map", // Should be a map.
+		},
+	}
+
+	err := writeLabeledBlocks(body, "resource", content, 2)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expects a map")
+}
+
+// Test serializeToTFVars with unsupported value type.
+func TestSerializeToTFVars_UnsupportedType(t *testing.T) {
+	content := map[string]any{
+		"bad_value": complex(1, 2), // Unsupported type.
+	}
+
+	_, err := serializeToTFVars(content)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error converting")
+}
+
+// Test writeHCLBlock with non-map value that has unsupported type.
+func TestWriteHCLBlock_UnsupportedType(t *testing.T) {
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+
+	content := map[string]any{
+		"bad_key": complex(1, 2), // Unsupported type.
+	}
+
+	err := writeHCLBlock(body, content)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error converting")
+}
+
+// Test writeHCLBlock with unknown map at top level with unsupported value.
+func TestWriteHCLBlock_UnknownMapUnsupportedValue(t *testing.T) {
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+
+	content := map[string]any{
+		"unknown_map": map[string]any{
+			"nested": complex(1, 2), // Unsupported type.
+		},
+	}
+
+	err := writeHCLBlock(body, content)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error converting")
+}
+
+// Test writeBlockBody with unsupported value type.
+func TestWriteBlockBody_UnsupportedType(t *testing.T) {
+	f := hclwrite.NewEmptyFile()
+	body := f.Body()
+
+	content := map[string]any{
+		"bad_key": complex(1, 2), // Unsupported type.
+	}
+
+	err := writeBlockBody(body, content)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "error converting")
+}
+
+// Test renderMapTemplates with nested map error propagation.
+func TestRenderMapTemplates_NestedError(t *testing.T) {
+	content := map[string]any{
+		"outer": map[string]any{
+			"inner": "{{ .bad", // Invalid template.
+		},
+	}
+
+	_, err := renderMapTemplates(content, nil)
+	require.Error(t, err)
+}
+
+// Test renderMapTemplates with nested array error propagation.
+func TestRenderMapTemplates_ArrayError(t *testing.T) {
+	content := map[string]any{
+		"array": []any{
+			"{{ .bad", // Invalid template.
+		},
+	}
+
+	_, err := renderMapTemplates(content, nil)
+	require.Error(t, err)
+}
+
+// Test renderArrayTemplates with nested map error.
+func TestRenderArrayTemplates_NestedMapError(t *testing.T) {
+	content := []any{
+		map[string]any{
+			"key": "{{ .bad", // Invalid template.
+		},
+	}
+
+	_, err := renderArrayTemplates(content, nil)
+	require.Error(t, err)
+}
+
+// Test renderArrayTemplates with nested array error.
+func TestRenderArrayTemplates_NestedArrayError(t *testing.T) {
+	content := []any{
+		[]any{
+			"{{ .bad", // Invalid template.
+		},
+	}
+
+	_, err := renderArrayTemplates(content, nil)
+	require.Error(t, err)
 }
