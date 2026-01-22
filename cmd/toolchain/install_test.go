@@ -152,3 +152,32 @@ func TestInstallCommand_FlagDefaults(t *testing.T) {
 		assert.Equal(t, "false", flag.DefValue)
 	})
 }
+
+// TestInstallCommandProvider_Interface tests the full interface implementation.
+func TestInstallCommandProvider_Interface(t *testing.T) {
+	provider := &InstallCommandProvider{}
+
+	t.Run("GetName returns install", func(t *testing.T) {
+		assert.Equal(t, "install", provider.GetName())
+	})
+
+	t.Run("GetGroup returns Toolchain Commands", func(t *testing.T) {
+		assert.Equal(t, "Toolchain Commands", provider.GetGroup())
+	})
+
+	t.Run("GetFlagsBuilder returns parser", func(t *testing.T) {
+		fb := provider.GetFlagsBuilder()
+		assert.NotNil(t, fb)
+		assert.Equal(t, installParser, fb)
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		pab := provider.GetPositionalArgsBuilder()
+		assert.Nil(t, pab)
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		cf := provider.GetCompatibilityFlags()
+		assert.Nil(t, cf)
+	})
+}

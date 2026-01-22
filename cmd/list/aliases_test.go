@@ -299,3 +299,200 @@ func TestCollectBuiltInAliasesSkipsHidden(t *testing.T) {
 	assert.False(t, foundHidden, "Should not find hidden command alias")
 	assert.True(t, foundVisible, "Should find visible command alias 'v' → 'visible'")
 }
+
+// TestStripRootPrefix tests the stripRootPrefix function.
+func TestStripRootPrefix(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		rootName string
+		expected string
+	}{
+		{
+			name:     "strips root prefix",
+			path:     "atmos terraform plan",
+			rootName: "atmos",
+			expected: "terraform plan",
+		},
+		{
+			name:     "no prefix to strip",
+			path:     "terraform plan",
+			rootName: "atmos",
+			expected: "terraform plan",
+		},
+		{
+			name:     "empty path",
+			path:     "",
+			rootName: "atmos",
+			expected: "",
+		},
+		{
+			name:     "path equals root name",
+			path:     "atmos",
+			rootName: "atmos",
+			expected: "atmos",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripRootPrefix(tt.path, tt.rootName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestCollectCommandAliases tests the collectCommandAliases function.
+func TestCollectCommandAliases(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	tfCmd := &cobra.Command{Use: "terraform", Aliases: []string{"tf", "terra"}}
+	rootCmd.AddCommand(tfCmd)
+
+	// Test top-level command aliases.
+	aliases := collectCommandAliases(tfCmd, "atmos", "atmos terraform", "atmos")
+
+	// Should have 2 aliases: tf and terra.
+	assert.Len(t, aliases, 2)
+
+	// Verify alias paths (top-level commands just use the alias).
+	foundTf := false
+	foundTerra := false
+	for _, a := range aliases {
+		if a.Alias == "tf" && a.Command == "terraform" && a.Type == aliasTypeBuiltIn {
+			foundTf = true
+		}
+		if a.Alias == "terra" && a.Command == "terraform" && a.Type == aliasTypeBuiltIn {
+			foundTerra = true
+		}
+	}
+	assert.True(t, foundTf, "Should find 'tf' alias")
+	assert.True(t, foundTerra, "Should find 'terra' alias")
+}
+
+// TestCollectCommandAliasesNested tests collectCommandAliases with nested commands.
+func TestCollectCommandAliasesNested(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	tfCmd := &cobra.Command{Use: "terraform"}
+	planCmd := &cobra.Command{Use: "plan", Aliases: []string{"p"}}
+
+	rootCmd.AddCommand(tfCmd)
+	tfCmd.AddCommand(planCmd)
+
+	// Test nested command aliases.
+	aliases := collectCommandAliases(planCmd, "atmos terraform", "atmos terraform plan", "atmos")
+
+	// Should have 1 alias: terraform p -> terraform plan.
+	assert.Len(t, aliases, 1)
+	assert.Equal(t, "terraform p", aliases[0].Alias)
+	assert.Equal(t, "terraform plan", aliases[0].Command)
+}
+
+// TestCollectAllAliasesEmptyConfigured tests collectAllAliases with no configured aliases.
+func TestCollectAllAliasesEmptyConfigured(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	tfCmd := &cobra.Command{Use: "terraform", Aliases: []string{"tf"}}
+	rootCmd.AddCommand(tfCmd)
+
+	emptyConfigured := schema.CommandAliases{}
+
+	allAliases := collectAllAliases(rootCmd, emptyConfigured)
+
+	// Should have only 1 built-in alias.
+	assert.Len(t, allAliases, 1)
+	assert.Equal(t, "tf", allAliases[0].Alias)
+	assert.Equal(t, aliasTypeBuiltIn, allAliases[0].Type)
+}
+
+// TestCollectAllAliasesEmptyBuiltIn tests collectAllAliases with no built-in aliases.
+func TestCollectAllAliasesEmptyBuiltIn(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	tfCmd := &cobra.Command{Use: "terraform"} // No aliases.
+	rootCmd.AddCommand(tfCmd)
+
+	configuredAliases := schema.CommandAliases{
+		"tp": "terraform plan",
+	}
+
+	allAliases := collectAllAliases(rootCmd, configuredAliases)
+
+	// Should have only 1 configured alias.
+	assert.Len(t, allAliases, 1)
+	assert.Equal(t, "tp", allAliases[0].Alias)
+	assert.Equal(t, aliasTypeConfigured, allAliases[0].Type)
+}
+
+// TestCollectBuiltInAliasesSkipsHelp tests that the help command is skipped.
+func TestCollectBuiltInAliasesSkipsHelp(t *testing.T) {
+	rootCmd := &cobra.Command{Use: "atmos"}
+	helpCmd := &cobra.Command{Use: "help", Aliases: []string{"h"}}
+	rootCmd.AddCommand(helpCmd)
+
+	aliases := collectBuiltInAliases(rootCmd, "")
+
+	// Should not find any aliases for the help command.
+	for _, a := range aliases {
+		assert.NotEqual(t, "h", a.Alias, "Should not find alias for help command")
+	}
+}
+
+// TestGetAliasColumnsCaseInsensitive tests getAliasColumns with mixed case column names.
+func TestGetAliasColumnsCaseInsensitive(t *testing.T) {
+	columns := getAliasColumns([]string{"ALIAS", "Command", "TYPE"})
+
+	// Should handle case-insensitive column names.
+	assert.Len(t, columns, 3)
+	assert.Equal(t, "Alias", columns[0].Name)
+	assert.Equal(t, "Command", columns[1].Name)
+	assert.Equal(t, "Type", columns[2].Name)
+}
+
+// TestGetAliasColumnsPartialValid tests getAliasColumns with some valid and some invalid columns.
+func TestGetAliasColumnsPartialValid(t *testing.T) {
+	columns := getAliasColumns([]string{"alias", "invalid", "type"})
+
+	// Should return only valid columns.
+	assert.Len(t, columns, 2)
+	assert.Equal(t, "Alias", columns[0].Name)
+	assert.Equal(t, "Type", columns[1].Name)
+}
+
+// TestBuildAliasSortersInvalidSpec tests buildAliasSorters with an invalid sort spec.
+func TestBuildAliasSortersInvalidSpec(t *testing.T) {
+	_, err := buildAliasSorters("invalid::spec")
+
+	// Should return an error for invalid sort spec.
+	assert.Error(t, err)
+}
+
+// TestBuildAliasFooterEmpty tests buildAliasFooter with empty aliases.
+func TestBuildAliasFooterEmpty(t *testing.T) {
+	aliases := []AliasInfo{}
+
+	footer := buildAliasFooter(aliases)
+
+	assert.Contains(t, footer, "0 aliases")
+	assert.Contains(t, footer, "0 built-in")
+	assert.Contains(t, footer, "0 configured")
+}
+
+// TestAliasesToDataEmpty tests aliasesToData with empty slice.
+func TestAliasesToDataEmpty(t *testing.T) {
+	aliases := []AliasInfo{}
+
+	data := aliasesToData(aliases)
+
+	assert.Len(t, data, 0)
+	assert.NotNil(t, data)
+}
+
+// TestAliasesOptionsAllFields tests AliasesOptions with all fields populated.
+func TestAliasesOptionsAllFields(t *testing.T) {
+	opts := &AliasesOptions{
+		Format:  "yaml",
+		Columns: []string{"alias", "command"},
+		Sort:    "alias:asc",
+	}
+	assert.Equal(t, "yaml", opts.Format)
+	assert.Equal(t, []string{"alias", "command"}, opts.Columns)
+	assert.Equal(t, "alias:asc", opts.Sort)
+}

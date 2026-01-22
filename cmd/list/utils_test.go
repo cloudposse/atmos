@@ -10,8 +10,10 @@ import (
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/global"
 	listerrors "github.com/cloudposse/atmos/pkg/list/errors"
 	f "github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestNewCommonListParser tests the newCommonListParser helper function.
@@ -462,6 +464,94 @@ func TestNewCommonListParser_WithAdditionalFlags(t *testing.T) {
 	assert.NotNil(t, customFlag, "Expected custom flag to be registered")
 	assert.Equal(t, "default", customFlag.DefValue)
 	assert.Equal(t, "c", customFlag.Shorthand)
+}
+
+// TestBuildConfigAndStacksInfo tests the buildConfigAndStacksInfo function.
+func TestBuildConfigAndStacksInfo(t *testing.T) {
+	testCases := []struct {
+		name        string
+		globalFlags *global.Flags
+		expectEmpty bool
+	}{
+		{
+			name:        "nil global flags returns empty struct",
+			globalFlags: nil,
+			expectEmpty: true,
+		},
+		{
+			name: "with base path set",
+			globalFlags: &global.Flags{
+				BasePath: "/custom/path",
+			},
+			expectEmpty: false,
+		},
+		{
+			name: "with config files set",
+			globalFlags: &global.Flags{
+				Config: []string{"config1.yaml", "config2.yaml"},
+			},
+			expectEmpty: false,
+		},
+		{
+			name: "with config path set",
+			globalFlags: &global.Flags{
+				ConfigPath: []string{"/path1", "/path2"},
+			},
+			expectEmpty: false,
+		},
+		{
+			name: "with profile set",
+			globalFlags: &global.Flags{
+				Profile: []string{"dev", "prod"},
+			},
+			expectEmpty: false,
+		},
+		{
+			name: "with all fields set",
+			globalFlags: &global.Flags{
+				BasePath:   "/custom/base",
+				Config:     []string{"main.yaml"},
+				ConfigPath: []string{"/etc/atmos"},
+				Profile:    []string{"staging"},
+			},
+			expectEmpty: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := buildConfigAndStacksInfo(tc.globalFlags)
+
+			if tc.expectEmpty {
+				assert.Empty(t, result.AtmosBasePath)
+				assert.Empty(t, result.AtmosConfigFilesFromArg)
+				assert.Empty(t, result.AtmosConfigDirsFromArg)
+				assert.Empty(t, result.ProfilesFromArg)
+				return
+			}
+
+			// Verify non-empty cases - check each field that was set.
+			verifyBuildConfigResult(t, tc.globalFlags, &result)
+		})
+	}
+}
+
+// verifyBuildConfigResult is a helper to verify buildConfigAndStacksInfo results.
+func verifyBuildConfigResult(t *testing.T, flags *global.Flags, result *schema.ConfigAndStacksInfo) {
+	t.Helper()
+
+	if flags.BasePath != "" {
+		assert.Equal(t, flags.BasePath, result.AtmosBasePath)
+	}
+	if len(flags.Config) > 0 {
+		assert.Equal(t, flags.Config, result.AtmosConfigFilesFromArg)
+	}
+	if len(flags.ConfigPath) > 0 {
+		assert.Equal(t, flags.ConfigPath, result.AtmosConfigDirsFromArg)
+	}
+	if len(flags.Profile) > 0 {
+		assert.Equal(t, flags.Profile, result.ProfilesFromArg)
+	}
 }
 
 // TestHandleNoValuesError tests the handleNoValuesError function.

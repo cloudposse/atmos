@@ -966,3 +966,297 @@ func findSubstringIndex(s, substr string, startIdx int) int {
 	_ = idx // Avoid unused variable warning.
 	return -1
 }
+
+// TestFormatOutputs_Table tests the table format output.
+func TestFormatOutputs_Table(t *testing.T) {
+	outputs := map[string]any{
+		"url":     "https://example.com",
+		"port":    float64(8080),
+		"enabled": true,
+	}
+
+	result, err := FormatOutputs(outputs, FormatTable)
+	require.NoError(t, err)
+
+	// Table should contain headers and values.
+	assert.Contains(t, result, "Key")
+	assert.Contains(t, result, "Value")
+	assert.Contains(t, result, "url")
+	assert.Contains(t, result, "https://example.com")
+	assert.Contains(t, result, "8080")
+	assert.Contains(t, result, "true")
+}
+
+// TestFormatOutputs_Table_EmptyOutputs tests table format with empty outputs.
+func TestFormatOutputs_Table_EmptyOutputs(t *testing.T) {
+	outputs := map[string]any{}
+
+	result, err := FormatOutputs(outputs, FormatTable)
+	require.NoError(t, err)
+
+	// Should still contain headers.
+	assert.Contains(t, result, "Key")
+	assert.Contains(t, result, "Value")
+}
+
+// TestFormatOutputs_Table_NullValues tests table format skips null values.
+func TestFormatOutputs_Table_NullValues(t *testing.T) {
+	outputs := map[string]any{
+		"valid":    "value",
+		"null_val": nil,
+	}
+
+	result, err := FormatOutputs(outputs, FormatTable)
+	require.NoError(t, err)
+
+	assert.Contains(t, result, "valid")
+	assert.Contains(t, result, "value")
+	assert.NotContains(t, result, "null_val")
+}
+
+// TestFormatOutputs_Table_ComplexTypes tests table format with complex types.
+func TestFormatOutputs_Table_ComplexTypes(t *testing.T) {
+	outputs := map[string]any{
+		"simple": "value",
+		"list":   []any{"a", "b", "c"},
+		"map":    map[string]any{"key": "val"},
+	}
+
+	result, err := FormatOutputs(outputs, FormatTable)
+	require.NoError(t, err)
+
+	// Should contain all keys.
+	assert.Contains(t, result, "simple")
+	assert.Contains(t, result, "list")
+	assert.Contains(t, result, "map")
+	// Complex types should be JSON-encoded.
+	assert.Contains(t, result, `["a","b","c"]`)
+	assert.Contains(t, result, `{"key":"val"}`)
+}
+
+// TestFormatOutputs_Table_IntegerAndFloat tests table format with numeric types.
+func TestFormatOutputs_Table_IntegerAndFloat(t *testing.T) {
+	outputs := map[string]any{
+		"integer": float64(42),
+		"float":   float64(3.14159),
+	}
+
+	result, err := FormatOutputs(outputs, FormatTable)
+	require.NoError(t, err)
+
+	// Integer should be formatted without decimal.
+	assert.Contains(t, result, "42")
+	// Float should retain decimals.
+	assert.Contains(t, result, "3.14")
+}
+
+// TestFormatValueForTable tests the formatValueForTable helper function.
+func TestFormatValueForTable(t *testing.T) {
+	tests := []struct {
+		name     string
+		value    any
+		contains string
+	}{
+		{"string", "hello", "hello"},
+		{"integer", float64(42), "42"},
+		{"float", float64(3.14), "3.14"},
+		{"bool true", true, "true"},
+		{"bool false", false, "false"},
+		{"nil", nil, ""},
+		{"slice", []any{"a", "b"}, `["a","b"]`},
+		{"map", map[string]any{"key": "value"}, `{"key":"value"}`},
+		{"nested map", map[string]any{"outer": map[string]any{"inner": "val"}}, `inner`},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Pass nil config to skip highlighting.
+			result := formatValueForTable(tt.value, nil)
+			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
+
+// TestHighlightValue tests the highlightValue helper function.
+func TestHighlightValue(t *testing.T) {
+	// With nil config, should return the value unchanged.
+	result := highlightValue("test", nil)
+	assert.Equal(t, "test", result)
+
+	// With empty string, should return empty string.
+	result = highlightValue("", nil)
+	assert.Equal(t, "", result)
+}
+
+// TestSortMapRecursive tests the sortMapRecursive function.
+func TestSortMapRecursive(t *testing.T) {
+	m := map[string]any{
+		"zebra": "last",
+		"alpha": "first",
+		"middle": map[string]any{
+			"zulu": "end",
+			"able": "start",
+		},
+	}
+
+	sorted := sortMapRecursive(m)
+
+	// Keys should be sorted.
+	keys := sortedKeys(sorted)
+	assert.Equal(t, []string{"alpha", "middle", "zebra"}, keys)
+
+	// Nested map keys should also be sorted.
+	nestedMap := sorted["middle"].(map[string]any)
+	nestedKeys := sortedKeys(nestedMap)
+	assert.Equal(t, []string{"able", "zulu"}, nestedKeys)
+}
+
+// TestSortValueRecursive tests the sortValueRecursive function.
+func TestSortValueRecursive(t *testing.T) {
+	// Test with a map.
+	m := map[string]any{
+		"z": 1,
+		"a": 2,
+	}
+	result := sortValueRecursive(m)
+	resultMap, ok := result.(map[string]any)
+	require.True(t, ok)
+	keys := sortedKeys(resultMap)
+	assert.Equal(t, []string{"a", "z"}, keys)
+
+	// Test with a slice containing maps.
+	s := []any{
+		map[string]any{"z": 1, "a": 2},
+	}
+	result = sortValueRecursive(s)
+	resultSlice, ok := result.([]any)
+	require.True(t, ok)
+	require.Len(t, resultSlice, 1)
+	innerMap, ok := resultSlice[0].(map[string]any)
+	require.True(t, ok)
+	keys = sortedKeys(innerMap)
+	assert.Equal(t, []string{"a", "z"}, keys)
+
+	// Test with a scalar (should return unchanged).
+	scalar := "test"
+	result = sortValueRecursive(scalar)
+	assert.Equal(t, scalar, result)
+}
+
+// TestSortSliceRecursive tests the sortSliceRecursive function.
+func TestSortSliceRecursive(t *testing.T) {
+	// Slice with maps should have maps recursively sorted.
+	s := []any{
+		map[string]any{"z": 1, "a": 2},
+		"scalar",
+		[]any{"nested", "slice"},
+	}
+
+	result := sortSliceRecursive(s)
+
+	// First element should be a sorted map.
+	firstElem, ok := result[0].(map[string]any)
+	require.True(t, ok)
+	keys := sortedKeys(firstElem)
+	assert.Equal(t, []string{"a", "z"}, keys)
+
+	// Second element should be the scalar unchanged.
+	assert.Equal(t, "scalar", result[1])
+
+	// Third element should be the nested slice.
+	thirdElem, ok := result[2].([]any)
+	require.True(t, ok)
+	assert.Equal(t, []any{"nested", "slice"}, thirdElem)
+}
+
+// TestTransformKeys tests the transformKeys function.
+func TestTransformKeys(t *testing.T) {
+	outputs := map[string]any{
+		"vpc_id":    "vpc-123",
+		"subnet_id": "subnet-456",
+	}
+
+	// Without uppercase option.
+	result := transformKeys(outputs, FormatOptions{})
+	assert.Equal(t, outputs, result)
+
+	// With uppercase option.
+	result = transformKeys(outputs, FormatOptions{Uppercase: true})
+	assert.Equal(t, "vpc-123", result["VPC_ID"])
+	assert.Equal(t, "subnet-456", result["SUBNET_ID"])
+}
+
+// TestFlattenMap tests the flattenMap function.
+func TestFlattenMap(t *testing.T) {
+	m := map[string]any{
+		"simple": "value",
+		"nested": map[string]any{
+			"deep": "deepvalue",
+		},
+	}
+
+	result := flattenMap(m, "", "_")
+
+	assert.Equal(t, "value", result["simple"])
+	assert.Equal(t, "deepvalue", result["nested_deep"])
+}
+
+// TestFlattenMap_WithPrefix tests flattenMap with a prefix.
+func TestFlattenMap_WithPrefix(t *testing.T) {
+	m := map[string]any{
+		"key": "value",
+	}
+
+	result := flattenMap(m, "prefix", "_")
+
+	assert.Equal(t, "value", result["prefix_key"])
+}
+
+// TestFlattenMap_WithCustomSeparator tests flattenMap with different separators.
+func TestFlattenMap_WithCustomSeparator(t *testing.T) {
+	m := map[string]any{
+		"outer": map[string]any{
+			"inner": "value",
+		},
+	}
+
+	// Test with double underscore separator.
+	result := flattenMap(m, "", "__")
+	assert.Equal(t, "value", result["outer__inner"])
+
+	// Test with dot separator.
+	result = flattenMap(m, "", ".")
+	assert.Equal(t, "value", result["outer.inner"])
+}
+
+// TestFlattenSlice tests the flattenSlice function.
+func TestFlattenSlice(t *testing.T) {
+	result := make(map[string]any)
+	s := []any{"a", "b", "c"}
+
+	flattenSlice("items", s, "_", result)
+
+	assert.Equal(t, "a", result["items_0"])
+	assert.Equal(t, "b", result["items_1"])
+	assert.Equal(t, "c", result["items_2"])
+}
+
+// TestFlattenValue tests the flattenValue function.
+func TestFlattenValue(t *testing.T) {
+	result := make(map[string]any)
+
+	// Test scalar value.
+	flattenValue("key", "value", "_", result)
+	assert.Equal(t, "value", result["key"])
+
+	// Test map value.
+	result = make(map[string]any)
+	flattenValue("config", map[string]any{"port": float64(8080)}, "_", result)
+	assert.Equal(t, float64(8080), result["config_port"])
+
+	// Test slice value.
+	result = make(map[string]any)
+	flattenValue("items", []any{"x", "y"}, "_", result)
+	assert.Equal(t, "x", result["items_0"])
+	assert.Equal(t, "y", result["items_1"])
+}

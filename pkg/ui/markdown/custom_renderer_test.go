@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/glamour/ansi"
 	"github.com/muesli/termenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -513,6 +514,97 @@ func TestCustomRenderer_EdgeCases(t *testing.T) {
 			assert.NotNil(t, result)
 		})
 	}
+}
+
+// TestBuildStyleOptions_AsciiProfile tests that Ascii profile skips styles for NO_COLOR mode.
+func TestBuildStyleOptions_AsciiProfile(t *testing.T) {
+	cfg := &customRendererConfig{
+		colorProfile: termenv.Ascii,
+	}
+
+	styleOpts, err := buildStyleOptions(cfg)
+	assert.NoError(t, err)
+	assert.Empty(t, styleOpts, "Ascii profile should return empty style options")
+}
+
+// TestBuildStyleOptions_WithCustomStyles tests custom styles are used when provided.
+func TestBuildStyleOptions_WithCustomStyles(t *testing.T) {
+	cfg := &customRendererConfig{
+		colorProfile: termenv.TrueColor,
+		styles:       &ansi.StyleConfig{},
+	}
+
+	styleOpts, err := buildStyleOptions(cfg)
+	assert.NoError(t, err)
+	assert.Len(t, styleOpts, 1, "Should have one style option")
+}
+
+// TestBuildStyleOptions_FallbackToDefault tests fallback to builtin default style.
+func TestBuildStyleOptions_FallbackToDefault(t *testing.T) {
+	cfg := &customRendererConfig{
+		colorProfile: termenv.TrueColor,
+		styles:       nil, // No custom styles.
+	}
+
+	styleOpts, err := buildStyleOptions(cfg)
+	assert.NoError(t, err)
+	assert.Len(t, styleOpts, 1, "Should have one style option from default")
+}
+
+// TestBuildGlamourOptions tests the full options building.
+func TestBuildGlamourOptions(t *testing.T) {
+	cfg := &customRendererConfig{
+		wordWrap:         80,
+		colorProfile:     termenv.TrueColor,
+		preserveNewLines: true,
+	}
+
+	opts, err := buildGlamourOptions(cfg)
+	assert.NoError(t, err)
+	assert.NotEmpty(t, opts, "Should have glamour options")
+}
+
+// TestNewDefaultConfig tests default configuration creation.
+func TestNewDefaultConfig(t *testing.T) {
+	cfg := newDefaultConfig()
+
+	assert.Equal(t, defaultWidth, cfg.wordWrap)
+	assert.Equal(t, termenv.TrueColor, cfg.colorProfile)
+	assert.Nil(t, cfg.styles)
+	assert.False(t, cfg.preserveNewLines)
+}
+
+// TestWithStyles tests the WithStyles option.
+func TestWithStyles(t *testing.T) {
+	customStyles := &ansi.StyleConfig{}
+	renderer, err := NewCustomRenderer(
+		WithStyles(customStyles),
+		WithColorProfile(termenv.TrueColor),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, renderer)
+
+	// Verify it renders.
+	output, err := renderer.Render("test content")
+	require.NoError(t, err)
+	assert.NotEmpty(t, output)
+}
+
+// TestNewCustomRenderer_AsciiProfile tests renderer with Ascii (no color) profile.
+func TestNewCustomRenderer_AsciiProfile(t *testing.T) {
+	renderer, err := NewCustomRenderer(
+		WithColorProfile(termenv.Ascii),
+	)
+	require.NoError(t, err)
+	assert.NotNil(t, renderer)
+
+	// Render some content and verify no ANSI codes.
+	output, err := renderer.Render("**bold** and *italic*")
+	require.NoError(t, err)
+
+	// With Ascii profile, output should have minimal or no ANSI escape codes.
+	assert.Contains(t, output, "bold")
+	assert.Contains(t, output, "italic")
 }
 
 // TestGetGlamourGoldmark_ReflectionStability tests that getGlamourGoldmark can
