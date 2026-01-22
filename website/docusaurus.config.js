@@ -67,6 +67,12 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    // Core concepts main pages moved to top level
+                    {from: '/core-concepts/stacks', to: '/stacks'},
+                    {from: '/core-concepts/components', to: '/components'},
+                    {from: '/core-concepts/components/terraform', to: '/components/terraform'},
+                    {from: '/core-concepts/components/library', to: '/components'},
+                    {from: '/core-concepts/custom-commands', to: '/cli/configuration/commands'},
                     // Backend documentation reorganization
                     {
                         from: '/core-concepts/components/terraform/state-backend',
@@ -200,14 +206,14 @@ const config = {
                         to: '/howto/catalogs'
                     },
                     // Redirects for workflow pages moved to top level
-//                     {
-//                         from: '/core-concepts/workflows',
-//                         to: '/workflows/workflows'
-//                     },
-//                     {
-//                         from: '/core-concepts/workflows/workflows',
-//                         to: '/workflows/workflows'
-//                     },
+                    {
+                        from: '/core-concepts/workflows',
+                        to: '/workflows'
+                    },
+                    {
+                        from: '/core-concepts/workflows/workflows',
+                        to: '/workflows'
+                    },
                     // Redirects for vendoring pages moved to top level
                     {
                         from: '/core-concepts/vendor',
