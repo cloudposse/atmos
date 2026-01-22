@@ -353,7 +353,7 @@ func printSuccessSummary(installed, skipped int, showHint bool) {
 		ui.Successf("Installed **%d** tools, skipped **%d**", installed, skipped)
 	}
 	if showHint {
-		ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+		ui.Hint(getPlatformPathHint())
 	}
 }
 
