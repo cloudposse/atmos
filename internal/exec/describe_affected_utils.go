@@ -198,6 +198,7 @@ func executeDescribeAffected(
 		includeSettings,
 		stack,
 		excludeLocked,
+		localRepoFileSystemPathAbs,
 	)
 	if err != nil {
 		return nil, nil, nil, err
@@ -208,6 +209,8 @@ func executeDescribeAffected(
 
 // findAffected returns a list of all affected components in all stacks.
 // Uses parallel processing for improved performance.
+// The gitRepoRoot parameter is the absolute path to the git repository root, used to resolve
+// relative file paths from git diff.
 func findAffected(
 	currentStacks *map[string]any,
 	remoteStacks *map[string]any,
@@ -217,6 +220,7 @@ func findAffected(
 	includeSettings bool,
 	stackToFilter string,
 	excludeLocked bool,
+	gitRepoRoot string,
 ) ([]schema.Affected, error) {
 	// Use parallel implementation for significant performance improvement (40-60% faster).
 	return findAffectedParallel(
@@ -228,5 +232,6 @@ func findAffected(
 		includeSettings,
 		stackToFilter,
 		excludeLocked,
+		gitRepoRoot,
 	)
 }

@@ -124,32 +124,32 @@ func processTerraformComponentsIndexed(
 			}
 		}
 
-		// Check component folder and module changes.
-		if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
-			// Check terraform modules.
-			changed, err := areTerraformComponentModulesChangedIndexed(component, atmosConfig, filesIndex, patternCache)
-			if err != nil {
-				return nil, err
-			}
-			if changed {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
-					&componentSection, affectedReasonComponentModule, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
-			}
+		// Resolve the component folder for path matching.
+		component := GetComponentFolder(&componentSection, componentName)
 
-			// Check component folder changes.
-			changed, err = isComponentFolderChangedIndexed(component, cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
+		// Check component folder and module changes.
+		changed, err := areTerraformComponentModulesChangedIndexed(component, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
+				&componentSection, affectedReasonComponentModule, false, nil, includeSettings)
 			if err != nil {
 				return nil, err
 			}
-			if changed {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
-					&componentSection, affectedReasonComponent, includeSpaceliftAdminStacks, currentStacks, includeSettings)
-				if err != nil {
-					return nil, err
-				}
+		}
+
+		// Check component folder changes.
+		changed, err = isComponentFolderChangedIndexed(component, cfg.TerraformComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
+				&componentSection, affectedReasonComponent, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+			if err != nil {
+				return nil, err
 			}
 		}
 
@@ -227,17 +227,18 @@ func processHelmfileComponentsIndexed(
 			}
 		}
 
-		if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
-			changed, err := isComponentFolderChangedIndexed(component, cfg.HelmfileComponentType, atmosConfig, filesIndex, patternCache)
+		// Resolve the component folder for path matching.
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.HelmfileComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
+				&componentSection, affectedReasonComponent, false, nil, includeSettings)
 			if err != nil {
 				return nil, err
-			}
-			if changed {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
-					&componentSection, affectedReasonComponent, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
 			}
 		}
 
@@ -314,17 +315,18 @@ func processPackerComponentsIndexed(
 			}
 		}
 
-		if component, ok := componentSection[cfg.ComponentSectionName].(string); ok && component != "" {
-			changed, err := isComponentFolderChangedIndexed(component, cfg.PackerComponentType, atmosConfig, filesIndex, patternCache)
+		// Resolve the component folder for path matching.
+		component := GetComponentFolder(&componentSection, componentName)
+
+		changed, err := isComponentFolderChangedIndexed(component, cfg.PackerComponentType, atmosConfig, filesIndex, patternCache)
+		if err != nil {
+			return nil, err
+		}
+		if changed {
+			err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+				&componentSection, affectedReasonComponent, false, nil, includeSettings)
 			if err != nil {
 				return nil, err
-			}
-			if changed {
-				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
-					&componentSection, affectedReasonComponent, false, nil, includeSettings)
-				if err != nil {
-					return nil, err
-				}
 			}
 		}
 

@@ -1,0 +1,69 @@
+---
+slug: describe-affected-component-detection
+title: 'Fixed: Describe Affected Now Detects Component File Changes'
+authors:
+  - aknysh
+tags:
+  - bugfix
+date: 2026-01-21T00:00:00.000Z
+---
+
+Atmos now correctly detects component file changes when running `atmos describe affected`.
+A regression introduced in v1.195.0 caused changes to Terraform, Helmfile, or Packer component files to not be detected when `atmos.yaml` was located in a subdirectory of the git repository (e.g., when using `atmos -C path/to/project`).
+
+<!--truncate-->
+
+## The Problem
+
+When using `atmos describe affected` to identify components impacted by code changes, the command was only detecting stack configuration changes but missing actual component file changes. For example, modifying a `main.tf` file inside a Terraform component folder would not mark that component as affected.
+
+This issue occurred because git diff returns file paths relative to the git repository root, while the path resolution was using the current working directory. This caused path mismatches in the following scenarios:
+
+- **Using `-C` flag**: Running `atmos -C path/to/project describe affected` from a parent directory
+- **Subdirectory projects**: When `atmos.yaml` is located in a subdirectory of the git repository
+- **Monorepo setups**: When multiple Atmos projects share a single git repository
+
+## The Fix
+
+We updated the changed files indexing logic to properly resolve relative paths against the git repository root instead of the current working directory. The fix ensures that:
+
+- Relative paths from git diff are correctly resolved against the git repo root
+- Component folder changes are detected regardless of where Atmos is executed from
+- Individual file changes within component directories are properly tracked
+
+## Example
+
+Now when you modify component files, `atmos describe affected` correctly identifies them:
+
+```bash
+# Modify a component file
+echo "# comment" >> components/terraform/vpc/main.tf
+
+# Run describe affected
+atmos describe affected --ref refs/heads/main
+
+# Output now includes the vpc component
+[
+  {
+    "component": "vpc",
+    "stack": "plat-ue2-dev",
+    "affected": "component"
+  }
+]
+```
+
+## Usage
+
+Upgrade to the latest version of Atmos and run:
+
+```bash
+atmos describe affected --ref refs/heads/main
+```
+
+The command now correctly detects:
+- Changes to component folders (Terraform, Helmfile, Packer)
+- Changes to individual files within components
+- Stack configuration changes (as before)
+- Vendored components configured with `source` (even without an explicit `component` field)
+
+This fix ensures your CI/CD pipelines accurately identify which components need to be deployed based on actual code changes.
