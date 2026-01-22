@@ -24,9 +24,11 @@ atmos_cli_config:
       helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
       cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
       command: ""
+      auto_generate_files: false
     packer:
       base_path: ""
       command: ""
+      auto_generate_files: false
   stacks:
     base_path: stacks
     included_paths:
