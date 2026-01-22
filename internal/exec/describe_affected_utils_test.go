@@ -96,7 +96,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "vpc",
 					ComponentType: "terraform",
-					ComponentPath: "components/terraform/vpc",
+					ComponentPath: filepath.Join("components", "terraform", "vpc"),
 					Stack:         "dev",
 					Affected:      "stack.metadata",
 					AffectedAll:   []string{"stack.metadata", "component"},
@@ -139,7 +139,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "ingress",
 					ComponentType: "helmfile",
-					ComponentPath: "components/helmfile/ingress",
+					ComponentPath: filepath.Join("components", "helmfile", "ingress"),
 					Stack:         "staging",
 					StackSlug:     "staging-ingress",
 					Affected:      "stack.metadata",
@@ -182,7 +182,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "custom-ami",
 					ComponentType: "packer",
-					ComponentPath: "components/packer/custom-ami",
+					ComponentPath: filepath.Join("components", "packer", "custom-ami"),
 					Stack:         "prod",
 					StackSlug:     "prod-custom-ami",
 					Affected:      "stack.metadata",
@@ -239,7 +239,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "vpc",
 					ComponentType: "terraform",
-					ComponentPath: "components/terraform/vpc",
+					ComponentPath: filepath.Join("components", "terraform", "vpc"),
 					Stack:         "prod",
 					StackSlug:     "prod-vpc",
 					Affected:      "stack.metadata",
@@ -248,7 +248,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "ingress",
 					ComponentType: "helmfile",
-					ComponentPath: "components/helmfile/ingress",
+					ComponentPath: filepath.Join("components", "helmfile", "ingress"),
 					Stack:         "prod",
 					StackSlug:     "prod-ingress",
 					Affected:      "stack.metadata",
