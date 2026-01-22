@@ -24,6 +24,24 @@ const (
 	bitSize64 = 64 // Bit size for int64 parsing.
 )
 
+// unitMultipliers maps duration unit suffixes to their second multipliers.
+var unitMultipliers = map[byte]int64{
+	's': 1,
+	'm': secondsPerMinute,
+	'h': secondsPerHour,
+	'd': secondsPerDay,
+}
+
+// keywordDurations maps keyword strings to their duration in seconds.
+var keywordDurations = map[string]int64{
+	"minute":  secondsPerMinute,
+	"hourly":  secondsPerHour,
+	"daily":   secondsPerDay,
+	"weekly":  secondsPerWeek,
+	"monthly": secondsPerMonth,
+	"yearly":  secondsPerYear,
+}
+
 // Parse parses a duration string into seconds.
 //
 // Supported formats:
@@ -44,57 +62,68 @@ func Parse(s string) (int64, error) {
 	freq := strings.TrimSpace(s)
 
 	// Try parsing as integer seconds.
-	if intVal, err := strconv.ParseInt(freq, base10, bitSize64); err == nil {
-		if intVal > 0 {
-			return intVal, nil
-		}
+	if seconds, ok := parseAsInteger(freq); ok {
+		return seconds, nil
 	}
 
-	// Parse duration with suffix (e.g., "1h", "5m", "30s", "7d").
-	if len(freq) > 1 {
-		unit := freq[len(freq)-1]
-		valPart := freq[:len(freq)-1]
-		if valInt, err := strconv.ParseInt(valPart, base10, bitSize64); err == nil && valInt > 0 {
-			switch unit {
-			case 's':
-				return valInt, nil
-			case 'm':
-				return valInt * secondsPerMinute, nil
-			case 'h':
-				return valInt * secondsPerHour, nil
-			case 'd':
-				return valInt * secondsPerDay, nil
-			default:
-				return 0, errUtils.Build(errUtils.ErrInvalidDuration).
-					WithExplanation("Unrecognized duration unit").
-					WithContext("unit", string(unit)).
-					WithHint("Use 's' (seconds), 'm' (minutes), 'h' (hours), or 'd' (days)").
-					Err()
-			}
-		}
+	// Try parsing as duration with suffix.
+	if seconds, err := parseWithSuffix(freq); err != nil {
+		return 0, err
+	} else if seconds > 0 {
+		return seconds, nil
 	}
 
-	// Handle predefined keywords.
-	switch freq {
-	case "minute":
-		return secondsPerMinute, nil
-	case "hourly":
-		return secondsPerHour, nil
-	case "daily":
-		return secondsPerDay, nil
-	case "weekly":
-		return secondsPerWeek, nil
-	case "monthly":
-		return secondsPerMonth, nil
-	case "yearly":
-		return secondsPerYear, nil
-	default:
+	// Try parsing as keyword.
+	if seconds, ok := keywordDurations[freq]; ok {
+		return seconds, nil
+	}
+
+	return 0, errUtils.Build(errUtils.ErrInvalidDuration).
+		WithExplanation("Unrecognized duration format").
+		WithContext("value", freq).
+		WithHint("Use formats like '1h', '30m', '7d', or keywords like 'daily', 'weekly'").
+		Err()
+}
+
+// parseAsInteger attempts to parse the string as a positive integer (seconds).
+func parseAsInteger(s string) (int64, bool) {
+	if intVal, err := strconv.ParseInt(s, base10, bitSize64); err == nil && intVal > 0 {
+		return intVal, true
+	}
+	return 0, false
+}
+
+// parseWithSuffix attempts to parse a duration with a unit suffix (e.g., "1h", "30m").
+// Returns (0, nil) if the string doesn't match the suffix pattern.
+// Returns (0, error) if the suffix is unrecognized.
+// Returns (seconds, nil) on success.
+func parseWithSuffix(s string) (int64, error) {
+	if len(s) <= 1 {
+		return 0, nil
+	}
+
+	unit := s[len(s)-1]
+	valPart := s[:len(s)-1]
+
+	valInt, err := strconv.ParseInt(valPart, base10, bitSize64)
+	if err != nil {
+		// Not a valid number prefix - doesn't match suffix pattern.
+		return 0, nil //nolint:nilerr // Intentionally returning nil - this means "not a suffix pattern".
+	}
+	if valInt <= 0 {
+		return 0, nil
+	}
+
+	multiplier, ok := unitMultipliers[unit]
+	if !ok {
 		return 0, errUtils.Build(errUtils.ErrInvalidDuration).
-			WithExplanation("Unrecognized duration format").
-			WithContext("value", freq).
-			WithHint("Use formats like '1h', '30m', '7d', or keywords like 'daily', 'weekly'").
+			WithExplanation("Unrecognized duration unit").
+			WithContext("unit", string(unit)).
+			WithHint("Use 's' (seconds), 'm' (minutes), 'h' (hours), or 'd' (days)").
 			Err()
 	}
+
+	return valInt * multiplier, nil
 }
 
 // ParseDuration parses a duration string and returns a time.Duration.

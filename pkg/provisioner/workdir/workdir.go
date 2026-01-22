@@ -176,28 +176,13 @@ func (s *Service) syncLocalToWorkdir(
 ) (*WorkdirMetadata, bool, error) {
 	defer perf.Track(atmosConfig, "workdir.Service.syncLocalToWorkdir")()
 
-	// Get component path.
-	componentPath := extractComponentPath(atmosConfig, componentConfig, component)
-	if componentPath == "" {
-		return nil, false, errUtils.Build(errUtils.ErrWorkdirProvision).
-			WithExplanation("cannot determine local component path").
-			WithContext("component", component).
-			Err()
+	componentPath, err := s.validateComponentPath(atmosConfig, componentConfig, component)
+	if err != nil {
+		return nil, false, err
 	}
 
-	// Verify source exists.
-	if !s.fs.Exists(componentPath) {
-		return nil, false, errUtils.Build(errUtils.ErrWorkdirProvision).
-			WithExplanation("local component path does not exist").
-			WithContext("path", componentPath).
-			WithHint("Check that the component exists in components/terraform/").
-			Err()
-	}
-
-	// Read existing metadata to preserve CreatedAt if it exists.
 	existingMetadata, _ := ReadMetadata(workdirPath)
 
-	// Use per-file checksum comparison for incremental sync.
 	changed, err := s.fs.SyncDir(componentPath, workdirPath, s.hasher)
 	if err != nil {
 		return nil, false, errUtils.Build(errUtils.ErrWorkdirSync).
@@ -212,34 +197,86 @@ func (s *Service) syncLocalToWorkdir(
 		ui.Info(fmt.Sprintf("Local component files synced: %s", componentPath))
 	}
 
-	// Compute content hash for the synced workdir.
+	contentHash := s.computeContentHash(workdirPath)
+	metadata := buildLocalMetadata(&localMetadataParams{
+		component:        component,
+		stack:            stack,
+		componentPath:    componentPath,
+		contentHash:      contentHash,
+		existingMetadata: existingMetadata,
+		changed:          changed,
+	})
+
+	return metadata, changed, nil
+}
+
+// validateComponentPath extracts and validates the component path.
+func (s *Service) validateComponentPath(
+	atmosConfig *schema.AtmosConfiguration,
+	componentConfig map[string]any,
+	component string,
+) (string, error) {
+	componentPath := extractComponentPath(atmosConfig, componentConfig, component)
+	if componentPath == "" {
+		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
+			WithExplanation("cannot determine local component path").
+			WithContext("component", component).
+			Err()
+	}
+
+	if !s.fs.Exists(componentPath) {
+		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
+			WithExplanation("local component path does not exist").
+			WithContext("path", componentPath).
+			WithHint("Check that the component exists in components/terraform/").
+			Err()
+	}
+
+	return componentPath, nil
+}
+
+// computeContentHash computes the content hash, logging a warning on failure.
+func (s *Service) computeContentHash(workdirPath string) string {
 	contentHash, err := s.hasher.HashDir(workdirPath)
 	if err != nil {
 		ui.Warning(fmt.Sprintf("Failed to compute content hash: %s", err))
+		return ""
 	}
+	return contentHash
+}
 
+// localMetadataParams holds parameters for building local workdir metadata.
+type localMetadataParams struct {
+	component        string
+	stack            string
+	componentPath    string
+	contentHash      string
+	existingMetadata *WorkdirMetadata
+	changed          bool
+}
+
+// buildLocalMetadata creates metadata for a local workdir, preserving timestamps from existing metadata.
+func buildLocalMetadata(params *localMetadataParams) *WorkdirMetadata {
 	now := time.Now()
 	metadata := &WorkdirMetadata{
-		Component:    component,
-		Stack:        stack,
+		Component:    params.component,
+		Stack:        params.stack,
 		SourceType:   SourceTypeLocal,
-		Source:       componentPath,
+		Source:       params.componentPath,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 		LastAccessed: now,
-		ContentHash:  contentHash,
+		ContentHash:  params.contentHash,
 	}
 
-	// Preserve original CreatedAt if metadata already existed.
-	if existingMetadata != nil {
-		metadata.CreatedAt = existingMetadata.CreatedAt
-		// Only update UpdatedAt if content actually changed.
-		if !changed {
-			metadata.UpdatedAt = existingMetadata.UpdatedAt
+	if params.existingMetadata != nil {
+		metadata.CreatedAt = params.existingMetadata.CreatedAt
+		if !params.changed {
+			metadata.UpdatedAt = params.existingMetadata.UpdatedAt
 		}
 	}
 
-	return metadata, changed, nil
+	return metadata
 }
 
 // isWorkdirEnabled checks if provision.workdir.enabled is set to true.

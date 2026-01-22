@@ -78,12 +78,21 @@ func (f *DefaultFileSystem) CopyDir(src, dst string) error {
 func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error) {
 	defer perf.Track(nil, "workdir.DefaultFileSystem.SyncDir")()
 
+	srcFiles, changed, err := syncSourceToDest(src, dst, hasher)
+	if err != nil {
+		return changed, err
+	}
+
+	deletedFiles, err := deleteRemovedFiles(dst, srcFiles)
+	return changed || deletedFiles, err
+}
+
+// syncSourceToDest copies new/changed files from src to dst.
+// Returns a map of relative paths for deletion detection, and whether any changes were made.
+func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, error) {
+	srcFiles := make(map[string]bool)
 	anyChanged := false
 
-	// Track source files for deletion detection.
-	srcFiles := make(map[string]bool)
-
-	// Copy new/changed files from src to dst.
 	err := filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -101,28 +110,37 @@ func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error
 
 		srcFiles[relPath] = true
 
-		// Compare checksums.
-		srcHash, err := hasher.HashFile(path)
-		if err != nil {
-			return err
+		if fileNeedsCopy(path, dstPath, hasher) {
+			anyChanged = true
+			return copyFile(path, dstPath)
 		}
-
-		dstHash, dstErr := hasher.HashFile(dstPath)
-		if dstErr == nil && srcHash == dstHash {
-			return nil // Skip - file unchanged.
-		}
-
-		// Copy changed/new file.
-		anyChanged = true
-		return copyFile(path, dstPath)
+		return nil
 	})
+
+	return srcFiles, anyChanged, err
+}
+
+// fileNeedsCopy checks if a source file needs to be copied to destination.
+func fileNeedsCopy(srcPath, dstPath string, hasher Hasher) bool {
+	srcHash, err := hasher.HashFile(srcPath)
 	if err != nil {
-		return anyChanged, err
+		return true // Error reading source, try to copy.
 	}
 
-	// Delete files in dst that no longer exist in src.
-	// Skip the .atmos/ directory which contains metadata.
-	err = filepath.WalkDir(dst, func(path string, d fs.DirEntry, err error) error {
+	dstHash, err := hasher.HashFile(dstPath)
+	if err != nil {
+		return true // Destination doesn't exist or can't be read.
+	}
+
+	return srcHash != dstHash
+}
+
+// deleteRemovedFiles removes files in dst that no longer exist in src.
+// Skips the .atmos/ directory which contains metadata.
+func deleteRemovedFiles(dst string, srcFiles map[string]bool) (bool, error) {
+	anyDeleted := false
+
+	err := filepath.WalkDir(dst, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -137,18 +155,15 @@ func (f *DefaultFileSystem) SyncDir(src, dst string, hasher Hasher) (bool, error
 			return filepath.SkipDir
 		}
 
-		if d.IsDir() {
+		if d.IsDir() || srcFiles[relPath] {
 			return nil
 		}
 
-		if !srcFiles[relPath] {
-			anyChanged = true
-			return os.Remove(path)
-		}
-		return nil
+		anyDeleted = true
+		return os.Remove(path)
 	})
 
-	return anyChanged, err
+	return anyDeleted, err
 }
 
 // copyFile copies a single file from src to dst.

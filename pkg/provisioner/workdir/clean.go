@@ -233,14 +233,10 @@ func findExpiredWorkdirs(basePath string, ttl time.Duration) ([]ExpiredWorkdirIn
 	cutoff := time.Now().Add(-ttl)
 	workdirBase := filepath.Join(basePath, WorkdirPath, "terraform")
 
-	// Check if workdir base exists.
 	if _, err := os.Stat(workdirBase); os.IsNotExist(err) {
 		return nil, nil
 	}
 
-	var expired []ExpiredWorkdirInfo
-
-	// Walk through terraform workdirs.
 	entries, err := os.ReadDir(workdirBase)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrWorkdirClean).
@@ -250,69 +246,63 @@ func findExpiredWorkdirs(basePath string, ttl time.Duration) ([]ExpiredWorkdirIn
 			Err()
 	}
 
+	var expired []ExpiredWorkdirInfo
 	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-
-		workdirPath := filepath.Join(workdirBase, entry.Name())
-
-		// Read metadata to get LastAccessed.
-		metadata, err := ReadMetadata(workdirPath)
-		if err != nil {
-			// Can't read metadata - use file system modification time as fallback.
-			info, statErr := entry.Info()
-			if statErr != nil {
-				continue
-			}
-			if info.ModTime().Before(cutoff) {
-				expired = append(expired, ExpiredWorkdirInfo{
-					Path:         workdirPath,
-					Name:         entry.Name(),
-					LastAccessed: info.ModTime(),
-					Age:          time.Since(info.ModTime()),
-				})
-			}
-			continue
-		}
-
-		if metadata == nil {
-			// No metadata - use file system modification time as fallback.
-			info, statErr := entry.Info()
-			if statErr != nil {
-				continue
-			}
-			if info.ModTime().Before(cutoff) {
-				expired = append(expired, ExpiredWorkdirInfo{
-					Path:         workdirPath,
-					Name:         entry.Name(),
-					LastAccessed: info.ModTime(),
-					Age:          time.Since(info.ModTime()),
-				})
-			}
-			continue
-		}
-
-		// Use LastAccessed from metadata, fall back to UpdatedAt if not set.
-		lastAccessed := metadata.LastAccessed
-		if lastAccessed.IsZero() {
-			lastAccessed = metadata.UpdatedAt
-		}
-		if lastAccessed.IsZero() {
-			lastAccessed = metadata.CreatedAt
-		}
-
-		if lastAccessed.Before(cutoff) {
-			expired = append(expired, ExpiredWorkdirInfo{
-				Path:         workdirPath,
-				Name:         entry.Name(),
-				LastAccessed: lastAccessed,
-				Age:          time.Since(lastAccessed),
-			})
+		if info := checkWorkdirExpiry(workdirBase, entry, cutoff); info != nil {
+			expired = append(expired, *info)
 		}
 	}
 
 	return expired, nil
+}
+
+// checkWorkdirExpiry checks if a single workdir entry is expired.
+// Returns nil if the entry is not expired or not a valid workdir.
+func checkWorkdirExpiry(workdirBase string, entry os.DirEntry, cutoff time.Time) *ExpiredWorkdirInfo {
+	if !entry.IsDir() {
+		return nil
+	}
+
+	workdirPath := filepath.Join(workdirBase, entry.Name())
+	lastAccessed := getLastAccessedTime(workdirPath, entry)
+
+	if lastAccessed.IsZero() || !lastAccessed.Before(cutoff) {
+		return nil
+	}
+
+	return &ExpiredWorkdirInfo{
+		Path:         workdirPath,
+		Name:         entry.Name(),
+		LastAccessed: lastAccessed,
+		Age:          time.Since(lastAccessed),
+	}
+}
+
+// getLastAccessedTime determines the last accessed time for a workdir.
+// Uses metadata if available, otherwise falls back to file system modification time.
+func getLastAccessedTime(workdirPath string, entry os.DirEntry) time.Time {
+	metadata, err := ReadMetadata(workdirPath)
+	if err != nil || metadata == nil {
+		return getModTimeFromEntry(entry)
+	}
+
+	// Use LastAccessed from metadata, fall back to UpdatedAt, then CreatedAt.
+	if !metadata.LastAccessed.IsZero() {
+		return metadata.LastAccessed
+	}
+	if !metadata.UpdatedAt.IsZero() {
+		return metadata.UpdatedAt
+	}
+	return metadata.CreatedAt
+}
+
+// getModTimeFromEntry gets the modification time from a directory entry.
+func getModTimeFromEntry(entry os.DirEntry) time.Time {
+	info, err := entry.Info()
+	if err != nil {
+		return time.Time{}
+	}
+	return info.ModTime()
 }
 
 // formatDuration formats a duration in a human-readable way.

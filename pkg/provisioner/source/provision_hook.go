@@ -245,44 +245,43 @@ func isWorkdirEnabled(componentConfig map[string]any) bool {
 //
 // Returns (false, "") if the existing workdir is up-to-date.
 func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource) (bool, string) {
-	info, err := os.Stat(targetDir)
-	if os.IsNotExist(err) {
-		return true, ""
-	}
-	if err != nil {
-		return true, "" // Error accessing, assume needs provisioning.
-	}
-	if !info.IsDir() {
-		return true, "" // Not a directory, needs provisioning.
-	}
-
-	// Check if directory is empty.
-	entries, err := os.ReadDir(targetDir)
-	if err != nil {
-		return true, ""
-	}
-	if len(entries) == 0 {
+	// Check if directory exists and has content.
+	if !isNonEmptyDir(targetDir) {
 		return true, ""
 	}
 
 	// Directory exists and has content - check metadata for version/URI changes.
 	metadata, err := workdir.ReadMetadata(targetDir)
 	if err != nil || metadata == nil {
-		// No metadata = needs provisioning (can't determine if up-to-date).
 		return true, "No metadata found, re-provisioning"
 	}
 
-	// Check if version changed.
+	// Check for version/URI changes.
+	return checkMetadataChanges(metadata, sourceSpec)
+}
+
+// isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry.
+func isNonEmptyDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+
+	entries, err := os.ReadDir(path)
+	return err == nil && len(entries) > 0
+}
+
+// checkMetadataChanges compares metadata with source spec for version/URI changes.
+// Returns (true, reason) if changes detected, (false, "") if up-to-date.
+func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.VendorComponentSource) (bool, string) {
 	if sourceSpec.Version != "" && sourceSpec.Version != metadata.SourceVersion {
 		return true, fmt.Sprintf("Source version changed (%s → %s)", metadata.SourceVersion, sourceSpec.Version)
 	}
 
-	// Check if URI changed.
 	if sourceSpec.Uri != metadata.SourceURI {
 		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
 	}
 
-	// Workdir is up-to-date.
 	return false, ""
 }
 
