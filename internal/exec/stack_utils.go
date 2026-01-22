@@ -39,7 +39,8 @@ func BuildTerraformWorkspace(atmosConfig *schema.AtmosConfiguration, configAndSt
 	case atmosConfig.Stacks.NamePattern != "":
 		contextPrefix, err = cfg.GetContextPrefix(configAndStacksInfo.Stack, configAndStacksInfo.Context, atmosConfig.Stacks.NamePattern, configAndStacksInfo.Stack)
 		if err != nil {
-			return "", err
+			// Fall back to filename when pattern validation fails.
+			contextPrefix = strings.ReplaceAll(configAndStacksInfo.Stack, "/", "-")
 		}
 	default:
 		contextPrefix = strings.Replace(configAndStacksInfo.Stack, "/", "-", -1)
