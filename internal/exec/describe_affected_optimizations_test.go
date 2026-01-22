@@ -1260,11 +1260,11 @@ func TestChangedFilesIndex_AbsolutePathNormalization(t *testing.T) {
 // git repo root, not the current working directory.
 // This is a regression test for issue #1978: atmos describe affected doesn't detect component changes.
 func TestChangedFilesIndex_GitRepoRootResolution(t *testing.T) {
-	// Simulate a scenario where:
-	// - Git repo root is /repo
-	// - Atmos base path is /repo/atmos_test (a subdirectory)
-	// - Changed file from git diff is "atmos_test/components/terraform/second_component/main.tf"
-	//   (relative to git root, not to atmos base path)
+	// Simulate the scenario below.
+	// - Git repo root is /repo.
+	// - Atmos base path is /repo/atmos_test (a subdirectory).
+	// - Changed file from git diff is "atmos_test/components/terraform/second_component/main.tf".
+	//   (relative to git root, not to atmos base path).
 	gitRepoRoot := t.TempDir()
 	atmosBaseDir := filepath.Join(gitRepoRoot, "atmos_test")
 

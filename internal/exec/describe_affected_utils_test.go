@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -95,6 +96,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "vpc",
 					ComponentType: "terraform",
+					ComponentPath: "components/terraform/vpc",
 					Stack:         "dev",
 					Affected:      "stack.metadata",
 					AffectedAll:   []string{"stack.metadata", "component"},
@@ -137,6 +139,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "ingress",
 					ComponentType: "helmfile",
+					ComponentPath: "components/helmfile/ingress",
 					Stack:         "staging",
 					StackSlug:     "staging-ingress",
 					Affected:      "stack.metadata",
@@ -179,6 +182,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "custom-ami",
 					ComponentType: "packer",
+					ComponentPath: "components/packer/custom-ami",
 					Stack:         "prod",
 					StackSlug:     "prod-custom-ami",
 					Affected:      "stack.metadata",
@@ -235,6 +239,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "vpc",
 					ComponentType: "terraform",
+					ComponentPath: "components/terraform/vpc",
 					Stack:         "prod",
 					StackSlug:     "prod-vpc",
 					Affected:      "stack.metadata",
@@ -243,6 +248,7 @@ func TestFindAffected(t *testing.T) {
 				{
 					Component:     "ingress",
 					ComponentType: "helmfile",
+					ComponentPath: "components/helmfile/ingress",
 					Stack:         "prod",
 					StackSlug:     "prod-ingress",
 					Affected:      "stack.metadata",
@@ -416,9 +422,8 @@ func TestFindAffectedComponentFolderChanges(t *testing.T) {
 		require.Len(t, affected, 1)
 		assert.Equal(t, "vpc-sourced", affected[0].Component)
 		assert.Equal(t, "component", affected[0].Affected)
-		// ComponentPath is empty because the affected detection code path
-		// doesn't pass the component name as a fallback to BuildComponentPath.
-		assert.Empty(t, affected[0].ComponentPath)
+		// ComponentPath is now resolved using the component name as fallback for JIT vendored components.
+		assert.Equal(t, filepath.Join(tempDir, "components", "terraform", "vpc-sourced"), affected[0].ComponentPath)
 	})
 
 	t.Run("Should detect changes for JIT vendored component with source - full config", func(t *testing.T) {
@@ -1371,8 +1376,21 @@ func TestShouldSkipComponent(t *testing.T) {
 
 func TestChangedFilesIndexWithAbsolutePaths(t *testing.T) {
 	t.Run("handles already absolute paths", func(t *testing.T) {
+		// On Windows, absolute paths require a drive letter (e.g., C:\...).
+		// On Unix, paths starting with / are absolute.
+		var basePath, absPath, gitRepoRoot string
+		if runtime.GOOS == "windows" {
+			basePath = "C:\\test"
+			absPath = "C:\\test\\components\\terraform\\vpc\\main.tf"
+			gitRepoRoot = "C:\\test"
+		} else {
+			basePath = "/test"
+			absPath = "/test/components/terraform/vpc/main.tf"
+			gitRepoRoot = "/test"
+		}
+
 		atmosConfig := &schema.AtmosConfiguration{
-			BasePath: string(filepath.Separator) + "test",
+			BasePath: basePath,
 			Components: schema.Components{
 				Terraform: schema.Terraform{
 					BasePath: "components/terraform",
@@ -1380,11 +1398,8 @@ func TestChangedFilesIndexWithAbsolutePaths(t *testing.T) {
 			},
 		}
 
-		// Use absolute paths directly.
-		absPath := string(filepath.Separator) + filepath.Join("test", "components", "terraform", "vpc", "main.tf")
 		changedFiles := []string{absPath}
-
-		index := newChangedFilesIndex(atmosConfig, changedFiles, string(filepath.Separator)+"test")
+		index := newChangedFilesIndex(atmosConfig, changedFiles, gitRepoRoot)
 		allFiles := index.getAllFiles()
 
 		assert.Len(t, allFiles, 1)
@@ -1392,8 +1407,21 @@ func TestChangedFilesIndexWithAbsolutePaths(t *testing.T) {
 	})
 
 	t.Run("handles relative paths with git repo root", func(t *testing.T) {
+		// On Windows, absolute paths require a drive letter (e.g., C:\...).
+		// On Unix, paths starting with / are absolute.
+		var basePath, gitRepoRoot, expected string
+		if runtime.GOOS == "windows" {
+			basePath = "C:\\test"
+			gitRepoRoot = "C:\\test"
+			expected = "C:\\test\\components\\terraform\\vpc\\main.tf"
+		} else {
+			basePath = "/test"
+			gitRepoRoot = "/test"
+			expected = "/test/components/terraform/vpc/main.tf"
+		}
+
 		atmosConfig := &schema.AtmosConfiguration{
-			BasePath: string(filepath.Separator) + "test",
+			BasePath: basePath,
 			Components: schema.Components{
 				Terraform: schema.Terraform{
 					BasePath: "components/terraform",
@@ -1402,11 +1430,10 @@ func TestChangedFilesIndexWithAbsolutePaths(t *testing.T) {
 		}
 
 		changedFiles := []string{"components/terraform/vpc/main.tf"}
-		index := newChangedFilesIndex(atmosConfig, changedFiles, string(filepath.Separator)+"test")
+		index := newChangedFilesIndex(atmosConfig, changedFiles, gitRepoRoot)
 		allFiles := index.getAllFiles()
 
 		assert.Len(t, allFiles, 1)
-		expected := string(filepath.Separator) + filepath.Join("test", "components", "terraform", "vpc", "main.tf")
 		assert.Equal(t, expected, allFiles[0])
 	})
 
@@ -1731,4 +1758,116 @@ func TestFindAffectedSkipsDisabledComponents(t *testing.T) {
 		// Disabled components should be skipped even if their vars changed.
 		assert.Len(t, affected, 0)
 	})
+}
+
+func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
+	tests := []struct {
+		name          string
+		componentType string
+		componentName string
+		stackName     string
+		varsKey       string
+		varsOldValue  string
+		varsNewValue  string
+		envKey        string
+		envOldValue   string
+		envNewValue   string
+		componentBase string
+	}{
+		{
+			name:          "helmfile component with vars and env changes",
+			componentType: "helmfile",
+			componentName: "ingress",
+			stackName:     "staging",
+			varsKey:       "name",
+			varsOldValue:  "old-value",
+			varsNewValue:  "new-value",
+			envKey:        "HELM_DEBUG",
+			envOldValue:   "false",
+			envNewValue:   "true",
+			componentBase: "components/helmfile",
+		},
+		{
+			name:          "packer component with vars and env changes",
+			componentType: "packer",
+			componentName: "custom-ami",
+			stackName:     "prod",
+			varsKey:       "ami_name",
+			varsOldValue:  "old-ami",
+			varsNewValue:  "new-ami",
+			envKey:        "AWS_REGION",
+			envOldValue:   "us-east-1",
+			envNewValue:   "us-west-2",
+			componentBase: "components/packer",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentSection := map[string]any{
+				tt.componentName: map[string]any{
+					"component": tt.componentName,
+					"vars":      map[string]any{tt.varsKey: tt.varsNewValue},
+					"env":       map[string]any{tt.envKey: tt.envNewValue},
+				},
+			}
+
+			remoteStacks := map[string]any{
+				tt.stackName: map[string]any{
+					"components": map[string]any{
+						tt.componentType: map[string]any{
+							tt.componentName: map[string]any{
+								"component": tt.componentName,
+								"vars":      map[string]any{tt.varsKey: tt.varsOldValue},
+								"env":       map[string]any{tt.envKey: tt.envOldValue},
+							},
+						},
+					},
+				},
+			}
+
+			currentStacks := map[string]any{
+				tt.stackName: map[string]any{
+					"components": map[string]any{
+						tt.componentType: componentSection,
+					},
+				},
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath: "/test",
+			}
+
+			// Set the appropriate base path based on component type.
+			switch tt.componentType {
+			case "helmfile":
+				atmosConfig.Components.Helmfile.BasePath = tt.componentBase
+			case "packer":
+				atmosConfig.Components.Packer.BasePath = tt.componentBase
+			}
+
+			filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+			patternCache := newComponentPathPatternCache()
+
+			var affected []schema.Affected
+			var err error
+
+			switch tt.componentType {
+			case "helmfile":
+				affected, err = processHelmfileComponentsIndexed(
+					tt.stackName, componentSection, &remoteStacks, &currentStacks,
+					atmosConfig, filesIndex, patternCache, false, false, false,
+				)
+			case "packer":
+				affected, err = processPackerComponentsIndexed(
+					tt.stackName, componentSection, &remoteStacks, &currentStacks,
+					atmosConfig, filesIndex, patternCache, false, false, false,
+				)
+			}
+
+			assert.NoError(t, err)
+			// Should detect both vars and env changes.
+			assert.GreaterOrEqual(t, len(affected), 1)
+		})
+	}
 }

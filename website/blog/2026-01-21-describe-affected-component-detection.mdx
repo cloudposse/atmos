@@ -5,7 +5,7 @@ authors:
   - aknysh
 tags:
   - bugfix
-date: 2025-01-21T00:00:00.000Z
+date: 2026-01-21T00:00:00.000Z
 ---
 
 Atmos now correctly detects component file changes when running `atmos describe affected`.
@@ -64,5 +64,6 @@ The command now correctly detects:
 - Changes to component folders (Terraform, Helmfile, Packer)
 - Changes to individual files within components
 - Stack configuration changes (as before)
+- Vendored components configured with `source` (even without an explicit `component` field)
 
 This fix ensures your CI/CD pipelines accurately identify which components need to be deployed based on actual code changes.
