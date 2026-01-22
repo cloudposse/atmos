@@ -1610,7 +1610,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/yuin/goldmark
     License: MIT
-    URL: https://github.com/yuin/goldmark/blob/v1.7.8/LICENSE
+    URL: https://github.com/yuin/goldmark/blob/v1.7.16/LICENSE
 
   - github.com/yuin/goldmark-emoji
     License: MIT
