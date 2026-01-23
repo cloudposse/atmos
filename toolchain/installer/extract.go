@@ -153,7 +153,7 @@ func findBinaryInDir(dir, binaryName string) (string, error) {
 		if err != nil {
 			return err
 		}
-		if info.Mode().IsRegular() && (info.Name() == binaryName || info.Name() == binaryName+".exe") {
+		if info.Mode().IsRegular() && (info.Name() == binaryName || info.Name() == binaryName+windowsExeExt) {
 			found = path
 			return filepath.SkipDir
 		}
@@ -243,7 +243,7 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
 			}
 			// Try with .exe extension (common for Windows binaries in archives).
-			srcWithExe := src + ".exe"
+			srcWithExe := src + windowsExeExt
 			if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
 				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
 			}

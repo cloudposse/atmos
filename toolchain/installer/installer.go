@@ -514,7 +514,7 @@ func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) strin
 			// On Windows, check for .exe extension (permission bits don't apply).
 			isExec := info.Mode()&executablePermissionMask != 0
 			if runtime.GOOS == "windows" {
-				isExec = strings.HasSuffix(strings.ToLower(entry.Name()), ".exe")
+				isExec = strings.HasSuffix(strings.ToLower(entry.Name()), windowsExeExt)
 			}
 			if isExec {
 				// Found an executable.

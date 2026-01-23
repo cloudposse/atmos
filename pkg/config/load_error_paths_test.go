@@ -508,7 +508,8 @@ settings:
 	// Call loadAtmosDFromDirectory - should find and process the atmos.d directory.
 	loadAtmosDFromDirectory(tempDir, v)
 
-	// Function should complete without panic.
+	// Verify the config was actually loaded into viper.
+	assert.Equal(t, "from_atmos_d", v.GetString("settings.test_value"))
 }
 
 // TestLoadAtmosDFromDirectory_DotAtmosDExists tests when .atmos.d directory exists.
@@ -533,7 +534,8 @@ settings:
 	// Call loadAtmosDFromDirectory - should find and process the .atmos.d directory.
 	loadAtmosDFromDirectory(tempDir, v)
 
-	// Function should complete without panic.
+	// Verify the config was actually loaded into viper.
+	assert.Equal(t, "from_dot_atmos_d", v.GetString("settings.test_value"))
 }
 
 // TestLoadAtmosDFromDirectory_BothDirectoriesExist tests when both atmos.d and .atmos.d exist.
@@ -548,14 +550,16 @@ func TestLoadAtmosDFromDirectory_BothDirectoriesExist(t *testing.T) {
 	err = os.MkdirAll(dotAtmosDPath, 0o755)
 	assert.NoError(t, err)
 
-	// Add config files to both.
+	// Add config files to both with different values.
 	configContent1 := `
 settings:
   test_value: from_atmos_d
+  atmos_d_only: true
 `
 	configContent2 := `
 settings:
   test_value: from_dot_atmos_d
+  dot_atmos_d_only: true
 `
 	err = os.WriteFile(filepath.Join(atmosDPath, "test.yaml"), []byte(configContent1), 0o644)
 	assert.NoError(t, err)
@@ -566,9 +570,15 @@ settings:
 	v.SetConfigType("yaml")
 
 	// Call loadAtmosDFromDirectory - should process both directories.
+	// atmos.d is processed first, then .atmos.d, so .atmos.d values should win for overlapping keys.
 	loadAtmosDFromDirectory(tempDir, v)
 
-	// Function should complete without panic.
+	// Verify both configs were loaded and merged correctly.
+	// .atmos.d is processed after atmos.d, so its value should win for test_value.
+	assert.Equal(t, "from_dot_atmos_d", v.GetString("settings.test_value"))
+	// Both unique keys should be present from their respective configs.
+	assert.True(t, v.GetBool("settings.atmos_d_only"))
+	assert.True(t, v.GetBool("settings.dot_atmos_d_only"))
 }
 
 // TestLoadAtmosDFromDirectory_FileNotDirectory tests when atmos.d is a file, not a directory.
