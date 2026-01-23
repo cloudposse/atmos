@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -278,4 +279,271 @@ func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
 	require.Error(t, err, "expected permission error to occur during cleanup")
 	// When errors occur, they should be accumulated.
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+// Test expired workdir cleanup.
+
+func TestCleanExpiredWorkdirs_NoWorkdirs(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := CleanExpiredWorkdirs(atmosConfig, "7d", false)
+	require.NoError(t, err)
+}
+
+func TestCleanExpiredWorkdirs_InvalidTTL(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := CleanExpiredWorkdirs(atmosConfig, "invalid", false)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanExpiredWorkdirs_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with old metadata.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Write metadata with old LastAccessed time (30 days ago).
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	metadata := &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		SourceType:   SourceTypeLocal,
+		Source:       "components/terraform/vpc",
+		CreatedAt:    oldTime,
+		UpdatedAt:    oldTime,
+		LastAccessed: oldTime,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Dry run should not remove the workdir.
+	err := CleanExpiredWorkdirs(atmosConfig, "7d", true)
+	require.NoError(t, err)
+
+	// Verify workdir still exists.
+	_, err = os.Stat(workdirPath)
+	assert.False(t, os.IsNotExist(err), "workdir should still exist after dry run")
+}
+
+func TestCleanExpiredWorkdirs_ActualClean(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with old metadata.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Write metadata with old LastAccessed time (30 days ago).
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	metadata := &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		SourceType:   SourceTypeLocal,
+		Source:       "components/terraform/vpc",
+		CreatedAt:    oldTime,
+		UpdatedAt:    oldTime,
+		LastAccessed: oldTime,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Actual clean should remove the expired workdir.
+	err := CleanExpiredWorkdirs(atmosConfig, "7d", false)
+	require.NoError(t, err)
+
+	// Verify workdir is removed.
+	_, err = os.Stat(workdirPath)
+	assert.True(t, os.IsNotExist(err), "workdir should be removed")
+}
+
+func TestCleanExpiredWorkdirs_NotExpired(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with recent metadata.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Write metadata with recent LastAccessed time (1 hour ago).
+	recentTime := time.Now().Add(-1 * time.Hour)
+	metadata := &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		SourceType:   SourceTypeLocal,
+		Source:       "components/terraform/vpc",
+		CreatedAt:    recentTime,
+		UpdatedAt:    recentTime,
+		LastAccessed: recentTime,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Should not clean recent workdirs.
+	err := CleanExpiredWorkdirs(atmosConfig, "7d", false)
+	require.NoError(t, err)
+
+	// Verify workdir still exists.
+	_, err = os.Stat(workdirPath)
+	assert.False(t, os.IsNotExist(err), "recent workdir should not be removed")
+}
+
+func TestClean_ExpiredWithoutTTL(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Expired=true without TTL should error.
+	err := Clean(atmosConfig, CleanOptions{Expired: true})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestClean_ExpiredWithTTL(t *testing.T) {
+	tmpDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// No workdirs, should succeed without error.
+	err := Clean(atmosConfig, CleanOptions{Expired: true, TTL: "7d"})
+	require.NoError(t, err)
+}
+
+// Test formatDuration.
+
+func TestFormatDuration(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"less than minute", 30 * time.Second, "< 1m"},
+		{"minutes only", 45 * time.Minute, "45m"},
+		{"hours only", 3 * time.Hour, "3h"},
+		{"hours and minutes", 3*time.Hour + 30*time.Minute, "3h 30m"},
+		{"days only", 7 * 24 * time.Hour, "7d"},
+		{"days and hours", 7*24*time.Hour + 5*time.Hour, "7d 5h"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := formatDuration(tc.duration)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// Test getLastAccessedTime fallbacks.
+
+func TestGetLastAccessedTime_WithMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	expectedTime := time.Now().Add(-24 * time.Hour).Truncate(time.Second)
+	metadata := &WorkdirMetadata{
+		Component:    "test",
+		Stack:        "dev",
+		SourceType:   SourceTypeLocal,
+		Source:       "test",
+		CreatedAt:    expectedTime.Add(-48 * time.Hour),
+		UpdatedAt:    expectedTime.Add(-12 * time.Hour),
+		LastAccessed: expectedTime,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	result := getLastAccessedTime(workdirPath, entries[0])
+	// LastAccessed should be used.
+	assert.Equal(t, expectedTime, result)
+}
+
+func TestGetLastAccessedTime_FallbackToUpdatedAt(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	expectedTime := time.Now().Add(-24 * time.Hour).Truncate(time.Second)
+	metadata := &WorkdirMetadata{
+		Component:  "test",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+		Source:     "test",
+		CreatedAt:  expectedTime.Add(-48 * time.Hour),
+		UpdatedAt:  expectedTime,
+		// LastAccessed is zero.
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	result := getLastAccessedTime(workdirPath, entries[0])
+	// UpdatedAt should be used when LastAccessed is zero.
+	assert.Equal(t, expectedTime, result)
+}
+
+func TestGetLastAccessedTime_FallbackToCreatedAt(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	expectedTime := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	metadata := &WorkdirMetadata{
+		Component:  "test",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+		Source:     "test",
+		CreatedAt:  expectedTime,
+		// UpdatedAt and LastAccessed are zero.
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	result := getLastAccessedTime(workdirPath, entries[0])
+	// CreatedAt should be used when others are zero.
+	assert.Equal(t, expectedTime, result)
+}
+
+func TestGetLastAccessedTime_NoMetadata(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// No metadata written.
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	result := getLastAccessedTime(workdirPath, entries[0])
+	// Should fall back to directory modification time.
+	assert.False(t, result.IsZero(), "should return file modification time")
+}
+
+// Test checkWorkdirExpiry.
+
+func TestCheckWorkdirExpiry_NotADirectory(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a file, not a directory.
+	filePath := filepath.Join(tmpDir, "testfile")
+	require.NoError(t, os.WriteFile(filePath, []byte("test"), 0o644))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	result := checkWorkdirExpiry(tmpDir, entries[0], time.Now())
+	assert.Nil(t, result, "should return nil for non-directory entries")
 }

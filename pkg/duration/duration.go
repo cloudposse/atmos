@@ -137,8 +137,8 @@ func parseWithSuffix(s string) (int64, error) {
 	return valInt * multiplier, nil
 }
 
-// maxDurationSeconds is the maximum seconds value that won't overflow time.Duration.
-// time.Duration is int64 nanoseconds, so max is ~292 years in seconds.
+// maxDurationSeconds is the maximum seconds value that won't overflow time.Duration
+// (which is int64 nanoseconds), so max is approximately 292 years in seconds.
 const maxDurationSeconds = int64(^uint64(0)>>1) / int64(time.Second)
 
 // ParseDuration parses a duration string and returns a time.Duration.

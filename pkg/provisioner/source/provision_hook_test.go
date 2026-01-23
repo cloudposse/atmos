@@ -575,3 +575,81 @@ func TestWrapProvisionError(t *testing.T) {
 		})
 	}
 }
+
+func TestIsLocalSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		// Local sources.
+		{
+			name:     "relative path with dot",
+			uri:      "./components/terraform/vpc",
+			expected: true,
+		},
+		{
+			name:     "parent directory path",
+			uri:      "../demo-library/weather",
+			expected: true,
+		},
+		{
+			name:     "absolute path",
+			uri:      "/home/user/components/vpc",
+			expected: true,
+		},
+		{
+			name:     "file scheme",
+			uri:      "file:///path/to/component",
+			expected: true,
+		},
+		{
+			name:     "simple relative path",
+			uri:      "components/terraform/vpc",
+			expected: true,
+		},
+		// Remote sources.
+		{
+			name:     "github.com URL",
+			uri:      "github.com/cloudposse/terraform-aws-vpc//src",
+			expected: false,
+		},
+		{
+			name:     "gitlab.com URL",
+			uri:      "gitlab.com/org/repo//module",
+			expected: false,
+		},
+		{
+			name:     "bitbucket URL",
+			uri:      "bitbucket.org/org/repo//module",
+			expected: false,
+		},
+		{
+			name:     "https URL",
+			uri:      "https://example.com/path/to/module",
+			expected: false,
+		},
+		{
+			name:     "git:: prefix",
+			uri:      "git::https://github.com/org/repo.git",
+			expected: false,
+		},
+		{
+			name:     "s3:: prefix",
+			uri:      "s3::s3://bucket/path/to/module",
+			expected: false,
+		},
+		{
+			name:     "gcs:: prefix",
+			uri:      "gcs::gs://bucket/path/to/module",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isLocalSource(tt.uri)
+			assert.Equal(t, tt.expected, result, "isLocalSource(%q) should return %v", tt.uri, tt.expected)
+		})
+	}
+}
