@@ -332,7 +332,7 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 - Use definition lists `<dl>` instead of tables for arguments and flags
 - Follow Docusaurus conventions from existing files
 - File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-- Link to core concepts using `/core-concepts/` paths
+- Link to documentation using current URL paths (e.g., `/stacks`, `/components`, `/cli/configuration`)
 - Include purpose note and help screengrab
 - Use consistent section ordering: Usage → Examples → Arguments → Flags
 

@@ -14,6 +14,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain"
 )
 
 // Sentinel errors for test mocks.
@@ -794,4 +795,29 @@ func TestEnsureTool(t *testing.T) {
 		assert.True(t, cockroachErrors.Is(err, errUtils.ErrToolInstall), "expected ErrToolInstall in chain, got: %v", err)
 		assert.Equal(t, "terraform@1.10.0", calledSpec, "install should be called with correct tool spec")
 	})
+}
+
+// TestBuildToolchainPATH_MatchesToolchainInstallPath verifies that BuildToolchainPATH
+// uses the same path as toolchain.GetInstallPath() to ensure PATH points to where
+// tools are actually installed.
+func TestBuildToolchainPATH_MatchesToolchainInstallPath(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Get the expected install path from toolchain package.
+	expectedInstallPath := toolchain.GetInstallPath()
+
+	// Build PATH with a tool dependency.
+	result, err := BuildToolchainPATH(nil, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	// The expected path component for the tool.
+	expectedPathComponent := filepath.Join(expectedInstallPath, "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify that the PATH contains the correct directory.
+	assert.Contains(t, result, expectedPathComponent,
+		"PATH should contain the toolchain install path (%s), not a hardcoded default like '.tools'",
+		expectedInstallPath)
 }

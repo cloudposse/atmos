@@ -1,0 +1,50 @@
+# Lychee link checker configuration
+# https://github.com/lycheeverse/lychee
+#
+# Run locally: make link-check
+# Or directly: lychee --config lychee.toml '**/*.md'
+
+# Log level: "error", "warn", "info", "debug", "trace"
+verbose = "info"
+
+# Don't show progress bar (cleaner CI output)
+no_progress = true
+
+# Timeout for each request (seconds)
+timeout = 30
+
+# Retry failed requests
+max_retries = 3
+
+# Accept these HTTP status codes as valid
+accept = ["200", "204", "301", "302", "403", "429"]
+
+# Paths to exclude from checking (input files to scan)
+exclude_path = [
+  "website",
+  "node_modules",
+  ".git",
+  ".conductor",
+]
+
+# URL patterns to exclude (regex)
+exclude = [
+  "localhost",
+  "127\\.0\\.0\\.1",
+  "example\\.com",
+  "cpco\\.io",
+  "cloudposse\\.com.*utm_",
+  "slack\\.cloudposse\\.com",
+  "wttr\\.in",
+  # GNU.org (rate limits and connection resets)
+  "gnu\\.org",
+  # Cloudinary image resizing proxy
+  "img\\.cloudposse\\.com",
+  # atmos.tools URLs (can't verify website links locally)
+  "atmos\\.tools",
+  # Root-relative paths converted to file:// URLs (atmos.tools website paths)
+  "file://.*/cli/",
+  # Files that don't exist yet (planned documentation)
+  "website/docs/cli/errors\\.mdx",
+  "website/docs/cli/configuration/mask\\.mdx",
+]
