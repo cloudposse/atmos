@@ -1,0 +1,104 @@
+---
+slug: azure-service-principal-provider
+title: "Azure Service Principal Authentication Provider"
+authors: [osterman]
+tags: [feature]
+---
+
+Atmos now supports Azure Service Principal authentication for automated environments using client credentials.
+
+<!--truncate-->
+
+## What Changed
+
+We've added the `azure/service-principal` provider to the Atmos auth system, enabling OAuth2 client credentials authentication for Azure. This complements the existing `azure/cli`, `azure/device-code`, and `azure/oidc` providers.
+
+## When to Use Which Provider
+
+| Provider | Use Case | Credentials |
+|----------|----------|-------------|
+| `azure/oidc` | **CI/CD (recommended)** - GitHub Actions, Azure DevOps | None (federated tokens) |
+| `azure/service-principal` | Automation with static credentials | Client secret or certificate |
+| `azure/device-code` | Developer workstations (interactive) | None (browser-based) |
+| `azure/cli` | Developer workstations (uses `az login`) | None (CLI-based) |
+
+**For CI/CD, we recommend `azure/oidc`** - it uses federated tokens and requires no secrets.
+
+## Why Service Principal?
+
+Use `azure/service-principal` when:
+- Your CI/CD platform doesn't support OIDC federation with Azure.
+- You're running in environments without browser access (embedded systems, etc.).
+- You need static credentials for legacy automation.
+
+**Terraform Compatible**: Sets `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET` (or `ARM_CLIENT_CERTIFICATE_PATH`), and `ARM_TENANT_ID` for seamless integration with azurerm and azapi Terraform providers.
+
+## Authentication Options
+
+The service principal provider supports two credential types:
+
+| Option | Config Key | Environment Variable | Best For |
+|--------|------------|---------------------|----------|
+| Client Secret | `client_secret` | `AZURE_CLIENT_SECRET` | Simple automation |
+| Certificate | `client_certificate_path` | `AZURE_CLIENT_CERTIFICATE_PATH` | Enhanced security |
+
+Certificates provide better security than secrets because they can't be easily copied or transmitted. Azure supports both PEM and PFX formats.
+
+## How to Use It
+
+```yaml
+auth:
+  providers:
+    azure-automation:
+      kind: azure/service-principal
+      spec:
+        tenant_id: "your-tenant-id"
+        client_id: "your-client-id"
+        subscription_id: "your-subscription-id"
+        # client_secret via AZURE_CLIENT_SECRET env var
+
+  identities:
+    azure-prod:
+      kind: azure/subscription
+      via:
+        provider: azure-automation
+      principal:
+        subscription_id: "your-subscription-id"
+```
+
+Then authenticate:
+
+```bash
+export AZURE_CLIENT_SECRET="your-client-secret"
+atmos auth login --identity azure-prod
+atmos terraform plan -s your-stack
+```
+
+### Certificate Authentication
+
+For enhanced security, use a certificate instead of a client secret:
+
+```yaml
+auth:
+  providers:
+    azure-cert:
+      kind: azure/service-principal
+      spec:
+        tenant_id: "your-tenant-id"
+        client_id: "your-client-id"
+        subscription_id: "your-subscription-id"
+        client_certificate_path: "/path/to/cert.pem"
+        # For PFX files with password:
+        # client_certificate_password: "cert-password"
+```
+
+```bash
+# Or use environment variables
+export AZURE_CLIENT_CERTIFICATE_PATH="/path/to/cert.pem"
+atmos auth login --identity azure-prod
+```
+
+## Get Involved
+
+- Read the [Auth documentation](/cli/configuration/auth/providers)
+- Report issues on [GitHub](https://github.com/cloudposse/atmos/issues)
