@@ -1,0 +1,152 @@
+---
+title: Infrastructure Tools Matrix
+sidebar_label: Alternatives
+id: alternatives
+slug: /alternatives
+description: A comprehensive comparison of infrastructure tools showing where Atmos fits in the modern infrastructure toolchain.
+---
+import React, { useState } from 'react'
+import Intro from '@site/src/components/Intro'
+import ToolCategory from '@site/src/components/ToolCategory'
+import ComparisonMatrix from '@site/src/components/ComparisonMatrix'
+import { RiExpandDiagonalLine, RiLayoutGridLine, RiTableLine } from 'react-icons/ri'
+import { toolCategories } from '@site/src/data/tools'
+
+export const ToolsMatrixPage = () => {
+  const [view, setView] = useState('categories');
+  const [expandAll, setExpandAll] = useState(false);
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--ifm-color-emphasis-300)' }}>
+          <button
+            onClick={() => setView('categories')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: view === 'categories' ? '#fff' : 'var(--ifm-color-emphasis-700)',
+              backgroundColor: view === 'categories' ? 'var(--ifm-color-primary)' : 'transparent',
+              border: 'none',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            <RiLayoutGridLine />
+            By Category
+          </button>
+          <button
+            onClick={() => setView('matrix')}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: view === 'matrix' ? '#fff' : 'var(--ifm-color-emphasis-700)',
+              backgroundColor: view === 'matrix' ? 'var(--ifm-color-primary)' : 'transparent',
+              border: 'none',
+              borderLeft: '1px solid var(--ifm-color-emphasis-300)',
+              cursor: 'pointer',
+              transition: 'all 0.2s',
+            }}
+          >
+            <RiTableLine />
+            Atmos vs Alternatives
+          </button>
+        </div>
+        {view === 'categories' && (
+          <button
+            onClick={() => setExpandAll(!expandAll)}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.5rem 1rem',
+              fontSize: '0.875rem',
+              fontWeight: 500,
+              color: 'var(--ifm-color-primary)',
+              backgroundColor: 'transparent',
+              border: '1px solid var(--ifm-color-primary)',
+              borderRadius: '8px',
+              cursor: 'pointer',
+            }}
+          >
+            <RiExpandDiagonalLine />
+            {expandAll ? 'Collapse All' : 'Expand All'}
+          </button>
+        )}
+      </div>
+      {view === 'categories' ? (
+        <>
+          {toolCategories.map((category, index) => (
+            <ToolCategory
+              key={category.id}
+              id={category.id}
+              icon={category.icon}
+              title={category.title}
+              tagline={category.tagline}
+              tools={category.tools}
+              expandAll={expandAll}
+              index={index}
+            />
+          ))}
+        </>
+      ) : (
+        <ComparisonMatrix />
+      )}
+    </div>
+  );
+};
+
+<Intro>
+Infrastructure isn't hard because any single tool is hard. It's hard because integrating dozens of tools into a cohesive developer experience is genuinely challenging. Toggle between views to explore tools by category or see how Atmos compares.
+</Intro>
+
+:::info Atmos does all this—and more
+Atmos replaces many single-purpose tools while letting you bring in the tools you already know and love. Custom commands let you integrate everything else, and workflows simplify onboarding and bootstrapping.
+:::
+
+<ToolsMatrixPage />
+
+## How Atmos Fits In
+
+Atmos **replaces many single-purpose tools** while letting you bring in the tools you already know and love—like Terraform, OpenTofu, Helmfile, and Packer. Custom commands let you integrate everything else, and workflows simplify onboarding and bootstrapping.
+
+| Capability | Atmos Approach |
+|------------|----------------|
+| **Infrastructure as Code** | Native Terraform, OpenTofu, Helmfile, Packer support |
+| **Configuration** | Stack-based composition with imports and inheritance |
+| **Task Automation** | Native [workflows](/workflows) with typed inputs |
+| **Custom Commands** | Integrate any CLI tool with [custom commands](/cli/configuration/commands) |
+| **Vendoring** | Native [vendoring](/vendor/) inspired by Vendir |
+| **Policy** | Native [OPA validation](/cli/commands/validate/stacks) |
+| **Dev Environments** | Native [devcontainer](/cli/commands/devcontainer) support |
+
+## Design Inspirations
+
+Atmos draws conceptual inspiration from several tools and frameworks that shaped its architecture:
+
+### Component-Based Architecture (React)
+
+React's component-based architecture inspired Atmos's approach to modularity. Just as React breaks UIs into reusable components, Atmos promotes breaking infrastructure into reusable components. Any Terraform "root module" can be used as a component, composed and configured through stacks.
+
+### Template-Free Configuration (Kustomize)
+
+Kustomize introduced a template-free way to customize Kubernetes configurations using overlays and inheritance. Atmos adopts a similar approach—enabling users to import, overlay, and override configurations without relying on templating. However, Atmos also supports advanced templating (via Gomplate) as an escape hatch when needed.
+
+### Stack Orchestration (Helmfile)
+
+Helmfile manages collections of Helm charts with declarative syntax, combining them into a "stack" for deployment. Atmos draws from Helmfile's ability to orchestrate multiple tools, applying the concept to Terraform root modules. Atmos generates `.tfvars` files like Helmfile generates Helm values files.
+
+### Parameterized Packaging (Helm Charts)
+
+Helm Charts provide a packaging format where parameterization enables flexibility. If your Terraform root modules are sufficiently parameterized, they function much like Helm charts—you only need to supply the appropriate values to achieve the desired configuration.
+
+### Declarative Vendoring (Vendir)
+
+Vendir by VMware Tanzu served as the basis for Atmos's vendoring implementation. After using Vendir, we realized we only needed a simpler subset of its functionality. We implemented our own version using HashiCorp's GoGetter library, adding OCI support for pulling configurations from anywhere.
