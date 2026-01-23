@@ -39,7 +39,8 @@ Think of each demo folder as representing an example of a standalone repository.
 8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
 9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
 10. ├── demo-workflows/           # Automate repetitive tasks with streamlined workflows.
-11. └── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
+11. ├── secrets-masking/          # Configure custom patterns and literals for automatic secrets masking in output.
+12. └── stack-names/              # Demonstrate imperative stack naming with explicit 'name' field.
 ```
 
 ## Playground

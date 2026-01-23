@@ -10,8 +10,14 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
+	listformat "github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
+
+// defaultFmt is the default format verb for generic value formatting.
+const defaultFmt = "%v"
 
 // FormatOutputs converts terraform outputs map to the specified format.
 func FormatOutputs(outputs map[string]any, format Format) (string, error) {
@@ -31,36 +37,41 @@ func FormatOutputsWithOptions(outputs map[string]any, format Format, opts Format
 	}
 	transformed = transformKeys(transformed, opts)
 
-	return formatWithOptions(transformed, format)
+	return formatWithOptions(transformed, format, opts)
+}
+
+// simpleFormatter is a format function that only needs the outputs map.
+type simpleFormatter func(map[string]any) (string, error)
+
+// simpleFormatters maps simple formats to their formatter functions.
+var simpleFormatters = map[Format]simpleFormatter{
+	FormatJSON:   formatJSON,
+	FormatYAML:   formatYAML,
+	FormatHCL:    formatHCL,
+	FormatEnv:    formatEnv,
+	FormatDotenv: formatDotenv,
+	FormatBash:   formatBash,
+	FormatCSV:    formatCSV,
+	FormatTSV:    formatTSV,
+	FormatGitHub: formatGitHub,
 }
 
 // formatWithOptions applies the specified format to transformed outputs.
-func formatWithOptions(transformed map[string]any, format Format) (string, error) {
-	switch format {
-	case FormatJSON:
-		return formatJSON(transformed)
-	case FormatYAML:
-		return formatYAML(transformed)
-	case FormatHCL:
-		return formatHCL(transformed)
-	case FormatEnv:
-		return formatEnv(transformed)
-	case FormatDotenv:
-		return formatDotenv(transformed)
-	case FormatBash:
-		return formatBash(transformed)
-	case FormatCSV:
-		return formatCSV(transformed)
-	case FormatTSV:
-		return formatTSV(transformed)
-	case FormatGitHub:
-		return formatGitHub(transformed)
-	default:
-		return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
-			WithExplanationf("Unsupported format %q.", format).
-			WithHintf("Supported formats: %s.", strings.Join(SupportedFormats, ", ")).
-			Err()
+func formatWithOptions(transformed map[string]any, format Format, opts FormatOptions) (string, error) {
+	// Handle table format separately since it needs options.
+	if format == FormatTable {
+		return formatTable(transformed, opts)
 	}
+
+	// Look up simple formatter.
+	if formatter, ok := simpleFormatters[format]; ok {
+		return formatter(transformed)
+	}
+
+	return "", errUtils.Build(errUtils.ErrInvalidArgumentError).
+		WithExplanationf("Unsupported format %q.", format).
+		WithHintf("Supported formats: %s.", strings.Join(SupportedFormats, ", ")).
+		Err()
 }
 
 // transformKeys applies key transformations based on options.
@@ -349,7 +360,7 @@ func valueToString(value any) (string, error) {
 		if v == float64(int64(v)) {
 			return fmt.Sprintf("%d", int64(v)), nil
 		}
-		return fmt.Sprintf("%v", v), nil
+		return fmt.Sprintf(defaultFmt, v), nil
 	case bool:
 		return fmt.Sprintf("%t", v), nil
 	case nil:
@@ -389,7 +400,7 @@ func formatHCLNumber(v float64) string {
 	if v == float64(int64(v)) {
 		return fmt.Sprintf("%d", int64(v))
 	}
-	return fmt.Sprintf("%v", v)
+	return fmt.Sprintf(defaultFmt, v)
 }
 
 // formatHCLList formats a slice as an HCL list.
@@ -436,6 +447,69 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// formatTable outputs as a styled table with Key/Value columns.
+// Uses the same table rendering as list commands for consistent styling.
+func formatTable(outputs map[string]any, opts FormatOptions) (string, error) {
+	keys := sortedKeys(outputs)
+
+	// Build rows: Key | Value.
+	headers := []string{"Key", "Value"}
+	rows := make([][]string, 0, len(keys))
+	for _, k := range keys {
+		value := outputs[k]
+		if value == nil {
+			continue // Skip null values.
+		}
+		rows = append(rows, []string{k, formatValueForTable(value, opts.AtmosConfig)})
+	}
+
+	// Use existing styled table renderer from list package.
+	return listformat.CreateStyledTable(headers, rows), nil
+}
+
+// formatValueForTable converts a value to a string suitable for table display.
+// Scalars are returned as-is, complex types are JSON-encoded compactly.
+// If config is provided, syntax highlighting is applied.
+func formatValueForTable(value any, config *schema.AtmosConfiguration) string {
+	switch v := value.(type) {
+	case string:
+		return highlightValue(v, config)
+	case float64:
+		// Check if it's an integer value.
+		if v == float64(int64(v)) {
+			return highlightValue(fmt.Sprintf("%d", int64(v)), config)
+		}
+		return highlightValue(fmt.Sprintf(defaultFmt, v), config)
+	case bool:
+		return highlightValue(fmt.Sprintf("%t", v), config)
+	case nil:
+		return ""
+	default:
+		// Complex types (maps, slices) - compact JSON with deterministic key ordering.
+		// Apply sorting for consistent output across runs (matches formatJSON/formatYAML behavior).
+		sorted := sortValueRecursive(v)
+		jsonBytes, err := json.Marshal(sorted)
+		if err != nil {
+			return fmt.Sprintf(defaultFmt, v)
+		}
+		return highlightValue(string(jsonBytes), config)
+	}
+}
+
+// highlightValue applies JSON syntax highlighting if config is available.
+// Respects color preferences (NO_COLOR, ATMOS_FORCE_COLOR, TTY detection).
+func highlightValue(s string, config *schema.AtmosConfiguration) string {
+	if config == nil {
+		return s
+	}
+	// HighlightCodeWithConfig auto-detects JSON and respects color preferences.
+	highlighted, err := u.HighlightCodeWithConfig(config, s)
+	if err != nil {
+		return s
+	}
+	return highlighted
 }
 
 // sortMapRecursive creates a new map with keys sorted alphabetically at all levels.

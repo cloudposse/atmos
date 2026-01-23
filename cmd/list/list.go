@@ -32,6 +32,7 @@ func init() {
 
 	// Attach all subcommands
 	listCmd.AddCommand(affectedCmd)
+	listCmd.AddCommand(aliasesCmd)
 	listCmd.AddCommand(componentsCmd)
 	listCmd.AddCommand(stacksCmd)
 	listCmd.AddCommand(themesCmd)

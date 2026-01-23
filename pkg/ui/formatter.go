@@ -13,7 +13,9 @@ import (
 	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	"github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/terminal"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -131,6 +133,26 @@ func setColorProfileInternal(profile termenv.Profile) {
 //	ui.SetColorProfile(termenv.Ascii)
 func SetColorProfile(profile termenv.Profile) {
 	setColorProfileInternal(profile)
+}
+
+// GetColorProfile returns the configured termenv color profile.
+// Use this instead of termenv.ColorProfile() to respect atmos's terminal detection.
+// This ensures colors degrade gracefully in terminals that don't support TrueColor
+// (like macOS Terminal.app which only supports 256 colors until macOS Tahoe).
+//
+// The returned profile respects:
+//   - --force-color flag (returns TrueColor for screenshot generation).
+//   - --no-color / NO_COLOR env var (returns Ascii).
+//   - Terminal capabilities detected via COLORTERM env var.
+//
+// Example usage.
+//
+//	profile := ui.GetColorProfile()
+//	glamour.WithColorProfile(profile)
+func GetColorProfile() termenv.Profile {
+	defer perf.Track(nil, "ui.GetColorProfile")()
+
+	return lipgloss.DefaultRenderer().ColorProfile()
 }
 
 // getFormatter returns the global formatter instance.
@@ -642,8 +664,17 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 	// Split by newlines and trim trailing padding that Glamour adds.
 	lines := atmosansi.TrimTrailingWhitespace(rendered, paragraphIndent, paragraphIndentWidth)
 
+	// Remove trailing empty/whitespace-only lines that Glamour may add.
+	// Glamour can output extra padded lines before trailing newlines.
+	// Note: Intentional trailing newlines from the original text are also stripped
+	// because they would cause extra indented empty lines in multi-line output.
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+
 	if len(lines) == 0 {
-		return styledIcon, nil
+		// Empty message: return icon + space for consistency with iconMessageFormat.
+		return fmt.Sprintf(iconMessageFormat, styledIcon, ""), nil
 	}
 
 	if len(lines) == 1 {
@@ -678,15 +709,19 @@ func (f *formatter) toastMarkdown(icon string, style *lipgloss.Style, text strin
 
 // renderToastMarkdownFromStylesheet renders markdown using a provided stylesheet getter.
 // This is the shared implementation used by both renderToastMarkdown and renderToastMarkdownInline.
+// Uses the custom markdown renderer with extended syntax support (highlight, badge, admonitions).
 func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesheet func(string) ([]byte, error), wordWrap int) (string, error) {
-	var opts []glamour.TermRendererOption
+	var opts []markdown.CustomRendererOption
 
 	if wordWrap > 0 {
-		opts = append(opts, glamour.WithWordWrap(wordWrap))
-		opts = append(opts, glamour.WithPreservedNewLines())
+		opts = append(opts, markdown.WithWordWrap(wordWrap))
+		opts = append(opts, markdown.WithPreservedNewLines())
 	} else {
-		opts = append(opts, glamour.WithWordWrap(0))
+		opts = append(opts, markdown.WithWordWrap(0))
 	}
+
+	// Set color profile using lipgloss's detected profile.
+	opts = append(opts, markdown.WithColorProfile(lipgloss.DefaultRenderer().ColorProfile()))
 
 	if f.terminal.ColorProfile() != terminal.ColorNone {
 		themeName := f.ioCtx.Config().AtmosConfig.Settings.Terminal.Theme
@@ -695,13 +730,11 @@ func (f *formatter) renderToastMarkdownFromStylesheet(content string, getStylesh
 		}
 		glamourStyle, err := getStylesheet(themeName)
 		if err == nil {
-			opts = append(opts, glamour.WithStylesFromJSONBytes(glamourStyle))
+			opts = append(opts, markdown.WithStylesFromJSONBytes(glamourStyle))
 		}
-	} else {
-		opts = append(opts, glamour.WithStylePath("notty"))
 	}
 
-	renderer, err := glamour.NewTermRenderer(opts...)
+	renderer, err := markdown.NewCustomRenderer(opts...)
 	if err != nil {
 		// Degrade gracefully: return plain content if renderer creation fails.
 		return content, err

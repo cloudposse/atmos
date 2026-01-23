@@ -10,10 +10,13 @@ import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use this command to perform sequential execution of `atmos` and `shell` commands defined as workflow steps.
 </Intro>
+
+<DemoVideo id="workflow-run" title="atmos workflow" showCaption={false} />
 
 <ActionCard title="Configure Workflows">
     Learn how to configure workflow paths and define workflow manifests in your atmos.yaml.
@@ -38,21 +41,51 @@ and [Atmos Workflows](/workflows)
 in [Atmos Custom Commands](/cli/configuration/commands)
 :::
 
-## Usage
+## Examples
 
-Execute the `atmos workflow` command like this:
+### Run a Workflow by Name
+
+The simplest way to run a workflow is by name. Atmos will find it automatically:
 
 ```shell
-atmos workflow <workflow_name> --file <workflow_file> [options]
+# Run the "deploy" workflow
+atmos workflow deploy
+
+# Run the "plan-all-vpc" workflow
+atmos workflow plan-all-vpc
 ```
 
+### Interactive Workflow Selection
 
-## Screenshots
+If multiple workflows share the same name across different workflow files, Atmos will present an interactive selector:
 
-### Workflow UI
+```shell
+# If "deploy" exists in both networking.yaml and database.yaml,
+# Atmos will prompt you to choose which one to run
+atmos workflow deploy
+```
 
-Just run `atmos workflow` to start an interactive UI to view, search and execute the configured Atmos
-workflows:
+### Explicit File Selection
+
+Use the `--file` / `-f` flag to explicitly select which workflow file to use:
+
+```shell
+# Run "deploy" from the networking workflow file
+atmos workflow deploy --file networking
+
+# Short form
+atmos workflow deploy -f networking
+
+# Run with dry-run to preview steps
+atmos workflow apply-all-components -f networking --dry-run
+
+# Start from a specific step
+atmos workflow test-1 -f workflow1 --from-step step2
+```
+
+### Interactive UI
+
+Just run `atmos workflow` without arguments to start an interactive UI to view, search, and execute workflows:
 
 ```shell
 atmos workflow
@@ -85,15 +118,6 @@ For example:
 ![`atmos workflow` CLI command 3](/img/cli/workflow/atmos-workflow-command-3.png)
 </Terminal>
 
-## Examples
-
-```shell
-atmos workflow
-atmos workflow plan-all-vpc --file networking
-atmos workflow apply-all-components -f networking --dry-run
-atmos workflow test-1 -f workflow1 --from-step step2
-```
-
 :::tip
 Run `atmos workflow --help` to see all the available options
 :::
@@ -108,8 +132,8 @@ Run `atmos workflow --help` to see all the available options
 ## Flags
 
 <dl>
-  <dt>`--file` / `-f` <em>(required)</em></dt>
-  <dd>File name where the workflow is defined.</dd>
+  <dt>`--file` / `-f` <em>(optional)</em></dt>
+  <dd>File name where the workflow is defined. If omitted and the workflow name is unique, Atmos finds it automatically. If multiple workflows share the same name, Atmos presents an interactive selector.</dd>
 
   <dt>`--stack` / `-s` <em>(optional)</em></dt>
   <dd>Atmos stack (if provided, will override stacks defined in the workflow or workflow steps).</dd>
