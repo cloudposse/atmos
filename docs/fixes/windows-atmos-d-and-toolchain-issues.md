@@ -2,10 +2,11 @@
 
 ## Summary
 
-This document describes two user-reported issues on Windows:
+This document describes user-reported issues on Windows:
 
 1. **Issue #1**: Auto-import of `.atmos.d` directory not working on Windows - **VERIFIED WORKING**
-2. **Issue #2**: Toolchain installation failures and PATH/config issues on Windows
+2. **Issue #2**: Toolchain installation failures and PATH/config issues on Windows - **FIXED (.exe extension)**
+3. **Issue #3**: Toolchain tools not in PATH when running custom commands
 
 ---
 
@@ -462,6 +463,177 @@ toolchain-terraform-integration/
    .\atmos.exe toolchain env --format powershell
    # Expected: Graceful error message about missing config
    ```
+
+---
+
+## Issue #3: Toolchain Tools Not in PATH When Running Custom Commands
+
+### Problem Description
+
+Users report that after installing toolchain tools (e.g., gum), running custom Atmos commands that use these tools fails with:
+
+```
+"gum": executable file not found in $PATH
+```
+
+This occurs even when:
+1. The tool was successfully installed via `atmos toolchain install`
+2. The tool works when running `gum --version` directly after setting PATH via `Invoke-Expression`
+
+### User Configuration
+
+**atmos.yaml**:
+```yaml
+toolchain:
+  file_path: .tool-versions
+  install_path: .tools
+  aliases:
+    helm: helm/helm
+    kubectl: kubernetes-sigs/kubectl
+    replicated: replicatedhq/replicated
+    tofu: opentofu/opentofu
+  registries:
+    - name: custom
+      type: atmos
+      priority: 100
+      tools:
+        replicatedhq/replicated:
+          type: github_release
+          repo_owner: replicatedhq
+          repo_name: replicated
+          asset: 'replicated_{{trimV .Version}}_{{if eq .OS "darwin"}}darwin_all{{else}}{{.OS}}_{{.Arch}}{{end}}.tar.gz'
+          files:
+            - name: replicated
+              src: replicated
+```
+
+**.tool-versions**:
+```
+charmbracelet/gum 0.17.0
+derailed/k9s 0.32.7
+helm/helm 3.16.3
+jqlang/jq 1.7.1
+kubernetes/kubectl 1.31.4
+opentofu/opentofu 1.9.0
+replicatedhq/replicated 0.124.1
+```
+
+### Root Cause Analysis
+
+When Atmos runs custom commands (defined in `.atmos.d/commands.yaml`), it spawns a subprocess to execute the command. The subprocess inherits the current process's PATH environment variable.
+
+**Problem**: The toolchain tools are installed to a local directory (e.g., `.tools/bin/`), but this directory is NOT automatically added to the PATH when Atmos runs custom commands. Users must manually run:
+- **PowerShell**: `Invoke-Expression (atmos toolchain env --format powershell)`
+- **Bash/Zsh**: `eval "$(atmos toolchain env)"`
+
+This is a one-time operation per shell session, but custom commands run in a fresh subprocess that doesn't have this PATH modification.
+
+### Proposed Solutions
+
+#### Option A: Auto-inject Toolchain PATH for Custom Commands
+
+Modify Atmos to automatically prepend the toolchain bin directories to PATH before executing custom commands.
+
+**Files to modify**:
+- `internal/exec/shell_utils.go` - Add toolchain PATH injection
+- `internal/exec/cmd_utils.go` - Ensure custom command execution includes toolchain PATH
+
+#### Option B: Auto-source Toolchain on Shell Initialization
+
+Provide guidance/tooling for users to add `eval "$(atmos toolchain env)"` to their shell profile (`.bashrc`, `.zshrc`, PowerShell profile).
+
+#### Option C: Document the Limitation
+
+Clearly document that toolchain tools require PATH setup before running custom commands.
+
+### Test Fixture
+
+A test fixture has been created to reproduce this issue:
+
+**Location**: `tests/fixtures/scenarios/toolchain-custom-commands`
+
+**Structure**:
+```
+toolchain-custom-commands/
+├── .atmos.d/
+│   └── commands.yaml    # Custom commands using all toolchain tools
+├── .tool-versions       # gum, k9s, helm, jq, kubectl, tofu, replicated
+├── atmos.yaml           # Toolchain config with aliases and custom registry
+├── components/terraform/test-component/
+│   └── main.tf
+└── stacks/deploy/
+    └── dev.yaml
+```
+
+**Custom commands defined**:
+- `test-gum` - Runs `gum --version`
+- `test-k9s` - Runs `k9s version --short`
+- `test-helm` - Runs `helm version --short`
+- `test-jq` - Runs `jq --version`
+- `test-kubectl` - Runs `kubectl version --client`
+- `test-tofu` - Runs `tofu --version`
+- `test-replicated` - Runs `replicated version`
+- `test-all-tools` - Runs all of the above
+
+### Manual Testing Steps
+
+#### On Windows:
+
+```powershell
+# Navigate to test fixture
+cd tests\fixtures\scenarios\toolchain-custom-commands
+
+# Build atmos (from repo root)
+cd ..\..\..\..
+go build -o atmos.exe .
+cd tests\fixtures\scenarios\toolchain-custom-commands
+
+# Install all tools from .tool-versions
+..\..\..\..\atmos.exe toolchain install
+
+# Check that custom commands are loaded
+..\..\..\..\atmos.exe --help
+# Should see: test-gum, test-k9s, test-helm, etc.
+
+# Try running custom command WITHOUT setting PATH first (expect failure)
+..\..\..\..\atmos.exe test-gum
+# Expected error: "gum": executable file not found in $PATH
+
+# Now set PATH and try again
+Invoke-Expression (..\..\..\..\atmos.exe toolchain env --format powershell)
+
+# Verify gum works directly
+gum --version
+# Should work
+
+# Try custom command again (may still fail because atmos runs in subprocess)
+..\..\..\..\atmos.exe test-gum
+# Behavior to verify: Does setting PATH in parent shell help subprocess?
+```
+
+#### On macOS/Linux:
+
+```bash
+# Navigate to test fixture
+cd tests/fixtures/scenarios/toolchain-custom-commands
+
+# Build atmos
+cd ../../../..
+go build -o atmos .
+cd tests/fixtures/scenarios/toolchain-custom-commands
+
+# Install all tools
+../../../../atmos toolchain install
+
+# Set PATH
+eval "$(../../../../atmos toolchain env)"
+
+# Test custom command
+../../../../atmos test-gum
+
+# Test all tools
+../../../../atmos test-all-tools
+```
 
 ---
 

@@ -1,0 +1,44 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+# Toolchain configuration - tests gum in PATH for custom commands
+toolchain:
+  file_path: .tool-versions
+  install_path: .tools
+  aliases:
+    helm: helm/helm
+    kubectl: kubernetes-sigs/kubectl
+    replicated: replicatedhq/replicated
+    tofu: opentofu/opentofu
+  registries:
+    # Inline registry for tools not in Aqua
+    - name: custom
+      type: atmos
+      priority: 100
+      tools:
+        # Replicated CLI - not in Aqua registry
+        replicatedhq/replicated:
+          type: github_release
+          repo_owner: replicatedhq
+          repo_name: replicated
+          asset: 'replicated_{{trimV .Version}}_{{if eq .OS "darwin"}}darwin_all{{else}}{{.OS}}_{{.Arch}}{{end}}.tar.gz'
+          files:
+            - name: replicated
+              src: replicated
+
+logs:
+  file: "/dev/stderr"
+  level: Info

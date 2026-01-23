@@ -1,0 +1,48 @@
+# Custom CLI commands that use tools from the toolchain
+# This tests that all toolchain tools are in PATH when running custom commands
+commands:
+  - name: "test-gum"
+    description: "Test that gum is available in PATH"
+    steps:
+      - gum --version
+
+  - name: "test-k9s"
+    description: "Test that k9s is available in PATH"
+    steps:
+      - k9s version --short
+
+  - name: "test-helm"
+    description: "Test that helm is available in PATH"
+    steps:
+      - helm version --short
+
+  - name: "test-jq"
+    description: "Test that jq is available in PATH"
+    steps:
+      - jq --version
+
+  - name: "test-kubectl"
+    description: "Test that kubectl is available in PATH"
+    steps:
+      - kubectl version --client
+
+  - name: "test-tofu"
+    description: "Test that tofu is available in PATH"
+    steps:
+      - tofu --version
+
+  - name: "test-replicated"
+    description: "Test that replicated is available in PATH"
+    steps:
+      - replicated version
+
+  - name: "test-all-tools"
+    description: "Test all toolchain tools are in PATH"
+    steps:
+      - gum --version
+      - k9s version --short
+      - helm version --short
+      - jq --version
+      - kubectl version --client
+      - tofu --version
+      - replicated version
