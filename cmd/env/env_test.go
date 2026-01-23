@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
 )
 
@@ -314,7 +315,7 @@ func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 		// Try to write to a path that doesn't exist and can't be created.
 		err := envfmt.WriteToFile("/nonexistent/directory/file.env", "content")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to open file")
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
 
 	t.Run("fails with read-only directory", func(t *testing.T) {
@@ -336,7 +337,7 @@ func TestWriteEnvToFile_ErrorCases(t *testing.T) {
 
 		err = envfmt.WriteToFile(filepath.Join(readOnlyDir, "test.env"), "content")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to open file")
+		assert.ErrorIs(t, err, errUtils.ErrOpenFile)
 	})
 }
 

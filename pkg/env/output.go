@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
@@ -130,12 +131,18 @@ func outputJSON(data map[string]string, outputFile string, cfg *outputConfig) er
 func writeToFileWithMode(filePath string, content string, mode os.FileMode) error {
 	f, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, mode)
 	if err != nil {
-		return fmt.Errorf("failed to open file '%s': %w", filePath, err)
+		return errUtils.Build(errUtils.ErrOpenFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
 	}
 	defer f.Close()
 
 	if _, err := f.WriteString(content); err != nil {
-		return fmt.Errorf("failed to write to file '%s': %w", filePath, err)
+		return errUtils.Build(errUtils.ErrWriteFile).
+			WithCause(err).
+			WithContext("path", filePath).
+			Err()
 	}
 	return nil
 }
