@@ -78,13 +78,13 @@ func (m *masker) RegisterSecret(secret string) {
 
 	m.RegisterValue(secret)
 
-	// Register base64 encoded versions
+	// Register base64 encoded versions.
 	m.RegisterValue(base64.StdEncoding.EncodeToString([]byte(secret)))
 	m.RegisterValue(base64.URLEncoding.EncodeToString([]byte(secret)))
 	m.RegisterValue(base64.RawStdEncoding.EncodeToString([]byte(secret)))
 	m.RegisterValue(base64.RawURLEncoding.EncodeToString([]byte(secret)))
 
-	// Register URL encoded version
+	// Register URL encoded version.
 	m.RegisterValue(url.QueryEscape(secret))
 
 	// Register JSON-escaped version (without quotes to preserve JSON structure).
@@ -156,9 +156,9 @@ func (m *masker) Mask(input string) string {
 
 	masked := input
 
-	// Mask literals (exact matches)
-	// Sort by length (longest first) to avoid partial replacements
-	// Collect literals into slice
+	// Mask literals (exact matches).
+	// Sort by length (longest first) to avoid partial replacements.
+	// Collect literals into slice.
 	literals := make([]string, 0, len(m.literals))
 	for literal := range m.literals {
 		if literal != "" {
@@ -166,8 +166,8 @@ func (m *masker) Mask(input string) string {
 		}
 	}
 
-	// Sort by length descending (longest first)
-	// This prevents shorter literals from being replaced before longer ones
+	// Sort by length descending (longest first).
+	// This prevents shorter literals from being replaced before longer ones.
 	for i := 0; i < len(literals); i++ {
 		for j := i + 1; j < len(literals); j++ {
 			if len(literals[j]) > len(literals[i]) {
