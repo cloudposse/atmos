@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -965,4 +966,119 @@ func TestNewWithOptions(t *testing.T) {
 		assert.NotNil(t, installer)
 		assert.Equal(t, factory, installer.registryFactory)
 	})
+}
+
+// TestEnsureWindowsExeExtension tests the centralized Windows .exe extension handling.
+// This function follows Aqua's behavior where executables need the .exe extension
+// on Windows to be found by os/exec.LookPath.
+func TestEnsureWindowsExeExtension(t *testing.T) {
+	tests := []struct {
+		name       string
+		binaryName string
+		// Expected result depends on runtime.GOOS:
+		// - On Windows: returns binaryName + ".exe" if not already present
+		// - On non-Windows: returns binaryName unchanged
+		wantWindows    string
+		wantNonWindows string
+	}{
+		{
+			name:           "plain binary name",
+			binaryName:     "terraform",
+			wantWindows:    "terraform.exe",
+			wantNonWindows: "terraform",
+		},
+		{
+			name:           "binary name already has .exe",
+			binaryName:     "terraform.exe",
+			wantWindows:    "terraform.exe",
+			wantNonWindows: "terraform.exe",
+		},
+		{
+			name:           "binary name with uppercase .EXE",
+			binaryName:     "terraform.EXE",
+			wantWindows:    "terraform.EXE",
+			wantNonWindows: "terraform.EXE",
+		},
+		{
+			name:           "binary name with mixed case .Exe",
+			binaryName:     "terraform.Exe",
+			wantWindows:    "terraform.Exe",
+			wantNonWindows: "terraform.Exe",
+		},
+		{
+			name:           "binary name with path",
+			binaryName:     "bin/terraform",
+			wantWindows:    "bin/terraform.exe",
+			wantNonWindows: "bin/terraform",
+		},
+		{
+			name:           "binary name with path and .exe",
+			binaryName:     "bin/terraform.exe",
+			wantWindows:    "bin/terraform.exe",
+			wantNonWindows: "bin/terraform.exe",
+		},
+		{
+			name:           "empty binary name",
+			binaryName:     "",
+			wantWindows:    ".exe",
+			wantNonWindows: "",
+		},
+		{
+			name:           "binary name ending with .ex",
+			binaryName:     "myfile.ex",
+			wantWindows:    "myfile.ex.exe",
+			wantNonWindows: "myfile.ex",
+		},
+		{
+			name:           "binary name ending with .exeFile",
+			binaryName:     "terraform.exeFile",
+			wantWindows:    "terraform.exeFile.exe",
+			wantNonWindows: "terraform.exeFile",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := EnsureWindowsExeExtension(tt.binaryName)
+
+			// Determine expected result based on current OS.
+			var expected string
+			if runtime.GOOS == "windows" {
+				expected = tt.wantWindows
+			} else {
+				expected = tt.wantNonWindows
+			}
+
+			assert.Equal(t, expected, result,
+				"EnsureWindowsExeExtension(%q) on %s", tt.binaryName, runtime.GOOS)
+		})
+	}
+}
+
+// TestEnsureWindowsExeExtension_CurrentPlatformBehavior verifies the function
+// behaves correctly on the current platform.
+func TestEnsureWindowsExeExtension_CurrentPlatformBehavior(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		// On Windows, should add .exe if not present.
+		t.Run("adds .exe on Windows", func(t *testing.T) {
+			result := EnsureWindowsExeExtension("myapp")
+			assert.Equal(t, "myapp.exe", result)
+		})
+
+		t.Run("does not double-add .exe on Windows", func(t *testing.T) {
+			result := EnsureWindowsExeExtension("myapp.exe")
+			assert.Equal(t, "myapp.exe", result)
+		})
+	} else {
+		// On non-Windows, should return unchanged.
+		t.Run("returns unchanged on non-Windows", func(t *testing.T) {
+			result := EnsureWindowsExeExtension("myapp")
+			assert.Equal(t, "myapp", result)
+		})
+
+		t.Run("returns unchanged even with .exe on non-Windows", func(t *testing.T) {
+			result := EnsureWindowsExeExtension("myapp.exe")
+			assert.Equal(t, "myapp.exe", result)
+		})
+	}
 }

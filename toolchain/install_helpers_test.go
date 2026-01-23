@@ -2,6 +2,8 @@ package toolchain
 
 import (
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -207,4 +209,33 @@ func TestSpinnerControl_Fields(t *testing.T) {
 
 	assert.True(t, sc.showingSpinner)
 	assert.Nil(t, sc.program)
+}
+
+// TestGetPlatformPathHint tests that getPlatformPathHint returns the correct hint for the current platform.
+func TestGetPlatformPathHint(t *testing.T) {
+	hint := getPlatformPathHint()
+
+	// Verify the hint is not empty.
+	assert.NotEmpty(t, hint)
+
+	// Verify the hint contains expected content based on platform.
+	if runtime.GOOS == "windows" {
+		assert.True(t, strings.Contains(hint, "Invoke-Expression"),
+			"Windows hint should contain 'Invoke-Expression'")
+		assert.True(t, strings.Contains(hint, "--format powershell"),
+			"Windows hint should contain '--format powershell'")
+	} else {
+		assert.True(t, strings.Contains(hint, "eval"),
+			"Unix hint should contain 'eval'")
+		assert.True(t, strings.Contains(hint, "$("),
+			"Unix hint should contain '$('")
+	}
+
+	// All platforms should include the atmos toolchain env command.
+	assert.True(t, strings.Contains(hint, "atmos"),
+		"Hint should contain 'atmos'")
+	assert.True(t, strings.Contains(hint, "toolchain env"),
+		"Hint should contain 'toolchain env'")
+	assert.True(t, strings.Contains(hint, "PATH"),
+		"Hint should contain 'PATH'")
 }
