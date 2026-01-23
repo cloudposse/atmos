@@ -290,7 +290,7 @@ const config = {
                     {from: '/core-concepts/stacks/naming', to: '/stacks/name'},
                     {from: '/core-concepts/stacks/templates', to: '/templates'},
                     {from: '/core-concepts/workflows/workflow-manifest', to: '/workflows'},
-                    {from: '/core-concepts/vendoring', to: '/vendor'},
+                    {from: '/core-concepts/vendoring', to: '/vendor/'},
                     {from: '/core-concepts/vendoring/vendor-manifest', to: '/vendor/vendor-config'},
                     // Redirects for directory renames: core-concepts → learn
                     {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
