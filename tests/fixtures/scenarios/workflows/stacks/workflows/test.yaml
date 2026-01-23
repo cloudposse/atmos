@@ -156,3 +156,64 @@ workflows:
     steps:
       - command: echo -var="enabled=false" -var='foo=bar'
         type: shell
+
+  # Test cases for double-hyphen (--) separator parsing
+  # This reproduces GitHub issue #1967 where commands with -- separator
+  # were incorrectly parsed, causing stack value corruption.
+  #
+  # The POSIX convention is that -- separates command options from positional arguments.
+  # Everything after -- should be passed through to terraform without being parsed by atmos.
+
+  # Test double-hyphen with stack in command
+  # This is the exact pattern from the bug report
+  double-hyphen-with-stack:
+    description: |
+      Test command with -- separator and --stack flag.
+      Reproduces issue #1967 where stack value gets corrupted.
+    steps:
+      # The command includes --stack and then -- followed by terraform flags
+      - command: terraform plan mock --stack nonprod -- -consolidate-warnings=false
+
+  # Test double-hyphen with workflow-level stack override
+  double-hyphen-workflow-stack:
+    description: |
+      Test double-hyphen with workflow-level stack.
+      Stack from workflow should be inserted before --.
+    stack: nonprod
+    steps:
+      - command: terraform plan mock -- -consolidate-warnings=false
+
+  # Test double-hyphen with step-level stack override
+  double-hyphen-step-stack:
+    description: |
+      Test double-hyphen with step-level stack.
+      Stack from step should be inserted before --.
+    steps:
+      - command: terraform plan mock -- -consolidate-warnings=false
+        stack: nonprod
+
+  # Test double-hyphen with both command stack and workflow stack
+  # Workflow stack should override command stack
+  double-hyphen-stack-precedence:
+    description: |
+      Test stack precedence with double-hyphen.
+      Workflow stack should override inline stack.
+    stack: nonprod
+    steps:
+      # This has --stack wrongstack but workflow says nonprod
+      - command: terraform plan mock --stack wrongstack -- -consolidate-warnings=false
+
+  # Test double-hyphen with multiple terraform flags after separator
+  double-hyphen-multiple-flags:
+    description: |
+      Test multiple terraform flags after -- separator.
+    steps:
+      - command: terraform plan mock -s nonprod -- -var="foo=bar" -var="baz=qux"
+
+  # Test shell command to verify parsing of -- separator
+  shell-double-hyphen-echo:
+    description: |
+      Shell command to verify -- separator parsing.
+    steps:
+      - command: echo "before --" -- "after --"
+        type: shell

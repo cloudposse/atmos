@@ -21,10 +21,10 @@ export interface FeaturedItem {
   changelog?: string;
   pr?: number;
   prd?: string;
+/** Whether this feature is experimental (still being refined). */
+  experimental?: boolean;
   /** Demo video ID (optional) - matches scene name in demos/scenes.yaml. */
   demoId?: string;
-  /** Whether this feature is experimental (still being refined). */
-  experimental?: boolean;
 }
 
 interface FeaturedDrawerProps {

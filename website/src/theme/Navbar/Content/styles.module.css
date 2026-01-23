@@ -45,6 +45,7 @@ See https://github.com/facebook/docusaurus/pull/11142
     max-width 0.2s ease-out;
   max-width: 200px; /* Reasonable max for animation. */
   overflow: hidden;
+  visibility: visible;
 }
 
 /* Hidden item (in overflow). */
@@ -53,11 +54,13 @@ See https://github.com/facebook/docusaurus/pull/11142
   max-width: 0;
   transform: translateX(-10px);
   pointer-events: none;
-  /* Faster exit animation. */
+  visibility: hidden;
+  /* Faster exit animation. Visibility delay ensures element is hidden after animation completes. */
   transition:
     opacity 0.15s ease-in,
     transform 0.15s ease-in,
-    max-width 0.15s ease-in;
+    max-width 0.15s ease-in,
+    visibility 0s linear 0.15s;
 }
 
 /* ========================================

@@ -13,6 +13,7 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	"github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/pager"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -22,6 +23,9 @@ import (
 
 // componentInfoKey is the key used for component info in stack sections.
 const componentInfoKey = "component_info"
+
+// logFieldStack is the log field key for stack names.
+const logFieldStack = "stack"
 
 type DescribeStacksArgs struct {
 	Query                string
@@ -381,7 +385,10 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
-								return nil, err
+								// Fall back to filename when pattern validation fails.
+								log.Debug("Pattern validation failed, using filename as stack name",
+									logFieldStack, stackFileName, "error", err)
+								stackName = stackFileName
 							}
 						default:
 							// Default: use stack filename when no name, template, or pattern is configured.
@@ -635,7 +642,10 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
-								return nil, err
+								// Fall back to filename when pattern validation fails.
+								log.Debug("Pattern validation failed, using filename as stack name",
+									logFieldStack, stackFileName, "error", err)
+								stackName = stackFileName
 							}
 						default:
 							// Default: use stack filename when no name, template, or pattern is configured.
@@ -866,7 +876,10 @@ func ExecuteDescribeStacks(
 							configAndStacksInfo.Context = context
 							stackName, err = cfg.GetContextPrefix(stackFileName, context, GetStackNamePattern(atmosConfig), stackFileName)
 							if err != nil {
-								return nil, err
+								// Fall back to filename when pattern validation fails.
+								log.Debug("Pattern validation failed, using filename as stack name",
+									logFieldStack, stackFileName, "error", err)
+								stackName = stackFileName
 							}
 						default:
 							// Default: use stack filename when no name, template, or pattern is configured.
@@ -1050,8 +1063,7 @@ func getComponentBasePath(atmosConfig *schema.AtmosConfiguration, componentKind 
 	case cfg.HelmfileSectionName:
 		return atmosConfig.Components.Helmfile.BasePath
 	case cfg.PackerSectionName:
-		// Packer doesn't have a dedicated BasePath in schema.
-		return "components/packer"
+		return atmosConfig.Components.Packer.BasePath
 	default:
 		return ""
 	}

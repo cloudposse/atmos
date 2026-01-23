@@ -167,7 +167,7 @@ func listComponentsWithOptions(cmd *cobra.Command, args []string, opts *Componen
 	}
 
 	if len(components) == 0 {
-		_ = ui.Info("No components found")
+		ui.Info("No components found")
 		return nil
 	}
 

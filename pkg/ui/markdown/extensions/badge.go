@@ -5,12 +5,15 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // BadgeKind is the kind of Badge AST node.
@@ -71,6 +74,12 @@ func (p *badgeParser) Parse(parent ast.Node, block text.Reader, pc parser.Contex
 	line, _ := block.PeekLine()
 	pos := block.LineOffset()
 
+	// Validate bounds before slicing - offset can exceed line length
+	// when parsing inline elements across multi-line or ANSI-encoded content.
+	if pos >= len(line) {
+		return nil
+	}
+
 	// Get remaining text from current position.
 	remaining := string(line[pos:])
 
@@ -103,16 +112,35 @@ func (r *badgeHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(BadgeKind, r.renderBadge)
 }
 
-// badgeColors defines the colors for each badge variant.
-var badgeColors = map[string]struct {
-	bg string // Background color (ANSI 256 or hex)
-	fg string // Foreground color
-}{
-	"":        {bg: "99", fg: "16"},  // Default: purple bg, dark fg
-	"warning": {bg: "208", fg: "16"}, // Orange bg, dark fg
-	"success": {bg: "34", fg: "16"},  // Green bg, dark fg
-	"error":   {bg: "196", fg: "16"}, // Red bg, white fg
-	"info":    {bg: "33", fg: "16"},  // Blue bg, white fg
+// getBadgeStyle returns the lipgloss style for a badge variant.
+// Uses theme-aware colors that adapt to the user's configured theme.
+// Badge styles use the semantic color as background with contrasting foreground.
+func getBadgeStyle(variant string) lipgloss.Style {
+	styles := theme.GetCurrentStyles()
+	var baseStyle lipgloss.Style
+
+	switch variant {
+	case "warning":
+		baseStyle = styles.Warning
+	case "success":
+		baseStyle = styles.Success
+	case "error":
+		baseStyle = styles.Error
+	case "info":
+		baseStyle = styles.Info
+	default:
+		// Default to Notice (purple) for unmarked badges.
+		baseStyle = styles.Notice
+	}
+
+	// Extract the foreground color from the theme style and use as background.
+	// Use a contrasting dark color for foreground text.
+	fg := baseStyle.GetForeground()
+	return lipgloss.NewStyle().
+		Background(fg).
+		Foreground(lipgloss.Color("16")). // Dark/black for contrast.
+		Bold(true).
+		Padding(0, 1)
 }
 
 // renderBadge renders the Badge node.
@@ -122,21 +150,8 @@ func (r *badgeHTMLRenderer) renderBadge(w util.BufWriter, source []byte, n ast.N
 	}
 
 	badge := n.(*Badge)
-	colors, ok := badgeColors[badge.BadgeVariant]
-	if !ok {
-		colors = badgeColors[""] // Default.
-	}
-
-	// Render badge with ANSI escape codes.
-	// ESC[48;5;Xm = 256-color background, ESC[38;5;Xm = 256-color foreground.
-	// ESC[1m = bold, space padding for badge appearance.
-	_, _ = w.WriteString("\x1b[48;5;")
-	_, _ = w.WriteString(colors.bg)
-	_, _ = w.WriteString("m\x1b[38;5;")
-	_, _ = w.WriteString(colors.fg)
-	_, _ = w.WriteString("m\x1b[1m ")
-	_, _ = w.WriteString(badge.BadgeText)
-	_, _ = w.WriteString(" \x1b[0m")
+	style := getBadgeStyle(badge.BadgeVariant)
+	_, _ = w.WriteString(style.Render(badge.BadgeText))
 
 	return ast.WalkContinue, nil
 }

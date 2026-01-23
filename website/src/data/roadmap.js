@@ -15,6 +15,13 @@
  * - Versions are sourced from blog post `release:` fields and git tag research
  * - Not all shipped milestones have versions; older features pre-date version tracking
  * - When adding a new shipped milestone, include the version if known
+ *
+ * Demo video metadata:
+ * - The optional `demoId` field references a scene in demos/scenes.yaml
+ * - The DemoVideo component is currently a placeholder (returns null)
+ * - When the demo infrastructure is added, demoIds will render embedded demo videos
+ * - Valid demoIds: auth-shell, devcontainer, list-components, list-stacks, profile,
+ *   terraform-plan, theme, toolchain, workflow-list
  */
 
 export const roadmapConfig = {
@@ -31,8 +38,8 @@ export const roadmapConfig = {
     { id: 'q1-2025', label: 'Q1 2025', status: 'completed' },
     { id: 'q2-2025', label: 'Q2 2025', status: 'completed' },
     { id: 'q3-2025', label: 'Q3 2025', status: 'completed' },
-    { id: 'q4-2025', label: 'Q4 2025', status: 'current' },
-    { id: 'q1-2026', label: 'Q1 2026', status: 'planned' },
+    { id: 'q4-2025', label: 'Q4 2025', status: 'completed' },
+    { id: 'q1-2026', label: 'Q1 2026', status: 'current' },
     { id: 'q2-2026', label: 'Q2 2026', status: 'planned' },
   ],
 
@@ -50,8 +57,8 @@ export const roadmapConfig = {
       docs: '/cli/configuration/devcontainer',
       changelog: 'native-devcontainer-support',
       prd: 'devcontainer-command',
-      demoId: 'devcontainer',
       experimental: true,
+      demoId: 'devcontainer',
     },
     {
       id: 'toolchain',
@@ -65,8 +72,8 @@ export const roadmapConfig = {
       pr: 1686,
       docs: '/cli/commands/toolchain/usage',
       changelog: 'toolchain-management',
-      demoId: 'toolchain',
       experimental: true,
+      demoId: 'toolchain',
     },
     {
       id: 'cloud-auth',
@@ -81,7 +88,6 @@ export const roadmapConfig = {
       docs: '/cli/configuration/auth/providers',
       changelog: 'introducing-atmos-auth',
       prd: 'keyring-backends',
-      demoId: 'auth-login',
     },
     {
       id: 'workflows',
@@ -94,7 +100,6 @@ export const roadmapConfig = {
       quarter: 'q1-2026',
       docs: '/cli/configuration/workflows',
       pr: 1899,
-      demoId: 'workflow-run',
     },
     {
       id: 'source-provisioning',
@@ -137,7 +142,7 @@ export const roadmapConfig = {
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.' },
-        { label: 'AWS IAM Identity Center (SSO)', status: 'shipped', quarter: 'q2-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Native support for AWS SSO login with automatic credential caching and session refresh.', benefits: 'Log in once and work across all AWS accounts. Sessions refresh automatically without interrupting your workflow.', demoId: 'auth-login' },
+        { label: 'AWS IAM Identity Center (SSO)', status: 'shipped', quarter: 'q2-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Native support for AWS SSO login with automatic credential caching and session refresh.', benefits: 'Log in once and work across all AWS accounts. Sessions refresh automatically without interrupting your workflow.' },
         { label: 'AWS IAM Users', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/auth/providers', description: 'Support for traditional IAM user credentials with secure credential management.', benefits: 'Teams with IAM users can adopt Atmos auth without changing their identity provider.' },
         { label: 'Assume Root capability', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/auth/providers', changelog: 'aws-assume-root-identity', description: 'Centralized root access management for organizations that need controlled root-level operations.', benefits: 'Auditable root access for break-glass scenarios. No shared root credentials or password managers.' },
         { label: 'GitHub OIDC', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Native GitHub Actions OIDC integration for secure, secretless CI/CD authentication to AWS.', benefits: 'No AWS access keys in GitHub secrets. Credentials are scoped to the repository and workflow.' },
@@ -181,25 +186,29 @@ export const roadmapConfig = {
         { label: 'Secret masking (built-in patterns + custom expressions)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/mask', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Automatic detection and masking of 120+ secret patterns (AWS keys, tokens, passwords) in terminal output.', benefits: 'Secrets are protected automatically. Safe to share terminal output or stream logs without audit risk.' },
         { label: 'Added `--chdir` flag for multi-repo workflows', status: 'shipped', quarter: 'q3-2025', docs: '/cli/global-flags', changelog: 'introducing-chdir-flag', version: 'v1.195.0', description: 'Run Atmos commands from any directory by specifying the project root with --chdir.', benefits: 'Scripts and CI jobs can target any repo without changing directories or managing paths.' },
         { label: 'Parent directory search & git root discovery', status: 'shipped', quarter: 'q3-2025', changelog: 'parent-directory-search-and-git-root-discovery', version: 'v1.198.0', description: 'Run Atmos from any directory within your project—automatic discovery of atmos.yaml by searching parent directories up to the git repository root.', category: 'featured', priority: 'high', benefits: 'Run atmos from anywhere in your project. No need to cd to the root directory first.' },
-        { label: 'Native Dev Containers', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/devcontainer', changelog: 'native-devcontainer-support', description: 'Native Dev Container support with automatic container lifecycle management—start, stop, attach, and exec.', category: 'featured', priority: 'high', benefits: 'Consistent development environments across the team. New contributors are productive immediately.', demoId: 'devcontainer', experimental: true },
+        { label: 'Native Dev Containers', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/devcontainer', changelog: 'native-devcontainer-support', description: 'Native Dev Container support with automatic container lifecycle management—start, stop, attach, and exec.', category: 'featured', priority: 'high', benefits: 'Consistent development environments across the team. New contributors are productive immediately.', experimental: true, demoId: 'devcontainer' },
         { label: 'Interactive prompts for missing flags', status: 'shipped', quarter: 'q4-2025', changelog: 'interactive-flag-prompts', version: 'v1.202.0', description: 'Prompts for missing required flags with tab completion and validation.', category: 'featured', priority: 'high', benefits: 'Discover available options interactively instead of reading docs. Commands guide you through required inputs.' },
         { label: 'Atmos Profiles', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/profiles', changelog: 'atmos-profiles', version: 'v1.199.0', description: 'Named configuration profiles for different environments or projects, switchable on the fly.', benefits: 'Switch between projects or environments without editing config files or setting environment variables.', demoId: 'profile' },
         { label: 'Automated Terraform backend provisioning', status: 'shipped', quarter: 'q4-2025', docs: '/components/terraform/backend-provisioning', changelog: 'automatic-backend-provisioning', version: 'v1.202.0', description: 'Automatic backend.tf generation from stack configuration. Backends are defined once and inherited.', category: 'featured', priority: 'high', benefits: 'No more copy-pasting backend blocks. Backend configuration is defined once and applied consistently.', experimental: true },
         { label: 'Streaming Terraform UI', status: 'in-progress', quarter: 'q4-2025', pr: 1908, description: 'Real-time Terraform plan/apply visualization with resource-level progress tracking.', benefits: 'See exactly what Terraform is doing as it happens. Identify slow resources and stuck operations.' },
         { label: 'Native CI integration with summary templates', status: 'in-progress', quarter: 'q4-2025', pr: 1891, description: 'GitHub/GitLab-native summaries with formatted plan output, cost estimates, and approval workflows.', benefits: 'PR reviewers see formatted plans directly in GitHub. No clicking through to CI logs.' },
-        { label: 'Component-aware tab completion for all commands', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/completion', changelog: 'component-aware-stack-completion', version: 'v1.198.0', description: 'Shell completion that understands your stacks and components for faster command entry.', category: 'featured', priority: 'high', benefits: 'Tab completion shows only valid stacks and components. Discover what exists without searching config files.', demoId: 'completion' },
+        { label: 'Component-aware tab completion for all commands', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/completion', changelog: 'component-aware-stack-completion', version: 'v1.198.0', description: 'Shell completion that understands your stacks and components for faster command entry.', category: 'featured', priority: 'high', benefits: 'Tab completion shows only valid stacks and components. Discover what exists without searching config files.' },
         { label: 'Filesystem paths for components', status: 'shipped', quarter: 'q4-2025', changelog: 'path-based-component-resolution', version: 'v1.201.0', description: 'Reference components by filesystem path instead of component name. Run commands from component directories.', codeExample: 'atmos terraform plan ./components/vpc -s plat-ue1-prod', category: 'featured', priority: 'high', benefits: 'Work on components naturally by navigating to their directory. Component names are inferred from the path.' },
-        { label: 'Automatic toolchain installation and version management', status: 'shipped', quarter: 'q4-2025', description: 'Install and manage tool versions (Terraform, OpenTofu, Helmfile) based on component requirements.', benefits: 'The correct tool versions are installed automatically. No tfenv, tgswitch, or manual version management.', demoId: 'toolchain', experimental: true },
+        { label: 'Automatic toolchain installation and version management', status: 'shipped', quarter: 'q4-2025', description: 'Install and manage tool versions (Terraform, OpenTofu, Helmfile) based on component requirements.', benefits: 'The correct tool versions are installed automatically. No tfenv, tgswitch, or manual version management.', experimental: true, demoId: 'toolchain' },
         { label: 'Terminal themes', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/settings/terminal', changelog: 'terminal-themes', version: 'v1.198.0', description: 'Customizable terminal color themes with built-in presets and user-defined themes.', benefits: 'Match your terminal output to your preferences or brand. Switch themes without code changes.', demoId: 'theme' },
         { label: 'Theme-aware help text', status: 'shipped', quarter: 'q4-2025', changelog: 'theme-aware-help', version: 'v1.200.0', description: 'Help text respects your terminal theme settings for consistent styling.', benefits: 'Help output matches your theme. Consistent look across all Atmos commands.' },
         { label: 'Helpful error messages with hints', status: 'shipped', quarter: 'q4-2025', changelog: 'helpful-errors', version: 'v1.199.0', description: 'Error messages include actionable hints, rich context, and optional Sentry integration for enterprise error tracking.', benefits: 'Understand what went wrong and how to fix it. Enterprise teams get centralized error tracking.' },
         { label: 'Interactive Terraform prompts', status: 'shipped', quarter: 'q4-2025', changelog: 'interactive-terraform-prompts', description: 'Interactive component and stack selection when running Terraform commands without arguments.', benefits: 'Discover and select components interactively. No need to remember exact names.' },
+        { label: 'Interactive file generation for terraform, helmfile, and packer', status: 'shipped', quarter: 'q1-2026', pr: 1971, changelog: 'interactive-file-generation', description: 'Interactive prompts for generate files command with cross-provisioner support and idempotent generation.', benefits: 'Explore file generation interactively. Same patterns work across terraform, helmfile, and packer.' },
+        { label: 'Smarter component selection filtering', status: 'shipped', quarter: 'q1-2026', pr: 1977, changelog: 'component-selection-filtering', description: 'Interactive component menus and shell completion now filter out abstract and disabled components, showing only deployable options.', benefits: 'Component selection shows only what can actually be deployed. No more confusion from seeing abstract templates or disabled components.' },
         { label: 'Seamless first login with provider fallback', status: 'shipped', quarter: 'q4-2025', pr: 1918, changelog: 'auth-login-provider-fallback', description: 'Auth login automatically falls back to provider when no identities exist, enabling zero-friction first-time login.', benefits: 'New users just run atmos auth login. No need to understand --provider flag on first use.' },
         { label: 'Configuration provenance tracking', status: 'shipped', quarter: 'q4-2025', changelog: 'provenance-tracking', version: 'v1.195.0', description: 'Track where every configuration value comes from—which file, which import, which override.', benefits: 'Debug complex inheritance chains. Understand exactly how configuration was assembled.' },
         { label: 'Global environment variables', status: 'shipped', quarter: 'q4-2025', changelog: 'global-env-section', version: 'v1.202.0', description: 'Define environment variables globally in atmos.yaml that apply to all commands.', benefits: 'Set common environment variables once. No repetition across components.' },
         { label: 'Metadata inheritance', status: 'shipped', quarter: 'q4-2025', changelog: 'metadata-inheritance', version: 'v1.201.0', description: 'Metadata section now supports full inheritance from base stacks.', benefits: 'Define metadata patterns once and inherit everywhere. Consistent naming across stacks.' },
         { label: 'Experimental feature controls', status: 'in-progress', quarter: 'q1-2026', pr: 1940, docs: '/cli/configuration/settings/experimental', changelog: 'experimental-feature-flag', description: 'Granular control over experimental features with CLI badges, configurable modes (warn, silence, disable, error), and environment variable support.', benefits: 'Explore new features safely. Block experimental commands in CI while testing locally.' },
         { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
+        { label: 'Command aliases for vendor and workflow list', status: 'shipped', quarter: 'q1-2026', changelog: 'vendor-workflow-list-aliases', description: 'Added `atmos vendor list` and `atmos workflow list` as aliases for their `atmos list` counterparts for intuitive command discovery.', benefits: 'Users can use either command form. Natural command structure regardless of preference.' },
+        { label: 'Packer directory-based templates', status: 'shipped', quarter: 'q1-2026', pr: 1982, changelog: 'packer-directory-based-templates', description: 'Packer commands now default to directory mode, loading all *.pkr.hcl files from the component directory. Aligns with HashiCorp best practices for multi-file configurations.', benefits: 'Organize Packer configurations across multiple files without explicit template configuration. Just run atmos packer build and it works.' },
       ],
       issues: [],
       prs: [
@@ -223,10 +232,12 @@ export const roadmapConfig = {
         { label: '`atmos list affected` to identify changes for targeted CI/CD', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/affected', changelog: 'list-affected-command', description: 'Identify which stacks and components are affected by changes, enabling targeted CI/CD pipelines.', category: 'featured', priority: 'high', benefits: 'CI only plans/applies what changed. Large monorepos deploy in minutes instead of hours.', experimental: true },
         { label: 'Customizable list columns for tailored views', status: 'shipped', quarter: 'q4-2025', changelog: 'customizable-list-command-output', version: 'v1.201.0', description: 'Configure which columns appear in list output to show the data relevant to your workflow.', category: 'featured', priority: 'high', benefits: 'Show exactly the information you need—environment, region, component status—without noise.' },
         { label: 'Easy filter output using jq-like queries (`--query`)', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/list/stacks', description: 'Filter and transform list output with familiar jq-style expressions (powered by JMESPath) for precise data extraction.', codeExample: 'atmos list stacks --query "[?components.terraform.vpc]"', category: 'featured', priority: 'high', benefits: 'Query your infrastructure like a database. Find stacks with specific components or configurations instantly.' },
+        { label: '`atmos list aliases` shows built-in and configured aliases', status: 'shipped', quarter: 'q1-2026', pr: 1954, changelog: 'list-and-toolchain-enhancements', description: 'List all command aliases including built-in shortcuts (tf→terraform, hf→helmfile) and user-configured aliases from atmos.yaml.', codeExample: 'atmos list aliases --format json', benefits: 'Discover all available shortcuts without reading docs. See both built-in and custom aliases in one place.' },
       ],
       issues: [],
       prs: [
         { number: 1874, title: 'Add list affected command with spinner UI improvements' },
+        { number: 1954, title: 'Add built-in aliases to list aliases command' },
       ],
     },
     {
@@ -241,7 +252,7 @@ export const roadmapConfig = {
       milestones: [
         { label: 'New workflow step types (show, sleep, stage, alert, etc.)', status: 'in-progress', quarter: 'q1-2026', docs: '/cli/configuration/workflows', description: 'Rich step types including message display, timed delays, user prompts, and alert notifications.', category: 'featured', priority: 'high', benefits: 'Build interactive deployment workflows with user confirmations and status updates.' },
         { label: 'New interactive input types for workflow steps', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', description: 'Typed inputs for workflow steps with validation—strings, numbers, booleans, and selections.', category: 'featured', priority: 'high', benefits: 'Inputs are validated before execution starts. Bad values are caught early, not mid-deployment.' },
-        { label: 'Run any workflow without specifying the workflow file', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', changelog: 'workflow-file-auto-discovery', version: 'v1.202.0', description: 'Workflows are automatically discovered without needing to specify the file path.', category: 'featured', priority: 'high', benefits: 'Just run atmos workflow <name>. No need to remember which file contains which workflow.', demoId: 'workflow-run' },
+        { label: 'Run any workflow without specifying the workflow file', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', changelog: 'workflow-file-auto-discovery', version: 'v1.202.0', description: 'Workflows are automatically discovered without needing to specify the file path.', category: 'featured', priority: 'high', benefits: 'Just run atmos workflow <name>. No need to remember which file contains which workflow.' },
         { label: 'Workflows can now change directories before executing commands', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', changelog: 'working-directory-support', description: 'Execute workflow steps in specific directories, enabling multi-repo orchestration.', category: 'featured', priority: 'high', benefits: 'Orchestrate across multiple repositories in a single workflow.' },
         { label: 'Integration with `atmos auth` identities for per-step authentication', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/identities', changelog: 'authentication-for-workflows-and-custom-commands', version: 'v1.197.0', description: 'Each workflow step can use different credentials for cross-account deployments.', category: 'featured', priority: 'high', benefits: 'Deploy to multiple accounts in sequence without credential juggling.' },
         { label: 'Unified task execution (`pkg/runner`)', status: 'shipped', quarter: 'q4-2025', pr: 1901, changelog: 'unified-task-runner', description: 'A single execution engine for all task types—Terraform, Helmfile, shell, and custom commands.', benefits: 'Consistent behavior across all command types. Same output handling, error reporting, and logging.' },
@@ -259,7 +270,7 @@ export const roadmapConfig = {
       tagline: 'Truly extensible architecture',
       description:
         'Modern infrastructure spans Terraform, Kubernetes, serverless, and custom tooling. A single orchestration layer should manage all of it consistently, not just a subset.',
-      progress: 80,
+      progress: 84,
       status: 'in-progress',
       milestones: [
         { label: 'Custom commands support interactive step types', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/commands', description: 'Define your own command types beyond Terraform and Helmfile—shell scripts, Ansible, Pulumi, and more.', category: 'featured', priority: 'high', benefits: 'Extend Atmos to orchestrate any tool. Your entire toolchain speaks the same language.' },
@@ -274,6 +285,7 @@ export const roadmapConfig = {
         { label: 'Auth support for custom commands', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/auth/identities', changelog: 'authentication-for-workflows-and-custom-commands', version: 'v1.197.0', description: 'Custom commands can leverage Atmos authentication for cloud provider access.', benefits: 'Custom scripts use the same identity management as Terraform. One auth system for everything.' },
         { label: 'Added `!random` YAML function', status: 'shipped', quarter: 'q4-2025', docs: '/functions/yaml/random', changelog: 'random-yaml-function', description: 'Generate random values (strings, numbers, UUIDs) directly in stack configuration.', codeExample: 'suffix: !random string:8', benefits: 'Generate unique identifiers without external tools. Useful for resource naming and testing.' },
         { label: 'Added `!env` function with stack manifest support', status: 'shipped', quarter: 'q4-2025', changelog: 'env-function-stack-manifest-support', version: 'v1.199.0', description: 'The !env function now reads from stack manifest env sections, not just system environment.', benefits: 'Reference environment variables defined in stack configuration. Consistent behavior across local and CI.' },
+        { label: 'YAML functions in locals', status: 'shipped', quarter: 'q1-2026', pr: 1994, docs: '/stacks/locals', changelog: 'locals-yaml-functions', description: 'Locals can now use all YAML functions including !env, !exec, !store, !terraform.state, and !terraform.output for dynamic value resolution.', benefits: 'Fetch dynamic values in locals—environment variables, secrets, Terraform outputs—and use them throughout your configuration.' },
         { label: 'Circular dependency detection for YAML functions', status: 'shipped', quarter: 'q4-2025', changelog: 'yaml-function-circular-dependency-detection', version: 'v1.196.0', description: 'Automatic detection of circular dependencies between YAML functions with clear error messages.', benefits: 'Catch configuration errors before deployment. Clear error messages show the dependency chain.' },
         { label: 'Deferred YAML function evaluation in merge', status: 'shipped', quarter: 'q4-2025', changelog: 'deferred-yaml-functions-evaluation-in-merge', description: 'YAML functions are now evaluated after merge, allowing functions to reference inherited values.', benefits: 'Functions work correctly with inheritance. Reference values from base stacks in function arguments.' },
         { label: 'Unified import adapter registry', status: 'shipped', quarter: 'q1-2026', pr: 1897, changelog: 'import-adapter-registry', description: 'Pluggable import adapter system for configuration imports with support for local files, remote URLs (HTTP, Git, S3, OCI), and custom adapters.', benefits: 'Extend import sources without modifying core code. Add support for new protocols with a simple adapter interface.' },
@@ -295,15 +307,16 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 83,
+      progress: 86,
       status: 'in-progress',
       milestones: [
-        { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.', demoId: 'vendor-pull' },
+        { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
         { label: 'Version constraints for vendor updates', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/vendor', changelog: 'version-constraint-validation', version: 'v1.201.0', description: 'Semantic versioning constraints to control which versions are pulled during vendor updates.', benefits: 'Control upgrade behavior. Pin to major versions or allow patches automatically.' },
         { label: 'Vendor registry pattern migration', status: 'in-progress', quarter: 'q4-2025', pr: 1889, description: 'Refactoring vendoring to use a pluggable registry pattern for different source types.', benefits: 'Add new source types (OCI, custom registries) without modifying core vendoring code.' },
         { label: 'Just-in-time vendoring', status: 'shipped', quarter: 'q4-2025', pr: 1877, changelog: 'terraform-source-provisioner', docs: '/cli/commands/terraform/source', description: 'Automatically vendor components on first use—no separate vendor step needed.', category: 'featured', priority: 'high', benefits: 'Reference a component and deploy. No manual vendor step or CI job required.', experimental: true },
         { label: 'Component workdir provisioning', status: 'shipped', quarter: 'q4-2025', pr: 1876, changelog: 'component-workdir-isolation', description: 'Isolated working directories for each component instance with `atmos terraform workdir` commands to manage them—eliminating conflicts when multiple instances share the same component source.', benefits: 'Enables concurrent component execution and just-in-time vendoring. Multiple component instances no longer conflict by overwriting each other in the same directory. Use list, describe, show, and clean subcommands to inspect and manage workdirs.', experimental: true },
         { label: 'Source provisioner UX improvements', status: 'shipped', quarter: 'q1-2026', changelog: 'source-provisioner-ux', description: 'Spinner feedback during auto-provisioning and interactive confirmation prompts for delete operations.', benefits: 'Better visual feedback during vendoring operations. Interactive delete confirmation improves safety without requiring --force in TTY environments.' },
+        { label: 'Source list command', status: 'shipped', quarter: 'q1-2026', changelog: 'source-list-command', docs: '/cli/commands/terraform/source', description: 'List all components with source configuration in a stack. Available as `atmos terraform source list` and `atmos list sources`.', benefits: 'Quickly discover which components are configured for JIT vendoring. Useful for auditing and debugging source configurations.' },
       ],
       issues: [],
       prs: [
@@ -319,16 +332,19 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 35,
+      progress: 75,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
-        { label: 'Easily sharing outputs between GitHub Actions steps', status: 'planned', quarter: 'q1-2026', description: 'Pass Terraform outputs between GitHub Actions workflow steps without manual JSON parsing.', category: 'featured', priority: 'high', benefits: 'Use Terraform outputs in subsequent steps naturally. No jq parsing or file juggling.' },
+        { label: 'Native GitHub Actions PATH integration', status: 'shipped', quarter: 'q1-2026', pr: 1979, docs: '/cli/commands/toolchain/toolchain-env', changelog: 'github-actions-toolchain-path', description: 'Native `github` format for `atmos toolchain env` that outputs paths compatible with $GITHUB_PATH, with automatic file detection and append mode.', category: 'featured', priority: 'high', benefits: 'Add toolchain paths to GitHub Actions PATH with a single command. No shell tricks or manual file handling required.' },
+        { label: 'Easily share Terraform outputs between GitHub Actions steps', status: 'shipped', quarter: 'q1-2026', pr: 1985, docs: '/cli/commands/terraform/output', changelog: 'github-output-format', description: 'Native --format=github option writes Terraform outputs directly to $GITHUB_OUTPUT, with automatic heredoc handling for multiline values—no jq parsing or manual heredoc construction required.', category: 'featured', priority: 'high', benefits: 'Pass outputs between workflow steps naturally. Complex values like JSON configs just work.' },
         { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'CLI auto-detects CI environments and generates rich job summaries with resource badges, collapsible diffs, and status checks. Replaces separate actions like github-action-atmos-terraform-plan.', category: 'featured', priority: 'high', benefits: 'No wrapper scripts needed. Same command works locally and in CI. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.' },
       ],
       issues: [],
       prs: [
         { number: 1891, title: 'Native CI Integration with Summary Templates and Terraform Command Registry' },
+        { number: 1979, title: 'Native GitHub Actions PATH integration for toolchain env' },
+        { number: 1985, title: 'Add --format=github for terraform output' },
       ],
     },
     {

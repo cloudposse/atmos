@@ -5,12 +5,15 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
+
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 // AdmonitionKind is the kind of Admonition AST node.
@@ -159,17 +162,37 @@ func (r *admonitionHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegi
 	reg.Register(AdmonitionKind, r.renderAdmonition)
 }
 
-// admonitionStyles defines the icon and colors for each admonition type.
+// admonitionStyles defines the icon and label for each admonition type.
+// Colors are determined dynamically via getAdmonitionStyle() using pkg/ui/theme.
 var admonitionStyles = map[AdmonitionType]struct {
 	icon  string
 	label string
-	color string // ANSI 256 color
 }{
-	AdmonitionNote:      {icon: "ℹ", label: "Note", color: "33"},      // Blue
-	AdmonitionWarning:   {icon: "⚠", label: "Warning", color: "208"},  // Orange
-	AdmonitionTip:       {icon: "💡", label: "Tip", color: "34"},       // Green
-	AdmonitionImportant: {icon: "❗", label: "Important", color: "99"}, // Purple
-	AdmonitionCaution:   {icon: "🔥", label: "Caution", color: "196"},  // Red
+	AdmonitionNote:      {icon: "ℹ", label: "Note"},
+	AdmonitionWarning:   {icon: "⚠", label: "Warning"},
+	AdmonitionTip:       {icon: "💡", label: "Tip"},
+	AdmonitionImportant: {icon: "❗", label: "Important"},
+	AdmonitionCaution:   {icon: "🔥", label: "Caution"},
+}
+
+// getAdmonitionStyle returns the lipgloss style for an admonition type.
+// Uses theme-aware colors that adapt to the user's configured theme.
+func getAdmonitionStyle(admonitionType AdmonitionType) lipgloss.Style {
+	styles := theme.GetCurrentStyles()
+	switch admonitionType {
+	case AdmonitionNote:
+		return styles.Info
+	case AdmonitionWarning:
+		return styles.Warning
+	case AdmonitionTip:
+		return styles.Success
+	case AdmonitionImportant:
+		return styles.Notice
+	case AdmonitionCaution:
+		return styles.Error
+	default:
+		return styles.Info
+	}
 }
 
 // renderAdmonition renders the Admonition node.
@@ -179,20 +202,20 @@ func (r *admonitionHTMLRenderer) renderAdmonition(w util.BufWriter, source []byt
 	}
 
 	adm := n.(*Admonition)
-	style, ok := admonitionStyles[adm.AdmonitionType]
+	styleInfo, ok := admonitionStyles[adm.AdmonitionType]
 	if !ok {
-		style = admonitionStyles[AdmonitionNote] // Default to note.
+		styleInfo = admonitionStyles[AdmonitionNote] // Default to note.
 	}
+
+	// Get theme-aware style for this admonition type.
+	labelStyle := getAdmonitionStyle(adm.AdmonitionType).Bold(true)
 
 	// Render admonition with icon, colored label, and content.
 	// Format: icon Label: content
 	_, _ = w.WriteString(newlineChar)
-	_, _ = w.WriteString(style.icon)
-	_, _ = w.WriteString(" \x1b[38;5;")
-	_, _ = w.WriteString(style.color)
-	_, _ = w.WriteString("m\x1b[1m")
-	_, _ = w.WriteString(style.label)
-	_, _ = w.WriteString(":\x1b[0m")
+	_, _ = w.WriteString(styleInfo.icon)
+	_, _ = w.WriteString(" ")
+	_, _ = w.WriteString(labelStyle.Render(styleInfo.label + ":"))
 
 	if adm.AdmonitionContent != "" {
 		_, _ = w.WriteString(" ")

@@ -127,18 +127,15 @@ func buildGlamourOptions(cfg *customRendererConfig) ([]glamour.TermRendererOptio
 		glamour.WithEmoji(),
 	}
 
-	if cfg.styles != nil {
-		styleBytes, err := json.Marshal(cfg.styles)
-		if err == nil {
-			glamourOpts = append(glamourOpts, glamour.WithStylesFromJSONBytes(styleBytes))
-		}
-	} else {
-		defaultStyleBytes, err := getBuiltinDefaultStyle()
-		if err != nil {
-			return nil, err
-		}
-		glamourOpts = append(glamourOpts, glamour.WithStylesFromJSONBytes(defaultStyleBytes))
+	// Only apply custom styles when color output is enabled.
+	// Glamour with Ascii profile correctly strips ANSI codes when no styles are applied,
+	// but custom styles with Bold/Italic/Underline still produce ANSI sequences.
+	// Skip styles for Ascii profile to ensure clean plaintext output for NO_COLOR mode.
+	styleOpts, err := buildStyleOptions(cfg)
+	if err != nil {
+		return nil, err
 	}
+	glamourOpts = append(glamourOpts, styleOpts...)
 
 	if cfg.preserveNewLines {
 		glamourOpts = append(glamourOpts, glamour.WithPreservedNewLines())
@@ -147,14 +144,46 @@ func buildGlamourOptions(cfg *customRendererConfig) ([]glamour.TermRendererOptio
 	return glamourOpts, nil
 }
 
+// buildStyleOptions returns glamour style options based on config.
+// Returns empty slice for Ascii profile (NO_COLOR mode) to avoid ANSI output.
+func buildStyleOptions(cfg *customRendererConfig) ([]glamour.TermRendererOption, error) {
+	// Skip styles for Ascii profile to ensure clean plaintext output.
+	if cfg.colorProfile == termenv.Ascii {
+		return nil, nil
+	}
+
+	// Use custom styles if provided.
+	if cfg.styles != nil {
+		styleBytes, err := json.Marshal(cfg.styles)
+		if err == nil {
+			return []glamour.TermRendererOption{glamour.WithStylesFromJSONBytes(styleBytes)}, nil
+		}
+		// Fall through to use default styles if custom styles fail to marshal.
+		// This is a defensive fallback since StyleConfig should always marshal.
+	}
+
+	// Fall back to builtin default style.
+	defaultStyleBytes, err := getBuiltinDefaultStyle()
+	if err != nil {
+		return nil, err
+	}
+	return []glamour.TermRendererOption{glamour.WithStylesFromJSONBytes(defaultStyleBytes)}, nil
+}
+
 // extendGlamourWithCustomExtensions adds custom goldmark extensions to the renderer.
 func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 	md := getGlamourGoldmark(renderer)
 	if md == nil {
 		return
 	}
-	// Add muted extension (converts ((text)) to strikethrough).
+	// Add admonition extension (converts > [!NOTE] etc. to styled callouts).
+	extensions.NewAdmonitionExtension().Extend(md)
+	// Add muted extension (converts ((text)) to muted gray text).
 	extensions.NewMutedExtension().Extend(md)
+	// Add highlight extension (converts ==text== to highlighted text).
+	extensions.NewHighlightExtension().Extend(md)
+	// Add badge extension (converts [!BADGE text] to styled badges).
+	extensions.NewBadgeExtension().Extend(md)
 	// Add strict linkify (prevents foo/bar@1.0.0 from becoming mailto: links).
 	extensions.NewStrictLinkifyExtension().Extend(md)
 }
@@ -162,6 +191,7 @@ func extendGlamourWithCustomExtensions(renderer *glamour.TermRenderer) {
 // getGlamourGoldmark extracts the internal goldmark.Markdown from a glamour.TermRenderer.
 // This uses reflection because glamour doesn't expose its internal goldmark instance.
 // Returns nil if the reflection fails (e.g., if glamour's internal structure changes).
+// Tested against glamour v0.10.0 - revisit if glamour is upgraded.
 func getGlamourGoldmark(renderer *glamour.TermRenderer) goldmark.Markdown {
 	val := reflect.ValueOf(renderer).Elem()
 	mdField := val.FieldByName("md")

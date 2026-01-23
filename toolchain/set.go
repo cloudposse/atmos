@@ -347,7 +347,8 @@ func SetToolVersion(toolName, version string, scrollSpeed int) error {
 		return fmt.Errorf("failed to set version: %w", err)
 	}
 
-	return ui.Successf("Set %s@%s in %s", spec.key, version, filePath)
+	ui.Successf("Set %s@%s in %s", spec.key, version, filePath)
+	return nil
 }
 
 // fetchGitHubVersions fetches available versions and titles from GitHub releases.

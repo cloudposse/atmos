@@ -44,6 +44,8 @@ var (
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
+	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
+	ErrMarkdownRender                        = errors.New("failed to render markdown content")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
@@ -387,6 +389,7 @@ var (
 	ErrInitializingCLIConfig        = errors.New("error initializing CLI config")
 	ErrDescribingStacks             = errors.New("error describing stacks")
 	ErrComponentNameRequired        = errors.New("component name is required")
+	ErrCreateColumnSelector         = errors.New("failed to create column selector")
 
 	// Version command errors.
 	ErrVersionDisplayFailed   = errors.New("failed to display version information")
@@ -454,6 +457,9 @@ var (
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+
+	// Packer configuration errors.
+	ErrMissingPackerBasePath = errors.New("packer base path is required")
 
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")
@@ -746,10 +752,11 @@ var (
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
 	// Locals-related errors.
-	ErrLocalsInvalidType       = errors.New("locals must be a map")
-	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
-	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
-	ErrLocalsResolution        = errors.New("failed to resolve local")
+	ErrLocalsInvalidType        = errors.New("locals must be a map")
+	ErrLocalsCircularDep        = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract  = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution         = errors.New("failed to resolve local")
+	ErrLocalsYamlFunctionFailed = errors.New("failed to process YAML function in local")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

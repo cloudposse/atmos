@@ -379,6 +379,13 @@ func processMatch(sourceDir, targetPath, file string, shallow bool, excluded []s
 		return errors.Join(errUtils.ErrComputeRelativePath, fmt.Errorf("computing relative path for %q: %w", file, err))
 	}
 	relPath = filepath.ToSlash(relPath)
+	// Skip any path containing .git to avoid permission issues with git internal files.
+	if relPath == gitDirName ||
+		strings.HasSuffix(relPath, "/"+gitDirName) ||
+		strings.Contains(relPath, "/"+gitDirName+"/") {
+		log.Debug("Skipping .git path", logKeyPath, relPath)
+		return nil
+	}
 	if shouldExcludePath(info, relPath, excluded) {
 		return nil
 	}

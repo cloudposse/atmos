@@ -17,6 +17,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	tuiUtils "github.com/cloudposse/atmos/internal/tui/utils"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -391,7 +392,7 @@ func printDescription(w io.Writer, cmd *cobra.Command, styles *helpStyles) {
 	rendered := renderMarkdownDescription(desc)
 	styled := styles.commandDesc.Render(rendered)
 	// Lipgloss pads multi-line strings to uniform width. Trim trailing whitespace from each line.
-	styled = ui.TrimLinesRight(styled)
+	styled = atmosansi.TrimLinesRight(styled)
 	fmt.Fprintln(w, styled)
 	fmt.Fprintln(w)
 }

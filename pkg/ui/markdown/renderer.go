@@ -255,8 +255,14 @@ func (r *Renderer) Render(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(0),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -275,8 +281,14 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),

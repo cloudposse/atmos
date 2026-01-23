@@ -244,12 +244,12 @@ func TestBadgeParser(t *testing.T) {
 	})
 }
 
-func TestBadgeColors(t *testing.T) {
-	// Verify all expected badge colors are defined.
+func TestBadgeStyles(t *testing.T) {
+	// Verify all expected badge variants return valid styles.
 	expectedVariants := []string{"", "warning", "success", "error", "info"}
 	for _, variant := range expectedVariants {
-		_, ok := badgeColors[variant]
-		assert.True(t, ok, "badge color should be defined for variant %q", variant)
+		style := getBadgeStyle(variant)
+		assert.NotNil(t, style, "getBadgeStyle should return a style for variant %q", variant)
 	}
 }
 
@@ -374,7 +374,7 @@ func TestAdmonitionParser(t *testing.T) {
 }
 
 func TestAdmonitionStyles(t *testing.T) {
-	// Verify all admonition types have styles defined.
+	// Verify all admonition types have styles and colors defined.
 	expectedTypes := []AdmonitionType{
 		AdmonitionNote,
 		AdmonitionWarning,
@@ -387,7 +387,9 @@ func TestAdmonitionStyles(t *testing.T) {
 		assert.True(t, ok, "style should be defined for type %q", adType)
 		assert.NotEmpty(t, style.icon, "icon should be defined for %q", adType)
 		assert.NotEmpty(t, style.label, "label should be defined for %q", adType)
-		assert.NotEmpty(t, style.color, "color should be defined for %q", adType)
+		// Verify getAdmonitionStyle returns a valid style (uses theme).
+		lipglossStyle := getAdmonitionStyle(adType)
+		assert.NotNil(t, lipglossStyle, "getAdmonitionStyle should return a style for %q", adType)
 	}
 }
 

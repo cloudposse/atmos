@@ -46,6 +46,7 @@ export function usePriorityNavbar(
 
   // Start with all items visible to allow measurement.
   const [visibleCount, setVisibleCount] = useState(totalItems);
+  const [measuredItemCount, setMeasuredItemCount] = useState(totalItems);
   const [isMobile, setIsMobile] = useState(false);
   const [isReady, setIsReady] = useState(false);
 
@@ -55,9 +56,14 @@ export function usePriorityNavbar(
 
   const calculateVisibleItems = useCallback(() => {
     const container = containerRef.current;
-    const items = itemRefs.current;
+    // Clamp refs to totalItems to avoid stale trailing entries when items are removed.
+    // This prevents endless re-measure loops when itemRefs.current.length > totalItems.
+    const items = Array.from(
+      { length: totalItems },
+      (_, i) => itemRefs.current?.[i] ?? null
+    );
 
-    if (!container || !items || items.length === 0) {
+    if (!container || items.length === 0) {
       return;
     }
 
@@ -74,18 +80,36 @@ export function usePriorityNavbar(
 
     // Measure item widths on first pass (when all items are visible).
     // Cache them for subsequent calculations.
-    if (itemWidthsRef.current.length !== items.length) {
+    // Re-measure if any items have zero width or are missing.
+    const cachedNeedsInit =
+      itemWidthsRef.current.length !== items.length ||
+      itemWidthsRef.current.some((w) => w === 0) ||
+      items.some((el) => !el);
+
+    if (cachedNeedsInit) {
       const widths: number[] = [];
+      let allMeasured = true;
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
         if (item) {
           // Get scroll width for accurate measurement even if overflow:hidden.
-          widths[i] = item.scrollWidth || item.getBoundingClientRect().width;
+          const w = item.scrollWidth || item.getBoundingClientRect().width;
+          widths[i] = w;
+          if (!w) allMeasured = false;
         } else {
           widths[i] = 0;
+          allMeasured = false;
         }
       }
       itemWidthsRef.current = widths;
+
+      // If we couldn't measure everything yet, try again next frame.
+      if (!allMeasured) {
+        setIsReady(false);
+        if (rafRef.current) cancelAnimationFrame(rafRef.current);
+        rafRef.current = requestAnimationFrame(calculateVisibleItems);
+        return;
+      }
     }
 
     // Get available width for left items.
@@ -107,21 +131,23 @@ export function usePriorityNavbar(
       availableWidth = containerRect.width;
     }
 
-    // Calculate how many items fit.
+    // Calculate how many items fit using cached widths (all non-zero now).
     const cachedWidths = itemWidthsRef.current;
+    const measuredItems = cachedWidths.map((width, index) => ({ width, index }));
+    const measuredCount = measuredItems.length;
+
     let totalWidth = 0;
     let fitCount = 0;
 
-    for (let i = 0; i < cachedWidths.length; i++) {
-      const itemWidth = cachedWidths[i];
-      if (itemWidth === 0) continue;
+    for (let i = 0; i < measuredItems.length; i++) {
+      const { width: itemWidth } = measuredItems[i];
 
       // Add gap for items after the first.
-      const widthWithGap = i > 0 ? itemWidth + gap : itemWidth;
+      const widthWithGap = fitCount > 0 ? itemWidth + gap : itemWidth;
 
       // If there will be overflow, reserve space for the toggle.
       const wouldOverflow = totalWidth + widthWithGap > availableWidth;
-      const needsToggle = i < totalItems - 1 && wouldOverflow;
+      const needsToggle = i < measuredCount - 1 && wouldOverflow;
 
       // Check if this item fits (with toggle space if needed).
       const spaceNeeded = needsToggle
@@ -142,6 +168,7 @@ export function usePriorityNavbar(
     }
 
     setVisibleCount(fitCount);
+    setMeasuredItemCount(measuredCount);
     setIsReady(true);
   }, [containerRef, itemRefs, totalItems, toggleWidth, gap, mobileBreakpoint]);
 
@@ -194,7 +221,7 @@ export function usePriorityNavbar(
 
   return {
     visibleCount,
-    hasOverflow: visibleCount < totalItems && !isMobile,
+    hasOverflow: visibleCount < measuredItemCount && !isMobile,
     isMobile,
     isReady,
   };

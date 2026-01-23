@@ -10,9 +10,15 @@ VERSION=test
 
 export CGO_ENABLED=0
 
-readme:
-	@echo "README.md generation temporarily disabled."
-	@exit 0
+# Detect git worktree and set GOFLAGS accordingly.
+# In worktrees, buildvcs fails because .git is in a different location.
+IS_WORKTREE := $(shell [ "$$(git rev-parse --git-dir 2>/dev/null)" != "$$(git rev-parse --git-common-dir 2>/dev/null)" ] && echo true)
+ifdef IS_WORKTREE
+export GOFLAGS := -buildvcs=false
+endif
+
+readme: build
+	./build/atmos docs generate readme
 
 build: build-default
 
@@ -124,4 +130,4 @@ generate-mocks:
 	@go generate ./pkg/http/...
 	@echo "Mocks regenerated successfully"
 
-.PHONY: lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks
+.PHONY: readme lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks

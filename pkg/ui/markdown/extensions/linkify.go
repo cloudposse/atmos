@@ -65,6 +65,7 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 		// Valid emails cannot contain "/" so this is safe.
 		if strings.Contains(url, "/") {
 			nodesToReplace = append(nodesToReplace, autoLink)
+			return ast.WalkContinue, nil
 		}
 
 		// Also check if domain part looks like a version (e.g., @1.0.0).
@@ -83,39 +84,11 @@ func (t *packageRefTransformer) Transform(node *ast.Document, reader text.Reader
 			continue
 		}
 
-		// Create a proper Text node with the original content.
-		// AutoLink is an inline node, so we need to find the label in the source
-		// and create a text segment that references those bytes.
-		label := autoLink.Label(source)
-		labelStart := findLabelOffset(source, label)
-		var textNode ast.Node
-		if labelStart >= 0 {
-			// Create a Text node with a segment pointing to the source.
-			textNode = ast.NewTextSegment(text.NewSegment(labelStart, labelStart+len(label)))
-		} else {
-			// Fallback: use RawString node (should rarely happen).
-			textNode = ast.NewString(label)
-		}
+		// Create a text node with the original content.
+		// AutoLink stores its text in a single child segment.
+		textNode := ast.NewString(autoLink.Label(source))
 		parent.ReplaceChild(parent, autoLink, textNode)
 	}
-}
-
-// findLabelOffset finds the byte offset of label in source.
-// Returns -1 if not found.
-func findLabelOffset(source, label []byte) int {
-	for i := 0; i <= len(source)-len(label); i++ {
-		match := true
-		for j := 0; j < len(label); j++ {
-			if source[i+j] != label[j] {
-				match = false
-				break
-			}
-		}
-		if match {
-			return i
-		}
-	}
-	return -1
 }
 
 // strictLinkifyExtension adds a transformer that unlinks package references.
