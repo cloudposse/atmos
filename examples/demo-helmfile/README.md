@@ -2,11 +2,11 @@
 
 Deploy Kubernetes resources using Helmfile with Atmos stack patterns.
 
-Learn more about [Helmfile Components](https://atmos.tools/core-concepts/components/helmfile/).
+Learn more about [Helmfile Components](https://atmos.tools/components/helmfile).
 
 ## What You'll See
 
-- [Helmfile component](https://atmos.tools/core-concepts/components/helmfile/) configuration
+- [Helmfile component](https://atmos.tools/components/helmfile) configuration
 - Stack inheritance for Kubernetes deployments
 - Local k3s environment via Docker Compose
 
