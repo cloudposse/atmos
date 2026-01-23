@@ -1927,7 +1927,7 @@ The component provider decides what to validate and what to ignore. This matches
 - [Command Registry Pattern PRD](command-registry-pattern.md)
 - [Atmos Component Architecture Research](../../.conductor/bordeaux/component-architecture-research.md)
 - [Go Plugin Documentation](https://pkg.go.dev/plugin)
-- [Terraform Plugin Protocol](https://www.terraform.io/plugin)
+- [Terraform Plugin Protocol](https://developer.hashicorp.com/terraform/plugin)
 - [kubectl Plugin System](https://kubernetes.io/docs/tasks/extend-kubectl/kubectl-plugins/)
 
 ## Changelog

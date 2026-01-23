@@ -1414,8 +1414,7 @@ atmos auth list --format graphviz > auth-graph.dot
 ### Next Steps
 
 - See full documentation: https://atmos.tools/cli/commands/auth/list
-- Configure authentication: https://atmos.tools/cli/commands/auth/
-- Learn about authentication providers: https://atmos.tools/core-concepts/auth-providers
+- Configure authentication: https://atmos.tools/cli/commands/auth/login
 
 ---
 

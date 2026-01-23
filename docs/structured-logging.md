@@ -147,7 +147,7 @@ Error and warning logs need enough context to diagnose and fix issues.
 
 ## Charm Logger in Atmos
 
-Atmos uses the [Charm Logger](https://charm.sh/blog/the-charm-logger/), which offers:
+Atmos uses the [Charm Logger](https://charm.land/blog/the-charm-logger/), which offers:
 
 - Simple APIs through `pkg/logger` such as `logger.Trace`, `logger.Debug`, `logger.Info`, `logger.Warn`, and `logger.Error`
 - Automatic line wrapping and colorized output for terminals
@@ -222,6 +222,6 @@ Follow the existing conventions in Atmos and keep suppression comments to a mini
 
 ## Further Reading
 
-- [Charm Logger](https://charm.sh/blog/the-charm-logger/)
+- [Charm Logger](https://charm.land/blog/the-charm-logger/)
 - [Loggly: What is Structured Logging](https://www.loggly.com/use-cases/what-is-structured-logging-and-how-to-use-it/)
 - [Otelic: What is Semantic Logging](https://otelic.com/en/reference-guide/what-is-semantic-logging-and-why-is-it-important)

@@ -1235,4 +1235,4 @@ devcontainer:
 - [Podman CLI Reference](https://docs.podman.io/en/latest/Commands.html)
 - [Atmos Component Registry Pattern](docs/prd/component-registry-pattern.md)
 - [Atmos Command Registry Pattern](docs/prd/command-registry-pattern.md)
-- [Atmos YAML Functions](https://atmos.tools/core-concepts/stacks/templates) - `!include` documentation
+- [Atmos YAML Functions](https://atmos.tools/stacks/templates) - `!include` documentation
