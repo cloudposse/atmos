@@ -68,10 +68,28 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 		return "", err
 	}
 
+	// On Windows, add .exe to raw binary asset names that don't have an archive extension.
+	// This follows Aqua's behavior where Windows binaries need .exe extension in the download URL.
+	// See: https://aquaproj.github.io/docs/reference/windows-support/
+	if !hasArchiveExtension(assetName) {
+		assetName = EnsureWindowsExeExtension(assetName)
+	}
+
 	url := fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
 		tool.RepoOwner, tool.RepoName, data.Version, assetName)
 
 	return url, nil
+}
+
+// hasArchiveExtension checks if the asset name has a known archive extension.
+func hasArchiveExtension(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.HasSuffix(lower, ".tar.gz") ||
+		strings.HasSuffix(lower, ".tgz") ||
+		strings.HasSuffix(lower, ".zip") ||
+		strings.HasSuffix(lower, ".gz") ||
+		strings.HasSuffix(lower, ".tar") ||
+		strings.HasSuffix(lower, ".pkg")
 }
 
 // buildTemplateData creates template data for asset URL building.

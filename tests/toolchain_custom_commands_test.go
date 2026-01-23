@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -326,42 +327,34 @@ func TestToolchainCustomCommands_ExecuteWithDependencies(t *testing.T) {
 			output, err := cmd.CombinedOutput()
 			t.Logf("Command %s output:\n%s", tc.commandName, string(output))
 
-			// The command should succeed if toolchain integration works.
-			if err != nil {
-				t.Logf("Command failed: %v", err)
-				t.Logf("This may indicate that toolchain tools are not in PATH for custom commands")
-				// Don't fail - document current behavior.
-				// Once the toolchain PATH injection is implemented, change to require.NoError.
-			} else {
-				assert.Contains(t, strings.ToLower(string(output)), strings.ToLower(tc.expectedOutput),
-					"Output should contain %q", tc.expectedOutput)
-			}
+			// The command should succeed - toolchain PATH injection is implemented.
+			require.NoError(t, err, "custom command %s should succeed", tc.commandName)
+			assert.Contains(t, strings.ToLower(string(output)), strings.ToLower(tc.expectedOutput),
+				"Output should contain %q", tc.expectedOutput)
 		})
 	}
 }
 
-// getAtmosRunner returns a shared AtmosRunner for tests.
-// It uses a package-level runner to avoid rebuilding atmos for each test.
-var sharedRunner *testhelpers.AtmosRunner
+// sharedRunner is a package-level AtmosRunner shared across all tests to avoid
+// rebuilding atmos for each test. Build happens once via sync.Once.
+// Cleanup is handled by the OS when the test process exits (temp directory).
+var (
+	sharedRunner   *testhelpers.AtmosRunner
+	sharedRunnerMu sync.Once
+	buildErr       error
+)
 
-// buildAtmosBinary builds the atmos binary using the shared AtmosRunner and returns its path.
+// buildAtmosBinary builds the atmos binary once using sync.Once and returns its path.
+// The binary is shared across all tests in this package.
 func buildAtmosBinary(t *testing.T) string {
 	t.Helper()
 
-	if sharedRunner == nil {
+	sharedRunnerMu.Do(func() {
 		sharedRunner = testhelpers.NewAtmosRunner("")
-	}
-
-	err := sharedRunner.Build()
-	require.NoError(t, err, "Failed to build atmos")
-
-	// Register cleanup only once.
-	t.Cleanup(func() {
-		if sharedRunner != nil {
-			sharedRunner.Cleanup()
-			sharedRunner = nil
-		}
+		buildErr = sharedRunner.Build()
 	})
+
+	require.NoError(t, buildErr, "Failed to build atmos")
 
 	return sharedRunner.BinaryPath()
 }

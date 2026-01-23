@@ -239,10 +239,12 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 		// On Windows, archives may contain binaries with .exe extension even when the
 		// registry definition doesn't specify it. Try both with and without .exe.
 		if _, err := os.Stat(src); os.IsNotExist(err) {
+			if runtime.GOOS != "windows" {
+				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+			}
 			// Try with .exe extension (common for Windows binaries in archives).
 			srcWithExe := src + ".exe"
-			_, exeErr := os.Stat(srcWithExe)
-			if exeErr != nil {
+			if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
 				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
 			}
 			src = srcWithExe

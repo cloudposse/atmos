@@ -8,6 +8,7 @@ This document describes Windows-specific issues reported by users and the fixes 
 |------------------------------------|--------------------|----------------------------------------------------------|
 | `.atmos.d` auto-import             | ✅ Verified Working | Configuration loading works correctly on Windows         |
 | Toolchain binary `.exe` extension  | ✅ Fixed            | Centralized function ensures `.exe` extension on Windows |
+| Download URL `.exe` handling       | ✅ Fixed            | GitHub release URLs get `.exe` for raw binaries          |
 | Archive extraction `.exe` handling | ✅ Fixed            | Files extracted correctly from archives                  |
 | PowerShell hint message            | ✅ Fixed            | Shows correct `Invoke-Expression` syntax                 |
 
@@ -33,26 +34,49 @@ Enhanced debug logging in `pkg/config/load.go`:
 ### Reported Problems
 
 1. Binary installed without `.exe` extension - causes `terraform --version` to hang.
-2. Archive extraction fails for tools like helm - looking for `windows-amd64/helm` instead of `windows-amd64/helm.exe`.
-3. Hint message shows Unix `eval` syntax instead of PowerShell `Invoke-Expression`.
+2. Download URL missing `.exe` - tools like jq fail with 404 on Windows (e.g., `jq-windows-amd64` vs `jq-windows-amd64.exe`).
+3. Archive extraction fails for tools like helm - looking for `windows-amd64/helm` instead of `windows-amd64/helm.exe`.
+4. Hint message shows Unix `eval` syntax instead of PowerShell `Invoke-Expression`.
 
 ### Architecture: Centralized Windows Extension Handling
 
-Following [Aqua's Windows support approach](https://aquaproj.github.io/docs/reference/windows-support/), Windows executables need the `.exe` extension to be found by `os/exec.LookPath`. Rather than scattering `.exe` handling across multiple files, we use a single centralized function.
+Following [Aqua's Windows support approach](https://aquaproj.github.io/docs/reference/windows-support/), Windows executables need the `.exe` extension to be found by `os/exec.LookPath`. We use a centralized function for consistent handling.
 
 **Key design decisions:**
 
-- **No download URL heuristics**: If a tool's download URL needs `.exe`, the registry should specify it correctly in the asset template. We don't append `.exe` to URLs as a fallback.
 - **Single utility function**: `EnsureWindowsExeExtension()` handles all Windows extension logic in one place.
-- **Registry-driven configuration**: Asset URLs and file names come from the registry definition, not runtime heuristics.
+- **Tool type determines URL handling**:
+  - `github_release` type: Automatically adds `.exe` to download URLs for raw binaries (non-archive assets) on Windows. This matches Aqua's behavior.
+  - `http` type: No automatic `.exe` handling - the asset template must specify the complete URL including `.exe` if needed.
+- **Archive extraction**: Only attempts `.exe` fallback on Windows (not on Unix).
+
+### Download URL Handling by Tool Type
+
+| Tool Type        | Download URL `.exe` Handling                                           |
+|------------------|------------------------------------------------------------------------|
+| `github_release` | Automatic: adds `.exe` on Windows for raw binaries (no archive ext)    |
+| `http`           | Manual: asset template must include `.exe` in URL if needed            |
+
+**Example - `github_release` type (jq):**
+```
+Asset template: jq-{{.OS}}-{{.Arch}}
+On Windows:     https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe  ✅
+On Linux:       https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64       ✅
+```
+
+**Example - `http` type (must specify `.exe` in template):**
+```
+Asset template: https://example.com/tool-{{.OS}}-{{.Arch}}{{if eq .OS "windows"}}.exe{{end}}
+```
 
 ### Fixes Applied
 
 | File                               | Fix                                                          |
 |------------------------------------|--------------------------------------------------------------|
 | `toolchain/installer/installer.go` | Added `EnsureWindowsExeExtension()` centralized function     |
-| `toolchain/installer/installer.go` | Uses centralized function for binary naming                  |
-| `toolchain/installer/extract.go`   | Uses centralized function when extracting from archives      |
+| `toolchain/installer/installer.go` | Uses centralized function for installed binary naming        |
+| `toolchain/installer/asset.go`     | Adds `.exe` to GitHub release URLs for raw binaries on Win   |
+| `toolchain/installer/extract.go`   | Uses centralized function; `.exe` fallback only on Windows   |
 | `toolchain/install_helpers.go`     | Platform-aware hint message for PowerShell                   |
 
 ### Centralized Function
@@ -68,6 +92,17 @@ func EnsureWindowsExeExtension(binaryName string) string {
         return binaryName + ".exe"
     }
     return binaryName
+}
+```
+
+### GitHub Release URL Builder (for raw binaries)
+
+```go
+// In buildGitHubReleaseURL():
+// On Windows, add .exe to raw binary asset names that don't have an archive extension.
+// This follows Aqua's behavior where Windows binaries need .exe extension in the download URL.
+if !hasArchiveExtension(assetName) {
+    assetName = EnsureWindowsExeExtension(assetName)
 }
 ```
 
