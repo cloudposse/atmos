@@ -5,11 +5,13 @@ on:
     paths:
       - '**.md'
       - '!website/**'
+      - 'lychee.toml'
   push:
     branches: [main]
     paths:
       - '**.md'
       - '!website/**'
+      - 'lychee.toml'
   workflow_dispatch:
 
 jobs:
@@ -25,23 +27,7 @@ jobs:
       - name: Check links with lychee
         uses: lycheeverse/lychee-action@v2
         with:
-          args: >-
-            --base https://github.com/cloudposse/atmos/tree/main/
-            --verbose
-            --no-progress
-            --exclude-path website
-            --exclude-path node_modules
-            --exclude-path .git
-            --exclude 'localhost'
-            --exclude '127.0.0.1'
-            --exclude 'example.com'
-            --exclude 'cpco\.io'
-            --exclude 'cloudposse\.com.*utm_'
-            --exclude 'slack\.cloudposse\.com'
-            --exclude 'wttr\.in'
-            --accept 200,204,301,302,403,429
-            --timeout 30
-            --max-retries 3
-            '**/*.md'
+          args: --config lychee.toml --root-dir ${{ github.workspace }} '**/*.md'
           fail: true
           jobSummary: true
+          token: ${{ secrets.GITHUB_TOKEN }}
