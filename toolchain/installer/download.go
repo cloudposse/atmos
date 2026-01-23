@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	log "github.com/charmbracelet/log"
@@ -176,7 +177,39 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 		return assetPath, nil
 	}
 
+	// On Windows, try appending .exe to the asset URL as a last resort.
+	// Some tools (like jq) have Windows binaries with .exe suffix in the download URL.
+	if runtime.GOOS == "windows" {
+		return i.tryWindowsExeFallback(assetURL, fallbackURL)
+	}
+
 	return "", fmt.Errorf("%w: tried %s and %s: %w", ErrHTTPRequest, assetURL, fallbackURL, err)
+}
+
+// tryWindowsExeFallback attempts to download with .exe extension appended to the URL.
+// Some tools have Windows binaries named with .exe suffix (e.g., jq-windows-amd64.exe).
+func (i *Installer) tryWindowsExeFallback(assetURL, fallbackURL string) (string, error) {
+	defer perf.Track(nil, "Installer.tryWindowsExeFallback")()
+
+	// Try original URL with .exe.
+	exeURL := assetURL + ".exe"
+	log.Debug("Trying Windows .exe fallback", "url", exeURL)
+	assetPath, err := i.downloadAsset(exeURL)
+	if err == nil {
+		return assetPath, nil
+	}
+
+	// Try fallback URL with .exe.
+	if fallbackURL != "" && fallbackURL != assetURL {
+		fallbackExeURL := fallbackURL + ".exe"
+		log.Debug("Trying Windows .exe fallback for version fallback", "url", fallbackExeURL)
+		assetPath, err = i.downloadAsset(fallbackExeURL)
+		if err == nil {
+			return assetPath, nil
+		}
+	}
+
+	return "", fmt.Errorf("%w: tried %s and %s: %w", ErrHTTPRequest, assetURL, fallbackURL, ErrHTTP404)
 }
 
 // isHTTP404 returns true if the error is a 404 from downloadAsset.

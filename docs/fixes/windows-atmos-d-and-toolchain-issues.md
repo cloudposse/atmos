@@ -233,6 +233,44 @@ The hint message after installation was showing Unix/bash syntax on Windows.
 - **Windows**: `Invoke-Expression (atmos --chdir /path/to/project toolchain env --format powershell)`
 - **Unix/macOS**: `eval "$(atmos --chdir /path/to/project toolchain env)"`
 
+#### 3. File Extraction Missing .exe in Archives (CONFIRMED BUG - FIXED)
+
+**File**: `toolchain/installer/extract.go:239-250`
+
+**Problem**: When extracting files using the `Files` config (e.g., helm), the code was looking for `windows-amd64/helm` but archives contain `windows-amd64/helm.exe`.
+
+**Error**: `file not found in archive: windows-amd64/helm`
+
+**Fix Applied**: Added fallback to check for `.exe` extension when file not found:
+```go
+if _, err := os.Stat(src); os.IsNotExist(err) {
+    srcWithExe := src + ".exe"
+    if _, exeErr := os.Stat(srcWithExe); exeErr == nil {
+        src = srcWithExe
+        if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(dst), ".exe") {
+            dst = dst + ".exe"
+        }
+    } else {
+        return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+    }
+}
+```
+
+#### 4. Asset Download URL Missing .exe Extension (CONFIRMED BUG - FIXED)
+
+**File**: `toolchain/installer/download.go:179-207`
+
+**Problem**: Some tools (like jq) have Windows binaries named with `.exe` suffix in the download URL (e.g., `jq-windows-amd64.exe` not `jq-windows-amd64`), causing HTTP 404 errors.
+
+**Error**: `HTTP 404 Not Found` for `jq-windows-amd64`
+
+**Fix Applied**: Added `tryWindowsExeFallback()` function that tries appending `.exe` to the download URL on Windows:
+```go
+if runtime.GOOS == "windows" {
+    return i.tryWindowsExeFallback(assetURL, fallbackURL)
+}
+```
+
 This is confusing for Windows users who try to use the Unix syntax in PowerShell.
 
 #### 2. PATH Separator Issue

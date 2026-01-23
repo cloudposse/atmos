@@ -236,8 +236,20 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 			"isPrimary", idx == 0)
 
 		// Check if source file exists.
+		// On Windows, archives may contain binaries with .exe extension even when the
+		// registry definition doesn't specify it. Try both with and without .exe.
 		if _, err := os.Stat(src); os.IsNotExist(err) {
-			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+			// Try with .exe extension (common for Windows binaries in archives).
+			srcWithExe := src + ".exe"
+			_, exeErr := os.Stat(srcWithExe)
+			if exeErr != nil {
+				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+			}
+			src = srcWithExe
+			// Also update dst to include .exe if it doesn't already.
+			if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(dst), ".exe") {
+				dst += ".exe"
+			}
 		}
 
 		if err := MoveFile(src, dst); err != nil {
