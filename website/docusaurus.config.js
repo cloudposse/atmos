@@ -67,6 +67,10 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    {
+                        from: '/reference/alternatives',
+                        to: '/alternatives'
+                    },
                     // Backend documentation reorganization
                     {
                         from: '/core-concepts/components/terraform/state-backend',
