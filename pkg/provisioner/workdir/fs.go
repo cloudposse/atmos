@@ -128,7 +128,23 @@ func syncSourceToDest(src, dst string, hasher Hasher) (map[string]bool, bool, er
 }
 
 // fileNeedsCopy checks if a source file needs to be copied to destination.
+// Compares both content hash and file permissions to detect all types of changes.
 func fileNeedsCopy(srcPath, dstPath string, hasher Hasher) bool {
+	// Check file permissions first (cheaper than hashing).
+	srcInfo, err := os.Stat(srcPath)
+	if err != nil {
+		return true // Error reading source, try to copy.
+	}
+	dstInfo, err := os.Stat(dstPath)
+	if err != nil {
+		return true // Destination doesn't exist or can't be read.
+	}
+	// Check if permission bits differ (e.g., executable bit changed).
+	if srcInfo.Mode().Perm() != dstInfo.Mode().Perm() {
+		return true
+	}
+
+	// Check content hash.
 	srcHash, err := hasher.HashFile(srcPath)
 	if err != nil {
 		return true // Error reading source, try to copy.

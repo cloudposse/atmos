@@ -123,6 +123,17 @@ func parseWithSuffix(s string) (int64, error) {
 			Err()
 	}
 
+	// Guard against int64 overflow when multiplying.
+	maxSecondsForUnit := int64(^uint64(0)>>1) / multiplier
+	if valInt > maxSecondsForUnit {
+		return 0, errUtils.Build(errUtils.ErrInvalidDuration).
+			WithExplanation("Duration value too large for unit").
+			WithContext("value", valInt).
+			WithContext("unit", string(unit)).
+			WithHint("Use a smaller duration that fits within int64 seconds").
+			Err()
+	}
+
 	return valInt * multiplier, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -107,9 +108,9 @@ func AutoProvisionSource(
 		return err
 	}
 
-	// Write workdir metadata for remote sources (when workdir is enabled).
+	// Write workdir metadata (when workdir is enabled).
 	if isWorkdir {
-		if err := writeRemoteMetadata(targetDir, component, stack, sourceSpec); err != nil {
+		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
 			// Non-critical error - log and continue.
 			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
 		}
@@ -310,29 +311,73 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 	return false, ""
 }
 
-// writeRemoteMetadata writes workdir metadata for a remote source.
-func writeRemoteMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource) error {
+// isLocalSource determines if a source URI refers to a local path.
+// Local sources start with ".", "/", or are relative paths without remote indicators.
+func isLocalSource(uri string) bool {
+	// Relative paths starting with . or ..
+	if strings.HasPrefix(uri, ".") {
+		return true
+	}
+	// Absolute paths (Unix-style).
+	if strings.HasPrefix(uri, "/") {
+		return true
+	}
+	// File scheme.
+	if strings.HasPrefix(uri, "file://") {
+		return true
+	}
+	// Remote indicators - if any of these are present, it's remote.
+	remoteIndicators := []string{
+		"://",        // Any URL scheme (https://, git://, s3://, etc.).
+		"github.com", // GitHub.
+		"gitlab.com", // GitLab.
+		"bitbucket.", // Bitbucket.
+		"git::",      // Git getter prefix.
+		"s3::",       // S3 getter prefix.
+		"gcs::",      // GCS getter prefix.
+	}
+	for _, indicator := range remoteIndicators {
+		if strings.Contains(uri, indicator) {
+			return false
+		}
+	}
+	// Default: paths without remote indicators are local.
+	return true
+}
+
+// writeWorkdirMetadata writes workdir metadata based on source type (local or remote).
+func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource) error {
 	now := time.Now()
 
 	// Read existing metadata to preserve CreatedAt if it exists.
 	existingMetadata, _ := workdir.ReadMetadata(workdirPath)
 
+	// Determine source type based on URI.
+	sourceType := workdir.SourceTypeRemote
+	if isLocalSource(sourceSpec.Uri) {
+		sourceType = workdir.SourceTypeLocal
+	}
+
 	metadata := &workdir.WorkdirMetadata{
 		Component:     component,
 		Stack:         stack,
-		SourceType:    workdir.SourceTypeRemote,
+		SourceType:    sourceType,
 		Source:        sourceSpec.Uri, // Keep source field for backward compatibility.
 		SourceURI:     sourceSpec.Uri,
 		SourceVersion: sourceSpec.Version,
 		CreatedAt:     now,
 		UpdatedAt:     now,
 		LastAccessed:  now,
-		ContentHash:   "", // Remote sources don't track content hash.
+		ContentHash:   "", // Content hash is computed separately for local sources.
 	}
 
-	// Preserve original CreatedAt if metadata already existed.
+	// Preserve original CreatedAt and ContentHash if metadata already existed.
 	if existingMetadata != nil {
 		metadata.CreatedAt = existingMetadata.CreatedAt
+		// Preserve content hash for local sources (may have been computed by workdir provisioner).
+		if sourceType == workdir.SourceTypeLocal && existingMetadata.ContentHash != "" {
+			metadata.ContentHash = existingMetadata.ContentHash
+		}
 	}
 
 	return workdir.WriteMetadata(workdirPath, metadata)
