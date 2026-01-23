@@ -439,7 +439,7 @@ func TestCreateField_AllFieldTypes(t *testing.T) {
 			values[tc.field.Key] = tc.field.Default
 
 			// Create the field
-			field, _ := createField(tc.field.Key, tc.field, values)
+			field, _ := createField(tc.field.Key, &tc.field, values)
 
 			// Verify the field was created (we can't easily test the exact type without reflection)
 			// but we can verify it's not nil
@@ -473,7 +473,7 @@ func TestCreateField_ValueOverwriteIssue(t *testing.T) {
 	values["year"] = "2025" // User-provided value
 
 	// Create the field - this should NOT overwrite the value
-	_, _ = createField("year", field, values)
+	_, _ = createField("year", &field, values)
 
 	// The value should still be "2025", not "2024"
 	if values["year"] != "2025" {
@@ -493,7 +493,7 @@ func TestCreateField_ValueOverwriteIssue(t *testing.T) {
 	values["license"] = "Apache" // User-provided value
 
 	// Create the field - this should NOT overwrite the value
-	_, _ = createField("license", field2, values)
+	_, _ = createField("license", &field2, values)
 
 	// The value should still be "Apache", not "MIT"
 	if values["license"] != "Apache" {
@@ -518,7 +518,7 @@ func TestCreateField_UserInputPriority(t *testing.T) {
 	values["year"] = "2025" // User wants 2025
 
 	// Create the field
-	fieldObj, getter := createField("year", field, values)
+	fieldObj, getter := createField("year", &field, values)
 
 	// The field should be created
 	if fieldObj == nil {
@@ -595,7 +595,8 @@ func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
 	}
 
 	// Test that the createField function uses the correct values
-	yearField, yearGetter := createField("year", scaffoldConfig.Fields["year"], formValues)
+	yearFieldDef := scaffoldConfig.Fields["year"]
+	yearField, yearGetter := createField("year", &yearFieldDef, formValues)
 	if yearField == nil {
 		t.Errorf("Year field was not created")
 	}
@@ -607,7 +608,8 @@ func TestPromptForScaffoldConfig_UserInputCapture(t *testing.T) {
 	}
 
 	// Test author field
-	authorField, authorGetter := createField("author", scaffoldConfig.Fields["author"], formValues)
+	authorFieldDef := scaffoldConfig.Fields["author"]
+	authorField, authorGetter := createField("author", &authorFieldDef, formValues)
 	if authorField == nil {
 		t.Errorf("Author field was not created")
 	}
@@ -686,7 +688,8 @@ func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
 	}
 
 	// Test that createField uses the correct values
-	yearField, yearGetter := createField("year", scaffoldConfig.Fields["year"], formValues)
+	yearFieldDef := scaffoldConfig.Fields["year"]
+	yearField, yearGetter := createField("year", &yearFieldDef, formValues)
 	if yearField == nil {
 		t.Errorf("Year field was not created")
 	}
@@ -696,7 +699,8 @@ func TestPromptForScaffoldConfig_ExistingValuesPriority(t *testing.T) {
 		t.Errorf("Expected year getter to return '2025' (existing value), but got '%v'", yearValue)
 	}
 
-	authorField, authorGetter := createField("author", scaffoldConfig.Fields["author"], formValues)
+	authorFieldDef := scaffoldConfig.Fields["author"]
+	authorField, authorGetter := createField("author", &authorFieldDef, formValues)
 	if authorField == nil {
 		t.Errorf("Author field was not created")
 	}

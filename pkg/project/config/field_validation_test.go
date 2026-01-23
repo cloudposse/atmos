@@ -29,7 +29,7 @@ func TestCreateField_InvalidFieldType(t *testing.T) {
 		}
 	}()
 
-	createField("test_field", field, values)
+	createField("test_field", &field, values)
 }
 
 func TestCreateField_ValidFieldTypes(t *testing.T) {
@@ -147,7 +147,7 @@ func TestCreateField_ValidFieldTypes(t *testing.T) {
 				}
 			}()
 
-			field, getter := createField(tc.key, tc.field, values)
+			field, getter := createField(tc.key, &tc.field, values)
 			if field == nil {
 				t.Errorf("createField returned nil field for type %s", tc.fieldType)
 			}
@@ -199,7 +199,7 @@ func TestCreateField_BooleanTypesAllWorkAsSame(t *testing.T) {
 				}
 			}()
 
-			huhField, getter := createField("test_field", field, values)
+			huhField, getter := createField("test_field", &field, values)
 			if huhField == nil {
 				t.Errorf("createField returned nil field for boolean type %s", boolType)
 			}

@@ -213,6 +213,7 @@ func TestTemplateFilenameProcessing(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			result, err := processor.ProcessTemplate(tc.filePath, tempDir, scaffoldConfig, userValues)
 
+			//nolint:nestif // test assertion logic requires nested conditionals
 			if tc.shouldError {
 				if err == nil {
 					t.Errorf("Expected error but got none")

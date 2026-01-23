@@ -364,7 +364,7 @@ func TestInitUI_GenerateSuggestedDirectoryWithValues(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := ui.generateSuggestedDirectoryWithValues(tt.config, tt.mergedValues)
+			result := ui.generateSuggestedDirectoryWithValues(&tt.config, tt.mergedValues)
 			if result != tt.expected {
 				t.Errorf("Expected %q, got %q", tt.expected, result)
 			}

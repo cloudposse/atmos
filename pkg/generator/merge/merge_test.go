@@ -450,6 +450,7 @@ func TestThreeWayMerger_ConflictHandling(t *testing.T) {
 				return
 			}
 
+			//nolint:nestif // test assertion logic requires nested conditionals
 			if err == nil {
 				if result.HasConflicts != tt.wantConflicts {
 					t.Errorf("HasConflicts = %v, want %v", result.HasConflicts, tt.wantConflicts)

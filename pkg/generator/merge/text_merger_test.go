@@ -588,6 +588,7 @@ line 5`
 			merger := NewTextMerger(tt.threshold)
 			result, err := merger.Merge(base, ours, theirs)
 
+			//nolint:nestif // test assertion logic requires nested conditionals
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("Expected error with threshold %d, got nil", tt.threshold)

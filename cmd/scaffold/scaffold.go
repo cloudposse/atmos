@@ -496,7 +496,7 @@ func executeTemplateGeneration(
 	}
 
 	// Target directory provided, use normal Execute.
-	return scaffoldUI.Execute(*selectedConfig, targetDir, force, update, useDefaults, templateVars)
+	return scaffoldUI.Execute(selectedConfig, targetDir, force, update, useDefaults, templateVars)
 }
 
 // renderDryRunPreview renders a preview of template files without writing to disk.
@@ -629,7 +629,7 @@ func executeTemplateWithoutTargetDir(
 ) error {
 	if !dryRun {
 		// Interactive mode: use ExecuteWithInteractiveFlow which will prompt for target directory.
-		return scaffoldUI.ExecuteWithInteractiveFlow(*selectedConfig, "", force, update, useDefaults, templateVars)
+		return scaffoldUI.ExecuteWithInteractiveFlow(selectedConfig, "", force, update, useDefaults, templateVars)
 	}
 
 	// Dry-run mode: target directory is required

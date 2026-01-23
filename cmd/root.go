@@ -688,16 +688,22 @@ func setupColorProfile(atmosConfig *schema.AtmosConfiguration) {
 // This is called during init() before Boa styles are created, ensuring Cobra help
 // text rendering respects the forced color profile.
 func setupColorProfileFromEnv() {
-	defer perf.Track(nil, "cmd.setupColorProfileFromEnv")()
+	setupColorProfileFromEnvWithArgs(os.Args)
+}
+
+// setupColorProfileFromEnvWithArgs checks for --force-color flag in the given args.
+// This is a testable version of setupColorProfileFromEnv that accepts args as a parameter.
+func setupColorProfileFromEnvWithArgs(args []string) {
+	defer perf.Track(nil, "cmd.setupColorProfileFromEnvWithArgs")()
 
 	// Check environment variable first using global viper.
 	// Note: ATMOS env prefix and AutomaticEnv are configured in init().
 	forceColor := viper.GetBool("FORCE_COLOR")
 
-	// Also check --force-color CLI flag by manually parsing os.Args.
+	// Also check --force-color CLI flag by manually parsing args.
 	// This is needed because Cobra hasn't parsed flags yet during init().
 	if !forceColor {
-		for _, arg := range os.Args {
+		for _, arg := range args {
 			if arg == "--force-color" {
 				forceColor = true
 				break
@@ -1304,7 +1310,13 @@ func ExecuteVersion() error {
 // handleConfigInitError processes config initialization errors and enriches them for display.
 // Returns nil if the error can be ignored (e.g., for version command), or an enriched error.
 func handleConfigInitError(initErr error, atmosConfig *schema.AtmosConfiguration) error {
-	if isVersionCommand() {
+	return handleConfigInitErrorWithArgs(initErr, atmosConfig, os.Args)
+}
+
+// handleConfigInitErrorWithArgs processes config initialization errors with explicit args.
+// This is a testable version of handleConfigInitError that accepts args as a parameter.
+func handleConfigInitErrorWithArgs(initErr error, atmosConfig *schema.AtmosConfiguration, args []string) error {
+	if isVersionCommandWithArgs(args) {
 		// Version command should always work, even with invalid config.
 		log.Debug("Warning: CLI configuration error (continuing for version command)", "error", initErr)
 		return nil

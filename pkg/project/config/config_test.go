@@ -208,7 +208,7 @@ func TestCreateField(t *testing.T) {
 		Placeholder: "Enter project name",
 	}
 
-	field, _ := createField("project_name", inputField, values)
+	field, _ := createField("project_name", &inputField, values)
 	assert.NotNil(t, field)
 
 	// Test select field
@@ -222,7 +222,7 @@ func TestCreateField(t *testing.T) {
 		Options:     []string{"MIT", "Apache", "GPL"},
 	}
 
-	field, _ = createField("license", selectField, values)
+	field, _ = createField("license", &selectField, values)
 	assert.NotNil(t, field)
 
 	// Test multiselect field
@@ -236,7 +236,7 @@ func TestCreateField(t *testing.T) {
 		Options:     []string{"us-east-1", "us-west-2", "eu-west-1"},
 	}
 
-	field, _ = createField("regions", multiSelectField, values)
+	field, _ = createField("regions", &multiSelectField, values)
 	assert.NotNil(t, field)
 
 	// Test confirm field
@@ -249,7 +249,7 @@ func TestCreateField(t *testing.T) {
 		Required:    false,
 	}
 
-	field, _ = createField("monitoring", confirmField, values)
+	field, _ = createField("monitoring", &confirmField, values)
 	assert.NotNil(t, field)
 }
 

@@ -305,6 +305,7 @@ func TestExecuteInit_AbsolutePath(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// This test validates the path conversion logic
 			// without actually executing the full command.
+			//nolint:nestif // test assertion logic requires nested conditionals
 			if tt.targetDir != "" {
 				absPath, err := filepath.Abs(tt.targetDir)
 				if tt.expectError {
@@ -400,16 +401,15 @@ func TestExecuteInit_WithTemplateDirectory(t *testing.T) {
 
 	tmpDir := t.TempDir()
 
-	err := executeInit(
-		context.Background(),
-		"simple",
-		tmpDir,
-		false, // non-interactive
-		false, // no force
-		map[string]interface{}{
+	err := executeInit(context.Background(), initOptions{
+		templateName: "simple",
+		targetDir:    tmpDir,
+		interactive:  false,
+		force:        false,
+		templateVars: map[string]interface{}{
 			"project_name": "test-project",
 		},
-	)
+	})
 
 	// This would test actual execution, skipped for unit tests.
 	assert.NoError(t, err)
@@ -451,14 +451,13 @@ func TestExecuteInit_ValidatesRequiredArgs(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := executeInit(
-				context.Background(),
-				tt.templateName,
-				tt.targetDir,
-				tt.interactive,
-				false,
-				map[string]interface{}{},
-			)
+			err := executeInit(context.Background(), initOptions{
+				templateName: tt.templateName,
+				targetDir:    tt.targetDir,
+				interactive:  tt.interactive,
+				force:        false,
+				templateVars: map[string]interface{}{},
+			})
 
 			if tt.expectError {
 				require.Error(t, err)

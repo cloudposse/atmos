@@ -195,16 +195,17 @@ func (m *YAMLMerger) mergeDocuments(base, ours, theirs *yaml.Node, path string, 
 		Kind: yaml.DocumentNode,
 	}
 
-	// Merge the content nodes
-	if len(base.Content) > 0 && len(ours.Content) > 0 && len(theirs.Content) > 0 {
+	// Merge the content nodes.
+	switch {
+	case len(base.Content) > 0 && len(ours.Content) > 0 && len(theirs.Content) > 0:
 		merged, err := m.mergeNodes(base.Content[0], ours.Content[0], theirs.Content[0], path, conflicts)
 		if err != nil {
 			return nil, err
 		}
 		result.Content = []*yaml.Node{merged}
-	} else if len(ours.Content) > 0 {
+	case len(ours.Content) > 0:
 		result.Content = ours.Content
-	} else if len(theirs.Content) > 0 {
+	case len(theirs.Content) > 0:
 		result.Content = theirs.Content
 	}
 
@@ -268,11 +269,12 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 		}
 		keyPath += key
 
-		if !inBase && !inTheirs {
-			// User added, not in template - keep it (with comments)
+		switch {
+		case !inBase && !inTheirs:
+			// User added, not in template - keep it (with comments).
 			result.Content = append(result.Content, keyNode, oursValue)
-		} else if !inBase && inTheirs {
-			// Both added the same key - merge values
+		case !inBase && inTheirs:
+			// Both added the same key - merge values.
 			if oursValue.Kind != theirsValue.Kind {
 				conflicts.addConflict(keyPath)
 				result.Content = append(result.Content, keyNode, oursValue)
@@ -285,11 +287,11 @@ func (m *YAMLMerger) mergeMappings(base, ours, theirs *yaml.Node, path string, c
 				return nil, err
 			}
 			result.Content = append(result.Content, keyNode, merged)
-		} else if inBase && !inTheirs {
-			// User modified, template deleted - keep user's version (preserve user changes and comments)
+		case inBase && !inTheirs:
+			// User modified, template deleted - keep user's version (preserve user changes and comments).
 			result.Content = append(result.Content, keyNode, oursValue)
-		} else {
-			// All three have the key - merge values (preserve user's key comments)
+		default:
+			// All three have the key - merge values (preserve user's key comments).
 			merged, err := m.mergeNodes(baseValue, oursValue, theirsValue, keyPath, conflicts)
 			if err != nil {
 				return nil, err

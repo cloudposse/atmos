@@ -79,6 +79,7 @@ func TestValidateTargetDirectory(t *testing.T) {
 			tempDir := t.TempDir()
 			targetPath := filepath.Join(tempDir, "target")
 
+			//nolint:nestif // test setup logic requires nested conditionals
 			if tt.setupDir {
 				if err := os.MkdirAll(targetPath, 0o755); err != nil {
 					t.Fatalf("failed to create test directory: %v", err)

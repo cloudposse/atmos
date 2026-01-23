@@ -362,7 +362,7 @@ func createFormGroup(items []fieldItem, formValues map[string]interface{}, value
 	var groupFields []huh.Field
 
 	for i := range items {
-		field, getter := createField(items[i].key, items[i].field, formValues)
+		field, getter := createField(items[i].key, &items[i].field, formValues)
 		groupFields = append(groupFields, field)
 		valueGetters[items[i].key] = getter
 	}
@@ -390,7 +390,7 @@ func extractFormValues(userValues map[string]interface{}, valueGetters map[strin
 // It returns the field and a function to get the updated value.
 //
 //nolint:gocognit,revive,cyclop,funlen // complex TUI field factory handling multiple field types
-func createField(key string, field FieldDefinition, values map[string]interface{}) (huh.Field, func() interface{}) {
+func createField(key string, field *FieldDefinition, values map[string]interface{}) (huh.Field, func() interface{}) {
 	// Get current value or default
 	currentValue := values[key]
 	if currentValue == nil {

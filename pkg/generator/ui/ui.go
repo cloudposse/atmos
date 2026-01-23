@@ -69,6 +69,106 @@ func truncateString(s string, maxLen int) string {
 	return s[:maxLen] + "..."
 }
 
+// resolveDelimiters determines the delimiters to use, falling back to scaffold config or defaults.
+func resolveDelimiters(delimiters []string, scaffoldConfig *config.ScaffoldConfig) []string {
+	if len(delimiters) > 0 {
+		return delimiters
+	}
+	if scaffoldConfig != nil && len(scaffoldConfig.Delimiters) == 2 {
+		return scaffoldConfig.Delimiters
+	}
+	return []string{"{{", "}}"}
+}
+
+// calculateMaxColumnWidths finds maximum content widths for table columns from rows.
+func calculateMaxColumnWidths(rows [][]string, nameWidth, sourceWidth, versionWidth, descWidth int) (int, int, int, int) {
+	const minColumns = 4
+	for _, row := range rows {
+		if len(row) < minColumns {
+			continue
+		}
+		if len(row[0]) > nameWidth {
+			nameWidth = len(row[0])
+		}
+		if len(row[1]) > sourceWidth {
+			sourceWidth = len(row[1])
+		}
+		if len(row[2]) > versionWidth {
+			versionWidth = len(row[2])
+		}
+		if len(row[3]) > descWidth {
+			descWidth = len(row[3])
+		}
+	}
+	return nameWidth, sourceWidth, versionWidth, descWidth
+}
+
+// buildEmbedsTemplateOptions builds huh options from embedded configuration map.
+func buildEmbedsTemplateOptions(configs map[string]tmpl.Configuration) []huh.Option[string] {
+	// Build config keys for consistent ordering.
+	var templateNames []string
+	for key := range configs {
+		templateNames = append(templateNames, key)
+	}
+	sort.Strings(templateNames)
+
+	var options []huh.Option[string]
+	for _, key := range templateNames {
+		config := configs[key]
+		displayText := fmt.Sprintf("%-15s   %-35s   %s", key, config.Name, config.Description)
+		options = append(options, huh.NewOption(displayText, key))
+	}
+	return options
+}
+
+// buildScaffoldTemplateOptions builds huh options from scaffold templates in atmos.yaml.
+func buildScaffoldTemplateOptions(templates interface{}) ([]huh.Option[string], []string) {
+	templatesMap, ok := templates.(map[string]interface{})
+	if !ok {
+		return nil, nil
+	}
+
+	var options []huh.Option[string]
+	var templateNames []string
+
+	for templateName, templateConfig := range templatesMap {
+		displayText, valid := buildScaffoldDisplayText(templateName, templateConfig)
+		if !valid {
+			continue
+		}
+		options = append(options, huh.NewOption(displayText, templateName))
+		templateNames = append(templateNames, templateName)
+	}
+
+	return options, templateNames
+}
+
+// buildScaffoldDisplayText constructs display text for a scaffold template.
+func buildScaffoldDisplayText(templateName string, templateConfig interface{}) (string, bool) {
+	templateMap, ok := templateConfig.(map[string]interface{})
+	if !ok {
+		return "", false
+	}
+
+	description := getStringFromMap(templateMap, "description")
+	source := getStringFromMap(templateMap, "source")
+
+	displayText := fmt.Sprintf("%-20s   %s", templateName, description)
+	if source != "" {
+		displayText += fmt.Sprintf(" (from %s)", source)
+	}
+
+	return displayText, true
+}
+
+// getStringFromMap safely extracts a string value from a map.
+func getStringFromMap(m map[string]interface{}, key string) string {
+	if val, ok := m[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
 // spinnerModel wraps the spinner for tea.Model compatibility.
 type spinnerModel struct {
 	spinner spinner.Model
@@ -173,21 +273,21 @@ func (ui *InitUI) flushOutput() {
 // Execute runs the initialization process with UI.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
-func (ui *InitUI) Execute(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
+func (ui *InitUI) Execute(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, cmdTemplateValues map[string]interface{}) error {
 	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, "", cmdTemplateValues)
 }
 
 // ExecuteWithBaseRef runs the initialization process with UI and specified base ref.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
-func (ui *InitUI) ExecuteWithBaseRef(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error {
+func (ui *InitUI) ExecuteWithBaseRef(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}) error {
 	return ui.ExecuteWithDelimiters(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues, []string{"{{", "}}"})
 }
 
 // ExecuteWithDelimiters runs the initialization process with UI and custom delimiters.
 //
 //nolint:revive // argument-limit: public API maintains compatibility
-func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+func (ui *InitUI) ExecuteWithDelimiters(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Defensive validation: target directory cannot be empty
 	if targetPath == "" {
 		return errUtils.Build(errUtils.ErrTargetDirRequired).
@@ -227,9 +327,9 @@ func (ui *InitUI) ExecuteWithDelimiters(embedsConfig tmpl.Configuration, targetP
 // ExecuteWithInteractiveFlow provides a unified flow for both init and scaffold commands.
 // This ensures both commands have identical behavior - the only difference is the source of templates.
 //
-//nolint:gocritic,revive // hugeParam: public API signature
+//nolint:revive // argument-limit: public API maintains compatibility
 func (ui *InitUI) ExecuteWithInteractiveFlow(
-	embedsConfig tmpl.Configuration,
+	embedsConfig *tmpl.Configuration,
 	targetPath string,
 	force, update, useDefaults bool,
 	cmdTemplateValues map[string]interface{},
@@ -239,75 +339,90 @@ func (ui *InitUI) ExecuteWithInteractiveFlow(
 
 // ExecuteWithInteractiveFlowAndBaseRef provides a unified flow with base ref support.
 //
-//nolint:gocognit,gocritic,revive // complex orchestration function, public API signature
+//nolint:revive // argument-limit: public API maintains compatibility
 func (ui *InitUI) ExecuteWithInteractiveFlowAndBaseRef(
-	embedsConfig tmpl.Configuration,
+	embedsConfig *tmpl.Configuration,
 	targetPath string,
 	force, update, useDefaults bool,
 	baseRef string,
 	cmdTemplateValues map[string]interface{},
 ) error {
-	// If no target path was provided (interactive mode), prompt for it after setup
+	// If no target path was provided (interactive mode), prompt for it after setup.
 	if targetPath == "" {
-		// For templates with scaffold configuration, we need to run setup first to get proper values
-		if tmpl.HasScaffoldConfig(embedsConfig.Files) {
-			// Create a temporary directory for setup
-			tempDir, err := os.MkdirTemp("", "atmos-setup-*")
-			if err != nil {
-				return fmt.Errorf("failed to create temporary directory: %w", err)
-			}
-			defer os.RemoveAll(tempDir)
-
-			// Load the scaffold configuration
-			var scaffoldConfigFile *tmpl.File
-			for i := range embedsConfig.Files {
-				if embedsConfig.Files[i].Path == config.ScaffoldConfigFileName {
-					scaffoldConfigFile = &embedsConfig.Files[i]
-					break
-				}
-			}
-
-			if scaffoldConfigFile == nil {
-				return errUtils.Build(errUtils.ErrScaffoldConfigMissing).
-					WithExplanationf("%s not found in configuration", config.ScaffoldConfigFileName).
-					Err()
-			}
-
-			// Load the scaffold configuration from content
-			scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
-			if err != nil {
-				return fmt.Errorf("failed to load scaffold configuration: %w", err)
-			}
-
-			// Run setup to get configuration values
-			mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, tempDir, useDefaults, cmdTemplateValues)
-			if err != nil {
-				return fmt.Errorf("failed to run setup form: %w", err)
-			}
-
-			// Now prompt for target directory with evaluated template
-			var err2 error
-			targetPath, err2 = ui.PromptForTargetDirectory(embedsConfig, mergedValues)
-			if err2 != nil {
-				return fmt.Errorf("failed to prompt for target directory: %w", err2)
-			}
-		} else {
-			// For simple templates, prompt directly
-			var err2 error
-			targetPath, err2 = ui.PromptForTargetDirectory(embedsConfig, nil)
-			if err2 != nil {
-				return fmt.Errorf("failed to prompt for target directory: %w", err2)
-			}
+		var err error
+		targetPath, err = ui.promptForTargetPath(embedsConfig, useDefaults, cmdTemplateValues)
+		if err != nil {
+			return err
 		}
 	}
 
-	// Now execute with the determined target path
+	// Now execute with the determined target path.
 	return ui.ExecuteWithBaseRef(embedsConfig, targetPath, force, update, useDefaults, baseRef, cmdTemplateValues)
 }
 
+// promptForTargetPath handles interactive target path prompting with scaffold config support.
+func (ui *InitUI) promptForTargetPath(embedsConfig *tmpl.Configuration, useDefaults bool, cmdTemplateValues map[string]interface{}) (string, error) {
+	// For simple templates without scaffold config, prompt directly.
+	if !tmpl.HasScaffoldConfig(embedsConfig.Files) {
+		return ui.PromptForTargetDirectory(embedsConfig, nil)
+	}
+
+	// For templates with scaffold configuration, we need to run setup first to get proper values.
+	return ui.promptForTargetPathWithScaffoldSetup(embedsConfig, useDefaults, cmdTemplateValues)
+}
+
+// promptForTargetPathWithScaffoldSetup runs scaffold setup and prompts for target directory.
+func (ui *InitUI) promptForTargetPathWithScaffoldSetup(embedsConfig *tmpl.Configuration, useDefaults bool, cmdTemplateValues map[string]interface{}) (string, error) {
+	// Create a temporary directory for setup.
+	tempDir, err := os.MkdirTemp("", "atmos-setup-*")
+	if err != nil {
+		return "", fmt.Errorf("failed to create temporary directory: %w", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	// Find and load the scaffold configuration.
+	scaffoldConfig, err := ui.loadScaffoldConfigFromEmbeds(embedsConfig)
+	if err != nil {
+		return "", err
+	}
+
+	// Run setup to get configuration values.
+	mergedValues, _, err := ui.RunSetupForm(scaffoldConfig, tempDir, useDefaults, cmdTemplateValues)
+	if err != nil {
+		return "", fmt.Errorf("failed to run setup form: %w", err)
+	}
+
+	// Prompt for target directory with evaluated template.
+	return ui.PromptForTargetDirectory(embedsConfig, mergedValues)
+}
+
+// loadScaffoldConfigFromEmbeds finds and loads scaffold configuration from embedded files.
+func (ui *InitUI) loadScaffoldConfigFromEmbeds(embedsConfig *tmpl.Configuration) (*config.ScaffoldConfig, error) {
+	var scaffoldConfigFile *tmpl.File
+	for i := range embedsConfig.Files {
+		if embedsConfig.Files[i].Path == config.ScaffoldConfigFileName {
+			scaffoldConfigFile = &embedsConfig.Files[i]
+			break
+		}
+	}
+
+	if scaffoldConfigFile == nil {
+		return nil, errUtils.Build(errUtils.ErrScaffoldConfigMissing).
+			WithExplanationf("%s not found in configuration", config.ScaffoldConfigFileName).
+			Err()
+	}
+
+	scaffoldConfig, err := config.LoadScaffoldConfigFromContent(scaffoldConfigFile.Content)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load scaffold configuration: %w", err)
+	}
+
+	return scaffoldConfig, nil
+}
+
 // generateSuggestedDirectoryWithValues generates a suggested directory name using template values.
-func (ui *InitUI) generateSuggestedDirectoryWithValues(config tmpl.Configuration, mergedValues map[string]interface{}) string {
-	// If we have merged values, try to use them for a better suggestion
+func (ui *InitUI) generateSuggestedDirectoryWithValues(config *tmpl.Configuration, mergedValues map[string]interface{}) string {
+	// If we have merged values, try to use them for a better suggestion.
 	if mergedValues != nil {
 		if name, ok := mergedValues["name"].(string); ok && name != "" {
 			return currentDirPrefix + name
@@ -317,14 +432,14 @@ func (ui *InitUI) generateSuggestedDirectoryWithValues(config tmpl.Configuration
 		}
 	}
 
-	// Fallback to the original logic
+	// Fallback to the original logic.
 	return currentDirPrefix + filepath.Base(config.Name)
 }
 
 // executeWithCommandValues processes files using command-line template values.
 //
 //nolint:revive // function-length: file processing loop with error handling
-func (ui *InitUI) executeWithCommandValues(embedsConfig tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}) error {
+func (ui *InitUI) executeWithCommandValues(embedsConfig *tmpl.Configuration, targetPath string, force, update bool, cmdTemplateValues map[string]interface{}) error {
 	// For now, use the existing processFile method but this should be refactored
 	// to use the templating processor properly
 	var successCount, errorCount int
@@ -458,7 +573,7 @@ func (ui *InitUI) RunSetupForm(scaffoldConfig *config.ScaffoldConfig, targetPath
 // executeWithSetup handles any scaffold configuration with interactive prompts.
 //
 //nolint:gocognit,revive,cyclop,funlen // complex orchestration function with multiple setup phases
-func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
+func (ui *InitUI) executeWithSetup(embedsConfig *tmpl.Configuration, targetPath string, force, update, useDefaults bool, baseRef string, cmdTemplateValues map[string]interface{}, delimiters []string) error {
 	// Find the scaffold.yaml file in the configuration
 	var scaffoldConfigFile *tmpl.File
 	for i := range embedsConfig.Files {
@@ -586,26 +701,18 @@ func (ui *InitUI) executeWithSetup(embedsConfig tmpl.Configuration, targetPath s
 	// Flush all output before rendering README
 	ui.flushOutput()
 
-	// Only render README if all files were successful
+	// Only render README if all files were successful.
 	if embedsConfig.README != "" {
-		// Use the delimiters passed in, or get from scaffold config as fallback
-		if len(delimiters) == 0 {
-			delimiters = []string{"{{", "}}"}
-			if scaffoldConfig != nil {
-				// scaffoldConfig is of type *config.ScaffoldConfig, access Delimiters field directly
-				if len(scaffoldConfig.Delimiters) == 2 {
-					delimiters = scaffoldConfig.Delimiters
-				}
-			}
-		}
+		// Resolve delimiters: use passed-in, or scaffold config, or defaults.
+		delimiters = resolveDelimiters(delimiters, scaffoldConfig)
 
-		// Process README template with rich configuration
+		// Process README template with rich configuration.
 		processedContent, err := ui.processor.ProcessTemplateWithDelimiters(embedsConfig.README, targetPath, scaffoldConfig, mergedValues, delimiters)
 		if err != nil {
 			return fmt.Errorf("failed to process README template: %w", err)
 		}
 
-		// Render the processed content as markdown
+		// Render the processed content as markdown.
 		if err := ui.renderMarkdown(processedContent); err != nil {
 			return err
 		}
@@ -770,7 +877,7 @@ func (ui *InitUI) displayConfigurationTable(_ []string, rows [][]string) {
 
 // DisplayTemplateTable displays template data in a formatted table.
 //
-//nolint:gocognit,revive,funlen // complex table rendering with dynamic column widths
+//nolint:revive // complex table rendering with dynamic column widths
 func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	// Get terminal width
 	width := ui.term.Width(terminal.Stdout)
@@ -793,23 +900,8 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 	versionWidth := versionColumnMinWidth // Minimum width for version
 	descWidth := descColumnMinWidth       // Minimum width for descriptions
 
-	// Find the maximum content width for each column
-	for _, row := range rows {
-		if len(row) >= 4 {
-			if len(row[0]) > nameWidth {
-				nameWidth = len(row[0])
-			}
-			if len(row[1]) > sourceWidth {
-				sourceWidth = len(row[1])
-			}
-			if len(row[2]) > versionWidth {
-				versionWidth = len(row[2])
-			}
-			if len(row[3]) > descWidth {
-				descWidth = len(row[3])
-			}
-		}
-	}
+	// Find the maximum content width for each column.
+	nameWidth, sourceWidth, versionWidth, descWidth = calculateMaxColumnWidths(rows, nameWidth, sourceWidth, versionWidth, descWidth)
 
 	// Add some padding to each column
 	nameWidth += 2
@@ -867,56 +959,21 @@ func (ui *InitUI) DisplayTemplateTable(header []string, rows [][]string) {
 // PromptForTemplate prompts the user to select a template from available options.
 // This works for both init (embeds) and scaffold (local/remote) templates.
 //
-//nolint:gocognit,revive,cyclop,funlen // complex TUI component with multiple template type handlers
+//nolint:revive // complex TUI component with multiple template type handlers
 func (ui *InitUI) PromptForTemplate(templateType string, templates interface{}) (string, error) {
 	var options []huh.Option[string]
-	var templateNames []string
 
 	switch templateType {
 	case "embeds":
-		// Handle tmpl.Configuration map
+		// Handle tmpl.Configuration map.
 		if configs, ok := templates.(map[string]tmpl.Configuration); ok {
-			// Build config keys for consistent ordering
-			for key := range configs {
-				templateNames = append(templateNames, key)
-			}
-			sort.Strings(templateNames)
-
-			for _, key := range templateNames {
-				config := configs[key]
-				displayText := fmt.Sprintf("%-15s   %-35s   %s", key, config.Name, config.Description)
-				options = append(options, huh.NewOption(displayText, key))
-			}
+			options = buildEmbedsTemplateOptions(configs)
 		}
 
 	case templateTypeScaffold:
-		// Handle scaffold templates from atmos.yaml
-		if templatesMap, ok := templates.(map[string]interface{}); ok {
-			for templateName, templateConfig := range templatesMap {
-				templateMap, ok := templateConfig.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				description := ""
-				if desc, ok := templateMap["description"].(string); ok {
-					description = desc
-				}
-
-				source := ""
-				if src, ok := templateMap["source"].(string); ok {
-					source = src
-				}
-
-				displayText := fmt.Sprintf("%-20s   %s", templateName, description)
-				if source != "" {
-					displayText += fmt.Sprintf(" (from %s)", source)
-				}
-
-				options = append(options, huh.NewOption(displayText, templateName))
-				templateNames = append(templateNames, templateName)
-			}
-		}
+		// Handle scaffold templates from atmos.yaml.
+		scaffoldOptions, _ := buildScaffoldTemplateOptions(templates)
+		options = append(options, scaffoldOptions...)
 	}
 
 	if len(options) == 0 {
