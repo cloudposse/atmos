@@ -12,11 +12,10 @@ stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
-  name_pattern: "{stage}"
+  name_template: "{{ .vars.stage }}"
 
-# Toolchain configuration - tests gum in PATH for custom commands
+# Toolchain configuration - tests toolchain tools in PATH for custom commands
 toolchain:
-  file_path: .tool-versions
   install_path: .tools
   aliases:
     helm: helm/helm
@@ -38,6 +37,10 @@ toolchain:
           files:
             - name: replicated
               src: replicated
+    # Default Aqua registry for standard tools
+    - name: aqua
+      type: aqua
+      priority: 10
 
 logs:
   file: "/dev/stderr"

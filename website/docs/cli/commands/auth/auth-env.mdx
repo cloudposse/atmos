@@ -32,6 +32,7 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 
 **Typical Workflow (AWS):**
 
+**Bash/Zsh:**
 ```bash
 # 1. Set environment variables for an identity
 eval $(atmos auth env --identity prod-admin)
@@ -44,11 +45,40 @@ aws s3 ls
 terraform plan vpc -s prod
 ```
 
+**PowerShell (Windows):**
+```powershell
+# 1. Set environment variables for an identity
+$envVars = atmos auth env --identity prod-admin --format json | ConvertFrom-Json
+$envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+
+# 2. Authenticate (when needed) - opens browser for SSO
+atmos auth login --identity prod-admin
+
+# 3. Use AWS CLI, Terraform, or other tools
+aws s3 ls
+terraform plan vpc -s prod
+```
+
 **Typical Workflow (Azure with device-code):**
 
+**Bash/Zsh:**
 ```bash
 # 1. Set environment variables for an Azure identity
 eval $(atmos auth env --identity azure-dev)
+
+# 2. Authenticate (when needed) - displays device code for browser login
+atmos auth login --identity azure-dev
+
+# 3. Use Azure CLI, Terraform, or other tools
+az group list
+terraform plan -var-file=azure.tfvars
+```
+
+**PowerShell (Windows):**
+```powershell
+# 1. Set environment variables for an Azure identity
+$envVars = atmos auth env --identity azure-dev --format json | ConvertFrom-Json
+$envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
 
 # 2. Authenticate (when needed) - displays device code for browser login
 atmos auth login --identity azure-dev
@@ -118,11 +148,17 @@ atmos auth env --identity prod-admin --login
 
 ### Adding to Your Shell Profile
 
-A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile (e.g., `.zshrc`, `.bashrc`) without triggering a login prompt on every new shell session:
+A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile without triggering a login prompt on every new shell session:
 
+**Bash/Zsh** (`~/.bashrc` or `~/.zshrc`):
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
 eval $(atmos auth env)
+```
+
+**PowerShell** (`$PROFILE`):
+```powershell
+$envVars = atmos auth env --format json | ConvertFrom-Json
+$envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
 ```
 
 <details>

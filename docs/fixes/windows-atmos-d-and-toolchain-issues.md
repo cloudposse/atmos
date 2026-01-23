@@ -556,14 +556,22 @@ A test fixture has been created to reproduce this issue:
 ```
 toolchain-custom-commands/
 ├── .atmos.d/
-│   └── commands.yaml    # Custom commands using all toolchain tools
-├── .tool-versions       # gum, k9s, helm, jq, kubectl, tofu, replicated
+│   └── commands.yaml    # Custom commands with dependencies.tools
 ├── atmos.yaml           # Toolchain config with aliases and custom registry
 ├── components/terraform/test-component/
 │   └── main.tf
 └── stacks/deploy/
     └── dev.yaml
 ```
+
+**Tool versions specified via `dependencies.tools`** (not `.tool-versions` file):
+- `charmbracelet/gum: "0.17.0"`
+- `derailed/k9s: "0.32.7"`
+- `helm: "3.16.3"` (via alias)
+- `jqlang/jq: "1.7.1"`
+- `kubectl: "1.31.4"` (via alias)
+- `tofu: "1.9.0"` (via alias)
+- `replicated: "0.124.1"` (via alias)
 
 **Custom commands defined**:
 - `test-gum` - Runs `gum --version`
@@ -573,7 +581,7 @@ toolchain-custom-commands/
 - `test-kubectl` - Runs `kubectl version --client`
 - `test-tofu` - Runs `tofu --version`
 - `test-replicated` - Runs `replicated version`
-- `test-all-tools` - Runs all of the above
+- `test-all-tools` - Runs all of the above with all 7 tools as dependencies
 
 ### Manual Testing Steps
 
@@ -633,6 +641,34 @@ eval "$(../../../../atmos toolchain env)"
 
 # Test all tools
 ../../../../atmos test-all-tools
+```
+
+### Automated Integration Tests
+
+Integration tests are available in `tests/toolchain_custom_commands_test.go`:
+
+| Test | Description |
+|------|-------------|
+| `TestToolchainCustomCommands_InstallAllTools` | Installs all 5 tools (gum, k9s, helm, jq, tofu) and verifies binaries exist |
+| `TestToolchainCustomCommands_ToolsExecutable` | Verifies installed tools can execute `--version` |
+| `TestToolchainCustomCommands_PathEnvOutput` | Tests `toolchain env` output for bash and PowerShell formats |
+| `TestToolchainCustomCommands_WindowsExeExtension` | Windows-only: verifies `.exe` extension is added |
+| `TestToolchainCustomCommands_CustomCommandsLoaded` | Verifies all 8 custom commands appear in `--help` |
+| `TestToolchainCustomCommands_ExecuteWithDependencies` | Tests custom commands with `dependencies.tools` can execute |
+
+**Run all integration tests on macOS/Linux:**
+```bash
+go test -v -run "TestToolchainCustomCommands" ./tests/... -timeout 10m
+```
+
+**Run all integration tests on Windows (PowerShell):**
+```powershell
+go test -v -run "TestToolchainCustomCommands" .\tests\... -timeout 10m
+```
+
+**Quick test (no network required):**
+```bash
+go test -v -run "TestToolchainCustomCommands_CustomCommandsLoaded" ./tests/... -timeout 60s
 ```
 
 ---
