@@ -97,9 +97,9 @@ type AtmosConfiguration struct {
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
-// List holds command-specific list configurations (list.components, list.instances, list.stacks).
+	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
 	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
-	CI   CIConfig            `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
+	CI   CIConfig           `yaml:"ci,omitempty" json:"ci,omitempty" mapstructure:"ci"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
