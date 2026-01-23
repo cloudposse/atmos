@@ -12,7 +12,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // terraformSubdir is the subdirectory name for terraform workdirs.
@@ -119,9 +118,7 @@ func (m *DefaultWorkdirManager) ListWorkdirs(atmosConfig *schema.AtmosConfigurat
 		workdirPath := filepath.Join(workdirBase, entry.Name())
 		metadata, err := provWorkdir.ReadMetadata(workdirPath)
 		if err != nil {
-			// Surface the error as a warning but continue processing other workdirs.
-			ui.Warning(fmt.Sprintf("Failed to read metadata for workdir '%s': %v", entry.Name(), err))
-			continue
+			return nil, fmt.Errorf("read metadata for %s: %w", workdirPath, err)
 		}
 		if metadata == nil {
 			// Skip directories without metadata (not managed workdirs).
