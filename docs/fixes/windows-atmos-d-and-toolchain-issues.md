@@ -4,13 +4,12 @@
 
 This document describes Windows-specific issues reported by users and the fixes applied.
 
-| Issue                              | Status             | Description                                      |
-|------------------------------------|--------------------|--------------------------------------------------|
-| `.atmos.d` auto-import             | ✅ Verified Working | Configuration loading works correctly on Windows |
-| Toolchain binary `.exe` extension  | ✅ Fixed            | Binaries now installed with `.exe` extension     |
-| Archive extraction `.exe` handling | ✅ Fixed            | Files extracted correctly from archives          |
-| Asset download URL `.exe` fallback | ✅ Fixed            | Downloads now try `.exe` suffix on Windows       |
-| PowerShell hint message            | ✅ Fixed            | Shows correct `Invoke-Expression` syntax         |
+| Issue                              | Status             | Description                                              |
+|------------------------------------|--------------------|----------------------------------------------------------|
+| `.atmos.d` auto-import             | ✅ Verified Working | Configuration loading works correctly on Windows         |
+| Toolchain binary `.exe` extension  | ✅ Fixed            | Centralized function ensures `.exe` extension on Windows |
+| Archive extraction `.exe` handling | ✅ Fixed            | Files extracted correctly from archives                  |
+| PowerShell hint message            | ✅ Fixed            | Shows correct `Invoke-Expression` syntax                 |
 
 ---
 
@@ -24,8 +23,8 @@ After testing on Windows, the `.atmos.d` auto-import functionality works correct
 
 Enhanced debug logging in `pkg/config/load.go`:
 
-- Logs at **Debug** level when directories are found
-- Users can diagnose issues with `ATMOS_LOGS_LEVEL=Debug`
+- Logs at **Debug** level when directories are found.
+- Users can diagnose issues with `ATMOS_LOGS_LEVEL=Debug`.
 
 ---
 
@@ -33,19 +32,44 @@ Enhanced debug logging in `pkg/config/load.go`:
 
 ### Reported Problems
 
-1. Binary installed without `.exe` extension - causes `terraform --version` to hang
-2. Archive extraction fails for tools like helm - looking for `windows-amd64/helm` instead of `windows-amd64/helm.exe`
-3. Asset download fails for tools like jq - URL missing `.exe` suffix
-4. Hint message shows Unix `eval` syntax instead of PowerShell `Invoke-Expression`
+1. Binary installed without `.exe` extension - causes `terraform --version` to hang.
+2. Archive extraction fails for tools like helm - looking for `windows-amd64/helm` instead of `windows-amd64/helm.exe`.
+3. Hint message shows Unix `eval` syntax instead of PowerShell `Invoke-Expression`.
+
+### Architecture: Centralized Windows Extension Handling
+
+Following [Aqua's Windows support approach](https://aquaproj.github.io/docs/reference/windows-support/), Windows executables need the `.exe` extension to be found by `os/exec.LookPath`. Rather than scattering `.exe` handling across multiple files, we use a single centralized function.
+
+**Key design decisions:**
+
+- **No download URL heuristics**: If a tool's download URL needs `.exe`, the registry should specify it correctly in the asset template. We don't append `.exe` to URLs as a fallback.
+- **Single utility function**: `EnsureWindowsExeExtension()` handles all Windows extension logic in one place.
+- **Registry-driven configuration**: Asset URLs and file names come from the registry definition, not runtime heuristics.
 
 ### Fixes Applied
 
-| File                               | Fix                                                |
-|------------------------------------|----------------------------------------------------|
-| `toolchain/installer/installer.go` | Append `.exe` to binary name on Windows            |
-| `toolchain/installer/extract.go`   | Try `.exe` extension when extracting from archives |
-| `toolchain/installer/download.go`  | Try `.exe` suffix in download URL on Windows       |
-| `toolchain/install_helpers.go`     | Platform-aware hint message                        |
+| File                               | Fix                                                          |
+|------------------------------------|--------------------------------------------------------------|
+| `toolchain/installer/installer.go` | Added `EnsureWindowsExeExtension()` centralized function     |
+| `toolchain/installer/installer.go` | Uses centralized function for binary naming                  |
+| `toolchain/installer/extract.go`   | Uses centralized function when extracting from archives      |
+| `toolchain/install_helpers.go`     | Platform-aware hint message for PowerShell                   |
+
+### Centralized Function
+
+```go
+// EnsureWindowsExeExtension appends .exe to the binary name on Windows if not present.
+// This follows Aqua's behavior where executables need the .exe extension on Windows
+// to be found by os/exec.LookPath.
+func EnsureWindowsExeExtension(binaryName string) string {
+    defer perf.Track(nil, "installer.EnsureWindowsExeExtension")()
+
+    if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), ".exe") {
+        return binaryName + ".exe"
+    }
+    return binaryName
+}
+```
 
 ---
 
@@ -62,6 +86,8 @@ go test ./toolchain/installer/... -v
 ### Integration Tests
 
 Test file: `tests/toolchain_custom_commands_test.go`
+
+Uses `testhelpers.NewAtmosRunner` for building and running atmos binary (shared infrastructure).
 
 | Test                                                  | Description                                                    |
 |-------------------------------------------------------|----------------------------------------------------------------|

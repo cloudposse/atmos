@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/toolchain/installer"
 )
 
 // --- Fake Installer for testing ---.
@@ -88,7 +89,8 @@ func TestRunExecCommand_Success(t *testing.T) {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	expected := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.13.1", "terraform")
+	binaryName := installer.EnsureWindowsExeExtension("terraform")
+	expected := filepath.Join(tempDir, ".tools", "bin", "hashicorp", "terraform", "1.13.1", binaryName)
 	if calledExecPath != expected {
 		t.Errorf("expected exec path %q, got %q", expected, calledExecPath)
 	}

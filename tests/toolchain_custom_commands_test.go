@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/tests/testhelpers"
+	"github.com/cloudposse/atmos/toolchain/installer"
 )
 
 // TestToolchainCustomCommands_InstallAllTools verifies that all tools defined in
@@ -338,38 +340,36 @@ func TestToolchainCustomCommands_ExecuteWithDependencies(t *testing.T) {
 	}
 }
 
-// buildAtmosBinary builds the atmos binary and returns its path.
-// It builds to a temporary directory to avoid polluting the source tree.
+// getAtmosRunner returns a shared AtmosRunner for tests.
+// It uses a package-level runner to avoid rebuilding atmos for each test.
+var sharedRunner *testhelpers.AtmosRunner
+
+// buildAtmosBinary builds the atmos binary using the shared AtmosRunner and returns its path.
 func buildAtmosBinary(t *testing.T) string {
 	t.Helper()
 
-	// Get the repo root (4 levels up from fixtures/scenarios/toolchain-custom-commands).
-	repoRoot, err := filepath.Abs("../../../..")
-	require.NoError(t, err, "Failed to get repo root")
-
-	// Build to temp directory.
-	tmpDir := t.TempDir()
-	binaryName := "atmos"
-	if runtime.GOOS == "windows" {
-		binaryName = "atmos.exe"
+	if sharedRunner == nil {
+		sharedRunner = testhelpers.NewAtmosRunner("")
 	}
-	binaryPath := filepath.Join(tmpDir, binaryName)
 
-	// Build atmos.
-	cmd := exec.Command("go", "build", "-o", binaryPath, ".")
-	cmd.Dir = repoRoot
-	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err, "Failed to build atmos: %s", string(output))
+	err := sharedRunner.Build()
+	require.NoError(t, err, "Failed to build atmos")
 
-	return binaryPath
+	// Register cleanup only once.
+	t.Cleanup(func() {
+		if sharedRunner != nil {
+			sharedRunner.Cleanup()
+			sharedRunner = nil
+		}
+	})
+
+	return sharedRunner.BinaryPath()
 }
 
 // getBinaryPath constructs the expected binary path for an installed tool.
 func getBinaryPath(toolsDir, owner, repo, version, binaryName string) string {
-	if runtime.GOOS == "windows" && !strings.HasSuffix(binaryName, ".exe") {
-		binaryName += ".exe"
-	}
+	// Use the centralized function for Windows .exe extension handling.
+	binaryName = installer.EnsureWindowsExeExtension(binaryName)
 	return filepath.Join(toolsDir, "bin", owner, repo, version, binaryName)
 }
 

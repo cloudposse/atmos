@@ -38,7 +38,22 @@ const (
 	logFieldOwner   = "owner"
 	logFieldRepo    = "repo"
 	logFieldVersion = "version"
+
+	// Windows constants.
+	windowsExeExt = ".exe"
 )
+
+// EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
+// This follows Aqua's behavior where executables need the .exe extension on Windows
+// to be found by os/exec.LookPath.
+func EnsureWindowsExeExtension(binaryName string) string {
+	defer perf.Track(nil, "installer.EnsureWindowsExeExtension")()
+
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
+		return binaryName + windowsExeExt
+	}
+	return binaryName
+}
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
 // This allows for mocking in tests and flexible resolution in production.
@@ -447,10 +462,8 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 	// Determine the binary name using shared resolution logic.
 	binaryName := resolveBinaryName(tool)
 
-	// On Windows, executables need the .exe extension to be found by the shell.
-	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), ".exe") {
-		binaryName += ".exe"
-	}
+	// Ensure Windows executables have .exe extension.
+	binaryName = EnsureWindowsExeExtension(binaryName)
 
 	binaryPath := filepath.Join(versionDir, binaryName)
 

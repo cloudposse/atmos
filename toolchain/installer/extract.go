@@ -247,9 +247,7 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 			}
 			src = srcWithExe
 			// Also update dst to include .exe if it doesn't already.
-			if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(dst), ".exe") {
-				dst += ".exe"
-			}
+			dst = EnsureWindowsExeExtension(dst)
 		}
 
 		if err := MoveFile(src, dst); err != nil {
