@@ -1,12 +1,13 @@
 package vendor
 
 import (
-	"fmt"
+	"errors"
 	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -105,7 +106,7 @@ By default, it vendors all components defined in vendor.yaml. Use flags to vendo
 			}
 			atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, processStacks)
 			if err != nil {
-				return fmt.Errorf("failed to initialize CLI config: %w", err)
+				return errors.Join(errUtils.ErrInitializingCLIConfig, err)
 			}
 			atmosConfigPtr = &atmosConfig
 		}
