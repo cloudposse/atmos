@@ -461,7 +461,7 @@ func TestGetLastAccessedTime_WithMetadata(t *testing.T) {
 
 	result := getLastAccessedTime(workdirPath, entries[0])
 	// LastAccessed should be used.
-	assert.Equal(t, expectedTime, result)
+	assert.True(t, expectedTime.Equal(result), "LastAccessed time should match")
 }
 
 func TestGetLastAccessedTime_FallbackToUpdatedAt(t *testing.T) {
@@ -487,7 +487,7 @@ func TestGetLastAccessedTime_FallbackToUpdatedAt(t *testing.T) {
 
 	result := getLastAccessedTime(workdirPath, entries[0])
 	// UpdatedAt should be used when LastAccessed is zero.
-	assert.Equal(t, expectedTime, result)
+	assert.True(t, expectedTime.Equal(result), "UpdatedAt time should match when LastAccessed is zero")
 }
 
 func TestGetLastAccessedTime_FallbackToCreatedAt(t *testing.T) {
@@ -512,7 +512,7 @@ func TestGetLastAccessedTime_FallbackToCreatedAt(t *testing.T) {
 
 	result := getLastAccessedTime(workdirPath, entries[0])
 	// CreatedAt should be used when others are zero.
-	assert.Equal(t, expectedTime, result)
+	assert.True(t, expectedTime.Equal(result), "CreatedAt time should match when others are zero")
 }
 
 func TestGetLastAccessedTime_NoMetadata(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -1184,4 +1185,90 @@ func TestDefaultFileSystem_Walk_Error(t *testing.T) {
 		return nil
 	})
 	assert.ErrorIs(t, err, expectedErr)
+}
+
+// TestBuildLocalMetadata tests the buildLocalMetadata function.
+func TestBuildLocalMetadata_NewWorkdir(t *testing.T) {
+	params := &localMetadataParams{
+		component:        "vpc",
+		stack:            "dev",
+		componentPath:    "components/terraform/vpc",
+		contentHash:      "abc123",
+		existingMetadata: nil,
+		changed:          false,
+	}
+
+	result := buildLocalMetadata(params)
+
+	assert.Equal(t, "vpc", result.Component)
+	assert.Equal(t, "dev", result.Stack)
+	assert.Equal(t, SourceTypeLocal, result.SourceType)
+	assert.Equal(t, "components/terraform/vpc", result.Source)
+	assert.Equal(t, "abc123", result.ContentHash)
+	assert.False(t, result.CreatedAt.IsZero())
+	assert.False(t, result.UpdatedAt.IsZero())
+	assert.False(t, result.LastAccessed.IsZero())
+}
+
+func TestBuildLocalMetadata_ExistingMetadata_ContentChanged(t *testing.T) {
+	// Simulate existing metadata from a previous sync.
+	oldCreatedAt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	oldUpdatedAt := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	params := &localMetadataParams{
+		component:     "vpc",
+		stack:         "dev",
+		componentPath: "components/terraform/vpc",
+		contentHash:   "newhash123",
+		existingMetadata: &WorkdirMetadata{
+			Component:   "vpc",
+			Stack:       "dev",
+			SourceType:  SourceTypeLocal,
+			Source:      "components/terraform/vpc",
+			ContentHash: "oldhash",
+			CreatedAt:   oldCreatedAt,
+			UpdatedAt:   oldUpdatedAt,
+		},
+		changed: true, // Content changed.
+	}
+
+	result := buildLocalMetadata(params)
+
+	// CreatedAt should be preserved from existing metadata.
+	assert.True(t, oldCreatedAt.Equal(result.CreatedAt), "CreatedAt should be preserved")
+	// UpdatedAt should be updated (not equal to old value) since content changed.
+	assert.False(t, oldUpdatedAt.Equal(result.UpdatedAt), "UpdatedAt should be updated when content changed")
+	// New values.
+	assert.Equal(t, "newhash123", result.ContentHash)
+}
+
+func TestBuildLocalMetadata_ExistingMetadata_ContentUnchanged(t *testing.T) {
+	// Simulate existing metadata from a previous sync.
+	oldCreatedAt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	oldUpdatedAt := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	params := &localMetadataParams{
+		component:     "vpc",
+		stack:         "dev",
+		componentPath: "components/terraform/vpc",
+		contentHash:   "samehash",
+		existingMetadata: &WorkdirMetadata{
+			Component:   "vpc",
+			Stack:       "dev",
+			SourceType:  SourceTypeLocal,
+			Source:      "components/terraform/vpc",
+			ContentHash: "samehash",
+			CreatedAt:   oldCreatedAt,
+			UpdatedAt:   oldUpdatedAt,
+		},
+		changed: false, // Content unchanged.
+	}
+
+	result := buildLocalMetadata(params)
+
+	// Both CreatedAt and UpdatedAt should be preserved since content unchanged.
+	assert.True(t, oldCreatedAt.Equal(result.CreatedAt), "CreatedAt should be preserved")
+	assert.True(t, oldUpdatedAt.Equal(result.UpdatedAt), "UpdatedAt should be preserved when content unchanged")
+	// LastAccessed should still be updated.
+	assert.False(t, result.LastAccessed.IsZero())
 }

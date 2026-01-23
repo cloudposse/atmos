@@ -312,14 +312,14 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 }
 
 // isLocalSource determines if a source URI refers to a local path.
-// Local sources start with ".", "/", or are relative paths without remote indicators.
+// Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
 func isLocalSource(uri string) bool {
 	// Relative paths starting with . or ..
 	if strings.HasPrefix(uri, ".") {
 		return true
 	}
-	// Absolute paths (Unix-style).
-	if strings.HasPrefix(uri, "/") {
+	// Absolute paths (OS-specific, including Windows paths like C:\...).
+	if filepath.IsAbs(uri) {
 		return true
 	}
 	// File scheme.

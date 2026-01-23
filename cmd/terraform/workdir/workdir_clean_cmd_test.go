@@ -404,3 +404,58 @@ func TestCleanSpecificWorkdir_VariousInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanExpiredWorkdirs_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanExpiredWorkdirs(gomock.Any(), "7d", false).Return(nil)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanExpiredWorkdirs(atmosConfig, "7d", false)
+	assert.NoError(t, err)
+}
+
+func TestCleanExpiredWorkdirs_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanExpiredWorkdirs(gomock.Any(), "30d", true).Return(nil)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanExpiredWorkdirs(atmosConfig, "30d", true)
+	assert.NoError(t, err)
+}
+
+func TestCleanExpiredWorkdirs_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	expectedErr := errUtils.Build(errUtils.ErrWorkdirClean).
+		WithExplanation("invalid TTL").
+		Err()
+	mock.EXPECT().CleanExpiredWorkdirs(gomock.Any(), "invalid", false).Return(expectedErr)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanExpiredWorkdirs(atmosConfig, "invalid", false)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}

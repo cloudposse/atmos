@@ -113,13 +113,17 @@ func printListTable(workdirs []WorkdirInfo) {
 		if lastAccessed.IsZero() {
 			lastAccessed = workdirs[i].CreatedAt
 		}
+		lastAccessedStr := "-"
+		if !lastAccessed.IsZero() {
+			lastAccessedStr = lastAccessed.Format("2006-01-02 15:04")
+		}
 
 		rows = append(rows, []string{
 			workdirs[i].Component,
 			workdirs[i].Stack,
 			sourceType,
 			version,
-			lastAccessed.Format("2006-01-02 15:04"),
+			lastAccessedStr,
 			workdirs[i].Path,
 		})
 	}

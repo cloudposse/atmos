@@ -527,3 +527,58 @@ func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	assert.Contains(t, manifest, "2024-06-15")
 	assert.Contains(t, manifest, "2024-06-16")
 }
+
+// Test DefaultWorkdirManager.CleanExpiredWorkdirs.
+
+func TestDefaultWorkdirManager_CleanExpiredWorkdirs_NoWorkdirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Should succeed when no workdirs exist.
+	err := manager.CleanExpiredWorkdirs(atmosConfig, "7d", false)
+	assert.NoError(t, err)
+}
+
+func TestDefaultWorkdirManager_CleanExpiredWorkdirs_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with old metadata.
+	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
+	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	metadata := provWorkdir.WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		SourceType:   provWorkdir.SourceTypeLocal,
+		Source:       "components/terraform/vpc",
+		CreatedAt:    oldTime,
+		UpdatedAt:    oldTime,
+		LastAccessed: oldTime,
+	}
+	require.NoError(t, provWorkdir.WriteMetadata(workdirPath, &metadata))
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Dry run should not remove workdirs.
+	err := manager.CleanExpiredWorkdirs(atmosConfig, "7d", true)
+	assert.NoError(t, err)
+
+	// Workdir should still exist.
+	_, err = os.Stat(workdirPath)
+	assert.NoError(t, err)
+}
+
+func TestDefaultWorkdirManager_CleanExpiredWorkdirs_InvalidTTL(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := manager.CleanExpiredWorkdirs(atmosConfig, "invalid", false)
+	assert.Error(t, err)
+}

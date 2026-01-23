@@ -117,11 +117,9 @@ func (m *DefaultWorkdirManager) ListWorkdirs(atmosConfig *schema.AtmosConfigurat
 
 		workdirPath := filepath.Join(workdirBase, entry.Name())
 		metadata, err := provWorkdir.ReadMetadata(workdirPath)
-		if err != nil {
-			return nil, fmt.Errorf("read metadata for %s: %w", workdirPath, err)
-		}
-		if metadata == nil {
-			// Skip directories without metadata (not managed workdirs).
+		if err != nil || metadata == nil {
+			// Skip directories with invalid or missing metadata.
+			// This allows the list operation to succeed even if some workdirs are corrupt.
 			continue
 		}
 
