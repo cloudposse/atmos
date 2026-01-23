@@ -36,6 +36,8 @@ exclude = [
   "cloudposse\\.com.*utm_",
   "slack\\.cloudposse\\.com",
   "wttr\\.in",
+  # GNU.org (rate limits and connection resets)
+  "gnu\\.org",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)
