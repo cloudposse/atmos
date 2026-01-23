@@ -1,0 +1,5 @@
+components:
+  terraform:
+    test-component:
+      vars:
+        environment: dev

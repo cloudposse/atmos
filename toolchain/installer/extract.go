@@ -153,7 +153,7 @@ func findBinaryInDir(dir, binaryName string) (string, error) {
 		if err != nil {
 			return err
 		}
-		if info.Mode().IsRegular() && (info.Name() == binaryName || info.Name() == binaryName+".exe") {
+		if info.Mode().IsRegular() && (info.Name() == binaryName || info.Name() == binaryName+windowsExeExt) {
 			found = path
 			return filepath.SkipDir
 		}
@@ -236,8 +236,23 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 			"isPrimary", idx == 0)
 
 		// Check if source file exists.
+		// On Windows, archives may contain binaries with .exe extension even when the
+		// registry definition doesn't specify it. Try both with and without .exe.
 		if _, err := os.Stat(src); os.IsNotExist(err) {
-			return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+			if runtime.GOOS != "windows" {
+				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+			}
+			// Try with .exe extension (common for Windows binaries in archives).
+			srcWithExe := src + windowsExeExt
+			if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
+				if !os.IsNotExist(exeErr) {
+					return fmt.Errorf("%w: failed to stat file in archive: %s: %w", ErrFileOperation, srcWithExe, exeErr)
+				}
+				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
+			}
+			src = srcWithExe
+			// Also update dst to include .exe if it doesn't already.
+			dst = EnsureWindowsExeExtension(dst)
 		}
 
 		if err := MoveFile(src, dst); err != nil {
