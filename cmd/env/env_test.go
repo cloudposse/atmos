@@ -294,11 +294,17 @@ func TestOutputEnvAsJSON(t *testing.T) {
 			filePath := filepath.Join(tmpDir, "test.json")
 
 			err := envfmt.Output(tt.envVars, "json", filePath)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
-			// Verify file was created.
-			_, err = os.Stat(filePath)
-			assert.NoError(t, err)
+			// Verify file was created and contains valid JSON.
+			content, err := os.ReadFile(filePath)
+			require.NoError(t, err)
+
+			// Verify JSON structure matches input.
+			for key, value := range tt.envVars {
+				assert.Contains(t, string(content), `"`+key+`"`)
+				assert.Contains(t, string(content), `"`+value+`"`)
+			}
 		})
 	}
 }
