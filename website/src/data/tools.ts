@@ -1224,6 +1224,18 @@ const vendoringFeatures: FeatureComparison[] = [
   { feature: 'Stack Integration', atmos: true, tool: false },
 ];
 
+// Vendir-specific features (supports more source types than generic vendoring tools).
+const vendirFeatures: FeatureComparison[] = [
+  { feature: 'Git Sources', atmos: true, tool: true },
+  { feature: 'HTTP Sources', atmos: true, tool: true },
+  { feature: 'OCI/Docker Images', atmos: true, tool: true },
+  { feature: 'GitHub Releases', atmos: false, tool: true },
+  { feature: 'Helm Charts', atmos: false, tool: true },
+  { feature: 'S3 Sources', atmos: true, tool: false },
+  { feature: 'Excludes/Includes', atmos: true, tool: true },
+  { feature: 'Stack Integration', atmos: true, tool: false },
+];
+
 export const vendoringTools: Tool[] = [
   {
     id: 'vendir',
@@ -1232,9 +1244,11 @@ export const vendoringTools: Tool[] = [
     description: 'Declarative directory sync from multiple sources',
     category: 'Vendoring',
     relationship: 'ecosystem',
-    details: 'Vendir allows you to declaratively state what should be in a directory and sync data from various sources like git repos, helm charts, and OCI images.',
-    atmosComparison: 'Atmos **replaces** Vendir with native [vendoring](/vendor/). Supports git, OCI, HTTP, S3 sources via GoGetter. Simpler config, more source types.',
-    featureComparison: vendoringFeatures,
+    details:
+      'Vendir allows you to declaratively state what should be in a directory and sync data from various sources like git repos, helm charts, and OCI images.',
+    atmosComparison:
+      "Atmos provides native [vendoring](/vendor/) using HashiCorp's GoGetter. Vendir supports GitHub releases and Helm charts that Atmos doesn't, while Atmos offers S3 sources and direct stack integration that Vendir lacks.",
+    featureComparison: vendirFeatures,
   },
   {
     id: 'terrafile',
@@ -1434,77 +1448,88 @@ export const toolCategories: ToolCategory[] = [
     id: 'supported',
     icon: 'RiCodeBoxLine',
     title: 'Native Integrations',
-    tagline: 'Tools that Atmos orchestrates natively',
+    tagline:
+      'Atmos enhances the tools you already use—adding powerful conventions while keeping you in full control. Comprehensive enough to be complete, flexible enough to never limit you.',
     tools: supportedTools,
   },
   {
     id: 'wrappers',
     icon: 'RiStackLine',
     title: 'Terraform Wrappers',
-    tagline: 'Alternative approaches for managing Terraform at scale',
+    tagline:
+      'Atmos is the alternative to stitching together single-purpose wrapper tools—one unified CLI for stack configuration, component inheritance, and deep merging',
     tools: terraformWrappers,
   },
   {
     id: 'auth',
     icon: 'RiShieldKeyholeLine',
     title: 'Cloud Authentication',
-    tagline: 'Identity and SSO tools that Atmos auth replaces',
+    tagline:
+      'Atmos is the alternative to juggling multiple CLI credential helpers—providing unified authentication across AWS, Azure, GCP, and GitHub OIDC with automatic session management',
     tools: authTools,
   },
   {
     id: 'workflows',
     icon: 'RiFlowChart',
     title: 'Workflows & Task Runners',
-    tagline: 'Task runners that Atmos workflows replace',
+    tagline:
+      'Atmos is the alternative to maintaining Makefiles and task runners—providing native YAML workflows with typed inputs and automatic retry logic',
     tools: workflowTools,
   },
   {
     id: 'commands',
     icon: 'RiTerminalBoxLine',
     title: 'Custom Commands',
-    tagline: 'CLI frameworks that Atmos custom commands replace',
+    tagline:
+      'Atmos is the alternative to building custom CLI tools—providing extensible commands with full access to stack context and component configuration',
     tools: commandTools,
   },
   {
     id: 'toolchain',
     icon: 'RiToolsLine',
     title: 'Toolchain Management',
-    tagline: 'Version managers that Atmos toolchain replaces',
+    tagline:
+      'Atmos is the alternative to managing tool versions separately—with access to 1,500+ packages via Aqua, automatically install and pin versions for Terraform, OpenTofu, and any CLI tool',
     tools: toolchainTools,
   },
   {
     id: 'devenv',
     icon: 'RiTerminalWindowLine',
     title: 'Dev Environments',
-    tagline: 'Development environment tools',
+    tagline:
+      'Atmos is the alternative to running dev containers manually from the command line or inside your IDE—providing native devcontainer lifecycle management',
     tools: devEnvironmentTools,
   },
   {
     id: 'policy',
     icon: 'RiShieldCheckLine',
     title: 'Policy & Validation',
-    tagline: 'Compliance and security guardrails',
+    tagline:
+      'Atmos OPA policies provide high-level architectural guardrails, while tools like TFSEC, Checkov, and Conftest give you low-level controls—bring your own tools and integrate them via custom commands',
     tools: policyTools,
   },
   {
     id: 'delivery',
     icon: 'RiRocketLine',
     title: 'CI/CD & Delivery',
-    tagline: 'Delivery platforms—Atmos uses GitHub Actions natively',
+    tagline:
+      'Atmos is the alternative to paying for another platform to automate Terraform—with native GitHub Actions support, you control where and how your workflows run',
     tools: deliveryTools,
   },
   {
     id: 'vendoring',
     icon: 'RiDownloadLine',
     title: 'Vendoring',
-    tagline: 'Module vendoring that Atmos replaces natively',
+    tagline:
+      'Atmos is the alternative to external vendoring tools—providing native module vendoring with Git, OCI, HTTP, and S3 sources integrated directly into your stack configuration',
     tools: vendoringTools,
   },
   {
     id: 'templating',
     icon: 'RiFileCodeLine',
     title: 'Templating',
-    tagline: 'Config templating—Atmos integrates Gomplate',
+    tagline:
+      'Atmos is the alternative to general-purpose templating tools—providing powerful Go template support with multiple data sources for ultimate flexibility',
     tools: templatingTools,
   },
 ];
