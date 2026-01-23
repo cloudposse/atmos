@@ -17,6 +17,8 @@ tests:
         - "Authentication configuration validation failed"
         - "invalid-provider"
         - "unsupported provider kind"
+        - "^\\s+provider$"  # Orphaned continuation line from wrapping
+        - "^\\s+kind:"  # Orphaned continuation line from wrapping
       stderr:
         - "invalid auth config"
       exit_code: 1
