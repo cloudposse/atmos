@@ -119,4 +119,9 @@ generate-mocks:
 	@go generate ./pkg/http/...
 	@echo "Mocks regenerated successfully"
 
-.PHONY: readme lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks
+# Check markdown links (requires lychee: brew install lychee)
+link-check:
+	@command -v lychee >/dev/null 2>&1 || { echo "Install lychee: brew install lychee"; exit 1; }
+	lychee --config lychee.toml --root-dir "$(CURDIR)" '**/*.md'
+
+.PHONY: readme lint lintroller gomodcheck build version build-linux build-windows build-macos deps version-linux version-windows version-macos testacc testacc-cover testacc-coverage test-short test-short-cover generate-mocks link-check

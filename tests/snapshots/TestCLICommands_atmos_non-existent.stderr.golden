@@ -4,35 +4,36 @@
 
 Valid subcommands are:
 
-• about
-• atlantis
-• auth
-• aws
-• completion
-• describe
-• devcontainer
-• docs
-• env
-• helmfile
-• help
-• init
-• list
-• packer
-• pro
-• profile
-• scaffold
-• show
-• support
-• terraform
-• tf
-• tf-custom
-• theme
-• toolchain
-• validate
-• vendor
-• version
-• workflow
+  • about
+  • atlantis
+  • auth
+  • aws
+  • completion
+  • describe
+  • devcontainer
+  • docs
+  • env
+  • helmfile
+  • help
+  • init
+  • list
+  • packer
+  • pro
+  • profile
+  • scaffold
+  • show
+  • support
+  • terraform
+  • tf
+  • tf-custom
+  • theme
+  • toolchain
+  • validate
+  • vendor
+  • version
+  • workflow
 
 ## Hints
 
 💡 Run atmos --help for usage
+

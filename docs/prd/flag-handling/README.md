@@ -2,20 +2,20 @@
 
 **⚠️ NOTICE: This directory contains historical design documents that have been consolidated.**
 
-**For the current, authoritative specification, see: [`../unified-flag-parsing-refactoring.md`](../unified-flag-parsing-refactoring.md)**
+**For the current, authoritative specification, see: [`./unified-flag-parsing.md`](./unified-flag-parsing.md)**
 
 ## Overview
 
 This directory contains design documents for various aspects of Atmos's flag parsing system. These documents represent the evolution of thinking that led to the final unified approach.
 
-**Current Status**: All these documents have been consolidated into a single comprehensive PRD: [`unified-flag-parsing-refactoring.md`](../unified-flag-parsing-refactoring.md)
+**Current Status**: All these documents have been consolidated into a single comprehensive PRD: [`unified-flag-parsing.md`](./unified-flag-parsing.md)
 
 ## Historical Documents
 
 The following documents provide detailed context on specific aspects of the design but should be read alongside the master PRD:
 
 ### [unified-flag-parsing.md](unified-flag-parsing.md)
-**Status**: Superseded by `unified-flag-parsing-refactoring.md`
+**Status**: Superseded by `unified-flag-parsing.md`
 
 Original comprehensive design for unified flag parsing. The concepts here have been integrated into the master PRD with additional details on compatibility flags and migration strategy.
 
@@ -59,7 +59,7 @@ For the complete, up-to-date specification covering:
 - Blog post guidance
 - Implementation status
 
-**→ See [`../unified-flag-parsing-refactoring.md`](../unified-flag-parsing-refactoring.md)**
+**→ See [`./unified-flag-parsing.md`](./unified-flag-parsing.md)**
 
 ## Implementation Status
 

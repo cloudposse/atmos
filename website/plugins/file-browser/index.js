@@ -39,12 +39,14 @@ const TAGS_MAP = {
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
   'demo-custom-command': ['Automation'],
+  'generate-files': ['Automation'],
   toolchain: ['DX'],
   devcontainer: ['DX'],
   'devcontainer-build': ['DX'],
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
   scaffolding: ['Scaffold', 'Init'],
+  'stack-names': ['Stacks'],
 };
 
 // Documentation pages mapping for examples.
@@ -97,6 +99,9 @@ const DOCS_MAP = {
   'demo-custom-command': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
   ],
+  'generate-files': [
+    { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },
+  ],
   'config-profiles': [
     { label: 'CLI Configuration', url: '/cli/configuration' },
   ],
@@ -115,6 +120,9 @@ const DOCS_MAP = {
   scaffolding: [
     { label: 'Init Command', url: '/cli/commands/init' },
     { label: 'Scaffold Generate', url: '/cli/commands/scaffold/generate' },
+  ],
+  'stack-names': [
+    { label: 'Stack Names', url: '/stacks/name' },
   ],
 };
 

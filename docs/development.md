@@ -23,7 +23,7 @@ This guide covers the development workflow for contributing to Atmos.
 
 ## Development Workflow
 
-We use Atmos custom commands for development (dogfooding our own tool). This ensures we experience the same workflows our users do. See [Atmos Custom Commands](https://atmos.tools/core-concepts/custom-commands/) for more details.
+We use Atmos custom commands for development (dogfooding our own tool). This ensures we experience the same workflows our users do. See [Atmos Custom Commands](https://atmos.tools/cli/configuration/commands) for more details.
 
 ### Available Commands
 

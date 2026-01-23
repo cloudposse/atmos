@@ -1,8 +1,8 @@
 # PRD: Source Provisioner (Just-in-Time Vendoring)
 
 **Status:** Implemented
-**Version:** 1.3
-**Last Updated:** 2025-12-29
+**Version:** 1.4
+**Last Updated:** 2026-01-18
 **Author:** Claude Code
 
 ---
@@ -97,9 +97,25 @@ Following the vendor pattern (`atmos vendor pull`), the source provisioner provi
 # Core operations (Implemented)
 atmos terraform source pull <component> --stack <stack>           # Vendor if missing or outdated
 atmos terraform source pull <component> --stack <stack> --force   # Force re-vendor
-atmos terraform source list --stack <stack>
+atmos terraform source list [component] [--stack <stack>]         # List sources (all args optional)
 atmos terraform source describe <component> --stack <stack>
 atmos terraform source delete <component> --stack <stack> --force
+```
+
+**List Command Variants:**
+
+```bash
+# List all sources across all stacks
+atmos terraform source list
+
+# List all sources in a specific stack
+atmos terraform source list --stack dev
+
+# List sources for a specific component across all stacks
+atmos terraform source list vpc
+
+# List sources for a specific component in a specific stack
+atmos terraform source list vpc --stack dev
 ```
 
 **Planned (Phase 2) - Cache Management:**
@@ -118,7 +134,7 @@ atmos terraform source cache refresh <uri>
 # Core operations (Implemented)
 atmos helmfile source pull <component> --stack <stack>
 atmos helmfile source pull <component> --stack <stack> --force
-atmos helmfile source list --stack <stack>
+atmos helmfile source list [component] [--stack <stack>]
 atmos helmfile source describe <component> --stack <stack>
 atmos helmfile source delete <component> --stack <stack> --force
 ```
@@ -128,9 +144,49 @@ atmos helmfile source delete <component> --stack <stack> --force
 ```bash
 # Core operations (Implemented)
 atmos packer source pull <component> --stack <stack>
-atmos packer source list --stack <stack>
+atmos packer source list [component] [--stack <stack>]
 atmos packer source describe <component> --stack <stack>
 atmos packer source delete <component> --stack <stack> --force
+```
+
+### Unified View: `atmos list sources`
+
+For convenience, `atmos list sources [component] [--stack <stack>]` provides a unified view that lists components with source configuration across ALL component types (terraform, helmfile, packer) in a single table with a "Type" column:
+
+```bash
+# List all sources across all stacks and component types
+atmos list sources
+
+# List sources in a specific stack
+atmos list sources --stack dev
+
+# List sources for a specific component across all stacks
+atmos list sources vpc
+
+# List sources for a specific component in a specific stack
+atmos list sources vpc --stack dev
+
+# Output includes Type column (always) and Stack column (when listing all stacks)
+STACK        TYPE        COMPONENT        URI                                                           VERSION
+plat-dev     terraform   vpc              github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-prod    terraform   vpc              github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-prod    helmfile    nginx            github.com/cloudposse/helmfile-components//charts/nginx       1.0.0
+
+# When --stack is provided, Stack column is omitted
+atmos list sources --stack dev
+TYPE        COMPONENT    URI                                                           VERSION
+helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx       1.0.0
+terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+
+# Folder column appears when any component has metadata.component different from component name
+# This happens with derived components (e.g., vpc/production derived from vpc)
+STACK        TYPE        COMPONENT        FOLDER    URI                                                           VERSION
+plat-dev     terraform   vpc/production   vpc       github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+
+# Supports all format options
+atmos list sources --format json
+atmos list sources --format yaml
+atmos list sources --format csv
 ```
 
 ### Why Component-Type Scoped?
@@ -865,9 +921,20 @@ ls components/terraform/vpc-map/
 **5. Test `source list` command:**
 
 ```bash
-# List components with source configuration
+# List components with source configuration in a stack
 atmos terraform source list --stack dev
-# Note: Currently returns "not implemented"
+
+# Output as JSON
+atmos terraform source list --stack dev --format json
+
+# Output as YAML
+atmos terraform source list --stack dev --format yaml
+
+# Output as CSV
+atmos terraform source list --stack dev --format csv
+
+# Unified view: List sources across all component types
+atmos list sources --stack dev
 ```
 
 **6. Test with authentication (for private repos):**
