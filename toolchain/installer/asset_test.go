@@ -683,3 +683,38 @@ func TestBuildAssetURL_NoExeForArchives(t *testing.T) {
 		})
 	}
 }
+
+// TestBuildAssetURL_NoExeForOtherExtensions tests that assets with non-archive extensions
+// (like .msi, .dmg, .deb) don't get .exe appended.
+func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name  string
+		asset string
+	}{
+		{"msi installer", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.msi"},
+		{"dmg image", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.dmg"},
+		{"deb package", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.deb"},
+		{"rpm package", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.rpm"},
+		{"appimage", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.AppImage"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tool := &registry.Tool{
+				Type:      "github_release",
+				RepoOwner: "example",
+				RepoName:  "tool",
+				Asset:     tt.asset,
+			}
+
+			url, err := installer.BuildAssetURL(tool, "1.0.0")
+			require.NoError(t, err)
+
+			// Non-archive extensions should not get .exe appended (avoids .msi.exe, etc.).
+			assert.False(t, strings.HasSuffix(url, ".exe"),
+				"URL with %s extension should not have .exe appended: %s", tt.name, url)
+		})
+	}
+}

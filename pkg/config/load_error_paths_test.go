@@ -90,24 +90,38 @@ func TestReadHomeConfig_ConfigFileNotFound(t *testing.T) {
 }
 
 // TestReadWorkDirConfig_GetwdError tests os.Getwd() error path at load.go:236-239.
+// Note: This error path is difficult to trigger reliably across platforms.
+// On macOS, os.Getwd() may still succeed even after removing the directory.
+// On Linux, behavior varies by filesystem. This test documents the error path exists.
 func TestReadWorkDirConfig_GetwdError(t *testing.T) {
-	// Create and change to a temp directory
+	// Skip on Windows - directory removal while inside is Unix-specific.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping Getwd error test on Windows - directory removal behavior differs")
+	}
+
+	// Create and change to a temp directory.
 	tempDir := t.TempDir()
 	t.Chdir(tempDir)
 
-	// Remove the directory while we're in it (Unix-specific behavior)
-	if runtime.GOOS != "windows" {
-		err := os.Remove(tempDir)
-		if err == nil {
-			// Only test if we successfully removed the directory
-			v := viper.New()
-			v.SetConfigType("yaml")
+	// Remove the directory while we're in it (Unix-specific behavior).
+	err := os.Remove(tempDir)
+	if err != nil {
+		t.Skip("Could not remove current directory - skipping Getwd error path test")
+	}
 
-			err = readWorkDirConfig(v)
-			// On some systems this may error, on others it may still work
-			// This tests the error path without asserting specific behavior
-			_ = err
-		}
+	// Directory removed successfully - test that readWorkDirConfig handles this gracefully.
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err = readWorkDirConfig(v)
+	// Behavior is OS-specific:
+	// - On some systems, os.Getwd() fails and readWorkDirConfig returns an error.
+	// - On others (e.g., macOS), os.Getwd() still succeeds with the removed path.
+	// Either outcome is acceptable - the test verifies no panic occurs.
+	if err != nil {
+		t.Logf("readWorkDirConfig returned error as expected: %v", err)
+	} else {
+		t.Log("readWorkDirConfig succeeded (os.Getwd still works on this platform)")
 	}
 }
 
@@ -128,8 +142,8 @@ func TestReadWorkDirConfig_ConfigFileNotFound(t *testing.T) {
 
 // TestReadEnvAmosConfigPath_EmptyEnv tests early return at load.go:253-256.
 func TestReadEnvAmosConfigPath_EmptyEnv(t *testing.T) {
-	// Ensure ATMOS_CLI_CONFIG_PATH is not set
-	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	// Ensure ATMOS_CLI_CONFIG_PATH is not set (empty string clears it for this test).
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
 
 	v := viper.New()
 	v.SetConfigType("yaml")
@@ -140,12 +154,11 @@ func TestReadEnvAmosConfigPath_EmptyEnv(t *testing.T) {
 
 // TestReadEnvAmosConfigPath_ConfigFileNotFound tests viper.ConfigFileNotFoundError at load.go:258-266.
 func TestReadEnvAmosConfigPath_ConfigFileNotFound(t *testing.T) {
-	// Create temp directory without atmos.yaml
+	// Create temp directory without atmos.yaml.
 	tempDir := t.TempDir()
 
-	// Set ATMOS_CLI_CONFIG_PATH to temp directory
+	// Set ATMOS_CLI_CONFIG_PATH to temp directory (t.Setenv handles cleanup).
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
-	defer os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
 
 	v := viper.New()
 	v.SetConfigType("yaml")

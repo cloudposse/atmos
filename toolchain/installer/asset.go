@@ -2,6 +2,7 @@ package installer
 
 import (
 	"fmt"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"text/template"
@@ -68,10 +69,11 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 		return "", err
 	}
 
-	// On Windows, add .exe to raw binary asset names that don't have an archive extension.
+	// On Windows, add .exe to raw binary asset names that don't have any extension.
 	// This follows Aqua's behavior where Windows binaries need .exe extension in the download URL.
+	// Only apply when: not an archive AND has no extension (avoids .msi.exe, etc.).
 	// See: https://aquaproj.github.io/docs/reference/windows-support/.
-	if !hasArchiveExtension(assetName) {
+	if !hasArchiveExtension(assetName) && filepath.Ext(assetName) == "" {
 		assetName = EnsureWindowsExeExtension(assetName)
 	}
 
