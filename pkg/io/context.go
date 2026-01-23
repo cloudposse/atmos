@@ -28,8 +28,11 @@ func NewContext(opts ...ContextOption) (Context, error) {
 	// Create masker
 	masker := newMasker(cfg)
 
-	// Register common secrets and patterns for automatic masking
+	// Register common secrets and patterns for automatic masking.
 	registerCommonSecrets(masker)
+
+	// Register custom patterns and literals from atmos.yaml config.
+	registerCustomMaskPatterns(masker, cfg)
 
 	// Create streams with masking
 	streams := newStreams(masker, cfg)
