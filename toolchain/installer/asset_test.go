@@ -2,6 +2,7 @@ package installer
 
 import (
 	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -585,4 +586,135 @@ func TestBuildAssetURL_HTTPTypePreservesVersionAsIs(t *testing.T) {
 	url2, err := installer.BuildAssetURL(tool, "v1.2.3")
 	require.NoError(t, err)
 	assert.Equal(t, "https://example.com/tool-v1.2.3.tar.gz", url2)
+}
+
+// TestHasArchiveExtension tests the hasArchiveExtension helper function.
+func TestHasArchiveExtension(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected bool
+	}{
+		{"tar.gz extension", "tool-1.0.0.tar.gz", true},
+		{"tgz extension", "tool-1.0.0.tgz", true},
+		{"zip extension", "tool-1.0.0.zip", true},
+		{"gz extension", "tool-1.0.0.gz", true},
+		{"tar extension", "tool-1.0.0.tar", true},
+		{"pkg extension", "tool-1.0.0.pkg", true},
+		{"tar.xz extension", "tool-1.0.0.tar.xz", true},
+		{"txz extension", "tool-1.0.0.txz", true},
+		{"tar.bz2 extension", "tool-1.0.0.tar.bz2", true},
+		{"tbz extension", "tool-1.0.0.tbz", true},
+		{"tbz2 extension", "tool-1.0.0.tbz2", true},
+		{"bz2 extension", "tool-1.0.0.bz2", true},
+		{"xz extension", "tool-1.0.0.xz", true},
+		{"7z extension", "tool-1.0.0.7z", true},
+		{"uppercase TAR.GZ", "tool-1.0.0.TAR.GZ", true},
+		{"mixed case Zip", "tool-1.0.0.Zip", true},
+		{"uppercase TAR.XZ", "tool-1.0.0.TAR.XZ", true},
+		{"no extension", "tool-windows-amd64", false},
+		{"exe extension", "tool.exe", false},
+		{"partial match tar", "mytar-tool", false},
+		{"partial match zip", "unzip-tool", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasArchiveExtension(tt.input)
+			assert.Equal(t, tt.expected, result, "hasArchiveExtension(%q)", tt.input)
+		})
+	}
+}
+
+// TestBuildAssetURL_WindowsExeExtensionForRawBinary tests that on Windows,
+// raw binary assets get .exe appended to the download URL.
+func TestBuildAssetURL_WindowsExeExtensionForRawBinary(t *testing.T) {
+	installer := &Installer{}
+
+	// Tool with raw binary asset (no archive extension) - like jq.
+	tool := &registry.Tool{
+		Type:          "github_release",
+		RepoOwner:     "jqlang",
+		RepoName:      "jq",
+		Asset:         "jq-{{.OS}}-{{.Arch}}",
+		VersionPrefix: "jq-",
+	}
+
+	url, err := installer.BuildAssetURL(tool, "1.7.1")
+	require.NoError(t, err)
+
+	if runtime.GOOS == "windows" {
+		// On Windows, should have .exe extension.
+		assert.Contains(t, url, ".exe", "Windows URL should contain .exe")
+		assert.True(t, strings.HasSuffix(url, ".exe"), "Windows URL should end with .exe")
+	} else {
+		// On non-Windows, should NOT have .exe extension.
+		assert.NotContains(t, url, ".exe", "Non-Windows URL should not contain .exe")
+	}
+}
+
+// TestBuildAssetURL_NoExeForArchives tests that archive assets don't get .exe appended.
+func TestBuildAssetURL_NoExeForArchives(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name  string
+		asset string
+	}{
+		{"tar.gz archive", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"},
+		{"zip archive", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.zip"},
+		{"tgz archive", "tool-{{.Version}}.tgz"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tool := &registry.Tool{
+				Type:      "github_release",
+				RepoOwner: "example",
+				RepoName:  "tool",
+				Asset:     tt.asset,
+			}
+
+			url, err := installer.BuildAssetURL(tool, "1.0.0")
+			require.NoError(t, err)
+
+			// Archives should never get double .exe extension, even on Windows.
+			assert.NotContains(t, url, ".exe", "Archive URL should not contain .exe")
+		})
+	}
+}
+
+// TestBuildAssetURL_NoExeForOtherExtensions tests that assets with non-archive extensions
+// (like .msi, .dmg, .deb) don't get .exe appended.
+func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
+	installer := &Installer{}
+
+	tests := []struct {
+		name  string
+		asset string
+	}{
+		{"msi installer", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.msi"},
+		{"dmg image", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.dmg"},
+		{"deb package", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.deb"},
+		{"rpm package", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.rpm"},
+		{"appimage", "tool_{{.Version}}_{{.OS}}_{{.Arch}}.AppImage"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tool := &registry.Tool{
+				Type:      "github_release",
+				RepoOwner: "example",
+				RepoName:  "tool",
+				Asset:     tt.asset,
+			}
+
+			url, err := installer.BuildAssetURL(tool, "1.0.0")
+			require.NoError(t, err)
+
+			// Non-archive extensions should not get .exe appended (avoids .msi.exe, etc.).
+			assert.False(t, strings.HasSuffix(url, ".exe"),
+				"URL with %s extension should not have .exe appended: %s", tt.name, url)
+		})
+	}
 }

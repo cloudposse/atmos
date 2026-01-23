@@ -118,7 +118,7 @@ All standard GFM syntax is also supported:
 - **Bold**: `**text**`
 - *Italic*: `*text*`
 - `Inline code`: `` `code` ``
-- [Links](url): `[text](url)`
+- [Links](https://example.com): `[text](url)`
 - Headings: `# H1`, `## H2`, etc.
 - Lists: `- item` or `1. item`
 - Blockquotes: `> text`
