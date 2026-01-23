@@ -43,5 +43,4 @@ toolchain:
       priority: 10
 
 logs:
-  file: "/dev/stderr"
   level: Info

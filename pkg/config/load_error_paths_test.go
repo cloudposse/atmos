@@ -457,3 +457,122 @@ func TestMergeConfigFile_ReadConfigError(t *testing.T) {
 // 2. loadEmbeddedConfig uses hardcoded valid YAML that shouldn't fail to merge
 // If these error paths need explicit coverage, the functions would need refactoring to accept
 // injectable dependencies (e.g., a ConfigMerger interface) to allow controlled failure simulation.
+
+// TestLoadAtmosDFromDirectory_NotFoundPath tests the "not found" path for atmos.d directories.
+func TestLoadAtmosDFromDirectory_NotFoundPath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory with a directory that has no atmos.d or .atmos.d
+	// This should hit the "No atmos.d directory found" and "No .atmos.d directory found" paths.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic - the directories don't exist
+	// which is handled gracefully by logging at Trace level.
+}
+
+// TestLoadAtmosDFromDirectory_DirectoryExists tests when atmos.d directory exists.
+func TestLoadAtmosDFromDirectory_DirectoryExists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create atmos.d directory with a valid config file.
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	err := os.MkdirAll(atmosDPath, 0o755)
+	assert.NoError(t, err)
+
+	configContent := `
+settings:
+  test_value: from_atmos_d
+`
+	err = os.WriteFile(filepath.Join(atmosDPath, "test.yaml"), []byte(configContent), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should find and process the atmos.d directory.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic.
+}
+
+// TestLoadAtmosDFromDirectory_DotAtmosDExists tests when .atmos.d directory exists.
+func TestLoadAtmosDFromDirectory_DotAtmosDExists(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create .atmos.d directory with a valid config file.
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	err := os.MkdirAll(dotAtmosDPath, 0o755)
+	assert.NoError(t, err)
+
+	configContent := `
+settings:
+  test_value: from_dot_atmos_d
+`
+	err = os.WriteFile(filepath.Join(dotAtmosDPath, "test.yaml"), []byte(configContent), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should find and process the .atmos.d directory.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic.
+}
+
+// TestLoadAtmosDFromDirectory_BothDirectoriesExist tests when both atmos.d and .atmos.d exist.
+func TestLoadAtmosDFromDirectory_BothDirectoriesExist(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create both directories.
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	dotAtmosDPath := filepath.Join(tempDir, ".atmos.d")
+	err := os.MkdirAll(atmosDPath, 0o755)
+	assert.NoError(t, err)
+	err = os.MkdirAll(dotAtmosDPath, 0o755)
+	assert.NoError(t, err)
+
+	// Add config files to both.
+	configContent1 := `
+settings:
+  test_value: from_atmos_d
+`
+	configContent2 := `
+settings:
+  test_value: from_dot_atmos_d
+`
+	err = os.WriteFile(filepath.Join(atmosDPath, "test.yaml"), []byte(configContent1), 0o644)
+	assert.NoError(t, err)
+	err = os.WriteFile(filepath.Join(dotAtmosDPath, "test.yaml"), []byte(configContent2), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should process both directories.
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic.
+}
+
+// TestLoadAtmosDFromDirectory_FileNotDirectory tests when atmos.d is a file, not a directory.
+func TestLoadAtmosDFromDirectory_FileNotDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create atmos.d as a file, not a directory.
+	atmosDPath := filepath.Join(tempDir, "atmos.d")
+	err := os.WriteFile(atmosDPath, []byte("not a directory"), 0o644)
+	assert.NoError(t, err)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	// Call loadAtmosDFromDirectory - should handle file gracefully.
+	// Since it's not a directory, it should skip processing (stat.IsDir() returns false).
+	loadAtmosDFromDirectory(tempDir, v)
+
+	// Function should complete without panic.
+}

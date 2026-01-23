@@ -70,7 +70,7 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 
 	// On Windows, add .exe to raw binary asset names that don't have an archive extension.
 	// This follows Aqua's behavior where Windows binaries need .exe extension in the download URL.
-	// See: https://aquaproj.github.io/docs/reference/windows-support/
+	// See: https://aquaproj.github.io/docs/reference/windows-support/.
 	if !hasArchiveExtension(assetName) {
 		assetName = EnsureWindowsExeExtension(assetName)
 	}
@@ -81,15 +81,22 @@ func (i *Installer) buildGitHubReleaseURL(tool *registry.Tool, version string) (
 	return url, nil
 }
 
+// archiveExtensions contains known archive file extensions.
+var archiveExtensions = []string{
+	".tar.gz", ".tgz", ".zip", ".gz",
+	".tar.xz", ".txz", ".tar.bz2", ".tbz", ".tbz2",
+	".bz2", ".xz", ".7z", ".tar", ".pkg",
+}
+
 // hasArchiveExtension checks if the asset name has a known archive extension.
 func hasArchiveExtension(name string) bool {
 	lower := strings.ToLower(name)
-	return strings.HasSuffix(lower, ".tar.gz") ||
-		strings.HasSuffix(lower, ".tgz") ||
-		strings.HasSuffix(lower, ".zip") ||
-		strings.HasSuffix(lower, ".gz") ||
-		strings.HasSuffix(lower, ".tar") ||
-		strings.HasSuffix(lower, ".pkg")
+	for _, ext := range archiveExtensions {
+		if strings.HasSuffix(lower, ext) {
+			return true
+		}
+	}
+	return false
 }
 
 // buildTemplateData creates template data for asset URL building.

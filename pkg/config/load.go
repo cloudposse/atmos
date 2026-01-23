@@ -1046,6 +1046,8 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
 			log.Debug("Failed to load atmos.d configs", "error", err, "path", atmosDPath)
 		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat atmos.d directory", "path", atmosDPath, "error", err)
 	} else {
 		log.Trace("No atmos.d directory found", "path", atmosDPath)
 	}
@@ -1058,6 +1060,8 @@ func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
 			log.Debug("Failed to load .atmos.d configs", "error", err, "path", dotAtmosDPath)
 		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat .atmos.d directory", "path", dotAtmosDPath, "error", err)
 	} else {
 		log.Trace("No .atmos.d directory found", "path", dotAtmosDPath)
 	}

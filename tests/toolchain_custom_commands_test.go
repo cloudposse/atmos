@@ -229,8 +229,8 @@ func TestToolchainCustomCommands_WindowsExeExtension(t *testing.T) {
 	t.Logf("Install output:\n%s", string(output))
 	require.NoError(t, err, "toolchain install should succeed")
 
-	// Verify .exe extension is present.
-	binaryPath := filepath.Join(toolsDir, "bin", "jqlang", "jq", "1.7.1", "jq.exe")
+	// Verify .exe extension is present using the helper for consistency.
+	binaryPath := getBinaryPath(toolsDir, "jqlang", "jq", "1.7.1", "jq")
 	_, err = os.Stat(binaryPath)
 	require.NoError(t, err, "Binary should exist at %s with .exe extension", binaryPath)
 

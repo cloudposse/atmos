@@ -58,14 +58,14 @@ Following [Aqua's Windows support approach](https://aquaproj.github.io/docs/refe
 | `http`           | Manual: asset template must include `.exe` in URL if needed            |
 
 **Example - `github_release` type (jq):**
-```
+```text
 Asset template: jq-{{.OS}}-{{.Arch}}
 On Windows:     https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe  ✅
 On Linux:       https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64       ✅
 ```
 
 **Example - `http` type (must specify `.exe` in template):**
-```
+```text
 Asset template: https://example.com/tool-{{.OS}}-{{.Arch}}{{if eq .OS "windows"}}.exe{{end}}
 ```
 
