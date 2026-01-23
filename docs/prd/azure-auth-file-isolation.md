@@ -123,7 +123,7 @@ See **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation
 ### Primary Goals
 
 1. **Match AWS isolation pattern**: Use identical architecture for consistency
-2. **XDG compliance**: Follow [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)
+2. **XDG compliance**: Follow [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)
 3. **Environment variable control**: Use Azure SDK environment variables to direct SDK to Atmos-managed files
 4. **Clean logout**: Delete provider directory to remove all traces
 5. **Security model preservation**: Maintain shell session identity scoping
@@ -1325,7 +1325,7 @@ This implementation follows the [Universal Identity Provider File Isolation Patt
 2. **[AWS Authentication File Isolation](./aws-auth-file-isolation.md)** - Reference implementation
 3. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
 4. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
-5. **[XDG Specification](https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html)** - Official standard
+5. **[XDG Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)** - Official standard
 
 ## Changelog
 

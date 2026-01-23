@@ -209,5 +209,5 @@ import (
 
 - Command Registry Pattern: `docs/prd/command-registry-pattern.md`
 - Error Handling Linter Rules: `docs/prd/error-handling-linter-rules.md`
-- Testing Strategy: `docs/prd/testing-strategy.md`
+- Testing Strategy: `docs/prd/testability-refactoring-strategy.md`
 - Interface-Driven Design: `CLAUDE.md` - "Architectural Patterns"
