@@ -95,7 +95,9 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 		IncludeReviewRequests: true,
 	})
 	if err != nil {
-		return err
+		return errUtils.Build(errUtils.ErrCIStatusFetchFailed).
+			WithCause(err).
+			Err()
 	}
 
 	// Render output.
