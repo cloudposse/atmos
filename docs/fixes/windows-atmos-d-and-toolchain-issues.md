@@ -4,105 +4,67 @@
 
 This document describes two user-reported issues on Windows:
 
-1. **Issue #1**: Auto-import of `.atmos.d` directory not working on Windows
+1. **Issue #1**: Auto-import of `.atmos.d` directory not working on Windows - **VERIFIED WORKING**
 2. **Issue #2**: Toolchain installation failures and PATH/config issues on Windows
-
-Both issues appear to be related to Windows-specific path handling (case sensitivity, path separators, PATH environment
-variable format).
 
 ---
 
 ## Issue #1: Auto-Import of .atmos.d Not Working on Windows
 
-### Problem Description
+### Status: ✅ VERIFIED WORKING
 
-Users report that configurations placed in the `.atmos.d/` directory are not being loaded on Windows, even though the
-directory exists and contains valid YAML configuration files.
+After testing on Windows (January 2025), the `.atmos.d` auto-import functionality **works correctly**.
 
-### Expected Behavior
+### Test Results
 
-The `.atmos.d/` directory (and `atmos.d/`) should be automatically discovered and its contents merged into the Atmos
-configuration, regardless of the operating system.
+Testing was performed on Windows using the `atmos-configuration` fixture:
 
-### Symptoms
+```
+PS C:\...\atmos-configuration> $env:ATMOS_LOGS_LEVEL = "Debug"
+PS C:\...\atmos-configuration> go run github.com/cloudposse/atmos --help
+```
 
-- Custom commands defined in `.atmos.d/` are not available
-- Configuration overrides in `.atmos.d/` are ignored
-- No error messages - the directory is silently not loaded
+**Debug logs confirm successful loading:**
+```
+DEBU  Found atmos.d directory, loading configurations path=C:\...\atmos-configuration\atmos.d
+DEBU  Loaded configuration directory source=atmos.d files=5 pattern=C:\...\atmos.d\**\*
+```
 
-### Root Cause Analysis
+**Custom command from `atmos.d/commands.yaml` appears in help:**
+```
+AVAILABLE COMMANDS
+    ...
+    test                                      Run all tests with custom command
+```
 
-Based on code review, the most likely cause is:
-
-**Silent error handling**: Errors during `.atmos.d` loading are logged at `Trace` level and silently swallowed, making
-it impossible for users to diagnose why configs aren't being loaded.
-
-The code in `loadAtmosDFromDirectory()` catches all errors and only logs them at Trace level:
-
-```go
-if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
-// Don't return error - just log and continue.
+**`describe config` shows the command loaded correctly:**
+```json
+{
+  "name": "test",
+  "description": "Run all tests with custom command",
+  "steps": [{"command": "atmos describe config", "type": "shell"}]
 }
 ```
 
-To diagnose, users need to set `ATMOS_LOGS_LEVEL=Trace` which is not documented prominently.
+### Original Problem Description
 
-Additional potential causes include:
+Users reported that configurations placed in the `.atmos.d/` directory were not being loaded on Windows.
 
-#### 1. Glob Pattern Path Separator Issues
+### Resolution
 
-**File**: `pkg/config/load.go:1040-1055`
+The issue was likely caused by:
+1. **Lack of visibility**: Errors were logged at `Trace` level, making debugging difficult
+2. **User configuration issues**: The `.atmos.d` directory may not have existed or contained valid YAML
 
-```go
-func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
-// Search for `atmos.d/` configurations.
-searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
-}
+### Improvements Made
 
-// Search for `.atmos.d` configurations.
-searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-// ...
-}
-```
+1. **Enhanced debug logging** (`pkg/config/load.go`):
+   - Now logs at `Debug` level when directories are found
+   - Users can diagnose issues with `ATMOS_LOGS_LEVEL=Debug` instead of requiring `Trace`
 
-The glob pattern `**/*` may not work correctly on Windows if the underlying glob library does not handle Windows path
-separators properly. The pattern uses forward slashes (`**/*`) but Windows paths use backslashes (`\`).
-
-#### 2. Case-Insensitive Path Matching
-
-Windows file systems (NTFS) are case-insensitive by default. The code at `pkg/config/load.go:1020-1023` handles
-case-insensitivity for exclusion paths:
-
-```go
-// Use case-insensitive comparison on Windows where paths may differ only in casing.
-if runtime.GOOS == "windows" {
-// Case-insensitive comparison logic
-}
-```
-
-However, this may not be consistently applied throughout the `.atmos.d` loading logic.
-
-#### 3. Git Root Discovery Issues
-
-**File**: `pkg/config/git_root.go:85-104`
-
-The `hasLocalAtmosConfig()` function checks for `.atmos.d/` using `os.Stat()`, which should work on Windows. However, if
-the git root discovery fails silently, `.atmos.d` at the repo root won't be discovered.
-
-### Affected Files
-
-- `pkg/config/load.go` - Functions: `loadAtmosDFromDirectory()`, `loadAtmosDFromGitRoot()`, `mergeDefaultImports()`
-- `pkg/config/git_root.go` - Function: `hasLocalAtmosConfig()`
-- `pkg/config/const.go` - Constants: `DotAtmosDefaultImportsDirName`, `AtmosDefaultImportsDirName`
-
-### Proposed Fix
-
-1. **Normalize glob patterns for Windows**: Ensure glob patterns use the correct path separator for the OS
-2. **Add Windows-specific tests**: Add `load_windows_test.go` tests for `.atmos.d` loading
-3. **Add debug logging**: Add more verbose logging to help diagnose discovery issues
+2. **Explicit directory existence check**:
+   - Directory is checked with `os.Stat()` before attempting glob search
+   - Clearer log messages distinguish between "directory not found" vs "failed to load"
 
 ### Test Plan for Manual Verification
 
@@ -220,35 +182,55 @@ Users report multiple toolchain-related issues on Windows:
 2. After running `eval "$(atmos toolchain env)"` in PowerShell, `gum` is not found in PATH
 3. General config issues (atmos.yaml not found)
 
-### Expected Behavior
+### Test Results (January 2025)
 
-- Toolchain should install tools successfully on Windows
-- `atmos toolchain env --format powershell` should output valid PowerShell that adds tool paths to PATH
-- Tools should be executable after PATH is updated
+Testing on Windows revealed:
 
-### Symptoms
+**Working ✅:**
+- `atmos toolchain install hashicorp/terraform@1.9.8` - installs successfully
+- `atmos toolchain env --format powershell` - outputs correct PowerShell syntax
+- PowerShell hint message now shows correct syntax
+- `Invoke-Expression (atmos toolchain env --format powershell)` - no errors
 
-1. **Installation failure**: `atmos toolchain install` fails with network or extraction errors
-2. **PATH not updated**: After eval, running `gum --version` fails with "command not found"
-3. **Config not found**: Error about atmos.yaml not existing
+**Not Working ❌:**
+- `terraform --version` **hangs indefinitely** after PATH is updated
+- Root cause: Binary installed without `.exe` extension
 
 ### Root Cause Analysis
 
-#### 1. Unix-style Hint Message on Windows (CONFIRMED BUG)
+#### 1. Missing .exe Extension on Windows (CONFIRMED BUG - FIXED)
+
+**File**: `toolchain/installer/installer.go:448-450`
+
+The binary was being installed without the `.exe` extension:
+```go
+binaryName := resolveBinaryName(tool)  // Returns "terraform"
+binaryPath := filepath.Join(versionDir, binaryName)  // ".tools/.../terraform" (no .exe!)
+```
+
+Installation output showed:
+```
+✓ Installed hashicorp/terraform@1.9.8 to .tools\bin\hashicorp\terraform\1.9.8\terraform (86mb)
+```
+
+On Windows, the shell only recognizes executables with `.exe`, `.cmd`, `.bat`, or `.com` extensions. Without `.exe`, the binary cannot be found even though it's in the PATH.
+
+**Fix Applied**: Added Windows-specific handling to append `.exe`:
+```go
+if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), ".exe") {
+    binaryName += ".exe"
+}
+```
+
+#### 2. Unix-style Hint Message on Windows (FIXED)
 
 **Files**: `toolchain/install.go:356`, `toolchain/install_helpers.go:130,139`
 
-The hint message after installation always shows Unix/bash syntax, even on Windows:
+The hint message after installation was showing Unix/bash syntax on Windows.
 
-```go
-ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
-```
-
-Windows/PowerShell users should see:
-
-```
-Invoke-Expression (atmos --chdir /path/to/project toolchain env --format powershell)
-```
+**Fix Applied**: Added `getPlatformPathHint()` function that returns platform-appropriate syntax:
+- **Windows**: `Invoke-Expression (atmos --chdir /path/to/project toolchain env --format powershell)`
+- **Unix/macOS**: `eval "$(atmos --chdir /path/to/project toolchain env)"`
 
 This is confusing for Windows users who try to use the Unix syntax in PowerShell.
 

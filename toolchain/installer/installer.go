@@ -447,6 +447,11 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 	// Determine the binary name using shared resolution logic.
 	binaryName := resolveBinaryName(tool)
 
+	// On Windows, executables need the .exe extension to be found by the shell.
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), ".exe") {
+		binaryName += ".exe"
+	}
+
 	binaryPath := filepath.Join(versionDir, binaryName)
 
 	// For now, just copy the file (simplified extraction)
