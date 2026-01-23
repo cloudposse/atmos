@@ -42,3 +42,4 @@ jobs:
             --max-retries 3
             '**/*.md'
           fail: true
+          jobSummary: true
