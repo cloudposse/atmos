@@ -245,6 +245,9 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 			// Try with .exe extension (common for Windows binaries in archives).
 			srcWithExe := src + windowsExeExt
 			if _, exeErr := os.Stat(srcWithExe); exeErr != nil {
+				if !os.IsNotExist(exeErr) {
+					return fmt.Errorf("%w: failed to stat file in archive: %s: %w", ErrFileOperation, srcWithExe, exeErr)
+				}
 				return fmt.Errorf("%w: file not found in archive: %s", ErrToolNotFound, expandedSrcPath)
 			}
 			src = srcWithExe

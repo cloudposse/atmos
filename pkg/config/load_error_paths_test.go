@@ -222,8 +222,8 @@ func TestLoadConfigFile_ConfigFileNotFoundError(t *testing.T) {
 
 // TestReadConfigFileContent_ReadError tests error path at load.go:308-312.
 func TestReadConfigFileContent_ReadError(t *testing.T) {
-	// Try to read a nonexistent file
-	_, err := readConfigFileContent("/nonexistent/path/atmos.yaml")
+	// Try to read a nonexistent file.
+	_, err := readConfigFileContent(filepath.Join(string(os.PathSeparator), "nonexistent", "path", "atmos.yaml"))
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrReadConfig)
 }
@@ -441,8 +441,8 @@ func TestMergeConfigFile_ReadFileError(t *testing.T) {
 	v := viper.New()
 	v.SetConfigType("yaml")
 
-	// Try to read non-existent file
-	err := mergeConfigFile("/nonexistent/path/config.yaml", v)
+	// Try to read non-existent file.
+	err := mergeConfigFile(filepath.Join(string(os.PathSeparator), "nonexistent", "path", "config.yaml"), v)
 	assert.Error(t, err)
 }
 
