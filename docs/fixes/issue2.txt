@@ -1,0 +1,81 @@
+Windows PowerShell
+Copyright (C) Microsoft Corporation. All rights reserved.
+
+Install the latest PowerShell for new features and improvements! https://aka.ms/PSWindows
+
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration>  go run github.com/cloudposse/atmos
+╭────────────────────────────────────────────────────────╮
+│                                                        │
+│     Commands                                           │      Stacks                                                    Components
+│                                                        │
+│    14 items                                            │     1 item                                                    2 items
+│                                                        │
+│    > terraform destroy                                 │     > dev                                                     > test-component
+│                                                        │
+│    ••••••••••••••                                      │                                                               ••
+│                                                        │
+╰────────────────────────────────────────────────────────╯
+↑/k up       /   filter                    enter      execute
+↓/j down     esc clear filter              esc/ctrl+c quit
+←/h left     tab flip stacks/components
+
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration> type .tool-versions
+type : Cannot find path 'C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration\.tool-versions' because it does not exist.
+At line:1 char:1
++ type .tool-versions
++ ~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : ObjectNotFound: (C:\Users\Dimitr...\.tool-versions:String) [Get-Content], ItemNotFoundException
+    + FullyQualifiedErrorId : PathNotFound,Microsoft.PowerShell.Commands.GetContentCommand
+
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration> type atmos.yaml
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
+# Toolchain configuration
+toolchain:
+  install_path: ".tools"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration>  go run github.com/cloudposse/atmos toolchain install hashicorp/terraform@1.9.8
+🧪 toolchain is an experimental feature. Learn more https://atmos.tools/experimental
+✓ Installed hashicorp/terraform@1.9.8 to .tools\bin\hashicorp\terraform\1.9.8\terraform (86mb)
+💡 Export the PATH environment variable for your toolchain tools using Invoke-Expression (atmos --chdir /path/to/project toolchain env --format powershell)
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration> dir .tools
+
+
+    Directory: C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration\.tools
+
+
+Mode                 LastWriteTime         Length Name
+----                 -------------         ------ ----
+d-----         1/22/2026   8:22 PM                bin
+
+
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration>  go run github.com/cloudposse/atmos toolchain env --format powershell
+🧪 toolchain is an experimental feature. Learn more https://atmos.tools/experimental
+$env:PATH = "C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration\.tools\bin\hashicorp\terraform\1.9.8;C:\Users\Dimitri\go\pkg\mod\golang.org\toolchain@v0.0.1-go1.25.2.window
+s-amd64\bin;C:\Program Files (x86)\VMware\VMware Workstation\bin\;C:\Program Files\Oculus\Support\oculus-runtime;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\Sys
+tem32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Common;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WIN
+DOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files\Docker\Docker\resources\bin;C:\Program Files\Git\cmd;C:\Program Files\Go\bin;C:\Users\Dimitri\AppData\Local\Programs\Python\Launcher\;C:\Users\Dimitri\scoop\shims
+;C:\Program Files\Oculus\Support\oculus-runtime;C:\Windows\system32;C:\Windows;C:\Windows\System32\Wbem;C:\Windows\System32\WindowsPowerShell\v1.0\;C:\Windows\System32\OpenSSH\;C:\Program Files (x86)\NVIDIA Corporation\PhysX\Co
+mmon;C:\Program Files\NVIDIA Corporation\NVIDIA NvDLISR;C:\WINDOWS\system32;C:\WINDOWS;C:\WINDOWS\System32\Wbem;C:\WINDOWS\System32\WindowsPowerShell\v1.0\;C:\WINDOWS\System32\OpenSSH\;C:\Program Files\dotnet\;C:\Program Files\
+Docker\Docker\resources\bin;C:\Program Files\Git\cmd;C:\Program Files\Go\bin;C:\Users\Dimitri\AppData\Local\Microsoft\WindowsApps;;C:\Program Files\JetBrains\IntelliJ IDEA 2023.3\bin;C:\Users\Dimitri\go\bin;C:\Program Files\JetBrains\GoLand 2025.1.2\bin;%USERPROFILE%\AppData\Local\Microsoft\WindowsApps"
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration> Invoke-Expression (..\..\..\..\atmos.exe toolchain env --format powershell)
+🧪 toolchain is an experimental feature. Learn more https://atmos.tools/experimental
+PS C:\Users\Dimitri\GolandProjects\cloudposse\atmos\tests\fixtures\scenarios\toolchain-terraform-integration> terraform --version
+<the process stuck here>
