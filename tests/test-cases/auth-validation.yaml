@@ -12,7 +12,11 @@ tests:
       - "auth"
       - "validate"
     expect:
-      diff: []
+      # Ignore lines that wrap differently based on terminal width
+      diff:
+        - "Authentication configuration validation failed"
+        - "invalid-provider"
+        - "unsupported provider kind"
       stderr:
         - "invalid auth config"
       exit_code: 1
