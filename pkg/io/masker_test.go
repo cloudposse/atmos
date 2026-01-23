@@ -577,11 +577,11 @@ func TestMasker_RegisterSecret_WithEscaping(t *testing.T) {
 
 	// The escaped version should also be masked.
 	input := `{"value": "secret\nwith\nnewlines"}`
+	expected := `{"value": "<MASKED>"}`
 	got := m.Mask(input)
 
-	// Both the plain and escaped versions should be masked.
-	if got == input {
-		t.Error("expected secret with escaping to be masked")
+	if got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
 	}
 }
 
