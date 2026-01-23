@@ -21,6 +21,7 @@ export const ToolsMatrixPage = () => {
         <div style={{ display: 'flex', borderRadius: '8px', overflow: 'hidden', border: '1px solid var(--ifm-color-emphasis-300)' }}>
           <button
             onClick={() => setView('categories')}
+            aria-pressed={view === 'categories'}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -40,6 +41,7 @@ export const ToolsMatrixPage = () => {
           </button>
           <button
             onClick={() => setView('matrix')}
+            aria-pressed={view === 'matrix'}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

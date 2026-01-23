@@ -178,22 +178,22 @@ const ToolDrawer: React.FC<ToolDrawerProps> = ({ tool, isOpen, onClose }) => {
                           </td>
                           <td>
                             {item.atmos ? (
-                              <span className="tool-drawer__check">
+                              <span className="tool-drawer__check" role="img" aria-label="Supported by Atmos">
                                 <RiCheckLine />
                               </span>
                             ) : (
-                              <span className="tool-drawer__cross">
+                              <span className="tool-drawer__cross" role="img" aria-label="Not supported by Atmos">
                                 <RiCloseFill />
                               </span>
                             )}
                           </td>
                           <td>
                             {item.tool ? (
-                              <span className="tool-drawer__check">
+                              <span className="tool-drawer__check" role="img" aria-label={`Supported by ${tool.name}`}>
                                 <RiCheckLine />
                               </span>
                             ) : (
-                              <span className="tool-drawer__cross">
+                              <span className="tool-drawer__cross" role="img" aria-label={`Not supported by ${tool.name}`}>
                                 <RiCloseFill />
                               </span>
                             )}

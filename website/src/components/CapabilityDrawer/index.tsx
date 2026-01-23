@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RiCloseLine, RiArrowRightLine } from 'react-icons/ri';
 import Markdown from 'react-markdown';
@@ -14,6 +14,9 @@ interface CapabilityDrawerProps {
 }
 
 const CapabilityDrawer: React.FC<CapabilityDrawerProps> = ({ capability, isOpen, onClose }) => {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousActiveElement = useRef<HTMLElement | null>(null);
+
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -25,12 +28,20 @@ const CapabilityDrawer: React.FC<CapabilityDrawerProps> = ({ capability, isOpen,
 
   useEffect(() => {
     if (isOpen) {
+      // Store the previously focused element.
+      previousActiveElement.current = document.activeElement as HTMLElement;
       document.addEventListener('keydown', handleEscape);
       document.body.style.overflow = 'hidden';
+      // Focus the close button when drawer opens.
+      setTimeout(() => closeButtonRef.current?.focus(), 0);
     }
     return () => {
       document.removeEventListener('keydown', handleEscape);
       document.body.style.overflow = '';
+      // Restore focus when drawer closes.
+      if (!isOpen && previousActiveElement.current) {
+        previousActiveElement.current.focus();
+      }
     };
   }, [isOpen, handleEscape]);
 
@@ -58,7 +69,7 @@ const CapabilityDrawer: React.FC<CapabilityDrawerProps> = ({ capability, isOpen,
             aria-labelledby="capability-drawer-title"
           >
             <div className="capability-drawer__header">
-              <button className="capability-drawer__close" onClick={onClose} aria-label="Close drawer">
+              <button ref={closeButtonRef} className="capability-drawer__close" onClick={onClose} aria-label="Close drawer">
                 <RiCloseLine />
               </button>
             </div>

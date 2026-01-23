@@ -64,7 +64,7 @@ const ComparisonMatrix: React.FC = () => {
                   </button>
                 </td>
                 <td className="comparison-matrix__cell comparison-matrix__cell--atmos">
-                  <span className="comparison-matrix__check">
+                  <span className="comparison-matrix__check" role="img" aria-label="Supported by Atmos">
                     <RiCheckLine />
                   </span>
                 </td>
@@ -89,7 +89,7 @@ const ComparisonMatrix: React.FC = () => {
 
       <div className="comparison-matrix__legend">
         <div className="comparison-matrix__legend-item">
-          <span className="comparison-matrix__check comparison-matrix__check--small">
+          <span className="comparison-matrix__check comparison-matrix__check--small" role="img" aria-label="Supported">
             <RiCheckLine />
           </span>
           <span>Native capability in Atmos</span>
