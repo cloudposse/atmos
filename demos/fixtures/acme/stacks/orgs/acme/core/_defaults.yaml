@@ -1,0 +1,8 @@
+# Core Team Defaults
+import:
+  - orgs/acme/_defaults
+
+vars:
+  tenant: core
+  tags:
+    Team: Core

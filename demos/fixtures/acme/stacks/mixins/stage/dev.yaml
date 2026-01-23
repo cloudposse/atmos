@@ -1,0 +1,4 @@
+# Stage: Development
+vars:
+  stage: dev
+  namespace: acme

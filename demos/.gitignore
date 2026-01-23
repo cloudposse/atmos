@@ -1,0 +1,11 @@
+# Generated outputs (deployed to gh-pages instead)
+.cache/
+
+# Local development
+*.gif
+*.png
+*.mp4
+*.webm
+
+# Keep tape files
+!scenes/*.tape

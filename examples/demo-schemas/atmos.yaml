@@ -1,3 +1,15 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{stage}"
+
 schemas:
   schemaFromFile:
     manifest: ./manifest.json

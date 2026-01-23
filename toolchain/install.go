@@ -109,6 +109,13 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
 	}
 
+	// Single tool: use original single-tool flow with full progress.
+	return installSingleToolSpec(toolSpec, setAsDefault, reinstallFlag, showHint, showProgressBar)
+}
+
+// installSingleToolSpec installs a single tool specification with full progress display.
+// Note: reinstallFlag is accepted for API consistency but handled by InstallSingleTool internally.
+func installSingleToolSpec(toolSpec string, setAsDefault, _ bool, showHint, showProgressBar bool) error {
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
 		return err
@@ -307,6 +314,7 @@ func showProgress(
 		ui.Errorf("Install failed %s/%s@%s: %v", tool.owner, tool.repo, tool.version, state.err)
 	}
 
+	// Show animated progress bar on current line (EscResetLine overwrites each frame).
 	percent := float64(state.index+1) / float64(state.total)
 	bar := progressBar.ViewAs(percent)
 

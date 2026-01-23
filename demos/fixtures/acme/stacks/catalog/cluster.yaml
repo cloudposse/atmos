@@ -1,0 +1,36 @@
+# EKS Cluster Component Catalog
+# Kubernetes infrastructure
+
+components:
+  terraform:
+    cluster:
+      metadata:
+        component: cluster
+        type: real
+      remote_state_backend_type: static
+      remote_state_backend:
+        static:
+          cluster_endpoint: "https://eks.us-east-1.amazonaws.com"
+          cluster_name: "acme-eks"
+          cluster_arn: "arn:aws:eks:us-east-1:123456789012:cluster/acme-eks"
+      vars:
+        enabled: true
+        name: "eks"
+        cluster_version: "1.29"
+        node_groups:
+          main:
+            instance_types:
+              - "t3.medium"
+            min_size: 2
+            max_size: 10
+            desired_size: 3
+        addons:
+          - name: vpc-cni
+            version: "v1.16.0"
+          - name: kube-proxy
+            version: "v1.29.0"
+          - name: coredns
+            version: "v1.11.1"
+        # Read from VPC component state
+        vpc_id: !terraform.state vpc vpc_id
+        subnet_ids: !terraform.state vpc private_subnet_ids

@@ -1,0 +1,16 @@
+# CI Profile - Settings
+# Optimized for CI/CD pipelines with minimal output and no interactive features
+
+settings:
+  terminal:
+    color: false
+    max_width: 80
+    unicode: false
+    syntax_highlighting:
+      enabled: false
+    title: false
+    alerts: false
+
+logs:
+  level: Info
+  file: "/dev/stderr"

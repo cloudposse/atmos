@@ -1,0 +1,11 @@
+# Dev Stage Mixin
+vars:
+  stage: dev
+  tags:
+    Stage: dev
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"

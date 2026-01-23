@@ -1,0 +1,12 @@
+# Core Automation Global Stack
+import:
+  - orgs/acme/core/_defaults
+
+vars:
+  tenant: core
+  stage: auto
+  environment: global
+  region: us-east-1
+  tags:
+    Purpose: Automation
+    Scope: Global

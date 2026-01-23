@@ -1044,6 +1044,27 @@ a[class*="table-of-contents__link"] {
     max-width: none;
 }
 
+/* Demos page title - metallic effect */
+html[data-theme="dark"] .demos-title {
+    background: linear-gradient(
+        to right bottom,
+        rgb(255, 255, 255) 30%,
+        rgba(255, 255, 255, 0.5)
+    ) text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+html[data-theme="light"] .demos-title {
+    background: linear-gradient(
+        to right bottom,
+        rgb(30, 30, 30) 30%,
+        rgba(30, 30, 30, 0.6)
+    ) text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
 /* YAML syntax highlighting - nightOwl theme doesn't style atrule tokens */
 /* YAML keys use atrule token, values use various scalar types */
 .prism-code .token.atrule,

@@ -571,6 +571,19 @@
   opacity: 0.7;
 }
 
+/* Demo Video Section */
+.demoVideoSection {
+  width: 100%;
+  margin-bottom: 1.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+:global(html[data-theme='dark']) .demoVideoSection {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
 /* README Section */
 .readmeSection {
   width: 100%;

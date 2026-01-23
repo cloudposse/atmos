@@ -121,6 +121,30 @@ const DOCS_MAP = {
   ],
 };
 
+// Demo video mapping for examples (maps example name to manifest.json demo ID).
+// Videos appear at the top of example pages in the FileBrowser.
+const DEMO_MAP = {
+  'demo-stacks': 'example-demo-stacks',
+  'demo-vendoring': 'example-demo-vendoring',
+  'demo-workflows': 'example-demo-workflows',
+  'demo-auth': 'example-demo-auth',
+  'demo-helmfile': 'example-demo-helmfile',
+  'demo-localstack': 'example-demo-localstack',
+  'demo-custom-command': 'example-demo-custom-command',
+  'demo-component-versions': 'example-demo-component-versions',
+  'demo-context': 'example-demo-context',
+  'demo-schemas': 'example-demo-schemas',
+  'demo-library': 'example-demo-library',
+  'demo-env': 'example-demo-env',
+  'demo-atlantis': 'example-demo-atlantis',
+  'quick-start-simple': 'example-quick-start-simple',
+  'quick-start-advanced': 'example-quick-start-advanced',
+  'config-profiles': 'example-config-profiles',
+  toolchain: 'example-toolchain',
+  devcontainer: 'example-devcontainer',
+  'devcontainer-build': 'example-devcontainer-build',
+};
+
 // Map file extensions to syntax highlighting languages.
 const LANGUAGE_MAP = {
   yaml: 'yaml',
@@ -382,6 +406,7 @@ function scanExamples(sourceDir, options) {
       hasAtmosYaml,
       tags: TAGS_MAP[entry.name] || [],
       docs: DOCS_MAP[entry.name] || [],
+      demoId: DEMO_MAP[entry.name] || null,
       root: tree,
     });
 

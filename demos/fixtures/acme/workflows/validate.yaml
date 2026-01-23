@@ -1,0 +1,29 @@
+# Validate Workflow
+# Run all validations before deployment
+
+name: validate
+description: Validate configuration before deployment
+
+workflows:
+  validate:
+    description: Run all validations
+    steps:
+      - command: echo "Running validations..."
+      - command: validate stacks
+      - command: describe affected
+      - command: echo "All validations passed!"
+
+  validate-stack:
+    description: Validate a specific stack
+    steps:
+      - command: validate stacks --stack ${ATMOS_STACK}
+      - command: describe component vpc -s ${ATMOS_STACK}
+      - command: describe component cluster -s ${ATMOS_STACK}
+
+  pre-deploy:
+    description: Pre-deployment checks
+    steps:
+      - command: validate stacks
+      - command: describe affected --include-dependents
+      - command: terraform plan vpc -s ${ATMOS_STACK}
+      - command: terraform plan cluster -s ${ATMOS_STACK}

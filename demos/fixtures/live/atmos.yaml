@@ -1,0 +1,47 @@
+# Live Demo Fixture
+# For demos that require real cloud interaction (terraform plan/apply)
+# These demos validate atmos functionality with actual terraform execution
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    backend_type: local
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: false
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "orgs/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_pattern: "{tenant}-{stage}-{environment}"
+  name_template: "{{ .vars.tenant }}-{{ .vars.stage }}-{{ .vars.environment }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
+
+# Command aliases
+aliases:
+  tf: terraform
+  tp: terraform plan
+  ta: terraform apply
+
+# Settings
+settings:
+  list_merge_strategy: replace
+
+# Toolchain configuration
+toolchain:
+  aliases:
+    terraform: hashicorp/terraform
+    opentofu: opentofu/opentofu
+    tofu: opentofu/opentofu
+    helm: helm/helm
+    kubectl: kubernetes/kubectl
+    tflint: terraform-linters/tflint

@@ -1,0 +1,134 @@
+.videoContainer {
+  width: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--ifm-background-surface-color);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.videoWrapper {
+  position: relative;
+  cursor: pointer;
+}
+
+.video,
+.gif {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px 8px 0 0;
+}
+
+.streamPlayer {
+  width: 100%;
+  border-radius: 8px 8px 0 0;
+}
+
+.svgPlayer {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 8px 8px 0 0;
+}
+
+/* When no caption, use full rounded corners. */
+.noCaption .video,
+.noCaption .gif,
+.noCaption .streamPlayer,
+.noCaption .svgPlayer {
+  border-radius: 8px;
+}
+
+.playOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.4);
+  transition: background 0.2s ease;
+}
+
+.videoWrapper:hover .playOverlay {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.playIcon {
+  width: 64px;
+  height: 64px;
+  color: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+/* Control overlay for playing SVG - appears on hover. */
+.controlOverlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.2s ease;
+  cursor: pointer;
+  z-index: 10;
+}
+
+.videoWrapper:hover .controlOverlay {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+/* When paused, always show the overlay. */
+.controlOverlay.paused {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.controlIcon {
+  width: 48px;
+  height: 48px;
+  color: white;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.caption {
+  padding: 12px 16px;
+  border-top: 1px solid var(--ifm-border-color);
+}
+
+.title {
+  margin: 0 0 4px 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ifm-heading-color);
+}
+
+.description {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--ifm-color-emphasis-600);
+  line-height: 1.4;
+}
+
+.placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  background: var(--ifm-color-emphasis-100);
+  color: var(--ifm-color-emphasis-600);
+  border-radius: 8px 8px 0 0;
+}
+
+.placeholder p {
+  margin: 0;
+  font-size: 1rem;
+  font-style: italic;
+}

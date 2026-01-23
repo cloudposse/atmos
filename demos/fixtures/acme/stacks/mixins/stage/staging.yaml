@@ -1,0 +1,4 @@
+# Stage: Staging
+vars:
+  stage: staging
+  namespace: acme

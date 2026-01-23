@@ -1,0 +1,4 @@
+# Region: US East 2 (Ohio)
+vars:
+  region: us-east-2
+  environment: ue2
