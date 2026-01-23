@@ -285,6 +285,13 @@ const config = {
                         from: '/core-concepts/stacks/templates/datasources',
                         to: '/templates/datasources'
                     },
+                    // Additional core-concepts redirects for documentation links
+                    {from: '/core-concepts/components/helmfile', to: '/components/helmfile'},
+                    {from: '/core-concepts/stacks/naming', to: '/stacks/naming'},
+                    {from: '/core-concepts/stacks/templates', to: '/stacks/templates'},
+                    {from: '/core-concepts/workflows/workflow-manifest', to: '/workflows/workflow-manifest'},
+                    {from: '/core-concepts/vendoring', to: '/vendor'},
+                    {from: '/core-concepts/vendoring/vendor-manifest', to: '/vendor/vendor-manifest'},
                     // Redirects for directory renames: core-concepts → learn
                     {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
                     {from: '/core-concepts/concepts-overview', to: '/learn/concepts-overview'},

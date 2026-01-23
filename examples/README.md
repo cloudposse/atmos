@@ -47,7 +47,7 @@ Think of each demo folder as representing an example of a standalone repository.
 
 ## Quick Start (Simple)
 
-The [`demo-stacks`](demo-stacks/) contains code for the [simple quick start](https://atmos.tools/quick-start/advanced). This requires no special permissions and is the fastest way to grasp [atmos concepts](https://atmos.tools/core-concepts).
+The [`demo-stacks`](demo-stacks/) contains code for the [simple quick start](https://atmos.tools/quick-start/advanced). This requires no special permissions and is the fastest way to grasp [atmos concepts](https://atmos.tools).
 
 ## Quick Start (Advanced)
 

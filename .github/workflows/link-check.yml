@@ -34,6 +34,9 @@ jobs:
             --exclude 'localhost'
             --exclude '127.0.0.1'
             --exclude 'example.com'
+            --exclude 'cpco\.io'
+            --exclude 'cloudposse\.com.*utm_'
+            --exclude 'slack\.cloudposse\.com'
             --accept 200,204,301,302,403,429
             --timeout 30
             --max-retries 3
