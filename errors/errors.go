@@ -44,6 +44,8 @@ var (
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
+	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
+	ErrMarkdownRender                        = errors.New("failed to render markdown content")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
@@ -79,6 +81,10 @@ var (
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
+
+	// Experimental feature errors.
+	ErrExperimentalDisabled   = errors.New("experimental command is disabled")
+	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
 
 	// Authentication and TTY errors.
 	ErrAuthConsole            = errors.New("auth console operation failed")
@@ -365,18 +371,21 @@ var (
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// List command errors.
-	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
-	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
-	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
-	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
-	ErrQueryFailed                 = errors.New("query execution failed")
-	ErrTableTooWide                = errors.New("the table is too wide to display properly")
-	ErrGettingCommonFlags          = errors.New("error getting common flags")
-	ErrGettingAbstractFlag         = errors.New("error getting abstract flag")
-	ErrGettingVarsFlag             = errors.New("error getting vars flag")
-	ErrInitializingCLIConfig       = errors.New("error initializing CLI config")
-	ErrDescribingStacks            = errors.New("error describing stacks")
-	ErrComponentNameRequired       = errors.New("component name is required")
+	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                  = errors.New("query execution failed")
+	ErrScalarExtractionNotSupported = errors.New("scalar extraction queries are not supported")
+	ErrQueryUnexpectedResultType    = errors.New("query returned unexpected result type")
+	ErrTableTooWide                 = errors.New("the table is too wide to display properly")
+	ErrGettingCommonFlags           = errors.New("error getting common flags")
+	ErrGettingAbstractFlag          = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag              = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig        = errors.New("error initializing CLI config")
+	ErrDescribingStacks             = errors.New("error describing stacks")
+	ErrComponentNameRequired        = errors.New("component name is required")
+	ErrCreateColumnSelector         = errors.New("failed to create column selector")
 
 	// Version command errors.
 	ErrVersionDisplayFailed   = errors.New("failed to display version information")
@@ -435,6 +444,7 @@ var (
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
+	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
@@ -448,6 +458,9 @@ var (
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+
+	// Packer configuration errors.
+	ErrMissingPackerBasePath = errors.New("packer base path is required")
 
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")
@@ -705,26 +718,27 @@ var (
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
 	// Backend provisioning errors.
-	ErrBucketRequired       = errors.New("backend.bucket is required")
-	ErrRegionRequired       = errors.New("backend.region is required")
-	ErrBackendNotFound      = errors.New("backend configuration not found")
-	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
-	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
-	ErrProvisionerFailed    = errors.New("provisioner failed")
-	ErrLoadAWSConfig        = errors.New("failed to load AWS config")
-	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
-	ErrCreateBucket         = errors.New("failed to create bucket")
-	ErrApplyBucketDefaults  = errors.New("failed to apply bucket defaults")
-	ErrEnableVersioning     = errors.New("failed to enable versioning")
-	ErrEnableEncryption     = errors.New("failed to enable encryption")
-	ErrBlockPublicAccess    = errors.New("failed to block public access")
-	ErrApplyTags            = errors.New("failed to apply tags")
-	ErrForceRequired        = errors.New("--force flag required for backend deletion")
-	ErrBucketNotEmpty       = errors.New("bucket contains objects and cannot be deleted")
-	ErrStateFilesExist      = errors.New("bucket contains terraform state files")
-	ErrDeleteObjects        = errors.New("failed to delete objects from bucket")
-	ErrDeleteBucket         = errors.New("failed to delete bucket")
-	ErrListObjects          = errors.New("failed to list bucket objects")
+	ErrBucketRequired            = errors.New("backend.bucket is required")
+	ErrRegionRequired            = errors.New("backend.region is required")
+	ErrBackendNotFound           = errors.New("backend configuration not found")
+	ErrProvisioningNotConfigured = errors.New("provisioning not configured")
+	ErrCreateNotImplemented      = errors.New("create not implemented for backend type")
+	ErrDeleteNotImplemented      = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed         = errors.New("provisioner failed")
+	ErrLoadAWSConfig             = errors.New("failed to load AWS config")
+	ErrCheckBucketExist          = errors.New("failed to check bucket existence")
+	ErrCreateBucket              = errors.New("failed to create bucket")
+	ErrApplyBucketDefaults       = errors.New("failed to apply bucket defaults")
+	ErrEnableVersioning          = errors.New("failed to enable versioning")
+	ErrEnableEncryption          = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess         = errors.New("failed to block public access")
+	ErrApplyTags                 = errors.New("failed to apply tags")
+	ErrForceRequired             = errors.New("--force flag required for backend deletion")
+	ErrBucketNotEmpty            = errors.New("bucket contains objects and cannot be deleted")
+	ErrStateFilesExist           = errors.New("bucket contains terraform state files")
+	ErrDeleteObjects             = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket              = errors.New("failed to delete bucket")
+	ErrListObjects               = errors.New("failed to list bucket objects")
 
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
@@ -739,10 +753,11 @@ var (
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
 	// Locals-related errors.
-	ErrLocalsInvalidType       = errors.New("locals must be a map")
-	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
-	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
-	ErrLocalsResolution        = errors.New("failed to resolve local")
+	ErrLocalsInvalidType        = errors.New("locals must be a map")
+	ErrLocalsCircularDep        = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract  = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution         = errors.New("failed to resolve local")
+	ErrLocalsYamlFunctionFailed = errors.New("failed to process YAML function in local")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

@@ -148,6 +148,17 @@ func copyComponentToDestination(tempDir, componentPath string, vendorComponentSp
 		OnSymlink: func(src string) cp.SymlinkAction {
 			return cp.Deep
 		},
+
+		// OnDirExists handles existing directories at the destination.
+		// We skip .git directories from source, but if the destination already has a .git directory
+		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
+		// on git packfiles which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
+		},
 	}
 
 	componentPath2 := componentPath
@@ -565,6 +576,17 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
 		OnSymlink: func(src string) cp.SymlinkAction {
 			return cp.Deep
+		},
+
+		// OnDirExists handles existing directories at the destination.
+		// If the destination already has a .git directory (from a previous vendor run),
+		// we need to leave it untouched to avoid permission errors on git packfiles
+		// which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
 		},
 	}
 

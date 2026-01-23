@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -46,9 +47,11 @@ type Renderer struct {
 
 // NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           &atmosConfig,
@@ -101,9 +104,11 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
 
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           atmosConfig,
@@ -250,8 +255,14 @@ func (r *Renderer) Render(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(0),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),
@@ -270,8 +281,14 @@ func (r *Renderer) RenderAsciiWithoutWordWrap(content string) (string, error) {
 }
 
 func (r *Renderer) RenderAscii(content string) (string, error) {
+	// Get minimal style with just list indentation (no colors) for ASCII mode.
+	style, err := GetListIndentStyle()
+	if err != nil {
+		return "", err
+	}
 	renderer, err := glamour.NewTermRenderer(
 		glamour.WithStandardStyle(styles.AsciiStyle),
+		glamour.WithStylesFromJSONBytes(style),
 		glamour.WithWordWrap(int(r.width)),
 		glamour.WithColorProfile(r.profile),
 		glamour.WithEmoji(),

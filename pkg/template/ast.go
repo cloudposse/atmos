@@ -17,8 +17,6 @@ type FieldRef struct {
 }
 
 // String returns the dot-separated path of the field reference.
-//
-//nolint:lintroller // Simple strings.Join - perf.Track overhead disproportionate.
 func (f FieldRef) String() string {
 	return strings.Join(f.Path, ".")
 }

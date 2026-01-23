@@ -1,0 +1,52 @@
+toolchain:
+  file_path: .tool-versions
+  install_path: .tools
+  aliases:
+    aws-cli: aws/aws-cli
+    gum: charmbracelet/gum
+    helm: helm/helm
+    jq: jqlang/jq
+    kubectl: kubernetes/kubectl
+    replicated: replicatedhq/replicated
+    tofu: opentofu/opentofu
+  registries:
+    # Inline registry for tools not in Aqua
+    - name: valinor
+      type: atmos
+      priority: 100
+      tools:
+        # Replicated CLI - not in Aqua registry
+        replicatedhq/replicated:
+          type: github_release
+          repo_owner: replicatedhq
+          repo_name: replicated
+          asset: 'replicated_{{trimV .Version}}_{{if eq .OS "darwin"}}darwin_all{{else}}{{.OS}}_{{.Arch}}{{end}}.tar.gz'
+          files:
+            - name: replicated
+              src: replicated
+
+# Custom commands to test toolchain integration
+commands:
+  - name: which-tools
+    description: "Show paths to all toolchain tools (verifies PATH is set correctly)"
+    steps:
+      - |
+        echo "=== Toolchain Tool Locations ==="
+        echo ""
+        echo "Infrastructure tools:"
+        echo "  tofu:       $(which tofu)"
+        echo "  helm:       $(which helm)"
+        echo "  kubectl:    $(which kubectl 2>/dev/null || which kubernetes 2>/dev/null || echo 'not found')"
+        echo "  k9s:        $(which k9s)"
+        echo ""
+        echo "AWS tools:"
+        echo "  aws:        $(which aws 2>/dev/null || which aws-cli 2>/dev/null || echo 'not found')"
+        echo ""
+        echo "Enterprise tools:"
+        echo "  replicated: $(which replicated)"
+        echo ""
+        echo "CLI utilities:"
+        echo "  gum:        $(which gum)"
+        echo "  jq:         $(which jq)"
+        echo ""
+        echo "=== All tools found! ==="

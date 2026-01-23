@@ -104,6 +104,7 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 // WithCause wraps the builder's error with an underlying cause error.
 // This preserves the original error message while allowing errors.Is() to match the sentinel.
 // The resulting error will match both the sentinel (passed to Build) and the cause.
+// Hints and context from the cause error are extracted and preserved in the final error.
 //
 // Example:
 //
@@ -117,13 +118,67 @@ func (b *ErrorBuilder) WithExitCode(code int) *ErrorBuilder {
 //   - errors.Is(result, ErrContainerRuntimeOperation) returns true
 //   - errors.Is(result, err) returns true
 //   - Error message includes "container already running"
+//   - Hints and context from cause are preserved
 func (b *ErrorBuilder) WithCause(cause error) *ErrorBuilder {
 	if cause != nil {
-		// Wrap sentinel with the actual cause using double %w.
-		// This ensures both errors are in the chain for errors.Is() checks.
-		b.err = fmt.Errorf("%w: %w", b.err, cause)
+		// Guard against nil b.err - if no sentinel was provided, use cause directly.
+		if b.err == nil {
+			b.err = cause
+		} else {
+			// Extract hints from cause before wrapping, since fmt.Errorf
+			// doesn't preserve cockroachdb hint metadata.
+			if causeHints := errors.GetAllHints(cause); len(causeHints) > 0 {
+				b.hints = append(b.hints, causeHints...)
+			}
+			// Extract context from cause before wrapping, since fmt.Errorf
+			// doesn't preserve cockroachdb safe details metadata.
+			b.extractContextFromCause(cause)
+			// Use fmt.Errorf with double %w to maintain both errors in chain.
+			// This is compatible with std errors.Is() used by testify's assert.ErrorIs().
+			// Note: cockroachdb/errors.Wrap() only works with cockroachdb's errors.Is(),
+			// not the standard library's, which breaks test assertions.
+			b.err = fmt.Errorf("%w: %w", b.err, cause)
+		}
 	}
 	return b
+}
+
+// extractContextFromCause extracts context key-value pairs from the cause error's
+// SafeDetails and adds them to this builder's context map.
+func (b *ErrorBuilder) extractContextFromCause(cause error) {
+	allDetails := errors.GetAllSafeDetails(cause)
+	for _, payload := range allDetails {
+		for _, detail := range payload.SafeDetails {
+			str := fmt.Sprintf("%v", detail)
+			pairs := strings.Split(str, " ")
+			for _, pair := range pairs {
+				if parts := strings.SplitN(pair, "=", 2); len(parts) == 2 {
+					if b.context == nil {
+						b.context = make(map[string]interface{})
+					}
+					// Don't overwrite existing context.
+					if _, exists := b.context[parts[0]]; !exists {
+						b.context[parts[0]] = parts[1]
+					}
+				}
+			}
+		}
+	}
+}
+
+// WithCausef wraps the builder's error with a formatted cause message.
+// This is a convenience method that creates a new error from the format string
+// and passes it to WithCause.
+//
+// Example:
+//
+//	return errUtils.Build(errUtils.ErrInvalidStack).
+//	    WithCausef("stack '%s' does not exist", stackName).
+//	    WithHint("Check your stack configuration").
+//	    Err()
+func (b *ErrorBuilder) WithCausef(format string, args ...interface{}) *ErrorBuilder {
+	//nolint:err113 // WithCausef intentionally creates dynamic errors for cause messages.
+	return b.WithCause(fmt.Errorf(format, args...))
 }
 
 // Err finalizes and returns the enriched error.

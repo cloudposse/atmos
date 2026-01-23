@@ -1,14 +1,24 @@
 package tests
 
 import (
+	"os"
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/cmd"
 )
+
+// resetViperState resets global Viper state to prevent test pollution.
+// This is needed because tests in this package use cmd.Execute() which
+// binds flags to the global Viper instance. Without this reset, flag
+// values from previous tests can leak and cause unexpected behavior.
+func resetViperState() {
+	viper.Reset()
+}
 
 // TestSourceProvisionerDescribe_Success tests the `atmos terraform source describe` command.
 func TestSourceProvisionerDescribe_Success(t *testing.T) {
@@ -66,20 +76,27 @@ func TestSourceProvisionerList(t *testing.T) {
 
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "list", "--stack", "dev"})
 
-	// Currently returns "not implemented" error.
 	err := cmd.Execute()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "not implemented")
+	require.NoError(t, err)
 }
 
 // TestSourceProvisionerDelete_MissingForce tests that delete requires --force flag.
 func TestSourceProvisionerDelete_MissingForce(t *testing.T) {
+	resetViperState() // Prevent flag leakage from previous tests
 	t.Chdir("./fixtures/scenarios/source-provisioner")
+
+	// Create the target directory so delete has something to operate on.
+	targetDir := "components/terraform/vpc-map"
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+	t.Cleanup(func() {
+		_ = os.RemoveAll(targetDir)
+	})
 
 	cmd.RootCmd.SetArgs([]string{"terraform", "source", "delete", "vpc-map", "--stack", "dev"})
 
 	err := cmd.Execute()
 	require.Error(t, err)
-	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force"),
-		"Expected error about missing --force flag")
+	assert.True(t, strings.Contains(err.Error(), "force") || strings.Contains(err.Error(), "--force") ||
+		strings.Contains(err.Error(), "interactive"),
+		"Expected error about missing --force flag or non-interactive mode")
 }

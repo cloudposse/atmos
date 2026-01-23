@@ -63,7 +63,7 @@ func (m *Manager) Start(atmosConfig *schema.AtmosConfiguration, name, instance, 
 // startExistingContainer starts an existing container if it's not running.
 func startExistingContainer(ctx context.Context, runtime container.Runtime, containerInfo *container.Info, containerName string, config *Config) error {
 	if isContainerRunning(containerInfo.Status) {
-		_ = ui.Infof("Container %s is already running", containerName)
+		ui.Infof("Container %s is already running", containerName)
 		return nil
 	}
 
