@@ -119,6 +119,14 @@ func (s *stubAuthManager) GetIntegration(integrationName string) (*schema.Integr
 	return nil, nil
 }
 
+func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	return nil, false
+}
+
+func (s *stubAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	return nil, false
+}
+
 func TestGetConfigLogLevels(t *testing.T) {
 	tests := []struct {
 		name             string

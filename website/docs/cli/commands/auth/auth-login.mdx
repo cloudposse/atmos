@@ -98,9 +98,13 @@ The interactive selector displays all configured identities with arrow key navig
 - Configure a default identity in your `atmos.yaml`
 - Explicitly specify the identity using `--identity <name>` or environment variable
 
-## Integrations (ECR, EKS)
+## Integrations (ECR)
 
-When you authenticate with an identity, Atmos automatically triggers any **integrations** linked to that identity (when `auto_provision` is enabled, which is the default). Integrations provide client-only credential materializations for services like ECR and EKS.
+When you authenticate with an identity, Atmos automatically triggers any **integrations** linked to that identity (when `auto_provision` is enabled, which is the default). Integrations provide client-only credential materializations for services like ECR.
+
+:::note EKS Integration Coming Soon
+EKS integration is planned but not yet implemented. Currently only ECR integrations are supported.
+:::
 
 ```yaml
 auth:
