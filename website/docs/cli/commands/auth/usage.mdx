@@ -61,11 +61,25 @@ atmos auth shell
   <dd>
     Specify the identity to use for authentication. Can be:
     <ul>
-      <li>An identity name (e.g., <code>--identity admin</code>)</li>
+      <li>An identity name (e.g., <code>--identity admin</code> or <code>--identity=admin</code>)</li>
       <li>Empty for interactive selection (e.g., <code>--identity</code>)</li>
       <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
     </ul>
     When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+
+:::tip Flag Placement Best Practice
+When using `--identity` with a value, place it **before the `--` separator** and before any positional arguments:
+
+```shell
+# Recommended: --identity before -- separator
+atmos auth exec --identity admin -- terraform plan
+
+# Also recommended: use equals syntax for clarity
+atmos auth exec --identity=admin -- terraform plan
+```
+
+Using the equals syntax (`--identity=admin`) is unambiguous and works in all contexts.
+:::
   </dd>
 </dl>
 

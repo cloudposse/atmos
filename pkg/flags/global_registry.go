@@ -7,6 +7,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags/global"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 const (
@@ -73,6 +74,21 @@ func ParseGlobalFlags(cmd *cobra.Command, v *viper.Viper) global.Flags {
 		// System configuration.
 		RedirectStderr: v.GetString("redirect-stderr"),
 		Version:        v.GetBool("version"),
+	}
+}
+
+// BuildConfigAndStacksInfo parses global flags and builds ConfigAndStacksInfo.
+// This ensures commands honor global flags like --base-path, --config, --config-path, and --profile.
+// This is a convenience wrapper that extracts global flags and populates ConfigAndStacksInfo in one step.
+func BuildConfigAndStacksInfo(cmd *cobra.Command, v *viper.Viper) schema.ConfigAndStacksInfo {
+	defer perf.Track(nil, "flags.BuildConfigAndStacksInfo")()
+
+	globalFlags := ParseGlobalFlags(cmd, v)
+	return schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
 	}
 }
 
@@ -277,7 +293,7 @@ func registerAuthenticationFlags(registry *FlagRegistry) {
 		Shorthand:   "i",
 		Default:     "",
 		Description: "Identity to use for authentication (use without value to select interactively)",
-		EnvVars:     []string{"ATMOS_IDENTITY", "IDENTITY"},
+		EnvVars:     []string{"ATMOS_IDENTITY"},
 		NoOptDefVal: cfg.IdentityFlagSelectValue, // "__SELECT__"
 	})
 

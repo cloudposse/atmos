@@ -34,6 +34,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
+	"github.com/cloudposse/atmos/pkg/flags/preprocess"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/pager"
@@ -52,6 +53,7 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/auth"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	"github.com/cloudposse/atmos/cmd/internal"
@@ -1418,9 +1420,9 @@ func Execute() error {
 	// Boa styling is already applied via RootCmd.SetHelpFunc() which is inherited by all subcommands.
 	// No need to recursively set UsageFunc as that would override Boa's handling.
 
-	// Preprocess args for commands with compatibility flags.
-	// This separates Atmos flags from pass-through flags BEFORE Cobra parses.
-	preprocessCompatibilityFlags()
+	// Preprocess args before Cobra parses.
+	// This orchestrates multiple preprocessing steps in the correct order.
+	preprocessArgs()
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
@@ -1438,22 +1440,58 @@ func Execute() error {
 	return err
 }
 
+// preprocessArgs runs all argument preprocessing before Cobra parses.
+// This orchestrates multiple preprocessing steps in the correct order:
+//  1. NoOptDefVal flags: Rewrites --flag value → --flag=value for native Atmos flags
+//  2. Compatibility flags: Separates Atmos flags from pass-through flags for external tools
+func preprocessArgs() {
+	osArgs := os.Args[1:]
+	if len(osArgs) == 0 {
+		return
+	}
+
+	// Step 1: Preprocess NoOptDefVal flags (native Atmos flags like --identity, --pager).
+	// This rewrites --identity value → --identity=value before Cobra parses.
+	processedArgs := preprocessNoOptDefValFlags(osArgs)
+
+	// Step 2: Preprocess compatibility flags (external tool syntax like -var).
+	// This separates Atmos flags from pass-through flags.
+	// Note: This may call RootCmd.SetArgs() if there are compat flags.
+	hasCompatFlags := preprocessCompatibilityFlags(processedArgs)
+
+	// If no compat flags were processed but NoOptDefVal changed the args,
+	// we need to set the processed args for Cobra to use.
+	if !hasCompatFlags && !slicesEqual(processedArgs, osArgs) {
+		RootCmd.SetArgs(processedArgs)
+	}
+}
+
+// slicesEqual compares two string slices for equality.
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // preprocessCompatibilityFlags separates Atmos flags from pass-through flags.
 // This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
 // native flags that would otherwise be dropped by FParseErrWhitelist.
 //
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
-func preprocessCompatibilityFlags() {
-	osArgs := os.Args[1:]
-	if len(osArgs) == 0 {
-		return
-	}
-
+//
+// Returns true if compatibility flags were processed and SetArgs was called.
+func preprocessCompatibilityFlags(args []string) bool {
 	// Find target command without parsing flags.
-	targetCmd, _, _ := RootCmd.Find(osArgs)
+	targetCmd, _, _ := RootCmd.Find(args)
 	if targetCmd == nil {
-		return
+		return false
 	}
 
 	// Get the top-level command name (e.g., "terraform").
@@ -1463,24 +1501,54 @@ func preprocessCompatibilityFlags() {
 		cmdName = c.Name()
 	}
 	if cmdName == "" {
-		return
+		return false
 	}
 
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
-		return
+		return false
 	}
 
 	// Translate args: separate Atmos flags from pass-through flags.
 	translator := compat.NewCompatibilityFlagTranslator(compatFlags)
-	atmosArgs, separatedArgs := translator.Translate(osArgs)
+	atmosArgs, separatedArgs := translator.Translate(args)
 
 	// Give Cobra only the Atmos args.
 	RootCmd.SetArgs(atmosArgs)
 
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
+
+	return true
+}
+
+// preprocessNoOptDefValFlags rewrites space-separated NoOptDefVal flags to equals syntax.
+// This is necessary because Cobra's NoOptDefVal feature only works with equals syntax:
+//   - --identity=value works correctly
+//   - --identity value treats "value" as a positional argument (broken)
+//
+// This function rewrites: --identity value → --identity=value
+// So that Cobra properly assigns "value" to the identity flag.
+func preprocessNoOptDefValFlags(args []string) []string {
+	registry := flags.GlobalFlagsRegistry()
+	if registry == nil {
+		return args
+	}
+
+	// Convert flags.Flag to preprocess.FlagInfo for the preprocessor.
+	// The flags.Flag interface satisfies preprocess.FlagInfo.
+	allFlags := registry.All()
+	flagInfos := make([]preprocess.FlagInfo, len(allFlags))
+	for i, f := range allFlags {
+		flagInfos[i] = f
+	}
+
+	// Use the preprocess pipeline for native flag preprocessing.
+	pipeline := preprocess.NewPipeline(
+		preprocess.NewNoOptDefValPreprocessor(flagInfos),
+	)
+	return pipeline.Run(args)
 }
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
