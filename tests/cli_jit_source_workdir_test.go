@@ -129,14 +129,39 @@ func TestJITSource_WorkdirWithLocalComponent_SourcePrecedence(t *testing.T) {
 //
 // When source.uri + provision.workdir.enabled are configured, the JIT source provisioner
 // should vendor from remote to workdir, even if a local component exists. This test
-// confirms the fix in ExecuteTerraform() works universally for destroy and init commands.
+// confirms the fix in ExecuteTerraform() works universally for all terraform commands
+// that operate on a component with a stack.
 func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 	subcommands := []struct {
 		name       string
 		subcommand string
 	}{
+		// Core execution commands.
+		{"apply", "apply"},
+		{"deploy", "deploy"},
 		{"destroy", "destroy"},
 		{"init", "init"},
+		{"workspace", "workspace"},
+
+		// State and resource commands.
+		{"console", "console"},
+		{"force-unlock", "force-unlock"},
+		{"get", "get"},
+		{"graph", "graph"},
+		{"import", "import"},
+		{"output", "output"},
+		{"refresh", "refresh"},
+		{"show", "show"},
+		{"state", "state"},
+		{"taint", "taint"},
+		{"untaint", "untaint"},
+
+		// Validation and info commands.
+		{"metadata", "metadata"},
+		{"modules", "modules"},
+		{"providers", "providers"},
+		{"test", "test"},
+		{"validate", "validate"},
 	}
 
 	for _, tc := range subcommands {
