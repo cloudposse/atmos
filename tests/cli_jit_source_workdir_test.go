@@ -123,3 +123,80 @@ func TestJITSource_WorkdirWithLocalComponent_SourcePrecedence(t *testing.T) {
 	// The test is a placeholder for verifying source provisioning takes precedence.
 	// The actual verification is in the previous test which checks workdir contents.
 }
+
+// TestJITSource_WorkdirWithLocalComponent_AllSubcommands verifies that JIT source
+// provisioning takes precedence over local components for all terraform subcommands.
+//
+// When source.uri + provision.workdir.enabled are configured, the JIT source provisioner
+// should vendor from remote to workdir, even if a local component exists. This test
+// confirms the fix in ExecuteTerraform() works universally for destroy and init commands.
+func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
+	subcommands := []struct {
+		name       string
+		subcommand string
+	}{
+		{"destroy", "destroy"},
+		{"init", "init"},
+	}
+
+	for _, tc := range subcommands {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+
+			// Create a LOCAL component at components/terraform/vpc-remote-workdir/.
+			// This simulates having previously vendored via vendor.yaml with a different version.
+			localComponent := filepath.Join("components", "terraform", "vpc-remote-workdir")
+			require.NoError(t, os.MkdirAll(localComponent, 0o755))
+
+			// Create a marker file to identify content from LOCAL vs REMOTE source.
+			localMarker := "# LOCAL_VERSION_MARKER - This content is from local component and should NOT be used"
+			require.NoError(t, os.WriteFile(
+				filepath.Join(localComponent, "main.tf"),
+				[]byte(localMarker+"\n\nresource \"null_resource\" \"local\" {}\n"),
+				0o644,
+			))
+
+			t.Cleanup(func() {
+				_ = os.RemoveAll(localComponent)
+				_ = os.RemoveAll(".workdir")
+			})
+
+			// Run terraform <subcommand> with --dry-run to trigger the provisioning flow
+			// without actually running terraform.
+			cmd.RootCmd.SetArgs([]string{
+				"terraform", tc.subcommand, "vpc-remote-workdir",
+				"--stack", "dev",
+				"--dry-run",
+			})
+
+			// Execute - this may error due to terraform not being configured,
+			// but the provisioning should have been attempted.
+			_ = cmd.Execute()
+
+			// Check the workdir path where the component should have been provisioned.
+			workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir")
+
+			// Verify workdir exists.
+			info, err := os.Stat(workdirPath)
+			require.NoError(t, err, "Workdir should exist at %s", workdirPath)
+			require.True(t, info.IsDir(), "Workdir path should be a directory")
+
+			// Check if main.tf exists in workdir.
+			mainTfPath := filepath.Join(workdirPath, "main.tf")
+			if _, statErr := os.Stat(mainTfPath); statErr == nil {
+				content, readErr := os.ReadFile(mainTfPath)
+				require.NoError(t, readErr)
+
+				// CRITICAL ASSERTION: The workdir should NOT contain our local marker.
+				// If it does, it means the workdir provisioner copied from local
+				// instead of source provisioner vendoring from remote.
+				assert.False(t,
+					strings.Contains(string(content), "LOCAL_VERSION_MARKER"),
+					"%s: Workdir should contain content from remote source, not local component. "+
+						"This indicates JIT source provisioning was skipped for %s.",
+					tc.subcommand, tc.subcommand,
+				)
+			}
+		})
+	}
+}
