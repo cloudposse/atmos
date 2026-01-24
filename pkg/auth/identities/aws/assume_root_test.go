@@ -446,6 +446,52 @@ func TestAssumeRootIdentity_Environment(t *testing.T) {
 	assert.Equal(t, "test-root", env["AWS_PROFILE"])
 }
 
+func TestAssumeRootIdentity_Environment_WithRegion(t *testing.T) {
+	// When region is set on the identity, Environment should include AWS_REGION and AWS_DEFAULT_REGION.
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "ca-central-1",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+			Via: &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+
+	env, err := i.Environment()
+	assert.NoError(t, err)
+	// Should include region vars when explicitly configured.
+	assert.Equal(t, "ca-central-1", env["AWS_REGION"])
+	assert.Equal(t, "ca-central-1", env["AWS_DEFAULT_REGION"])
+}
+
+func TestAssumeRootIdentity_Environment_WithoutRegion(t *testing.T) {
+	// When region is NOT set, Environment should NOT include AWS_REGION (no default fallback).
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "", // No region set
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+			Via: &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+
+	env, err := i.Environment()
+	assert.NoError(t, err)
+	// Should NOT include region vars when not explicitly configured.
+	_, hasRegion := env["AWS_REGION"]
+	_, hasDefaultRegion := env["AWS_DEFAULT_REGION"]
+	assert.False(t, hasRegion, "AWS_REGION should not be set when region is not explicitly configured")
+	assert.False(t, hasDefaultRegion, "AWS_DEFAULT_REGION should not be set when region is not explicitly configured")
+}
+
 func TestAssumeRootIdentity_PostAuthenticate(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 
@@ -1423,6 +1469,14 @@ func (m *mockAuthManager) GetIntegration(_ string) (*schema.Integration, error) 
 	return nil, nil
 }
 
+func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface{}, bool) {
+	return nil, false
+}
+
+func (m *mockAuthManager) ResolveProviderConfig(_ string) (*schema.Provider, bool) {
+	return nil, false
+}
+
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {
 	// Test when we can't resolve the provider name.
 	i := &assumeRootIdentity{
@@ -1610,6 +1664,188 @@ func TestAssumeRootIdentity_Environment_WithEnvFromConfig(t *testing.T) {
 	// Should include custom env vars from config.
 	assert.Equal(t, "value1", env["CUSTOM_VAR1"])
 	assert.Equal(t, "value2", env["CUSTOM_VAR2"])
+}
+
+func TestAssumeRootIdentity_resolveRegion_ManagerNil_CachedRegion(t *testing.T) {
+	// When manager is nil and i.region is set, should return cached region.
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "eu-west-1",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "eu-west-1", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_ManagerNil_FromPrincipal(t *testing.T) {
+	// When manager is nil and i.region is empty, should check config.Principal["region"].
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "", // No cached region.
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+				"region":           "ap-southeast-1",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "ap-southeast-1", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_ManagerNil_NoRegion(t *testing.T) {
+	// When manager is nil and no region configured, should return empty string.
+	i := &assumeRootIdentity{
+		name:   "test-root",
+		region: "",
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_WithManager_FromPrincipalSetting(t *testing.T) {
+	// When manager exists and ResolvePrincipalSetting returns region, use it.
+	// Note: mockResolveAuthManager is defined in assume_role_test.go.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-root": {"region": "us-west-2"},
+		},
+	}
+
+	i := &assumeRootIdentity{
+		name:    "test-root",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "us-west-2", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_WithManager_FromProviderConfig(t *testing.T) {
+	// When manager exists, ResolvePrincipalSetting returns empty, use provider's region.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{},
+		providerConfigs: map[string]*schema.Provider{
+			"test-root": {Region: "ca-central-1"},
+		},
+	}
+
+	i := &assumeRootIdentity{
+		name:    "test-root",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "ca-central-1", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_WithManager_NeitherHasRegion(t *testing.T) {
+	// When manager exists but neither principal nor provider has region.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{},
+		providerConfigs:   map[string]*schema.Provider{},
+	}
+
+	i := &assumeRootIdentity{
+		name:    "test-root",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_WithManager_NonStringPrincipalSetting(t *testing.T) {
+	// When ResolvePrincipalSetting returns non-string value, skip it.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-root": {"region": 12345}, // Non-string value.
+		},
+		providerConfigs: map[string]*schema.Provider{
+			"test-root": {Region: "fallback-region"},
+		},
+	}
+
+	i := &assumeRootIdentity{
+		name:    "test-root",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "fallback-region", region)
+}
+
+func TestAssumeRootIdentity_resolveRegion_WithManager_EmptyStringPrincipalSetting(t *testing.T) {
+	// When ResolvePrincipalSetting returns empty string, fall back to provider.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-root": {"region": ""}, // Empty string.
+		},
+		providerConfigs: map[string]*schema.Provider{
+			"test-root": {Region: "fallback-region"},
+		},
+	}
+
+	i := &assumeRootIdentity{
+		name:    "test-root",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind: "aws/assume-root",
+			Principal: map[string]any{
+				"target_principal": "123456789012",
+				"task_policy_arn":  "arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "fallback-region", region)
 }
 
 func TestAssumeRootIdentity_Logout_ViaProvider(t *testing.T) {
