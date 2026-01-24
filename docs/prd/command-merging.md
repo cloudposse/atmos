@@ -243,4 +243,4 @@ None - all requirements have been implemented and tested.
 - [Original Issue](https://github.com/cloudposse/atmos/issues/1447)
 - [First Fix Attempt](https://github.com/cloudposse/atmos/issues/1489)
 - [Atmos Configuration Documentation](https://atmos.tools/configuration)
-- [CloudPosse Reference Architecture](https://github.com/cloudposse/reference-architectures)
+- [CloudPosse Reference Architecture](https://github.com/cloudposse-archives/reference-architectures)

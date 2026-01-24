@@ -8,6 +8,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd"
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 )
 
@@ -51,17 +52,19 @@ func run() int {
 		// Check for conflicting flags: --version and --use-version cannot be used together.
 		if hasUseVersionFlag(os.Args) {
 			// Print error directly since config/formatters aren't initialized yet.
-			os.Stderr.WriteString("\nError: --version and --use-version cannot be used together\n\n")
-			os.Stderr.WriteString("Hints:\n")
-			os.Stderr.WriteString("  - Use --version to display the current Atmos version\n")
-			os.Stderr.WriteString("  - Use --use-version to run a command with a specific Atmos version\n\n")
+			// Use MaskWriter for consistent masking (gracefully falls back if not initialized).
+			maskedStderr := ioLayer.MaskWriter(os.Stderr)
+			_, _ = maskedStderr.Write([]byte("\nError: --version and --use-version cannot be used together\n\n"))
+			_, _ = maskedStderr.Write([]byte("Hints:\n"))
+			_, _ = maskedStderr.Write([]byte("  - Use --version to display the current Atmos version\n"))
+			_, _ = maskedStderr.Write([]byte("  - Use --use-version to run a command with a specific Atmos version\n\n"))
 			return 1
 		}
 		err := cmd.ExecuteVersion()
 		if err != nil {
 			errUtils.CaptureError(err)
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			os.Stderr.WriteString(formatted + "\n")
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
 			return errUtils.GetExitCode(err)
 		}
 		return 0 // Exit normally after printing version.
@@ -74,7 +77,7 @@ func run() int {
 
 		// Format and print error using centralized formatter.
 		formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-		os.Stderr.WriteString(formatted + "\n")
+		_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
 
 		// Extract and use the correct exit code.
 		exitCode := errUtils.GetExitCode(err)

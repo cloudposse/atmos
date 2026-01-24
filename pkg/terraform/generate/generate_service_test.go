@@ -1,6 +1,7 @@
 package generate
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -498,4 +499,313 @@ func TestExecAdapter(t *testing.T) {
 	_, _, err = adapter.FindStacksMap(nil, false)
 	require.NoError(t, err)
 	assert.True(t, findStacksMapCalled)
+}
+
+// TestService_ExecuteForComponent_DryRun tests dry-run mode.
+func TestService_ExecuteForComponent_DryRun(t *testing.T) {
+	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		ProcessStacks(gomock.Any(), gomock.Any(), true, true, true, nil, nil).
+		DoAndReturn(func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+			info.ComponentSection = map[string]any{
+				"generate": map[string]any{
+					"test.json": map[string]any{
+						"key": "value",
+					},
+				},
+			}
+			info.FinalComponent = "vpc"
+			return info, nil
+		})
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	// Execute in dry-run mode.
+	err = service.ExecuteForComponent(atmosConfig, "vpc", "dev-us-west-2", true, false)
+	require.NoError(t, err)
+
+	// Verify file was NOT created (dry-run).
+	_, err = os.Stat(filepath.Join(componentDir, "test.json"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestService_ExecuteForComponent_Clean tests clean mode.
+func TestService_ExecuteForComponent_Clean(t *testing.T) {
+	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		ProcessStacks(gomock.Any(), gomock.Any(), true, true, true, nil, nil).
+		DoAndReturn(func(atmosConfig *schema.AtmosConfiguration, info schema.ConfigAndStacksInfo, checkStack, processTemplates, processYamlFunctions bool, skip []string, authManager auth.AuthManager) (schema.ConfigAndStacksInfo, error) {
+			info.ComponentSection = map[string]any{
+				"generate": map[string]any{
+					"test.json": map[string]any{
+						"key": "value",
+					},
+				},
+			}
+			info.FinalComponent = "vpc"
+			return info, nil
+		})
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory and file.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(componentDir, "test.json")
+	err = os.WriteFile(testFile, []byte(`{"key": "value"}`), 0o644)
+	require.NoError(t, err)
+
+	// Execute in clean mode.
+	err = service.ExecuteForComponent(atmosConfig, "vpc", "dev-us-west-2", false, true)
+	require.NoError(t, err)
+
+	// Verify file was deleted.
+	_, err = os.Stat(testFile)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestService_ExecuteForAll_DryRun tests dry-run mode for all stacks.
+func TestService_ExecuteForAll_DryRun(t *testing.T) {
+	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev-us-west-2": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"generate": map[string]any{
+								"output.json": map[string]any{
+									"stack": "dev",
+								},
+							},
+						},
+					},
+				},
+			},
+		}, map[string]map[string]any{}, nil)
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	// Execute in dry-run mode.
+	err = service.ExecuteForAll(atmosConfig, nil, nil, true, false)
+	require.NoError(t, err)
+
+	// Verify file was NOT created (dry-run).
+	_, err = os.Stat(filepath.Join(componentDir, "output.json"))
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestService_ExecuteForAll_Clean tests clean mode for all stacks.
+func TestService_ExecuteForAll_Clean(t *testing.T) {
+	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev-us-west-2": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							"generate": map[string]any{
+								"output.json": map[string]any{
+									"stack": "dev",
+								},
+							},
+						},
+					},
+				},
+			},
+		}, map[string]map[string]any{}, nil)
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory and file.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	testFile := filepath.Join(componentDir, "output.json")
+	err = os.WriteFile(testFile, []byte(`{"stack": "dev"}`), 0o644)
+	require.NoError(t, err)
+
+	// Execute in clean mode.
+	err = service.ExecuteForAll(atmosConfig, nil, nil, false, true)
+	require.NoError(t, err)
+
+	// Verify file was deleted.
+	_, err = os.Stat(testFile)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// TestService_ExecuteForComponent_ProcessStacksError tests error handling when ProcessStacks fails.
+func TestService_ExecuteForComponent_ProcessStacksError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	expectedError := fmt.Errorf("process stacks failed")
+	mock.EXPECT().
+		ProcessStacks(gomock.Any(), gomock.Any(), true, true, true, nil, nil).
+		Return(schema.ConfigAndStacksInfo{}, expectedError)
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	err := service.ExecuteForComponent(atmosConfig, "vpc", "dev", false, false)
+	require.Error(t, err)
+	assert.Equal(t, expectedError, err)
+}
+
+// TestService_ExecuteForAll_FindStacksMapError tests error handling when FindStacksMap fails.
+func TestService_ExecuteForAll_FindStacksMapError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	expectedError := fmt.Errorf("find stacks map failed")
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(nil, nil, expectedError)
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.Error(t, err)
+	assert.Equal(t, expectedError, err)
+}
+
+// TestService_ExecuteForAll_NoComponentsSection tests processing when there's no components section.
+func TestService_ExecuteForAll_NoComponentsSection(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": map[string]any{
+				// No components section.
+				"vars": map[string]any{
+					"name": "test",
+				},
+			},
+		}, map[string]map[string]any{}, nil)
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	// Should not error when there's no components section.
+	err := service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.NoError(t, err)
+}
+
+// TestService_ExecuteForAll_NoGenerateSection tests that components without generate section are skipped.
+func TestService_ExecuteForAll_NoGenerateSection(t *testing.T) {
+	tempDir := t.TempDir()
+	ctrl := gomock.NewController(t)
+	mock := NewMockStackProcessor(ctrl)
+
+	mock.EXPECT().
+		FindStacksMap(gomock.Any(), false).
+		Return(map[string]any{
+			"dev": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{
+							// No generate section.
+							"vars": map[string]any{
+								"name": "test",
+							},
+						},
+					},
+				},
+			},
+		}, map[string]map[string]any{}, nil)
+
+	service := NewService(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create the component directory.
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(componentDir, 0o755)
+	require.NoError(t, err)
+
+	// Should not error, and no files should be created.
+	err = service.ExecuteForAll(atmosConfig, nil, nil, false, false)
+	require.NoError(t, err)
 }

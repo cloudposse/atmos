@@ -14,16 +14,16 @@ USAGE
 
 AVAILABLE COMMANDS
 
-      add                 Add a tool to .tool-versions file
+      add                 Add tools to .tool-versions file
       clean               Clean tools and cache directories
       du                  Show disk space usage for installed tools
       env                 Export PATH entries for installed tools in shell-specific format
       exec                Execute a tool with specified version
       get                 Get version information for a tool
       info                Show information about a tool
-      install             Install a CLI binary from the registry
+      install             Install CLI binaries from the registry
       list                List configured tools and their installation status
-      path                Print PATH entries for installed tools
+      path                Print PATH entries for installed tools (alias for 'toolchain env')
       registry [command]  Manage toolchain registries
       remove              Remove a tool or version from .tool-versions file
       search              Search for tools (alias to 'registry search')

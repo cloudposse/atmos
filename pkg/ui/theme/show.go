@@ -11,13 +11,19 @@ import (
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/markdown"
 )
+
+// MarkdownRendererFunc is a function type for rendering markdown content.
+// This allows the caller to provide a markdown renderer, avoiding import cycles
+// between the theme and markdown packages.
+type MarkdownRendererFunc func(themeName string, content string) (string, error)
 
 // ShowThemeOptions contains options for showing theme details.
 type ShowThemeOptions struct {
 	ThemeName string
+	// MarkdownRenderer is an optional function for rendering markdown previews.
+	// If not provided, the markdown preview section will be skipped.
+	MarkdownRenderer MarkdownRendererFunc
 }
 
 // ShowThemeResult contains the formatted output for a theme.
@@ -68,7 +74,7 @@ func ShowTheme(opts ShowThemeOptions) ShowThemeResult {
 	styles := GetStyles(&scheme)
 
 	// Display theme information (preview output).
-	output := formatThemeDetails(selectedTheme, &scheme, styles)
+	output := formatThemeDetails(selectedTheme, &scheme, styles, opts.MarkdownRenderer)
 
 	return ShowThemeResult{
 		Output: output,
@@ -160,12 +166,9 @@ func formatUIElements(styles *StyleSet) string {
 	return output.String()
 }
 
-// formatMarkdownPreview renders a sample markdown document with the theme.
-func formatMarkdownPreview(t *Theme, _ *StyleSet) string {
-	defer perf.Track(nil, "theme.formatMarkdownPreview")()
-
-	// Sample markdown content.
-	markdownContent := `# Heading Level 1
+// SampleMarkdownContent is the sample markdown used for theme previews.
+// It's exported so callers can use it with their own markdown renderer.
+const SampleMarkdownContent = `# Heading Level 1
 ## Heading Level 2
 ### Heading Level 3
 
@@ -186,7 +189,7 @@ This is a paragraph with **bold text** and *italic text*.
 func main() {
     fmt.Println("Hello, Atmos!")
 }` + "\n```\n\n" +
-		`Here's a [link to documentation](https://atmos.tools).
+	`Here's a [link to documentation](https://atmos.tools).
 
 | Column 1 | Column 2 | Column 3 |
 |----------|----------|----------|
@@ -194,21 +197,16 @@ func main() {
 | Value A  | Value B  | Value C  |
 `
 
-	// Create a markdown renderer with the theme.
-	atmosConfig := schema.AtmosConfiguration{
-		Settings: schema.AtmosSettings{
-			Terminal: schema.Terminal{
-				Theme: t.Name,
-			},
-		},
+// formatMarkdownPreview renders a sample markdown document with the theme.
+// If renderer is nil, returns a placeholder message.
+func formatMarkdownPreview(t *Theme, renderer MarkdownRendererFunc) string {
+	defer perf.Track(nil, "theme.formatMarkdownPreview")()
+
+	if renderer == nil {
+		return "(Markdown preview not available)\n"
 	}
 
-	renderer, err := markdown.NewTerminalMarkdownRenderer(atmosConfig)
-	if err != nil {
-		return "Error rendering markdown preview\n"
-	}
-
-	rendered, err := renderer.Render(markdownContent)
+	rendered, err := renderer(t.Name, SampleMarkdownContent)
 	if err != nil {
 		return "Error rendering markdown preview\n"
 	}
@@ -277,7 +275,7 @@ func formatUsageInstructions(t *Theme, styles *StyleSet) string {
 }
 
 // formatThemeDetails creates a detailed preview of the theme.
-func formatThemeDetails(t *Theme, scheme *ColorScheme, styles *StyleSet) string {
+func formatThemeDetails(t *Theme, scheme *ColorScheme, styles *StyleSet, mdRenderer MarkdownRendererFunc) string {
 	defer perf.Track(nil, "theme.formatThemeDetails")()
 
 	var output strings.Builder
@@ -304,7 +302,7 @@ func formatThemeDetails(t *Theme, scheme *ColorScheme, styles *StyleSet) string 
 	// Markdown Preview Section.
 	output.WriteString(styles.Heading.Render("MARKDOWN PREVIEW"))
 	output.WriteString(sectionSeparator)
-	output.WriteString(formatMarkdownPreview(t, styles))
+	output.WriteString(formatMarkdownPreview(t, mdRenderer))
 	output.WriteString(lineBreak)
 
 	// Sample UI Elements Section.

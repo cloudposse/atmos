@@ -44,6 +44,8 @@ var (
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
+	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
+	ErrMarkdownRender                        = errors.New("failed to render markdown content")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
@@ -369,18 +371,21 @@ var (
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// List command errors.
-	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
-	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
-	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
-	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
-	ErrQueryFailed                 = errors.New("query execution failed")
-	ErrTableTooWide                = errors.New("the table is too wide to display properly")
-	ErrGettingCommonFlags          = errors.New("error getting common flags")
-	ErrGettingAbstractFlag         = errors.New("error getting abstract flag")
-	ErrGettingVarsFlag             = errors.New("error getting vars flag")
-	ErrInitializingCLIConfig       = errors.New("error initializing CLI config")
-	ErrDescribingStacks            = errors.New("error describing stacks")
-	ErrComponentNameRequired       = errors.New("component name is required")
+	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                  = errors.New("query execution failed")
+	ErrScalarExtractionNotSupported = errors.New("scalar extraction queries are not supported")
+	ErrQueryUnexpectedResultType    = errors.New("query returned unexpected result type")
+	ErrTableTooWide                 = errors.New("the table is too wide to display properly")
+	ErrGettingCommonFlags           = errors.New("error getting common flags")
+	ErrGettingAbstractFlag          = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag              = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig        = errors.New("error initializing CLI config")
+	ErrDescribingStacks             = errors.New("error describing stacks")
+	ErrComponentNameRequired        = errors.New("component name is required")
+	ErrCreateColumnSelector         = errors.New("failed to create column selector")
 
 	// Version command errors.
 	ErrVersionDisplayFailed   = errors.New("failed to display version information")
@@ -744,10 +749,11 @@ var (
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
 	// Locals-related errors.
-	ErrLocalsInvalidType       = errors.New("locals must be a map")
-	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
-	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
-	ErrLocalsResolution        = errors.New("failed to resolve local")
+	ErrLocalsInvalidType        = errors.New("locals must be a map")
+	ErrLocalsCircularDep        = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract  = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution         = errors.New("failed to resolve local")
+	ErrLocalsYamlFunctionFailed = errors.New("failed to process YAML function in local")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

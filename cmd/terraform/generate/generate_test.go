@@ -444,3 +444,69 @@ func TestVarfileValidation(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
 	})
 }
+
+// TestFilesValidation tests validation errors in the files command.
+func TestFilesValidation(t *testing.T) {
+	t.Run("component with all flag returns error", func(t *testing.T) {
+		// Get the global viper instance and set up clean state.
+		v := viper.GetViper()
+		// Reset flags that might interfere.
+		v.Set("all", true)
+		v.Set("stack", "test-stack") // Provide stack to avoid that error.
+		defer func() {
+			// Clean up.
+			v.Set("all", false)
+			v.Set("stack", "")
+		}()
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "files"}
+		filesParser.RegisterFlags(cmd)
+
+		// Execute RunE with component argument and --all flag set in viper.
+		err := filesCmd.RunE(cmd, []string{"my-component"})
+		assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	})
+
+	t.Run("missing component without all flag returns error", func(t *testing.T) {
+		// Get the global viper instance and set up clean state.
+		v := viper.GetViper()
+		v.Set("all", false)
+		v.Set("stack", "")
+		defer func() {
+			// Clean up.
+			v.Set("all", false)
+			v.Set("stack", "")
+		}()
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "files"}
+		filesParser.RegisterFlags(cmd)
+
+		// Execute RunE with no component argument and no --all flag.
+		// In non-TTY environment, the prompt returns ErrInteractiveModeNotAvailable.
+		err := filesCmd.RunE(cmd, []string{})
+		assert.ErrorIs(t, err, errUtils.ErrMissingComponent)
+	})
+
+	t.Run("component without stack returns error", func(t *testing.T) {
+		// Get the global viper instance and set up clean state.
+		v := viper.GetViper()
+		v.Set("all", false)
+		v.Set("stack", "")
+		defer func() {
+			// Clean up.
+			v.Set("all", false)
+			v.Set("stack", "")
+		}()
+
+		// Create a test command to execute RunE directly.
+		cmd := &cobra.Command{Use: "files"}
+		filesParser.RegisterFlags(cmd)
+
+		// Execute RunE with component argument but no stack.
+		// In non-TTY environment, the prompt returns ErrInteractiveModeNotAvailable.
+		err := filesCmd.RunE(cmd, []string{"my-component"})
+		assert.ErrorIs(t, err, errUtils.ErrMissingStack)
+	})
+}
