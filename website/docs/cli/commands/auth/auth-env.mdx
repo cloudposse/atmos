@@ -108,7 +108,7 @@ In GitHub Actions, use `--format=github` to export credentials directly to `$GIT
   run: atmos terraform apply mycomponent -s prod
 ```
 
-The `--format=github` flag writes `KEY=value` pairs directly to the `$GITHUB_ENV` file, making credentials available to subsequent steps without shell pipelines.
+The `--format=github` flag writes `KEY=value` pairs directly to the `$GITHUB_ENV` file, making credentials available to subsequent steps in GitHub Actions without shell pipelines.
 
 **The commands fail gracefully:** If you run cloud CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
 
