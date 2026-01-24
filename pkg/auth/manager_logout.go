@@ -54,12 +54,10 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 	}
 
 	log.Debug("Logout completed", logKeyIdentity, identityName, "errors", len(errs), "deletedKeychain", deleteKeychain)
-	ui.Successf("Logout completed for identity %s", identityName)
-
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
 	}
-
+	ui.Successf("Logout completed for identity %s", identityName)
 	return nil
 }
 
@@ -170,12 +168,10 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 	}
 
 	log.Debug("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs), "deletedKeychain", deleteKeychain)
-	ui.Successf("Provider logout completed for %s", providerName)
-
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
 	}
-
+	ui.Successf("Provider logout completed for %s", providerName)
 	return nil
 }
 
@@ -229,12 +225,10 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	}
 
 	log.Debug("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.config.Providers), "errors", len(errs), "deletedKeychain", deleteKeychain)
-	ui.Success("Logout all completed")
-
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
 	}
-
+	ui.Success("Logout all completed")
 	return nil
 }
 
