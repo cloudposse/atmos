@@ -1104,6 +1104,236 @@ func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_IgnoresAmbientCredentials(
 	assert.NotContains(t, err.Error(), "i/o timeout")
 }
 
+func TestAssumeRoleIdentity_resolveRegion_ManagerNil_CachedRegion(t *testing.T) {
+	// When manager is nil and i.region is set, should return cached region.
+	i := &assumeRoleIdentity{
+		name:   "test-role",
+		region: "eu-west-1",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "eu-west-1", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_ManagerNil_FromPrincipal(t *testing.T) {
+	// When manager is nil and i.region is empty, should check config.Principal["region"].
+	i := &assumeRoleIdentity{
+		name:   "test-role",
+		region: "", // No cached region.
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Principal: map[string]any{
+				"assume_role": "arn:aws:iam::123:role/x",
+				"region":      "ap-southeast-1",
+			},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "ap-southeast-1", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_ManagerNil_NoRegion(t *testing.T) {
+	// When manager is nil and no region configured, should return empty string.
+	i := &assumeRoleIdentity{
+		name:   "test-role",
+		region: "",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_FromPrincipalSetting(t *testing.T) {
+	// When manager exists and ResolvePrincipalSetting returns region, use it.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-role": {"region": "us-west-2"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "us-west-2", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_FromProviderConfig(t *testing.T) {
+	// When manager exists, ResolvePrincipalSetting returns empty, use provider's region.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{},
+		providerConfigs: map[string]*schema.Provider{
+			"test-role": {Region: "ca-central-1"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "ca-central-1", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_NeitherHasRegion(t *testing.T) {
+	// When manager exists but neither principal nor provider has region.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{},
+		providerConfigs:   map[string]*schema.Provider{},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_NonStringPrincipalSetting(t *testing.T) {
+	// When ResolvePrincipalSetting returns non-string value, skip it.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-role": {"region": 12345}, // Non-string value.
+		},
+		providerConfigs: map[string]*schema.Provider{
+			"test-role": {Region: "fallback-region"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "fallback-region", region)
+}
+
+func TestAssumeRoleIdentity_resolveRegion_WithManager_EmptyStringPrincipalSetting(t *testing.T) {
+	// When ResolvePrincipalSetting returns empty string, fall back to provider.
+	mockManager := &mockResolveAuthManager{
+		principalSettings: map[string]map[string]interface{}{
+			"test-role": {"region": ""}, // Empty string.
+		},
+		providerConfigs: map[string]*schema.Provider{
+			"test-role": {Region: "fallback-region"},
+		},
+	}
+
+	i := &assumeRoleIdentity{
+		name:    "test-role",
+		manager: mockManager,
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+		},
+	}
+
+	region := i.resolveRegion()
+	assert.Equal(t, "fallback-region", region)
+}
+
+// mockResolveAuthManager implements types.AuthManager for testing resolveRegion.
+type mockResolveAuthManager struct {
+	principalSettings map[string]map[string]interface{}
+	providerConfigs   map[string]*schema.Provider
+}
+
+func (m *mockResolveAuthManager) ResolvePrincipalSetting(identityName, key string) (interface{}, bool) {
+	if settings, ok := m.principalSettings[identityName]; ok {
+		if val, ok := settings[key]; ok {
+			return val, true
+		}
+	}
+	return nil, false
+}
+
+func (m *mockResolveAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	if provider, ok := m.providerConfigs[identityName]; ok {
+		return provider, true
+	}
+	return nil, false
+}
+
+// Implement other AuthManager methods as no-ops for the mock.
+func (m *mockResolveAuthManager) GetProviderForIdentity(_ string) string { return "" }
+
+func (m *mockResolveAuthManager) GetCachedCredentials(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) Authenticate(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) AuthenticateProvider(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) Whoami(_ context.Context, _ string) (*types.WhoamiInfo, error) {
+	return nil, nil
+}
+func (m *mockResolveAuthManager) Validate() error                                     { return nil }
+func (m *mockResolveAuthManager) GetDefaultIdentity(_ bool) (string, error)           { return "", nil }
+func (m *mockResolveAuthManager) ListIdentities() []string                            { return nil }
+func (m *mockResolveAuthManager) GetFilesDisplayPath(_ string) string                 { return "" }
+func (m *mockResolveAuthManager) GetProviderKindForIdentity(_ string) (string, error) { return "", nil }
+func (m *mockResolveAuthManager) GetChain() []string                                  { return nil }
+func (m *mockResolveAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo           { return nil }
+func (m *mockResolveAuthManager) ListProviders() []string                             { return nil }
+func (m *mockResolveAuthManager) GetIdentities() map[string]schema.Identity           { return nil }
+func (m *mockResolveAuthManager) GetProviders() map[string]schema.Provider            { return nil }
+func (m *mockResolveAuthManager) Logout(_ context.Context, _ string, _ bool) error    { return nil }
+func (m *mockResolveAuthManager) LogoutProvider(_ context.Context, _ string, _ bool) error {
+	return nil
+}
+func (m *mockResolveAuthManager) LogoutAll(_ context.Context, _ bool) error { return nil }
+func (m *mockResolveAuthManager) GetEnvironmentVariables(_ string) (map[string]string, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) PrepareShellEnvironment(_ context.Context, _ string, _ []string) ([]string, error) {
+	return nil, nil
+}
+
+func (m *mockResolveAuthManager) ExecuteIdentityIntegrations(_ context.Context, _ string) error {
+	return nil
+}
+func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
+func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
+	return nil, nil
+}
+
 func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {
 	// This test documents the difference between standard AssumeRole and AssumeRoleWithWebIdentity
 	// credential handling. Standard AssumeRole REQUIRES base AWS credentials, while web identity
