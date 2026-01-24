@@ -105,6 +105,33 @@ func TestMasker_RegisterPattern(t *testing.T) {
 	}
 }
 
+func TestMasker_RegisterSecret_WithJSONEscaping(t *testing.T) {
+	// Test that RegisterSecret handles secrets that need JSON escaping.
+	cfg := &Config{DisableMasking: false}
+	m := newMasker(cfg)
+
+	// Register a secret with special characters that need JSON escaping.
+	secretWithNewline := "secret\nwith\nnewlines"
+	m.RegisterSecret(secretWithNewline)
+
+	// The escaped version should also be masked in JSON context.
+	// In JSON, newlines become \n, so "secret\nwith\nnewlines" becomes "secret\\nwith\\nnewlines".
+	input := `{"value": "secret\nwith\nnewlines"}`
+	expected := `{"value": "<MASKED>"}`
+	got := m.Mask(input)
+	if got != expected {
+		t.Errorf("expected %q, got %q", expected, got)
+	}
+
+	// Also verify the plain secret is masked.
+	plainInput := "token: secret\nwith\nnewlines"
+	plainExpected := "token: <MASKED>"
+	plainGot := m.Mask(plainInput)
+	if plainGot != plainExpected {
+		t.Errorf("expected %q, got %q", plainExpected, plainGot)
+	}
+}
+
 func TestMasker_DollarSignInReplacement(t *testing.T) {
 	// Test that $ in custom replacement strings is treated literally, not as backreference.
 	cfg := &Config{
