@@ -130,6 +130,40 @@ export const featureLinks: Record<string, string> = {
   // Terminal UI features
   'Terminal UI': '/cli/commands',
   'Interactive Mode': '/cli/commands',
+
+  // Workflow-specific features
+  'YAML Syntax': '/workflows',
+  'Typed Inputs': '/workflows',
+
+  // Custom command-specific features
+  'YAML Definition': '/cli/configuration/commands',
+  'Typed Arguments': '/cli/configuration/commands',
+  'Component Context': '/cli/configuration/commands',
+  'No Separate Tool': '/cli/configuration/commands',
+
+  // Toolchain-specific features
+  'Multiple Versions Coexist': '/cli/commands/toolchain',
+
+  // Devcontainer-specific features
+  'Container-based': '/cli/commands/devcontainer',
+  'VS Code Integration': '/cli/commands/devcontainer',
+  'GitHub Codespaces': '/cli/commands/devcontainer',
+  'Native CLI Commands': '/cli/commands/devcontainer',
+  'Isolated Environments': '/cli/commands/devcontainer',
+  'Reproducible': '/cli/commands/devcontainer',
+  'No Nix Required': '/cli/commands/devcontainer',
+
+  // Validation-specific features
+  'OPA/Rego Policies': '/validation/validating',
+  'Stack Validation': '/validation/validating',
+  'Component Validation': '/validation/validating',
+
+  // Additional vendoring features
+  'OCI/Docker Images': '/vendor',
+  'Env Var Substitution': '/cli/configuration/templates',
+
+  // Multi-tool support
+  'Multi-tool Support': '/components',
 };
 
 // =============================================================================
@@ -1266,7 +1300,7 @@ export const vendoringTools: Tool[] = [
       { feature: 'S3 Sources', atmos: true, tool: false },
       { feature: 'Excludes/Includes', atmos: true, tool: false },
       { feature: 'Stack Integration', atmos: true, tool: false },
-        ],
+    ],
   },
 ];
 
@@ -1451,7 +1485,7 @@ export const toolCategories: ToolCategory[] = [
     id: 'auth',
     icon: 'RiShieldKeyholeLine',
     title: 'Cloud Authentication',
-    tagline: 'Unified authentication across AWS, Azure, GCP, and GitHub OIDC.',
+    tagline: 'Unified authentication for AWS today; Azure and GCP on the roadmap.',
     tools: authTools,
   },
   {

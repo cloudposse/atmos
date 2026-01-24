@@ -64,6 +64,7 @@ export const ToolsMatrixPage = () => {
         {view === 'categories' && (
           <button
             onClick={() => setExpandAll(!expandAll)}
+            aria-pressed={expandAll}
             style={{
               display: 'inline-flex',
               alignItems: 'center',

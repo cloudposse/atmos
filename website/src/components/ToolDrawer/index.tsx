@@ -1,4 +1,4 @@
-import React, { useEffect, useCallback } from 'react';
+import React, { useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { RiCloseLine, RiExternalLinkLine, RiCheckLine, RiCloseFill } from 'react-icons/ri';
 import Markdown from 'react-markdown';
@@ -12,16 +12,20 @@ import './index.css';
  * Markdown components for rendering tool details and comparison content.
  */
 const markdownComponents = {
-  code({ className, children, ...props }: { className?: string; children?: React.ReactNode }) {
-    const match = /language-(\w+)/.exec(className || '');
-    const isInline = !match;
-    return isInline ? (
-      <code className={className} {...props}>
-        {children}
-      </code>
-    ) : (
-      <CodeBlock language={match[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>
-    );
+  code({
+    inline,
+    className,
+    children,
+  }: {
+    inline?: boolean;
+    className?: string;
+    children?: React.ReactNode;
+  }) {
+    const match = /language-([^\s]+)/.exec(className || '');
+    if (inline) {
+      return <code className={className}>{children}</code>;
+    }
+    return <CodeBlock language={match?.[1]}>{String(children).replace(/\n$/, '')}</CodeBlock>;
   },
 };
 
@@ -70,20 +74,40 @@ const relationshipColors: Record<Tool['relationship'], string> = {
 };
 
 const ToolDrawer: React.FC<ToolDrawerProps> = ({ tool, isOpen, onClose }) => {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const previousOverflowRef = useRef<string | null>(null);
+
   const handleEscape = useCallback((e: KeyboardEvent) => {
     if (e.key === 'Escape') {
       onClose();
     }
   }, [onClose]);
 
+  // Focus management: save previous focus on open, restore on close
+  useEffect(() => {
+    if (isOpen) {
+      previousFocusRef.current = document.activeElement as HTMLElement | null;
+      closeButtonRef.current?.focus();
+    } else if (previousFocusRef.current) {
+      previousFocusRef.current.focus();
+      previousFocusRef.current = null;
+    }
+  }, [isOpen]);
+
+  // Keyboard and overflow management
   useEffect(() => {
     if (isOpen) {
       document.addEventListener('keydown', handleEscape);
+      previousOverflowRef.current = document.body.style.overflow;
       document.body.style.overflow = 'hidden';
     }
     return () => {
       document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
+      if (previousOverflowRef.current !== null) {
+        document.body.style.overflow = previousOverflowRef.current;
+        previousOverflowRef.current = null;
+      }
     };
   }, [isOpen, handleEscape]);
 
@@ -112,6 +136,7 @@ const ToolDrawer: React.FC<ToolDrawerProps> = ({ tool, isOpen, onClose }) => {
           >
             <div className="tool-drawer__header">
               <button
+                ref={closeButtonRef}
                 className="tool-drawer__close"
                 onClick={onClose}
                 aria-label="Close drawer"
