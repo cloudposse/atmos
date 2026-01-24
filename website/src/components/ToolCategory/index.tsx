@@ -33,9 +33,7 @@ const ToolCategory: React.FC<ToolCategoryProps> = ({
 
   // Sync with expandAll prop.
   useEffect(() => {
-    if (expandAll) {
-      setIsExpanded(true);
-    }
+    setIsExpanded(expandAll);
   }, [expandAll]);
 
   // Dynamically get the icon component.

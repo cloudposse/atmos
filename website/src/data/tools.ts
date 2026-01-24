@@ -1437,88 +1437,77 @@ export const toolCategories: ToolCategory[] = [
     id: 'supported',
     icon: 'RiCodeBoxLine',
     title: 'Native Integrations',
-    tagline:
-      'Atmos enhances the tools you already use—adding powerful conventions while keeping you in full control. Comprehensive enough to be complete, flexible enough to never limit you.',
+    tagline: 'Atmos enhances the tools you already use. Powerful conventions, full control.',
     tools: supportedTools,
   },
   {
     id: 'wrappers',
     icon: 'RiStackLine',
     title: 'Terraform Wrappers',
-    tagline:
-      'Atmos is the alternative to stitching together single-purpose wrapper tools—one unified CLI for stack configuration, component inheritance, and deep merging',
+    tagline: 'Replace single-purpose wrapper tools with one unified CLI.',
     tools: terraformWrappers,
   },
   {
     id: 'auth',
     icon: 'RiShieldKeyholeLine',
     title: 'Cloud Authentication',
-    tagline:
-      'Atmos is the alternative to juggling multiple CLI credential helpers—providing unified authentication across AWS, Azure, GCP, and GitHub OIDC with automatic session management',
+    tagline: 'Unified authentication across AWS, Azure, GCP, and GitHub OIDC.',
     tools: authTools,
   },
   {
     id: 'workflows',
     icon: 'RiFlowChart',
     title: 'Workflows & Task Runners',
-    tagline:
-      'Atmos is the alternative to maintaining Makefiles and task runners—providing native YAML workflows with typed inputs and automatic retry logic',
+    tagline: 'Replace Makefiles and task runners with native YAML workflows.',
     tools: workflowTools,
   },
   {
     id: 'commands',
     icon: 'RiTerminalBoxLine',
     title: 'Custom Commands',
-    tagline:
-      'Atmos is the alternative to building custom CLI tools—providing extensible commands with full access to stack context and component configuration',
+    tagline: 'Extensible CLI commands with full access to stack context.',
     tools: commandTools,
   },
   {
     id: 'toolchain',
     icon: 'RiToolsLine',
     title: 'Toolchain Management',
-    tagline:
-      'Atmos is the alternative to managing tool versions separately—with access to 1,500+ packages via Aqua, automatically install and pin versions for Terraform, OpenTofu, and any CLI tool',
+    tagline: 'Auto-install any tool from 1,500+ Aqua packages.',
     tools: toolchainTools,
   },
   {
     id: 'devenv',
     icon: 'RiTerminalWindowLine',
     title: 'Dev Environments',
-    tagline:
-      'Atmos is the alternative to running dev containers manually from the command line or inside your IDE—providing native devcontainer lifecycle management',
+    tagline: 'Native devcontainer lifecycle management.',
     tools: devEnvironmentTools,
   },
   {
     id: 'policy',
     icon: 'RiShieldCheckLine',
     title: 'Policy & Validation',
-    tagline:
-      'Atmos OPA policies provide high-level architectural guardrails, while tools like TFSEC, Checkov, and Conftest give you low-level controls—bring your own tools and integrate them via custom commands',
+    tagline: 'OPA for guardrails. Bring your own tools for low-level controls.',
     tools: policyTools,
   },
   {
     id: 'delivery',
     icon: 'RiRocketLine',
     title: 'CI/CD & Delivery',
-    tagline:
-      'Atmos is the alternative to paying for another platform to automate Terraform—with native GitHub Actions support, you control where and how your workflows run',
+    tagline: 'Native GitHub Actions support. You control where workflows run.',
     tools: deliveryTools,
   },
   {
     id: 'vendoring',
     icon: 'RiDownloadLine',
     title: 'Vendoring',
-    tagline:
-      'Atmos is the alternative to external vendoring tools—providing native module vendoring with Git, OCI, HTTP, and S3 sources integrated directly into your stack configuration',
+    tagline: 'Native module vendoring with Git, OCI, HTTP, and S3 sources.',
     tools: vendoringTools,
   },
   {
     id: 'templating',
     icon: 'RiFileCodeLine',
     title: 'Templating',
-    tagline:
-      'Atmos is the alternative to general-purpose templating tools—providing powerful Go template support with multiple data sources for ultimate flexibility',
+    tagline: 'Powerful Go templates with multiple data sources.',
     tools: templatingTools,
   },
 ];
