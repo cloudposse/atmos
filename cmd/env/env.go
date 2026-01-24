@@ -10,13 +10,11 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	"github.com/cloudposse/atmos/pkg/data"
 	envfmt "github.com/cloudposse/atmos/pkg/env"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	ghactions "github.com/cloudposse/atmos/pkg/github/actions"
 	"github.com/cloudposse/atmos/pkg/schema"
-	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // SupportedFormats lists all supported output formats.
@@ -48,7 +46,7 @@ var envCmd = &cobra.Command{
 		}
 
 		// Get output file path and export flag.
-		output := v.GetString("output")
+		output := v.GetString("output-file")
 		exportPrefix := v.GetBool("export")
 
 		// Build ConfigAndStacksInfo with CLI overrides (--config, --config-path, --base-path).
@@ -80,85 +78,32 @@ var envCmd = &cobra.Command{
 			envVars = make(map[string]string)
 		}
 
-		// Handle JSON format separately (not supported by pkg/env).
-		if formatStr == "json" {
-			if output != "" {
-				return u.WriteToFileAsJSON(output, envVars, 0o644)
-			}
-			return outputEnvAsJSON(&atmosConfig, envVars)
-		}
-
 		// Handle GitHub format special case (requires output path).
-		if formatStr == "github" {
-			path := output
-			if path == "" {
-				path = ghactions.GetEnvPath()
-				if path == "" {
-					return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
-						WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output to specify a file path.").
-						Err()
-				}
-			}
-			dataMap := convertToAnyMap(envVars)
-			formatted, err := envfmt.FormatData(dataMap, envfmt.FormatGitHub)
-			if err != nil {
-				return errUtils.Build(errUtils.ErrInvalidArgumentError).
-					WithCause(err).
-					WithExplanation("Failed to format environment variables for GitHub output.").
+		if formatStr == "github" && output == "" {
+			output = ghactions.GetEnvPath()
+			if output == "" {
+				return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+					WithExplanation("--format=github requires GITHUB_ENV environment variable to be set, or use --output-file to specify a file path.").
 					Err()
 			}
-			return envfmt.WriteToFile(path, formatted)
 		}
 
-		// Parse format string to Format type.
-		format, err := envfmt.ParseFormat(formatStr)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrInvalidArgumentError).
-				WithCause(err).
-				WithExplanationf("Invalid --format value %q.", formatStr).
-				Err()
-		}
-
-		// Format the environment variables with export option.
-		dataMap := convertToAnyMap(envVars)
-		formatted, err := envfmt.FormatData(dataMap, format, envfmt.WithExport(exportPrefix))
-		if err != nil {
-			return errUtils.Build(errUtils.ErrInvalidArgumentError).
-				WithCause(err).
-				WithExplanation("Failed to format environment variables.").
-				Err()
-		}
-
-		// Output to file or stdout.
-		if output != "" {
-			return envfmt.WriteToFile(output, formatted)
-		}
-		return data.Write(formatted)
+		// Use unified env.Output() for all format/output combinations.
+		return envfmt.Output(envVars, formatStr, output,
+			envfmt.WithAtmosConfig(&atmosConfig),
+			envfmt.WithFormatOptions(envfmt.WithExport(exportPrefix)),
+		)
 	},
-}
-
-// outputEnvAsJSON outputs environment variables as JSON.
-func outputEnvAsJSON(atmosConfig *schema.AtmosConfiguration, envVars map[string]string) error {
-	return u.PrintAsJSON(atmosConfig, envVars)
-}
-
-// convertToAnyMap converts a map[string]string to map[string]any for use with env formatters.
-func convertToAnyMap(envVars map[string]string) map[string]any {
-	result := make(map[string]any, len(envVars))
-	for k, v := range envVars {
-		result[k] = v
-	}
-	return result
 }
 
 func init() {
 	// Create parser with env-specific flags using functional options.
 	envParser = flags.NewStandardParser(
 		flags.WithStringFlag("format", "f", "bash", "Output format: bash, json, dotenv, github"),
-		flags.WithStringFlag("output", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
+		flags.WithStringFlag("output-file", "o", "", "Output file path (default: stdout, or $GITHUB_ENV for github format)"),
 		flags.WithBoolFlag("export", "", true, "Include 'export' prefix in bash format (default: true)"),
 		flags.WithEnvVars("format", "ATMOS_ENV_FORMAT"),
-		flags.WithEnvVars("output", "ATMOS_ENV_OUTPUT"),
+		flags.WithEnvVars("output-file", "ATMOS_ENV_OUTPUT_FILE"),
 		flags.WithEnvVars("export", "ATMOS_ENV_EXPORT"),
 	)
 

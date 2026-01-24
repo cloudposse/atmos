@@ -196,7 +196,7 @@ tests:
       diff: []
       stderr: []
       stdout:
-        - "export AWS_PROFILE='mock-identity'"
+        - "export AWS_PROFILE=mock-identity"
       exit_code: 0
 
   - name: atmos auth env without --login returns config env vars
@@ -218,7 +218,7 @@ tests:
       diff: []
       stderr: []
       stdout:
-        - "export AWS_PROFILE='mock-identity'"
+        - "export AWS_PROFILE=mock-identity"
       exit_code: 0
 
   # ============================================================================

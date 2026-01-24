@@ -23,7 +23,7 @@ Quickly generate temporary cloud credentials as environment variables so you can
 ## Usage
 
 ```shell
-atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
+atmos auth env [--identity <name>] [--format bash|json|dotenv|github] [--output-file <file>] [--login]
 ```
 
 ## How It Works
@@ -96,17 +96,19 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
   </TabItem>
 </Tabs>
 
-**CI/CD Workflow (Azure OIDC):**
+**CI/CD Workflow (GitHub Actions):**
 
-In CI/CD environments like GitHub Actions, Azure OIDC authentication happens automatically without interactive login:
+In GitHub Actions, use `--format=github` to export credentials directly to `$GITHUB_ENV`:
 
-```bash
-# In GitHub Actions workflow - credentials are obtained from the platform
-eval $(atmos auth env --identity azure-prod --login)
+```yaml
+- name: Authenticate
+  run: atmos auth env --identity azure-prod --format=github --login
 
-# Run Terraform with Azure OIDC credentials
-atmos terraform apply mycomponent -s prod
+- name: Deploy
+  run: atmos terraform apply mycomponent -s prod
 ```
+
+The `--format=github` flag writes `KEY=value` pairs directly to the `$GITHUB_ENV` file, making credentials available to subsequent steps in GitHub Actions without shell pipelines.
 
 **The commands fail gracefully:** If you run cloud CLI or Terraform commands before logging in, they will fail with standard credential errors, prompting you to run `atmos auth login`.
 
@@ -118,7 +120,7 @@ This separation allows you to add `eval $(atmos auth env)` to your shell profile
 - Adding authentication to your shell profile (`.zshrc`, `.bashrc`) for automatic configuration
 - Integrating with CI/CD pipelines that need environment variables
 - Writing scripts that source credentials
-- You need credentials in a specific format (bash, json, dotenv)
+- You need credentials in a specific format (bash, json, dotenv, github)
 - Working primarily in a single identity and want persistent configuration
 
 **Use `atmos auth shell` instead when:**
@@ -144,6 +146,12 @@ atmos auth env --identity prod-admin --format json
 
 # Dotenv format
 atmos auth env --format dotenv
+
+# GitHub Actions format (writes to $GITHUB_ENV)
+atmos auth env --identity prod-admin --format github
+
+# GitHub Actions format with explicit output file
+atmos auth env --identity prod-admin --format github --output-file /path/to/env/file
 
 # Automatically login if credentials don't exist or are expired
 atmos auth env --login
@@ -271,6 +279,14 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
     - **`bash`** (default): Prints `export KEY='value'` lines suitable for shell evaluation
     - **`json`**: Prints a JSON object of environment variables
     - **`dotenv`**: Prints `KEY='value'` lines in dotenv format
+    - **`github`**: Prints `KEY=value` lines for GitHub Actions `$GITHUB_ENV` file. Multiline values use GitHub's heredoc syntax.
+  </dd>
+
+  <dt>`--output-file` <em>(alias `-o`)</em></dt>
+  <dd>
+    Write output to a file instead of stdout. When used with `--format=github`, this specifies the target file for environment variables.
+
+    If `--format=github` is used without `--output-file`, the command automatically writes to the file specified by the `$GITHUB_ENV` environment variable (set automatically in GitHub Actions).
   </dd>
 
   <dt>`--login`</dt>
@@ -293,7 +309,10 @@ Adding `eval $(atmos auth env)` to your shell profile (`.zshrc`, `.bashrc`) ensu
   <dd>Default identity when `--identity` is not provided.</dd>
 
   <dt>`ATMOS_AUTH_ENV_FORMAT`</dt>
-  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`.</dd>
+  <dd>Sets the default output style for exported credentials. Supported values: `bash`, `json`, `dotenv`, `github`.</dd>
+
+  <dt>`ATMOS_AUTH_ENV_OUTPUT_FILE`</dt>
+  <dd>Default output file path when `--output-file` is not provided. For `--format=github`, this defaults to the value of `$GITHUB_ENV` if set.</dd>
 </dl>
 
 ### Output Variables (Exported by this command)

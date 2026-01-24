@@ -1,0 +1,61 @@
+---
+slug: auth-env-github-format
+title: "GitHub Actions Format for Auth Credentials"
+authors: [osterman]
+tags: [feature]
+---
+
+The `atmos auth env` command now supports `--format=github` for direct output to `$GITHUB_ENV`, eliminating shell pipelines in CI workflows.
+
+<!--truncate-->
+
+## The Problem
+
+Previously, exporting auth credentials to GitHub Actions required awkward shell pipelines:
+
+```yaml
+- name: Export credentials
+  run: |
+    atmos auth env --identity azure-dev-ci 2>/dev/null | grep "^export " | sed 's/^export //' >> $GITHUB_ENV
+```
+
+## The Solution
+
+With `--format=github`, credentials are exported directly:
+
+```yaml
+- name: Export credentials
+  run: atmos auth env --identity azure-dev-ci --format=github
+```
+
+When `$GITHUB_ENV` is set (automatically in GitHub Actions), credentials are written directly to that file. No redirection needed.
+
+## Features
+
+- **Auto-detection:** Automatically writes to `$GITHUB_ENV` when set
+- **Explicit output:** Use `--output-file` (or `-o`) to specify a different file
+- **Multiline support:** Values with newlines use GitHub's heredoc syntax
+- **No quotes:** Output is `KEY=value` format (no shell quoting)
+
+## Example Workflow
+
+```yaml
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate
+        run: atmos auth env --identity prod-deploy --format=github
+
+      - name: Deploy
+        run: atmos terraform apply vpc -s prod --auto-approve
+```
+
+## Get Started
+
+The `--format=github` flag is available now. See the [auth env documentation](/cli/commands/auth/env) for details.
