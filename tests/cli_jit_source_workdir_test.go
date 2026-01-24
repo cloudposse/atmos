@@ -3,7 +3,6 @@ package tests
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -72,23 +71,22 @@ func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 	require.NoError(t, err, "Workdir should exist at %s", workdirPath)
 	require.True(t, info.IsDir(), "Workdir path should be a directory")
 
-	// Check if main.tf exists in workdir.
-	mainTfPath := filepath.Join(workdirPath, "main.tf")
-	if _, err := os.Stat(mainTfPath); err == nil {
-		// File exists - check its contents.
-		content, err := os.ReadFile(mainTfPath)
-		require.NoError(t, err)
+	// The remote source (terraform-null-label//exports) contains context.tf, not main.tf.
+	// If JIT source provisioning ran correctly, context.tf MUST exist.
+	contextTfPath := filepath.Join(workdirPath, "context.tf")
+	_, err = os.Stat(contextTfPath)
+	require.NoError(t, err, "context.tf should exist in workdir (from remote source)")
 
-		// CRITICAL ASSERTION: The workdir should NOT contain our local marker.
-		// If it does, it means the workdir provisioner copied from local
-		// instead of source provisioner vendoring from remote.
-		assert.False(t,
-			strings.Contains(string(content), "LOCAL_VERSION_MARKER"),
-			"Workdir should contain content from remote source, not local component. "+
-				"This indicates the bug: JIT source provisioning was skipped because "+
-				"local component exists, and workdir provisioner copied from local instead.",
-		)
-	}
+	// CRITICAL ASSERTION: The local main.tf with our marker should NOT exist.
+	// The remote source doesn't have main.tf, so if it exists, the workdir
+	// provisioner incorrectly copied from local instead of using remote source.
+	mainTfPath := filepath.Join(workdirPath, "main.tf")
+	_, err = os.Stat(mainTfPath)
+	assert.True(t, os.IsNotExist(err),
+		"main.tf should NOT exist in workdir. "+
+			"Its presence indicates the bug: JIT source provisioning was skipped because "+
+			"local component exists, and workdir provisioner copied from local instead.",
+	)
 }
 
 // TestJITSource_WorkdirWithLocalComponent_SourcePrecedence is an alternative test
@@ -206,22 +204,22 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 			require.NoError(t, err, "Workdir should exist at %s", workdirPath)
 			require.True(t, info.IsDir(), "Workdir path should be a directory")
 
-			// Check if main.tf exists in workdir.
-			mainTfPath := filepath.Join(workdirPath, "main.tf")
-			if _, statErr := os.Stat(mainTfPath); statErr == nil {
-				content, readErr := os.ReadFile(mainTfPath)
-				require.NoError(t, readErr)
+			// The remote source (terraform-null-label//exports) contains context.tf, not main.tf.
+			// If JIT source provisioning ran correctly, context.tf MUST exist.
+			contextTfPath := filepath.Join(workdirPath, "context.tf")
+			_, err = os.Stat(contextTfPath)
+			require.NoError(t, err, "%s: context.tf should exist in workdir (from remote source)", tc.subcommand)
 
-				// CRITICAL ASSERTION: The workdir should NOT contain our local marker.
-				// If it does, it means the workdir provisioner copied from local
-				// instead of source provisioner vendoring from remote.
-				assert.False(t,
-					strings.Contains(string(content), "LOCAL_VERSION_MARKER"),
-					"%s: Workdir should contain content from remote source, not local component. "+
-						"This indicates JIT source provisioning was skipped for %s.",
-					tc.subcommand, tc.subcommand,
-				)
-			}
+			// CRITICAL ASSERTION: The local main.tf with our marker should NOT exist.
+			// The remote source doesn't have main.tf, so if it exists, the workdir
+			// provisioner incorrectly copied from local instead of using remote source.
+			mainTfPath := filepath.Join(workdirPath, "main.tf")
+			_, statErr := os.Stat(mainTfPath)
+			assert.True(t, os.IsNotExist(statErr),
+				"%s: main.tf should NOT exist in workdir. "+
+					"Its presence indicates JIT source provisioning was skipped for %s.",
+				tc.subcommand, tc.subcommand,
+			)
 		})
 	}
 }
