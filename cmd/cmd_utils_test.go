@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -1766,4 +1768,52 @@ func TestWithStackValidation(t *testing.T) {
 			assert.Equal(t, tt.expected, cfg.CheckStack)
 		})
 	}
+}
+
+// TestPreCustomCommand_ShowsSubCommands tests that preCustomCommand displays available
+// subcommands when a command has no arguments or steps but has subcommands.
+func TestPreCustomCommand_ShowsSubCommands(t *testing.T) {
+	// Initialize I/O context for data package.
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	data.InitWriter(ioCtx)
+
+	// Save original OsExit and restore after test.
+	originalOsExit := errUtils.OsExit
+	defer func() { errUtils.OsExit = originalOsExit }()
+
+	var capturedExitCode int
+	exitCalled := false
+	errUtils.OsExit = func(code int) {
+		capturedExitCode = code
+		exitCalled = true
+		panic("exit called") // Panic to stop execution.
+	}
+
+	// Create parent command.
+	parentCmd := &cobra.Command{Use: "atmos"}
+
+	// Create command config with subcommands but no arguments/steps.
+	// This triggers the "show sub-commands" code path in preCustomCommand.
+	commandConfig := &schema.Command{
+		Name:      "parent-cmd",
+		Arguments: []schema.CommandArgument{}, // Empty - triggers subcommand display.
+		Steps:     schema.Tasks{},             // Empty.
+		Commands: []schema.Command{ // Non-empty - has subcommands.
+			{Name: "sub1"},
+			{Name: "sub2"},
+		},
+	}
+
+	cmd := &cobra.Command{Use: "parent-cmd"}
+
+	defer func() {
+		if r := recover(); r != nil {
+			// Expected: panic from mocked OsExit.
+			assert.True(t, exitCalled, "OsExit should be called")
+			assert.Equal(t, 1, capturedExitCode, "Should exit with code 1")
+		}
+	}()
+
+	preCustomCommand(cmd, []string{}, parentCmd, commandConfig)
 }
