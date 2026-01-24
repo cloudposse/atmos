@@ -6,10 +6,10 @@ across multiple cloud and DevOps toolchains.
 
 USAGE
 
-
-    $ atmos [flags]
-    $ atmos [sub-command] [flags]
-
+                                   
+    $ atmos [flags]                
+    $ atmos [sub-command] [flags]  
+                                   
 
 SUBCOMMAND ALIASES
 

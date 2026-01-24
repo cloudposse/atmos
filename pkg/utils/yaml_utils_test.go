@@ -3,6 +3,7 @@ package utils
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1321,8 +1322,14 @@ func TestWriteToFileAsYAML(t *testing.T) {
 
 // TestWriteToFileAsYAML_InvalidPath tests writing to an invalid path.
 func TestWriteToFileAsYAML_InvalidPath(t *testing.T) {
-	// Try to write to a non-existent directory.
-	invalidPath := filepath.Join(string(filepath.Separator), "nonexistent", "directory", "that", "does", "not", "exist", "test.yaml")
+	// Use platform-appropriate non-existent path.
+	var invalidPath string
+	if runtime.GOOS == "windows" {
+		// Use a non-existent drive letter on Windows.
+		invalidPath = `Z:\nonexistent\directory\that\does\not\exist\test.yaml`
+	} else {
+		invalidPath = "/nonexistent/directory/that/does/not/exist/test.yaml"
+	}
 
 	data := map[string]any{"key": "value"}
 

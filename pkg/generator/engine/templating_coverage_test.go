@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -136,8 +137,16 @@ func TestProcessFileSkipPaths(t *testing.T) {
 
 	// Absolute paths should return ErrPathTraversal (security check takes precedence over skip).
 	t.Run("error_absolute_path", func(t *testing.T) {
+		// Use platform-appropriate absolute path.
+		var absPath string
+		if runtime.GOOS == "windows" {
+			absPath = `C:\absolute\path.txt`
+		} else {
+			absPath = "/absolute/path.txt"
+		}
+
 		file := File{
-			Path:        "/absolute/path.txt",
+			Path:        absPath,
 			Content:     "test",
 			IsTemplate:  false,
 			Permissions: 0o644,
@@ -179,7 +188,7 @@ func TestHandleExistingFileForce(t *testing.T) {
 func TestWriteFileErrors(t *testing.T) {
 	processor := NewProcessor()
 
-	// Try to write to invalid path
+	// Try to write to invalid path.
 	file := File{
 		Path:        "test.txt",
 		Content:     "test",
@@ -187,8 +196,17 @@ func TestWriteFileErrors(t *testing.T) {
 		Permissions: 0o644,
 	}
 
-	// Non-existent directory should fail
-	err := processor.ProcessFile(file, "/nonexistent/directory/that/does/not/exist", false, false, nil, nil)
+	// Use platform-appropriate non-existent path.
+	var invalidDir string
+	if runtime.GOOS == "windows" {
+		// Use a non-existent drive letter on Windows.
+		invalidDir = `Z:\nonexistent\directory\that\does\not\exist`
+	} else {
+		invalidDir = "/nonexistent/directory/that/does/not/exist"
+	}
+
+	// Non-existent directory should fail.
+	err := processor.ProcessFile(file, invalidDir, false, false, nil, nil)
 	assert.Error(t, err, "Expected error for non-existent directory")
 }
 
