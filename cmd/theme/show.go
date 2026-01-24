@@ -10,7 +10,9 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/markdown"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
@@ -118,7 +120,8 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 	}
 
 	result := theme.ShowTheme(theme.ShowThemeOptions{
-		ThemeName: opts.ThemeName,
+		ThemeName:        opts.ThemeName,
+		MarkdownRenderer: createMarkdownRenderer,
 	})
 
 	if result.Error != nil {
@@ -136,4 +139,30 @@ func executeThemeShow(cmd *cobra.Command, args []string) error {
 
 	ui.Write(result.Output)
 	return nil
+}
+
+// createMarkdownRenderer creates a markdown renderer for the specified theme.
+// It is passed to theme.ShowTheme to render markdown previews without
+// creating an import cycle between theme and markdown packages.
+func createMarkdownRenderer(themeName string, content string) (string, error) {
+	defer perf.Track(nil, "theme.createMarkdownRenderer")()
+
+	atmosConfig := schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			Terminal: schema.Terminal{
+				Theme: themeName,
+			},
+		},
+	}
+
+	renderer, err := markdown.NewTerminalMarkdownRenderer(atmosConfig)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrMarkdownRendererInit, err)
+	}
+
+	rendered, err := renderer.Render(content)
+	if err != nil {
+		return "", errors.Join(errUtils.ErrMarkdownRender, err)
+	}
+	return rendered, nil
 }

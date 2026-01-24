@@ -354,6 +354,21 @@ func TestGenerateFiles_HCLSpecialCases(t *testing.T) {
 			},
 			wantContains: []string{"locals", "big_number"},
 		},
+		{
+			name:     "Map attributes render with equals sign",
+			filename: "tags.tf",
+			content: map[string]any{
+				"locals": map[string]any{
+					"tags": map[string]any{
+						"Name":        "example",
+						"Environment": "dev",
+					},
+				},
+			},
+			// Verify maps are rendered as attributes (key = {}) not blocks (key {}).
+			// HCL attribute names don't have quotes, so we check for Name = and Environment =.
+			wantContains: []string{"tags = {", "Name", "Environment", `"example"`, `"dev"`},
+		},
 	}
 
 	for _, tt := range tests {
@@ -471,6 +486,290 @@ func TestGenerateFiles_EdgeCases(t *testing.T) {
 			assert.NoError(t, result.Error)
 		}
 	})
+}
+
+// TestGenerateFiles_LabeledBlocks tests HCL generation for labeled block types.
+func TestGenerateFiles_LabeledBlocks(t *testing.T) {
+	tests := []struct {
+		name         string
+		filename     string
+		content      map[string]any
+		wantContains []string
+		wantExclude  []string
+	}{
+		{
+			name:     "Variable block with single label",
+			filename: "variables.tf",
+			content: map[string]any{
+				"variable": map[string]any{
+					"app_name": map[string]any{
+						"type":        "string",
+						"description": "Application name",
+					},
+				},
+			},
+			wantContains: []string{
+				`variable "app_name"`,
+				"type",
+				"description",
+			},
+		},
+		{
+			name:     "Multiple variable blocks",
+			filename: "variables.tf",
+			content: map[string]any{
+				"variable": map[string]any{
+					"app_name": map[string]any{
+						"type":        "string",
+						"description": "Application name",
+					},
+					"version": map[string]any{
+						"type":        "string",
+						"description": "Application version",
+					},
+				},
+			},
+			wantContains: []string{
+				`variable "app_name"`,
+				`variable "version"`,
+			},
+		},
+		{
+			name:     "Output block with single label",
+			filename: "outputs.tf",
+			content: map[string]any{
+				"output": map[string]any{
+					"app_name": map[string]any{
+						"description": "The application name",
+						"value":       "var.app_name",
+					},
+				},
+			},
+			wantContains: []string{
+				`output "app_name"`,
+				"description",
+				"value",
+			},
+		},
+		{
+			name:     "Resource block with double label",
+			filename: "main.tf",
+			content: map[string]any{
+				"resource": map[string]any{
+					"aws_instance": map[string]any{
+						"web": map[string]any{
+							"ami":           "ami-12345678",
+							"instance_type": "t2.micro",
+						},
+					},
+				},
+			},
+			wantContains: []string{
+				`resource "aws_instance" "web"`,
+				"ami",
+				"instance_type",
+			},
+		},
+		{
+			name:     "Data block with double label",
+			filename: "data.tf",
+			content: map[string]any{
+				"data": map[string]any{
+					"aws_ami": map[string]any{
+						"ubuntu": map[string]any{
+							"most_recent": true,
+						},
+					},
+				},
+			},
+			wantContains: []string{
+				`data "aws_ami" "ubuntu"`,
+				"most_recent",
+			},
+		},
+		{
+			name:     "Module block with single label",
+			filename: "modules.tf",
+			content: map[string]any{
+				"module": map[string]any{
+					"vpc": map[string]any{
+						"source":  "terraform-aws-modules/vpc/aws",
+						"version": "3.0.0",
+					},
+				},
+			},
+			wantContains: []string{
+				`module "vpc"`,
+				"source",
+				"version",
+			},
+		},
+		{
+			name:     "Provider block with single label",
+			filename: "providers.tf",
+			content: map[string]any{
+				"provider": map[string]any{
+					"aws": map[string]any{
+						"region": "us-west-2",
+					},
+				},
+			},
+			wantContains: []string{
+				`provider "aws"`,
+				"region",
+			},
+		},
+		{
+			name:     "Mixed labeled and unlabeled blocks",
+			filename: "mixed.tf",
+			content: map[string]any{
+				"terraform": map[string]any{
+					"required_version": ">= 1.0.0",
+				},
+				"variable": map[string]any{
+					"env": map[string]any{
+						"type": "string",
+					},
+				},
+				"locals": map[string]any{
+					"environment": "prod",
+				},
+			},
+			wantContains: []string{
+				"terraform",
+				"required_version",
+				`variable "env"`,
+				"locals",
+				"environment",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			generateSection := map[string]any{tt.filename: tt.content}
+			config := GenerateConfig{DryRun: false, Clean: false}
+
+			results, err := GenerateFiles(generateSection, tempDir, nil, config)
+			require.NoError(t, err)
+			require.Len(t, results, 1)
+			assert.NoError(t, results[0].Error)
+
+			content, err := os.ReadFile(filepath.Join(tempDir, tt.filename))
+			require.NoError(t, err)
+			contentStr := string(content)
+
+			for _, want := range tt.wantContains {
+				assert.Contains(t, contentStr, want, "expected %q in output:\n%s", want, contentStr)
+			}
+			for _, exclude := range tt.wantExclude {
+				assert.NotContains(t, contentStr, exclude, "unexpected %q in output:\n%s", exclude, contentStr)
+			}
+		})
+	}
+}
+
+// TestGenerateFiles_TFVars tests .tfvars file generation.
+func TestGenerateFiles_TFVars(t *testing.T) {
+	tests := []struct {
+		name         string
+		content      map[string]any
+		wantContains []string
+	}{
+		{
+			name: "Simple flat attributes",
+			content: map[string]any{
+				"app_name": "myapp",
+				"version":  "1.0.0",
+				"enabled":  true,
+			},
+			// Note: hclwrite aligns = signs, so we just check for key and value presence.
+			wantContains: []string{
+				"app_name",
+				`"myapp"`,
+				"version",
+				`"1.0.0"`,
+				"enabled",
+				"true",
+			},
+		},
+		{
+			name: "Array values",
+			content: map[string]any{
+				"features": []any{"feature1", "feature2", "feature3"},
+			},
+			wantContains: []string{
+				"features = [",
+				`"feature1"`,
+				`"feature2"`,
+				`"feature3"`,
+			},
+		},
+		{
+			name: "Nested object (map)",
+			content: map[string]any{
+				"tags": map[string]any{
+					"env":     "dev",
+					"team":    "platform",
+					"managed": true,
+				},
+			},
+			wantContains: []string{
+				"tags = {",
+				`env`,
+				`team`,
+				`managed`,
+			},
+		},
+		{
+			name: "Mixed types",
+			content: map[string]any{
+				"name":     "myapp",
+				"replicas": 3,
+				"enabled":  true,
+				"config": map[string]any{
+					"port":    8080,
+					"timeout": 30,
+				},
+				"regions": []any{"us-west-2", "us-east-1"},
+			},
+			// Note: hclwrite aligns = signs, so we check for key and value presence.
+			wantContains: []string{
+				"name",
+				`"myapp"`,
+				"replicas",
+				"3",
+				"enabled",
+				"true",
+				"config",
+				"port",
+				"regions",
+				"us-west-2",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			generateSection := map[string]any{"terraform.tfvars": tt.content}
+			config := GenerateConfig{DryRun: false, Clean: false}
+
+			results, err := GenerateFiles(generateSection, tempDir, nil, config)
+			require.NoError(t, err)
+			require.Len(t, results, 1)
+			assert.NoError(t, results[0].Error)
+
+			content, err := os.ReadFile(filepath.Join(tempDir, "terraform.tfvars"))
+			require.NoError(t, err)
+			contentStr := string(content)
+
+			for _, want := range tt.wantContains {
+				assert.Contains(t, contentStr, want, "expected %q in output:\n%s", want, contentStr)
+			}
+		})
+	}
 }
 
 // TestGetGenerateFilenames tests the GetGenerateFilenames function.

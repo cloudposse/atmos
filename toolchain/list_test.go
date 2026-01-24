@@ -675,3 +675,215 @@ func TestCalculateContentWidths(t *testing.T) {
 	assert.Equal(t, len("longer-binary"), widths.binary)
 	assert.Equal(t, len("1.10.0"), widths.version)
 }
+
+// Tests for list_helpers.go functions.
+
+func TestHandleToolVersionsLoadError_NotExist(t *testing.T) {
+	// Test with file not exist error.
+	err := handleToolVersionsLoadError(os.ErrNotExist, "/path/to/.tool-versions")
+
+	// Should return nil (graceful handling) for missing file.
+	assert.NoError(t, err, "Should handle missing file gracefully")
+}
+
+func TestHandleToolVersionsLoadError_OtherError(t *testing.T) {
+	// Test with other error type.
+	otherErr := os.ErrPermission
+	err := handleToolVersionsLoadError(otherErr, "/path/to/.tool-versions")
+
+	// Should return wrapped error.
+	assert.Error(t, err, "Should return error for non-missing file errors")
+	assert.Contains(t, err.Error(), "failed to load .tool-versions")
+}
+
+func TestSortToolRows(t *testing.T) {
+	rows := []toolRow{
+		{registry: "opentofu/opentofu", version: "1.0.0"},
+		{registry: "hashicorp/terraform", version: "1.5.0"},
+		{registry: "hashicorp/terraform", version: "1.10.0"},
+		{registry: "hashicorp/terraform", version: "1.2.0"},
+		{registry: "kubernetes/kubectl", version: "1.28.0"},
+	}
+
+	sortToolRows(rows)
+
+	// Should be sorted by registry first.
+	assert.Equal(t, "hashicorp/terraform", rows[0].registry)
+	assert.Equal(t, "hashicorp/terraform", rows[1].registry)
+	assert.Equal(t, "hashicorp/terraform", rows[2].registry)
+	assert.Equal(t, "kubernetes/kubectl", rows[3].registry)
+	assert.Equal(t, "opentofu/opentofu", rows[4].registry)
+
+	// Within same registry, should be sorted by version (newest first).
+	assert.Equal(t, "1.10.0", rows[0].version)
+	assert.Equal(t, "1.5.0", rows[1].version)
+	assert.Equal(t, "1.2.0", rows[2].version)
+}
+
+func TestSortToolRows_InvalidSemver(t *testing.T) {
+	rows := []toolRow{
+		{registry: "test/tool", version: "abc"},
+		{registry: "test/tool", version: "xyz"},
+		{registry: "test/tool", version: "def"},
+	}
+
+	// Should not panic with invalid semver.
+	sortToolRows(rows)
+
+	// Falls back to lexicographic (newest/greatest first).
+	assert.Equal(t, "xyz", rows[0].version)
+	assert.Equal(t, "def", rows[1].version)
+	assert.Equal(t, "abc", rows[2].version)
+}
+
+func TestGetInstallationMetadata_NotInstalled(t *testing.T) {
+	status, installDate, size := getInstallationMetadata("", false)
+
+	assert.Equal(t, "  ", status)
+	assert.Equal(t, notAvailablePlaceholder, installDate)
+	assert.Equal(t, notAvailablePlaceholder, size)
+}
+
+func TestGetInstallationMetadata_Installed(t *testing.T) {
+	tempDir := t.TempDir()
+	binaryPath := filepath.Join(tempDir, "test-binary")
+	err := os.WriteFile(binaryPath, []byte("mock binary content"), defaultMkdirPermissions)
+	require.NoError(t, err)
+
+	// Set a known modification time.
+	modTime := time.Date(2024, 6, 15, 10, 30, 0, 0, time.UTC)
+	err = os.Chtimes(binaryPath, modTime, modTime)
+	require.NoError(t, err)
+
+	status, installDate, size := getInstallationMetadata(binaryPath, true)
+
+	assert.Equal(t, " "+installedIndicatorChar, status)
+	assert.Contains(t, installDate, "2024-06-15")
+	assert.NotEqual(t, notAvailablePlaceholder, size)
+}
+
+func TestGetInstallationMetadata_StatError(t *testing.T) {
+	// Test with non-existent file path.
+	status, installDate, size := getInstallationMetadata("/non/existent/path", true)
+
+	// Should return installed status but N/A for date and size.
+	assert.Equal(t, " "+installedIndicatorChar, status)
+	assert.Equal(t, notAvailablePlaceholder, installDate)
+	assert.Equal(t, notAvailablePlaceholder, size)
+}
+
+func TestBuildToolRow(t *testing.T) {
+	tempDir := t.TempDir()
+	toolsDir := filepath.Join(tempDir, ".tools")
+
+	// Create mock binary in the correct path structure.
+	binaryPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.0.0", "terraform")
+	err := os.MkdirAll(filepath.Dir(binaryPath), defaultMkdirPermissions)
+	require.NoError(t, err)
+	err = os.WriteFile(binaryPath, []byte("mock"), defaultMkdirPermissions)
+	require.NoError(t, err)
+
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			ToolsDir: toolsDir,
+		},
+	})
+
+	installer := NewInstaller()
+	info := toolRowInfo{
+		owner:     "hashicorp",
+		repo:      "terraform",
+		alias:     "tf",
+		version:   "1.0.0",
+		isDefault: true,
+	}
+
+	row := buildToolRow(installer, info)
+
+	assert.Equal(t, "tf", row.alias)
+	assert.Equal(t, "hashicorp/terraform", row.registry)
+	assert.Equal(t, "terraform", row.binary)
+	assert.Equal(t, "1.0.0", row.version)
+	assert.True(t, row.isDefault)
+	// Note: Installation detection depends on Installer.FindBinaryPath which may have
+	// specific path requirements. If not installed, row.isInstalled will be false.
+}
+
+func TestBuildToolRow_NotInstalled(t *testing.T) {
+	tempDir := t.TempDir()
+
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			ToolsDir: tempDir,
+		},
+	})
+
+	installer := NewInstaller()
+	info := toolRowInfo{
+		owner:     "hashicorp",
+		repo:      "terraform",
+		alias:     "",
+		version:   "1.0.0",
+		isDefault: true,
+	}
+
+	row := buildToolRow(installer, info)
+
+	assert.Equal(t, "", row.alias)
+	assert.Equal(t, "hashicorp/terraform", row.registry)
+	assert.Equal(t, "terraform", row.binary)
+	assert.Equal(t, "1.0.0", row.version)
+	assert.True(t, row.isDefault)
+	assert.False(t, row.isInstalled)
+	assert.Equal(t, "  ", row.status) // Not installed status.
+}
+
+func TestFindAliasForTool_NoConfig(t *testing.T) {
+	SetAtmosConfig(nil)
+
+	alias := findAliasForTool("hashicorp", "terraform")
+
+	assert.Empty(t, alias, "Should return empty when no config")
+}
+
+func TestFindAliasForTool_NoAliases(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			Aliases: map[string]string{},
+		},
+	})
+
+	alias := findAliasForTool("hashicorp", "terraform")
+
+	assert.Empty(t, alias, "Should return empty when no aliases configured")
+}
+
+func TestFindAliasForTool_WithMatch(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			Aliases: map[string]string{
+				"tf":        "hashicorp/terraform",
+				"terraform": "hashicorp/terraform",
+			},
+		},
+	})
+
+	alias := findAliasForTool("hashicorp", "terraform")
+
+	// Should return the shortest matching alias.
+	assert.Equal(t, "tf", alias)
+}
+
+func TestFindAliasForTool_NoMatch(t *testing.T) {
+	SetAtmosConfig(&schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			Aliases: map[string]string{
+				"tofu": "opentofu/opentofu",
+			},
+		},
+	})
+
+	alias := findAliasForTool("hashicorp", "terraform")
+
+	assert.Empty(t, alias, "Should return empty when no matching alias")
+}

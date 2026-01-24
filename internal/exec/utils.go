@@ -336,11 +336,24 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 }
 
 // processStackContextPrefix processes the context prefix for a stack based on name template or pattern.
+// If stackManifestName is provided (stack has explicit name), template/pattern processing is skipped.
 func processStackContextPrefix(
 	atmosConfig *schema.AtmosConfiguration,
 	configAndStacksInfo *schema.ConfigAndStacksInfo,
 	stackName string,
+	stackManifestName string,
 ) error {
+	// If stack has explicit name, skip template/pattern processing.
+	// The explicit name takes precedence over any generated name.
+	// Still populate Context from vars to avoid stale values from previous iterations.
+	if stackManifestName != "" {
+		configAndStacksInfo.Context = cfg.GetContextFromVars(configAndStacksInfo.ComponentVarsSection)
+		configAndStacksInfo.ContextPrefix = stackManifestName
+		configAndStacksInfo.Context.Component = configAndStacksInfo.ComponentFromArg
+		configAndStacksInfo.Context.BaseComponent = configAndStacksInfo.BaseComponentPath
+		return nil
+	}
+
 	switch {
 	case atmosConfig.Stacks.NameTemplate != "":
 		tmpl, err := ProcessTmpl(atmosConfig, "name-template", atmosConfig.Stacks.NameTemplate, configAndStacksInfo.ComponentSection, false)
@@ -412,7 +425,7 @@ func findComponentInStacks(
 			continue
 		}
 
-		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName); err != nil {
+		if err := processStackContextPrefix(atmosConfig, configAndStacksInfo, stackName, stackManifestName); err != nil {
 			continue
 		}
 

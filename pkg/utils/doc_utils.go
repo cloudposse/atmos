@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/spf13/viper"
 )
@@ -18,7 +19,7 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 	defer perf.Track(nil, "utils.DisplayDocs")()
 
 	if !usePager {
-		fmt.Println(componentDocs)
+		fmt.Fprintln(ioLayer.MaskWriter(os.Stdout), componentDocs)
 		return nil
 	}
 
@@ -40,8 +41,8 @@ func DisplayDocs(componentDocs string, usePager bool) error {
 
 	cmd := exec.Command(args[0], args[1:]...) //nolint:gosec // User-specified PAGER command is intentional
 	cmd.Stdin = strings.NewReader(componentDocs)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = ioLayer.MaskWriter(os.Stdout)
+	cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
 
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("failed to execute pager: %w", err)

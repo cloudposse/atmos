@@ -104,10 +104,13 @@ func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Ins
 		return toolIdentity{}, err
 	}
 
-	// Determine alias (if resolved key differs from tool name).
+	// Determine alias - first check if entry differs from resolved key.
 	alias := ""
 	if resolvedKey != toolName {
 		alias = toolName
+	} else {
+		// Reverse lookup: find any alias configured in atmos.yaml.
+		alias = findAliasForTool(owner, repo)
 	}
 
 	return toolIdentity{
@@ -115,6 +118,26 @@ func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Ins
 		repo:  repo,
 		alias: alias,
 	}, nil
+}
+
+// findAliasForTool finds a configured alias that maps to the given owner/repo.
+// Returns the shortest matching alias (prefers "tofu" over "opentofu").
+func findAliasForTool(owner, repo string) string {
+	atmosConfig := GetAtmosConfig()
+	if atmosConfig == nil || len(atmosConfig.Toolchain.Aliases) == 0 {
+		return ""
+	}
+
+	target := owner + "/" + repo
+	var shortestAlias string
+	for alias, fullName := range atmosConfig.Toolchain.Aliases {
+		if fullName == target {
+			if shortestAlias == "" || len(alias) < len(shortestAlias) {
+				shortestAlias = alias
+			}
+		}
+	}
+	return shortestAlias
 }
 
 // buildToolRow creates a single toolRow for a specific tool version.

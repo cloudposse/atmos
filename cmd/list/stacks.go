@@ -248,7 +248,7 @@ func renderStacksTable(atmosConfig *schema.AtmosConfiguration, stacks []map[stri
 
 	outputFormat := format.Format(opts.Format)
 	r := renderer.New(filters, selector, sorters, outputFormat, "")
-	return r.Render(stacks)
+	return renderWithPager(atmosConfig, "List Stacks", r, stacks)
 }
 
 // buildStackFilters creates filters based on command options.

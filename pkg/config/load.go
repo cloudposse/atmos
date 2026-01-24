@@ -1035,19 +1035,31 @@ func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
 // and loads their configurations into the destination viper instance.
 func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	// Search for `atmos.d/` configurations.
-	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-		log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
-		// Don't return error - just log and continue.
-		// This maintains existing behavior where .atmos.d loading is optional.
+	atmosDPath := filepath.Join(filepath.FromSlash(dirPath), "atmos.d")
+	if stat, err := os.Stat(atmosDPath); err == nil && stat.IsDir() {
+		log.Debug("Found atmos.d directory, loading configurations", "path", atmosDPath)
+		searchPattern := filepath.Join(atmosDPath, "**", "*")
+		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
+			log.Debug("Failed to load atmos.d configs", "error", err, "path", atmosDPath)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat atmos.d directory", "path", atmosDPath, "error", err)
+	} else {
+		log.Trace("No atmos.d directory found", "path", atmosDPath)
 	}
 
 	// Search for `.atmos.d` configurations.
-	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-		log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
-		// Don't return error - just log and continue.
-		// This maintains existing behavior where .atmos.d loading is optional.
+	dotAtmosDPath := filepath.Join(filepath.FromSlash(dirPath), ".atmos.d")
+	if stat, err := os.Stat(dotAtmosDPath); err == nil && stat.IsDir() {
+		log.Debug("Found .atmos.d directory, loading configurations", "path", dotAtmosDPath)
+		searchPattern := filepath.Join(dotAtmosDPath, "**", "*")
+		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
+			log.Debug("Failed to load .atmos.d configs", "error", err, "path", dotAtmosDPath)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat .atmos.d directory", "path", dotAtmosDPath, "error", err)
+	} else {
+		log.Trace("No .atmos.d directory found", "path", dotAtmosDPath)
 	}
 }
 

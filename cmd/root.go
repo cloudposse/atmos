@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"syscall"
 
@@ -27,6 +26,7 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
@@ -62,6 +62,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
+	_ "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
 	"github.com/cloudposse/atmos/toolchain"
@@ -601,9 +602,9 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 		switch atmosConfig.Logs.File {
 		case "/dev/stderr":
-			output = os.Stderr
+			output = iolib.MaskWriter(os.Stderr)
 		case "/dev/stdout":
-			output = os.Stdout
+			output = iolib.MaskWriter(os.Stdout)
 		case "/dev/null":
 			output = io.Discard // More efficient than opening os.DevNull
 		default:
@@ -611,7 +612,7 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
 			// Store the file handle for later cleanup instead of deferring close.
 			logFileHandle = logFile
-			output = logFile
+			output = iolib.MaskWriter(logFile)
 		}
 
 		log.SetOutput(output)
@@ -897,7 +898,7 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 	if renderer != nil {
 		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
 		if err == nil {
-			wrapped = ui.TrimLinesRight(rendered)
+			wrapped = atmosansi.TrimLinesRight(rendered)
 		}
 	}
 
@@ -1423,12 +1424,14 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
-	cmd, err := RootCmd.ExecuteC()
+	cmd, err := internal.Execute(RootCmd)
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Handle sentinel errors with errors.Is().
 	if err != nil {
-		if strings.Contains(err.Error(), "unknown command") {
-			command := getInvalidCommandName(err.Error())
+		if errors.Is(err, errUtils.ErrCommandNotFound) {
+			command, _ := errUtils.GetContext(err, "command")
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
@@ -1478,22 +1481,6 @@ func preprocessCompatibilityFlags() {
 
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
-}
-
-// getInvalidCommandName extracts the invalid command name from an error message.
-func getInvalidCommandName(input string) string {
-	// Regular expression to match the command name inside quotes.
-	re := regexp.MustCompile(`unknown command "([^"]+)"`)
-
-	// Find the match.
-	match := re.FindStringSubmatch(input)
-
-	// Check if a match is found.
-	if len(match) > 1 {
-		command := match[1] // The first capturing group contains the command
-		return command
-	}
-	return ""
 }
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.

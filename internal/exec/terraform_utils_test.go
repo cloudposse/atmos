@@ -190,26 +190,174 @@ func TestExecuteTerraformQuery(t *testing.T) {
 	}
 }
 
-// TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
-func TestWalkTerraformComponents(t *testing.T) {
-	stacks := map[string]any{
-		"stack1": map[string]any{
-			cfg.ComponentsSectionName: map[string]any{
-				cfg.TerraformSectionName: map[string]any{
-					"comp1": map[string]any{},
-					"comp2": map[string]any{},
-				},
-			},
-		},
+// TestExecuteTerraformQueryNoMatches verifies the behavior when no components match the query.
+func TestExecuteTerraformQueryNoMatches(t *testing.T) {
+	// Check if terraform is installed.
+	tests.RequireExecutable(t, "terraform", "running Terraform query tests")
+	os.Unsetenv("ATMOS_BASE_PATH")
+	os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+
+	// Define the work directory and change to it.
+	workDir := "../../tests/fixtures/scenarios/terraform-apply-affected"
+	t.Chdir(workDir)
+
+	oldStd := os.Stderr
+	_, w, _ := os.Pipe()
+	os.Stderr = w
+
+	// Ensure stderr is restored even if test fails.
+	defer func() {
+		os.Stderr = oldStd
+	}()
+
+	stack := "prod"
+
+	// Use a query that won't match any component.
+	info := schema.ConfigAndStacksInfo{
+		Stack:         stack,
+		ComponentType: "terraform",
+		SubCommand:    "plan",
+		DryRun:        true,
+		Query:         ".vars.tags.team == \"nonexistent-team\"",
 	}
 
-	var visited []string
-	err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
-		visited = append(visited, stack+"-"+comp)
-		return nil
+	err := ExecuteTerraformQuery(&info)
+
+	// Restore stderr before checking error.
+	w.Close()
+	os.Stderr = oldStd
+
+	// The function should succeed even when no components match.
+	if err != nil {
+		t.Fatalf("ExecuteTerraformQuery should succeed when no components match: %v", err)
+	}
+}
+
+// TestWalkTerraformComponents verifies that walkTerraformComponents iterates over all components.
+func TestWalkTerraformComponents(t *testing.T) {
+	t.Run("iterates all components", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"comp1": map[string]any{},
+						"comp2": map[string]any{},
+					},
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.ElementsMatch(t, []string{"stack1-comp1", "stack1-comp2"}, visited)
 	})
-	assert.NoError(t, err)
-	assert.ElementsMatch(t, []string{"stack1-comp1", "stack1-comp2"}, visited)
+
+	t.Run("propagates callback error", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"comp1": map[string]any{},
+					},
+				},
+			},
+		}
+
+		expectedErr := assert.AnError
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			return expectedErr
+		})
+		assert.Error(t, err)
+		assert.Equal(t, expectedErr, err)
+	})
+
+	t.Run("skips invalid stack section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": "not-a-map",
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips invalid components section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: "not-a-map",
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips invalid terraform section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: "not-a-map",
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips invalid component section type", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				cfg.ComponentsSectionName: map[string]any{
+					cfg.TerraformSectionName: map[string]any{
+						"comp1": "not-a-map",
+					},
+				},
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
+
+	t.Run("skips missing components section", func(t *testing.T) {
+		stacks := map[string]any{
+			"stack1": map[string]any{
+				"other_key": "value",
+			},
+		}
+
+		var visited []string
+		err := walkTerraformComponents(stacks, func(stack, comp string, section map[string]any) error {
+			visited = append(visited, stack+"-"+comp)
+			return nil
+		})
+		assert.NoError(t, err)
+		assert.Empty(t, visited)
+	})
 }
 
 // TestProcessTerraformComponent exercises the filtering logic of processTerraformComponent.
@@ -228,6 +376,45 @@ func TestProcessTerraformComponent(t *testing.T) {
 		}
 	}
 
+	t.Run("no metadata section", func(t *testing.T) {
+		// Section without metadata should return false, nil.
+		section := map[string]any{
+			"vars": map[string]any{"key": "value"},
+		}
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.False(t, processed)
+		assert.False(t, called)
+	})
+
+	t.Run("metadata wrong type", func(t *testing.T) {
+		// Section with metadata of wrong type should return false, nil.
+		section := map[string]any{
+			cfg.MetadataSectionName: "string-not-map",
+			"vars":                  map[string]any{"key": "value"},
+		}
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.False(t, processed)
+		assert.False(t, called)
+	})
+
 	t.Run("abstract", func(t *testing.T) {
 		section := newSection(map[string]any{"type": "abstract"})
 		called := false
@@ -238,8 +425,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.False(t, processed)
 		assert.False(t, called)
 	})
 
@@ -253,8 +441,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.False(t, processed)
 		assert.False(t, called)
 	})
 
@@ -268,8 +457,9 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan", Query: ".vars.tags.team == \"foo\""}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.False(t, processed)
 		assert.False(t, called)
 	})
 
@@ -286,8 +476,48 @@ func TestProcessTerraformComponent(t *testing.T) {
 		defer patch.Reset()
 
 		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
-		err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
 		assert.NoError(t, err)
+		assert.True(t, processed)
+		assert.True(t, called)
+	})
+
+	t.Run("dry run", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return nil
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan", DryRun: true}
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+		assert.NoError(t, err)
+		assert.True(t, processed) // Returns true in dry-run mode.
+		assert.False(t, called)   // But doesn't call ExecuteTerraform.
+	})
+
+	t.Run("execute returns error", func(t *testing.T) {
+		section := newSection(map[string]any{"enabled": true})
+		expectedErr := assert.AnError
+		called := false
+		patch := gomonkey.ApplyFunc(ExecuteTerraform, func(i schema.ConfigAndStacksInfo) error {
+			called = true
+			return expectedErr
+		})
+		defer patch.Reset()
+
+		info := schema.ConfigAndStacksInfo{SubCommand: "plan"}
+		processed, err := processTerraformComponent(&atmosConfig, &info, stack, component, section, logFunc)
+
+		// If gomonkey didn't work (common on macOS), skip the test.
+		if !called {
+			t.Skip("gomonkey function mocking failed (likely due to platform issues)")
+		}
+
+		assert.Error(t, err)
+		assert.True(t, processed)
 		assert.True(t, called)
 	})
 }
@@ -924,6 +1154,25 @@ func TestExecuteTerraformAffectedComponentInDepOrder(t *testing.T) {
 			dependents:        []schema.Dependent{},
 			args: &DescribeAffectedCmdArgs{
 				IncludeDependents: false,
+			},
+			mockTerraformError: false,
+			expectedError:      false,
+			expectedCalls:      0, // No actual terraform execution in dry run.
+		},
+		{
+			name: "dry run with parent component info",
+			info: &schema.ConfigAndStacksInfo{
+				SubCommand: "plan",
+				DryRun:     true,
+			},
+			affectedList:      []schema.Affected{},
+			affectedComponent: "security-group",
+			affectedStack:     "prod",
+			parentComponent:   "vpc",
+			parentStack:       "prod",
+			dependents:        []schema.Dependent{},
+			args: &DescribeAffectedCmdArgs{
+				IncludeDependents: true,
 			},
 			mockTerraformError: false,
 			expectedError:      false,

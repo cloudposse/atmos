@@ -16,7 +16,7 @@ html[data-theme="dark"] .terminal {
     color: #ccc;
     background: #070e12;
     border: 1px solid #cccccc36;
-    box-shadow: 0 0 20px 3px rgb(8 115 115 / 29%);
+    box-shadow: 0 0 20px 3px rgb(75 25 132 / 29%);
 }
 
 .markdown .terminal {

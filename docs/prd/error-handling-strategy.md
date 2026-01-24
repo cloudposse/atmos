@@ -396,7 +396,7 @@ func init() {
 - [Go 1.13 Error Handling](https://go.dev/blog/go1.13-errors)
 - [Go errors.Join Documentation](https://pkg.go.dev/errors#Join)
 - [err113 Linter Documentation](https://github.com/Djarvur/go-err113)
-- [Atmos Error Package](../errors/errors.go)
+- [Atmos Error Package](../../errors/errors.go)
 
 ## Revision History
 

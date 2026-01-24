@@ -101,6 +101,15 @@ func RegisterAll(root *cobra.Command) error {
 		}
 
 		root.AddCommand(cmd)
+
+		// Apply default NoArgs validator for commands that:
+		// 1. Don't already have Args set (explicit validation)
+		// 2. Don't have a PositionalArgsBuilder registered (structured args)
+		// This prevents commands from silently ignoring unexpected arguments.
+		// Commands that need positional args must explicitly declare them.
+		if cmd.Args == nil && provider.GetPositionalArgsBuilder() == nil {
+			cmd.Args = cobra.NoArgs
+		}
 	}
 
 	// Phase 2: Register command aliases.

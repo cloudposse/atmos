@@ -6,9 +6,9 @@ Learn more in the [Quick Start Guide](https://atmos.tools/quick-start/).
 
 ## What You'll See
 
-- Basic [stack configuration](https://atmos.tools/core-concepts/stacks/) with dev, staging, and prod environments
-- A simple Terraform [component](https://atmos.tools/core-concepts/components/) (`weather`)
-- [Catalog pattern](https://atmos.tools/core-concepts/stacks/catalogs/) for shared component defaults
+- Basic [stack configuration](https://atmos.tools/stacks) with dev, staging, and prod environments
+- A simple Terraform [component](https://atmos.tools/components) (`weather`)
+- [Catalog pattern](https://atmos.tools/howto/catalogs) for shared component defaults
 
 ## Try It
 
