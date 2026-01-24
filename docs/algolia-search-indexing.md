@@ -147,7 +147,7 @@ If the index has significantly fewer records than expected:
 
 ## References
 
-- [Algolia Crawler Documentation](https://www.algolia.com/doc/tools/crawler/getting-started/overview/)
+- [Algolia Crawler Documentation](https://www.algolia.com/doc/tools/crawler/getting-started/overview)
 - [Algolia Crawler GitHub Action](https://github.com/algolia/algoliasearch-crawler-github-actions)
 - [DocSearch Documentation](https://docsearch.algolia.com/)
 - [Docusaurus Search Documentation](https://docusaurus.io/docs/search)

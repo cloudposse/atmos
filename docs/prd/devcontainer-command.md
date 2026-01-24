@@ -1231,7 +1231,7 @@ devcontainer:
 ## References
 
 - [Development Containers Specification](https://containers.dev/)
-- [Docker CLI Reference](https://docs.docker.com/engine/reference/commandline/cli/)
+- [Docker CLI Reference](https://docs.docker.com/reference/cli/docker/)
 - [Podman CLI Reference](https://docs.podman.io/en/latest/Commands.html)
 - [Atmos Component Registry Pattern](./component-registry-pattern.md)
 - [Atmos Command Registry Pattern](./command-registry-pattern.md)
