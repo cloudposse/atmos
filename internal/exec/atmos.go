@@ -147,7 +147,7 @@ func ExecuteAtmosCmd() error {
 			return err
 		}
 
-		_ = ui.Successf("Validated %s in %s", selectedComponent, selectedStack)
+		ui.Successf("Validated %s in %s", selectedComponent, selectedStack)
 		return nil
 	}
 

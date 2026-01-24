@@ -166,7 +166,7 @@ func (p *samlProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, fmt.Errorf("%w: failed to assume role with SAML: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	_ = ui.Successf("SAML authentication successful for provider %s", p.name)
+	ui.Successf("SAML authentication successful for provider %s", p.name)
 
 	return awsCreds, nil
 }

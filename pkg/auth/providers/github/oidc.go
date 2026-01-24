@@ -86,7 +86,7 @@ func (p *oidcProvider) Authenticate(ctx context.Context) (types.ICredentials, er
 		return nil, err
 	}
 
-	_ = ui.Successf("GitHub OIDC authentication successful for provider %s", p.name)
+	ui.Successf("GitHub OIDC authentication successful for provider %s", p.name)
 
 	// Return the JWT token as credentials (used by downstream identities).
 	return &types.OIDCCredentials{
