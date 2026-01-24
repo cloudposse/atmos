@@ -26,9 +26,11 @@ atmos_cli_config:
       cluster_name_template: '{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster'
       cluster_name: ""
       command: ""
+      auto_generate_files: false
     packer:
       base_path: ""
       command: ""
+      auto_generate_files: false
   stacks:
     base_path: stacks
     included_paths:

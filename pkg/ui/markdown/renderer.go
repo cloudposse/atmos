@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -46,9 +47,11 @@ type Renderer struct {
 
 // NewRenderer creates a new Markdown renderer with the given options.
 func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           &atmosConfig,
@@ -101,9 +104,11 @@ func NewRenderer(atmosConfig schema.AtmosConfiguration, opts ...Option) (*Render
 func NewHelpRenderer(atmosConfig *schema.AtmosConfiguration, opts ...Option) (*Renderer, error) {
 	defer perf.Track(atmosConfig, "markdown.NewHelpRenderer")()
 
+	// Use lipgloss.DefaultRenderer().ColorProfile() instead of termenv.ColorProfile()
+	// to respect atmos's terminal detection (handles Terminal.app 256-color limitation).
 	r := &Renderer{
-		width:                 defaultWidth,           // default width
-		profile:               termenv.ColorProfile(), // default color profile
+		width:                 defaultWidth,                              // default width
+		profile:               lipgloss.DefaultRenderer().ColorProfile(), // use atmos-configured profile
 		isTTYSupportForStdout: term.IsTTYSupportForStdout,
 		isTTYSupportForStderr: term.IsTTYSupportForStderr,
 		atmosConfig:           atmosConfig,

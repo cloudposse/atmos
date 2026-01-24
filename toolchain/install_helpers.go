@@ -3,6 +3,7 @@ package toolchain
 import (
 	"fmt"
 	"path/filepath"
+	"runtime"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -10,6 +11,15 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// getPlatformPathHint returns the appropriate PATH export hint for the current platform.
+// On Windows, it returns PowerShell syntax; on Unix-like systems, it returns bash/zsh syntax.
+func getPlatformPathHint() string {
+	if runtime.GOOS == "windows" {
+		return "Export the `PATH` environment variable for your toolchain tools using `Invoke-Expression (atmos --chdir /path/to/project toolchain env --format powershell)`"
+	}
+	return "Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`"
+}
 
 // spinnerControl manages the lifecycle of a Bubble Tea spinner.
 type spinnerControl struct {
@@ -127,7 +137,7 @@ func handleInstallSuccess(result installResult, installer *Installer) {
 	if result.skipToolVersionsUpdate {
 		// Only show PATH hint when running toolchain install directly, not for dependency installs.
 		if result.showHint {
-			ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+			ui.Hint(getPlatformPathHint())
 		}
 		return
 	}
@@ -136,7 +146,7 @@ func handleInstallSuccess(result installResult, installer *Installer) {
 		ui.Successf("Registered `%s %s` in `.tool-versions`", result.repo, result.version)
 		// Only show PATH hint when running toolchain install directly, not for dependency installs.
 		if result.showHint {
-			ui.Hintf("Export the `PATH` environment variable for your toolchain tools using `eval \"$(atmos --chdir /path/to/project toolchain env)\"`")
+			ui.Hint(getPlatformPathHint())
 		}
 	}
 }

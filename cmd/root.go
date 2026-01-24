@@ -604,9 +604,9 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 		switch atmosConfig.Logs.File {
 		case "/dev/stderr":
-			output = os.Stderr
+			output = iolib.MaskWriter(os.Stderr)
 		case "/dev/stdout":
-			output = os.Stdout
+			output = iolib.MaskWriter(os.Stdout)
 		case "/dev/null":
 			output = io.Discard // More efficient than opening os.DevNull
 		default:
@@ -614,7 +614,7 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
 			// Store the file handle for later cleanup instead of deferring close.
 			logFileHandle = logFile
-			output = logFile
+			output = iolib.MaskWriter(logFile)
 		}
 
 		log.SetOutput(output)

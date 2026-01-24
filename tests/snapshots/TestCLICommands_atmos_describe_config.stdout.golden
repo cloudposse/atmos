@@ -27,13 +27,13 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "cluster_name_template": "",
-      "cluster_name": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
     },
     "packer": {
       "base_path": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
     },
     "list": {
       "format": "",

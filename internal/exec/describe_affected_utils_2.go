@@ -103,7 +103,8 @@ func appendToAffected(
 	}
 
 	// Check the `component` section and add `ComponentPath` to the output.
-	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType)
+	// Pass componentName as fallback for JIT vendored components without explicit `component` field.
+	affected.ComponentPath = BuildComponentPath(atmosConfig, componentSection, affected.ComponentType, componentName)
 	affected.StackSlug = fmt.Sprintf("%s-%s", stackName, strings.Replace(componentName, "/", "-", -1))
 
 	*affectedList = append(*affectedList, *affected)

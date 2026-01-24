@@ -540,7 +540,7 @@ rm -rf ~/.local/share/atmos/keyring
 
 ## References
 
-- **XDG Base Directory Specification**: https://specifications.freedesktop.org/basedir-spec/basedir-spec-latest.html
+- **XDG Base Directory Specification**: https://specifications.freedesktop.org/basedir/basedir-spec-latest.html
 - **99designs/keyring**: https://github.com/99designs/keyring
 - **adrg/xdg**: https://github.com/adrg/xdg
 - **Error Handling Strategy**: `docs/prd/error-handling-strategy.md`

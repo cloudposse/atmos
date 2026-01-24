@@ -838,7 +838,7 @@ See the updated [`atmos auth logout`](/cli/commands/auth/auth-logout) documentat
 ### References
 
 - [AWS CLI SSO Logout](https://docs.aws.amazon.com/cli/latest/reference/sso/logout.html)
-- [gcloud auth revoke](https://cloud.google.com/sdk/gcloud/reference/auth/revoke)
+- [gcloud auth revoke](https://docs.cloud.google.com/sdk/gcloud/reference/auth/revoke)
 - [OAuth 2.0 Token Revocation (RFC 7009)](https://datatracker.ietf.org/doc/html/rfc7009)
 - [OpenID Connect Session Management](https://openid.net/specs/openid-connect-session-1_0.html)
 - [OpenID Connect RP-Initiated Logout](https://openid.net/specs/openid-connect-rpinitiated-1_0.html)
