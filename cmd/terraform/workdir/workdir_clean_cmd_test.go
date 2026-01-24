@@ -459,3 +459,77 @@ func TestCleanExpiredWorkdirs_Error(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
 }
+
+// RunE validation tests - test the command entry point validation logic.
+
+func resetViperForTest(t *testing.T) {
+	t.Helper()
+	v := viper.GetViper()
+	v.Set("all", false)
+	v.Set("expired", false)
+	v.Set("ttl", "")
+	v.Set("dry-run", false)
+	v.Set("stack", "")
+}
+
+func TestCleanCmd_RunE_ExpiredWithoutTTL(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("expired", true)
+	v.Set("ttl", "") // No TTL provided.
+
+	err := cleanCmd.RunE(cleanCmd, []string{})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ExpiredWithAll(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("expired", true)
+	v.Set("ttl", "7d")
+	v.Set("all", true) // Cannot use --all with --expired.
+
+	err := cleanCmd.RunE(cleanCmd, []string{})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ExpiredWithComponent(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("expired", true)
+	v.Set("ttl", "7d")
+
+	err := cleanCmd.RunE(cleanCmd, []string{"vpc"}) // Component arg with --expired.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ActualCall_AllWithComponent(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("all", true)
+
+	err := cleanCmd.RunE(cleanCmd, []string{"vpc"}) // --all with component arg.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ActualCall_NoFlagsNoArgs(t *testing.T) {
+	resetViperForTest(t)
+
+	err := cleanCmd.RunE(cleanCmd, []string{}) // No flags, no args.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ActualCall_ComponentWithoutStack(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("stack", "") // No stack provided.
+
+	err := cleanCmd.RunE(cleanCmd, []string{"vpc"}) // Component without --stack.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}

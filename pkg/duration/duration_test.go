@@ -92,3 +92,59 @@ func TestParseDuration(t *testing.T) {
 		})
 	}
 }
+
+// Test overflow protection in parseWithSuffix.
+
+func TestParse_OverflowProtection(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		// Value that would overflow when multiplied by day multiplier.
+		{name: "overflow days", input: "9223372036854775807d", wantErr: true},
+		// Value that would overflow when multiplied by hour multiplier.
+		{name: "overflow hours", input: "9223372036854775807h", wantErr: true},
+		// Large but valid value.
+		{name: "large valid days", input: "100000000d", wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Parse(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err, "expected error for input %q", tt.input)
+			} else {
+				assert.NoError(t, err, "unexpected error for input %q", tt.input)
+			}
+		})
+	}
+}
+
+// Test ParseDuration overflow when seconds exceed maxDurationSeconds.
+
+func TestParseDuration_OverflowProtection(t *testing.T) {
+	// maxDurationSeconds is approximately 292 years.
+	// Test with a value that exceeds this.
+	tests := []struct {
+		name    string
+		input   string
+		wantErr bool
+	}{
+		// ~300 years in seconds (exceeds maxDurationSeconds).
+		{name: "exceeds max duration", input: "9467280000", wantErr: true},
+		// ~100 years in seconds (valid).
+		{name: "large valid seconds", input: "3153600000", wantErr: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := ParseDuration(tt.input)
+			if tt.wantErr {
+				assert.Error(t, err, "expected error for input %q", tt.input)
+			} else {
+				assert.NoError(t, err, "unexpected error for input %q", tt.input)
+			}
+		})
+	}
+}
