@@ -47,4 +47,15 @@ exclude = [
   # Files that don't exist yet (planned documentation)
   "website/docs/cli/errors\\.mdx",
   "website/docs/cli/configuration/mask\\.mdx",
+  # Documentation template placeholder (intentional)
+  "github\\.com/cloudposse/atmos/issues/XXXX",
+  # GitHub redirects (expected behavior)
+  "github\\.com/cloudposse/atmos/releases/latest",
+  "github\\.com/codespaces",
+  # Raw file URLs redirect through GitHub's CDN (by design)
+  "\\?raw=true",
+  # shields.io redirects /github/release/ to /github/v/release/ internally (both work)
+  "img\\.shields\\.io/github/release/",
+  # Atmos Pro redirects to sign-in page for unauthenticated users
+  "atmos-pro\\.com",
 ]
