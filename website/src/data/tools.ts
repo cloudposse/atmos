@@ -951,17 +951,6 @@ export const authTools: Tool[] = [
     atmosComparison: 'Atmos **replaces** the credential helper with native ECR authentication through GitHub Actions. The `setup-atmos` action handles ECR login automatically.',
     featureComparison: ecrAuthFeatures,
   },
-  {
-    id: 'eksctl',
-    name: 'eksctl',
-    url: 'https://github.com/eksctl-io/eksctl',
-    description: 'Official CLI for Amazon EKS',
-    category: 'Auth Management',
-    relationship: 'ecosystem',
-    details: 'eksctl is a simple CLI tool for creating and managing clusters on EKS. It can also update kubeconfig for cluster access.',
-    atmosComparison: 'Atmos **integrates** with eksctl through [custom commands](/cli/configuration/commands) and handles authentication separately via native [auth](/cli/commands/auth).',
-    featureComparison: eksAuthFeatures,
-  },
 ];
 
 const toolchainFeatures: FeatureComparison[] = [
