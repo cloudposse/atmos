@@ -223,3 +223,112 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 		})
 	}
 }
+
+// TestJITSource_GenerateVarfile verifies that `terraform generate varfile` works
+// with JIT-sourced components. This is a regression test for issue #2019.
+func TestJITSource_GenerateVarfile(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	// vpc-remote-workdir has source.uri configured with workdir enabled.
+	cmd.RootCmd.SetArgs([]string{
+		"terraform", "generate", "varfile", "vpc-remote-workdir",
+		"--stack", "dev",
+	})
+
+	err := cmd.Execute()
+	// Currently fails because generate varfile doesn't run JIT provisioning.
+	require.NoError(t, err, "generate varfile should work with JIT-sourced components")
+
+	// Verify workdir was provisioned.
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir")
+	info, err := os.Stat(workdirPath)
+	require.NoError(t, err, "Workdir should exist at %s", workdirPath)
+	require.True(t, info.IsDir(), "Workdir path should be a directory")
+
+	// Verify context.tf exists (from remote source).
+	contextTfPath := filepath.Join(workdirPath, "context.tf")
+	_, err = os.Stat(contextTfPath)
+	require.NoError(t, err, "context.tf should exist in workdir (from remote source)")
+}
+
+// TestJITSource_GenerateBackend verifies that `terraform generate backend` works
+// with JIT-sourced components. This is a regression test for issue #2019.
+// Note: The fixture doesn't have backend configuration, so the command will fail
+// with "backend_type is missing". The key assertion is that JIT provisioning
+// works (workdir is created) before the backend validation fails.
+func TestJITSource_GenerateBackend(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	cmd.RootCmd.SetArgs([]string{
+		"terraform", "generate", "backend", "vpc-remote-workdir",
+		"--stack", "dev",
+	})
+
+	err := cmd.Execute()
+	// The fixture doesn't have backend config, so this will fail with "backend_type is missing".
+	// The key test is that JIT provisioning happened (workdir exists) before this error.
+	// If JIT didn't work, the error would be "component does not exist".
+	if err != nil {
+		require.Contains(t, err.Error(), "backend_type",
+			"error should be about missing backend_type, not missing component")
+	}
+
+	// Verify workdir was provisioned by JIT source.
+	workdirPath := filepath.Join(".workdir", "terraform", "dev-vpc-remote-workdir")
+	info, statErr := os.Stat(workdirPath)
+	require.NoError(t, statErr, "Workdir should exist at %s (JIT provisioning should have run)", workdirPath)
+	require.True(t, info.IsDir(), "Workdir path should be a directory")
+
+	// Verify context.tf exists (from remote source).
+	contextTfPath := filepath.Join(workdirPath, "context.tf")
+	_, statErr = os.Stat(contextTfPath)
+	require.NoError(t, statErr, "context.tf should exist in workdir (from remote source)")
+}
+
+// TestJITSource_PackerOutput verifies that `packer output` works
+// with JIT-sourced components.
+func TestJITSource_PackerOutput(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	// ami-workdir has source.uri configured with workdir enabled.
+	cmd.RootCmd.SetArgs([]string{
+		"packer", "output", "ami-workdir",
+		"--stack", "dev",
+	})
+
+	err := cmd.Execute()
+	// Note: This will fail even after JIT fix if no manifest exists,
+	// but the error should be "manifest not found" not "component not found".
+	if err != nil {
+		// Accept "manifest not found" as success - JIT provisioning worked.
+		require.Contains(t, err.Error(), "manifest",
+			"error should be about missing manifest, not missing component")
+	}
+}
+
+// TestJITSource_HelmfileGenerateVarfile verifies that `helmfile generate varfile`
+// works with JIT-sourced components.
+func TestJITSource_HelmfileGenerateVarfile(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/source-provisioner-workdir")
+	t.Cleanup(func() {
+		_ = os.RemoveAll(".workdir")
+	})
+
+	// nginx-workdir has source.uri configured with workdir enabled.
+	cmd.RootCmd.SetArgs([]string{
+		"helmfile", "generate", "varfile", "nginx-workdir",
+		"--stack", "dev",
+	})
+
+	err := cmd.Execute()
+	require.NoError(t, err, "helmfile generate varfile should work with JIT-sourced components")
+}
