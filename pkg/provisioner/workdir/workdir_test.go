@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -413,7 +414,7 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping read-only directory test on Windows - directory permissions work differently")
 	}
 	// Create a temp dir with a read-only .atmos subdirectory to force WriteMetadata to fail.

@@ -3,6 +3,7 @@ package workdir
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -47,7 +48,7 @@ func TestFileNeedsCopy_DifferentContent(t *testing.T) {
 }
 
 func TestFileNeedsCopy_DifferentPermissions(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows - Unix file permissions not supported")
 	}
 	tmpDir := t.TempDir()
@@ -197,7 +198,7 @@ func TestCopyFile_SourceNotFound(t *testing.T) {
 }
 
 func TestCopyFile_PreservesPermissions(t *testing.T) {
-	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+	if runtime.GOOS == "windows" {
 		t.Skip("Skipping permission test on Windows - Unix file permissions not supported")
 	}
 	tmpDir := t.TempDir()
