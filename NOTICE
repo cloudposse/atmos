@@ -950,7 +950,7 @@ MIT LICENSED DEPENDENCIES
 
   - al.essio.dev/pkg/shellescape
     License: MIT
-    URL: https://github.com/alessio/shellescape/blob/v1.5.1/LICENSE
+    URL: https://github.com/alessio/shellescape/blob/v1.6.0/LICENSE
 
   - github.com/99designs/keyring
     License: MIT
