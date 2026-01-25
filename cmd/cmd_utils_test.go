@@ -1773,7 +1773,16 @@ func TestWithStackValidation(t *testing.T) {
 // TestPreCustomCommand_ShowsSubCommands tests that preCustomCommand displays available
 // subcommands when a command has no arguments or steps but has subcommands.
 func TestPreCustomCommand_ShowsSubCommands(t *testing.T) {
-	// Initialize I/O context for data package.
+	_ = NewTestKit(t)
+
+	// Capture stdout to verify output.
+	oldStdout := os.Stdout
+	r, w, err := os.Pipe()
+	require.NoError(t, err)
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
+	// Initialize I/O context for data package (after stdout capture is set up).
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
 	data.InitWriter(ioCtx)
@@ -1808,10 +1817,20 @@ func TestPreCustomCommand_ShowsSubCommands(t *testing.T) {
 	cmd := &cobra.Command{Use: "parent-cmd"}
 
 	defer func() {
-		if r := recover(); r != nil {
+		if rec := recover(); rec != nil {
+			// Close pipe and read captured output.
+			w.Close()
+			var buf [4096]byte
+			n, _ := r.Read(buf[:])
+			output := string(buf[:n])
+
 			// Expected: panic from mocked OsExit.
 			assert.True(t, exitCalled, "OsExit should be called")
 			assert.Equal(t, 1, capturedExitCode, "Should exit with code 1")
+
+			// Verify output contains the subcommand names.
+			assert.Contains(t, output, "sub1", "Output should contain 'sub1'")
+			assert.Contains(t, output, "sub2", "Output should contain 'sub2'")
 		}
 	}()
 
