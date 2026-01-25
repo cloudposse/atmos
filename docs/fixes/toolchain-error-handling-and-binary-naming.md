@@ -43,7 +43,7 @@ configuration.
 
 ### Solution
 
-Modified `pkg/ui/markdown/custom_renderer.go` to redirect stdout to `/dev/null` during glamour rendering:
+Modified `pkg/ui/markdown/custom_renderer.go` to redirect stdout to `os.DevNull` during glamour rendering:
 
 ```go
 // stdoutRedirectMu serializes stdout redirects during rendering to prevent races.
