@@ -1,0 +1,137 @@
+# OpenNext backing services for acme
+# Deploys S3, DynamoDB, SQS, IAM role, SSM parameters, and Sysbox sandbox runtime
+
+import:
+  - acme/_defaults
+  # OpenNext backing services
+  - catalog/s3-bucket/defaults
+  - catalog/dynamodb/defaults
+  - catalog/sqs-queue/defaults
+  - catalog/iam-role/defaults
+  - catalog/ssm-parameters/defaults
+  # Sysbox sandbox runtime for Docker-in-Docker workloads
+  - catalog/eks/karpenter/defaults
+  - catalog/eks/karpenter-node-pool/defaults
+  - catalog/eks/sysbox-runtime/defaults
+  - catalog/eks/sysbox-node-pool/defaults
+  - catalog/eks/sysbox-deployment/sample
+
+# These variables are passed to all components in this stack
+vars:
+  name: opennext
+
+components:
+  terraform:
+    s3-bucket/opennext:
+      metadata:
+        component: s3-bucket
+        inherits:
+          - s3-bucket/defaults
+      # We dont need to override any vars from the defaults. Add if needed.
+      vars: {}
+
+    dynamodb/opennext:
+      metadata:
+        component: dynamodb
+        inherits:
+          - dynamodb/defaults
+      # We dont need to override any vars from the defaults. Add if needed.
+      vars: {}
+
+    sqs-queue/opennext:
+      metadata:
+        component: sqs-queue
+        inherits:
+          - sqs-queue/defaults
+      # We dont need to override any vars from the defaults. Add if needed.
+      vars: {}
+
+    iam-role/opennext:
+      metadata:
+        component: iam-role
+        inherits:
+          - iam-role/defaults
+      vars:
+        role_description: |
+          IRSA role for OpenNext application to access S3, DynamoDB, and SQS backing services.
+        eks_oidc_enabled: true
+        service_account_namespace: acme
+        service_account_name: acme-opennext
+        policy_statements:
+          S3BucketAccess:
+            effect: Allow
+            actions:
+              - "s3:ListBucket"
+            resources:
+              - !terraform.state s3-bucket/opennext bucket_arn
+          S3ObjectAccess:
+            effect: Allow
+            actions:
+              - "s3:GetObject"
+              - "s3:PutObject"
+              - "s3:DeleteObject"
+            resources:
+              - !terraform.state s3-bucket/opennext bucket_arn_objects
+          DynamoDBTableAccess:
+            effect: Allow
+            actions:
+              - "dynamodb:GetItem"
+              - "dynamodb:PutItem"
+              - "dynamodb:UpdateItem"
+              - "dynamodb:DeleteItem"
+              - "dynamodb:Query"
+              - "dynamodb:Scan"
+              - "dynamodb:BatchGetItem"
+              - "dynamodb:BatchWriteItem"
+            resources:
+              - !terraform.state dynamodb/opennext table_arn
+              - !terraform.state dynamodb/opennext table_arn_indexes
+          SQSAccess:
+            effect: Allow
+            actions:
+              - "sqs:SendMessage"
+              - "sqs:ReceiveMessage"
+              - "sqs:DeleteMessage"
+              - "sqs:GetQueueAttributes"
+              - "sqs:GetQueueUrl"
+              - "sqs:ChangeMessageVisibility"
+            resources:
+              - !terraform.state sqs-queue/opennext sqs_queue.queue_arn
+
+    ssm-parameters/opennext:
+      metadata:
+        component: ssm-parameters
+        inherits:
+          - ssm-parameters/defaults
+      vars:
+        params:
+          /acme/CACHE_BUCKET_NAME:
+            description: "S3 bucket for OpenNext cache"
+            value: !terraform.state s3-bucket/opennext bucket_id
+            type: String
+            overwrite: true
+          /acme/CACHE_BUCKET_REGION:
+            description: "Region of the OpenNext cache bucket"
+            value: !terraform.state s3-bucket/opennext bucket_region
+            type: String
+            overwrite: true
+          /acme/CACHE_DYNAMO_TABLE:
+            description: "DynamoDB table for OpenNext cache metadata"
+            value: !terraform.state dynamodb/opennext table_name
+            type: String
+            overwrite: true
+          /acme/REVALIDATION_QUEUE_URL:
+            description: "SQS queue URL for OpenNext revalidation"
+            value: !terraform.state sqs-queue/opennext sqs_queue.queue_url
+            type: String
+            overwrite: true
+          /acme/REVALIDATION_QUEUE_REGION:
+            description: "Region of the revalidation queue"
+            value: !terraform.state sqs-queue/opennext region
+            type: String
+            overwrite: true
+
+    # Sysbox sandbox runtime components
+    eks/sysbox-deployment/sample:
+      vars:
+        enabled: true # Set to true to deploy a sample Sysbox workload

@@ -1,0 +1,38 @@
+components:
+  terraform:
+    eks/sysbox-runtime:
+      settings:
+        depends_on:
+          1:
+            component: "eks/cluster"
+      vars:
+        enabled: true
+        # EKS cluster connection info - uses atmos eks helper commands
+        # Run `atmos eks info` to see all cluster connection values
+        eks_cluster_id: !exec atmos eks id
+        eks_cluster_endpoint: !exec atmos eks endpoint
+        eks_cluster_certificate_authority_data: !exec atmos eks ca
+        # Sysbox deploy image - official Nestybox image
+        sysbox_deploy_image: "registry.nestybox.com/nestybox/sysbox-deploy-k8s:v0.6.7-0"
+        # RuntimeClass name - pods use runtimeClassName: sysbox-runc
+        runtime_class_name: "sysbox-runc"
+        # Handler must match CRI-O runtime config - sysbox-runc is the standard name
+        runtime_handler: "sysbox-runc"
+        # Node selector for RuntimeClass scheduling
+        # Use sysbox-install=yes which is set at node creation time
+        # The DaemonSet ensures Sysbox is installed before pods can run
+        node_selector:
+          sysbox-install: "yes"
+        # Tolerations match node pool taints
+        tolerations:
+          - key: "sandbox-runtime"
+            operator: "Equal"
+            value: "sysbox"
+            effect: "NoSchedule"
+        # Overhead for Sysbox pods (sysbox-mgr, sysbox-fs)
+        overhead_pod_fixed:
+          memory: "350Mi"
+          cpu: "250m"
+
+        kube_exec_auth_role_arn_enabled: false
+        kube_exec_auth_role_arn: ""

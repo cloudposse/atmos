@@ -1,0 +1,28 @@
+#!/bin/bash
+
+function usage() {
+  cat >&2 <<'EOF'
+./karpenter-crd-upgrade <version>
+
+Use this script to upgrade the Karpenter CRDs by installing or upgrading the karpenter-crd helm chart.
+
+EOF
+}
+
+function upgrade() {
+  VERSION="${1}"
+  [[ $VERSION =~ ^v ]] || VERSION="v${VERSION}"
+
+  set -x
+
+  kubectl label crd awsnodetemplates.karpenter.k8s.aws provisioners.karpenter.sh app.kubernetes.io/managed-by=Helm --overwrite
+  kubectl annotate crd awsnodetemplates.karpenter.k8s.aws provisioners.karpenter.sh meta.helm.sh/release-name=karpenter-crd --overwrite
+  kubectl annotate crd awsnodetemplates.karpenter.k8s.aws provisioners.karpenter.sh meta.helm.sh/release-namespace=karpenter --overwrite
+  helm upgrade --install karpenter-crd oci://public.ecr.aws/karpenter/karpenter-crd --version "$VERSION" --namespace karpenter
+}
+
+if (($# == 0)); then
+  usage
+else
+  upgrade $1
+fi

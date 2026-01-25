@@ -1,0 +1,121 @@
+# acme Terraform Component Vendoring
+#
+# This file defines all Terraform components to be vendored from upstream sources.
+# Run `atmos vendor pull` to download all components.
+#
+# Reference: https://atmos.tools/cli/commands/vendor/pull
+#
+# Usage:
+#   atmos vendor pull                    # Pull all components
+#   atmos vendor pull -c s3-bucket       # Pull specific component
+#   atmos vendor pull --tags opennext    # Pull components with specific tag
+
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: acme-vendor-config
+  description: Terraform components for acme infrastructure
+
+spec:
+  # Shared mixin for providers.tf (removes account-map dependency)
+  imports: []
+
+  sources:
+    # ─────────────────────────────────────────────────────────────────────────
+    # OpenNext Backing Services
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - component: s3-bucket
+      source: github.com/cloudposse-terraform-components/aws-s3-bucket.git//src?ref={{.Version}}
+      version: v1.539.0
+      targets:
+        - atmos/components/terraform/s3-bucket
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - opennext
+        - storage
+
+    - component: dynamodb
+      source: github.com/cloudposse-terraform-components/aws-dynamodb.git//src?ref={{.Version}}
+      version: v1.535.2
+      targets:
+        - atmos/components/terraform/dynamodb
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - opennext
+        - database
+
+    - component: sqs-queue
+      source: github.com/cloudposse-terraform-components/aws-sqs-queue.git//src?ref={{.Version}}
+      version: v1.535.5
+      targets:
+        - atmos/components/terraform/sqs-queue
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - opennext
+        - messaging
+
+    - component: ssm-parameters
+      source: github.com/cloudposse-terraform-components/aws-ssm-parameters.git//src?ref={{.Version}}
+      version: v2.0.0
+      targets:
+        - atmos/components/terraform/ssm-parameters
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - opennext
+        - config
+
+    - component: iam-role
+      source: github.com/cloudposse-terraform-components/aws-iam-role.git//src?ref={{.Version}}
+      version: v1.537.0
+      targets:
+        - atmos/components/terraform/iam-role
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - opennext
+        - iam
+
+    # ─────────────────────────────────────────────────────────────────────────
+    # EKS / Karpenter Components
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - component: eks/karpenter
+      source: github.com/cloudposse-terraform-components/aws-eks-karpenter-controller.git//src?ref={{.Version}}
+      version: v1.538.0
+      targets:
+        - atmos/components/terraform/eks/karpenter
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - eks
+        - karpenter
+
+    - component: eks/karpenter-node-pool
+      source: github.com/cloudposse-terraform-components/aws-eks-karpenter-node-pool.git//src?ref={{.Version}}
+      version: v2.2.0
+      targets:
+        - atmos/components/terraform/eks/karpenter-node-pool
+      included_paths:
+        - "**/**"
+      excluded_paths:
+        - providers.tf
+      tags:
+        - eks
+        - karpenter

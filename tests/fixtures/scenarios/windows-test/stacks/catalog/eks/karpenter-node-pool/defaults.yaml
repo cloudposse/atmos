@@ -1,0 +1,191 @@
+components:
+  terraform:
+    eks/karpenter-node-pool:
+      settings:
+        depends_on:
+          1:
+            component: "eks/karpenter"
+      vars:
+        enabled: true
+        eks_component_name: eks/cluster
+        vpc_component_name: vpc
+        name: "karpenter-node-pool"
+
+        # Set to false to use direct variables instead of remote state lookups
+        # When false, provide EKS and VPC config via the variables below
+        account_map_enabled: false
+
+        # Direct EKS cluster configuration (used when account_map_enabled: false)
+        # Can be populated via Atmos state functions: !terraform.state eks/cluster
+        eks:
+          eks_cluster_id: ""
+          eks_cluster_endpoint: ""
+          eks_cluster_certificate_authority_data: ""
+          karpenter_iam_role_name: ""
+
+        # Direct VPC configuration (used when account_map_enabled: false)
+        # Can be populated via Atmos state functions: !terraform.state vpc
+        vpc:
+          private_subnet_ids: []
+        # https://karpenter.sh/docs/concepts/
+        node_pools:
+          default:  &node_pool_defaults
+            # Whether to place EC2 instances launched by Karpenter into VPC private subnets. Set it to `false` to use public subnets
+            private_subnets_enabled: true
+            annotations: null
+            labels: null
+            disruption:
+              consolidation_policy: "WhenEmptyOrUnderutilized"
+              # A node becomes eligible for consolidation when it has not had
+              # a pod added or removed for the consolidate_after duration.
+              consolidate_after: "70s"
+              max_instance_lifetime: "336h" # 14 days
+              budgets:
+              - nodes: "20%"
+                reasons:
+                 - "Underutilized"
+                 - "Empty"
+            # Karpenter provisioner total CPU limit for all pods running on the EC2 instances launched by Karpenter
+            total_cpu_limit: "100"
+            # Karpenter provisioner total memory limit for all pods running on the EC2 instances launched by Karpenter
+            total_memory_limit: "1000Gi"
+            # Karpenter provisioner metadata options
+            metadata_options: {}
+            # The AMI used by Karpenter provisioner when provisioning nodes.
+            # Based on the value set for ami_selector_terms, Karpenter will automatically query for the appropriate
+            # EKS optimized AMI via AWS Systems Manager (SSM)
+            # bottlerocket, al2, al2023, windows2019, windows2022
+            # https://karpenter.sh/v1.0/concepts/nodeclasses/#specamiselectorterms
+            ami_selector_terms:
+              - alias: al2023@latest
+            # Karpenter provisioner block device mappings.
+            block_device_mappings:
+              - deviceName: /dev/xvda
+                ebs:
+                  volumeSize: 200Gi
+                  volumeType: gp3
+                  encrypted: true
+                  deleteOnTermination: true
+            # Set acceptable (In) and unacceptable (Out) Kubernetes and Karpenter values for node provisioning based on
+            # Well-Known Labels and cloud-specific settings. These can include instance types, zones, computer architecture,
+            # and capacity type (such as AWS spot or on-demand).
+            # See https://karpenter.sh/docs/concepts/nodepools/#spectemplatespecrequirements for more details
+            requirements:
+              # Require encryption in transit. If we did not have a more explicit SCP, this
+              # would be sufficient to ensure that all instances are encrypted in transit.
+              - key: "karpenter.k8s.aws/instance-encryption-in-transit-supported"
+                operator: "In"
+                values: ["true"]
+              # Exclude instance types with 1 vCPU to make room for all the DaemonSets
+              - key: "karpenter.k8s.aws/instance-cpu"
+                operator: Gt
+                values: ["1"]
+              # With a lot of pods, we start hitting IOPS and Bandwidth issues
+              # on the EBS volume. Split things up over smaller instances
+              # (< 32 vCPUs) to ensure adequate disk performance.
+              - key: "karpenter.k8s.aws/instance-cpu"
+                operator: Lt
+                values: ["32"]
+              # See https://karpenter.sh/docs/concepts/nodepools/#capacity-type
+              # Allow fallback to on-demand instances when spot instances are unavailable
+              # By default, Karpenter uses the "price-capacity-optimized" allocation strategy
+              # https://aws.amazon.com/blogs/compute/introducing-price-capacity-optimized-allocation-strategy-for-ec2-spot-instances/
+              # It is currently not configurable, but that may change in the future.
+              # See https://github.com/aws/karpenter-provider-aws/issues/1240
+              - key: "karpenter.sh/capacity-type"
+                operator: "In"
+                values:
+                  - "on-demand"
+                  - "spot"
+
+              - key: "kubernetes.io/arch"
+                operator: "In"
+                values:
+                  - "amd64"
+
+              # Set instance family according to the DenyEC2InstancesWithoutEncryptionInTransit SCP
+              # https://raw.githubusercontent.com/cloudposse/terraform-aws-service-control-policies/0.14.1/catalog/ec2-policies.yaml
+              # We do this explicitly, despite the "instance-encryption-in-transit-supported" requirement, because
+              # new instance families will be added before the SCP is updated, and Karpenter just gives up if it
+              # tries to launch an instance and fails due to the SCP.
+              - key: "karpenter.k8s.aws/instance-family"
+                operator: "In"
+                values:
+                  # updated 2024-04-11
+                  - c5a
+                  - c5ad
+                  - c5n
+                  - c6a
+                  - c6gn
+                  - c6i
+                  - c6id
+                  - c6in
+                  - c7a
+                  - c7g
+                  - c7gd
+                  - c7gn
+                  - c7i
+                  - d3
+                  - d3en
+                  - dl1
+                  - dl2q
+                  - g4ad
+                  - g4dn
+                  - g5
+                  - g6
+                  - gr6
+                  - hpc6a
+                  - hpc6id
+                  - hpc7a
+                  - hpc7g
+                  - i3en
+                  - i4g
+                  - i4i
+                  - im4gn
+                  - inf1
+                  - inf2
+                  - is4gen
+                  - m5dn
+                  - m5n
+                  - m5zn
+                  - m6a
+                  - m6i
+                  - m6id
+                  - m6idn
+                  - m6in
+                  - m7a
+                  - m7g
+                  - m7gd
+                  - m7i
+                  - m7i-flex
+                  - p3dn
+                  - p4d
+                  - p4de
+                  - p5
+                  - r5dn
+                  - r5n
+                  - r6a
+                  - r6i
+                  - r6id
+                  - r6idn
+                  - r6in
+                  - r7a
+                  - r7g
+                  - r7gd
+                  - r7i
+                  - r7iz
+                  - trn1
+                  - trn1n
+                  - u-12tb1
+                  - u-18tb1
+                  - u-24tb1
+                  - u-3tb1
+                  - u-6tb1
+                  - u-9tb1
+                  - vt1
+                  - x2idn
+                  - x2iedn
+                  - x2iezn
+
+        kube_exec_auth_role_arn_enabled: false
+        kube_exec_auth_role_arn: ""

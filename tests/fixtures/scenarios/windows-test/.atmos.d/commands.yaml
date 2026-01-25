@@ -1,0 +1,16 @@
+# Custom commands for the windows-test fixture
+# These commands demonstrate .atmos.d auto-import functionality
+
+commands:
+  - name: bootstrap
+    description: "Bootstrap the development environment"
+    steps:
+      - echo "Starting bootstrap..."
+      - echo "Run 'atmos toolchain install' to install tools"
+      - echo "Bootstrap complete!"
+
+  - name: hello
+    description: "Simple hello world test command"
+    steps:
+      - echo "Hello from .atmos.d custom commands!"
+      - echo "This proves .atmos.d auto-import is working"

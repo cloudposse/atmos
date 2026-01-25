@@ -1,0 +1,7 @@
+charmbracelet/gum 0.17.0
+derailed/k9s 0.32.7
+helm/helm 3.16.3
+jqlang/jq 1.7.1
+kubernetes/kubectl 1.31.4
+opentofu/opentofu 1.9.0
+replicatedhq/replicated 0.124.1

@@ -684,6 +684,49 @@ func TestBuildAssetURL_NoExeForArchives(t *testing.T) {
 	}
 }
 
+// TestBuildAssetURL_HTTPTypeWindowsExeExtension tests that HTTP type tools also get
+// .exe appended on Windows for raw binary URLs (like kubectl from dl.k8s.io).
+func TestBuildAssetURL_HTTPTypeWindowsExeExtension(t *testing.T) {
+	installer := &Installer{}
+
+	// HTTP type tool with raw binary URL (no extension) - like kubectl.
+	tool := &registry.Tool{
+		Type:  "http",
+		Asset: "https://dl.k8s.io/v{{.Version}}/bin/{{.OS}}/{{.Arch}}/kubectl",
+	}
+
+	url, err := installer.BuildAssetURL(tool, "1.31.4")
+	require.NoError(t, err)
+
+	if runtime.GOOS == "windows" {
+		// On Windows, should have .exe extension.
+		assert.True(t, strings.HasSuffix(url, ".exe"), "Windows HTTP URL should end with .exe: %s", url)
+		assert.Equal(t, "https://dl.k8s.io/v1.31.4/bin/windows/amd64/kubectl.exe", url)
+	} else {
+		// On non-Windows, should NOT have .exe extension.
+		assert.False(t, strings.HasSuffix(url, ".exe"), "Non-Windows HTTP URL should not end with .exe: %s", url)
+	}
+}
+
+// TestBuildAssetURL_HTTPTypeNoExeForArchives tests that HTTP type archive URLs
+// don't get .exe appended.
+func TestBuildAssetURL_HTTPTypeNoExeForArchives(t *testing.T) {
+	installer := &Installer{}
+
+	// HTTP type tool with archive URL.
+	tool := &registry.Tool{
+		Type:  "http",
+		Asset: "https://example.com/releases/v{{.Version}}/tool-{{.OS}}-{{.Arch}}.tar.gz",
+	}
+
+	url, err := installer.BuildAssetURL(tool, "1.0.0")
+	require.NoError(t, err)
+
+	// Archives should never get .exe appended, even on Windows.
+	assert.False(t, strings.HasSuffix(url, ".exe"), "Archive HTTP URL should not have .exe: %s", url)
+	assert.True(t, strings.HasSuffix(url, ".tar.gz"), "Archive URL should keep .tar.gz extension: %s", url)
+}
+
 // TestBuildAssetURL_NoExeForOtherExtensions tests that assets with non-archive extensions
 // (like .msi, .dmg, .deb) don't get .exe appended.
 func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {

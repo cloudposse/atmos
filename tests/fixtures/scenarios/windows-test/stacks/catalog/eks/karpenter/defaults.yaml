@@ -1,0 +1,55 @@
+components:
+  terraform:
+    eks/karpenter:
+      vars:
+        enabled: true
+        eks_component_name: eks/cluster
+        name: "karpenter"
+
+        # Set to false to use direct variables instead of remote state lookups
+        # When false, provide EKS config via the `eks` variable below
+        account_map_enabled: false
+
+        # Direct EKS cluster configuration (used when account_map_enabled: false)
+        # Can be populated via Atmos state functions: !terraform.state eks/cluster
+        eks:
+          eks_cluster_id: ""
+          eks_cluster_arn: ""
+          eks_cluster_endpoint: ""
+          eks_cluster_certificate_authority_data: ""
+          eks_cluster_identity_oidc_issuer: ""
+          karpenter_iam_role_arn: ""
+        chart: "karpenter"
+        crd_chart: "karpenter-crd"
+        # https://github.com/aws/karpenter/tree/main/charts/karpenter
+        chart_repository: "oci://public.ecr.aws/karpenter"
+        # renovate: datasource=helm depName=karpenter registryUrl=https://charts.karpenter.sh
+        chart_version: "1.0.5"
+        crd_chart_enabled: true
+        # Enable Karpenter to get advance notice of spot instances being terminated
+        # See https://karpenter.sh/docs/concepts/#interruption
+        interruption_handler_enabled: true
+        settings:
+          # Our main dynamic usage is from Terraform jobs, which tend to come in bursts,
+          # so we could batch them up and just run a single node. However, that would
+          # allocate 1 big instance and leave it running until every single job finished.
+          # In order to better support a stepped scale down, we attempt to limit the batches
+          # so that we get several nodes that can be scaled down independently, but
+          # balance that with some batching to take advantage of lower cost per job
+          # when running multiple jobs on larger instances.
+          batch_idle_duration: "7s"
+          batch_max_duration: "30s"
+        resources:
+          limits:
+            cpu: "300m"
+            memory: "1Gi"
+          requests:
+            cpu: "100m"
+            memory: "512Mi"
+        cleanup_on_fail: true
+        atomic: true
+        wait: true
+        rbac_enabled: true
+
+        kube_exec_auth_role_arn_enabled: false
+        kube_exec_auth_role_arn: ""

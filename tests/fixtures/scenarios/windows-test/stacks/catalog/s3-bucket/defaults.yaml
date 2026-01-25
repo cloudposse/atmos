@@ -1,0 +1,37 @@
+# S3 bucket component defaults for OpenNext cache
+components:
+  terraform:
+    s3-bucket/defaults:
+      metadata:
+        type: abstract
+        component: s3-bucket
+      vars:
+        enabled: true
+        # Secure by default
+        acl: private
+        block_public_acls: true
+        block_public_policy: true
+        ignore_public_acls: true
+        restrict_public_buckets: true
+        # Require HTTPS
+        allow_ssl_requests_only: true
+        # Server-side encryption
+        sse_algorithm: AES256
+        # Cache bucket - versioning not needed
+        versioning_enabled: false
+        # Allow force destroy for cache bucket (non-critical data)
+        force_destroy: true
+        # Lifecycle rules to clean up old cache entries
+        lifecycle_configuration_rules:
+          - id: expire-old-cache
+            enabled: true
+            abort_incomplete_multipart_upload_days: 1
+            filter_and:
+              prefix: ""
+              tags: {}
+            expiration:
+              days: 30
+            noncurrent_version_expiration:
+              noncurrent_days: 1
+            transition: []
+            noncurrent_version_transition: []

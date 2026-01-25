@@ -1,0 +1,37 @@
+components:
+  terraform:
+    eks/sysbox-deployment/defaults:
+      metadata:
+        type: abstract
+        component: eks/sysbox-deployment
+      settings:
+        depends_on:
+          1:
+            component: "eks/cluster"
+          2:
+            component: "eks/sysbox-runtime"
+      vars:
+        enabled: true
+        create_namespace: true
+        # Optional: Override namespace (defaults to module.this.name)
+        # kubernetes_namespace: "custom-namespace"
+        # Optional: Override deployment name (defaults to module.this.name)
+        # deployment_name: "custom-deployment"
+        # EKS cluster connection info - uses atmos eks helper commands
+        # Run `atmos eks info` to see all cluster connection values
+        eks_cluster_id: !exec atmos eks id
+        eks_cluster_endpoint: !exec atmos eks endpoint
+        eks_cluster_certificate_authority_data: !exec atmos eks ca
+        # RuntimeClass from sysbox-runtime component
+        # runtime_class_name: !terraform.state eks/sysbox-runtime runtime_class_name
+        runtime_class_name: "sysbox-runc"
+        replicas: 1
+        # Nestybox official image with systemd + Docker pre-installed
+        container_image: "nestybox/ubuntu-jammy-systemd-docker:latest"
+        container_command:
+          - "/sbin/init"
+        resources_requests_cpu: "100m"
+        resources_requests_memory: "256Mi"
+        resources_limits_cpu: "1"
+        resources_limits_memory: "1Gi"
+        kube_exec_auth_role_arn_enabled: false

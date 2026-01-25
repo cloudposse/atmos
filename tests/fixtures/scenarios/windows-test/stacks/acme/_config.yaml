@@ -1,0 +1,16 @@
+# acme namespace defaults
+# Uses a dedicated tfstate bucket for acme-managed resources
+#
+# These values can be customized via `atmos bootstrap configure`
+# which updates this file with your environment settings.
+
+vars:
+  namespace: ctx
+  environment: usw2
+  region: us-west-2
+  account_id: ""
+
+terraform:
+  backend:
+    s3:
+      bucket: ctx-usw2-tfstate
