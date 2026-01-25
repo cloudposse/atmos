@@ -1,10 +1,12 @@
 # YAML Functions YQ Expression Issues
 
-**Date:** 2026-01-26
+**Date:** 2025-01-25
 
 This document tracks issues and inconsistencies in Atmos YAML functions documentation and implementation.
 
-## Issue 1: Incorrect `.outputs.` Prefix in `!terraform.state` Documentation
+## Status: ✅ Issues 1, 2, 3 FIXED (2025-01-25)
+
+## Issue 1: Incorrect `.outputs.` Prefix in `!terraform.state` Documentation ✅ FIXED
 
 **File:** `website/docs/functions/yaml/terraform.state.mdx`
 
@@ -71,7 +73,7 @@ app_name: !terraform.state config '.apps["app''s-name"].display_name'
 
 ---
 
-## Issue 2: Confusing Component/Output Name Collision in `!terraform.output` Documentation
+## Issue 2: Confusing Component/Output Name Collision in `!terraform.output` Documentation ✅ FIXED
 
 **File:** `website/docs/functions/yaml/terraform.output.mdx`
 
@@ -104,7 +106,7 @@ access_key_id: !terraform.output iam-config '.users["github-dependabot"].access.
 
 ---
 
-## Issue 3: Inconsistent YQ Expression Patterns Across Documentation
+## Issue 3: Inconsistent YQ Expression Patterns Across Documentation ✅ FIXED
 
 **Files Affected:**
 
@@ -147,17 +149,55 @@ config_value: !terraform.output config '.settings["app-config"]["prod-env"]'
 
 ## User-Reported Issues
 
-*(Add user-reported issues below as they come in)*
+### Issue 5: Bracket Notation with Map Keys Containing Slashes ✅ VERIFIED WORKING
 
-### Issue 5: [Title]
+**Reported by:** User (Slack)
 
-**Reported by:** [User/Issue#]
+**Problem:** User reported YAML parsing error when using bracket notation with map keys containing forward slashes.
 
-**Problem:** [Description]
+**User's Code:**
+```yaml
+server_auth0_client_id_arn: !terraform.output secrets-manager/auth0-event-stream '.secret_arns_map["auth0-event-stream/app/client-id"]'
+server_auth0_client_secret_arn: !terraform.output secrets-manager/auth0-event-stream '.secret_arns_map["auth0-event-stream/app/client-secret"]'
+```
 
-**Expected Behavior:** [What should happen]
+**Error Message:**
+```
+Error: yaml: line 468: did not find expected '-' indicator
+```
 
-**Actual Behavior:** [What happens]
+**Investigation Results:**
+
+After extensive testing, the reported syntax **IS CORRECT and works properly**.
+
+The error on **line 468** is NOT caused by these YAML function lines. The error is occurring elsewhere in the user's YAML file. The "did not find expected '-' indicator" error typically indicates:
+- A malformed list (missing or misaligned `-` for list items)
+- Indentation issues around line 468
+- Tab characters instead of spaces
+
+**The user's syntax is valid. All of these forms work:**
+```yaml
+# Option 1: Single quotes around YQ expression (RECOMMENDED)
+client_id_arn: !terraform.output secrets-manager/auth0-event-stream '.secret_arns_map["auth0-event-stream/app/client-id"]'
+
+# Option 2: Bare brackets (also works)
+client_id_arn: !terraform.output secrets-manager/auth0-event-stream .secret_arns_map["auth0-event-stream/app/client-id"]
+
+# Option 3: With explicit stack parameter
+client_id_arn: !terraform.output secrets-manager/auth0-event-stream {{ .stack }} '.secret_arns_map["auth0-event-stream/app/client-id"]'
+```
+
+**Test Coverage Added:**
+- `tests/fixtures/components/terraform/mock/main.tf` - Added `secret_arns_map` output with keys containing slashes
+- `tests/fixtures/scenarios/atmos-terraform-output-yaml-function/stacks/deploy/nonprod.yaml` - Added `component-bracket-notation`
+- `tests/fixtures/scenarios/atmos-terraform-state-yaml-function/stacks/deploy/nonprod.yaml` - Added `component-bracket-notation`
+- `internal/exec/yaml_func_terraform_output_test.go` - Added bracket notation tests
+- `internal/exec/yaml_func_terraform_state_test.go` - Added bracket notation tests
+
+**User Guidance:**
+1. Your syntax is **correct** - no changes needed to these lines
+2. Look at **line 468** in your YAML file - the error is there, not in the YAML function syntax
+3. Check for indentation issues, missing list dashes (`-`), or tab characters around that line
 
 ---
 

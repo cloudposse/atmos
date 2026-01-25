@@ -133,23 +133,23 @@ To avoid conflicting quotes, wrap the entire YQ expression in single quotes whil
 
 ```yaml
 # Use single quotes around the expression to allow double quotes inside brackets
-access_key_id: !terraform.state security '.outputs.users["github-dependabot"].access_key_id'
+access_key_id: !terraform.state security '.users["github-dependabot"].access_key_id'
 ```
 
 Additional examples:
 
 ```yaml
 # Access map keys with special characters
-api_key: !terraform.state config '.outputs.api_keys["service-account-1"]'
+api_key: !terraform.state config '.api_keys["service-account-1"]'
 
 # Access nested maps with special characters in multiple levels
-endpoint: !terraform.state services '.outputs.endpoints["my-service"]["production"]'
+endpoint: !terraform.state services '.endpoints["my-service"]["production"]'
 
 # Combine with stack templating
-token: !terraform.state identity {{ .stack }} '.outputs.tokens["github-actions"]'
+token: !terraform.state identity {{ .stack }} '.tokens["github-actions"]'
 
 # Escape single quotes by doubling them when needed inside the expression
-app_name: !terraform.state config '.outputs.apps["app''s-name"].display_name'
+app_name: !terraform.state config '.apps["app''s-name"].display_name'
 ```
 
 **Quote escaping rules**
