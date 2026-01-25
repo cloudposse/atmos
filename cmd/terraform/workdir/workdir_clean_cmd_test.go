@@ -462,6 +462,9 @@ func TestCleanExpiredWorkdirs_Error(t *testing.T) {
 
 // RunE validation tests - test the command entry point validation logic.
 
+// resetViperForTest resets viper flags for test isolation.
+// Note: cmd.NewTestKit cannot be used here due to circular import between
+// cmd/terraform/workdir and cmd packages.
 func resetViperForTest(t *testing.T) {
 	t.Helper()
 	v := viper.GetViper()

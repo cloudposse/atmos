@@ -62,7 +62,7 @@ func ExecutePackerOutput(
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.PackerComponentType, info.ComponentSection, info.AuthContext); err != nil {
-				return nil, fmt.Errorf("failed to auto-provision component source: %w", err)
+				return nil, fmt.Errorf("failed to auto-provision component source: %w", errors.Join(errUtils.ErrSourceProvision, err))
 			}
 
 			// Check if source provisioner set a workdir path (source + workdir case).

@@ -4,8 +4,11 @@ package workdir
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func init() {
@@ -35,12 +38,12 @@ func loadMetadataWithReadLockWindows(metadataFile string) (*WorkdirMetadata, err
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrWorkdirMetadata, err)
 	}
 
 	var metadata WorkdirMetadata
 	if err := json.Unmarshal(data, &metadata); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: failed to parse metadata: %w", errUtils.ErrWorkdirMetadata, err)
 	}
 
 	return &metadata, nil
