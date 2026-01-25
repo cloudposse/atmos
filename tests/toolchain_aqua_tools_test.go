@@ -11,7 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/toolchain/installer"
 )
 
@@ -51,8 +53,10 @@ func TestToolchainAquaTools_KubectlBinaryNaming(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-aqua-tools"
 	t.Chdir(workDir)
 
+	// Get tools install path from atmos config.
+	toolsDir := getToolsInstallPath(t)
+
 	// Clean up any existing toolchain installations.
-	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
 
@@ -104,8 +108,10 @@ func TestToolchainAquaTools_KubectlExecutable(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-aqua-tools"
 	t.Chdir(workDir)
 
+	// Get tools install path from atmos config.
+	toolsDir := getToolsInstallPath(t)
+
 	// Clean up any existing toolchain installations.
-	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
 
@@ -150,8 +156,10 @@ func TestToolchainAquaTools_InstallAllTools(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-aqua-tools"
 	t.Chdir(workDir)
 
+	// Get tools install path from atmos config.
+	toolsDir := getToolsInstallPath(t)
+
 	// Clean up any existing toolchain installations.
-	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
 
@@ -280,8 +288,10 @@ func TestToolchainAquaTools_WindowsKubectl(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-aqua-tools"
 	t.Chdir(workDir)
 
+	// Get tools install path from atmos config.
+	toolsDir := getToolsInstallPath(t)
+
 	// Clean up any existing toolchain installations.
-	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
 
@@ -337,8 +347,10 @@ func TestToolchainAquaTools_KotsInstall(t *testing.T) {
 	workDir := "fixtures/scenarios/toolchain-aqua-tools"
 	t.Chdir(workDir)
 
+	// Get tools install path from atmos config.
+	toolsDir := getToolsInstallPath(t)
+
 	// Clean up any existing toolchain installations.
-	toolsDir := ".tools"
 	os.RemoveAll(toolsDir)
 	defer os.RemoveAll(toolsDir)
 
@@ -444,4 +456,17 @@ func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 		"Error should suggest searching the registry or checking configuration")
 
 	t.Logf("✓ Non-existent tool error correctly shown for replicatedhq/replicated")
+}
+
+// getToolsInstallPath returns the tools install path from atmos config.
+// This reads the toolchain.install_path from atmos.yaml in the current directory.
+func getToolsInstallPath(t *testing.T) string {
+	t.Helper()
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err, "Failed to load atmos config")
+	if atmosConfig.Toolchain.InstallPath != "" {
+		return atmosConfig.Toolchain.InstallPath
+	}
+	// Fallback to default if not configured.
+	return ".tools"
 }
