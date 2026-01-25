@@ -46,7 +46,20 @@ func (i *Installer) buildHTTPAssetURL(tool *registry.Tool, version string) (stri
 	}
 
 	data := buildTemplateData(tool, version)
-	return executeAssetTemplate(tool.Asset, tool, data)
+	url, err := executeAssetTemplate(tool.Asset, tool, data)
+	if err != nil {
+		return "", err
+	}
+
+	// On Windows, add .exe to raw binary URLs that don't have any extension.
+	// This follows Aqua's behavior where Windows binaries need .exe extension in the download URL.
+	// Only apply when: not an archive AND has no extension (avoids .msi.exe, etc.).
+	// See: https://aquaproj.github.io/docs/reference/windows-support/.
+	if !hasArchiveExtension(url) && filepath.Ext(url) == "" {
+		url = EnsureWindowsExeExtension(url)
+	}
+
+	return url, nil
 }
 
 // buildGitHubReleaseURL builds an asset URL for GitHub release type tools.

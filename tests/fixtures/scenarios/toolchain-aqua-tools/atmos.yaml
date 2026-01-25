@@ -1,0 +1,45 @@
+# Test fixture for toolchain Aqua registry tools.
+# Tests installation of common tools from the Aqua registry.
+#
+# Key tests:
+#   - kubernetes/kubectl: Tests binary naming fix for 3-segment package names
+#     (extracts "kubectl" from "kubernetes/kubernetes/kubectl")
+#   - HTTP type tools with .exe on Windows (kubectl uses dl.k8s.io)
+#   - Standard GitHub release tools (gum, k9s, helm, jq, tofu)
+#
+# Usage:
+#   ./build/atmos --chdir tests/fixtures/scenarios/toolchain-aqua-tools toolchain install
+#   ./build/atmos --chdir tests/fixtures/scenarios/toolchain-aqua-tools toolchain install kubernetes/kubectl@1.31.4
+#
+# Tools are defined in .tool-versions file in this directory.
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.stage }}"
+
+# Toolchain configuration - uses Aqua registry for all tools
+toolchain:
+  install_path: .tools
+  # Aliases for convenience
+  aliases:
+    gum: charmbracelet/gum
+    k9s: derailed/k9s
+    helm: helm/helm
+    jq: jqlang/jq
+    kubectl: kubernetes/kubectl
+    tofu: opentofu/opentofu
+  registries:
+    - name: aqua
+      type: aqua
+      priority: 10
+
+logs:
+  level: Info

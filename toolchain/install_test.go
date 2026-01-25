@@ -591,10 +591,11 @@ func TestShowProgress(t *testing.T) {
 // See ToolInstaller interface in set_test.go for reference pattern.
 func TestRunInstallBatch(t *testing.T) {
 	tests := []struct {
-		name          string
-		toolSpecs     []string
-		reinstallFlag bool
-		wantErr       bool
+		name            string
+		toolSpecs       []string
+		reinstallFlag   bool
+		wantErr         bool
+		requiresNetwork bool
 	}{
 		{
 			name:          "empty toolSpecs",
@@ -609,15 +610,19 @@ func TestRunInstallBatch(t *testing.T) {
 			wantErr:       false,
 		},
 		{
-			name:          "single tool delegates to RunInstall",
-			toolSpecs:     []string{"terraform@1.11.4"},
-			reinstallFlag: false,
-			wantErr:       false, // Delegates to single-tool flow.
+			name:            "single tool delegates to RunInstall",
+			toolSpecs:       []string{"terraform@1.11.4"},
+			reinstallFlag:   false,
+			wantErr:         false, // Delegates to single-tool flow.
+			requiresNetwork: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.requiresNetwork && testing.Short() {
+				t.Skip("Skipping test that requires network in short mode")
+			}
 			err := RunInstallBatch(tt.toolSpecs, tt.reinstallFlag)
 			if tt.wantErr {
 				assert.Error(t, err)

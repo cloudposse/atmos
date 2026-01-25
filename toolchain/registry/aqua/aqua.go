@@ -226,6 +226,7 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 // registryPackage holds package data from Aqua registry file.
 // This struct must include all fields that need to be preserved when resolving version overrides.
 type registryPackage struct {
+	Name             string                  `yaml:"name"` // Package name (e.g., "kubernetes/kubernetes/kubectl").
 	Type             string                  `yaml:"type"`
 	RepoOwner        string                  `yaml:"repo_owner"`
 	RepoName         string                  `yaml:"repo_name"`
@@ -239,6 +240,7 @@ type registryPackage struct {
 	Overrides        []registry.AquaOverride `yaml:"overrides"`
 	Files            []registry.File         `yaml:"files"`
 	VersionOverrides []versionOverride       `yaml:"version_overrides"`
+	SupportedEnvs    []string                `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux").
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
@@ -260,14 +262,8 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		asset = pkgDef.URL
 	}
 
-	// Determine binary name.
-	name := pkgDef.BinaryName
-	if name == "" {
-		name = pkgDef.RepoName
-	}
-
 	tool := &registry.Tool{
-		Name:          name,
+		Name:          resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
 		Type:          pkgDef.Type,
 		RepoOwner:     pkgDef.RepoOwner,
 		RepoName:      pkgDef.RepoName,
@@ -279,6 +275,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		Overrides:     convertAquaOverrides(pkgDef.Overrides),
 		Files:         pkgDef.Files,
 		SourceURL:     sourceURL,
+		SupportedEnvs: pkgDef.SupportedEnvs,
 	}
 
 	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version)
@@ -422,9 +419,10 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 		if asset == "" {
 			asset = pkg.URL
 		}
+
 		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
-			Name:          pkg.BinaryName,
+			Name:          resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
 			RepoOwner:     pkg.RepoOwner,
 			RepoName:      pkg.RepoName,
 			Asset:         asset,
@@ -433,12 +431,10 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 			BinaryName:    pkg.BinaryName,
 			VersionPrefix: pkg.VersionPrefix,
 			// Copy Aqua-specific fields for nested file extraction and platform overrides.
-			Files:        pkg.Files,
-			Replacements: pkg.Replacements,
-			Overrides:    convertAquaOverrides(pkg.Overrides),
-		}
-		if pkg.BinaryName == "" {
-			tool.Name = pkg.RepoName
+			Files:         pkg.Files,
+			Replacements:  pkg.Replacements,
+			Overrides:     convertAquaOverrides(pkg.Overrides),
+			SupportedEnvs: pkg.SupportedEnvs,
 		}
 		return tool, nil
 	}
@@ -571,4 +567,37 @@ func executeAssetTemplate(assetTemplate string, data map[string]string) (string,
 	}
 
 	return assetName.String(), nil
+}
+
+// extractBinaryNameFromPackageName extracts the binary name from an Aqua package name.
+// Aqua package names follow the pattern "owner/repo" or "owner/repo/binary".
+// For example: "kubernetes/kubernetes/kubectl" -> "kubectl"
+// For example: "hashicorp/terraform" -> "" (caller should fall back to repo_name).
+func extractBinaryNameFromPackageName(packageName string) string {
+	if packageName == "" {
+		return ""
+	}
+	parts := strings.Split(packageName, "/")
+	// If there are more than 2 segments, the last one is the binary name.
+	// E.g., "kubernetes/kubernetes/kubectl" has 3 parts, so "kubectl" is the binary.
+	if len(parts) > 2 {
+		return parts[len(parts)-1]
+	}
+	// For 2-segment names like "hashicorp/terraform", return empty
+	// so the caller falls back to repo_name.
+	return ""
+}
+
+// resolveBinaryName determines the binary name using Aqua's resolution order:
+// 1. Use explicit binary_name if set
+// 2. Extract last segment from package name (e.g., "kubectl" from "kubernetes/kubernetes/kubectl")
+// 3. Fall back to repo_name.
+func resolveBinaryName(binaryName, packageName, repoName string) string {
+	if binaryName != "" {
+		return binaryName
+	}
+	if name := extractBinaryNameFromPackageName(packageName); name != "" {
+		return name
+	}
+	return repoName
 }
