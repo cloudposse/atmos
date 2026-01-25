@@ -3,6 +3,7 @@ package tests
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,12 +82,19 @@ func TestJITSource_WorkdirWithLocalComponent(t *testing.T) {
 	// The remote source doesn't have main.tf, so if it exists, the workdir
 	// provisioner incorrectly copied from local instead of using remote source.
 	mainTfPath := filepath.Join(workdirPath, "main.tf")
-	_, err = os.Stat(mainTfPath)
-	assert.True(t, os.IsNotExist(err),
-		"main.tf should NOT exist in workdir. "+
-			"Its presence indicates the bug: JIT source provisioning was skipped because "+
-			"local component exists, and workdir provisioner copied from local instead.",
-	)
+	if _, statErr := os.Stat(mainTfPath); statErr == nil {
+		// main.tf exists when it shouldn't - read it to provide better diagnostics.
+		content, readErr := os.ReadFile(mainTfPath)
+		require.NoError(t, readErr, "Failed to read main.tf for diagnostics")
+		assert.False(t, strings.Contains(string(content), "LOCAL_VERSION_MARKER"),
+			"main.tf exists and contains LOCAL_VERSION_MARKER. "+
+				"This indicates JIT source provisioning was skipped because "+
+				"local component exists, and workdir provisioner copied from local instead.",
+		)
+		t.Fatalf("main.tf should NOT exist in workdir (remote source doesn't have it). " +
+			"Its presence indicates the bug: JIT source provisioning was skipped.")
+	}
+	// main.tf doesn't exist - this is the expected behavior.
 }
 
 // TestJITSource_WorkdirWithLocalComponent_SourcePrecedence is an alternative test
@@ -214,12 +222,20 @@ func TestJITSource_WorkdirWithLocalComponent_AllSubcommands(t *testing.T) {
 			// The remote source doesn't have main.tf, so if it exists, the workdir
 			// provisioner incorrectly copied from local instead of using remote source.
 			mainTfPath := filepath.Join(workdirPath, "main.tf")
-			_, statErr := os.Stat(mainTfPath)
-			assert.True(t, os.IsNotExist(statErr),
-				"%s: main.tf should NOT exist in workdir. "+
-					"Its presence indicates JIT source provisioning was skipped for %s.",
-				tc.subcommand, tc.subcommand,
-			)
+			if _, statErr := os.Stat(mainTfPath); statErr == nil {
+				// main.tf exists when it shouldn't - read it to provide better diagnostics.
+				content, readErr := os.ReadFile(mainTfPath)
+				require.NoError(t, readErr, "%s: Failed to read main.tf for diagnostics", tc.subcommand)
+				assert.False(t, strings.Contains(string(content), "LOCAL_VERSION_MARKER"),
+					"%s: main.tf exists and contains LOCAL_VERSION_MARKER. "+
+						"This indicates JIT source provisioning was skipped.",
+					tc.subcommand,
+				)
+				t.Fatalf("%s: main.tf should NOT exist in workdir (remote source doesn't have it). "+
+					"Its presence indicates the bug: JIT source provisioning was skipped.",
+					tc.subcommand)
+			}
+			// main.tf doesn't exist - this is the expected behavior.
 		})
 	}
 }
