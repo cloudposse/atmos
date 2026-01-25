@@ -200,11 +200,54 @@ convention uses the **last segment** of multi-part package names as the binary n
 
 ### Aqua Package Name Convention
 
+According to the [Aqua Registry Configuration documentation](https://aquaproj.github.io/docs/reference/registry-config/):
+
+> **"By default, the command name is the last element when splitting the package name by `/`."**
+
+This means:
+
 | Package Name                    | Expected Binary | Explanation                              |
 |---------------------------------|-----------------|------------------------------------------|
 | `kubernetes/kubernetes/kubectl` | `kubectl`       | 3 segments → last segment is binary name |
-| `hashicorp/terraform`           | `terraform`     | 2 segments → use repo_name               |
+| `hashicorp/terraform`           | `terraform`     | 2 segments → last segment = repo_name    |
 | `owner/repo/subdir/binary`      | `binary`        | 4 segments → last segment is binary name |
+
+### The `files` Field Override
+
+When the default binary name (last segment) doesn't match the actual executable, Aqua uses the `files` field to override:
+
+```yaml
+# Example: cli/cli package - default would be "cli" but actual binary is "gh"
+files:
+  - name: gh
+    src: gh_{{trimV .Version}}_{{.OS}}_{{.Arch}}/bin/gh
+```
+
+The [kubectl registry.yaml](https://github.com/aquaproj/aqua-registry/blob/main/pkgs/kubernetes/kubernetes/kubectl/registry.yaml)
+does **not** have an explicit `files` field because the default behavior (last segment = `kubectl`) is correct.
+
+### Atmos `files` Field Support
+
+Atmos fully supports the `files` field for both Aqua and Atmos registries:
+
+| Struct                      | Field                 | Location                   |
+|-----------------------------|-----------------------|----------------------------|
+| `Tool`                      | `Files []File`        | `registry.go:198`          |
+| `Override`                  | `Files []File`        | `registry.go:221`          |
+| `AquaPackage`               | `Files []File`        | `registry.go:250`          |
+| `AquaOverride`              | `Files []File`        | `registry.go:272`          |
+| `VersionOverride`           | `Files []File`        | `registry.go:292`          |
+
+The `File` struct (lines 210-213):
+
+```go
+type File struct {
+    Name string `yaml:"name"` // Binary name to create
+    Src  string `yaml:"src"`  // Path within archive to extract from
+}
+```
+
+When `files` is specified, `files[0].Name` is used as the binary name (see `aqua.go:213`).
 
 ### Solution
 
@@ -244,11 +287,14 @@ func resolveBinaryName(binaryName, packageName, repoName string) string {
 The `resolveBinaryName()` helper is used in both `parseRegistryFile()` and `resolveVersionOverrides()` to consolidate
 the binary name resolution logic and reduce code duplication.
 
-**Binary name resolution order:**
+**Binary name resolution order (matching Aqua's behavior):**
 
-1. Explicit `binary_name` field (if set in registry)
-2. **Extracted from package name** (for 3+ segment names)
-3. Fall back to `repo_name`
+1. Explicit `files[0].name` (if `files` field is set in registry)
+2. Explicit `binary_name` field (if set in registry)
+3. **Last segment of package name** (e.g., `kubectl` from `kubernetes/kubernetes/kubectl`)
+4. Fall back to `repo_name`
+
+Note: For 2-segment package names like `hashicorp/terraform`, the last segment equals `repo_name`, so steps 3 and 4 produce the same result.
 
 ### Files Changed
 
