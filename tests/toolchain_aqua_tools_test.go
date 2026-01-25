@@ -16,11 +16,13 @@ import (
 )
 
 // Tool version constants for maintainability.
+// NOTE: Versions must be recent enough to have Windows support in Aqua registry.
+// Older versions may have version_overrides that restrict supported_envs.
 const (
 	versionKubectl   = "1.31.4"
 	versionGum       = "0.17.0"
 	versionK9s       = "0.32.7"
-	versionHelm      = "3.16.3"
+	versionHelm      = "3.17.0"
 	versionJq        = "1.7.1"
 	versionOpentofu  = "1.9.0"
 	versionKots      = "1.127.0"
