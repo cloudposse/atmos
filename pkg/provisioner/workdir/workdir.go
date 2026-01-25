@@ -228,7 +228,7 @@ func (s *Service) validateComponentPath(
 		return "", errUtils.Build(errUtils.ErrWorkdirProvision).
 			WithExplanation("local component path does not exist").
 			WithContext("path", componentPath).
-			WithHint("Check that the component exists in components/terraform/").
+			WithHint(fmt.Sprintf("Check that the component exists at %s", componentPath)).
 			Err()
 	}
 

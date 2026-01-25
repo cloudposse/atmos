@@ -47,6 +47,9 @@ func TestFileNeedsCopy_DifferentContent(t *testing.T) {
 }
 
 func TestFileNeedsCopy_DifferentPermissions(t *testing.T) {
+	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+		t.Skip("Skipping permission test on Windows - Unix file permissions not supported")
+	}
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "src.txt")
 	dstFile := filepath.Join(tmpDir, "dst.txt")
@@ -194,6 +197,9 @@ func TestCopyFile_SourceNotFound(t *testing.T) {
 }
 
 func TestCopyFile_PreservesPermissions(t *testing.T) {
+	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+		t.Skip("Skipping permission test on Windows - Unix file permissions not supported")
+	}
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "src.txt")
 	dstFile := filepath.Join(tmpDir, "dst.txt")

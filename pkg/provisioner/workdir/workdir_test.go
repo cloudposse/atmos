@@ -413,6 +413,9 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
+	if os.Getenv("GOOS") == "windows" || filepath.Separator == '\\' {
+		t.Skip("Skipping read-only directory test on Windows - directory permissions work differently")
+	}
 	// Create a temp dir with a read-only .atmos subdirectory to force WriteMetadata to fail.
 	tempDir := t.TempDir()
 	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
