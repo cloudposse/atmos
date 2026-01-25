@@ -2,6 +2,7 @@
 
 **Branch:** `aknysh/windows-test-2`
 **Date:** 2026-01-24
+**Status:** ✅ **TESTED ON WINDOWS - FIX CONFIRMED WORKING**
 
 ## Context
 
@@ -86,12 +87,71 @@ Get-ChildItem -Recurse .tools\bin\ -Filter *.exe
 | helm/helm | ✅ Should install with `.exe` |
 | replicatedhq/replicated | ❌ Will fail - no Windows binaries published |
 
-## What to Report Back
+---
 
-1. Did kubectl install successfully? (This tests the HTTP type `.exe` fix)
-2. Did all other tools get `.exe` extension?
-3. Did `.atmos.d` custom commands (`hello`, `bootstrap`) work?
-4. What was the exact error for replicated?
+## Windows Test Results (2026-01-24)
+
+### Actual Results
+
+| Tool | Status | Binary Name | Notes |
+|------|--------|-------------|-------|
+| jqlang/jq@1.7.1 | ✅ Installed | `jq.exe` | GitHub release type |
+| kubernetes/kubectl@1.31.4 | ✅ Installed | `kubernetes.exe` | **HTTP type `.exe` fix confirmed working** |
+| opentofu/opentofu@1.9.0 | ✅ Installed | `tofu.exe` | GitHub release type |
+| charmbracelet/gum@0.17.0 | ✅ Installed | `gum.exe` | GitHub release type |
+| derailed/k9s@0.32.7 | ✅ Installed | `k9s.exe` | GitHub release type |
+| helm/helm@3.16.3 | ✅ Installed | `helm.exe` | GitHub release type |
+| replicatedhq/replicated@0.124.1 | ❌ Failed | N/A | 404 - No Windows binaries published (expected) |
+
+**Result:** 6 of 7 tools installed successfully.
+
+### Answers to Test Questions
+
+1. **Did kubectl install successfully?** ✅ YES - Downloaded from `https://dl.k8s.io/v1.31.4/bin/windows/amd64/kubectl.exe`
+2. **Did all other tools get `.exe` extension?** ✅ YES - All 6 installed tools have `.exe` extension
+3. **Did `.atmos.d` custom commands work?**
+   - `hello`: ✅ YES - Output: "Hello from .atmos.d custom commands!"
+   - `bootstrap`: ❌ NO - Blocked by `replicated` tool failure (toolchain tries to install all tools first)
+4. **What was the exact error for replicated?**
+   ```
+   ✗ Install failed : HTTP request failed: tried
+   https://github.com/replicatedhq/replicated/releases/download/0.124.1/replicated_0.124.1_windows_amd64.tar.gz
+   and https://github.com/replicatedhq/replicated/releases/download/v0.124.1/replicated_0.124.1_windows_amd64.tar.gz:
+   HTTP 404 Not Found
+   ```
+
+### Installed Binary Structure
+
+```
+.tools\bin\
+├── charmbracelet\gum\0.17.0\gum.exe (14 MB)
+├── derailed\k9s\0.32.7\k9s.exe (102 MB)
+├── helm\helm\3.16.3\helm.exe (59 MB)
+├── jqlang\jq\1.7.1\jq.exe (985 KB)
+├── kubernetes\kubectl\1.31.4\kubernetes.exe (58 MB)
+└── opentofu\opentofu\1.9.0\tofu.exe (87 MB)
+```
+
+### Unit Tests
+
+All HTTP-related tests pass:
+
+```
+=== RUN   TestBuildAssetURL_HTTPType
+--- PASS: TestBuildAssetURL_HTTPType (0.00s)
+=== RUN   TestBuildAssetURL_HTTPTypePreservesVersionAsIs
+--- PASS: TestBuildAssetURL_HTTPTypePreservesVersionAsIs (0.00s)
+=== RUN   TestBuildAssetURL_HTTPTypeWindowsExeExtension
+--- PASS: TestBuildAssetURL_HTTPTypeWindowsExeExtension (0.00s)
+=== RUN   TestBuildAssetURL_HTTPTypeNoExeForArchives
+--- PASS: TestBuildAssetURL_HTTPTypeNoExeForArchives (0.00s)
+```
+
+### Conclusion
+
+**The HTTP type `.exe` fix is confirmed working on Windows.** The gap in PR #2012 has been addressed. kubectl (which uses `http` type with `dl.k8s.io`) now downloads correctly with the `.exe` extension.
+
+---
 
 ## Documentation
 

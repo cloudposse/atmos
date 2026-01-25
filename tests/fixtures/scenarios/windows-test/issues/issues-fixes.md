@@ -369,6 +369,76 @@ func (i *Installer) buildHTTPAssetURL(tool *registry.Tool, version string) (stri
 
 ---
 
+## Windows Testing Results (2026-01-24)
+
+Testing performed on Windows with branch `aknysh/windows-test-2`.
+
+### Tool Installation Results
+
+| Tool | Status | Binary Name | Notes |
+|------|--------|-------------|-------|
+| jqlang/jq@1.7.1 | ✅ Installed | `jq.exe` | GitHub release type |
+| kubernetes/kubectl@1.31.4 | ✅ Installed | `kubernetes.exe` | **HTTP type `.exe` fix confirmed working** |
+| opentofu/opentofu@1.9.0 | ✅ Installed | `tofu.exe` | GitHub release type |
+| charmbracelet/gum@0.17.0 | ✅ Installed | `gum.exe` | GitHub release type |
+| derailed/k9s@0.32.7 | ✅ Installed | `k9s.exe` | GitHub release type |
+| helm/helm@3.16.3 | ✅ Installed | `helm.exe` | GitHub release type |
+| replicatedhq/replicated@0.124.1 | ❌ Failed | N/A | 404 - No Windows binaries published (expected) |
+
+**Summary:** 6 of 7 tools installed successfully. The only failure is `replicated` which doesn't publish Windows binaries.
+
+### Installed Binary Structure
+
+```
+.tools\bin\
+├── charmbracelet\gum\0.17.0\gum.exe (14 MB)
+├── derailed\k9s\0.32.7\k9s.exe (102 MB)
+├── helm\helm\3.16.3\helm.exe (59 MB)
+├── jqlang\jq\1.7.1\jq.exe (985 KB)
+├── kubernetes\kubectl\1.31.4\kubernetes.exe (58 MB)
+└── opentofu\opentofu\1.9.0\tofu.exe (87 MB)
+```
+
+### Key Findings
+
+1. **HTTP type `.exe` fix is working** - kubectl downloaded successfully from:
+   ```
+   https://dl.k8s.io/v1.31.4/bin/windows/amd64/kubectl.exe
+   ```
+   The fix in `buildHTTPAssetURL()` correctly appends `.exe` to the URL.
+
+2. **All installed binaries have `.exe` extension** - Confirmed for all 6 successfully installed tools.
+
+3. **`.atmos.d` custom commands work** - The `hello` command executed successfully:
+   ```
+   Hello from .atmos.d custom commands!
+   This proves .atmos.d auto-import is working
+   ```
+
+4. **Unit tests pass** - All 4 HTTP-related tests pass:
+   ```
+   === RUN   TestBuildAssetURL_HTTPType
+   --- PASS: TestBuildAssetURL_HTTPType (0.00s)
+   === RUN   TestBuildAssetURL_HTTPTypePreservesVersionAsIs
+   --- PASS: TestBuildAssetURL_HTTPTypePreservesVersionAsIs (0.00s)
+   === RUN   TestBuildAssetURL_HTTPTypeWindowsExeExtension
+   --- PASS: TestBuildAssetURL_HTTPTypeWindowsExeExtension (0.00s)
+   === RUN   TestBuildAssetURL_HTTPTypeNoExeForArchives
+   --- PASS: TestBuildAssetURL_HTTPTypeNoExeForArchives (0.00s)
+   ```
+
+### Issues Discovered
+
+1. **`bootstrap` command fails** - The toolchain tries to install all tools from `.tool-versions` before running custom commands. Since `replicated` fails with 404, the `bootstrap` command is blocked.
+
+2. **kubectl binary naming** - The kubectl binary is installed as `kubernetes.exe` rather than `kubectl.exe`. This may be intentional based on the org/repo naming convention.
+
+### Conclusion
+
+The HTTP type `.exe` fix in `toolchain/installer/asset.go` is **confirmed working on Windows**. The PR #2012 gap has been addressed, and kubectl (which uses `http` type with `dl.k8s.io`) now downloads correctly with the `.exe` extension.
+
+---
+
 ## Related Issues and PRs
 
 - Issue: [#2002 - Atmos on Windows: Toolchain failures and config issues](https://github.com/cloudposse/atmos/issues/2002)
