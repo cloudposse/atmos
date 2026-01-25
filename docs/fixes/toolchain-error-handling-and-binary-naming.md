@@ -15,6 +15,7 @@ and platform compatibility improvements discovered during Windows testing.
 | Nested error message duplication     | ✅ Fixed | Eliminated "HTTP request failed: HTTP request failed:" pattern       |
 | Pre-flight platform check            | ✅ Fixed | Check platform compatibility before attempting download              |
 | Platform-specific hints              | ✅ Fixed | WSL hints for Windows, Rosetta hints for macOS arm64                 |
+| Arch-only platform matching          | ✅ Fixed | Supports `amd64`/`arm64` entries in `supported_envs` (Aqua format)   |
 
 ---
 
@@ -45,11 +46,20 @@ configuration.
 Modified `pkg/ui/markdown/custom_renderer.go` to redirect stdout to `/dev/null` during glamour rendering:
 
 ```go
+// stdoutRedirectMu serializes stdout redirects during rendering to prevent races.
+var stdoutRedirectMu sync.Mutex
+
 func (r *CustomRenderer) Render(content string) (string, error) {
     // Suppress glamour's "Warning: unhandled element" messages that it prints to stdout.
     // These warnings are not useful to users and can be confusing.
+    //
+    // The mutex serializes stdout redirects to prevent races when Render() is called
+    // concurrently or when other goroutines write to stdout during rendering.
+    stdoutRedirectMu.Lock()
+    defer stdoutRedirectMu.Unlock()
+
     oldStdout := os.Stdout
-    devNull, err := os.Open(os.DevNull)
+    devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
     if err == nil {
         os.Stdout = devNull
         defer func() {
@@ -63,6 +73,8 @@ func (r *CustomRenderer) Render(content string) (string, error) {
 
 This approach:
 
+- Uses a mutex to prevent race conditions when Render() is called concurrently.
+- Opens `/dev/null` with write-only mode (`os.O_WRONLY`) for correctness.
 - Temporarily redirects stdout during rendering.
 - Restores stdout after rendering completes.
 - Uses `os.DevNull` which works on all platforms (Windows, macOS, Linux).
@@ -196,7 +208,7 @@ convention uses the **last segment** of multi-part package names as the binary n
 
 ### Solution
 
-Added `extractBinaryNameFromPackageName()` function in `toolchain/registry/aqua/aqua.go`:
+Added `extractBinaryNameFromPackageName()` and `resolveBinaryName()` helper functions in `toolchain/registry/aqua/aqua.go`:
 
 ```go
 // extractBinaryNameFromPackageName extracts the binary name from an Aqua package name.
@@ -213,14 +225,30 @@ func extractBinaryNameFromPackageName(packageName string) string {
     }
     return ""
 }
+
+// resolveBinaryName determines the binary name using Aqua's resolution order:
+// 1. Use explicit binary_name if set
+// 2. Extract last segment from package name (e.g., "kubectl" from "kubernetes/kubernetes/kubectl")
+// 3. Fall back to repo_name.
+func resolveBinaryName(binaryName, packageName, repoName string) string {
+    if binaryName != "" {
+        return binaryName
+    }
+    if name := extractBinaryNameFromPackageName(packageName); name != "" {
+        return name
+    }
+    return repoName
+}
 ```
 
-Updated binary name resolution order in both `parseRegistryFile()` and `resolveVersionOverrides()`:
+The `resolveBinaryName()` helper is used in both `parseRegistryFile()` and `resolveVersionOverrides()` to consolidate
+the binary name resolution logic and reduce code duplication.
+
+**Binary name resolution order:**
 
 1. Explicit `binary_name` field (if set in registry)
-2. First file name from `files[].name` (if present)
-3. **Extracted from package name** (for 3+ segment names)
-4. Fall back to `repo_name`
+2. **Extracted from package name** (for 3+ segment names)
+3. Fall back to `repo_name`
 
 ### Files Changed
 
@@ -228,6 +256,7 @@ Updated binary name resolution order in both `parseRegistryFile()` and `resolveV
 |----------------------------------------|--------------------------------------------------------|
 | `toolchain/registry/aqua/aqua.go`      | Added `Name` field to `registryPackage` struct         |
 | `toolchain/registry/aqua/aqua.go`      | Added `extractBinaryNameFromPackageName()` function    |
+| `toolchain/registry/aqua/aqua.go`      | Added `resolveBinaryName()` helper function            |
 | `toolchain/registry/aqua/aqua.go`      | Updated `parseRegistryFile()` to use new binary naming |
 | `toolchain/registry/aqua/aqua.go`      | Updated `resolveVersionOverrides()` to use new naming  |
 | `toolchain/registry/aqua/aqua_test.go` | Added tests for `extractBinaryNameFromPackageName()`   |
@@ -329,16 +358,43 @@ func CheckPlatformSupport(tool *registry.Tool) *PlatformError {
 }
 
 // isPlatformMatch checks if a supported_env entry matches the current platform.
-// Supports both OS-only ("darwin") and OS/arch ("darwin/amd64") formats.
+// Supported formats (following Aqua registry conventions):
+//   - "darwin" - matches any darwin architecture
+//   - "linux" - matches any linux architecture
+//   - "windows" - matches any windows architecture
+//   - "amd64" - matches any OS with amd64 architecture
+//   - "arm64" - matches any OS with arm64 architecture
+//   - "darwin/amd64" - matches specific OS/arch
+//   - "linux/arm64" - matches specific OS/arch
 func isPlatformMatch(env, currentOS, currentArch string) bool {
     env = strings.ToLower(strings.TrimSpace(env))
+
+    // Check for exact OS/arch match.
     if strings.Contains(env, "/") {
         parts := strings.Split(env, "/")
         if len(parts) == 2 {
             return parts[0] == currentOS && parts[1] == currentArch
         }
     }
+
+    // Check for arch-only match (any OS with this architecture).
+    // Aqua registry uses entries like "amd64" to mean "any OS with amd64".
+    if isKnownArch(env) {
+        return env == currentArch
+    }
+
+    // Check for OS-only match (any architecture).
     return env == currentOS
+}
+
+// isKnownArch returns true if the string is a known Go architecture name.
+func isKnownArch(s string) bool {
+    knownArchs := map[string]bool{
+        "amd64": true, "arm64": true, "386": true, "arm": true,
+        "ppc64": true, "ppc64le": true, "mips": true, "mipsle": true,
+        "mips64": true, "s390x": true, "riscv64": true,
+    }
+    return knownArchs[s]
 }
 ```
 
@@ -351,7 +407,7 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 
     // Pre-flight platform check: verify the tool supports the current platform.
     if platformErr := CheckPlatformSupport(tool); platformErr != nil {
-        return "", buildPlatformNotSupportedError(tool, platformErr)
+        return "", buildPlatformNotSupportedError(platformErr)
     }
     // ... rest of function (download only happens if platform check passes)
 }
@@ -383,16 +439,16 @@ Tool `replicatedhq/kots` does not support your platform (windows/amd64)
 
 ### Files Changed
 
-| File                                  | Change                                            |
-|---------------------------------------|---------------------------------------------------|
-| `toolchain/registry/registry.go`      | Added `SupportedEnvs` field to `Tool` struct      |
-| `toolchain/registry/aqua/aqua.go`     | Added `SupportedEnvs` to `registryPackage` struct |
-| `toolchain/registry/aqua/aqua.go`     | Propagated `SupportedEnvs` when creating tools    |
-| `toolchain/installer/platform.go`     | NEW: Platform check functions                     |
-| `toolchain/installer/installer.go`    | Added pre-flight platform check                   |
-| `toolchain/installer/download.go`     | Added `buildPlatformNotSupportedError()` function |
-| `errors/errors.go`                    | Added `ErrToolPlatformNotSupported` error         |
-| `toolchain/installer/platform_test.go`| NEW: Unit tests for platform check                |
+| File                                   | Change                                            |
+|----------------------------------------|---------------------------------------------------|
+| `toolchain/registry/registry.go`       | Added `SupportedEnvs` field to `Tool` struct      |
+| `toolchain/registry/aqua/aqua.go`      | Added `SupportedEnvs` to `registryPackage` struct |
+| `toolchain/registry/aqua/aqua.go`      | Propagated `SupportedEnvs` when creating tools    |
+| `toolchain/installer/platform.go`      | NEW: Platform check functions                     |
+| `toolchain/installer/installer.go`     | Added pre-flight platform check                   |
+| `toolchain/installer/download.go`      | Added `buildPlatformNotSupportedError()` function |
+| `errors/errors.go`                     | Added `ErrToolPlatformNotSupported` error         |
+| `toolchain/installer/platform_test.go` | NEW: Unit tests for platform check                |
 
 ---
 
@@ -406,51 +462,71 @@ on potential workarounds for their specific platform.
 ### Solution
 
 Added platform-specific hints that suggest workarounds based on the user's current platform and the tool's supported
-platforms:
+platforms. The implementation uses helper functions for maintainability and reduced cyclomatic complexity:
 
 ```go
+// buildPlatformHints generates helpful hints based on the current platform.
 func buildPlatformHints(currentOS, currentArch string, supportedEnvs []string) []string {
     hints := []string{
         fmt.Sprintf("This tool only supports: %s", strings.Join(supportedEnvs, ", ")),
     }
 
-    switch {
-    case currentOS == "windows":
-        // Check if Linux is supported.
-        if containsEnv(supportedEnvs, "linux") {
-            hints = append(hints,
-                "Consider using WSL (Windows Subsystem for Linux) to run this tool",
-                "Install WSL: https://docs.microsoft.com/en-us/windows/wsl/install",
-            )
-        }
+    // Add platform-specific suggestions using helper functions.
+    hints = appendWindowsHints(hints, currentOS, supportedEnvs)
+    hints = appendDarwinArm64Hints(hints, currentOS, currentArch, supportedEnvs)
+    hints = appendLinuxArm64Hints(hints, currentOS, currentArch, supportedEnvs)
 
-    case currentOS == "darwin" && currentArch == "arm64":
-        // Check if darwin/amd64 is supported but not darwin/arm64.
-        if containsEnv(supportedEnvs, "darwin/amd64") || containsEnv(supportedEnvs, "darwin") {
-            if !containsEnv(supportedEnvs, "darwin/arm64") {
-                hints = append(hints,
-                    "Try installing the amd64 version and running under Rosetta 2",
-                    "Run: softwareupdate --install-rosetta",
-                )
-            }
-        }
-        // Check if only Linux is supported.
-        if !containsEnv(supportedEnvs, "darwin") && containsEnv(supportedEnvs, "linux") {
-            hints = append(hints,
-                "Consider using Docker to run this Linux-only tool on macOS",
-            )
-        }
+    return hints
+}
 
-    case currentOS == "linux":
-        // For Linux, suggest checking if a different architecture is supported.
-        if currentArch == "arm64" && containsEnv(supportedEnvs, "linux/amd64") {
-            hints = append(hints,
-                "This tool may only support amd64 architecture",
-                "Consider using an emulation layer like qemu-user",
-            )
-        }
+// appendWindowsHints adds Windows-specific hints (WSL suggestion).
+func appendWindowsHints(hints []string, currentOS string, supportedEnvs []string) []string {
+    if currentOS != "windows" {
+        return hints
     }
+    if containsEnv(supportedEnvs, "linux") {
+        hints = append(hints,
+            "Consider using WSL (Windows Subsystem for Linux) to run this tool",
+            "Install WSL: https://docs.microsoft.com/en-us/windows/wsl/install",
+        )
+    }
+    return hints
+}
 
+// appendDarwinArm64Hints adds macOS arm64-specific hints (Rosetta/Docker suggestions).
+func appendDarwinArm64Hints(hints []string, currentOS, currentArch string, supportedEnvs []string) []string {
+    if currentOS != "darwin" || currentArch != "arm64" {
+        return hints
+    }
+    // Check if darwin/amd64 is supported but not darwin/arm64.
+    darwinSupported := containsEnv(supportedEnvs, "darwin/amd64") || containsEnv(supportedEnvs, "darwin")
+    arm64Supported := containsEnv(supportedEnvs, "darwin/arm64")
+    if darwinSupported && !arm64Supported {
+        hints = append(hints,
+            "Try installing the amd64 version and running under Rosetta 2",
+            "Run: softwareupdate --install-rosetta",
+        )
+    }
+    // Check if only Linux is supported.
+    if !containsEnv(supportedEnvs, "darwin") && containsEnv(supportedEnvs, "linux") {
+        hints = append(hints,
+            "Consider using Docker to run this Linux-only tool on macOS",
+        )
+    }
+    return hints
+}
+
+// appendLinuxArm64Hints adds Linux arm64-specific hints (QEMU suggestion).
+func appendLinuxArm64Hints(hints []string, currentOS, currentArch string, supportedEnvs []string) []string {
+    if currentOS != "linux" || currentArch != "arm64" {
+        return hints
+    }
+    if containsEnv(supportedEnvs, "linux/amd64") {
+        hints = append(hints,
+            "This tool may only support amd64 architecture",
+            "Consider using an emulation layer like qemu-user",
+        )
+    }
     return hints
 }
 ```
@@ -488,8 +564,11 @@ func addPlatformSpecificHints(builder *errUtils.ErrorBuilder) {
 | File                                   | Change                                            |
 |----------------------------------------|---------------------------------------------------|
 | `toolchain/installer/platform.go`      | Added `buildPlatformHints()` function             |
+| `toolchain/installer/platform.go`      | Added `isKnownArch()` for arch-only matching      |
+| `toolchain/installer/platform.go`      | Added helper functions for platform hint building |
 | `toolchain/installer/download.go`      | Added `addPlatformSpecificHints()` function       |
 | `toolchain/installer/platform_test.go` | Added tests for platform-specific hints           |
+| `toolchain/installer/platform_test.go` | Added tests for arch-only matching                |
 
 ### Unit Tests
 
@@ -594,17 +673,38 @@ A dedicated test fixture was created to validate these fixes:
 detection and WSL hints on Windows.
 
 **Non-existent tool:** `replicatedhq/replicated` - Does NOT exist in the Aqua registry. Used to test
-"tool not in registry" error handling. Note: Only `replicatedhq/kots` and `replicatedhq/outdated` exist
-under the `replicatedhq` organization in the Aqua registry.
+"tool not in registry" error handling.
+
+### Why `replicatedhq/replicated` for "Not in Registry" Testing
+
+| Aspect             | Status                                                  |
+|--------------------|---------------------------------------------------------|
+| GitHub repo exists | ✅ Yes - https://github.com/replicatedhq/replicated      |
+| Has releases       | ✅ Yes - v0.124.1, v0.124.0, etc.                        |
+| Has binary assets  | ✅ Yes - darwin_all, linux_386, linux_amd64, linux_arm64 |
+| In Aqua registry   | ❌ **No** - only `kots` and `outdated` exist             |
+| Windows binaries   | ❌ No Windows builds                                     |
+
+`replicatedhq/replicated` is a **real tool with GitHub releases**, but it's **not in the Aqua registry**.
+The Aqua registry only contains these tools under the `replicatedhq` organization:
+
+- `replicatedhq/kots`
+- `replicatedhq/outdated`
+
+Our "tool not in registry" error is **correct** - the tool exists on GitHub but hasn't been added to the
+Aqua registry. If a user wants to use this tool, they would need to:
+
+1. Request it be added to the [Aqua registry](https://github.com/aquaproj/aqua-registry), or
+2. Use a different registry/method to install it
 
 ### Error Type Distinction
 
 The tests verify two distinct error scenarios:
 
-| Error Type              | Example Tool             | Error Message                    | When It Occurs                        |
-|-------------------------|--------------------------|----------------------------------|---------------------------------------|
-| Tool not in registry    | `replicatedhq/replicated`| "tool not in registry"           | Tool doesn't exist in any registry    |
-| Platform not supported  | `replicatedhq/kots`      | "does not support your platform" | Tool exists but not for this platform |
+| Error Type             | Example Tool              | Error Message                    | When It Occurs                        |
+|------------------------|---------------------------|----------------------------------|---------------------------------------|
+| Tool not in registry   | `replicatedhq/replicated` | "tool not in registry"           | Tool doesn't exist in any registry    |
+| Platform not supported | `replicatedhq/kots`       | "does not support your platform" | Tool exists but not for this platform |
 
 ---
 
@@ -831,13 +931,14 @@ go test ./tests/... -v -run "TestToolchainAquaTools_NonExistentToolError" -timeo
 
 ## Summary of All Fixes
 
-| Fix                           | File                                 | Description                                             |
-|-------------------------------|--------------------------------------|---------------------------------------------------------|
-| Glamour warning suppression   | `pkg/ui/markdown/custom_renderer.go` | Redirect stdout during rendering to suppress warnings   |
-| Improved HTTP 404 errors      | `toolchain/installer/download.go`    | User-friendly error messages with platform hints        |
-| Binary naming for 3+ segments | `toolchain/registry/aqua/aqua.go`    | Extract binary name from package name (e.g., `kubectl`) |
-| Pre-flight platform check     | `toolchain/installer/platform.go`    | Check platform compatibility before download attempt    |
-| Platform-specific hints       | `toolchain/installer/platform.go`    | WSL for Windows, Rosetta for macOS arm64, Docker hints  |
+| Fix                           | File                                 | Description                                              |
+|-------------------------------|--------------------------------------|----------------------------------------------------------|
+| Glamour warning suppression   | `pkg/ui/markdown/custom_renderer.go` | Redirect stdout during rendering to suppress warnings    |
+| Improved HTTP 404 errors      | `toolchain/installer/download.go`    | User-friendly error messages with platform hints         |
+| Binary naming for 3+ segments | `toolchain/registry/aqua/aqua.go`    | Extract binary name from package name (e.g., `kubectl`)  |
+| Pre-flight platform check     | `toolchain/installer/platform.go`    | Check platform compatibility before download attempt     |
+| Platform-specific hints       | `toolchain/installer/platform.go`    | WSL for Windows, Rosetta for macOS arm64, Docker hints   |
+| Arch-only platform matching   | `toolchain/installer/platform.go`    | Support `amd64`/`arm64` entries in Aqua `supported_envs` |
 
 ---
 

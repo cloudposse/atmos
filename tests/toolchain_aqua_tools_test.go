@@ -15,6 +15,18 @@ import (
 	"github.com/cloudposse/atmos/toolchain/installer"
 )
 
+// Tool version constants for maintainability.
+const (
+	versionKubectl   = "1.31.4"
+	versionGum       = "0.17.0"
+	versionK9s       = "0.32.7"
+	versionHelm      = "3.16.3"
+	versionJq        = "1.7.1"
+	versionOpentofu  = "1.9.0"
+	versionKots      = "1.127.0"
+	versionReplicate = "0.124.1" // Non-existent tool for error testing.
+)
+
 // TestToolchainAquaTools_KubectlBinaryNaming verifies that kubectl is installed
 // with the correct binary name "kubectl" instead of "kubernetes".
 //
@@ -46,19 +58,19 @@ func TestToolchainAquaTools_KubectlBinaryNaming(t *testing.T) {
 	atmosBinary := buildAtmosBinary(t)
 
 	// Install kubectl.
-	cmd := exec.Command(atmosBinary, "toolchain", "install", "kubernetes/kubectl@1.31.4")
+	cmd := exec.Command(atmosBinary, "toolchain", "install", "kubernetes/kubectl@"+versionKubectl)
 	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	output, err := cmd.CombinedOutput()
 	t.Logf("Install output:\n%s", string(output))
 
-	require.NoError(t, err, "toolchain install kubernetes/kubectl@1.31.4 should succeed")
+	require.NoError(t, err, "toolchain install kubernetes/kubectl@%s should succeed", versionKubectl)
 
 	// Verify the binary is named "kubectl" NOT "kubernetes".
 	correctBinaryName := installer.EnsureWindowsExeExtension("kubectl")
 	wrongBinaryName := installer.EnsureWindowsExeExtension("kubernetes")
 
-	correctPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.31.4", correctBinaryName)
-	wrongPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.31.4", wrongBinaryName)
+	correctPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", versionKubectl, correctBinaryName)
+	wrongPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", versionKubectl, wrongBinaryName)
 
 	// The correct binary should exist.
 	info, err := os.Stat(correctPath)
@@ -99,14 +111,14 @@ func TestToolchainAquaTools_KubectlExecutable(t *testing.T) {
 	atmosBinary := buildAtmosBinary(t)
 
 	// Install kubectl.
-	installCmd := exec.Command(atmosBinary, "toolchain", "install", "kubernetes/kubectl@1.31.4")
+	installCmd := exec.Command(atmosBinary, "toolchain", "install", "kubernetes/kubectl@"+versionKubectl)
 	installCmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	_, err := installCmd.CombinedOutput()
 	require.NoError(t, err, "toolchain install should succeed")
 
 	// Get the binary path.
 	binaryName := installer.EnsureWindowsExeExtension("kubectl")
-	binaryPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.31.4", binaryName)
+	binaryPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", versionKubectl, binaryName)
 
 	// Execute kubectl version.
 	execCmd := exec.Command(binaryPath, "version", "--client", "--output=yaml")
@@ -115,7 +127,7 @@ func TestToolchainAquaTools_KubectlExecutable(t *testing.T) {
 
 	require.NoError(t, err, "kubectl should execute successfully")
 	assert.Contains(t, string(output), "clientVersion", "Output should contain clientVersion")
-	assert.Contains(t, string(output), "v1.31.4", "Output should contain version v1.31.4")
+	assert.Contains(t, string(output), "v"+versionKubectl, "Output should contain version v%s", versionKubectl)
 }
 
 // TestToolchainAquaTools_InstallAllTools verifies that all tools in the fixture
@@ -153,13 +165,13 @@ func TestToolchainAquaTools_InstallAllTools(t *testing.T) {
 		repo       string // Repo for path construction
 		version    string // Version for path construction
 	}{
-		{"charmbracelet/gum@0.17.0", "gum", "charmbracelet", "gum", "0.17.0"},
-		{"derailed/k9s@0.32.7", "k9s", "derailed", "k9s", "0.32.7"},
-		{"helm/helm@3.16.3", "helm", "helm", "helm", "3.16.3"},
-		{"jqlang/jq@1.7.1", "jq", "jqlang", "jq", "1.7.1"},
+		{"charmbracelet/gum@" + versionGum, "gum", "charmbracelet", "gum", versionGum},
+		{"derailed/k9s@" + versionK9s, "k9s", "derailed", "k9s", versionK9s},
+		{"helm/helm@" + versionHelm, "helm", "helm", "helm", versionHelm},
+		{"jqlang/jq@" + versionJq, "jq", "jqlang", "jq", versionJq},
 		// kubectl: Tests binary naming fix for 3-segment package names.
-		{"kubernetes/kubectl@1.31.4", "kubectl", "kubernetes", "kubectl", "1.31.4"},
-		{"opentofu/opentofu@1.9.0", "tofu", "opentofu", "opentofu", "1.9.0"},
+		{"kubernetes/kubectl@" + versionKubectl, "kubectl", "kubernetes", "kubectl", versionKubectl},
+		{"opentofu/opentofu@" + versionOpentofu, "tofu", "opentofu", "opentofu", versionOpentofu},
 	}
 
 	// Platform-specific tools (only darwin and linux).
@@ -171,7 +183,7 @@ func TestToolchainAquaTools_InstallAllTools(t *testing.T) {
 		version    string
 	}{
 		// kots: Tests platform detection - only supports darwin and linux.
-		{"replicatedhq/kots@1.127.0", "kubectl-kots", "replicatedhq", "kots", "1.127.0"},
+		{"replicatedhq/kots@" + versionKots, "kubectl-kots", "replicatedhq", "kots", versionKots},
 	}
 
 	// Install cross-platform tools on all platforms.
@@ -275,15 +287,15 @@ func TestToolchainAquaTools_WindowsKubectl(t *testing.T) {
 	atmosBinary := buildAtmosBinary(t)
 
 	// Install kubectl.
-	installCmd := exec.Command(atmosBinary, "toolchain", "install", "kubernetes/kubectl@1.31.4")
+	installCmd := exec.Command(atmosBinary, "toolchain", "install", "kubernetes/kubectl@"+versionKubectl)
 	installCmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	output, err := installCmd.CombinedOutput()
 	t.Logf("Install output:\n%s", string(output))
 	require.NoError(t, err, "toolchain install should succeed")
 
 	// Verify .exe extension is present and binary is named kubectl.exe NOT kubernetes.exe.
-	correctPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.31.4", "kubectl.exe")
-	wrongPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", "1.31.4", "kubernetes.exe")
+	correctPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", versionKubectl, "kubectl.exe")
+	wrongPath := filepath.Join(toolsDir, "bin", "kubernetes", "kubectl", versionKubectl, "kubernetes.exe")
 
 	_, err = os.Stat(correctPath)
 	require.NoError(t, err, "Binary should exist at %s with name 'kubectl.exe'", correctPath)
@@ -292,11 +304,12 @@ func TestToolchainAquaTools_WindowsKubectl(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "Binary should NOT be named 'kubernetes.exe' at %s", wrongPath)
 
 	// Verify the binary can be executed.
-	execCmd := exec.Command(correctPath, "version", "--client", "--short")
+	// Note: --short flag was removed in kubectl 1.28+, use --client only.
+	execCmd := exec.Command(correctPath, "version", "--client")
 	execOutput, err := execCmd.CombinedOutput()
 	t.Logf("Execution output:\n%s", string(execOutput))
 	require.NoError(t, err, "kubectl.exe should be executable")
-	assert.Contains(t, strings.ToLower(string(execOutput)), "v1.31", "Output should indicate kubectl version")
+	assert.Contains(t, string(execOutput), "v"+versionKubectl, "Output should indicate kubectl version")
 }
 
 // TestToolchainAquaTools_KotsInstall verifies that replicatedhq/kots
@@ -331,16 +344,16 @@ func TestToolchainAquaTools_KotsInstall(t *testing.T) {
 	atmosBinary := buildAtmosBinary(t)
 
 	// Install kots.
-	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/kots@1.127.0")
+	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/kots@"+versionKots)
 	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	output, err := cmd.CombinedOutput()
 	t.Logf("Install output:\n%s", string(output))
 
-	require.NoError(t, err, "toolchain install replicatedhq/kots@1.127.0 should succeed on %s/%s", runtime.GOOS, runtime.GOARCH)
+	require.NoError(t, err, "toolchain install replicatedhq/kots@%s should succeed on %s/%s", versionKots, runtime.GOOS, runtime.GOARCH)
 
 	// Verify the binary exists (kots installs as kubectl-kots).
 	binaryName := installer.EnsureWindowsExeExtension("kubectl-kots")
-	binaryPath := filepath.Join(toolsDir, "bin", "replicatedhq", "kots", "1.127.0", binaryName)
+	binaryPath := filepath.Join(toolsDir, "bin", "replicatedhq", "kots", versionKots, binaryName)
 
 	info, err := os.Stat(binaryPath)
 	require.NoError(t, err, "Binary should exist at %s", binaryPath)
@@ -368,7 +381,7 @@ func TestToolchainAquaTools_WindowsKotsPlatformError(t *testing.T) {
 	atmosBinary := buildAtmosBinary(t)
 
 	// Attempt to install kots on Windows - should fail with platform error.
-	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/kots@1.127.0")
+	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/kots@"+versionKots)
 	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)
@@ -406,7 +419,7 @@ func TestToolchainAquaTools_NonExistentToolError(t *testing.T) {
 	atmosBinary := buildAtmosBinary(t)
 
 	// Attempt to install replicatedhq/replicated which doesn't exist in the registry.
-	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/replicated@0.124.1")
+	cmd := exec.Command(atmosBinary, "toolchain", "install", "replicatedhq/replicated@"+versionReplicate)
 	cmd.Env = append(os.Environ(), "ATMOS_LOGS_LEVEL=Info")
 	output, err := cmd.CombinedOutput()
 	outputStr := string(output)

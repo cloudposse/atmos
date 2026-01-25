@@ -18,9 +18,9 @@ type PlatformError struct {
 }
 
 // Error implements the error interface.
+//
+//nolint:lintroller // Trivial getter implementing error interface - no perf tracking needed.
 func (e *PlatformError) Error() string {
-	defer perf.Track(nil, "installer.PlatformError.Error")()
-
 	return fmt.Sprintf("tool %s does not support %s", e.Tool, e.CurrentEnv)
 }
 
@@ -55,10 +55,12 @@ func CheckPlatformSupport(tool *registry.Tool) *PlatformError {
 }
 
 // isPlatformMatch checks if a supported_env entry matches the current platform.
-// Supported formats:
+// Supported formats (following Aqua registry conventions):
 //   - "darwin" - matches any darwin architecture
 //   - "linux" - matches any linux architecture
 //   - "windows" - matches any windows architecture
+//   - "amd64" - matches any OS with amd64 architecture
+//   - "arm64" - matches any OS with arm64 architecture
 //   - "darwin/amd64" - matches specific OS/arch
 //   - "linux/arm64" - matches specific OS/arch
 func isPlatformMatch(env, currentOS, currentArch string) bool {
@@ -72,8 +74,32 @@ func isPlatformMatch(env, currentOS, currentArch string) bool {
 		}
 	}
 
+	// Check for arch-only match (any OS with this architecture).
+	// Aqua registry uses entries like "amd64" to mean "any OS with amd64".
+	if isKnownArch(env) {
+		return env == currentArch
+	}
+
 	// Check for OS-only match (any architecture).
 	return env == currentOS
+}
+
+// isKnownArch returns true if the string is a known Go architecture name.
+func isKnownArch(s string) bool {
+	knownArchs := map[string]bool{
+		"amd64":   true,
+		"arm64":   true,
+		"386":     true,
+		"arm":     true,
+		"ppc64":   true,
+		"ppc64le": true,
+		"mips":    true,
+		"mipsle":  true,
+		"mips64":  true,
+		"s390x":   true,
+		"riscv64": true,
+	}
+	return knownArchs[s]
 }
 
 // buildPlatformHints generates helpful hints based on the current platform.

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"reflect"
+	"sync"
 	"unsafe"
 
 	"github.com/charmbracelet/glamour"
@@ -28,6 +29,9 @@ import (
 type CustomRenderer struct {
 	glamour *glamour.TermRenderer
 }
+
+// stdoutRedirectMu serializes stdout redirects during rendering to prevent races.
+var stdoutRedirectMu sync.Mutex
 
 // CustomRendererOption configures the CustomRenderer.
 type CustomRendererOption func(*customRendererConfig)
@@ -210,8 +214,14 @@ func (r *CustomRenderer) Render(content string) (string, error) {
 	// Glamour's internal ANSI renderer prints "Warning: unhandled element" directly to stdout
 	// via fmt.Println when it encounters nodes it doesn't know how to handle.
 	// These warnings are not useful to users and can be confusing.
+	//
+	// The mutex serializes stdout redirects to prevent races when Render() is called
+	// concurrently or when other goroutines write to stdout during rendering.
+	stdoutRedirectMu.Lock()
+	defer stdoutRedirectMu.Unlock()
+
 	oldStdout := os.Stdout
-	devNull, err := os.Open(os.DevNull)
+	devNull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
 	if err == nil {
 		os.Stdout = devNull
 		defer func() {

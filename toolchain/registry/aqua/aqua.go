@@ -262,20 +262,8 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		asset = pkgDef.URL
 	}
 
-	// Determine binary name following Aqua's resolution order:
-	// 1. Use explicit binary_name if set
-	// 2. Extract last segment from package name (e.g., "kubectl" from "kubernetes/kubernetes/kubectl")
-	// 3. Fall back to repo_name
-	name := pkgDef.BinaryName
-	if name == "" {
-		name = extractBinaryNameFromPackageName(pkgDef.Name)
-	}
-	if name == "" {
-		name = pkgDef.RepoName
-	}
-
 	tool := &registry.Tool{
-		Name:          name,
+		Name:          resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
 		Type:          pkgDef.Type,
 		RepoOwner:     pkgDef.RepoOwner,
 		RepoName:      pkgDef.RepoName,
@@ -432,21 +420,9 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 			asset = pkg.URL
 		}
 
-		// Determine binary name following Aqua's resolution order:
-		// 1. Use explicit binary_name if set
-		// 2. Extract last segment from package name (e.g., "kubectl" from "kubernetes/kubernetes/kubectl")
-		// 3. Fall back to repo_name
-		name := pkg.BinaryName
-		if name == "" {
-			name = extractBinaryNameFromPackageName(pkg.Name)
-		}
-		if name == "" {
-			name = pkg.RepoName
-		}
-
 		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
-			Name:          name,
+			Name:          resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
 			RepoOwner:     pkg.RepoOwner,
 			RepoName:      pkg.RepoName,
 			Asset:         asset,
@@ -610,4 +586,18 @@ func extractBinaryNameFromPackageName(packageName string) string {
 	// For 2-segment names like "hashicorp/terraform", return empty
 	// so the caller falls back to repo_name.
 	return ""
+}
+
+// resolveBinaryName determines the binary name using Aqua's resolution order:
+// 1. Use explicit binary_name if set
+// 2. Extract last segment from package name (e.g., "kubectl" from "kubernetes/kubernetes/kubectl")
+// 3. Fall back to repo_name.
+func resolveBinaryName(binaryName, packageName, repoName string) string {
+	if binaryName != "" {
+		return binaryName
+	}
+	if name := extractBinaryNameFromPackageName(packageName); name != "" {
+		return name
+	}
+	return repoName
 }

@@ -1,6 +1,7 @@
 package installer
 
 import (
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -701,7 +702,8 @@ func TestBuildAssetURL_HTTPTypeWindowsExeExtension(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		// On Windows, should have .exe extension.
 		assert.True(t, strings.HasSuffix(url, ".exe"), "Windows HTTP URL should end with .exe: %s", url)
-		assert.Equal(t, "https://dl.k8s.io/v1.31.4/bin/windows/amd64/kubectl.exe", url)
+		expectedURL := fmt.Sprintf("https://dl.k8s.io/v1.31.4/bin/windows/%s/kubectl.exe", runtime.GOARCH)
+		assert.Equal(t, expectedURL, url)
 	} else {
 		// On non-Windows, should NOT have .exe extension.
 		assert.False(t, strings.HasSuffix(url, ".exe"), "Non-Windows HTTP URL should not end with .exe: %s", url)
