@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -178,6 +179,9 @@ func TestClean_AllTakesPrecedence(t *testing.T) {
 func TestCleanWorkdir_ErrorType(t *testing.T) {
 	// Create a directory that will cause permission errors.
 	// Skip on non-Unix systems where permission model differs.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - different permission model")
+	}
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping permission test in CI")
 	}
@@ -200,6 +204,9 @@ func TestCleanWorkdir_ErrorType(t *testing.T) {
 
 func TestCleanAllWorkdirs_ErrorType(t *testing.T) {
 	// Similar permission test.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - different permission model")
+	}
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping permission test in CI")
 	}
@@ -237,6 +244,9 @@ func TestErrorWrapping(t *testing.T) {
 func TestClean_ErrorAccumulation_AllFails(t *testing.T) {
 	// Test the error accumulation path by making CleanAllWorkdirs fail.
 	// This requires creating a situation where removal fails.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - different permission model")
+	}
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping permission test in CI")
 	}
@@ -259,6 +269,9 @@ func TestClean_ErrorAccumulation_AllFails(t *testing.T) {
 
 func TestClean_ErrorAccumulation_ComponentFails(t *testing.T) {
 	// Test error accumulation when component cleanup fails.
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission test on Windows - different permission model")
+	}
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping permission test in CI")
 	}
