@@ -271,6 +271,12 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	// Apply platform-specific overrides before building the asset URL.
 	ApplyPlatformOverrides(tool)
 
+	// Pre-flight platform check: verify the tool supports the current platform.
+	// This provides a better user experience than waiting for a 404 error.
+	if platformErr := CheckPlatformSupport(tool); platformErr != nil {
+		return "", buildPlatformNotSupportedError(platformErr)
+	}
+
 	assetURL, err := i.BuildAssetURL(tool, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, err)

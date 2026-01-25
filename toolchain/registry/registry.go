@@ -203,6 +203,7 @@ type Tool struct {
 	BinaryName       string            `yaml:"binary_name"`
 	VersionPrefix    string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/"). Defaults to "v".
 	SourceURL        string            `yaml:"-"`              // URL where the registry file was found (not serialized).
+	SupportedEnvs    []string          `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux", "windows", "darwin/amd64").
 }
 
 // File represents a file to be extracted from the archive.
