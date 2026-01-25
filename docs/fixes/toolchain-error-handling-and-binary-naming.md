@@ -679,7 +679,7 @@ detection and WSL hints on Windows.
 
 | Aspect             | Status                                                  |
 |--------------------|---------------------------------------------------------|
-| GitHub repo exists | ✅ Yes - https://github.com/replicatedhq/replicated      |
+| GitHub repo exists | ✅ Yes - <https://github.com/replicatedhq/replicated>    |
 | Has releases       | ✅ Yes - v0.124.1, v0.124.0, etc.                        |
 | Has binary assets  | ✅ Yes - darwin_all, linux_386, linux_amd64, linux_arm64 |
 | In Aqua registry   | ❌ **No** - only `kots` and `outdated` exist             |
