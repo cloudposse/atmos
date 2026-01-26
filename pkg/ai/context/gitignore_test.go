@@ -102,7 +102,7 @@ func TestGitignoreFilter_LoadFile(t *testing.T) {
 node_modules
 /root.txt
 `
-	if err := os.WriteFile(gitignorePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to create .gitignore: %v", err)
 	}
 
@@ -167,7 +167,7 @@ func TestGitignoreFilter_EmptyLines(t *testing.T) {
 node_modules
 
 `
-	if err := os.WriteFile(gitignorePath, []byte(content), 0644); err != nil {
+	if err := os.WriteFile(gitignorePath, []byte(content), 0o644); err != nil {
 		t.Fatalf("Failed to create .gitignore: %v", err)
 	}
 

@@ -398,7 +398,7 @@ func TestManager_ImportSession(t *testing.T) {
 			tmpFile := filepath.Join(t.TempDir(), "checkpoint.json")
 			data, err := json.Marshal(tt.checkpoint)
 			require.NoError(t, err)
-			err = os.WriteFile(tmpFile, data, 0600)
+			err = os.WriteFile(tmpFile, data, 0o600)
 			require.NoError(t, err)
 
 			// Import session.
@@ -700,7 +700,7 @@ func TestValidateCheckpointFile(t *testing.T) {
 			tmpFile := filepath.Join(t.TempDir(), "checkpoint.json")
 			data, err := json.Marshal(tt.checkpoint)
 			require.NoError(t, err)
-			err = os.WriteFile(tmpFile, data, 0600)
+			err = os.WriteFile(tmpFile, data, 0o600)
 			require.NoError(t, err)
 
 			// Validate file.

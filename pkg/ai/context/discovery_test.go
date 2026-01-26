@@ -17,11 +17,11 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "valid config",
 			config: schema.AIContextSettings{
-				Enabled:      true,
-				AutoInclude:  []string{"*.go"},
-				MaxFiles:     100,
-				MaxSizeMB:    10,
-				CacheTTL:     300,
+				Enabled:     true,
+				AutoInclude: []string{"*.go"},
+				MaxFiles:    100,
+				MaxSizeMB:   10,
+				CacheTTL:    300,
 			},
 			wantErr: false,
 		},
@@ -121,7 +121,7 @@ func TestDiscoverer_BasicDiscovery(t *testing.T) {
 	}
 	for _, f := range testFiles {
 		path := filepath.Join(tmpDir, f)
-		if err := os.WriteFile(path, []byte("test content"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("test content"), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
@@ -179,7 +179,7 @@ func TestDiscoverer_Exclusion(t *testing.T) {
 	}
 	for _, f := range testFiles {
 		path := filepath.Join(tmpDir, f)
-		if err := os.WriteFile(path, []byte("test content"), 0644); err != nil {
+		if err := os.WriteFile(path, []byte("test content"), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
@@ -226,7 +226,7 @@ func TestDiscoverer_MaxFiles(t *testing.T) {
 	// Create 5 test files with unique names.
 	for i := 1; i <= 5; i++ {
 		filename := filepath.Join(tmpDir, filepath.Base(tmpDir)+"_"+string(rune('a'+i-1))+".go")
-		if err := os.WriteFile(filename, []byte("test content"), 0644); err != nil {
+		if err := os.WriteFile(filename, []byte("test content"), 0o644); err != nil {
 			t.Fatalf("Failed to create test file: %v", err)
 		}
 	}
@@ -265,7 +265,7 @@ func TestDiscoverer_MaxSize(t *testing.T) {
 	// Create file larger than 1MB.
 	largeContent := make([]byte, 2*1024*1024) // 2MB
 	path := filepath.Join(tmpDir, "large.go")
-	if err := os.WriteFile(path, largeContent, 0644); err != nil {
+	if err := os.WriteFile(path, largeContent, 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 
@@ -302,7 +302,7 @@ func TestDiscoverer_Cache(t *testing.T) {
 
 	// Create test file.
 	path := filepath.Join(tmpDir, "main.go")
-	if err := os.WriteFile(path, []byte("test content"), 0644); err != nil {
+	if err := os.WriteFile(path, []byte("test content"), 0o644); err != nil {
 		t.Fatalf("Failed to create test file: %v", err)
 	}
 

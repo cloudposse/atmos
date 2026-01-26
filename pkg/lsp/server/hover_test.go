@@ -86,31 +86,31 @@ func TestTextDocumentHover(t *testing.T) {
 			description: "Should show hover for 'namespace' variable",
 		},
 		{
-			name:       "hover over unknown keyword",
-			docContent: "unknown_key: value",
-			position:   protocol.Position{Line: 0, Character: 5},
-			wantHover:  false,
+			name:        "hover over unknown keyword",
+			docContent:  "unknown_key: value",
+			position:    protocol.Position{Line: 0, Character: 5},
+			wantHover:   false,
 			description: "Should return nil for unknown keywords",
 		},
 		{
-			name:       "hover at empty position",
-			docContent: "import:\n  - catalog\n\n",
-			position:   protocol.Position{Line: 2, Character: 0},
-			wantHover:  false,
+			name:        "hover at empty position",
+			docContent:  "import:\n  - catalog\n\n",
+			position:    protocol.Position{Line: 2, Character: 0},
+			wantHover:   false,
 			description: "Should return nil for empty line",
 		},
 		{
-			name:       "hover beyond line length",
-			docContent: "import:\n  - catalog",
-			position:   protocol.Position{Line: 10, Character: 0},
-			wantHover:  false,
+			name:        "hover beyond line length",
+			docContent:  "import:\n  - catalog",
+			position:    protocol.Position{Line: 10, Character: 0},
+			wantHover:   false,
 			description: "Should return nil for position beyond document",
 		},
 		{
-			name:       "document not found",
-			docContent: "",
-			position:   protocol.Position{Line: 0, Character: 0},
-			wantHover:  false,
+			name:        "document not found",
+			docContent:  "",
+			position:    protocol.Position{Line: 0, Character: 0},
+			wantHover:   false,
 			description: "Should return nil for non-existent document",
 		},
 	}
@@ -163,10 +163,10 @@ func TestTextDocumentHover(t *testing.T) {
 
 func TestGetHoverContent(t *testing.T) {
 	tests := []struct {
-		name        string
-		docContent  string
-		position    protocol.Position
-		wantContent bool
+		name         string
+		docContent   string
+		position     protocol.Position
+		wantContent  bool
 		checkContent func(t *testing.T, content string)
 	}{
 		{
