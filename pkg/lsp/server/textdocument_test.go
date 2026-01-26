@@ -14,10 +14,10 @@ import (
 
 func TestTextDocumentDidOpen(t *testing.T) {
 	tests := []struct {
-		name       string
-		params     *protocol.DidOpenTextDocumentParams
-		wantErr    bool
-		checkDoc   func(t *testing.T, dm *DocumentManager, uri protocol.DocumentUri)
+		name     string
+		params   *protocol.DidOpenTextDocumentParams
+		wantErr  bool
+		checkDoc func(t *testing.T, dm *DocumentManager, uri protocol.DocumentUri)
 	}{
 		{
 			name: "open new document",

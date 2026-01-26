@@ -12,32 +12,32 @@ import (
 
 func TestTextDocumentDefinition(t *testing.T) {
 	tests := []struct {
-		name         string
-		docContent   string
-		position     protocol.Position
-		wantResult   bool
-		checkResult  func(t *testing.T, result any)
-		description  string
+		name        string
+		docContent  string
+		position    protocol.Position
+		wantResult  bool
+		checkResult func(t *testing.T, result any)
+		description string
 	}{
 		{
-			name:       "stub returns nil for any position",
-			docContent: "import:\n  - catalog/vpc",
-			position:   protocol.Position{Line: 1, Character: 5},
-			wantResult: false,
+			name:        "stub returns nil for any position",
+			docContent:  "import:\n  - catalog/vpc",
+			position:    protocol.Position{Line: 1, Character: 5},
+			wantResult:  false,
 			description: "Definition lookup is not yet implemented (stub)",
 		},
 		{
-			name:       "non-existent document returns nil",
-			docContent: "",
-			position:   protocol.Position{Line: 0, Character: 0},
-			wantResult: false,
+			name:        "non-existent document returns nil",
+			docContent:  "",
+			position:    protocol.Position{Line: 0, Character: 0},
+			wantResult:  false,
 			description: "Non-existent document should return nil",
 		},
 		{
-			name:       "valid stack file returns nil (stub)",
-			docContent: "components:\n  terraform:\n    vpc: {}",
-			position:   protocol.Position{Line: 2, Character: 5},
-			wantResult: false,
+			name:        "valid stack file returns nil (stub)",
+			docContent:  "components:\n  terraform:\n    vpc: {}",
+			position:    protocol.Position{Line: 2, Character: 5},
+			wantResult:  false,
 			description: "Even valid files return nil in stub implementation",
 		},
 	}
@@ -89,9 +89,9 @@ func TestTextDocumentDefinition(t *testing.T) {
 
 func TestGetDefinitionLocations(t *testing.T) {
 	tests := []struct {
-		name         string
-		docContent   string
-		position     protocol.Position
+		name          string
+		docContent    string
+		position      protocol.Position
 		wantLocations int
 	}{
 		{

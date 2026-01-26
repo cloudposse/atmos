@@ -12,12 +12,12 @@ import (
 
 func TestTextDocumentCompletion(t *testing.T) {
 	tests := []struct {
-		name            string
-		docContent      string
-		position        protocol.Position
-		wantItems       bool
-		checkItems      func(t *testing.T, items []protocol.CompletionItem)
-		description     string
+		name        string
+		docContent  string
+		position    protocol.Position
+		wantItems   bool
+		checkItems  func(t *testing.T, items []protocol.CompletionItem)
+		description string
 	}{
 		{
 			name:       "empty document",
@@ -101,10 +101,10 @@ func TestTextDocumentCompletion(t *testing.T) {
 			description: "After 'settings:' should offer settings options",
 		},
 		{
-			name:       "document not found",
-			docContent: "",
-			position:   protocol.Position{Line: 0, Character: 0},
-			wantItems:  false,
+			name:        "document not found",
+			docContent:  "",
+			position:    protocol.Position{Line: 0, Character: 0},
+			wantItems:   false,
 			description: "Non-existent document should return nil",
 		},
 	}
