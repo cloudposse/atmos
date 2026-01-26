@@ -729,3 +729,102 @@ func TestWrapDescribeError_BreaksErrInvalidComponentChain(t *testing.T) {
 		})
 	}
 }
+
+// TestExecutor_ExecuteWithSections_ComponentPathResolution tests that component paths
+// are correctly resolved based on whether they are relative or absolute, and based on
+// the atmosConfig.BasePath setting.
+// This is a regression test for the issue where atmos.Component template function failed with
+// "backend.tf.json: no such file or directory" when running with --chdir or from a non-project-root directory.
+func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
+	tests := []struct {
+		name            string
+		basePath        string
+		componentPath   string
+		expectedWorkdir string
+		description     string
+	}{
+		{
+			name:            "relative path with BasePath",
+			basePath:        "/project/root",
+			componentPath:   "components/terraform/vpc",
+			expectedWorkdir: "/project/root/components/terraform/vpc",
+			description:     "Relative component path should be resolved against atmosConfig.BasePath",
+		},
+		{
+			name:            "absolute path preserved",
+			basePath:        "/project/root",
+			componentPath:   "/custom/absolute/path/to/component",
+			expectedWorkdir: "/custom/absolute/path/to/component",
+			description:     "Absolute component path should be preserved unchanged",
+		},
+		{
+			name:            "empty BasePath with relative path",
+			basePath:        "",
+			componentPath:   "components/terraform/vpc",
+			expectedWorkdir: "components/terraform/vpc",
+			description:     "With empty BasePath, relative path should be passed through unchanged",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockDescriber := NewMockComponentDescriber(ctrl)
+			mockRunner := NewMockTerraformRunner(ctrl)
+
+			// Track what workdir is passed to the runner factory.
+			var capturedWorkdir string
+			customFactory := func(workdir, executable string) (TerraformRunner, error) {
+				capturedWorkdir = workdir
+				return mockRunner, nil
+			}
+
+			exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath: tt.basePath,
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						AutoGenerateBackendFile: false,
+						InitRunReconfigure:      false,
+					},
+				},
+				Logs: schema.Logs{
+					Level: "info",
+				},
+			}
+
+			sections := map[string]any{
+				cfg.CommandSectionName:   "/usr/local/bin/terraform",
+				cfg.WorkspaceSectionName: "test-workspace",
+				"component_info": map[string]any{
+					"component_path": tt.componentPath,
+				},
+				cfg.BackendTypeSectionName: "s3",
+				cfg.BackendSectionName: map[string]any{
+					"bucket": "test-bucket",
+					"key":    "test-key",
+				},
+			}
+
+			// Setup expectations.
+			mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+			mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+			mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+			mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+				"vpc_id": {
+					Value: []byte(`"vpc-123456"`),
+				},
+			}, nil)
+
+			outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
+			require.NoError(t, err)
+			assert.Equal(t, "vpc-123456", outputs["vpc_id"])
+
+			// Verify the path resolution.
+			assert.Equal(t, tt.expectedWorkdir, capturedWorkdir, tt.description)
+		})
+	}
+}
