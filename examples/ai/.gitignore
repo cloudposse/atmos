@@ -1,0 +1,15 @@
+# Atmos AI session data (contains conversation history)
+.atmos/
+
+# Terraform artifacts
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+.terraform.lock.hcl
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

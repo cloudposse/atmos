@@ -1,0 +1,54 @@
+# Development Stack Configuration
+# This stack demonstrates AI-queryable infrastructure configuration.
+
+vars:
+  environment: "dev"
+  stage: "main"
+  region: "us-east-1"
+
+  # Common tags for all resources
+  tags:
+    Environment: "development"
+    Stage: "main"
+    ManagedBy: "atmos"
+    Project: "ai-example"
+
+components:
+  terraform:
+    myapp:
+      metadata:
+        component: myapp
+        type: real
+      vars:
+        # Application settings
+        app_name: "myapp"
+        app_version: "1.0.0"
+
+        # Infrastructure sizing (small for dev)
+        instance_type: "t3.small"
+        replica_count: 1
+        min_replicas: 1
+        max_replicas: 2
+
+        # Feature flags
+        debug_enabled: true
+        logging_level: "debug"
+        metrics_enabled: true
+
+        # Resource limits
+        cpu_limit: "500m"
+        memory_limit: "512Mi"
+
+        # Networking
+        public_access: false
+        health_check_path: "/health"
+        health_check_interval: 30
+
+        # Database settings
+        db_instance_class: "db.t3.micro"
+        db_storage_gb: 20
+        db_multi_az: false
+
+        # Cache settings
+        cache_node_type: "cache.t3.micro"
+        cache_num_nodes: 1

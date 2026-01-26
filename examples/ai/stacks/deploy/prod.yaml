@@ -1,0 +1,64 @@
+# Production Stack Configuration
+# Production-grade settings for the myapp component.
+
+vars:
+  environment: "prod"
+  stage: "main"
+  region: "us-east-1"
+
+  # Common tags for all resources
+  tags:
+    Environment: "production"
+    Stage: "main"
+    ManagedBy: "atmos"
+    Project: "ai-example"
+    CostCenter: "platform"
+    Compliance: "soc2"
+
+components:
+  terraform:
+    myapp:
+      metadata:
+        component: myapp
+        type: real
+      vars:
+        # Application settings
+        app_name: "myapp"
+        app_version: "1.0.0"
+
+        # Infrastructure sizing (production-grade)
+        instance_type: "m5.large"
+        replica_count: 3
+        min_replicas: 2
+        max_replicas: 10
+
+        # Feature flags
+        debug_enabled: false
+        logging_level: "info"
+        metrics_enabled: true
+
+        # Resource limits (larger for prod)
+        cpu_limit: "2000m"
+        memory_limit: "4Gi"
+
+        # Networking
+        public_access: false
+        health_check_path: "/health"
+        health_check_interval: 10
+
+        # Database settings (production-grade)
+        db_instance_class: "db.r5.large"
+        db_storage_gb: 100
+        db_multi_az: true
+        db_backup_retention: 30
+        db_encryption: true
+
+        # Cache settings (production-grade)
+        cache_node_type: "cache.r5.large"
+        cache_num_nodes: 3
+        cache_automatic_failover: true
+
+        # Additional production settings
+        ssl_enabled: true
+        waf_enabled: true
+        cdn_enabled: true

@@ -1,0 +1,43 @@
+# AI Demo Workflow
+# Demonstrates using Atmos AI features in workflows.
+
+name: AI Demo Workflow
+description: Demonstrates Atmos AI features
+
+workflows:
+  # List all available stacks
+  list-stacks:
+    description: List all stacks in the project
+    steps:
+      - command: list stacks
+
+  # Describe the dev stack component
+  describe-dev:
+    description: Describe the myapp component in dev
+    steps:
+      - command: describe component myapp -s dev-main
+
+  # Describe the prod stack component
+  describe-prod:
+    description: Describe the myapp component in prod
+    steps:
+      - command: describe component myapp -s prod-main
+
+  # Compare dev and prod configurations
+  compare-environments:
+    description: Compare dev and prod configurations
+    steps:
+      - command: describe component myapp -s dev-main
+      - command: describe component myapp -s prod-main
+
+  # Validate all stacks
+  validate-all:
+    description: Validate all stack configurations
+    steps:
+      - command: validate stacks
+
+  # AI-assisted analysis (if AI is enabled)
+  ai-analyze:
+    description: Use AI to analyze the infrastructure
+    steps:
+      - command: ai ask "Analyze the myapp component configuration across dev and prod environments. What are the key differences?"
