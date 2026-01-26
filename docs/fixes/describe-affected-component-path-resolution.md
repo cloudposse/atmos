@@ -79,9 +79,9 @@ func (g *defaultBackendGenerator) GenerateBackendIfNeeded(config *ComponentConfi
 #### 3. The Problem
 
 When the relative path `components/terraform/vpc/backend.tf.json` is used:
-- It resolves relative to the **current working directory (CWD)**
-- NOT relative to the project root (`atmosConfig.BasePath`)
-- If CWD differs from project root (e.g., `--chdir`, running from subdirectory, CI environment), the path doesn't exist
+- It resolves relative to the **current working directory (CWD)**.
+- NOT relative to the project root (`atmosConfig.BasePath`).
+- If CWD differs from project root (e.g., `--chdir`, running from subdirectory, CI environment), the path doesn't exist.
 
 ### Flow Diagram
 
@@ -268,10 +268,10 @@ func (e *Executor) execute(ctx context.Context, atmosConfig *schema.AtmosConfigu
 
 **Option 3 (Use GetComponentPath Utility)** was implemented because:
 
-1. It reuses the battle-tested `utils.GetComponentPath` function
-2. It guarantees absolute path resolution
-3. It's consistent with how other parts of the codebase resolve component paths
-4. It properly handles `atmosConfig.BasePath`, environment variables, and absolute paths
+1. It reuses the battle-tested `utils.GetComponentPath` function.
+2. It guarantees absolute path resolution.
+3. It's consistent with how other parts of the codebase resolve component paths.
+4. It properly handles `atmosConfig.BasePath`, environment variables, and absolute paths.
 
 ### Changes Made
 

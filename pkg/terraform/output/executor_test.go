@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -36,10 +37,9 @@ func validSections() map[string]any {
 }
 
 // Helper function to create minimal valid atmos config.
-// Uses a temp-like base path for cross-platform compatibility.
 func validAtmosConfig() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
-		BasePath: "/tmp/test-project",
+		BasePath: filepath.Join(os.TempDir(), "test-project"),
 		Components: schema.Components{
 			Terraform: schema.Terraform{
 				BasePath:                "components/terraform",
@@ -1188,7 +1188,7 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 				},
 			}, nil)
 
-			outputs, err := exec.ExecuteWithSections(atmosConfig, "vpc", "dev-ue1", sections, nil)
+			outputs, err := exec.ExecuteWithSections(atmosConfig, tt.componentName, "dev-ue1", sections, nil)
 			require.NoError(t, err)
 			assert.Equal(t, "vpc-123456", outputs["vpc_id"])
 
