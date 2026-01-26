@@ -1,0 +1,36 @@
+# Scaffold Template Configuration
+# This file defines the template metadata and interactive prompts.
+# See: https://atmos.tools/cli/commands/scaffold/generate
+
+name: "example"
+description: "Example scaffold template for demonstration"
+author: "Cloud Posse"
+version: "1.0.0"
+
+# Interactive prompts for customizing the generated project.
+# Each prompt becomes a variable accessible via {{ .Config.<name> }}
+prompts:
+  - name: "project_name"
+    description: "Project name"
+    type: "input"
+    default: "my-project"
+
+  - name: "terraform_version"
+    description: "Terraform version"
+    type: "input"
+    default: "1.5.0"
+
+  - name: "aws_region"
+    description: "Default AWS region"
+    type: "select"
+    default: "us-east-1"
+    options:
+      - "us-east-1"
+      - "us-west-2"
+      - "eu-west-1"
+      - "ap-southeast-1"
+
+  - name: "enable_vendoring"
+    description: "Enable component vendoring"
+    type: "confirm"
+    default: true

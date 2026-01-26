@@ -18,6 +18,8 @@ type FieldRef struct {
 
 // String returns the dot-separated path of the field reference.
 func (f FieldRef) String() string {
+	defer perf.Track(nil, "template.FieldRef.String")()
+
 	return strings.Join(f.Path, ".")
 }
 

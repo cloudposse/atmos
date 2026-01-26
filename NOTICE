@@ -1216,6 +1216,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/elliotchance/orderedmap/blob/v1.8.0/LICENSE
 
+  - github.com/epiclabs-io/diff3
+    License: MIT
+    URL: https://github.com/epiclabs-io/diff3/blob/280ec18688b6/LICENSE
+
   - github.com/fatih/color
     License: MIT
     URL: https://github.com/fatih/color/blob/v1.18.0/LICENSE.md

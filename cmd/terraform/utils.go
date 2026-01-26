@@ -415,7 +415,13 @@ func promptForStack(cmd *cobra.Command, component string) (string, error) {
 // This is needed because --heatmap must be detected before flag parsing occurs.
 // We only enable tracking if --heatmap is present; --heatmap-mode is only relevant when --heatmap is set.
 func enableHeatmapIfRequested() {
-	for _, arg := range os.Args {
+	enableHeatmapIfRequestedWithArgs(os.Args)
+}
+
+// enableHeatmapIfRequestedWithArgs checks the given args for --heatmap flag and enables performance tracking.
+// This is a testable version of enableHeatmapIfRequested that accepts args as a parameter.
+func enableHeatmapIfRequestedWithArgs(args []string) {
+	for _, arg := range args {
 		if arg == "--heatmap" {
 			perf.EnableTracking(true)
 			return

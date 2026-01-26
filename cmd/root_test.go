@@ -429,11 +429,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Use NewTestKit to isolate RootCmd state.
 		_ = NewTestKit(t)
 
-		// Save original os.Args and os.Exit.
-		originalArgs := os.Args
+		// Save original os.Exit.
 		originalOsExit := errUtils.OsExit
 		defer func() {
-			os.Args = originalArgs
 			errUtils.OsExit = originalOsExit
 		}()
 
@@ -453,9 +451,8 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Set ATMOS_PAGER=false to explicitly disable the pager.
 		t.Setenv("ATMOS_PAGER", "false")
 
-		// Set os.Args so our custom Execute() function can parse them.
-		// This is required because Execute() needs to initialize atmosConfig from environment variables.
-		os.Args = []string{"atmos", "--help"}
+		// Use SetArgs instead of modifying os.Args.
+		RootCmd.SetArgs([]string{"--help"})
 
 		// Execute should not error even without a TTY.
 		// The pager should be disabled via ATMOS_PAGER=false, so no TTY error should occur.
@@ -473,11 +470,9 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// Use NewTestKit to isolate RootCmd state.
 		_ = NewTestKit(t)
 
-		// Save original os.Args and os.Exit.
-		originalArgs := os.Args
+		// Save original os.Exit.
 		originalOsExit := errUtils.OsExit
 		defer func() {
-			os.Args = originalArgs
 			errUtils.OsExit = originalOsExit
 		}()
 
@@ -499,8 +494,8 @@ func TestPagerDoesNotRunWithoutTTY(t *testing.T) {
 		// The pager should detect no TTY and fall back to direct output.
 		t.Setenv("ATMOS_PAGER", "true")
 
-		// Set os.Args so our custom Execute() function can parse them.
-		os.Args = []string{"atmos", "--help"}
+		// Use SetArgs instead of modifying os.Args.
+		RootCmd.SetArgs([]string{"--help"})
 
 		// Execute should not error even without a TTY.
 		// The pager should detect the lack of TTY and fall back to printing directly.
@@ -915,20 +910,12 @@ func TestSetupColorProfileFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore os.Args.
-			oldArgs := os.Args
-			defer func() { os.Args = oldArgs }()
-
 			if tt.envVar != "" {
 				t.Setenv(tt.envVar, tt.envValue)
 			}
 
-			if len(tt.args) > 0 {
-				os.Args = tt.args
-			}
-
 			// Should not panic.
-			setupColorProfileFromEnv()
+			setupColorProfileFromEnvWithArgs(tt.args)
 		})
 	}
 }
