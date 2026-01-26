@@ -1,6 +1,6 @@
 ---
 title: AI Agents
-sidebar_position: 6
+sidebar_position: 7
 sidebar_label: Agents
 description: Specialized AI agents for different Atmos tasks
 id: agents
@@ -228,10 +228,9 @@ Found 3 issues:
 - **File**: stacks/catalog/eks/defaults.yaml:15
 - **Issue**: Required field 'cluster_version' is missing
 - **Fix**: Add cluster_version under vars:
-  ```yaml
-  vars:
-    cluster_version: "1.28"
-  ```
+
+      vars:
+        cluster_version: "1.28"
 
 ### 2. Invalid Import Path
 - **File**: stacks/deploy/prod.yaml:3
@@ -361,7 +360,7 @@ Agent Switching (Ctrl+A)
 
 Session Restore
   → Load saved session
-  → LoadSystemPrompt("<saved-agent>.md")
+  → LoadSystemPrompt("{saved-agent}.md")
   → Continue with same agent from last session
 ```
 

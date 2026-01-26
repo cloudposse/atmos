@@ -1,7 +1,7 @@
 ---
 title: AI Tool Execution
 sidebar_label: Tools
-sidebar_position: 4
+sidebar_position: 5
 description: AI tool execution and permission system for Atmos AI Assistant
 ---
 import Terminal from '@site/src/components/Terminal'
@@ -1907,13 +1907,12 @@ AI (config-validator): I'll run comprehensive validation on all stacks.
    Fix: Add 'cluster_version' to the component vars section
 
 Example fix for staging-apse1:
-```yaml
-components:
-  terraform:
-    eks:
-      vars:
-        cluster_version: "1.27"  # Add this line
-```
+
+    components:
+      terraform:
+        eks:
+          vars:
+            cluster_version: "1.27"  # Add this line
 
 All validation issues must be resolved before deployment.
 
