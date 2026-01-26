@@ -290,6 +290,12 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[s
             WithExplanationf("Component '%s' in stack '%s'.", component, stack).
             Err()
     }
+    componentInfoMap, ok := componentInfo.(map[string]any)
+    if !ok {
+        return "", errUtils.Build(errUtils.ErrInvalidComponentInfoS).
+            WithExplanationf("Component '%s' in stack '%s'.", component, stack).
+            Err()
+    }
 
     // Get component type (terraform, helmfile, etc.).
     componentType, ok := componentInfoMap["component_type"].(string)
