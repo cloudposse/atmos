@@ -25,16 +25,16 @@ Claude Code subagents are specialized AI assistants that enhance your developmen
 ┌─────────────────────────────────────────────────┐
 │ Claude Code IDE                                 │
 │                                                 │
-│  You: @atmos-expert "List my stacks"           │
+│  You: @atmos-expert "List my stacks"            │
 │         ↓                                       │
-│  ┌──────────────────┐                          │
-│  │ atmos-expert     │ Specialized Context      │
-│  │ Subagent         │ Isolated Conversation    │
-│  └────────┬─────────┘                          │
+│  ┌──────────────────┐                           │
+│  │ atmos-expert     │ Specialized Context       │
+│  │ Subagent         │ Isolated Conversation     │
+│  └────────┬─────────┘                           │
 │           │                                     │
 └───────────┼─────────────────────────────────────┘
             │ MCP Protocol
-            ▼
+            ↓
    ┌────────────────────┐
    │ Atmos MCP Server   │  Universal Interface
    │ • describe_stacks  │
@@ -42,7 +42,7 @@ Claude Code subagents are specialized AI assistants that enhance your developmen
    │ • validate_stack   │
    └────────┬───────────┘
             │
-            ▼
+            ↓
    ┌────────────────────┐
    │ Atmos CLI          │  Your Infrastructure
    └────────────────────┘

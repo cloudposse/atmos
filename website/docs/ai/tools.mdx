@@ -52,6 +52,94 @@ sequenceDiagram
     AtmosAI->>User: "The VPC CIDR is 10.0.0.0/16"
 ```
 
+### The House-Building Analogy
+
+*Prefer a real-world analogy? Here's a fun way to understand tool calling:*
+
+```text
+                          BUILDING A HOUSE
+                     (How AI Tool Calling Works)
+
+    YOU (The Homeowner)                    THE ARCHITECT (AI Provider)
+           [You]                                   [Brain]
+             │                                        │
+             │  "I want to build a house              │
+             │   with 3 bedrooms!"                    │
+             │ ─────────────────────────────────────> │
+             │                                        │
+             │   Also, here are my workers:           │
+             │   - Alex (has an axe)                  │
+             │   - Maya (has measuring tape)          │
+             │   - Sam (has a saw)                    │
+             │ ─────────────────────────────────────> │
+             │                                        │
+             │                             ┌──────────────────┐
+             │                             │ Architect thinks │
+             │                             │ "To build this,  │
+             │                             │  I need lumber   │
+             │                             │  measurements"   │
+             │                             └────────┬─────────┘
+             │                                      │
+             │ <─────────────────────────────────── │
+             │  "Please have Maya measure           │
+             │   the lumber pile"                   │
+             │                                      │
+             │                                      │
+    YOUR WORKERS (Local Tools)                      │
+    ┌─────────────────────┐                         │
+    │ Maya measures...    │                         │
+    │ "It's 8 feet!"      │                         │
+    └─────────────────────┘                         │
+             │                                      │
+             │  Maya's result: "8 feet"             │
+             │ ──────────────────────────────────>  │
+             │                                      │
+             │                             ┌──────────────────┐
+             │                             │ "Good! Now I     │
+             │                             │  need Sam to     │
+             │                             │  cut it to 6ft"  │
+             │                             └────────┬─────────┘
+             │                                      │
+             │ <─────────────────────────────────── │
+             │  "Have Sam cut the lumber            │
+             │   to 6 feet"                         │
+             │                                      │
+    ┌─────────────────────┐                         │
+    │ Sam cuts...         │                         │
+    │ "Done! 6 feet!"     │                         │
+    └─────────────────────┘                         │
+             │                                      │
+             │  Sam's result: "Cut complete"        │
+             │ ──────────────────────────────────>  │
+             │                                      │
+             │                             ┌──────────────────┐
+             │                             │ "Perfect! Here's │
+             │                             │  your house      │
+             │                             │  blueprint..."   │
+             │                             └────────┬─────────┘
+             │                                      │
+             │ <─────────────────────────────────── │
+             │  "Your 3-bedroom house plan          │
+             │   is ready!"
+
+
+    THE ANALOGY MAPPING:
+
+    [You] Homeowner        = You typing in Atmos AI chat
+    [Brain] Architect      = AI Provider (Claude, GPT, etc.)
+    Workers (Alex/Maya/Sam)= Atmos tools (describe, list, validate, etc.)
+    Tool descriptions      = "Alex has an axe and can chop wood"
+    Tool results           = "The lumber is 8 feet long"
+
+    KEY INSIGHT: The Architect (AI) never touches the tools directly!
+    They only TELL YOU which worker to use. You run the tool locally,
+    then report back with the results. Your lumber never leaves your yard!
+```
+
+:::tip Privacy Insight
+Just like the Architect never physically visits your property - they only receive reports from your workers - the AI provider never directly accesses your files. Tools run **locally on your machine**, and only the specific results you request are sent back to the AI.
+:::
+
 ### What Gets Sent to AI Servers
 
 It's important to understand **when and what** data is sent to the AI provider:
