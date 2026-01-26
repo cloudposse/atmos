@@ -19,7 +19,6 @@ import (
 )
 
 // Helper function to create minimal valid sections.
-// Uses a real temp directory for cross-platform compatibility.
 func validSections() map[string]any {
 	return map[string]any{
 		cfg.CommandSectionName:   "/usr/local/bin/terraform",

@@ -85,7 +85,7 @@ When the relative path `components/terraform/vpc/backend.tf.json` is used:
 
 ### Flow Diagram
 
-```
+```text
 User Template: {{ atmos.Component "vpc" "dev-ue1" }}
         ↓
 componentFunc() [template_funcs_component.go]
