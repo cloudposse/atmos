@@ -1,0 +1,185 @@
+# Advanced Custom Commands
+#
+# This file demonstrates advanced custom command features.
+# Run examples:
+#   atmos build --verbose --clean
+#   atmos deploy-component vpc -s dev
+#   atmos run-from-root
+#   atmos ops status
+
+commands:
+  # Boolean flags with conditional execution.
+  - name: build
+    description: Build the project with optional flags
+    flags:
+      - name: verbose
+        shorthand: v
+        description: Enable verbose output
+        type: bool
+        default: false
+      - name: clean
+        description: Clean before building
+        type: bool
+        default: true
+      - name: dry-run
+        shorthand: d
+        description: Show what would be done without executing
+        type: bool
+    steps:
+      # Pattern 1: Conditional command execution with if/else.
+      - |
+        {{ if .Flags.verbose }}
+        echo "Verbose mode enabled"
+        set -x
+        {{ end }}
+
+      # Pattern 2: Conditional step execution.
+      - |
+        {{ if .Flags.clean }}
+        echo "Cleaning build directory..."
+        # rm -rf ./build
+        {{ end }}
+
+      # Pattern 3: Dry-run check.
+      - |
+        {{ if .Flags.dry-run }}
+        echo "DRY RUN: Would execute build steps"
+        {{ else }}
+        echo "Building..."
+        # make build
+        {{ end }}
+
+      # Pattern 4: Pass as flag to another command.
+      - echo "Build complete{{ if .Flags.verbose }} (verbose){{ end }}"
+
+  # Environment variable usage in commands.
+  - name: deploy-component
+    description: Deploy a component with environment variable support
+    arguments:
+      - name: component
+        description: Component to deploy
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Target stack
+        required: true
+      - name: auto-approve
+        description: Auto-approve terraform apply
+        type: bool
+        default: false
+    # Environment variables support Go templates.
+    env:
+      - key: ATMOS_COMPONENT
+        value: "{{ .Arguments.component }}"
+      - key: ATMOS_STACK
+        value: "{{ .Flags.stack }}"
+      - key: TF_AUTO_APPROVE
+        value: "{{ .Flags.auto-approve }}"
+    steps:
+      - echo "Deploying component $ATMOS_COMPONENT to stack $ATMOS_STACK"
+      - echo "Auto-approve: $TF_AUTO_APPROVE"
+      # In a real command, you would run:
+      # - atmos terraform plan $ATMOS_COMPONENT -s $ATMOS_STACK
+      # - |
+      #   {{ if .Flags.auto-approve }}
+      #   atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK -auto-approve
+      #   {{ else }}
+      #   atmos terraform apply $ATMOS_COMPONENT -s $ATMOS_STACK
+      #   {{ end }}
+
+  # Component config integration - access component configuration in steps.
+  - name: show-component
+    description: Display component configuration details
+    arguments:
+      - name: component
+        description: Component name
+        required: true
+    flags:
+      - name: stack
+        shorthand: s
+        description: Stack name
+        required: true
+    # Component config makes .ComponentConfig available in templates.
+    component_config:
+      component: "{{ .Arguments.component }}"
+      stack: "{{ .Flags.stack }}"
+    env:
+      - key: COMPONENT_NAMESPACE
+        value: "{{ .ComponentConfig.vars.namespace }}"
+    steps:
+      - 'echo "Component: {{ .Arguments.component }}"'
+      - 'echo "Stack: {{ .Flags.stack }}"'
+      - 'echo "Terraform component: {{ .ComponentConfig.component }}"'
+      - 'echo "Workspace: {{ .ComponentConfig.workspace }}"'
+      - 'echo "Namespace: {{ .ComponentConfig.vars.namespace }}"'
+      - 'echo "Backend bucket: {{ .ComponentConfig.backend.bucket }}"'
+
+  # Working directory - run commands from a specific location.
+  - name: run-from-root
+    description: Run commands from repository root
+    working_directory: !repo-root .
+    steps:
+      - echo "Running from repository root"
+      - pwd
+      - ls -la
+
+  # Nested subcommands with shared flags.
+  - name: ops
+    description: Operations commands
+    commands:
+      - name: status
+        description: Show operational status
+        steps:
+          - echo "System Status: OK"
+          - echo "Time: $(date)"
+
+      - name: health
+        description: Health check with verbosity option
+        flags:
+          - name: verbose
+            shorthand: v
+            type: bool
+            description: Show detailed health info
+        steps:
+          - |
+            echo "Health Check"
+            {{ if .Flags.verbose }}
+            echo "  CPU: OK"
+            echo "  Memory: OK"
+            echo "  Disk: OK"
+            echo "  Network: OK"
+            {{ else }}
+            echo "  Status: Healthy"
+            {{ end }}
+
+      - name: restart
+        description: Restart a service
+        arguments:
+          - name: service
+            description: Service name to restart
+            required: true
+        flags:
+          - name: force
+            shorthand: f
+            type: bool
+            description: Force restart without confirmation
+        steps:
+          - |
+            {{ if .Flags.force }}
+            echo "Force restarting {{ .Arguments.service }}..."
+            {{ else }}
+            echo "Restarting {{ .Arguments.service }}..."
+            {{ end }}
+
+  # Trailing arguments example.
+  - name: run
+    description: Run arbitrary commands with trailing arguments
+    arguments:
+      - name: script
+        description: Script to run
+        default: main.sh
+        required: true
+    steps:
+      - 'echo "Running {{ .Arguments.script }} with args: {{ .TrailingArgs }}"'
+      # - ./{{ .Arguments.script }} {{ .TrailingArgs }}
