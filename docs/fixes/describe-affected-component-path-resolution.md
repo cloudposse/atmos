@@ -111,10 +111,10 @@ ERROR: "no such file or directory" (CWD is not project root!)
 
 The following changes may have exposed this latent bug:
 
-| PR/Commit | Description | Impact |
-|-----------|-------------|--------|
-| #1644 | `Add global --chdir flag for changing working directory` | Changed how working directory is handled before command execution |
-| #1639 | `Atmos Performance Optimization` | Added caching that may preserve incorrect paths |
+| PR/Commit | Description                                              | Impact                                                            |
+|-----------|----------------------------------------------------------|-------------------------------------------------------------------|
+| #1644     | `Add global --chdir flag for changing working directory` | Changed how working directory is handled before command execution |
+| #1639     | `Atmos Performance Optimization`                         | Added caching that may preserve incorrect paths                   |
 
 The `--chdir` flag (#1644) processes before all other operations including configuration loading. This change may have
 exposed the path resolution bug that was previously masked by consistent CWD state.
@@ -295,48 +295,6 @@ This ensures that when `ComponentPath` is relative (e.g., `components/terraform/
 
 ---
 
-## User Workarounds
-
-Until a fix is released, users can try:
-
-### Workaround 1: Pin to Older Version
-
-```bash
-atmos version install 1.188.0
-atmos version use 1.188.0
-```
-
-### Workaround 2: Avoid --chdir Flag
-
-Run Atmos from the project root directory instead of using `--chdir`:
-
-```bash
-# Instead of:
-atmos --chdir /path/to/project describe stacks
-
-# Use:
-cd /path/to/project && atmos describe stacks
-```
-
-### Workaround 3: Use !terraform.state Instead of atmos.Component
-
-Replace `atmos.Component` template function with `!terraform.state` YAML function:
-
-```yaml
-# Before (template function):
-vpc_id: "{{ (atmos.Component \"vpc\" .stack).outputs.vpc_id }}"
-
-# After (YAML function - recommended):
-vpc_id: !terraform.state vpc vpc_id
-```
-
-The `!terraform.state` YAML function is:
-- Faster (10-100x) as it reads from state file directly
-- More reliable path handling
-- Recommended best practice
-
----
-
 ## Testing
 
 ### Reproduce the Issue
@@ -373,8 +331,8 @@ atmos describe component vpc -s dev-ue1
 
 ## Files Modified
 
-| File | Change |
-|------|--------|
+| File                               | Change                                                                                          |
+|------------------------------------|-------------------------------------------------------------------------------------------------|
 | `pkg/terraform/output/executor.go` | ✅ Added path resolution step to resolve relative `ComponentPath` against `atmosConfig.BasePath` |
 
 ---
