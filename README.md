@@ -29,7 +29,7 @@
 
 Atmos is a framework for orchestrating and operating infrastructure workflows across multiple cloud and DevOps toolchains.
 
-## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/core-concepts/components) that you implement using [Terraform "root modules"](https://atmos.tools/core-concepts/components/terraform). Then tie everything together using [Stack](https://atmos.tools/core-concepts/stacks) configurations defined in YAML.
+## Use Atmos to break your architecture into reusable [Components](https://atmos.tools/components) that you implement using [Terraform "root modules"](https://atmos.tools/components/terraform). Then tie everything together using [Stack](https://atmos.tools/stacks) configurations defined in YAML.
 
 Atmos can change how you think about the Terraform code you write to build your infrastructure. Atmos is a framework that simplifies complex cloud architectures and DevOps workflows into intuitive CLI commands.
 Its strength in managing DRY configurations at scale for Terraform and is supported by robust design patterns, comprehensive documentation, and a passionate community, making it a versatile tool for both startups and enterprises.
@@ -70,7 +70,7 @@ You can even access the configurations natively from within terraform using our 
 > ### Did you know?
 >
 > By leveraging Atmos in conjunction with Cloud Posse's [*expertise in AWS*](https://cloudposse.com),
-> [*terraform blueprints*](https://cloudposse.com/services/), and our [*knowledgeable community*](https://slack.cloudposse.com), teams can achieve
+> [*terraform blueprints*](https://cloudposse.com/services), and our [*knowledgeable community*](https://slack.cloudposse.com), teams can achieve
 > operational mastery and innovation faster, transforming their infrastructure management practices into a competitive advantage.
 
 ## Core Features
@@ -82,11 +82,11 @@ indispensable asset for managing complex infrastructures with confidence.
 
 - [**Terminal UI**](https://atmos.tools/cli) Polished interface for easier interaction with Terraform, workflows, and commands.
 - [**Native Terraform Support:**](https://atmos.tools/cli/commands/terraform/usage) Orchestration, backend generation, varfile generation, ensuring compatibility with vanilla Terraform.
-- [**Stacks:**](https://atmos.tools/core-concepts/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
-- [**Components:**](https://atmos.tools/core-concepts/components) A generic abstraction for deployable units, such as Terraform "root" modules.
-- [**Vendoring:**](https://atmos.tools/core-concepts/vendor) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
-- [**Custom Commands:**](https://atmos.tools/core-concepts/custom-commands) Extends Atmos's functionality, allowing integration of any command with stack configurations.
-- [**Workflow Orchestration:**](https://atmos.tools/core-concepts/workflows) Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
+- [**Stacks:**](https://atmos.tools/stacks) Powerful abstraction layer defined in YAML for orchestrating and deploying components.
+- [**Components:**](https://atmos.tools/components) A generic abstraction for deployable units, such as Terraform "root" modules.
+- [**Vendoring:**](https://atmos.tools/vendor) Pulls dependencies from remote sources, supporting immutable infrastructure practices.
+- [**Custom Commands:**](https://atmos.tools/cli/configuration/commands) Extends Atmos's functionality, allowing integration of any command with stack configurations.
+- [**Workflow Orchestration:**](https://atmos.tools/workflows) Comprehensive support for managing the lifecycle of cloud infrastructure from initiation to maintenance.
 
 See [all features of Atmos](https://atmos.tools/features).
 
@@ -103,12 +103,12 @@ strength in the cloud infrastructure and DevOps domains:
   Simply define a baseline tenant configuration once, and then seamlessly onboard new tenants by reusing this baseline through pure
   configuration, bypassing the need for further code development.
 - **Efficient Multi-Region Deployments:** Atmos facilitates streamlined multi-region deployments by enabling businesses to define baseline
-  configurations with [stacks](https://atmos.tools/core-concepts/stacks/) and extend them across regions with DRY principles through
-  [imports](https://atmos.tools/core-concepts/stacks/imports) and [inheritance](https://atmos.tools/core-concepts/stacks/inheritance).
+  configurations with [stacks](https://atmos.tools/stacks) and extend them across regions with DRY principles through
+  [imports](https://atmos.tools/stacks/imports) and [inheritance](https://atmos.tools/howto/inheritance).
 - **Compliant Infrastructure for Regulated Industries:** Atmos empowers DevOps and SecOps teams to create vetted configurations that comply
   with SOC2, HIPAA, HITRUST, PCI, and other regulatory standards. These configurations can then be efficiently shared and reused across the
-  organization via [service catalogs](https://atmos.tools/core-concepts/stacks/catalogs), [component libraries](https://atmos.tools/core-concepts/components/library),
-  [vendoring](https://atmos.tools/core-concepts/vendor), and [OPA policies](https://atmos.tools/core-concepts/validate/opa),
+  organization via [service catalogs](https://atmos.tools/howto/catalogs), [component libraries](https://atmos.tools/components),
+  [vendoring](https://atmos.tools/vendor), and [OPA policies](https://atmos.tools/validation/opa),
   simplifying the process of achieving and maintaining rigorous compliance.
 - **Empowering Teams with Self-Service Infrastructure:** Allows teams to manage their infrastructure needs independently, using
   predefined templates and policies.
@@ -117,7 +117,7 @@ strength in the cloud infrastructure and DevOps domains:
 
 > [!TIP]
 > Don't see your use-case listed? Ask us in the [`#atmos`](https://slack.cloudposse.com) Slack channel,
-> or [join us for "Office Hours"](https://cloudposse.com/office-hours/) every week.
+> or [join us for "Office Hours"](https://cloudposse.com/office-hours) every week.
 
 
 Moreover, `atmos` is not only a command-line interface for managing clouds and clusters. It provides many useful patterns
@@ -196,7 +196,7 @@ Dropped straight into your Inbox every week — and usually a 5-minute read.
 It's **FREE** for everyone!
 ## License
 
-<a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" alt="License"></a>
+<a href="https://opensource.org/license/apache-2-0"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg?style=for-the-badge" alt="License"></a>
 
 <details>
 <summary>Preamble to the Apache License, Version 2.0</summary>

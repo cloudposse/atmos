@@ -290,3 +290,143 @@ func TestVersionFallbackLogic(t *testing.T) {
 		assert.Equal(t, "1.0.0", fallbackVersion)
 	})
 }
+
+func TestBuildDownloadNotFoundError(t *testing.T) {
+	tests := []struct {
+		name    string
+		owner   string
+		repo    string
+		version string
+		url1    string
+		url2    string
+	}{
+		{
+			name:    "basic tool",
+			owner:   "hashicorp",
+			repo:    "terraform",
+			version: "1.5.0",
+			url1:    "https://releases.hashicorp.com/terraform/1.5.0/terraform_1.5.0_darwin_arm64.zip",
+			url2:    "https://releases.hashicorp.com/terraform/v1.5.0/terraform_v1.5.0_darwin_arm64.zip",
+		},
+		{
+			name:    "github release tool",
+			owner:   "kubernetes",
+			repo:    "kubectl",
+			version: "v1.28.0",
+			url1:    "https://github.com/kubernetes/kubectl/releases/download/v1.28.0/kubectl_1.28.0_darwin_arm64.tar.gz",
+			url2:    "https://github.com/kubernetes/kubectl/releases/download/1.28.0/kubectl_1.28.0_darwin_arm64.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := buildDownloadNotFoundError(tt.owner, tt.repo, tt.version, tt.url1, tt.url2)
+
+			assert.Error(t, err)
+			// Must include ErrHTTP404 for version fallback detection.
+			assert.ErrorIs(t, err, ErrHTTP404)
+			// Must include ErrDownloadFailed sentinel error.
+			assert.ErrorIs(t, err, errUtils.ErrDownloadFailed)
+			// Verify isHTTP404 detects this error.
+			assert.True(t, isHTTP404(err), "isHTTP404 should detect error from buildDownloadNotFoundError")
+		})
+	}
+}
+
+func TestAddPlatformSpecificHints(t *testing.T) {
+	// Note: addPlatformSpecificHints uses runtime.GOOS and runtime.GOARCH,
+	// so tests verify behavior on the current platform.
+	t.Run("returns non-nil builder", func(t *testing.T) {
+		builder := errUtils.Build(errUtils.ErrDownloadFailed)
+		// Call the function - it modifies the builder in place.
+		addPlatformSpecificHints(builder)
+		// Function should not panic and builder should still be valid.
+		err := builder.Err()
+		assert.NotNil(t, err)
+	})
+}
+
+func TestBuildPlatformNotSupportedError(t *testing.T) {
+	tests := []struct {
+		name        string
+		platformErr *PlatformError
+	}{
+		{
+			name: "basic platform error",
+			platformErr: &PlatformError{
+				Tool:          "hashicorp/terraform",
+				CurrentEnv:    "darwin/arm64",
+				SupportedEnvs: []string{"linux/amd64"},
+				Hints:         []string{"This tool only supports: linux/amd64"},
+			},
+		},
+		{
+			name: "multiple hints",
+			platformErr: &PlatformError{
+				Tool:          "test/tool",
+				CurrentEnv:    "windows/amd64",
+				SupportedEnvs: []string{"darwin", "linux"},
+				Hints: []string{
+					"This tool only supports: darwin, linux",
+					"Consider using WSL",
+				},
+			},
+		},
+		{
+			name: "empty hints",
+			platformErr: &PlatformError{
+				Tool:          "org/repo",
+				CurrentEnv:    "linux/arm64",
+				SupportedEnvs: []string{"darwin/amd64"},
+				Hints:         []string{},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := buildPlatformNotSupportedError(tt.platformErr)
+
+			assert.Error(t, err)
+			// Must include ErrToolPlatformNotSupported sentinel error.
+			assert.ErrorIs(t, err, errUtils.ErrToolPlatformNotSupported)
+			// Error should not be nil.
+			assert.NotNil(t, err)
+		})
+	}
+}
+
+func TestGetOSAndGetArch(t *testing.T) {
+	// These are simple wrappers around runtime.GOOS and runtime.GOARCH.
+	t.Run("getOS returns current OS", func(t *testing.T) {
+		os := getOS()
+		// Should return a non-empty string matching runtime.GOOS.
+		assert.NotEmpty(t, os)
+		// On any platform, it should be one of the common OS values.
+		validOS := []string{"darwin", "linux", "windows", "freebsd", "netbsd", "openbsd"}
+		found := false
+		for _, v := range validOS {
+			if os == v {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "getOS() returned unexpected value: %s", os)
+	})
+
+	t.Run("getArch returns current architecture", func(t *testing.T) {
+		arch := getArch()
+		// Should return a non-empty string matching runtime.GOARCH.
+		assert.NotEmpty(t, arch)
+		// On any platform, it should be one of the common arch values.
+		validArch := []string{"amd64", "arm64", "386", "arm", "ppc64", "ppc64le", "s390x", "riscv64"}
+		found := false
+		for _, v := range validArch {
+			if arch == v {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "getArch() returned unexpected value: %s", arch)
+	})
+}

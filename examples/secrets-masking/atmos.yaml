@@ -1,0 +1,44 @@
+# Atmos configuration demonstrating secrets masking feature.
+#
+# This example shows how to configure custom patterns and literals
+# for automatic secret masking in terminal output.
+
+base_path: "."
+
+components:
+  terraform:
+    base_path: components/terraform
+
+stacks:
+  base_path: stacks
+  included_paths:
+    - "deploy/**/*"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+logs:
+  level: Info
+
+settings:
+  terminal:
+    mask:
+      # Enable secret masking (enabled by default).
+      enabled: true
+
+      # Custom replacement string (defaults to "***MASKED***").
+      replacement: "[REDACTED]"
+
+      # Custom regex patterns to mask.
+      # These are in addition to built-in patterns (AWS keys, tokens, etc.).
+      patterns:
+        # Match demo API keys like "demo-key-ABCD1234EFGH5678".
+        - 'demo-key-[A-Za-z0-9]{16}'
+        # Match internal IDs like "internal-0123456789abcdef0123456789abcdef".
+        - 'internal-[a-f0-9]{32}'
+        # Match custom tokens like "tkn_live_xxxx".
+        - 'tkn_(live|test)_[a-zA-Z0-9]{24}'
+
+      # Literal values to always mask (exact string match).
+      # Useful for known secrets that don't match a pattern.
+      literals:
+        - "super-secret-demo-value"
+        - "my-api-key-12345"

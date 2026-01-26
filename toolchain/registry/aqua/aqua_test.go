@@ -1322,3 +1322,44 @@ packages:
 		})
 	}
 }
+
+func TestExtractBinaryNameFromPackageName(t *testing.T) {
+	tests := []struct {
+		name        string
+		packageName string
+		expected    string
+	}{
+		{
+			name:        "three_segment_package_name",
+			packageName: "kubernetes/kubernetes/kubectl",
+			expected:    "kubectl",
+		},
+		{
+			name:        "two_segment_package_name_returns_empty",
+			packageName: "hashicorp/terraform",
+			expected:    "",
+		},
+		{
+			name:        "four_segment_package_name",
+			packageName: "owner/repo/subdir/binary",
+			expected:    "binary",
+		},
+		{
+			name:        "empty_package_name",
+			packageName: "",
+			expected:    "",
+		},
+		{
+			name:        "single_segment_returns_empty",
+			packageName: "terraform",
+			expected:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractBinaryNameFromPackageName(tt.packageName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

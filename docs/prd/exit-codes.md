@@ -487,6 +487,6 @@ esac
 
 ## Related Documents
 
-- [Error Handling Strategy](./atmos-error-handling.md)
+- [Error Handling Strategy](./error-handling.md)
 - [Error Builder API](../errors.md)
-- [Testing Strategy](./testing-strategy.md)
+- [Testing Strategy](./testability-refactoring-strategy.md)

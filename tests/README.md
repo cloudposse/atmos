@@ -206,7 +206,7 @@ func TestOCIVendoring(t *testing.T) {
 | `RequireFilePath(t, path, purpose)` | Check file/directory exists | Missing path |
 | `RequireOCIAuthentication(t)` | Check OCI registry auth | GitHub token not set |
 
-See [Testing Strategy PRD](../docs/prd/testing-strategy.md) for the complete design document.
+See [Testability Refactoring Strategy](../docs/prd/testability-refactoring-strategy.md) for the complete design document.
 
 ## Test Cases
 

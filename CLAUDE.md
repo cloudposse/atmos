@@ -51,6 +51,28 @@ make lint                    # golangci-lint on changed files
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
 
+## Working with Atmos Agents (RECOMMENDED)
+
+Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems. **Use agents instead of inline work** for their areas of expertise.
+
+**Available Agents:**
+- **`@agent-developer`** - Creating/maintaining agents, agent architecture
+- **`@tui-expert`** - Terminal UI, theme system, output formatting
+- **`@atmos-errors`** - Error handling patterns, error builder usage
+- **`@flag-handler`** - CLI commands, flag parsing, CommandProvider pattern
+- **`@example-creator`** - Creating examples, mock components, test cases, EmbedFile docs
+
+**When to delegate:**
+- TUI/theme changes → `@tui-expert`
+- New CLI commands → `@flag-handler`
+- Error handling refactoring → `@atmos-errors`
+- Creating new agents → `@agent-developer`
+- Creating examples/demos → `@example-creator`
+
+**Benefits:** Agents are domain experts with deep knowledge of patterns, PRDs, and subsystem architecture. They ensure consistency and best practices.
+
+See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architecture.md` for architecture.
+
 ## Architectural Patterns (MANDATORY)
 
 ### Registry Pattern (MANDATORY)
@@ -310,7 +332,7 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 - Use definition lists `<dl>` instead of tables for arguments and flags
 - Follow Docusaurus conventions from existing files
 - File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-- Link to core concepts using `/core-concepts/` paths
+- Link to documentation using current URL paths (e.g., `/stacks`, `/components`, `/cli/configuration`)
 - Include purpose note and help screengrab
 - Use consistent section ordering: Usage → Examples → Arguments → Flags
 

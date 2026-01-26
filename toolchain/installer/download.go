@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	log "github.com/charmbracelet/log"
@@ -176,10 +177,67 @@ func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL st
 		return assetPath, nil
 	}
 
-	return "", fmt.Errorf("%w: tried %s and %s: %w", ErrHTTPRequest, assetURL, fallbackURL, err)
+	// Both URLs failed - create a user-friendly error message.
+	// Don't nest ErrHTTPRequest again since the inner error already contains it.
+	return "", buildDownloadNotFoundError(tool.RepoOwner, tool.RepoName, version, assetURL, fallbackURL)
+}
+
+// buildDownloadNotFoundError creates a user-friendly error for when both URL attempts fail.
+func buildDownloadNotFoundError(owner, repo, version, url1, url2 string) error {
+	builder := errUtils.Build(errUtils.ErrDownloadFailed).
+		WithExplanationf("Asset not found for `%s/%s@%s`", owner, repo, version).
+		WithHint("Verify the tool name and version are correct").
+		WithHintf("Check if the tool publishes binaries for your platform (%s/%s)", getOS(), getArch()).
+		WithHint("Some tools may not publish pre-built binaries - check the tool's releases page").
+		WithContext("url_attempted", url1).
+		WithContext("url_fallback", url2).
+		WithExitCode(1)
+
+	// Add platform-specific hints.
+	addPlatformSpecificHints(builder)
+
+	return errors.Join(ErrHTTP404, builder.Err())
+}
+
+// addPlatformSpecificHints adds platform-specific suggestions to the error builder.
+func addPlatformSpecificHints(builder *errUtils.ErrorBuilder) {
+	currentOS := getOS()
+	currentArch := getArch()
+
+	switch {
+	case currentOS == "windows":
+		builder.WithHint("Consider using WSL (Windows Subsystem for Linux) if this tool only supports Linux")
+
+	case currentOS == "darwin" && currentArch == "arm64":
+		builder.WithHint("Try running under Rosetta 2 if only amd64 binaries are available")
+	}
 }
 
 // isHTTP404 returns true if the error is a 404 from downloadAsset.
 func isHTTP404(err error) bool {
 	return errors.Is(err, ErrHTTP404)
+}
+
+// getOS returns the current operating system.
+func getOS() string {
+	return runtime.GOOS
+}
+
+// getArch returns the current architecture.
+func getArch() string {
+	return runtime.GOARCH
+}
+
+// buildPlatformNotSupportedError creates a user-friendly error when a tool doesn't support the current platform.
+func buildPlatformNotSupportedError(platformErr *PlatformError) error {
+	builder := errUtils.Build(errUtils.ErrToolPlatformNotSupported).
+		WithExplanationf("Tool `%s` does not support your platform (%s)", platformErr.Tool, platformErr.CurrentEnv).
+		WithExitCode(1)
+
+	// Add all the platform-specific hints.
+	for _, hint := range platformErr.Hints {
+		builder.WithHint(hint)
+	}
+
+	return builder.Err()
 }

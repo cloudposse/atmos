@@ -38,7 +38,22 @@ const (
 	logFieldOwner   = "owner"
 	logFieldRepo    = "repo"
 	logFieldVersion = "version"
+
+	// Windows constants.
+	windowsExeExt = ".exe"
 )
+
+// EnsureWindowsExeExtension appends .exe to the binary name on Windows if not already present.
+// This follows Aqua's behavior where executables need the .exe extension on Windows
+// to be found by os/exec.LookPath.
+func EnsureWindowsExeExtension(binaryName string) string {
+	defer perf.Track(nil, "installer.EnsureWindowsExeExtension")()
+
+	if runtime.GOOS == "windows" && !strings.HasSuffix(strings.ToLower(binaryName), windowsExeExt) {
+		return binaryName + windowsExeExt
+	}
+	return binaryName
+}
 
 // ToolResolver defines an interface for resolving tool names to owner/repo pairs
 // This allows for mocking in tests and flexible resolution in production.
@@ -256,6 +271,12 @@ func (i *Installer) installFromTool(tool *registry.Tool, version string) (string
 	// Apply platform-specific overrides before building the asset URL.
 	ApplyPlatformOverrides(tool)
 
+	// Pre-flight platform check: verify the tool supports the current platform.
+	// This provides a better user experience than waiting for a 404 error.
+	if platformErr := CheckPlatformSupport(tool); platformErr != nil {
+		return "", buildPlatformNotSupportedError(platformErr)
+	}
+
 	assetURL, err := i.BuildAssetURL(tool, version)
 	if err != nil {
 		return "", fmt.Errorf(errUtils.ErrWrapFormat, ErrInvalidToolSpec, err)
@@ -447,6 +468,9 @@ func (i *Installer) extractAndInstall(tool *registry.Tool, assetPath, version st
 	// Determine the binary name using shared resolution logic.
 	binaryName := resolveBinaryName(tool)
 
+	// Ensure Windows executables have .exe extension.
+	binaryName = EnsureWindowsExeExtension(binaryName)
+
 	binaryPath := filepath.Join(versionDir, binaryName)
 
 	// For now, just copy the file (simplified extraction)
@@ -496,7 +520,7 @@ func (i *Installer) GetBinaryPath(owner, repo, version, binaryName string) strin
 			// On Windows, check for .exe extension (permission bits don't apply).
 			isExec := info.Mode()&executablePermissionMask != 0
 			if runtime.GOOS == "windows" {
-				isExec = strings.HasSuffix(strings.ToLower(entry.Name()), ".exe")
+				isExec = strings.HasSuffix(strings.ToLower(entry.Name()), windowsExeExt)
 			}
 			if isExec {
 				// Found an executable.

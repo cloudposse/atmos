@@ -138,7 +138,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 83,
+      progress: 85,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.' },
@@ -147,6 +147,7 @@ export const roadmapConfig = {
         { label: 'Assume Root capability', status: 'shipped', quarter: 'q4-2025', docs: '/cli/configuration/auth/providers', changelog: 'aws-assume-root-identity', description: 'Centralized root access management for organizations that need controlled root-level operations.', benefits: 'Auditable root access for break-glass scenarios. No shared root credentials or password managers.' },
         { label: 'GitHub OIDC', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Native GitHub Actions OIDC integration for secure, secretless CI/CD authentication to AWS.', benefits: 'No AWS access keys in GitHub secrets. Credentials are scoped to the repository and workflow.' },
         { label: 'Azure AD / Workload Identity Federation', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'azure-authentication-support', version: 'v1.199.0', description: 'Authenticate to Azure using Entra ID (Azure AD) with support for Workload Identity Federation for CI/CD.', benefits: 'Multi-cloud teams use the same auth patterns for AWS and Azure without separate tooling.' },
+        { label: 'Azure Portal console access', status: 'shipped', quarter: 'q4-2025', pr: 1894, docs: '/cli/commands/auth/console', changelog: 'azure-authentication-support', description: 'Open Azure Portal in your browser using authenticated Atmos identity credentials.', benefits: 'Access Azure Portal with one command. No manual login or credential copying required.' },
         { label: 'SAML Provider', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Enterprise SAML-based authentication for organizations using identity providers like Okta or OneLogin.', benefits: 'Enterprises can enforce their existing IdP policies without custom scripts or third-party tools.' },
         { label: 'Keyring backends (system, file, memory)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/keyring', changelog: 'flexible-keyring-backends', version: 'v1.196.0', description: 'Flexible credential storage with system keychain integration, encrypted file storage, or in-memory sessions.', benefits: 'Credentials are stored securely based on your environment—macOS Keychain, Linux secret-tool, or encrypted files.' },
         { label: 'Component-level auth identities', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/identities', changelog: 'authentication-for-workflows-and-custom-commands', version: 'v1.197.0', description: 'Define different AWS identities per component, enabling multi-account deployments from a single workflow.', benefits: 'Deploy to prod, staging, and dev accounts in a single workflow without switching credentials.' },
@@ -157,6 +158,7 @@ export const roadmapConfig = {
         { label: 'Seamless first login with provider fallback', status: 'shipped', quarter: 'q4-2025', pr: 1918, changelog: 'auth-login-provider-fallback', description: 'Automatic provider fallback when no identities are configured, enabling seamless first-time login with auto_provision_identities.', benefits: 'Just run atmos auth login on first use. No need to know about --provider flag.' },
         { label: 'Automatic EKS kubeconfig tied to identities', status: 'in-progress', quarter: 'q4-2025', pr: 1884, description: 'Automatic kubeconfig generation for EKS clusters using Atmos-managed AWS credentials.', benefits: 'No aws eks update-kubeconfig commands. Kubectl works immediately after Atmos auth.' },
         { label: 'Automatic ECR authentication tied to identities', status: 'shipped', quarter: 'q4-2025', pr: 1859, docs: '/tutorials/ecr-authentication', changelog: 'ecr-authentication-integration', description: 'Native ECR login for container image operations without external tooling.', benefits: 'Docker push/pull to ECR works without aws ecr get-login-password or external credential helpers.' },
+        { label: 'AWS_REGION and AWS_DEFAULT_REGION export from `atmos auth env`', status: 'shipped', quarter: 'q1-2026', pr: 1955, docs: '/cli/commands/auth/env', changelog: 'auth-env-region-export', description: 'Export AWS_REGION and AWS_DEFAULT_REGION environment variables from atmos auth env when region is configured in the identity.', benefits: 'External tools like Terraform and AWS CLI automatically use the correct region without additional configuration.' },
         { label: 'GCP Workload Identity', status: 'planned', quarter: 'q1-2026', description: 'Google Cloud authentication using Workload Identity Federation for secretless CI/CD.', benefits: 'GCP deployments use the same secretless CI/CD pattern as AWS OIDC.' },
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
@@ -424,6 +426,28 @@ export const roadmapConfig = {
       ],
       issues: [],
       prs: [],
+    },
+    {
+      id: 'secrets-management',
+      icon: 'RiShieldKeyholeLine',
+      title: 'Secrets Management',
+      tagline: 'Provably safe secrets protection',
+      description:
+        'Provably safe secrets management requires comprehensive output coverage—if even one channel bypasses the masking layer, secrets can leak. This initiative ensures all output routes through masking with support for custom patterns, configurable replacement strings, and secure credential handling.',
+      progress: 83,
+      status: 'in-progress',
+      milestones: [
+        { label: 'Built-in secret pattern library (120+ patterns)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/mask', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Automatic detection and masking of 120+ secret patterns from the Gitleaks library including AWS keys, tokens, and passwords.', benefits: 'Secrets are protected automatically without configuration. Safe to share terminal output or stream logs.' },
+        { label: 'Custom masking patterns from atmos.yaml', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'User-defined regex patterns and literal values loaded from atmos.yaml configuration for environment-specific secret formats.', benefits: 'Define patterns for internal tokens, custom API keys, and organization-specific secrets. Mask values beyond built-in patterns.' },
+        { label: 'Configurable replacement string', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Customize the masked output replacement string from the default <MASKED> to any value.', benefits: 'Use [REDACTED], <secret>, or any string that fits your logging and compliance requirements.' },
+        { label: '`!store` YAML function for secrets', status: 'shipped', quarter: 'q3-2025', docs: '/functions/yaml/store', description: 'Access secrets from configured stores (SSM, Secrets Manager, etc.) directly in stack configuration.', codeExample: 'api_key: !store ssm:/myapp/api-key', benefits: 'Reference secrets at deploy time. No hardcoded values or environment variables needed.' },
+        { label: 'Output masking across all channels', status: 'shipped', quarter: 'q1-2026', pr: 1972, changelog: 'custom-secrets-masking', description: 'Provably complete masking—all output channels route through the masking layer including terraform output, shell commands, logs, auth commands, documentation display, and error messages.', benefits: 'Provably safe output with no bypass paths. Secrets cannot leak through any channel.' },
+        { label: 'Vault integration', status: 'planned', quarter: 'q2-2026', description: 'Native HashiCorp Vault integration for secret retrieval and dynamic credentials.', benefits: 'Use Vault as your secret backend. Dynamic credentials for databases and cloud providers.' },
+      ],
+      issues: [],
+      prs: [
+        { number: 1972, title: 'Implement custom secrets masking patterns and fix output routing' },
+      ],
     },
   ],
 
