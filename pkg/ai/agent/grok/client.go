@@ -28,7 +28,7 @@ const (
 	DefaultBaseURL = "https://api.x.ai/v1"
 )
 
-// Client provides a simplified interface to the xAI Grok API for Atmos.
+// Client provides a simplified interface to the Grok API for Atmos.
 // Grok API is OpenAI-compatible, so we use the OpenAI SDK with a custom base URL.
 type Client struct {
 	client *openai.Client

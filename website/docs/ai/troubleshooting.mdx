@@ -43,10 +43,10 @@ Check that your API key environment variable is set:
 <Terminal title="shell">
     ```bash
     # Cloud Providers (API keys required)
-    echo $ANTHROPIC_API_KEY    # Anthropic Claude
-    echo $OPENAI_API_KEY       # OpenAI GPT
-    echo $GEMINI_API_KEY       # Google Gemini
-    echo $XAI_API_KEY          # xAI Grok
+    echo $ANTHROPIC_API_KEY    # Anthropic (Claude)
+    echo $OPENAI_API_KEY       # OpenAI (GPT)
+    echo $GEMINI_API_KEY       # Google (Gemini)
+    echo $XAI_API_KEY          # xAI (Grok)
 
     # Enterprise Providers (use cloud authentication)
     aws sts get-caller-identity           # AWS Bedrock
@@ -152,16 +152,16 @@ API keys are only needed for cloud providers (Anthropic, OpenAI, Gemini, Grok). 
 
 <Terminal title="shell">
     ```bash
-    # For Anthropic
+    # For Anthropic (Claude)
     export ANTHROPIC_API_KEY="sk-ant-..."
 
-    # For OpenAI
+    # For OpenAI (GPT)
     export OPENAI_API_KEY="sk-..."
 
-    # For Google Gemini
+    # For Google (Gemini)
     export GEMINI_API_KEY="..."
 
-    # For xAI Grok
+    # For xAI (Grok)
     export XAI_API_KEY="..."
     ```
 </Terminal>
@@ -1977,7 +1977,7 @@ If you continue to experience issues:
 ### External Resources
 - [Anthropic API Documentation](https://docs.anthropic.com/)
 - [OpenAI API Documentation](https://platform.openai.com/docs/)
-- [Google Gemini Documentation](https://ai.google.dev/docs)
+- [Gemini API Documentation](https://ai.google.dev/docs)
 - [Ollama Documentation](https://ollama.com/docs)
 - [AWS Bedrock Documentation](https://docs.aws.amazon.com/bedrock/)
 - [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/)

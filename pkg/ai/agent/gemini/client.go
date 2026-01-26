@@ -24,7 +24,7 @@ const (
 	DefaultAPIKeyEnv = "GEMINI_API_KEY"
 )
 
-// Client provides a simplified interface to the Google Gemini API for Atmos.
+// Client provides a simplified interface to the Gemini API for Atmos.
 type Client struct {
 	client *genai.Client
 	config *base.Config
