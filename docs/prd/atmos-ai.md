@@ -1,7 +1,7 @@
 # Atmos AI - Complete Product Requirements Document
 
 **Status:** Production Ready
-**Version:** 2.0
+**Version:** 2.1
 **Last Updated:** 2026-01-26
 
 ---
@@ -21,9 +21,9 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
 - **Automatic Context Discovery** - Intelligent file discovery with glob patterns and gitignore filtering
 - **Project Memory** - ATMOS.md for persistent context across sessions
-- **Tool Execution** - 19 tools with granular permission system
+- **Tool Execution** - 15+ tools with granular permission system
 - **Permission Cache** - Persistent permission decisions with 80%+ prompt reduction
-- **Agent System** - 5 built-in specialized agents + marketplace (production ready)
+- **Agent System** - 5 built-in specialized agents (marketplace planned)
 - **MCP Integration** - stdio/HTTP transports for external clients
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management
@@ -768,9 +768,9 @@ type Agent struct {
 
 #### Agent Marketplace
 
-**Status:** ✅ Production Ready
+**Status:** 📋 Planned (Coming Soon)
 
-**Agent Distribution:**
+**Agent Distribution (Planned):**
 - Agents distributed via GitHub repositories
 - Install with: `atmos ai agent install github.com/user/agent-name`
 - Versioned using Git tags (semantic versioning)
@@ -1237,7 +1237,7 @@ settings:
 
       gemini:
         model: gemini-2.0-flash-exp
-        api_key_env: GOOGLE_API_KEY
+        api_key_env: GEMINI_API_KEY
         max_tokens: 4096
 
       grok:
@@ -1270,7 +1270,7 @@ Users can switch providers:
 
 ## Advanced Features
 
-All advanced features listed below are already implemented and production-ready. This section describes future enhancements planned beyond the current release.
+All core features described in this document are production-ready. See the [Roadmap](#roadmap) section for recently completed features and the [Future Roadmap](#future-roadmap) section for planned enhancements.
 
 ---
 
@@ -1567,7 +1567,7 @@ settings:
 
       gemini:
         model: gemini-2.0-flash-exp
-        api_key_env: GOOGLE_API_KEY
+        api_key_env: GEMINI_API_KEY
         max_tokens: 4096
 
       grok:
@@ -2179,6 +2179,7 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 - **v1.0** (2025-10-20) - Initial release with sessions, tools, memory
 - **v1.5** (2025-10-25) - Added MCP integration, LSP support
 - **v2.0** (2025-10-30) - Agent system, enterprise providers, production ready
+- **v2.1** (2026-01-26) - Added AI example, documentation improvements, clarified marketplace status
 
 ### References
 

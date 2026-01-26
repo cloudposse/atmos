@@ -1,8 +1,8 @@
 # Atmos LSP - Language Server Protocol Integration
 
 **Status:** Production Ready (Core Features), Planned Enhancements (Advanced Features)
-**Version:** 1.0
-**Last Updated:** 2025-10-30
+**Version:** 1.1
+**Last Updated:** 2026-01-26
 
 ---
 
@@ -1115,7 +1115,7 @@ var (
    - **Fixed:** Removed from capabilities until handlers implemented
    - File: `pkg/lsp/server/handler.go`
 
-4. **No Incremental Sync** (Low Priority)
+5. **No Incremental Sync** (Low Priority)
    - Uses full-text synchronization
    - Performance impact for large files
    - **Workaround:** Keep files reasonably sized
@@ -1398,3 +1398,8 @@ Atmos LSP builds upon the Language Server Protocol standard and benefits from:
   - Documentation: Comprehensive guides for 13+ editors
   - Known issues and limitations documented
   - Future roadmap defined
+
+- **v1.1** (2026-01-26) - Documentation updates
+  - Fixed duplicate list numbering
+  - Updated cross-references to AI documentation
+  - Clarified feature status alignment with AI PRD
