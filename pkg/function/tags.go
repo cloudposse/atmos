@@ -127,3 +127,23 @@ func FromYAMLTag(tag string) string {
 	}
 	return tag
 }
+
+// AllYAMLTags returns all registered tag names with the YAML prefix (e.g., "!env", "!exec").
+// This is useful for error messages that need to show supported YAML tags.
+func AllYAMLTags() []string {
+	defer perf.Track(nil, "function.AllYAMLTags")()
+
+	tags := AllTags()
+	result := make([]string, len(tags))
+	for i, tag := range tags {
+		result[i] = YAMLTag(tag)
+	}
+	return result
+}
+
+// IsValidYAMLTag checks if a YAML tag is registered. The tag should include the YAML prefix.
+func IsValidYAMLTag(tag string) bool {
+	defer perf.Track(nil, "function.IsValidYAMLTag")()
+
+	return IsValidTag(FromYAMLTag(tag))
+}
