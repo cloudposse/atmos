@@ -19,12 +19,14 @@ import (
 )
 
 // Helper function to create minimal valid sections.
+// Uses a real temp directory for cross-platform compatibility.
 func validSections() map[string]any {
 	return map[string]any{
 		cfg.CommandSectionName:   "/usr/local/bin/terraform",
 		cfg.WorkspaceSectionName: "test-workspace",
+		cfg.ComponentSectionName: "test-component",
 		"component_info": map[string]any{
-			"component_path": "/tmp/test-component",
+			"component_type": "terraform",
 		},
 		cfg.BackendTypeSectionName: "s3",
 		cfg.BackendSectionName: map[string]any{
@@ -35,10 +37,13 @@ func validSections() map[string]any {
 }
 
 // Helper function to create minimal valid atmos config.
+// Uses a temp-like base path for cross-platform compatibility.
 func validAtmosConfig() *schema.AtmosConfiguration {
 	return &schema.AtmosConfiguration{
+		BasePath: "/tmp/test-project",
 		Components: schema.Components{
 			Terraform: schema.Terraform{
+				BasePath:                "components/terraform",
 				AutoGenerateBackendFile: false,
 				InitRunReconfigure:      false,
 			},
@@ -1080,8 +1085,8 @@ func TestHighlightValue_NilConfig(t *testing.T) {
 }
 
 // TestExecutor_ExecuteWithSections_ComponentPathResolution tests that component paths
-// are correctly resolved based on whether they are relative or absolute, and based on
-// the atmosConfig.BasePath setting.
+// are correctly resolved using utils.GetComponentPath, ensuring proper path construction
+// based on atmosConfig.BasePath and component settings.
 // This is a regression test for the issue where atmos.Component template function failed with
 // "backend.tf.json: no such file or directory" when running with --chdir or from a non-project-root directory.
 func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
@@ -1091,30 +1096,34 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 	tests := []struct {
 		name                  string
 		basePath              string
-		componentPath         string
-		expectedWorkdirSuffix string // Use suffix check for cross-platform compatibility
+		componentName         string
+		componentFolderPrefix string
+		expectedWorkdirSuffix string // Use suffix check for cross-platform compatibility.
 		description           string
 	}{
 		{
-			name:                  "relative path with BasePath",
+			name:                  "standard component path resolution",
 			basePath:              tempDir,
-			componentPath:         filepath.Join("components", "terraform", "vpc"),
+			componentName:         "vpc",
+			componentFolderPrefix: "",
 			expectedWorkdirSuffix: filepath.Join("components", "terraform", "vpc"),
-			description:           "Relative component path should be resolved against atmosConfig.BasePath",
+			description:           "Component path should be constructed using BasePath and component settings",
 		},
 		{
-			name:                  "absolute path preserved",
+			name:                  "component with folder prefix",
 			basePath:              tempDir,
-			componentPath:         filepath.Join(tempDir, "custom", "component"),
-			expectedWorkdirSuffix: filepath.Join("custom", "component"),
-			description:           "Absolute component path should be preserved unchanged",
+			componentName:         "mycomponent",
+			componentFolderPrefix: "custom",
+			expectedWorkdirSuffix: filepath.Join("components", "terraform", "custom", "mycomponent"),
+			description:           "Component path should include folder prefix when specified",
 		},
 		{
-			name:                  "empty BasePath with relative path",
-			basePath:              "",
-			componentPath:         filepath.Join("components", "terraform", "vpc"),
-			expectedWorkdirSuffix: filepath.Join("components", "terraform", "vpc"),
-			description:           "With empty BasePath, relative path should be passed through unchanged",
+			name:                  "nested component name",
+			basePath:              tempDir,
+			componentName:         "network/vpc",
+			componentFolderPrefix: "",
+			expectedWorkdirSuffix: filepath.Join("components", "terraform", "network", "vpc"),
+			description:           "Nested component names should be handled correctly",
 		},
 	}
 
@@ -1139,6 +1148,7 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 				BasePath: tt.basePath,
 				Components: schema.Components{
 					Terraform: schema.Terraform{
+						BasePath:                "components/terraform",
 						AutoGenerateBackendFile: false,
 						InitRunReconfigure:      false,
 					},
@@ -1151,14 +1161,22 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 			sections := map[string]any{
 				cfg.CommandSectionName:   "terraform",
 				cfg.WorkspaceSectionName: "test-workspace",
+				cfg.ComponentSectionName: tt.componentName,
 				"component_info": map[string]any{
-					"component_path": tt.componentPath,
+					"component_type": "terraform",
 				},
 				cfg.BackendTypeSectionName: "s3",
 				cfg.BackendSectionName: map[string]any{
 					"bucket": "test-bucket",
 					"key":    "test-key",
 				},
+			}
+
+			// Add folder prefix to metadata if specified.
+			if tt.componentFolderPrefix != "" {
+				sections[cfg.MetadataSectionName] = map[string]any{
+					"component_folder_prefix": tt.componentFolderPrefix,
+				}
 			}
 
 			// Setup expectations.
@@ -1175,8 +1193,10 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "vpc-123456", outputs["vpc_id"])
 
-			// Verify the path resolution using suffix check for cross-platform compatibility.
-			// Use filepath.ToSlash to normalize for comparison.
+			// Verify the path is absolute.
+			assert.True(t, filepath.IsAbs(capturedWorkdir), "%s: expected absolute path, got %q", tt.description, capturedWorkdir)
+
+			// Verify the path contains expected suffix using normalized slashes for cross-platform compatibility.
 			normalizedCaptured := filepath.ToSlash(capturedWorkdir)
 			normalizedExpected := filepath.ToSlash(tt.expectedWorkdirSuffix)
 			assert.True(t, strings.HasSuffix(normalizedCaptured, normalizedExpected),

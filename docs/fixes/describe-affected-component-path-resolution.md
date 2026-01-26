@@ -266,32 +266,66 @@ func (e *Executor) execute(ctx context.Context, atmosConfig *schema.AtmosConfigu
 
 ## Implemented Fix
 
-**Option 2 (Fix at Consumer)** was implemented because:
+**Option 3 (Use GetComponentPath Utility)** was implemented because:
 
-1. It's a minimal, targeted fix
-2. It doesn't change the `component_path` format that other consumers may rely on
-3. It can be done without affecting the describe output format
+1. It reuses the battle-tested `utils.GetComponentPath` function
+2. It guarantees absolute path resolution
+3. It's consistent with how other parts of the codebase resolve component paths
+4. It properly handles `atmosConfig.BasePath`, environment variables, and absolute paths
 
 ### Changes Made
 
-**File: `pkg/terraform/output/executor.go`**
+**File: `pkg/terraform/output/config.go`**
 
-Added path resolution after `ExtractComponentConfig()` in the `execute()` function:
+Updated `extractComponentPath()` to use `utils.GetComponentPath()` instead of reading `component_path` directly from sections:
 
 ```go
-// Step 2.5: Resolve relative component path against atmosConfig.BasePath.
-// The component_path from sections may be relative (e.g., "components/terraform/vpc").
-// When running with --chdir or from a non-project-root directory, we need to
-// resolve this path against the configured base path to ensure file operations
-// (backend generation, terraform init) work correctly.
-if config.ComponentPath != "" && !filepath.IsAbs(config.ComponentPath) {
-    config.ComponentPath = filepath.Join(atmosConfig.BasePath, config.ComponentPath)
-    log.Debug("Resolved relative component path", "component", component, "stack", stack, "path", config.ComponentPath)
+// extractComponentPath extracts and resolves the absolute component path from sections.
+// It uses utils.GetComponentPath to ensure consistent path resolution across the codebase.
+func extractComponentPath(atmosConfig *schema.AtmosConfiguration, sections map[string]any, component, stack string) (string, error) {
+    // Validate component_info exists.
+    componentInfo, ok := sections["component_info"]
+    if !ok {
+        return "", errUtils.Build(errUtils.ErrMissingComponentInfo).
+            WithExplanationf("Component '%s' in stack '%s'.", component, stack).
+            Err()
+    }
+
+    // Get component type (terraform, helmfile, etc.).
+    componentType, ok := componentInfoMap["component_type"].(string)
+    if !ok {
+        componentType = "terraform" // Default to terraform for backward compatibility.
+    }
+
+    // Get the base component name.
+    baseComponent := ""
+    if comp, ok := sections[cfg.ComponentSectionName].(string); ok && comp != "" {
+        baseComponent = comp
+    }
+
+    // Get component folder prefix if it exists in metadata.
+    componentFolderPrefix := ""
+    if metadata, ok := sections[cfg.MetadataSectionName].(map[string]any); ok {
+        if prefix, ok := metadata["component_folder_prefix"].(string); ok {
+            componentFolderPrefix = prefix
+        }
+    }
+
+    // Use utils.GetComponentPath for consistent path resolution.
+    componentPath, err := u.GetComponentPath(atmosConfig, componentType, componentFolderPrefix, baseComponent)
+    if err != nil {
+        return "", errUtils.Build(errUtils.ErrMissingComponentPath).
+            WithCause(err).
+            WithExplanationf("Component '%s' in stack '%s'.", component, stack).
+            Err()
+    }
+
+    return componentPath, nil
 }
 ```
 
-This ensures that when `ComponentPath` is relative (e.g., `components/terraform/vpc`), it's resolved against
-`atmosConfig.BasePath` before being used for file operations like writing `backend.tf.json`.
+This ensures that `ComponentPath` is always an absolute path properly resolved against `atmosConfig.BasePath`,
+making file operations (backend generation, terraform init) work correctly regardless of how Atmos is invoked.
 
 ---
 
@@ -331,9 +365,10 @@ atmos describe component vpc -s dev-ue1
 
 ## Files Modified
 
-| File                               | Change                                                                                          |
-|------------------------------------|-------------------------------------------------------------------------------------------------|
-| `pkg/terraform/output/executor.go` | ✅ Added path resolution step to resolve relative `ComponentPath` against `atmosConfig.BasePath` |
+| File                               | Change                                                                                                |
+|------------------------------------|-------------------------------------------------------------------------------------------------------|
+| `pkg/terraform/output/config.go`   | ✅ Updated `extractComponentPath` to use `utils.GetComponentPath` for consistent path resolution        |
+| `pkg/terraform/output/executor.go` | ✅ Removed unused `filepath` import, updated `ExtractComponentConfig` call to pass `atmosConfig`        |
 
 ---
 

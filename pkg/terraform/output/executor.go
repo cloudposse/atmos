@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -376,25 +375,12 @@ func (e *Executor) execute(
 	}
 
 	// Step 2: Extract and validate component configuration.
-	config, err := ExtractComponentConfig(
-		sections,
-		component,
-		stack,
-		atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		atmosConfig.Components.Terraform.InitRunReconfigure,
-	)
+	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
+	// proper path resolution that works correctly with --chdir and when running
+	// from non-project-root directories.
+	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
 	if err != nil {
 		return nil, err
-	}
-
-	// Step 2.5: Resolve relative component path against atmosConfig.BasePath.
-	// The component_path from sections may be relative (e.g., "components/terraform/vpc").
-	// When running with --chdir or from a non-project-root directory, we need to
-	// resolve this path against the configured base path to ensure file operations
-	// (backend generation, terraform init) work correctly.
-	if config.ComponentPath != "" && !filepath.IsAbs(config.ComponentPath) {
-		config.ComponentPath = filepath.Join(atmosConfig.BasePath, config.ComponentPath)
-		log.Debug("Resolved relative component path", "component", component, "stack", stack, "path", config.ComponentPath)
 	}
 
 	// Step 3: Generate backend file if needed.
