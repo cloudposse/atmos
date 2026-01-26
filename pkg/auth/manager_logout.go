@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // Logout removes credentials for the specified identity only.
@@ -52,12 +53,11 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 		log.Debug("Identity logout succeeded", logKeyIdentity, identityName)
 	}
 
-	log.Info("Logout completed", logKeyIdentity, identityName, "errors", len(errs), "deletedKeychain", deleteKeychain)
-
+	log.Debug("Logout completed", logKeyIdentity, identityName, "errors", len(errs), "deletedKeychain", deleteKeychain)
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrPartialLogout}, errs...)...)
 	}
-
+	ui.Successf("Logout completed for identity %s", identityName)
 	return nil
 }
 
@@ -167,12 +167,11 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 		errs = append(errs, fmt.Errorf("failed to remove provisioned identities cache for provider %q: %w", providerName, err))
 	}
 
-	log.Info("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs), "deletedKeychain", deleteKeychain)
-
+	log.Debug("Provider logout completed", logKeyProvider, providerName, "identities", len(identityNames), "errors", len(errs), "deletedKeychain", deleteKeychain)
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
 	}
-
+	ui.Successf("Provider logout completed for %s", providerName)
 	return nil
 }
 
@@ -225,12 +224,11 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 		}
 	}
 
-	log.Info("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.providers), "errors", len(errs), "deletedKeychain", deleteKeychain)
-
+	log.Debug("Logout all completed", "identities", len(m.config.Identities), "providers", len(m.config.Providers), "errors", len(errs), "deletedKeychain", deleteKeychain)
 	if len(errs) > 0 {
 		return errors.Join(append([]error{errUtils.ErrLogoutFailed}, errs...)...)
 	}
-
+	ui.Success("Logout all completed")
 	return nil
 }
 
