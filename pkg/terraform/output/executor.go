@@ -375,13 +375,10 @@ func (e *Executor) execute(
 	}
 
 	// Step 2: Extract and validate component configuration.
-	config, err := ExtractComponentConfig(
-		sections,
-		component,
-		stack,
-		atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		atmosConfig.Components.Terraform.InitRunReconfigure,
-	)
+	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
+	// proper path resolution that works correctly with --chdir and when running
+	// from non-project-root directories.
+	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
 	if err != nil {
 		return nil, err
 	}
