@@ -1,0 +1,146 @@
+# yaml-language-server: $schema=schema.json
+# Tests for the stack-names example demonstrating imperative stack naming.
+# See examples/stack-names/ for the example code.
+tests:
+  # Test 1: List stacks shows canonical names
+  - name: atmos list stacks (stack-names example)
+    enabled: true
+    snapshot: true
+    description: "List stacks shows 'dev' (filename) and 'production' (explicit name)"
+    workdir: "../examples/stack-names"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "list"
+      - "stacks"
+    expect:
+      stdout:
+        - "dev"
+        - "production"
+        - !not "^prod$"
+      exit_code: 0
+
+  # Test 2: Describe component with filename-based stack name works
+  - name: atmos describe component mock -s dev (stack-names example)
+    enabled: true
+    snapshot: true
+    description: "Describe component using filename-based stack name works"
+    workdir: "../examples/stack-names"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "dev"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"atmos_stack": "dev"'
+        - '"atmos_stack_file": "dev"'
+        - '"stack": "dev"'
+        - '"environment": "development"'
+      exit_code: 0
+
+  # Test 3: Describe component with explicit stack name works
+  - name: atmos describe component mock -s production (stack-names example)
+    enabled: true
+    snapshot: true
+    description: "Describe component using explicit stack name works"
+    workdir: "../examples/stack-names"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "production"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"atmos_stack": "production"'
+        - '"atmos_stack_file": "prod"'
+        - '"stack": "production"'
+        - '"environment": "production"'
+      exit_code: 0
+
+  # Test 4: Using filename when explicit name exists fails with helpful error
+  - name: atmos describe component mock -s prod (invalid - stack-names example)
+    enabled: true
+    snapshot: true
+    description: "Using filename 'prod' fails when stack has explicit name 'production', suggests correct name"
+    workdir: "../examples/stack-names"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "prod"
+    expect:
+      stderr:
+        - "invalid stack"
+        - "prod"
+        - "production"
+        - "atmos list stacks"
+      exit_code: 1
+
+  # Test 5: Terraform plan with invalid stack name fails
+  - name: atmos terraform plan mock -s prod (invalid - stack-names example)
+    enabled: true
+    snapshot: true
+    description: "Terraform plan using filename 'prod' fails when stack has explicit name 'production'"
+    workdir: "../examples/stack-names"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mock"
+      - "-s"
+      - "prod"
+    expect:
+      stderr:
+        - "invalid stack"
+        - "prod"
+        - "production"
+        - "atmos list stacks"
+      exit_code: 1
+
+  # Test 6: Describe stacks - disabled because it requires name_pattern
+  # The stack-names example doesn't use name_pattern to demonstrate the simplest case.
+  - name: atmos describe stacks (stack-names example)
+    enabled: false
+    snapshot: true
+    description: "Describe stacks output uses canonical names as keys (requires name_pattern)"
+    workdir: "../examples/stack-names"
+    env:
+      ATMOS_CLI_CONFIG_PATH: "."
+    command: "atmos"
+    args:
+      - "describe"
+      - "stacks"
+      - "--format"
+      - "json"
+    expect:
+      valid:
+        - "json"
+      stdout:
+        - '"dev":'
+        - '"production":'
+        - !not '"prod":'
+      exit_code: 0

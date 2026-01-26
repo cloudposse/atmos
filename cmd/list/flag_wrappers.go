@@ -302,6 +302,17 @@ func WithAffectedColumnsFlag(options *[]flags.Option) {
 	)
 }
 
+// WithAliasesColumnsFlag adds column selection flag for list aliases command.
+// Used by: aliases.
+func WithAliasesColumnsFlag(options *[]flags.Option) {
+	defer perf.Track(nil, "list.WithAliasesColumnsFlag")()
+
+	*options = append(*options,
+		flags.WithStringSliceFlag(flagColumns, "", []string{}, descColumns),
+		flags.WithEnvVars(flagColumns, envListColumns),
+	)
+}
+
 // WithRefFlag adds git reference flag for comparing branches.
 // Used by: affected.
 func WithRefFlag(options *[]flags.Option) {

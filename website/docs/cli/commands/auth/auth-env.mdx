@@ -8,10 +8,15 @@ description: Export temporary cloud credentials as environment variables for the
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
 
 <Intro>
 Quickly generate temporary cloud credentials as environment variables so you can run tools like Terraform, AWS CLI, or SDKs without manually copying and pasting access keys. This makes it seamless to switch between identities, integrate with scripts, and keep your sessions secure and short-lived.
 </Intro>
+
+<DemoVideo id="auth-env" title="atmos auth env" showCaption={false} />
 
 <Screengrab title="atmos auth env --help" slug="atmos-auth-env--help" />
 
@@ -29,31 +34,67 @@ atmos auth env [--identity <name>] [--format bash|json|dotenv] [--login]
 
 **Typical Workflow (AWS):**
 
-```bash
-# 1. Set environment variables for an identity
-eval $(atmos auth env --identity prod-admin)
+<Tabs>
+  <TabItem value="bash" label="Bash/Zsh" default>
+    ```bash
+    # 1. Set environment variables for an identity
+    eval $(atmos auth env --identity prod-admin)
 
-# 2. Authenticate (when needed) - opens browser for SSO
-atmos auth login --identity prod-admin
+    # 2. Authenticate (when needed) - opens browser for SSO
+    atmos auth login --identity prod-admin
 
-# 3. Use AWS CLI, Terraform, or other tools
-aws s3 ls
-terraform plan vpc -s prod
-```
+    # 3. Use AWS CLI, Terraform, or other tools
+    aws s3 ls
+    terraform plan vpc -s prod
+    ```
+  </TabItem>
+  <TabItem value="powershell" label="PowerShell">
+    ```powershell
+    # 1. Set environment variables for an identity
+    $envVars = atmos auth env --identity prod-admin --format json | ConvertFrom-Json
+    $envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+
+    # 2. Authenticate (when needed) - opens browser for SSO
+    atmos auth login --identity prod-admin
+
+    # 3. Use AWS CLI, Terraform, or other tools
+    aws s3 ls
+    terraform plan vpc -s prod
+    ```
+  </TabItem>
+</Tabs>
 
 **Typical Workflow (Azure with device-code):**
 
-```bash
-# 1. Set environment variables for an Azure identity
-eval $(atmos auth env --identity azure-dev)
+<Tabs>
+  <TabItem value="bash" label="Bash/Zsh" default>
+    ```bash
+    # 1. Set environment variables for an Azure identity
+    eval $(atmos auth env --identity azure-dev)
 
-# 2. Authenticate (when needed) - displays device code for browser login
-atmos auth login --identity azure-dev
+    # 2. Authenticate (when needed) - displays device code for browser login
+    atmos auth login --identity azure-dev
 
-# 3. Use Azure CLI, Terraform, or other tools
-az group list
-terraform plan -var-file=azure.tfvars
-```
+    # 3. Use Azure CLI, Terraform, or other tools
+    az group list
+    terraform plan -var-file=azure.tfvars
+    ```
+  </TabItem>
+  <TabItem value="powershell" label="PowerShell">
+    ```powershell
+    # 1. Set environment variables for an Azure identity
+    $envVars = atmos auth env --identity azure-dev --format json | ConvertFrom-Json
+    $envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+
+    # 2. Authenticate (when needed) - displays device code for browser login
+    atmos auth login --identity azure-dev
+
+    # 3. Use Azure CLI, Terraform, or other tools
+    az group list
+    terraform plan -var-file=azure.tfvars
+    ```
+  </TabItem>
+</Tabs>
 
 **CI/CD Workflow (Azure OIDC):**
 
@@ -115,12 +156,23 @@ atmos auth env --identity prod-admin --login
 
 ### Adding to Your Shell Profile
 
-A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile (e.g., `.zshrc`, `.bashrc`) without triggering a login prompt on every new shell session:
+A key advantage of `atmos auth env` is that it outputs environment variables for an identity **without requiring immediate authentication**. This makes it safe to add to your shell profile without triggering a login prompt on every new shell session:
 
-```bash
-# Add to ~/.zshrc or ~/.bashrc
-eval $(atmos auth env)
-```
+<Tabs>
+  <TabItem value="bash" label="Bash/Zsh" default>
+    Add to `~/.bashrc` or `~/.zshrc`:
+    ```bash
+    eval $(atmos auth env)
+    ```
+  </TabItem>
+  <TabItem value="powershell" label="PowerShell">
+    Add to `$PROFILE`:
+    ```powershell
+    $envVars = atmos auth env --format json | ConvertFrom-Json
+    $envVars.PSObject.Properties | ForEach-Object { Set-Item -Path "Env:$($_.Name)" -Value $_.Value }
+    ```
+  </TabItem>
+</Tabs>
 
 <details>
 <summary>Helper Function for Identity Switching</summary>

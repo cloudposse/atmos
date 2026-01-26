@@ -81,3 +81,25 @@ tests:
         - "stacks:"
         - "base_path: stacks"
       exit_code: 0
+
+  - name: "atmos --chdir with describe stacks resolves component paths"
+    enabled: true
+    snapshot: false
+    short: false
+    description: "Verify --chdir correctly resolves component paths when describing stacks. Regression test for path resolution issue in v1.195.0+ where relative component_path was not resolved against BasePath."
+    workdir: "../examples"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "../tests/fixtures/scenarios/stack-templates"
+      - "describe"
+      - "stacks"
+      - "-s"
+      - "nonprod"
+      - "--format"
+      - "yaml"
+    expect:
+      stdout:
+        - "component_path:"
+        - "components/terraform"
+      exit_code: 0

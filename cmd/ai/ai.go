@@ -79,3 +79,8 @@ func (a *AICommandProvider) GetCompatibilityFlags() map[string]compat.Compatibil
 func (a *AICommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (a *AICommandProvider) IsExperimental() bool {
+	return true
+}

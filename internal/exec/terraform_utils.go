@@ -10,6 +10,8 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	tfoutput "github.com/cloudposse/atmos/pkg/terraform/output"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -68,7 +70,7 @@ func cleanTerraformWorkspace(atmosConfig schema.AtmosConfiguration, componentPat
 		log.Debug("Terraform environment file found. Proceeding with deletion.", "file", filePath)
 
 		// Use retry logic on Windows to handle file locking
-		deleteErr := retryOnWindows(func() error {
+		deleteErr := tfoutput.RetryOnWindows(func() error {
 			return os.Remove(filePath)
 		})
 
@@ -189,12 +191,8 @@ func executeTerraformAffectedComponentInDepOrder(
 	dependents []schema.Dependent,
 	args *DescribeAffectedCmdArgs,
 ) error {
-	var logFunc func(msg any, keyvals ...any)
-	if info.DryRun {
-		logFunc = log.Info
-	} else {
-		logFunc = log.Debug
-	}
+	// Always use debug level for internal logging.
+	logFunc := log.Debug
 
 	info.Component = affectedComponent
 	info.ComponentFromArg = affectedComponent
@@ -208,12 +206,20 @@ func executeTerraformAffectedComponentInDepOrder(
 		logFunc("Executing", commandStr, command)
 	}
 
-	if !info.DryRun {
-		// Execute the terraform command for the affected component
-		err := ExecuteTerraform(*info)
-		if err != nil {
-			return err
+	// Show user-facing progress for dry-run mode.
+	if info.DryRun {
+		msg := fmt.Sprintf("Would %s `%s` in `%s` (dry run)", info.SubCommand, affectedComponent, affectedStack)
+		if args.IncludeDependents && parentComponent != "" && parentStack != "" {
+			msg = fmt.Sprintf("Would %s `%s` in `%s` (dependency of `%s` in `%s`) (dry run)", info.SubCommand, affectedComponent, affectedStack, parentComponent, parentStack)
 		}
+		ui.Successf("%s", msg)
+		return nil
+	}
+
+	// Execute the terraform command for the affected component.
+	err := ExecuteTerraform(*info)
+	if err != nil {
+		return err
 	}
 
 	for i := 0; i < len(dependents); i++ {
@@ -278,26 +284,27 @@ func walkTerraformComponents(
 }
 
 // processTerraformComponent performs filtering and execution logic for a single Terraform component.
+// Returns true if the component was processed (passed all filters), false otherwise.
 func processTerraformComponent(
 	atmosConfig *schema.AtmosConfiguration,
 	info *schema.ConfigAndStacksInfo,
 	stackName, componentName string,
 	componentSection map[string]any,
 	logFunc func(msg any, keyvals ...any),
-) error {
+) (bool, error) {
 	metadataSection, ok := componentSection[cfg.MetadataSectionName].(map[string]any)
 	if !ok {
-		return nil
+		return false, nil
 	}
 
-	// Skip abstract components
+	// Skip abstract components.
 	if metadataType, ok := metadataSection["type"].(string); ok && metadataType == "abstract" {
-		return nil
+		return false, nil
 	}
 
-	// Skip disabled components
+	// Skip disabled components.
 	if !isComponentEnabled(metadataSection, componentName) {
-		return nil
+		return false, nil
 	}
 
 	command := fmt.Sprintf("atmos terraform %s %s -s %s", info.SubCommand, componentName, stackName)
@@ -305,29 +312,33 @@ func processTerraformComponent(
 	if info.Query != "" {
 		queryResult, err := u.EvaluateYqExpression(atmosConfig, componentSection, info.Query)
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		if queryPassed, ok := queryResult.(bool); !ok || !queryPassed {
 			logFunc("Skipping the component because the query criteria not satisfied", commandStr, command, "query", info.Query)
-			return nil
+			return false, nil
 		}
 	}
 
 	logFunc("Executing", commandStr, command)
 
-	if !info.DryRun {
-		info.Component = componentName
-		info.ComponentFromArg = componentName
-		info.Stack = stackName
-		info.StackFromArg = stackName
-
-		if err := ExecuteTerraform(*info); err != nil {
-			return err
-		}
+	// Show user-facing progress for dry-run mode.
+	if info.DryRun {
+		ui.Successf("Would %s `%s` in `%s` (dry run)", info.SubCommand, componentName, stackName)
+		return true, nil
 	}
 
-	return nil
+	info.Component = componentName
+	info.ComponentFromArg = componentName
+	info.Stack = stackName
+	info.StackFromArg = stackName
+
+	if err := ExecuteTerraform(*info); err != nil {
+		return true, err
+	}
+
+	return true, nil
 }
 
 // parseUploadStatusFlag parses the upload status flag from the arguments.

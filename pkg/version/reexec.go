@@ -82,7 +82,8 @@ type defaultInstaller struct{}
 func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool) error {
 	defer perf.Track(nil, "version.defaultInstaller.Install")()
 
-	return toolchain.RunInstall(toolSpec, force, allowPrereleases)
+	// Suppress PATH hint for --use-version installs (automatic version switching), but show progress bar.
+	return toolchain.RunInstall(toolSpec, force, allowPrereleases, false, true)
 }
 
 // CheckAndReexec checks if version.use is configured and re-executes with the specified version.
@@ -158,8 +159,8 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	// Find or install the requested version.
 	binaryPath, err := findOrInstallVersionWithConfig(targetVersion, cfg)
 	if err != nil {
-		_ = ui.Warningf("Failed to switch to Atmos version %s: %v", requestedVersion, err)
-		_ = ui.Warningf("Continuing with current version %s", Version)
+		ui.Warningf("Failed to switch to Atmos version %s: %v", requestedVersion, err)
+		ui.Warningf("Continuing with current version %s", Version)
 		return false
 	}
 
@@ -170,14 +171,14 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	}
 
 	// Re-exec with the new binary.
-	_ = ui.Successf("Switching to Atmos version `%s`", requestedVersion)
+	ui.Successf("Switching to Atmos version `%s`", requestedVersion)
 
 	// Strip flags that shouldn't be passed to the target version.
 	args := stripChdirFlags(cfg.Args)
 	args = stripUseVersionFlags(args)
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
-		_ = ui.Errorf("Failed to exec %s: %v", binaryPath, err)
+		ui.Errorf("Failed to exec %s: %v", binaryPath, err)
 		return false
 	}
 

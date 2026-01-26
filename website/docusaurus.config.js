@@ -13,12 +13,13 @@ const latestReleasePlugin = require('./plugins/fetch-latest-release');
 const rehypeDtIds = require('./plugins/rehype-dt-ids');
 
 const BASE_URL = '';
+const DEPLOYMENT_HOST = process.env.DEPLOYMENT_HOST || 'atmos.tools';
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
     title: 'atmos',
     tagline: 'Universal tool for DevOps and Cloud Automation',
-    url: 'https://atmos.tools',
+    url: `https://${DEPLOYMENT_HOST}`,
     baseUrl: `${BASE_URL}/`,
     onBrokenLinks: 'throw',
     favicon: 'img/atmos-logo.png',
@@ -66,6 +67,12 @@ const config = {
                         from: '/reference/terraform-limitations',
                         to: '/intro/why-atmos'
                     },
+                    // Core concepts main pages moved to top level
+                    {from: '/core-concepts/stacks', to: '/stacks'},
+                    {from: '/core-concepts/components', to: '/components'},
+                    {from: '/core-concepts/components/terraform', to: '/components/terraform'},
+                    {from: '/core-concepts/components/library', to: '/components'},
+                    {from: '/core-concepts/custom-commands', to: '/cli/configuration/commands'},
                     // Backend documentation reorganization
                     {
                         from: '/core-concepts/components/terraform/state-backend',
@@ -199,14 +206,14 @@ const config = {
                         to: '/howto/catalogs'
                     },
                     // Redirects for workflow pages moved to top level
-//                     {
-//                         from: '/core-concepts/workflows',
-//                         to: '/workflows/workflows'
-//                     },
-//                     {
-//                         from: '/core-concepts/workflows/workflows',
-//                         to: '/workflows/workflows'
-//                     },
+                    {
+                        from: '/core-concepts/workflows',
+                        to: '/workflows'
+                    },
+                    {
+                        from: '/core-concepts/workflows/workflows',
+                        to: '/workflows'
+                    },
                     // Redirects for vendoring pages moved to top level
                     {
                         from: '/core-concepts/vendor',
@@ -278,6 +285,13 @@ const config = {
                         from: '/core-concepts/stacks/templates/datasources',
                         to: '/templates/datasources'
                     },
+                    // Additional core-concepts redirects for documentation links
+                    {from: '/core-concepts/components/helmfile', to: '/components/helmfile'},
+                    {from: '/core-concepts/stacks/naming', to: '/stacks/name'},
+                    {from: '/core-concepts/stacks/templates', to: '/templates'},
+                    {from: '/core-concepts/workflows/workflow-manifest', to: '/workflows'},
+                    {from: '/core-concepts/vendoring', to: '/vendor/'},
+                    {from: '/core-concepts/vendoring/vendor-manifest', to: '/vendor/vendor-config'},
                     // Redirects for directory renames: core-concepts → learn
                     {from: '/core-concepts/why-atmos', to: '/learn/why-atmos'},
                     {from: '/core-concepts/concepts-overview', to: '/learn/concepts-overview'},
@@ -336,7 +350,7 @@ const config = {
         [
             'docusaurus-plugin-sentry',
             {
-              DSN: 'b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
+              DSN: 'https://b022344b0e7cc96f803033fff3b377ee@o56155.ingest.us.sentry.io/4507472203087872',
             },
         ],
         [
@@ -347,6 +361,9 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'blog-release-data'), {}
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'doc-release-data'), {}
         ],
         [
             path.resolve(__dirname, 'plugins', 'docusaurus-plugin-llms-txt'),
@@ -368,7 +385,20 @@ const config = {
         ],
         [
             path.resolve(__dirname, 'plugins', 'slide-notes-extractor'), {}
-        ]
+        ],
+        [
+            path.resolve(__dirname, 'plugins', 'file-browser'),
+            {
+                id: 'examples',
+                sourceDir: '../examples',
+                routeBasePath: '/examples',
+                title: 'Examples',
+                description: 'Explore Atmos example projects with stack configurations, components, and workflows',
+                githubRepo: 'cloudposse/atmos',
+                githubBranch: 'main',
+                githubPath: 'examples',
+            },
+        ],
     ],
 
     presets: [
@@ -447,6 +477,11 @@ const config = {
                         label: 'Reference'
                     },
                     {
+                        to: '/examples',
+                        position: 'left',
+                        label: 'Examples'
+                    },
+                    {
                         label: 'Community',
                         position: 'left',
                         to: '/community'
@@ -489,13 +524,21 @@ const config = {
                 theme: lightCodeTheme,
                 darkTheme: darkCodeTheme,
                 // https://prismjs.com/#supported-languages
-                additionalLanguages: ['hcl', 'bash']
+                additionalLanguages: ['hcl', 'bash', 'yaml', 'json', 'toml', 'ini', 'docker', 'makefile', 'python', 'go']
             },
             algolia: {
                 appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
                 apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928', // this is SEARCH ONLY API key and is not sensitive information
                 indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
-                contextualSearch: false
+                contextualSearch: false,
+                // DocSearch v4 Ask AI integration
+                // https://docsearch.algolia.com/docs/v4/askai/
+                askAi: {
+                    assistantId: process.env.ALGOLIA_ASKAI_ASSISTANT_ID || 'xzgtsIXZSf7V',
+                    appId: process.env.ALGOLIA_APP_ID || '32YOERUX83',
+                    apiKey: process.env.ALGOLIA_SEARCH_API_KEY || '557985309adf0e4df9dcf3cb29c61928',
+                    indexName: process.env.ALGOLIA_INDEX_NAME || 'atmos.tools',
+                }
             },
             zoom: {
                 selector: '.markdown :not(em) > img',

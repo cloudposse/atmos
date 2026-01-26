@@ -21,6 +21,10 @@
 # Atmos binary (only in root directory)
 /atmos
 
+# Demo binaries and large audio files
+tools/director/director
+demos/audio/
+
 # Module directory
 .terraform
 **/.idea
@@ -38,11 +42,15 @@
 /bin
 
 # Nix
-.envrc
 .direnv/
+
+# Environment files (except .envrc which is tracked for Nix)
+.env*
+!.envrc
 
 # Tool version managers
 .tool-versions
+!examples/toolchain/.tool-versions
 
 # Ignore cache files and sessions
 **/.atmos/cache.yaml
@@ -128,3 +136,4 @@ TESTABILITY_CHANGES_SUMMARY.md
 *_summary.txt
 reply_to_*.sh
 *.ansi
+.claude-plan.md

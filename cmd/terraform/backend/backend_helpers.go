@@ -145,7 +145,10 @@ func ParseCommonFlags(cmd *cobra.Command, parser *flags.StandardParser) (*Common
 	}
 
 	if opts.Stack == "" {
-		return nil, errUtils.ErrRequiredFlagNotProvided
+		return nil, errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			WithHint("Specify a stack with --stack or -s flag").
+			Err()
 	}
 
 	return opts, nil
@@ -229,8 +232,22 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 		return err
 	}
 
+	return executeProvisionCommandWithValues(component, opts.Stack, opts.Identity)
+}
+
+// executeProvisionCommandWithValues is the internal implementation that accepts already-parsed values.
+// Used by commands that use StandardParser's prompting infrastructure.
+func executeProvisionCommandWithValues(component, stack, identity string) error {
+	// Validate required values.
+	if stack == "" {
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			WithHint("Specify a stack with --stack or -s flag").
+			Err()
+	}
+
 	// Initialize config and auth using injected dependency.
-	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, opts.Stack, opts.Identity)
+	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, stack, identity)
 	if err != nil {
 		return err
 	}
@@ -253,8 +270,81 @@ func ExecuteProvisionCommand(cmd *cobra.Command, args []string, parser *flags.St
 	return prov.CreateBackend(&CreateBackendParams{
 		AtmosConfig:  atmosConfig,
 		Component:    component,
-		Stack:        opts.Stack,
+		Stack:        stack,
 		DescribeFunc: describeFunc,
 		AuthContext:  authContext,
 	})
+}
+
+// executeDeleteCommandWithValues is the internal implementation for the delete command.
+// Used by commands that use StandardParser's prompting infrastructure.
+func executeDeleteCommandWithValues(component, stack, identity string, force bool) error {
+	// Validate required values.
+	if stack == "" {
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			WithHint("Specify a stack with --stack or -s flag").
+			Err()
+	}
+
+	// Initialize config and auth using injected dependency.
+	atmosConfig, authContext, err := configInit.InitConfigAndAuth(component, stack, identity)
+	if err != nil {
+		return err
+	}
+
+	// Create describe component callback.
+	describeFunc := CreateDescribeComponentFunc(nil) // Auth already handled in InitConfigAndAuth.
+
+	// Execute delete command using injected provisioner.
+	return prov.DeleteBackend(&DeleteBackendParams{
+		AtmosConfig:  atmosConfig,
+		Component:    component,
+		Stack:        stack,
+		Force:        force,
+		DescribeFunc: describeFunc,
+		AuthContext:  authContext,
+	})
+}
+
+// executeDescribeCommandWithValues is the internal implementation for the describe command.
+// Used by commands that use StandardParser's prompting infrastructure.
+func executeDescribeCommandWithValues(component, stack, identity, format string) error {
+	// Validate required values.
+	if stack == "" {
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			WithHint("Specify a stack with --stack or -s flag").
+			Err()
+	}
+
+	// Initialize config using injected dependency.
+	atmosConfig, _, err := configInit.InitConfigAndAuth(component, stack, identity)
+	if err != nil {
+		return err
+	}
+
+	// Execute describe command using injected provisioner.
+	return prov.DescribeBackend(atmosConfig, component, map[string]string{"format": format})
+}
+
+// executeListCommandWithValues is the internal implementation for the list command.
+// Used by commands that use StandardParser's prompting infrastructure.
+func executeListCommandWithValues(stack, identity, format string) error {
+	// Validate required values.
+	if stack == "" {
+		return errUtils.Build(errUtils.ErrRequiredFlagNotProvided).
+			WithExplanation("--stack flag is required").
+			WithHint("Specify a stack with --stack or -s flag").
+			Err()
+	}
+
+	// Initialize config using injected dependency (no component needed for list).
+	atmosConfig, _, err := configInit.InitConfigAndAuth("", stack, identity)
+	if err != nil {
+		return err
+	}
+
+	// Execute list command using injected provisioner.
+	return prov.ListBackends(atmosConfig, map[string]string{"format": format})
 }

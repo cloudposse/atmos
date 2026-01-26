@@ -48,6 +48,9 @@ var (
 
 	// ErrToolAlreadyExists indicates the tool version already exists in .tool-versions.
 	ErrToolAlreadyExists = errors.New("tool already exists")
+
+	// ErrNoValidTools indicates no valid tools were provided for installation.
+	ErrNoValidTools = errors.New("no valid tools to install")
 )
 
 // SearchTotalProvider is an optional interface that registries can implement
@@ -55,6 +58,8 @@ var (
 type SearchTotalProvider interface {
 	GetLastSearchTotal() int
 }
+
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -destination=mock_registry_test.go -package=registry github.com/cloudposse/atmos/toolchain/registry ToolRegistry
 
 // ToolRegistry defines the interface for tool metadata registries.
 // This abstraction allows multiple registry implementations (Aqua, custom URL-based, etc.)
@@ -198,6 +203,7 @@ type Tool struct {
 	BinaryName       string            `yaml:"binary_name"`
 	VersionPrefix    string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/"). Defaults to "v".
 	SourceURL        string            `yaml:"-"`              // URL where the registry file was found (not serialized).
+	SupportedEnvs    []string          `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux", "windows", "darwin/amd64").
 }
 
 // File represents a file to be extracted from the archive.
@@ -208,10 +214,12 @@ type File struct {
 
 // Override represents platform-specific overrides.
 type Override struct {
-	GOOS   string `yaml:"goos"`
-	GOARCH string `yaml:"goarch"`
-	Asset  string `yaml:"asset"`
-	Files  []File `yaml:"files"`
+	GOOS         string            `yaml:"goos"`
+	GOARCH       string            `yaml:"goarch"`
+	Asset        string            `yaml:"asset"`
+	Format       string            `yaml:"format"`
+	Files        []File            `yaml:"files"`
+	Replacements map[string]string `yaml:"replacements"`
 }
 
 // SupportedIf represents conditions for when a tool is supported.
@@ -232,18 +240,37 @@ type AquaPackage struct {
 	Type       string `yaml:"type"`
 	RepoOwner  string `yaml:"repo_owner"`
 	RepoName   string `yaml:"repo_name"`
-	Name       string `yaml:"name"` // Used by http and some go_install types.
-	Path       string `yaml:"path"` // Used by go_install types (Go module path).
-	URL        string `yaml:"url"`
+	Name       string `yaml:"name"`  // Used by http and some go_install types.
+	Path       string `yaml:"path"`  // Used by go_install types (Go module path).
+	Asset      string `yaml:"asset"` // Used by github_release types.
+	URL        string `yaml:"url"`   // Used by http types (complete URL).
 	Format     string `yaml:"format"`
 	BinaryName string `yaml:"binary_name"`
-	// Add other Aqua fields as needed.
+	// Files specifies which files to extract from archive with their destination names.
+	Files []File `yaml:"files"`
+	// Overrides provides platform-specific (goos/goarch) configuration overrides.
+	Overrides []AquaOverride `yaml:"overrides"`
+	// Replacements provides OS/Arch string mappings (e.g., amd64 -> x86_64).
+	Replacements map[string]string `yaml:"replacements"`
+	// Additional Aqua fields.
 	Description       string            `yaml:"description"`
 	SupportedEnvs     []string          `yaml:"supported_envs"`
 	Checksum          ChecksumConfig    `yaml:"checksum"`
 	VersionConstraint string            `yaml:"version_constraint"`
 	VersionOverrides  []VersionOverride `yaml:"version_overrides"`
 	VersionPrefix     string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/").
+}
+
+// AquaOverride represents platform-specific overrides in Aqua format.
+// Aqua uses 'goos' and 'goarch' (lowercase) as field names.
+type AquaOverride struct {
+	GOOS         string            `yaml:"goos"`
+	GOARCH       string            `yaml:"goarch"`
+	URL          string            `yaml:"url"`
+	Asset        string            `yaml:"asset"`
+	Format       string            `yaml:"format"`
+	Files        []File            `yaml:"files"`
+	Replacements map[string]string `yaml:"replacements"`
 }
 
 // ChecksumConfig represents checksum configuration for Aqua packages.

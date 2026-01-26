@@ -132,6 +132,33 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Terraform-specific: merge generate section using deferred merge.
+	// Merge order (lowest to highest priority):
+	// 1. Global + Terraform-level generate (stack-level `generate:` + `terraform.generate:`)
+	// 2. Base component generate (from metadata.inherits)
+	// 3. Component generate (component-specific generate section)
+	// 4. Component overrides generate (from overrides section)
+	var finalComponentGenerate map[string]any
+	if opts.ComponentType == cfg.TerraformComponentType {
+		var generateCtx *m.DeferredMergeContext
+		finalComponentGenerate, generateCtx, err = m.MergeWithDeferred(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalAndTerraformGenerate,
+				result.BaseComponentGenerate,
+				result.ComponentGenerate,
+				result.ComponentOverridesGenerate,
+			})
+		if err != nil {
+			return nil, err
+		}
+
+		// Apply deferred merges for generate (without YAML processing - already done earlier).
+		if err := m.ApplyDeferredMerges(generateCtx, finalComponentGenerate, atmosConfig, nil); err != nil {
+			return nil, err
+		}
+	}
+
 	// Resolve the final executable command.
 	// Check for the binary in the following order:
 	// - `components.<type>.command` section in `atmos.yaml` CLI config file.
@@ -198,6 +225,22 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
+	// Merge locals (base component locals + component locals).
+	// Component locals take precedence over base component locals.
+	// Note: Locals are used for template processing, not passed to terraform/helmfile.
+	var finalComponentLocals map[string]any
+	if len(result.BaseComponentLocals) > 0 || len(result.ComponentLocals) > 0 {
+		finalComponentLocals, err = m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				result.BaseComponentLocals,
+				result.ComponentLocals,
+			})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	// Build final component map.
 	comp := map[string]any{
 		cfg.VarsSectionName:        finalComponentVars,
@@ -213,6 +256,11 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	// Add dependencies if present.
 	if len(finalComponentDependencies) > 0 {
 		comp[cfg.DependenciesSectionName] = finalComponentDependencies
+	}
+
+	// Add locals if present (for template processing, not passed to terraform/helmfile).
+	if len(finalComponentLocals) > 0 {
+		comp[cfg.LocalsSectionName] = finalComponentLocals
 	}
 
 	// Terraform-specific: process backends and add Terraform-specific fields.
@@ -281,6 +329,7 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		// Add Terraform-specific fields to component map.
 		comp[cfg.ProvidersSectionName] = finalComponentProviders
 		comp[cfg.HooksSectionName] = finalComponentHooks
+		comp[cfg.GenerateSectionName] = finalComponentGenerate
 		comp[cfg.BackendTypeSectionName] = finalComponentBackendType
 		comp[cfg.BackendSectionName] = finalComponentBackend
 		comp[cfg.RemoteStateBackendTypeSectionName] = finalComponentRemoteStateBackendType
@@ -303,7 +352,20 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 			return nil, err
 		}
 		comp[cfg.SourceSectionName] = finalComponentSource
-		comp[cfg.ProvisionSectionName] = result.ComponentProvision
+
+		// Merge provision from global, base component, and component levels.
+		// Priority (lowest to highest): global → base component → component.
+		finalComponentProvision, err := m.Merge(
+			atmosConfig,
+			[]map[string]any{
+				opts.GlobalProvisionSection,
+				result.BaseComponentProvisionSection,
+				result.ComponentProvision,
+			})
+		if err != nil {
+			return nil, err
+		}
+		comp[cfg.ProvisionSectionName] = finalComponentProvision
 	}
 
 	// Add base component name if present.

@@ -9,12 +9,15 @@ description: Configure authentication providers for AWS SSO, SAML, and GitHub OI
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
 Providers are the upstream systems that Atmos uses to obtain initial credentials. Configure providers in the `auth.providers` section of your `atmos.yaml`.
 </Intro>
+
+<Experimental />
 
 ## AWS IAM Identity Center (SSO)
 
@@ -31,9 +34,6 @@ auth:
 
       # Automatically discover all accounts and permission sets
       auto_provision_identities: true
-
-      # Optional: include AWS tags from permission sets as labels
-      include_tags: true
 
       # Optional session configuration
       session:
@@ -56,9 +56,6 @@ auth:
 
   <dt>`auto_provision_identities`</dt>
   <dd>Optional. When `true`, Atmos automatically discovers all AWS accounts and permission sets assigned to the user and creates identities for them. This eliminates the need to manually configure each identity. Default: `false`.</dd>
-
-  <dt>`include_tags`</dt>
-  <dd>Optional. When `true` (and `auto_provision_identities` is enabled), Atmos retrieves AWS tags from permission sets and includes them as labels on the auto-provisioned identities. Requires additional IAM permissions. Default: `false`.</dd>
 
   <dt>`session.duration`</dt>
   <dd>Optional. Session duration for CLI credentials (e.g., `1h`, `4h`). Default varies by provider.</dd>
@@ -98,42 +95,6 @@ These permissions are required for automatic identity provisioning to work:
 - `sso:ListAccounts` - Enumerates all AWS accounts the user can access
 - `sso:ListAccountRoles` - Lists available permission sets (roles) for each account
 
-#### Tag/Label Support (Optional)
-
-If you enable tag discovery (`include_tags: true` in provider configuration), additional permissions are required:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListAccounts",
-        "sso:ListAccountRoles"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListInstances",
-        "sso:DescribePermissionSet",
-        "sso:ListPermissionSets",
-        "sso:ListTagsForResource"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-**Additional APIs Used:**
-- `sso:ListInstances` - Finds the SSO instance ARN
-- `sso:DescribePermissionSet` - Gets permission set details
-- `sso:ListPermissionSets` - Finds permission set ARNs
-- `sso:ListTagsForResource` - Retrieves AWS tags from permission sets
-
 #### How to Apply Permissions
 
 These permissions should be attached to the IAM Identity Center permission set that users authenticate with, or to the IAM user/role if using static credentials. Without these permissions, identity provisioning will fail gracefully and fall back to manually configured identities.
@@ -152,7 +113,6 @@ auth:
       kind: aws/saml
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
-      idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
       driver: Browser              # Browser, GoogleApps, Okta, or ADFS
 ```
 </File>
@@ -166,9 +126,6 @@ auth:
 
   <dt>`url`</dt>
   <dd>**Required.** SAML SSO URL from your identity provider.</dd>
-
-  <dt>`idp_arn`</dt>
-  <dd>**Required.** ARN of the SAML provider in IAM.</dd>
 
   <dt>`driver`</dt>
   <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`.</dd>
@@ -224,7 +181,6 @@ auth:
       kind: aws/saml
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
-      idp_arn: arn:aws:iam::123456789012:saml-provider/okta
 
     # GitHub OIDC for CI/CD
     github-oidc:

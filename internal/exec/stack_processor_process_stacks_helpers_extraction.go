@@ -23,6 +23,15 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 		result.ComponentVars = componentVars
 	}
 
+	// Extract locals section (for template processing, not passed to terraform/helmfile).
+	if i, ok := opts.ComponentMap[cfg.LocalsSectionName]; ok {
+		componentLocals, ok := i.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%w: 'components.%s.%s.locals' in the file '%s'", errUtils.ErrInvalidComponentLocals, opts.ComponentType, opts.Component, opts.StackName)
+		}
+		result.ComponentLocals = componentLocals
+	}
+
 	// Extract settings section.
 	if i, ok := opts.ComponentMap[cfg.SettingsSectionName]; ok {
 		componentSettings, ok := i.(map[string]any)
@@ -185,6 +194,19 @@ func extractComponentSections(opts *ComponentProcessorOptions, result *Component
 			return fmt.Errorf("%w: 'components.%s.%s.command' in the file '%s'", errUtils.ErrInvalidComponentCommand, opts.ComponentType, opts.Component, opts.StackName)
 		}
 		result.ComponentCommand = componentCommand
+	}
+
+	// Terraform-specific: extract generate section for file generation.
+	if opts.ComponentType == cfg.TerraformComponentType {
+		if i, ok := opts.ComponentMap[cfg.GenerateSectionName]; ok {
+			componentGenerate, ok := i.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: 'components.%s.%s.generate' in the file '%s'", errUtils.ErrInvalidComponentGenerate, opts.ComponentType, opts.Component, opts.StackName)
+			}
+			result.ComponentGenerate = componentGenerate
+		} else {
+			result.ComponentGenerate = make(map[string]any, componentSmallMapCapacity)
+		}
 	}
 
 	return nil

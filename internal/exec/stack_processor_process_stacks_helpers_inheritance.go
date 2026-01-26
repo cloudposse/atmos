@@ -22,11 +22,14 @@ func processComponentInheritance(opts *ComponentProcessorOptions, result *Compon
 	result.BaseComponentAuth = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentMetadata = make(map[string]any, componentSmallMapCapacity)
 	result.BaseComponentDependencies = make(map[string]any, componentSmallMapCapacity)
+	result.BaseComponentLocals = make(map[string]any, componentSmallMapCapacity)
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentHooks = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentGenerate = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentBackendSection = make(map[string]any, componentSmallMapCapacity)
 		result.BaseComponentRemoteStateBackendSection = make(map[string]any, componentSmallMapCapacity)
+		result.BaseComponentProvisionSection = make(map[string]any, componentSmallMapCapacity)
 	}
 
 	var baseComponentConfig schema.BaseComponentConfig
@@ -199,18 +202,21 @@ func applyBaseComponentConfig(opts *ComponentProcessorOptions, result *Component
 	result.BaseComponentAuth = baseComponentConfig.BaseComponentAuth
 	result.BaseComponentMetadata = baseComponentConfig.BaseComponentMetadata
 	result.BaseComponentDependencies = baseComponentConfig.BaseComponentDependencies
+	result.BaseComponentLocals = baseComponentConfig.BaseComponentLocals
 	result.BaseComponentName = baseComponentConfig.FinalBaseComponentName
 	result.BaseComponentCommand = baseComponentConfig.BaseComponentCommand
 	*componentInheritanceChain = baseComponentConfig.ComponentInheritanceChain
 
-	// Terraform-specific: extract base component providers, hooks, backend, and source.
+	// Terraform-specific: extract base component providers, hooks, generate, backend, source, and provision.
 	if opts.ComponentType == cfg.TerraformComponentType {
 		result.BaseComponentProviders = baseComponentConfig.BaseComponentProviders
 		result.BaseComponentHooks = baseComponentConfig.BaseComponentHooks
+		result.BaseComponentGenerate = baseComponentConfig.BaseComponentGenerate
 		result.BaseComponentBackendType = baseComponentConfig.BaseComponentBackendType
 		result.BaseComponentBackendSection = baseComponentConfig.BaseComponentBackendSection
 		result.BaseComponentRemoteStateBackendType = baseComponentConfig.BaseComponentRemoteStateBackendType
 		result.BaseComponentRemoteStateBackendSection = baseComponentConfig.BaseComponentRemoteStateBackendSection
 		result.BaseComponentSourceSection = baseComponentConfig.BaseComponentSourceSection
+		result.BaseComponentProvisionSection = baseComponentConfig.BaseComponentProvisionSection
 	}
 }

@@ -292,6 +292,20 @@ type AuthManager interface {
 
 	// GetIntegration returns the integration config by name.
 	GetIntegration(integrationName string) (*schema.Integration, error)
+
+	// ResolvePrincipalSetting traverses the identity chain and returns the first
+	// non-empty value for the given key in Principal configuration.
+	// The chain is traversed from the target identity backwards through parent identities.
+	// This is a provider-agnostic mechanism for inheriting settings through the chain.
+	// Returns the value and true if found, nil and false otherwise.
+	ResolvePrincipalSetting(identityName, key string) (interface{}, bool)
+
+	// ResolveProviderConfig returns the provider configuration at the root of
+	// the identity's authentication chain.
+	// This allows identities to access provider-level settings without knowing
+	// the specific provider name.
+	// Returns the provider config and true if found, nil and false otherwise.
+	ResolveProviderConfig(identityName string) (*schema.Provider, bool)
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.

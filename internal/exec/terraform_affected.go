@@ -5,6 +5,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -104,6 +105,7 @@ func executeAffectedComponents(affectedList []schema.Affected, info *schema.Conf
 
 	// Early return for empty list - nothing to process.
 	if len(affectedList) == 0 {
+		ui.Success("No components affected")
 		return nil
 	}
 

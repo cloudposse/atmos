@@ -395,6 +395,9 @@ func processEnvVars(atmosConfig *schema.AtmosConfiguration) error {
 		atmosConfig.Components.Terraform.AppendUserAgent = tfAppendUserAgent
 	}
 
+	// Note: ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE and ATMOS_COMPONENTS_TERRAFORM_PLUGIN_CACHE_DIR
+	// are handled via Viper bindEnv in setEnv() and populated during Unmarshal, not here.
+
 	listMergeStrategy := os.Getenv("ATMOS_SETTINGS_LIST_MERGE_STRATEGY")
 	if len(listMergeStrategy) > 0 {
 		log.Debug(foundEnvVarMessage, "ATMOS_SETTINGS_LIST_MERGE_STRATEGY", listMergeStrategy)
@@ -475,13 +478,13 @@ func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 
 // warnVersionConstraint logs a warning for unsatisfied version constraint.
 func warnVersionConstraint(constraint schema.VersionConstraint) {
-	_ = ui.Warning(fmt.Sprintf(
+	ui.Warning(fmt.Sprintf(
 		"Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s",
 		constraint.Require,
 		version.Version,
 	))
 	if constraint.Message != "" {
-		_ = ui.Warning(constraint.Message)
+		ui.Warning(constraint.Message)
 	}
 }
 

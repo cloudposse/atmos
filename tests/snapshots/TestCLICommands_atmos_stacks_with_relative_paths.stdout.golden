@@ -11,7 +11,11 @@ acme-platform-dev:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
@@ -44,7 +48,11 @@ acme-platform-prod:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}
@@ -77,7 +85,11 @@ acme-platform-staging:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
+        generate: {}
         hooks: {}
         inheritance: []
         metadata: {}

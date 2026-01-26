@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -51,7 +53,9 @@ func (i *Identity) getCredentialsFilePath() string {
 	// Use a temp directory that's cleaned up by the OS.
 	// In production, real providers would use XDG directories like ~/.config/atmos/aws/{provider}/.
 	tmpDir := os.TempDir()
-	return filepath.Join(tmpDir, "atmos-mock-"+i.name+".json")
+	// Sanitize identity name to be filesystem-safe (replace / with -).
+	safeName := strings.ReplaceAll(i.name, "/", "-")
+	return filepath.Join(tmpDir, "atmos-mock-"+safeName+".json")
 }
 
 // Kind returns the identity kind.
@@ -136,31 +140,70 @@ func (i *Identity) PrepareEnvironment(_ context.Context, environ map[string]stri
 }
 
 // PostAuthenticate simulates writing credentials to persistent storage.
-// For mock identities, this writes credentials to a temporary file to persist them.
-// This mimics real provider behavior where authentication results in credentials being written
-// to disk (AWS ~/.aws/credentials), environment variables (GitHub token), or other storage.
+// This uses the same three-step pattern as real AWS providers:
+// 1. SetupFiles - write AWS-format credential files.
+// 2. SetAuthContext - populate auth context for in-process SDK.
+// 3. SetEnvironmentVariables - derive env vars for subprocesses.
 func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthenticateParams) error {
 	defer perf.Track(nil, "mock.Identity.PostAuthenticate")()
 
-	// Write credentials to disk to simulate persistent storage.
+	// Get provider name from params (like real providers do).
+	providerName := "mock"
+	if params != nil && params.ProviderName != "" {
+		providerName = params.ProviderName
+	}
+
 	// Use a fixed timestamp for deterministic testing.
 	fixedExpiration := time.Date(MockExpirationYear, MockExpirationMonth, MockExpirationDay, MockExpirationHour, MockExpirationMinute, MockExpirationSecond, 0, time.UTC)
 
-	creds := &Credentials{
-		AccessKeyID:     "mock-access-key",
-		SecretAccessKey: "mock-secret-key",
-		SessionToken:    "mock-session-token",
+	// Create AWS credentials in the format expected by SetupFiles and SetAuthContext.
+	awsCreds := &types.AWSCredentials{
+		AccessKeyID:     fmt.Sprintf("MOCK_KEY_%s", i.name),
+		SecretAccessKey: fmt.Sprintf("MOCK_SECRET_%s", i.name),
+		SessionToken:    fmt.Sprintf("MOCK_TOKEN_%s", i.name),
+		Region:          MockRegion,
+		Expiration:      fixedExpiration.Format(time.RFC3339),
+	}
+
+	// Step 1: Write AWS-format credential files (for external tools and SDK).
+	if err := awsCloud.SetupFiles(providerName, i.name, awsCreds, ""); err != nil {
+		return fmt.Errorf("mock identity failed to setup AWS files: %w", err)
+	}
+
+	// Step 2: Populate auth context (for in-process SDK calls).
+	if params != nil && params.AuthContext != nil {
+		if err := awsCloud.SetAuthContext(&awsCloud.SetAuthContextParams{
+			AuthContext:  params.AuthContext,
+			StackInfo:    params.StackInfo,
+			ProviderName: providerName,
+			IdentityName: i.name,
+			Credentials:  awsCreds,
+			BasePath:     "",
+		}); err != nil {
+			return fmt.Errorf("mock identity failed to set auth context: %w", err)
+		}
+	}
+
+	// Step 3: Set environment variables (for spawned processes).
+	if params != nil && params.AuthContext != nil && params.StackInfo != nil {
+		if err := awsCloud.SetEnvironmentVariables(params.AuthContext, params.StackInfo); err != nil {
+			return fmt.Errorf("mock identity failed to set environment variables: %w", err)
+		}
+	}
+
+	// Also write legacy JSON format for backwards compatibility with existing tests
+	// that use LoadCredentials.
+	legacyCreds := &Credentials{
+		AccessKeyID:     awsCreds.AccessKeyID,
+		SecretAccessKey: awsCreds.SecretAccessKey,
+		SessionToken:    awsCreds.SessionToken,
 		Region:          MockRegion,
 		Expiration:      fixedExpiration,
 	}
-
-	// Serialize credentials to JSON.
-	data, err := json.Marshal(creds)
+	data, err := json.Marshal(legacyCreds)
 	if err != nil {
 		return fmt.Errorf("failed to marshal mock credentials: %w", err)
 	}
-
-	// Write to temp file (simulates writing to XDG directory).
 	credPath := i.getCredentialsFilePath()
 	if err := os.WriteFile(credPath, data, MockFilePermissions); err != nil {
 		return fmt.Errorf("failed to write mock credentials to %s: %w", credPath, err)

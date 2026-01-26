@@ -74,3 +74,8 @@ func (t *ThemeCommandProvider) GetCompatibilityFlags() map[string]compat.Compati
 func (t *ThemeCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
 }
+
+// IsExperimental returns whether this command is experimental.
+func (t *ThemeCommandProvider) IsExperimental() bool {
+	return false
+}

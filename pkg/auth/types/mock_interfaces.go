@@ -736,6 +736,36 @@ func (mr *MockAuthManagerMockRecorder) PrepareShellEnvironment(ctx, identityName
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareShellEnvironment", reflect.TypeOf((*MockAuthManager)(nil).PrepareShellEnvironment), ctx, identityName, currentEnv)
 }
 
+// ResolvePrincipalSetting mocks base method.
+func (m *MockAuthManager) ResolvePrincipalSetting(identityName, key string) (any, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolvePrincipalSetting", identityName, key)
+	ret0, _ := ret[0].(any)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ResolvePrincipalSetting indicates an expected call of ResolvePrincipalSetting.
+func (mr *MockAuthManagerMockRecorder) ResolvePrincipalSetting(identityName, key any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolvePrincipalSetting", reflect.TypeOf((*MockAuthManager)(nil).ResolvePrincipalSetting), identityName, key)
+}
+
+// ResolveProviderConfig mocks base method.
+func (m *MockAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveProviderConfig", identityName)
+	ret0, _ := ret[0].(*schema.Provider)
+	ret1, _ := ret[1].(bool)
+	return ret0, ret1
+}
+
+// ResolveProviderConfig indicates an expected call of ResolveProviderConfig.
+func (mr *MockAuthManagerMockRecorder) ResolveProviderConfig(identityName any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveProviderConfig", reflect.TypeOf((*MockAuthManager)(nil).ResolveProviderConfig), identityName)
+}
+
 // Validate mocks base method.
 func (m *MockAuthManager) Validate() error {
 	m.ctrl.T.Helper()

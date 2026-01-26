@@ -43,24 +43,19 @@ components:
     mock/instance-1:
       metadata:
         component: mock
-      # Component-level locals - inherit from terraform scope.
-      locals:
-        instance_id: "instance-1"
-        app_name: "{{ .locals.name_prefix }}-mock-{{ .locals.instance_id }}"
       vars:
-        foo: "{{ .locals.app_name }}"
+        # Use global and terraform-scope locals.
+        app_name: "{{ .locals.name_prefix }}-mock-instance-1"
         bar: "{{ .locals.environment }}"
-        baz: "{{ .locals.instance_id }}"
+        bucket: "{{ .locals.backend_bucket }}"
         tags: "{{ .locals.tags }}"
 
     mock/instance-2:
       metadata:
         component: mock
-      locals:
-        instance_id: "instance-2"
-        app_name: "{{ .locals.name_prefix }}-mock-{{ .locals.instance_id }}"
       vars:
-        foo: "{{ .locals.app_name }}"
+        # Use global and terraform-scope locals.
+        app_name: "{{ .locals.name_prefix }}-mock-instance-2"
         bar: "{{ .locals.environment }}"
-        baz: "{{ .locals.instance_id }}"
+        bucket: "{{ .locals.backend_bucket }}"
         tags: "{{ .locals.tags }}"

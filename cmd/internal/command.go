@@ -68,6 +68,10 @@ type CommandAlias struct {
 //	    return nil // No aliases
 //	}
 //
+//	func (a *AboutCommandProvider) IsExperimental() bool {
+//	    return false
+//	}
+//
 //	func init() {
 //	    internal.Register(&AboutCommandProvider{})
 //	}
@@ -116,4 +120,10 @@ type CommandProvider interface {
 	//       Long:          `This is an alias for "atmos profile list".`,
 	//   }}
 	GetAliases() []CommandAlias
+
+	// IsExperimental returns true if this command is experimental.
+	// Experimental commands may show warnings, be disabled, or cause errors
+	// depending on the settings.experimental configuration.
+	// Return false for stable commands.
+	IsExperimental() bool
 }

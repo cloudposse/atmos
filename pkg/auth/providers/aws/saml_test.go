@@ -188,6 +188,14 @@ func (s stubSamlMgr) GetIntegration(string) (*schema.Integration, error) {
 	return nil, nil
 }
 
+func (s stubSamlMgr) ResolvePrincipalSetting(string, string) (interface{}, bool) {
+	return nil, false
+}
+
+func (s stubSamlMgr) ResolveProviderConfig(string) (*schema.Provider, bool) {
+	return nil, false
+}
+
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
 	p, err := NewSAMLProvider("p", &schema.Provider{Kind: "aws/saml", URL: "https://idp.example.com/saml", Region: "us-east-1"})
 	require.NoError(t, err)

@@ -44,6 +44,8 @@ var (
 	ErrTUIModel                              = errors.New("failed to initialize TUI model")
 	ErrTUIRun                                = errors.New("failed to run TUI")
 	ErrUIFormatterNotInitialized             = errors.New("ui formatter not initialized")
+	ErrMarkdownRendererInit                  = errors.New("failed to initialize markdown renderer")
+	ErrMarkdownRender                        = errors.New("failed to render markdown content")
 	ErrIOContextNotInitialized               = errors.New("global I/O context is nil after initialization")
 	ErrNoFilesFound                          = errors.New("no files found in directory")
 	ErrMultipleFilesFound                    = errors.New("multiple files found in directory")
@@ -70,6 +72,7 @@ var (
 	ErrInvalidLimit                          = errors.New("limit must be between 1 and 100")
 	ErrInvalidOffset                         = errors.New("offset must be >= 0")
 	ErrDuplicateFlagRegistration             = errors.New("duplicate flag registration")
+	ErrReservedFlagName                      = errors.New("reserved flag name")
 	ErrInvalidSinceDate                      = errors.New("invalid date format for --since")
 	ErrTerminalTooNarrow                     = errors.New("terminal too narrow")
 	ErrSpinnerReturnedNilModel               = errors.New("spinner returned nil model")
@@ -78,6 +81,10 @@ var (
 	// Theme-related errors.
 	ErrThemeNotFound = errors.New("theme not found")
 	ErrInvalidTheme  = errors.New("invalid theme")
+
+	// Experimental feature errors.
+	ErrExperimentalDisabled   = errors.New("experimental command is disabled")
+	ErrExperimentalRequiresIn = errors.New("experimental command requires explicit opt-in")
 
 	// Authentication and TTY errors.
 	ErrAuthConsole            = errors.New("auth console operation failed")
@@ -92,6 +99,8 @@ var (
 	ErrWorkflowNameRequired       = errors.New("workflow name is required")
 	ErrInvalidStackConfiguration  = errors.New("invalid stack configuration")
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
+	ErrStackRequired              = errors.New("--stack flag is required")
+	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -110,6 +119,18 @@ var (
 	// These errors indicate the data is not available but do not represent API failures.
 	ErrTerraformStateNotProvisioned = errors.New("terraform state not provisioned")
 	ErrTerraformOutputNotFound      = errors.New("terraform output not found")
+	ErrTerraformOutputFailed        = errors.New("failed to retrieve terraform outputs")
+
+	// Terraform output component configuration errors.
+	ErrMissingExecutable      = errors.New("component does not have 'command' (executable) defined")
+	ErrMissingWorkspace       = errors.New("component does not have terraform workspace defined")
+	ErrMissingComponentInfo   = errors.New("component does not have 'component_info' defined")
+	ErrInvalidComponentInfoS  = errors.New("component has invalid 'component_info' section")
+	ErrMissingComponentPath   = errors.New("component has invalid 'component_info.component_path'")
+	ErrBackendFileGeneration  = errors.New("failed to generate backend file")
+	ErrProviderFileGeneration = errors.New("failed to generate provider override file")
+	ErrTerraformInit          = errors.New("terraform init failed")
+	ErrTerraformWorkspaceOp   = errors.New("terraform workspace operation failed")
 
 	// API/infrastructure errors - should cause non-zero exit.
 	// These errors indicate backend API failures that should not use YQ defaults.
@@ -202,6 +223,7 @@ var (
 	ErrLatestFileNotFound           = errors.New("latest version file not found")
 	ErrRegistryNotReachable         = errors.New("registry not reachable")
 	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
 	ErrAliasNotFound                = errors.New("alias not found")
 	ErrBinaryNotExecutable          = errors.New("binary not executable")
 	ErrBinaryNotFound               = errors.New("binary not found")
@@ -249,14 +271,18 @@ var (
 	ErrProfileDirNotAccessible = errors.New("profile directory not accessible")
 	ErrProfileInvalidMetadata  = errors.New("invalid profile metadata")
 
-	ErrMissingStack                               = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
-	ErrMissingComponent                           = errors.New("component is required")
-	ErrMissingComponentType                       = errors.New("component type is required")
-	ErrRequiredFlagNotProvided                    = errors.New("required flag not provided")
-	ErrRequiredFlagEmpty                          = errors.New("required flag cannot be empty")
-	ErrInvalidArguments                           = errors.New("invalid arguments")
-	ErrUnknownSubcommand                          = errors.New("unknown subcommand")
-	ErrInvalidComponent                           = errors.New("invalid component")
+	ErrMissingStack            = errors.New("stack is required; specify it on the command line using the flag `--stack <stack>` (shorthand `-s`)")
+	ErrMissingComponent        = errors.New("component is required")
+	ErrMissingComponentType    = errors.New("component type is required")
+	ErrRequiredFlagNotProvided = errors.New("required flag not provided")
+	ErrRequiredFlagEmpty       = errors.New("required flag cannot be empty")
+	ErrInvalidArguments        = errors.New("invalid arguments")
+	ErrUnknownSubcommand       = errors.New("unknown subcommand")
+	ErrInvalidComponent        = errors.New("invalid component")
+	// ErrInvalidStack indicates the user provided an identifier that doesn't match
+	// the stack's canonical name (e.g., using filename when explicit name is set).
+	// This differs from ErrStackNotFound which indicates the stack doesn't exist at all.
+	ErrInvalidStack                               = errors.New("invalid stack")
 	ErrInvalidComponentMapType                    = errors.New("invalid component map type")
 	ErrAbstractComponentCantBeProvisioned         = errors.New("abstract component cannot be provisioned")
 	ErrLockedComponentCantBeProvisioned           = errors.New("locked component cannot be provisioned")
@@ -298,10 +324,12 @@ var (
 	ErrInvalidHooksSection                    = errors.New("invalid 'hooks' section in the file")
 	ErrInvalidTerraformHooksSection           = errors.New("invalid 'terraform.hooks' section in the file")
 	ErrInvalidComponentVars                   = errors.New("invalid component vars section")
+	ErrInvalidComponentLocals                 = errors.New("invalid component locals section")
 	ErrInvalidComponentSettings               = errors.New("invalid component settings section")
 	ErrInvalidComponentEnv                    = errors.New("invalid component env section")
 	ErrInvalidComponentProviders              = errors.New("invalid component providers section")
 	ErrInvalidComponentHooks                  = errors.New("invalid component hooks section")
+	ErrInvalidComponentGenerate               = errors.New("invalid component generate section")
 	ErrInvalidComponentAuth                   = errors.New("invalid component auth section")
 	ErrInvalidComponentProvision              = errors.New("invalid component provision section")
 	ErrInvalidComponentMetadata               = errors.New("invalid component metadata section")
@@ -320,6 +348,7 @@ var (
 	ErrInvalidComponentOverridesCommand       = errors.New("invalid component overrides command attribute")
 	ErrInvalidComponentOverridesProviders     = errors.New("invalid component overrides providers section")
 	ErrInvalidComponentOverridesHooks         = errors.New("invalid component overrides hooks section")
+	ErrInvalidComponentOverridesGenerate      = errors.New("invalid component overrides generate section")
 	ErrInvalidComponentAttribute              = errors.New("invalid component attribute")
 	ErrInvalidComponentMetadataComponent      = errors.New("invalid component metadata.component attribute")
 	ErrInvalidSpaceLiftSettings               = errors.New("invalid spacelift settings section")
@@ -343,18 +372,21 @@ var (
 	ErrUnsupportedComponentType           = errors.New("unsupported component type")
 
 	// List command errors.
-	ErrInvalidStackPattern         = errors.New("invalid stack pattern")
-	ErrEmptyTargetComponentName    = errors.New("target component name cannot be empty")
-	ErrComponentsSectionNotFound   = errors.New("components section not found in stack")
-	ErrComponentNotFoundInSections = errors.New("component not found in terraform or helmfile sections")
-	ErrQueryFailed                 = errors.New("query execution failed")
-	ErrTableTooWide                = errors.New("the table is too wide to display properly")
-	ErrGettingCommonFlags          = errors.New("error getting common flags")
-	ErrGettingAbstractFlag         = errors.New("error getting abstract flag")
-	ErrGettingVarsFlag             = errors.New("error getting vars flag")
-	ErrInitializingCLIConfig       = errors.New("error initializing CLI config")
-	ErrDescribingStacks            = errors.New("error describing stacks")
-	ErrComponentNameRequired       = errors.New("component name is required")
+	ErrInvalidStackPattern          = errors.New("invalid stack pattern")
+	ErrEmptyTargetComponentName     = errors.New("target component name cannot be empty")
+	ErrComponentsSectionNotFound    = errors.New("components section not found in stack")
+	ErrComponentNotFoundInSections  = errors.New("component not found in terraform or helmfile sections")
+	ErrQueryFailed                  = errors.New("query execution failed")
+	ErrScalarExtractionNotSupported = errors.New("scalar extraction queries are not supported")
+	ErrQueryUnexpectedResultType    = errors.New("query returned unexpected result type")
+	ErrTableTooWide                 = errors.New("the table is too wide to display properly")
+	ErrGettingCommonFlags           = errors.New("error getting common flags")
+	ErrGettingAbstractFlag          = errors.New("error getting abstract flag")
+	ErrGettingVarsFlag              = errors.New("error getting vars flag")
+	ErrInitializingCLIConfig        = errors.New("error initializing CLI config")
+	ErrDescribingStacks             = errors.New("error describing stacks")
+	ErrComponentNameRequired        = errors.New("component name is required")
+	ErrCreateColumnSelector         = errors.New("failed to create column selector")
 
 	// Version command errors.
 	ErrVersionDisplayFailed   = errors.New("failed to display version information")
@@ -376,10 +408,16 @@ var (
 	// Validation errors.
 	ErrValidationFailed = errors.New("validation failed")
 
+	// EditorConfig validation errors.
+	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
+	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
+	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
+
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
 	ErrInvalidSettingsSection           = errors.New("invalid settings section")
 	ErrInvalidEnvSection                = errors.New("invalid env section")
+	ErrInvalidGenerateSection           = errors.New("invalid generate section")
 	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
 	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
@@ -398,6 +436,7 @@ var (
 	ErrInvalidTerraformSettings           = errors.New("invalid terraform settings section")
 	ErrInvalidTerraformEnv                = errors.New("invalid terraform env section")
 	ErrInvalidTerraformProviders          = errors.New("invalid terraform providers section")
+	ErrInvalidTerraformGenerateSection    = errors.New("invalid terraform generate section")
 	ErrInvalidTerraformBackendType        = errors.New("invalid terraform backend_type")
 	ErrMissingTerraformBackendType        = errors.New("'backend_type' is missing for the component")
 	ErrMissingTerraformBackendConfig      = errors.New("'backend' config is missing for the component")
@@ -406,6 +445,7 @@ var (
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
+	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
 	// Helmfile-specific subsection errors.
 	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
@@ -419,6 +459,9 @@ var (
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+
+	// Packer configuration errors.
+	ErrMissingPackerBasePath = errors.New("packer base path is required")
 
 	// Packer-specific subsection errors.
 	ErrInvalidPackerCommand  = errors.New("invalid packer command")
@@ -518,6 +561,7 @@ var (
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
 	ErrOpenFile            = errors.New("failed to open file")
+	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")
 	ErrRemoveDirectory     = errors.New("failed to remove directory")
 	ErrSetPermissions      = errors.New("failed to set permissions")
@@ -560,6 +604,9 @@ var (
 	ErrNoFileMatchPattern   = errors.New("no files matching patterns found")
 	ErrMaxImportDepth       = errors.New("maximum import depth reached")
 	ErrNoValidAbsolutePaths = errors.New("no valid absolute paths found")
+	ErrDownloadRemoteConfig = errors.New("failed to download remote config")
+	ErrMockImportFailure    = errors.New("mock error: simulated import failure")
+	ErrProcessNestedImports = errors.New("failed to process nested imports")
 
 	// Profiler-related errors.
 	ErrProfilerStart           = errors.New("profiler start failed")
@@ -673,26 +720,27 @@ var (
 	ErrInvalidLogoutOption                  = errors.New("invalid logout option")
 
 	// Backend provisioning errors.
-	ErrBucketRequired       = errors.New("backend.bucket is required")
-	ErrRegionRequired       = errors.New("backend.region is required")
-	ErrBackendNotFound      = errors.New("backend configuration not found")
-	ErrCreateNotImplemented = errors.New("create not implemented for backend type")
-	ErrDeleteNotImplemented = errors.New("delete not implemented for backend type")
-	ErrProvisionerFailed    = errors.New("provisioner failed")
-	ErrLoadAWSConfig        = errors.New("failed to load AWS config")
-	ErrCheckBucketExist     = errors.New("failed to check bucket existence")
-	ErrCreateBucket         = errors.New("failed to create bucket")
-	ErrApplyBucketDefaults  = errors.New("failed to apply bucket defaults")
-	ErrEnableVersioning     = errors.New("failed to enable versioning")
-	ErrEnableEncryption     = errors.New("failed to enable encryption")
-	ErrBlockPublicAccess    = errors.New("failed to block public access")
-	ErrApplyTags            = errors.New("failed to apply tags")
-	ErrForceRequired        = errors.New("--force flag required for backend deletion")
-	ErrBucketNotEmpty       = errors.New("bucket contains objects and cannot be deleted")
-	ErrStateFilesExist      = errors.New("bucket contains terraform state files")
-	ErrDeleteObjects        = errors.New("failed to delete objects from bucket")
-	ErrDeleteBucket         = errors.New("failed to delete bucket")
-	ErrListObjects          = errors.New("failed to list bucket objects")
+	ErrBucketRequired            = errors.New("backend.bucket is required")
+	ErrRegionRequired            = errors.New("backend.region is required")
+	ErrBackendNotFound           = errors.New("backend configuration not found")
+	ErrProvisioningNotConfigured = errors.New("provisioning not configured")
+	ErrCreateNotImplemented      = errors.New("create not implemented for backend type")
+	ErrDeleteNotImplemented      = errors.New("delete not implemented for backend type")
+	ErrProvisionerFailed         = errors.New("provisioner failed")
+	ErrLoadAWSConfig             = errors.New("failed to load AWS config")
+	ErrCheckBucketExist          = errors.New("failed to check bucket existence")
+	ErrCreateBucket              = errors.New("failed to create bucket")
+	ErrApplyBucketDefaults       = errors.New("failed to apply bucket defaults")
+	ErrEnableVersioning          = errors.New("failed to enable versioning")
+	ErrEnableEncryption          = errors.New("failed to enable encryption")
+	ErrBlockPublicAccess         = errors.New("failed to block public access")
+	ErrApplyTags                 = errors.New("failed to apply tags")
+	ErrForceRequired             = errors.New("--force flag required for backend deletion")
+	ErrBucketNotEmpty            = errors.New("bucket contains objects and cannot be deleted")
+	ErrStateFilesExist           = errors.New("bucket contains terraform state files")
+	ErrDeleteObjects             = errors.New("failed to delete objects from bucket")
+	ErrDeleteBucket              = errors.New("failed to delete bucket")
+	ErrListObjects               = errors.New("failed to list bucket objects")
 
 	// Component path resolution errors.
 	ErrPathNotInComponentDir  = errors.New("path is not within Atmos component directories")
@@ -707,10 +755,11 @@ var (
 	ErrNoOptionsAvailable          = errors.New("no options available")
 
 	// Locals-related errors.
-	ErrLocalsInvalidType       = errors.New("locals must be a map")
-	ErrLocalsCircularDep       = errors.New("circular dependency in locals")
-	ErrLocalsDependencyExtract = errors.New("failed to extract dependencies for local")
-	ErrLocalsResolution        = errors.New("failed to resolve local")
+	ErrLocalsInvalidType        = errors.New("locals must be a map")
+	ErrLocalsCircularDep        = errors.New("circular dependency in locals")
+	ErrLocalsDependencyExtract  = errors.New("failed to extract dependencies for local")
+	ErrLocalsResolution         = errors.New("failed to resolve local")
+	ErrLocalsYamlFunctionFailed = errors.New("failed to process YAML function in local")
 
 	// Source provisioner errors.
 	ErrSourceProvision       = errors.New("source provisioning failed")

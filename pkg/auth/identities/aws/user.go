@@ -656,6 +656,13 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 		env[envVar.Key] = envVar.Value
 	}
 
+	// Include region ONLY if explicitly configured (not default fallback).
+	// This enables users to reference AWS_REGION via !env in stack configurations.
+	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
+		env["AWS_REGION"] = r
+		env["AWS_DEFAULT_REGION"] = r
+	}
+
 	// Add environment variables from identity config.
 	for _, envVar := range i.config.Env {
 		env[envVar.Key] = envVar.Value

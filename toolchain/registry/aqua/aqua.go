@@ -187,10 +187,12 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 
 // versionOverride holds version override data from Aqua registry.
 type versionOverride struct {
-	VersionConstraint string `yaml:"version_constraint"`
-	Asset             string `yaml:"asset"`
-	URL               string `yaml:"url"` // Alternative to Asset for http type tools.
-	Format            string `yaml:"format"`
+	VersionConstraint string                  `yaml:"version_constraint"`
+	Asset             string                  `yaml:"asset"`
+	URL               string                  `yaml:"url"` // Alternative to Asset for http type tools.
+	Format            string                  `yaml:"format"`
+	Replacements      map[string]string       `yaml:"replacements"`
+	Overrides         []registry.AquaOverride `yaml:"overrides"`
 	Files             []struct {
 		Name string `yaml:"name"`
 	} `yaml:"files"`
@@ -210,17 +212,35 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	if len(override.Files) > 0 {
 		tool.Name = override.Files[0].Name
 	}
-	log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
+	// Apply replacements from version override (replaces base replacements).
+	if len(override.Replacements) > 0 {
+		tool.Replacements = override.Replacements
+	}
+	// Apply overrides from version override (replaces base overrides).
+	if len(override.Overrides) > 0 {
+		tool.Overrides = convertAquaOverrides(override.Overrides)
+	}
+	log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format, "replacements", tool.Replacements)
 }
 
 // registryPackage holds package data from Aqua registry file.
+// This struct must include all fields that need to be preserved when resolving version overrides.
 type registryPackage struct {
-	Type             string            `yaml:"type"`
-	RepoOwner        string            `yaml:"repo_owner"`
-	RepoName         string            `yaml:"repo_name"`
-	URL              string            `yaml:"url"`
-	Description      string            `yaml:"description"`
-	VersionOverrides []versionOverride `yaml:"version_overrides"`
+	Name             string                  `yaml:"name"` // Package name (e.g., "kubernetes/kubernetes/kubectl").
+	Type             string                  `yaml:"type"`
+	RepoOwner        string                  `yaml:"repo_owner"`
+	RepoName         string                  `yaml:"repo_name"`
+	Asset            string                  `yaml:"asset"` // Used by github_release types.
+	URL              string                  `yaml:"url"`   // Used by http types.
+	Format           string                  `yaml:"format"`
+	BinaryName       string                  `yaml:"binary_name"`
+	Description      string                  `yaml:"description"`
+	VersionPrefix    string                  `yaml:"version_prefix"`
+	Replacements     map[string]string       `yaml:"replacements"`
+	Overrides        []registry.AquaOverride `yaml:"overrides"`
+	Files            []registry.File         `yaml:"files"`
+	VersionOverrides []versionOverride       `yaml:"version_overrides"`
+	SupportedEnvs    []string                `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux").
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
@@ -236,13 +256,26 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		return nil, err
 	}
 
+	// Determine asset pattern: prefer Asset (github_release), fall back to URL (http type).
+	asset := pkgDef.Asset
+	if asset == "" {
+		asset = pkgDef.URL
+	}
+
 	tool := &registry.Tool{
-		Name:      pkgDef.RepoName,
-		Type:      pkgDef.Type,
-		RepoOwner: pkgDef.RepoOwner,
-		RepoName:  pkgDef.RepoName,
-		Asset:     pkgDef.URL,
-		SourceURL: sourceURL,
+		Name:          resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
+		Type:          pkgDef.Type,
+		RepoOwner:     pkgDef.RepoOwner,
+		RepoName:      pkgDef.RepoName,
+		Asset:         asset,
+		Format:        pkgDef.Format,
+		BinaryName:    pkgDef.BinaryName,
+		VersionPrefix: pkgDef.VersionPrefix,
+		Replacements:  pkgDef.Replacements,
+		Overrides:     convertAquaOverrides(pkgDef.Overrides),
+		Files:         pkgDef.Files,
+		SourceURL:     sourceURL,
+		SupportedEnvs: pkgDef.SupportedEnvs,
 	}
 
 	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version)
@@ -381,19 +414,27 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 	var aquaRegistry registry.AquaRegistryFile
 	if err := yaml.Unmarshal(data, &aquaRegistry); err == nil && len(aquaRegistry.Packages) > 0 {
 		pkg := aquaRegistry.Packages[0]
+		// Determine asset pattern: prefer Asset (github_release), fall back to URL (http type).
+		asset := pkg.Asset
+		if asset == "" {
+			asset = pkg.URL
+		}
+
 		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
-			Name:          pkg.BinaryName,
+			Name:          resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
 			RepoOwner:     pkg.RepoOwner,
 			RepoName:      pkg.RepoName,
-			Asset:         pkg.URL,
+			Asset:         asset,
 			Format:        pkg.Format,
 			Type:          pkg.Type,
 			BinaryName:    pkg.BinaryName,
 			VersionPrefix: pkg.VersionPrefix,
-		}
-		if pkg.BinaryName == "" {
-			tool.Name = pkg.RepoName
+			// Copy Aqua-specific fields for nested file extraction and platform overrides.
+			Files:         pkg.Files,
+			Replacements:  pkg.Replacements,
+			Overrides:     convertAquaOverrides(pkg.Overrides),
+			SupportedEnvs: pkg.SupportedEnvs,
 		}
 		return tool, nil
 	}
@@ -405,6 +446,29 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 	}
 
 	return nil, fmt.Errorf("%w: no tools or packages found in registry file", registry.ErrNoPackagesInRegistry)
+}
+
+// convertAquaOverrides converts Aqua overrides to the internal Override format.
+func convertAquaOverrides(aquaOverrides []registry.AquaOverride) []registry.Override {
+	if len(aquaOverrides) == 0 {
+		return nil
+	}
+	overrides := make([]registry.Override, len(aquaOverrides))
+	for i, ao := range aquaOverrides {
+		overrides[i] = registry.Override{
+			GOOS:         ao.GOOS,
+			GOARCH:       ao.GOARCH,
+			Asset:        ao.Asset,
+			Format:       ao.Format,
+			Files:        ao.Files,
+			Replacements: ao.Replacements,
+		}
+		// If URL is set in Aqua override, use it as Asset (Aqua uses url instead of asset).
+		if ao.URL != "" {
+			overrides[i].Asset = ao.URL
+		}
+	}
+	return overrides
 }
 
 // BuildAssetURL constructs the download URL for a tool version.
@@ -434,18 +498,23 @@ func (ar *AquaRegistry) BuildAssetURL(tool *registry.Tool, version string) (stri
 }
 
 // resolveVersionStrings determines the release version and semver based on tool config.
+// Following Aqua behavior: version_prefix defaults to empty, not "v".
+// Templates use {{trimV .Version}} or {{.SemVer}} when they need the version without prefix.
 func resolveVersionStrings(tool *registry.Tool, version string) (releaseVersion, semVer string) {
+	// Use version_prefix only if explicitly set in registry definition.
+	// This matches Aqua's behavior where version_prefix defaults to empty.
 	prefix := tool.VersionPrefix
-	if prefix == "" {
-		prefix = versionPrefix
-	}
 
 	releaseVersion = version
-	if !strings.HasPrefix(releaseVersion, prefix) {
+	if prefix != "" && !strings.HasPrefix(releaseVersion, prefix) {
 		releaseVersion = prefix + releaseVersion
 	}
 
-	semVer = strings.TrimPrefix(releaseVersion, prefix)
+	// SemVer is the version without any prefix.
+	semVer = version
+	if prefix != "" {
+		semVer = strings.TrimPrefix(releaseVersion, prefix)
+	}
 	return releaseVersion, semVer
 }
 
@@ -498,4 +567,37 @@ func executeAssetTemplate(assetTemplate string, data map[string]string) (string,
 	}
 
 	return assetName.String(), nil
+}
+
+// extractBinaryNameFromPackageName extracts the binary name from an Aqua package name.
+// Aqua package names follow the pattern "owner/repo" or "owner/repo/binary".
+// For example: "kubernetes/kubernetes/kubectl" -> "kubectl"
+// For example: "hashicorp/terraform" -> "" (caller should fall back to repo_name).
+func extractBinaryNameFromPackageName(packageName string) string {
+	if packageName == "" {
+		return ""
+	}
+	parts := strings.Split(packageName, "/")
+	// If there are more than 2 segments, the last one is the binary name.
+	// E.g., "kubernetes/kubernetes/kubectl" has 3 parts, so "kubectl" is the binary.
+	if len(parts) > 2 {
+		return parts[len(parts)-1]
+	}
+	// For 2-segment names like "hashicorp/terraform", return empty
+	// so the caller falls back to repo_name.
+	return ""
+}
+
+// resolveBinaryName determines the binary name using Aqua's resolution order:
+// 1. Use explicit binary_name if set
+// 2. Extract last segment from package name (e.g., "kubectl" from "kubernetes/kubernetes/kubectl")
+// 3. Fall back to repo_name.
+func resolveBinaryName(binaryName, packageName, repoName string) string {
+	if binaryName != "" {
+		return binaryName
+	}
+	if name := extractBinaryNameFromPackageName(packageName); name != "" {
+		return name
+	}
+	return repoName
 }

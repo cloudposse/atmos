@@ -21,6 +21,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 
 	// Import backend provisioner to register S3 provisioner.
 	_ "github.com/cloudposse/atmos/pkg/provisioner/backend"
@@ -28,6 +29,8 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	// Import workdir provisioner to register workdir provisioner.
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
+	// Import generate package for early file generation.
+	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
 	"github.com/cloudposse/atmos/toolchain"
 )
@@ -208,12 +211,33 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
-	// Check if the component (or base component) exists as a Terraform component.
+	// Get component path early - needed for both auto-generation and path validation.
 	componentPath, err := u.GetComponentPath(&atmosConfig, "terraform", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return fmt.Errorf("failed to resolve component path: %w", err)
 	}
 
+	// Auto-generate files BEFORE path validation when the following conditions hold.
+	// 1. auto_generate_files is enabled.
+	// 2. Component has a generate section.
+	// 3. Not in dry-run mode (to avoid filesystem modifications).
+	// This allows generating entire components from stack configuration.
+	if atmosConfig.Components.Terraform.AutoGenerateFiles && !info.DryRun { //nolint:nestif
+		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		if generateSection != nil {
+			// Ensure component directory exists for file generation.
+			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+			}
+
+			// Generate files before path validation.
+			if genErr := generateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
+				return errors.Join(errUtils.ErrFileOperation, genErr)
+			}
+		}
+	}
+
+	// Check if the component (or base component) exists as a Terraform component.
 	componentPathExists, err := u.IsDirectory(componentPath)
 	if err != nil || !componentPathExists {
 		// Check if component has source configured for JIT provisioning.
@@ -365,6 +389,12 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		return err
 	}
 
+	// Generate files from the generate section when auto_generate_files is enabled.
+	err = generateFilesForComponent(&atmosConfig, &info, workingDir)
+	if err != nil {
+		return err
+	}
+
 	err = generateProviderOverrides(&atmosConfig, &info, workingDir)
 	if err != nil {
 		return err
@@ -429,6 +459,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	if appendUserAgent != "" {
 		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("TF_APPEND_USER_AGENT=%s", appendUserAgent))
 	}
+
+	// Set TF_PLUGIN_CACHE_DIR for Terraform provider caching.
+	pluginCacheEnvList := configurePluginCache(&atmosConfig)
+	info.ComponentEnvList = append(info.ComponentEnvList, pluginCacheEnvList...)
 
 	// Print ENV vars if they are found in the component's stack config.
 	if len(info.ComponentEnvList) > 0 {
@@ -756,4 +790,79 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	return nil
+}
+
+// configurePluginCache returns environment variables for Terraform plugin caching.
+// It checks if the user has already set TF_PLUGIN_CACHE_DIR (via OS env or global env),
+// and if not, configures automatic caching based on atmosConfig.Components.Terraform.PluginCache.
+func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
+	// Check both OS env and global env (atmos.yaml env: section) for user override.
+	// If user has TF_PLUGIN_CACHE_DIR set to a valid path, do nothing - they manage their own cache.
+	// Invalid values (empty string or "/") are ignored with a warning, and we use our default.
+	if userCacheDir := getValidUserPluginCacheDir(atmosConfig); userCacheDir != "" {
+		log.Debug("TF_PLUGIN_CACHE_DIR already set, skipping automatic plugin cache configuration")
+		return nil
+	}
+
+	if !atmosConfig.Components.Terraform.PluginCache {
+		return nil
+	}
+
+	pluginCacheDir := atmosConfig.Components.Terraform.PluginCacheDir
+
+	// Use XDG cache directory if no custom path configured.
+	if pluginCacheDir == "" {
+		cacheDir, err := xdg.GetXDGCacheDir("terraform/plugins", xdg.DefaultCacheDirPerm)
+		if err != nil {
+			log.Warn("Failed to create plugin cache directory", "error", err)
+			return nil
+		}
+		pluginCacheDir = cacheDir
+	}
+
+	if pluginCacheDir == "" {
+		return nil
+	}
+
+	return []string{
+		fmt.Sprintf("TF_PLUGIN_CACHE_DIR=%s", pluginCacheDir),
+		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
+	}
+}
+
+// getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
+// Returns the valid path if set, or empty string if not set or invalid.
+// Invalid values (empty string or "/") are logged as warnings.
+func getValidUserPluginCacheDir(atmosConfig *schema.AtmosConfiguration) string {
+	// Check OS environment first.
+	if osEnvDir, inOsEnv := os.LookupEnv("TF_PLUGIN_CACHE_DIR"); inOsEnv {
+		if isValidPluginCacheDir(osEnvDir, "environment variable") {
+			return osEnvDir
+		}
+		return ""
+	}
+
+	// Check global env section in atmos.yaml.
+	if globalEnvDir, inGlobalEnv := atmosConfig.Env["TF_PLUGIN_CACHE_DIR"]; inGlobalEnv {
+		if isValidPluginCacheDir(globalEnvDir, "atmos.yaml env section") {
+			return globalEnvDir
+		}
+		return ""
+	}
+
+	return ""
+}
+
+// isValidPluginCacheDir checks if a plugin cache directory path is valid.
+// Invalid paths (empty string or "/") are logged as warnings and return false.
+func isValidPluginCacheDir(path, source string) bool {
+	if path == "" {
+		log.Warn("TF_PLUGIN_CACHE_DIR is empty, ignoring and using Atmos default", "source", source)
+		return false
+	}
+	if path == "/" {
+		log.Warn("TF_PLUGIN_CACHE_DIR is set to root '/', ignoring and using Atmos default", "source", source)
+		return false
+	}
+	return true
 }

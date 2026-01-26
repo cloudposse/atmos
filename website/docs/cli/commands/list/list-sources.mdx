@@ -1,0 +1,167 @@
+---
+title: atmos list sources
+sidebar_label: sources
+sidebar_class_name: command
+id: sources
+description: List all components with source configuration across all component types
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+
+<Intro>
+Use this command to list all components with `source` configuration across all component types (Terraform, Helmfile, Packer) in a unified view. This provides a single table showing which components can be vendored using the source provisioner.
+</Intro>
+
+<ActionCard title="Source-Based Version Pinning">
+    Learn how to configure the `source` field for per-environment version control.
+    <div>
+      <PrimaryCTA to="/design-patterns/version-management/source-based-versioning">Design Pattern</PrimaryCTA>
+    </div>
+</ActionCard>
+
+<Screengrab title="atmos list sources --help" slug="atmos-list-sources--help" />
+
+## Usage
+
+```shell
+atmos list sources [component] [flags]
+```
+
+List all components with source configuration across all stacks:
+
+```shell
+atmos list sources
+```
+
+Filter to a specific stack:
+
+```shell
+atmos list sources --stack dev
+```
+
+Filter to a specific component across all stacks:
+
+```shell
+atmos list sources vpc
+```
+
+:::tip
+Run `atmos list sources --help` to see all available options.
+:::
+
+## Description
+
+The `list sources` command provides a unified view of all components that have `source` configured, regardless of component type. Unlike the type-specific commands (`atmos terraform source list`, `atmos helmfile source list`, `atmos packer source list`), this command shows all types together with a "Type" column.
+
+This helps identify:
+- All components configured for JIT vendoring across your entire infrastructure
+- The source URIs and versions for each component
+- Which component types (terraform, helmfile, packer) have source configurations
+- Components that may need to be vendored before use
+
+## Examples
+
+### List All Sources Across All Stacks
+
+```shell
+atmos list sources
+```
+
+Example output:
+```
+STACK              TYPE        COMPONENT    URI                                                           VERSION
+plat-ue2-dev       terraform   eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
+plat-ue2-dev       terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-ue2-dev       helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx               1.0.0
+plat-ue2-prod      terraform   eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.451.0
+plat-ue2-prod      terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
+```
+
+### List Sources in a Specific Stack
+
+```shell
+atmos list sources --stack plat-ue2-dev
+```
+
+When filtering by stack, the Stack column is omitted:
+```
+TYPE        COMPONENT    URI                                                           VERSION
+terraform   eks          github.com/cloudposse/terraform-aws-components//modules/eks   1.450.0
+terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+helmfile    nginx        github.com/cloudposse/helmfile-components//charts/nginx               1.0.0
+```
+
+### List Sources for a Specific Component
+
+```shell
+atmos list sources vpc
+```
+
+Shows the component across all stacks where it has source configured:
+```
+STACK              TYPE        COMPONENT    URI                                                           VERSION
+plat-ue2-dev       terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+plat-ue2-prod      terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.451.0
+plat-ue2-staging   terraform   vpc          github.com/cloudposse/terraform-aws-components//modules/vpc   1.450.0
+```
+
+### Output in Different Formats
+
+```shell
+# JSON format
+atmos list sources --format json
+
+# YAML format
+atmos list sources --format yaml
+
+# CSV format
+atmos list sources --format csv
+```
+
+## Arguments
+
+<dl>
+  <dt>`component` <em>(optional)</em></dt>
+  <dd>Filter results to a specific component name or folder (`metadata.component`). When provided, only shows matching sources across all stacks.</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--stack` / `-s` <em>(optional)</em></dt>
+  <dd>Filter by stack name. When provided, only shows sources within that stack and omits the Stack column from output.<br/>Environment variable: `ATMOS_STACK`</dd>
+
+  <dt>`--format` / `-f`</dt>
+  <dd>Output format: `table`, `json`, `yaml`, `csv`, `tsv` (default: `table`).<br/>Environment variable: `ATMOS_FORMAT`</dd>
+</dl>
+
+## Dynamic Columns
+
+The command automatically adjusts columns based on context:
+
+| Context | Columns Shown |
+|---------|---------------|
+| All stacks | Stack, Type, Component, Folder*, URI, Version |
+| Single stack (`--stack`) | Type, Component, Folder*, URI, Version |
+
+*The Folder column only appears when any component uses `metadata.component` to specify a different folder name than the component instance name.
+
+## Related Commands
+
+For type-specific source listing:
+
+- [`atmos terraform source list`](/cli/commands/terraform/source/list) - List only Terraform components with source
+- [`atmos helmfile source list`](/cli/commands/helmfile/source/list) - List only Helmfile components with source
+- [`atmos packer source list`](/cli/commands/packer/source/list) - List only Packer components with source
+
+For source management:
+
+- [`atmos terraform source pull`](/cli/commands/terraform/source/pull) - Vendor a Terraform component
+- [`atmos terraform source describe`](/cli/commands/terraform/source/describe) - View source configuration details
+
+## See Also
+
+- [Source-Based Version Pinning](/design-patterns/version-management/source-based-versioning) - Design pattern for per-environment version control
+- [`atmos list components`](/cli/commands/list/components) - List all components

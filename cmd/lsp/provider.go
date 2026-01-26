@@ -46,6 +46,11 @@ func (p *Provider) GetAliases() []internal.CommandAlias {
 	return nil
 }
 
+// IsExperimental returns whether this command is experimental.
+func (p *Provider) IsExperimental() bool {
+	return true
+}
+
 func init() {
 	// Register this command provider with the command registry.
 	internal.Register(&Provider{})

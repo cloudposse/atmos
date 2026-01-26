@@ -2,6 +2,7 @@ package exec
 
 import (
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -25,6 +26,187 @@ import (
 
 // Mutex to serialize writes to importsConfig maps during parallel import processing.
 var importsConfigLock = &sync.Mutex{}
+
+// extractLocalsResult holds the results of parsing raw YAML and extracting locals.
+type extractLocalsResult struct {
+	locals    map[string]any // Resolved locals.
+	settings  map[string]any // Settings section (for template context).
+	vars      map[string]any // Vars section (for template context).
+	env       map[string]any // Env section (for template context).
+	hasLocals bool           // Whether any locals section exists in the file (including empty locals).
+}
+
+// extractLocalsFromRawYAML parses raw YAML content and extracts/resolves file-scoped locals.
+// This function is called BEFORE template processing to make locals available during template execution.
+// The raw YAML may contain unresolved templates like {{ .locals.X }}, which YAML treats as strings.
+// The locals resolver handles resolving self-references between locals.
+// Returns the resolved locals and other sections (settings, vars, env) that should be available during template processing.
+//
+// Locals are extracted and merged in order of specificity:
+// 1. Global locals (root level)
+// 2. Section-specific locals (terraform, helmfile, packer sections)
+//
+// Section-specific locals inherit from and can override global locals.
+// All resolved locals are flattened into a single map for template processing.
+func extractLocalsFromRawYAML(atmosConfig *schema.AtmosConfiguration, yamlContent string, filePath string) (*extractLocalsResult, error) {
+	defer perf.Track(atmosConfig, "exec.extractLocalsFromRawYAML")()
+
+	// Parse raw YAML to extract the structure.
+	// YAML treats template expressions like {{ .locals.X }} as plain strings,
+	// so parsing succeeds even with unresolved templates.
+	// Use Atmos's YAML unmarshaling which properly handles custom tags like !terraform.state
+	// by converting them to strings (e.g., "!terraform.state component .output").
+	// Create a default config if nil (UnmarshalYAMLFromFile requires non-nil config).
+	configToUse := atmosConfig
+	if configToUse == nil {
+		configToUse = &schema.AtmosConfiguration{}
+	}
+	rawConfig, err := u.UnmarshalYAMLFromFile[map[string]any](configToUse, yamlContent, filePath)
+	if err != nil {
+		// Provide a helpful hint if the file might contain Go template directives
+		// that aren't valid YAML. Files with .yaml.tmpl extension are processed
+		// as templates first, which allows non-YAML-valid Go template syntax.
+		hint := ""
+		if !strings.HasSuffix(filePath, u.TemplateExtension) {
+			hint = " (hint: if this file contains Go template directives, rename it to .yaml.tmpl)"
+		}
+		return nil, fmt.Errorf("%w: failed to parse YAML for locals extraction%s: %w", errUtils.ErrInvalidStackManifest, hint, err)
+	}
+
+	if rawConfig == nil {
+		return &extractLocalsResult{}, nil
+	}
+
+	// Use ProcessStackLocals which handles global and section-level scopes.
+	// Note: At this early stage, stack name is not yet determined, so we pass empty string.
+	// YAML functions that require stack context won't work here, but Go templates will.
+	localsCtx, err := ProcessStackLocals(atmosConfig, rawConfig, filePath, "")
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to process stack locals: %w", errUtils.ErrInvalidStackManifest, err)
+	}
+
+	return buildLocalsResult(rawConfig, localsCtx), nil
+}
+
+// buildLocalsResult builds an extractLocalsResult from raw config and resolved locals context.
+func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extractLocalsResult {
+	result := &extractLocalsResult{
+		locals: localsCtx.MergeForTemplateContext(),
+	}
+
+	// Detect locals section presence (including empty locals).
+	// This allows empty locals: {} to still enable template context.
+	if _, ok := rawConfig[cfg.LocalsSectionName]; ok {
+		result.hasLocals = true
+	}
+	if localsCtx.HasTerraformLocals || localsCtx.HasHelmfileLocals || localsCtx.HasPackerLocals {
+		result.hasLocals = true
+	}
+
+	// Ensure locals map is never nil when hasLocals is true.
+	if result.hasLocals && result.locals == nil {
+		result.locals = make(map[string]any)
+	}
+
+	// Extract settings, vars, env sections for template context.
+	if settings, ok := rawConfig[cfg.SettingsSectionName].(map[string]any); ok {
+		result.settings = settings
+	}
+	if vars, ok := rawConfig[cfg.VarsSectionName].(map[string]any); ok {
+		result.vars = vars
+	}
+	if env, ok := rawConfig[cfg.EnvSectionName].(map[string]any); ok {
+		result.env = env
+	}
+
+	return result
+}
+
+// extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
+// Returns the updated context and any error encountered during locals extraction.
+// Note: The "locals" key in context is reserved for file-scoped locals and will override
+// any user-provided "locals" key in the import context.
+// Settings, vars, and env sections are also added to the context so templates can reference them.
+// For template files (.tmpl), YAML parse errors are logged and the function continues
+// without locals, since template files may contain Go template syntax that isn't valid YAML
+// until after template processing.
+func extractAndAddLocalsToContext(
+	atmosConfig *schema.AtmosConfiguration,
+	yamlContent string,
+	filePath string,
+	relativeFilePath string,
+	context map[string]any,
+) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.extractAndAddLocalsToContext")()
+
+	// Enforce file-scoped locals: clear any inherited locals from parent context.
+	// Locals are file-scoped and should NOT inherit across file boundaries.
+	// This ensures that each file only has access to its own locals.
+	if context != nil {
+		delete(context, "locals")
+	}
+
+	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
+	if localsErr != nil {
+		// For template files (.tmpl), YAML parse errors are expected since the raw content
+		// may contain Go template syntax that isn't valid YAML until after processing.
+		// Log the error and continue without locals - template processing will happen next.
+		if strings.HasSuffix(filePath, u.TemplateExtension) {
+			log.Trace("Skipping locals extraction for template file with invalid YAML", "file", relativeFilePath, "error", localsErr)
+			return context, nil
+		}
+		// Circular dependencies in locals are a stack misconfiguration error.
+		// Return a helpful error with hints on how to fix it.
+		if stderrors.Is(localsErr, errUtils.ErrLocalsCircularDep) {
+			return context, errUtils.Build(errUtils.ErrLocalsCircularDep).
+				WithCause(localsErr).
+				WithContext("file", relativeFilePath).
+				WithHintf("Fix the circular dependency in '%s'", relativeFilePath).
+				WithHint("Ensure locals don't reference each other in a cycle").
+				WithHintf("Use 'atmos describe locals --stack %s' to inspect locals", relativeFilePath).
+				WithExitCode(1).
+				Err()
+		}
+		return context, localsErr
+	}
+
+	// Only modify context if a locals section exists in the file.
+	// This preserves the original behavior where files without locals don't trigger
+	// template processing (see the len(context) > 0 check in ProcessBaseStackConfig).
+	// We check hasLocals instead of len(locals) to support empty locals: {} sections,
+	// which should still enable template context.
+	if !extractResult.hasLocals {
+		return context, nil
+	}
+
+	// Initialize context if nil.
+	if context == nil {
+		context = make(map[string]any)
+	}
+
+	// Add settings, vars, env from the file to the context.
+	// These allow templates in the file (including locals) to reference these sections.
+	// This enables patterns like:
+	//   settings:
+	//     substage: dev
+	//   locals:
+	//     domain: '{{ .settings.substage }}.example.com'
+	if extractResult.settings != nil {
+		context[cfg.SettingsSectionName] = extractResult.settings
+	}
+	if extractResult.vars != nil {
+		context[cfg.VarsSectionName] = extractResult.vars
+	}
+	if extractResult.env != nil {
+		context[cfg.EnvSectionName] = extractResult.env
+	}
+
+	// Add resolved locals to the template context.
+	context["locals"] = extractResult.locals
+	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
+
+	return context, nil
+}
 
 // stackProcessResult holds the result of processing a single stack in parallel.
 type stackProcessResult struct {
@@ -415,6 +597,29 @@ func processYAMLConfigFileWithContextInternal(
 	}
 	if stackYamlConfig == "" {
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
+	}
+
+	// Extract and resolve file-scoped locals before template processing.
+	// Locals can reference other locals using {{ .locals.X }} syntax.
+	// The resolved locals are added to the template context so they're available during template processing.
+	// This enables patterns like:
+	//   locals:
+	//     stage: prod
+	//     name_prefix: "{{ .locals.stage }}-app"
+	//   components:
+	//     terraform:
+	//       myapp:
+	//         vars:
+	//           name: "{{ .locals.name_prefix }}"
+	if !skipTemplatesProcessingInImports {
+		var localsErr error
+		context, localsErr = extractAndAddLocalsToContext(atmosConfig, stackYamlConfig, filePath, relativeFilePath, context)
+		if localsErr != nil {
+			if mergeContext != nil {
+				return nil, nil, nil, nil, nil, nil, nil, nil, mergeContext.FormatError(localsErr, fmt.Sprintf("stack manifest '%s'", relativeFilePath))
+			}
+			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("stack manifest '%s': %w", relativeFilePath, localsErr)
+		}
 	}
 
 	stackManifestTemplatesProcessed := stackYamlConfig
@@ -1263,14 +1468,17 @@ func processBaseComponentConfigInternal(
 	var baseComponentEnv map[string]any
 	var baseComponentAuth map[string]any
 	var baseComponentDependencies map[string]any
+	var baseComponentLocals map[string]any
 	var baseComponentProviders map[string]any
 	var baseComponentHooks map[string]any
+	var baseComponentGenerate map[string]any
 	var baseComponentCommand string
 	var baseComponentBackendType string
 	var baseComponentBackendSection map[string]any
 	var baseComponentRemoteStateBackendType string
 	var baseComponentRemoteStateBackendSection map[string]any
 	var baseComponentSourceSection map[string]any
+	var baseComponentProvisionSection map[string]any
 	var baseComponentMap map[string]any
 	var ok bool
 
@@ -1395,6 +1603,13 @@ func processBaseComponentConfigInternal(
 			}
 		}
 
+		if baseComponentLocalsSection, baseComponentLocalsSectionExist := baseComponentMap[cfg.LocalsSectionName]; baseComponentLocalsSectionExist {
+			baseComponentLocals, ok = baseComponentLocalsSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w: '%s.locals' in the stack '%s'", errUtils.ErrInvalidComponentLocals, baseComponent, stack)
+			}
+		}
+
 		if baseComponentProvidersSection, baseComponentProvidersSectionExist := baseComponentMap[cfg.ProvidersSectionName]; baseComponentProvidersSectionExist {
 			baseComponentProviders, ok = baseComponentProvidersSection.(map[string]any)
 			if !ok {
@@ -1406,6 +1621,13 @@ func processBaseComponentConfigInternal(
 			baseComponentHooks, ok = baseComponentHooksSection.(map[string]any)
 			if !ok {
 				return fmt.Errorf("%w '%s.hooks' in the stack '%s'", errUtils.ErrInvalidComponentHooks, baseComponent, stack)
+			}
+		}
+
+		if baseComponentGenerateSection, baseComponentGenerateSectionExist := baseComponentMap[cfg.GenerateSectionName]; baseComponentGenerateSectionExist {
+			baseComponentGenerate, ok = baseComponentGenerateSection.(map[string]any)
+			if !ok {
+				return fmt.Errorf("%w '%s.generate' in the stack '%s'", errUtils.ErrInvalidComponentGenerate, baseComponent, stack)
 			}
 		}
 
@@ -1445,6 +1667,17 @@ func processBaseComponentConfigInternal(
 				baseComponentSourceSection, ok = i.(map[string]any)
 				if !ok {
 					return fmt.Errorf("%w '%s.source' in the stack '%s'", errUtils.ErrInvalidComponentSource, baseComponent, stack)
+				}
+			}
+		}
+
+		// Base component provision (when source inheritance is enabled).
+		// Provision follows the same inheritance rules as source.
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			if i, ok2 := baseComponentMap[cfg.ProvisionSectionName]; ok2 {
+				baseComponentProvisionSection, ok = i.(map[string]any)
+				if !ok {
+					return fmt.Errorf("%w '%s.provision' in the stack '%s'", errUtils.ErrInvalidComponentProvision, baseComponent, stack)
 				}
 			}
 		}
@@ -1496,6 +1729,13 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentDependencies = merged
 
+		// Base component `locals` (for template processing, not passed to terraform/helmfile).
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentLocals, baseComponentLocals})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentLocals = merged
+
 		// Base component `metadata` (when metadata inheritance is enabled).
 		// Merge all metadata fields except 'inherits' and 'type'.
 		// - 'inherits' is the meta-property defining inheritance, not inherited itself.
@@ -1534,6 +1774,13 @@ func processBaseComponentConfigInternal(
 		}
 		baseComponentConfig.BaseComponentHooks = merged
 
+		// Base component `generate`
+		merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentGenerate, baseComponentGenerate})
+		if err != nil {
+			return err
+		}
+		baseComponentConfig.BaseComponentGenerate = merged
+
 		// Base component `command`
 		baseComponentConfig.BaseComponentCommand = baseComponentCommand
 
@@ -1564,6 +1811,16 @@ func processBaseComponentConfigInternal(
 				return err
 			}
 			baseComponentConfig.BaseComponentSourceSection = merged
+		}
+
+		// Base component `provision` (when source inheritance is enabled).
+		// Provision follows the same inheritance rules as source.
+		if atmosConfig.Stacks.Inherit.IsSourceInheritanceEnabled() {
+			merged, err = m.Merge(atmosConfig, []map[string]any{baseComponentConfig.BaseComponentProvisionSection, baseComponentProvisionSection})
+			if err != nil {
+				return err
+			}
+			baseComponentConfig.BaseComponentProvisionSection = merged
 		}
 
 		baseComponentConfig.ComponentInheritanceChain = u.UniqueStrings(append([]string{baseComponent}, baseComponentConfig.ComponentInheritanceChain...))

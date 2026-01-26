@@ -19,6 +19,18 @@ This repository uses git worktrees for parallel development. When working in a w
 
 **For Task agents:** When searching for files, always use the current working directory (`.`) or relative paths. Never construct absolute paths that might escape the worktree.
 
+## Concurrent Sessions (MANDATORY)
+
+Multiple Claude sessions may be working on the same branch or worktree simultaneously. To avoid destroying other sessions' work:
+
+- **NEVER delete, reset, or discard files you didn't create** - Other sessions may have created them
+- **NEVER run `git reset`, `git checkout --`, or `git clean`** without explicit user approval
+- **ALWAYS ask the user before removing untracked files** - They may be work-in-progress from another session
+- **When you see unfamiliar files**, assume another session created them - ask the user what to do
+- **If pre-commit hooks fail due to files you didn't touch**, ask the user how to proceed rather than trying to fix or remove them
+
+**Why this matters:** The user may have multiple Claude sessions working in parallel on different aspects of a feature. Deleting “unknown” files destroys that work.
+
 ## Essential Commands
 
 ```bash
@@ -38,6 +50,28 @@ make lint                    # golangci-lint on changed files
 **Stack Pipeline**: Load atmos.yaml → process imports/inheritance → apply overrides → render templates → generate config.
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
+
+## Working with Atmos Agents (RECOMMENDED)
+
+Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems. **Use agents instead of inline work** for their areas of expertise.
+
+**Available Agents:**
+- **`@agent-developer`** - Creating/maintaining agents, agent architecture
+- **`@tui-expert`** - Terminal UI, theme system, output formatting
+- **`@atmos-errors`** - Error handling patterns, error builder usage
+- **`@flag-handler`** - CLI commands, flag parsing, CommandProvider pattern
+- **`@example-creator`** - Creating examples, mock components, test cases, EmbedFile docs
+
+**When to delegate:**
+- TUI/theme changes → `@tui-expert`
+- New CLI commands → `@flag-handler`
+- Error handling refactoring → `@atmos-errors`
+- Creating new agents → `@agent-developer`
+- Creating examples/demos → `@example-creator`
+
+**Benefits:** Agents are domain experts with deep knowledge of patterns, PRDs, and subsystem architecture. They ensure consistency and best practices.
+
+See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architecture.md` for architecture.
 
 ## Architectural Patterns (MANDATORY)
 
@@ -298,7 +332,7 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 - Use definition lists `<dl>` instead of tables for arguments and flags
 - Follow Docusaurus conventions from existing files
 - File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-- Link to core concepts using `/core-concepts/` paths
+- Link to documentation using current URL paths (e.g., `/stacks`, `/components`, `/cli/configuration`)
 - Include purpose note and help screengrab
 - Use consistent section ordering: Usage → Examples → Arguments → Flags
 
@@ -346,7 +380,15 @@ New configs support Go templating with `FuncMap()` from `internal/exec/template_
 Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
 ### Cross-Platform (MANDATORY)
-Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()`, not hardcoded separators.
+Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
+
+**Path handling in tests:**
+- **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`
+- **ALWAYS use `filepath.Join()`** with separate arguments: `filepath.Join(tempDir, "components", "terraform", "vpc")`
+- **NEVER use forward slashes in `filepath.Join()`** like `filepath.Join(dir, "a/b/c")` - use `filepath.Join(dir, "a", "b", "c")`
+- **For path suffix checks**, use `filepath.ToSlash()` to normalize: `strings.HasSuffix(filepath.ToSlash(path), "expected/suffix")`
+
+**Why:** Windows uses backslash (`\`) as path separator, Unix uses forward slash (`/`). Hardcoded paths fail on Windows CI.
 
 ### Multi-Provider Registry (MANDATORY)
 Follow registry pattern: define interface, implement per provider, register implementations, generate mocks. Example: `pkg/store/`

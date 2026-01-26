@@ -4,34 +4,32 @@
 
 Valid subcommands are:
 
-• about
-• ai
-• atlantis
-• auth
-• aws
-• completion
-• describe
-• devcontainer
-• docs
-• env
-• helmfile
-• help
-• list
-• lsp
-• mcp-server
-• packer
-• pro
-• profile
-• show
-• support
-• terraform
-• tf
-• theme
-• toolchain
-• validate
-• vendor
-• version
-• workflow
+  • about
+  • atlantis
+  • auth
+  • aws
+  • completion
+  • describe
+  • devcontainer
+  • docs
+  • env
+  • helmfile
+  • help
+  • list
+  • packer
+  • pro
+  • profile
+  • show
+  • support
+  • terraform
+  • tf
+  • tf-custom
+  • theme
+  • toolchain
+  • validate
+  • vendor
+  • version
+  • workflow
 
 ## Hints
 
