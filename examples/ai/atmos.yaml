@@ -1,85 +1,108 @@
 # Atmos AI Assistant Example Configuration
 # This demonstrates multi-provider AI configuration with sessions, tools, and custom agents.
+#
+# Documentation: https://atmos.tools/ai
 
 # Base paths
 base_path: "."
 
 # Components configuration
+# Docs: https://atmos.tools/core-concepts/components
 components:
   terraform:
     base_path: "components/terraform"
 
 # Stacks configuration
+# Docs: https://atmos.tools/core-concepts/stacks
 stacks:
   base_path: "stacks"
   included_paths:
     - "deploy/**/*"
+  # Stack naming template
+  # Docs: https://atmos.tools/core-concepts/stacks/templates
   name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
 
 # Templates configuration
+# Docs: https://atmos.tools/core-concepts/stacks/templates
 templates:
   settings:
     enabled: true
+    # Sprig functions: https://atmos.tools/core-concepts/stacks/templates/functions/sprig-functions
     sprig:
       enabled: true
+    # Gomplate functions: https://atmos.tools/core-concepts/stacks/templates/functions/gomplate-functions
     gomplate:
       enabled: true
 
 # AI Assistant Configuration
+# Docs: https://atmos.tools/ai/configuration
 settings:
   ai:
     # Enable AI features (required)
+    # Docs: https://atmos.tools/ai/configuration#enabling-ai
     enabled: true
 
     # Default provider for CLI commands
+    # Docs: https://atmos.tools/ai/providers
     default_provider: "anthropic"
 
-    # Default agent
+    # Default agent to use
+    # Docs: https://atmos.tools/ai/agents
     default_agent: "general"
 
-    # Context settings
+    # Context settings - control what information is sent to the AI
+    # Docs: https://atmos.tools/ai/configuration#context-settings
     send_context: false      # Don't auto-send stack configs
     prompt_on_send: true     # Prompt before sending context
 
-    # History management
+    # History management - limit conversation history size
+    # Docs: https://atmos.tools/ai/configuration#history-management
     max_history_messages: 50  # Keep last 50 messages
     max_history_tokens: 8000  # Or limit by tokens
 
-    # Timeouts
+    # Timeouts for AI API calls
+    # Docs: https://atmos.tools/ai/configuration#timeouts
     timeout_seconds: 60
 
     # Configure multiple AI providers
+    # Docs: https://atmos.tools/ai/providers
     providers:
       # Anthropic Claude - Best for complex reasoning
+      # Docs: https://atmos.tools/ai/providers#anthropic
       anthropic:
         model: "claude-sonnet-4-20250514"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
-        # Token caching for cost savings
+        # Token caching for cost savings (Anthropic-specific)
+        # Docs: https://atmos.tools/ai/providers#prompt-caching
         cache:
           enabled: true
           cache_system_prompt: true
           cache_project_memory: true
 
       # OpenAI GPT - Strong general capabilities
+      # Docs: https://atmos.tools/ai/providers#openai
       openai:
         model: "gpt-4o"
         api_key_env: "OPENAI_API_KEY"
         max_tokens: 4096
 
       # Google Gemini - Fast with large context
+      # Docs: https://atmos.tools/ai/providers#gemini
       gemini:
         model: "gemini-2.0-flash-exp"
         api_key_env: "GEMINI_API_KEY"
         max_tokens: 8192
 
       # Ollama - Local, private, no API costs
+      # Docs: https://atmos.tools/ai/providers#ollama
       ollama:
         model: "llama3.3:70b"
         base_url: "http://localhost:11434/v1"
         timeout_seconds: 120  # Longer timeout for local models
 
-    # Session management
+    # Session management - persist conversations across sessions
+    # Docs: https://atmos.tools/ai/sessions
     sessions:
       enabled: true
       storage: "sqlite"
@@ -89,6 +112,7 @@ settings:
       retention_days: 30
 
       # Auto-compact for long conversations
+      # Docs: https://atmos.tools/ai/sessions#auto-compaction
       auto_compact:
         enabled: true
         trigger_threshold: 0.75    # Compact at 75% of max_history_messages
@@ -100,12 +124,14 @@ settings:
         show_summary_markers: false
         compact_on_resume: true
 
-    # Tool execution settings
+    # Tool execution settings - control what the AI can do
+    # Docs: https://atmos.tools/ai/tools
     tools:
       enabled: true
       require_confirmation: true   # Prompt before tool execution
 
       # Tools that execute without confirmation
+      # Docs: https://atmos.tools/ai/tools#allowed-tools
       allowed_tools:
         - atmos_describe_component
         - atmos_list_stacks
@@ -113,28 +139,34 @@ settings:
         - read_stack_file
 
       # Tools that always require confirmation
+      # Docs: https://atmos.tools/ai/tools#restricted-tools
       restricted_tools:
         - file_edit
         - atmos_terraform_plan
 
       # Tools that are completely blocked
+      # Docs: https://atmos.tools/ai/tools#blocked-tools
       blocked_tools:
         - atmos_terraform_apply
         - atmos_terraform_destroy
 
       # Skip all confirmations (DANGEROUS - only for trusted environments)
+      # Docs: https://atmos.tools/ai/tools#yolo-mode
       yolo_mode: false
 
-    # Project memory
+    # Project memory - persistent context across sessions
+    # Docs: https://atmos.tools/ai/memory
     memory:
       enabled: true
       file_path: "ATMOS.md"
       auto_update: false
       create_if_missing: true
 
-    # Custom agents
+    # Custom agents - specialized AI personas for different tasks
+    # Docs: https://atmos.tools/ai/agents
     agents:
       # Cost optimization specialist
+      # Docs: https://atmos.tools/ai/agents#custom-agents
       cost-optimizer:
         display_name: "Cost Optimizer"
         description: "Analyzes infrastructure for cost savings opportunities"
@@ -164,6 +196,7 @@ settings:
         restricted_tools: []
 
       # Security auditor
+      # Docs: https://atmos.tools/ai/agents#custom-agents
       security-reviewer:
         display_name: "Security Reviewer"
         description: "Reviews infrastructure for security best practices"
@@ -193,5 +226,6 @@ settings:
         restricted_tools: []
 
 # Workflows
+# Docs: https://atmos.tools/core-concepts/workflows
 workflows:
   base_path: "workflows"

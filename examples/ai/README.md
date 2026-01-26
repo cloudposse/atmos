@@ -185,15 +185,15 @@ atmos workflow ai-demo
 
 ## Keyboard Shortcuts (in chat)
 
-| Key | Action |
-|-----|--------|
-| `Ctrl+P` | Switch AI provider |
-| `Ctrl+A` | Switch AI agent |
-| `Ctrl+N` | Create new session |
-| `Ctrl+L` | List sessions |
-| `Ctrl+C` | Exit chat |
-| `Enter` | Send message |
-| `Shift+Enter` | New line |
+| Key           | Action             |
+|---------------|--------------------|
+| `Ctrl+P`      | Switch AI provider |
+| `Ctrl+A`      | Switch AI agent    |
+| `Ctrl+N`      | Create new session |
+| `Ctrl+L`      | List sessions      |
+| `Ctrl+C`      | Exit chat          |
+| `Enter`       | Send message       |
+| `Shift+Enter` | New line           |
 
 ## Learn More
 

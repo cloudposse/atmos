@@ -5,6 +5,7 @@
 Valid subcommands are:
 
   • about
+  • ai
   • atlantis
   • auth
   • aws
@@ -16,6 +17,8 @@ Valid subcommands are:
   • helmfile
   • help
   • list
+  • lsp
+  • mcp-server
   • packer
   • pro
   • profile
