@@ -8,11 +8,11 @@ This document describes an issue affecting `describe affected`, `describe stacks
 function in Atmos v1.195.0+. The issue causes errors when Atmos is run from a non-project-root directory or when
 using the `--chdir` flag.
 
-| Issue                                     | Status   | Description                                                       |
-|-------------------------------------------|----------|-------------------------------------------------------------------|
-| `backend.tf.json: no such file or directory` | ✅ Fixed | `atmos.Component` template function fails with path error         |
-| Relative `component_path` resolution      | ✅ Fixed | `buildComponentInfo` returns relative path, consumers expect absolute |
-| `--chdir` flag interaction                | ✅ Fixed | Issue exposed by working directory changes in v1.195.0            |
+| Issue                                        | Status  | Description                                                           |
+|----------------------------------------------|---------|-----------------------------------------------------------------------|
+| `backend.tf.json: no such file or directory` | ✅ Fixed | `atmos.Component` template function fails with path error             |
+| Relative `component_path` resolution         | ✅ Fixed | `buildComponentInfo` returns relative path, consumers expect absolute |
+| `--chdir` flag interaction                   | ✅ Fixed | Issue exposed by working directory changes in v1.195.0                |
 
 ---
 

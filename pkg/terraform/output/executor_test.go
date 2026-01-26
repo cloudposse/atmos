@@ -730,6 +730,353 @@ func TestWrapDescribeError_BreaksErrInvalidComponentChain(t *testing.T) {
 	}
 }
 
+// TestExecutor_GetOutput_InvalidAuthManagerType tests that GetOutput returns an error
+// when an invalid authManager type is provided.
+func TestExecutor_GetOutput_InvalidAuthManagerType(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+	atmosConfig := validAtmosConfig()
+
+	// Pass an invalid authManager type (string instead of auth.AuthManager).
+	invalidAuthManager := "not an auth manager"
+
+	_, _, err := exec.GetOutput(atmosConfig, "test-stack", "test-component", "output", true, nil, invalidAuthManager)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidAuthManagerType)
+}
+
+// TestExecutor_GetOutput_FullExecutionPath tests the full execution path of GetOutput
+// when not using cache or static remote state.
+func TestExecutor_GetOutput_FullExecutionPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache to force full execution.
+	stackSlug := "full-exec-stack-full-exec-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Setup expectations for DescribeComponent.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
+
+	// Setup expectations for terraform operations.
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id": {
+			Value: []byte(`"vpc-full-exec"`),
+		},
+	}, nil)
+
+	value, exists, err := exec.GetOutput(atmosConfig, "full-exec-stack", "full-exec-component", "vpc_id", true, nil, nil)
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, "vpc-full-exec", value)
+}
+
+// TestExecutor_GetOutput_DescribeError tests that GetOutput returns an error
+// when DescribeComponent fails.
+func TestExecutor_GetOutput_DescribeError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	// Clear cache to force describe call.
+	stackSlug := "describe-err-stack-describe-err-component"
+	terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+
+	// Setup expectations - DescribeComponent returns error.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(nil, errors.New("component not found"))
+
+	_, _, err := exec.GetOutput(atmosConfig, "describe-err-stack", "describe-err-component", "output", true, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "component not found")
+}
+
+// TestExecutor_GetAllOutputs_Success tests the happy path for GetAllOutputs.
+func TestExecutor_GetAllOutputs_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "all-outputs-stack-all-outputs-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	// Set debug level to avoid spinner.
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+
+	// Setup expectations.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
+	mockRunner.EXPECT().SetStdout(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetStderr(gomock.Any()).AnyTimes()
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"vpc_id":  {Value: []byte(`"vpc-all"`)},
+		"enabled": {Value: []byte(`true`)},
+	}, nil)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "all-outputs-component", "all-outputs-stack", false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "vpc-all", outputs["vpc_id"])
+	assert.Equal(t, true, outputs["enabled"])
+}
+
+// TestExecutor_GetAllOutputs_CacheHit tests that GetAllOutputs returns cached values.
+func TestExecutor_GetAllOutputs_CacheHit(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	// Pre-populate cache.
+	stackSlug := "cache-hit-stack-cache-hit-component"
+	cachedOutputs := map[string]any{"cached_key": "cached_value"}
+	terraformOutputsCache.Store(stackSlug, cachedOutputs)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+
+	// No DescribeComponent call expected.
+	outputs, err := exec.GetAllOutputs(atmosConfig, "cache-hit-component", "cache-hit-stack", false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, cachedOutputs, outputs)
+}
+
+// TestExecutor_GetAllOutputs_Error tests that GetAllOutputs handles errors properly.
+func TestExecutor_GetAllOutputs_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	exec := NewExecutor(mockDescriber)
+
+	// Clear cache.
+	stackSlug := "error-stack-error-component"
+	terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	// Set debug level to avoid spinner.
+	atmosConfig.Logs.Level = "debug"
+
+	// Setup expectations - DescribeComponent returns error.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(nil, errors.New("describe failed"))
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "error-component", "error-stack", false, nil)
+	require.Error(t, err)
+	assert.Nil(t, outputs)
+}
+
+// TestStartSpinnerOrLog_DebugMode tests that startSpinnerOrLog logs in debug mode.
+func TestStartSpinnerOrLog_DebugMode(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
+	require.NotNil(t, stopFunc)
+
+	// Should be a no-op function.
+	stopFunc()
+}
+
+// TestStartSpinnerOrLog_TraceMode tests that startSpinnerOrLog logs in trace mode.
+func TestStartSpinnerOrLog_TraceMode(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "trace"
+
+	stopFunc := startSpinnerOrLog(atmosConfig, "test message", "component", "stack")
+	require.NotNil(t, stopFunc)
+
+	// Should be a no-op function.
+	stopFunc()
+}
+
+// TestExecutor_GetAllOutputs_StaticRemoteState tests GetAllOutputs with static remote state.
+func TestExecutor_GetAllOutputs_StaticRemoteState(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockGetter := NewMockStaticRemoteStateGetter(ctrl)
+
+	exec := NewExecutor(mockDescriber, WithStaticRemoteStateGetter(mockGetter))
+
+	// Clear cache.
+	stackSlug := "static-stack-static-component"
+	terraformOutputsCache.Delete(stackSlug)
+	defer terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Logs.Level = "debug"
+
+	sections := validSections()
+	staticOutputs := map[string]any{"static_key": "static_value"}
+
+	// Setup expectations.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
+	mockGetter.EXPECT().GetStaticRemoteStateOutputs(gomock.Any()).Return(staticOutputs)
+
+	outputs, err := exec.GetAllOutputs(atmosConfig, "static-component", "static-stack", false, nil)
+	require.NoError(t, err)
+	assert.Equal(t, staticOutputs, outputs)
+}
+
+// TestProcessOutputs_WithInvalidJSON tests processOutputs handling of invalid JSON.
+func TestProcessOutputs_WithInvalidJSON(t *testing.T) {
+	atmosConfig := validAtmosConfig()
+
+	// Create output meta with invalid JSON value.
+	outputMeta := map[string]tfexec.OutputMeta{
+		"invalid_json": {
+			Value: []byte(`not valid json`),
+		},
+		"valid_value": {
+			Value: []byte(`"hello"`),
+		},
+	}
+
+	outputs := processOutputs(outputMeta, atmosConfig)
+
+	// Invalid JSON should result in nil value.
+	assert.Nil(t, outputs["invalid_json"])
+	// Valid value should be processed correctly.
+	assert.Equal(t, "hello", outputs["valid_value"])
+}
+
+// TestExecutor_ExecuteWithSections_InitWithReconfigure tests init with reconfigure option.
+func TestExecutor_ExecuteWithSections_InitWithReconfigure(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+	atmosConfig := validAtmosConfig()
+	atmosConfig.Components.Terraform.InitRunReconfigure = true
+
+	sections := validSections()
+
+	// Setup expectations - init should be called with reconfigure option.
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockRunner.EXPECT().WorkspaceNew(gomock.Any(), "test-workspace").Return(nil)
+	mockRunner.EXPECT().Output(gomock.Any()).Return(map[string]tfexec.OutputMeta{
+		"result": {Value: []byte(`"reconfigure_success"`)},
+	}, nil)
+
+	outputs, err := exec.ExecuteWithSections(atmosConfig, "test-component", "test-stack", sections, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "reconfigure_success", outputs["result"])
+}
+
+// TestExecutor_GetOutput_ExecuteError tests GetOutput when execute fails.
+func TestExecutor_GetOutput_ExecuteError(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockDescriber := NewMockComponentDescriber(ctrl)
+	mockRunner := NewMockTerraformRunner(ctrl)
+
+	customFactory := func(workdir, executable string) (TerraformRunner, error) {
+		return mockRunner, nil
+	}
+
+	exec := NewExecutor(mockDescriber, WithRunnerFactory(customFactory))
+
+	// Clear cache.
+	stackSlug := "exec-err-stack-exec-err-component"
+	terraformOutputsCache.Delete(stackSlug)
+
+	atmosConfig := validAtmosConfig()
+	sections := validSections()
+
+	// Setup expectations.
+	mockDescriber.EXPECT().DescribeComponent(gomock.Any()).Return(sections, nil)
+	mockRunner.EXPECT().SetEnv(gomock.Any()).Return(nil).AnyTimes()
+	mockRunner.EXPECT().Init(gomock.Any(), gomock.Any()).Return(errors.New("init failed"))
+
+	_, _, err := exec.GetOutput(atmosConfig, "exec-err-stack", "exec-err-component", "output", true, nil, nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to execute terraform output")
+}
+
+// TestHighlightValue_NilConfig tests the highlightValue function with nil config.
+func TestHighlightValue_NilConfig(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		config   *schema.AtmosConfiguration
+		expected string
+	}{
+		{
+			name:     "nil config returns input unchanged",
+			input:    `{"key": "value"}`,
+			config:   nil,
+			expected: `{"key": "value"}`,
+		},
+		{
+			name:     "with config attempts highlighting",
+			input:    `{"key": "value"}`,
+			config:   validAtmosConfig(),
+			expected: `{"key": "value"}`, // May be highlighted or not depending on TTY.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := highlightValue(tt.input, tt.config)
+			// For nil config, result should be exactly the input.
+			if tt.config == nil {
+				assert.Equal(t, tt.expected, result)
+			} else {
+				// For non-nil config, result may be highlighted or unchanged.
+				// Just ensure it contains the key content.
+				assert.Contains(t, result, "key")
+			}
+		})
+	}
+}
+
 // TestExecutor_ExecuteWithSections_ComponentPathResolution tests that component paths
 // are correctly resolved based on whether they are relative or absolute, and based on
 // the atmosConfig.BasePath setting.
