@@ -31,7 +31,7 @@ YAML functions are **native YAML features** that work with the YAML parser. They
 **Example:**
 ```yaml
 # Safe and predictable - the function receives and returns proper YAML types
-vpc_id: !terraform.output vpc.vpc_id
+vpc_id: !terraform.output vpc vpc_id
 environment: !env AWS_ENVIRONMENT
 config: !include common-config.yaml
 ```

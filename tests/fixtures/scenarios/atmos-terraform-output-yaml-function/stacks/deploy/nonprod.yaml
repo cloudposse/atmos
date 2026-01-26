@@ -38,3 +38,18 @@ components:
         baz: !terraform.output component-2 {{ .stack }} ".invalid-output // ""default-value"""
         test_list: !terraform.output component-2 ".invalid-output2 // [""fallback1"", ""fallback2""]"
         test_map: !terraform.output 'component-2 ".invalid-output3 // {""key1"": ""value1"", ""key2"": ""value2""}"'
+
+    # Test component for bracket notation with special characters in map keys
+    component-bracket-notation:
+      command: tofu
+      metadata:
+        component: mock
+      vars:
+        # Test bracket notation with map keys containing slashes (user-reported issue)
+        # Using single quotes around the YQ expression to allow double quotes inside brackets
+        client_id_arn: !terraform.output component-1 '.secret_arns_map["auth0-event-stream/app/client-id"]'
+        client_secret_arn: !terraform.output component-1 '.secret_arns_map["auth0-event-stream/app/client-secret"]'
+        # Test without outer quotes (also valid)
+        client_id_arn_bare: !terraform.output component-1 .secret_arns_map["auth0-event-stream/app/client-id"]
+        # Test with stack parameter
+        client_id_arn_with_stack: !terraform.output component-1 {{ .stack }} '.secret_arns_map["auth0-event-stream/app/client-id"]'
