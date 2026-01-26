@@ -679,6 +679,14 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 			expectError:   true,
 			errorContains: "failed to access secret",
 		},
+		{
+			name:          "key used exactly without prefix",
+			key:           "my-exact-secret-name",
+			mockPayload:   []byte(`"secret-value"`),
+			mockError:     nil,
+			expectedValue: "secret-value",
+			expectError:   false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -723,4 +731,38 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 			mockClient.AssertExpectations(t)
 		})
 	}
+}
+
+func TestGSMStore_GetKey_WithPrefix(t *testing.T) {
+	testPrefix := "test-prefix"
+
+	t.Run("prefix_is_not_added_to_key", func(t *testing.T) {
+		// Arrange
+		mockClient := new(MockGSMClient)
+		store := &GSMStore{
+			client:    mockClient,
+			projectID: "test-project",
+			prefix:    testPrefix,
+		}
+
+		// The key should be used exactly as provided, WITHOUT the prefix prepended
+		key := "my-secret"
+		expectedFullPath := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", "test-project", key)
+
+		mockClient.On("AccessSecretVersion", mock.Anything, &secretmanagerpb.AccessSecretVersionRequest{
+			Name: expectedFullPath,
+		}).Return(&secretmanagerpb.AccessSecretVersionResponse{
+			Payload: &secretmanagerpb.SecretPayload{
+				Data: []byte(`"test-value"`),
+			},
+		}, nil)
+
+		// Act
+		result, err := store.GetKey(key)
+
+		// Assert
+		assert.NoError(t, err)
+		assert.Equal(t, "test-value", result)
+		mockClient.AssertExpectations(t)
+	})
 }
