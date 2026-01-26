@@ -371,13 +371,13 @@ func TestPermissionCache_CorruptedFile(t *testing.T) {
 
 	// Create cache directory.
 	cacheDir := filepath.Join(tmpDir, ".atmos")
-	if err := os.MkdirAll(cacheDir, 0755); err != nil {
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatalf("Failed to create cache directory: %v", err)
 	}
 
 	// Write corrupted JSON.
 	cacheFile := filepath.Join(cacheDir, "ai.settings.local.json")
-	if err := os.WriteFile(cacheFile, []byte("{invalid json}"), 0644); err != nil {
+	if err := os.WriteFile(cacheFile, []byte("{invalid json}"), 0o644); err != nil {
 		t.Fatalf("Failed to write corrupted cache file: %v", err)
 	}
 
@@ -464,9 +464,9 @@ func TestPermissionCache_FilePermissions(t *testing.T) {
 		t.Fatalf("Failed to stat cache file: %v", err)
 	}
 
-	// Verify file is readable and writable by user (0644).
+	// Verify file is readable and writable by owner only (0600 for security).
 	mode := info.Mode().Perm()
-	if mode != 0644 {
-		t.Errorf("Expected file permissions 0644, got %o", mode)
+	if mode != 0o600 {
+		t.Errorf("Expected file permissions 0600, got %o", mode)
 	}
 }
