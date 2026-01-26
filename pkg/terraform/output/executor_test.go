@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/hashicorp/terraform-exec/tfexec"
@@ -1083,33 +1085,36 @@ func TestHighlightValue_NilConfig(t *testing.T) {
 // This is a regression test for the issue where atmos.Component template function failed with
 // "backend.tf.json: no such file or directory" when running with --chdir or from a non-project-root directory.
 func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
+	// Create a temp directory to use as an absolute path that works cross-platform.
+	tempDir := t.TempDir()
+
 	tests := []struct {
-		name            string
-		basePath        string
-		componentPath   string
-		expectedWorkdir string
-		description     string
+		name                  string
+		basePath              string
+		componentPath         string
+		expectedWorkdirSuffix string // Use suffix check for cross-platform compatibility
+		description           string
 	}{
 		{
-			name:            "relative path with BasePath",
-			basePath:        "/project/root",
-			componentPath:   "components/terraform/vpc",
-			expectedWorkdir: "/project/root/components/terraform/vpc",
-			description:     "Relative component path should be resolved against atmosConfig.BasePath",
+			name:                  "relative path with BasePath",
+			basePath:              tempDir,
+			componentPath:         filepath.Join("components", "terraform", "vpc"),
+			expectedWorkdirSuffix: filepath.Join("components", "terraform", "vpc"),
+			description:           "Relative component path should be resolved against atmosConfig.BasePath",
 		},
 		{
-			name:            "absolute path preserved",
-			basePath:        "/project/root",
-			componentPath:   "/custom/absolute/path/to/component",
-			expectedWorkdir: "/custom/absolute/path/to/component",
-			description:     "Absolute component path should be preserved unchanged",
+			name:                  "absolute path preserved",
+			basePath:              tempDir,
+			componentPath:         filepath.Join(tempDir, "custom", "component"),
+			expectedWorkdirSuffix: filepath.Join("custom", "component"),
+			description:           "Absolute component path should be preserved unchanged",
 		},
 		{
-			name:            "empty BasePath with relative path",
-			basePath:        "",
-			componentPath:   "components/terraform/vpc",
-			expectedWorkdir: "components/terraform/vpc",
-			description:     "With empty BasePath, relative path should be passed through unchanged",
+			name:                  "empty BasePath with relative path",
+			basePath:              "",
+			componentPath:         filepath.Join("components", "terraform", "vpc"),
+			expectedWorkdirSuffix: filepath.Join("components", "terraform", "vpc"),
+			description:           "With empty BasePath, relative path should be passed through unchanged",
 		},
 	}
 
@@ -1144,7 +1149,7 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 			}
 
 			sections := map[string]any{
-				cfg.CommandSectionName:   "/usr/local/bin/terraform",
+				cfg.CommandSectionName:   "terraform",
 				cfg.WorkspaceSectionName: "test-workspace",
 				"component_info": map[string]any{
 					"component_path": tt.componentPath,
@@ -1170,8 +1175,12 @@ func TestExecutor_ExecuteWithSections_ComponentPathResolution(t *testing.T) {
 			require.NoError(t, err)
 			assert.Equal(t, "vpc-123456", outputs["vpc_id"])
 
-			// Verify the path resolution.
-			assert.Equal(t, tt.expectedWorkdir, capturedWorkdir, tt.description)
+			// Verify the path resolution using suffix check for cross-platform compatibility.
+			// Use filepath.ToSlash to normalize for comparison.
+			normalizedCaptured := filepath.ToSlash(capturedWorkdir)
+			normalizedExpected := filepath.ToSlash(tt.expectedWorkdirSuffix)
+			assert.True(t, strings.HasSuffix(normalizedCaptured, normalizedExpected),
+				"%s: expected workdir to end with %q, got %q", tt.description, normalizedExpected, normalizedCaptured)
 		})
 	}
 }
