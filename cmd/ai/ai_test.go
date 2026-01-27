@@ -109,6 +109,41 @@ func TestAICommandProvider(t *testing.T) {
 		assert.Equal(t, "Other Commands", group)
 	})
 
+	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
+		provider := &AICommandProvider{}
+		builder := provider.GetFlagsBuilder()
+
+		assert.Nil(t, builder, "GetFlagsBuilder should return nil for ai command")
+	})
+
+	t.Run("GetPositionalArgsBuilder returns nil", func(t *testing.T) {
+		provider := &AICommandProvider{}
+		builder := provider.GetPositionalArgsBuilder()
+
+		assert.Nil(t, builder, "GetPositionalArgsBuilder should return nil for ai command")
+	})
+
+	t.Run("GetCompatibilityFlags returns nil", func(t *testing.T) {
+		provider := &AICommandProvider{}
+		flags := provider.GetCompatibilityFlags()
+
+		assert.Nil(t, flags, "GetCompatibilityFlags should return nil for ai command")
+	})
+
+	t.Run("GetAliases returns nil", func(t *testing.T) {
+		provider := &AICommandProvider{}
+		aliases := provider.GetAliases()
+
+		assert.Nil(t, aliases, "GetAliases should return nil for ai command")
+	})
+
+	t.Run("IsExperimental returns true", func(t *testing.T) {
+		provider := &AICommandProvider{}
+		isExperimental := provider.IsExperimental()
+
+		assert.True(t, isExperimental, "ai command should be marked as experimental")
+	})
+
 	t.Run("command has subcommands", func(t *testing.T) {
 		provider := &AICommandProvider{}
 		cmd := provider.GetCommand()

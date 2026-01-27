@@ -63,6 +63,10 @@ func TestExecuteBashCommandTool_Execute_EmptyCommand(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_ValidCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping bash test on Windows")
+	}
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}

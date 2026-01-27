@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -139,75 +140,74 @@ func TestGetModelFromConfig(t *testing.T) {
 }
 
 func TestGetSessionStoragePath(t *testing.T) {
-	tests := []struct {
-		name         string
-		atmosConfig  *schema.AtmosConfiguration
-		expectedPath string
-	}{
-		{
-			name: "default path",
-			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/test/project",
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Sessions: schema.AISessionSettings{
-							Path: "",
-						},
-					},
-				},
-			},
-			expectedPath: "/test/project/.atmos/sessions/sessions.db",
-		},
-		{
-			name: "custom relative path",
-			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/test/project",
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Sessions: schema.AISessionSettings{
-							Path: "data/ai-sessions",
-						},
-					},
-				},
-			},
-			expectedPath: "/test/project/data/ai-sessions/sessions.db",
-		},
-		{
-			name: "absolute path",
-			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/test/project",
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Sessions: schema.AISessionSettings{
-							Path: "/var/atmos/sessions",
-						},
-					},
-				},
-			},
-			expectedPath: "/var/atmos/sessions/sessions.db",
-		},
-		{
-			name: "path with nested directories",
-			atmosConfig: &schema.AtmosConfiguration{
-				BasePath: "/home/user/project",
-				Settings: schema.AtmosSettings{
-					AI: schema.AISettings{
-						Sessions: schema.AISessionSettings{
-							Path: ".config/atmos/ai/sessions",
-						},
-					},
-				},
-			},
-			expectedPath: "/home/user/project/.config/atmos/ai/sessions/sessions.db",
-		},
-	}
+	// Use t.TempDir() for cross-platform base paths.
+	basePath := t.TempDir()
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getSessionStoragePath(tt.atmosConfig)
-			assert.Equal(t, tt.expectedPath, result)
-		})
-	}
+	t.Run("default path", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: basePath,
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Sessions: schema.AISessionSettings{
+						Path: "",
+					},
+				},
+			},
+		}
+		result := getSessionStoragePath(atmosConfig)
+		expected := filepath.Join(basePath, ".atmos", "sessions", "sessions.db")
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("custom relative path", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: basePath,
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Sessions: schema.AISessionSettings{
+						Path: filepath.Join("data", "ai-sessions"),
+					},
+				},
+			},
+		}
+		result := getSessionStoragePath(atmosConfig)
+		expected := filepath.Join(basePath, "data", "ai-sessions", "sessions.db")
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("absolute path", func(t *testing.T) {
+		// Use another temp directory as the absolute path.
+		absolutePath := t.TempDir()
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: basePath,
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Sessions: schema.AISessionSettings{
+						Path: absolutePath,
+					},
+				},
+			},
+		}
+		result := getSessionStoragePath(atmosConfig)
+		expected := filepath.Join(absolutePath, "sessions.db")
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("path with nested directories", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			BasePath: basePath,
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Sessions: schema.AISessionSettings{
+						Path: filepath.Join(".config", "atmos", "ai", "sessions"),
+					},
+				},
+			},
+		}
+		result := getSessionStoragePath(atmosConfig)
+		expected := filepath.Join(basePath, ".config", "atmos", "ai", "sessions", "sessions.db")
+		assert.Equal(t, expected, result)
+	})
 }
 
 func TestGetPermissionMode(t *testing.T) {

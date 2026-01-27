@@ -739,3 +739,384 @@ func TestConfig_AllFields(t *testing.T) {
 	assert.Equal(t, 1000, config.MaxTokens)
 	assert.Equal(t, "https://api.example.com", config.BaseURL)
 }
+
+func TestExtractConfig_NilProviders(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled:   true,
+				Providers: nil,
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
+
+	// Should use defaults when providers is nil.
+	assert.True(t, config.Enabled)
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+}
+
+func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"openai": {
+						Model: "gpt-4o",
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
+
+	// Should use defaults when this provider is not configured.
+	assert.True(t, config.Enabled)
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+}
+
+func TestExtractConfig_NilProviderConfig(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": nil, // Explicitly nil provider config.
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
+
+	// Should use defaults when provider config is nil.
+	assert.True(t, config.Enabled)
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+}
+
+func TestClientGetters_CustomValues(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		maxTokens int
+	}{
+		{
+			name:      "Default Claude Sonnet 4",
+			model:     "claude-sonnet-4-20250514",
+			maxTokens: 4096,
+		},
+		{
+			name:      "Claude 4",
+			model:     "claude-4-20250514",
+			maxTokens: 8192,
+		},
+		{
+			name:      "Claude 3 Opus",
+			model:     "claude-3-opus-20240229",
+			maxTokens: 4096,
+		},
+		{
+			name:      "Claude 3 Haiku",
+			model:     "claude-3-haiku-20240307",
+			maxTokens: 4096,
+		},
+		{
+			name:      "High token limit",
+			model:     "claude-sonnet-4-20250514",
+			maxTokens: 131072,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &SimpleClient{
+				client: nil,
+				config: &base.Config{
+					Enabled:   true,
+					Model:     tt.model,
+					MaxTokens: tt.maxTokens,
+				},
+			}
+
+			assert.Equal(t, tt.model, client.GetModel())
+			assert.Equal(t, tt.maxTokens, client.GetMaxTokens())
+		})
+	}
+}
+
+func TestAnthropicModels(t *testing.T) {
+	// Test various Anthropic model configurations.
+	models := []struct {
+		modelID     string
+		description string
+	}{
+		{"claude-sonnet-4-20250514", "Claude Sonnet 4"},
+		{"claude-4-20250514", "Claude 4"},
+		{"claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet"},
+		{"claude-3-opus-20240229", "Claude 3 Opus"},
+		{"claude-3-sonnet-20240229", "Claude 3 Sonnet"},
+		{"claude-3-haiku-20240307", "Claude 3 Haiku"},
+	}
+
+	for _, m := range models {
+		t.Run(m.description, func(t *testing.T) {
+			config := &base.Config{
+				Enabled:   true,
+				Model:     m.modelID,
+				APIKeyEnv: DefaultAPIKeyEnv,
+				MaxTokens: DefaultMaxTokens,
+			}
+
+			client := &SimpleClient{
+				client: nil,
+				config: config,
+			}
+
+			assert.Equal(t, m.modelID, client.GetModel())
+		})
+	}
+}
+
+func TestCacheConfig_Fields(t *testing.T) {
+	// Test cacheConfig struct fields.
+	cache := &cacheConfig{
+		enabled:            true,
+		cacheSystemPrompt:  true,
+		cacheProjectMemory: false,
+	}
+
+	assert.True(t, cache.enabled)
+	assert.True(t, cache.cacheSystemPrompt)
+	assert.False(t, cache.cacheProjectMemory)
+}
+
+func TestExtractCacheConfig_EmptyProviders(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled:   true,
+				Providers: map[string]*schema.AIProviderConfig{},
+			},
+		},
+	}
+
+	cache := extractCacheConfig(atmosConfig)
+
+	// Default behavior when no provider config.
+	assert.True(t, cache.enabled)
+	assert.True(t, cache.cacheSystemPrompt)
+	assert.True(t, cache.cacheProjectMemory)
+}
+
+func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Cache: &schema.AICacheSettings{
+							Enabled:            true,
+							CacheSystemPrompt:  true,
+							CacheProjectMemory: false,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cache := extractCacheConfig(atmosConfig)
+
+	assert.True(t, cache.enabled)
+	assert.True(t, cache.cacheSystemPrompt)
+	assert.False(t, cache.cacheProjectMemory)
+}
+
+func TestExtractCacheConfig_OnlyProjectMemory(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Cache: &schema.AICacheSettings{
+							Enabled:            true,
+							CacheSystemPrompt:  false,
+							CacheProjectMemory: true,
+						},
+					},
+				},
+			},
+		},
+	}
+
+	cache := extractCacheConfig(atmosConfig)
+
+	assert.True(t, cache.enabled)
+	assert.False(t, cache.cacheSystemPrompt)
+	assert.True(t, cache.cacheProjectMemory)
+}
+
+func TestBuildSystemPrompt_MultipleScenarios(t *testing.T) {
+	tests := []struct {
+		name           string
+		prompt         string
+		cacheEnabled   bool
+		promptCaching  bool
+		requestCaching bool
+		expectCache    bool
+	}{
+		{
+			name:           "All caching enabled",
+			prompt:         "System prompt",
+			cacheEnabled:   true,
+			promptCaching:  true,
+			requestCaching: true,
+			expectCache:    true,
+		},
+		{
+			name:           "Global caching disabled",
+			prompt:         "System prompt",
+			cacheEnabled:   false,
+			promptCaching:  true,
+			requestCaching: true,
+			expectCache:    false,
+		},
+		{
+			name:           "Request caching disabled",
+			prompt:         "System prompt",
+			cacheEnabled:   true,
+			promptCaching:  true,
+			requestCaching: false,
+			expectCache:    false,
+		},
+		{
+			name:           "Long prompt with caching",
+			prompt:         "This is a very long system prompt that should benefit from caching. " + "It contains detailed instructions for the AI model on how to behave.",
+			cacheEnabled:   true,
+			promptCaching:  true,
+			requestCaching: true,
+			expectCache:    true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &SimpleClient{
+				config: &base.Config{Enabled: true},
+				cache: &cacheConfig{
+					enabled:           tt.cacheEnabled,
+					cacheSystemPrompt: tt.promptCaching,
+				},
+			}
+
+			textBlock := client.buildSystemPrompt(tt.prompt, tt.requestCaching)
+
+			assert.Equal(t, tt.prompt, textBlock.Text)
+			if tt.expectCache {
+				assert.NotEmpty(t, textBlock.CacheControl.Type)
+			} else {
+				assert.Empty(t, textBlock.CacheControl.Type)
+			}
+		})
+	}
+}
+
+func TestConvertToolsToAnthropicFormat_WithDefaultValues(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "tool_with_defaults",
+			description: "Tool with default parameter values",
+			parameters: []tools.Parameter{
+				{Name: "required_param", Type: tools.ParamTypeString, Description: "Required", Required: true},
+				{Name: "optional_with_default", Type: tools.ParamTypeInt, Description: "Optional", Required: false, Default: 10},
+				{Name: "optional_bool", Type: tools.ParamTypeBool, Description: "Boolean", Required: false, Default: true},
+			},
+		},
+	}
+
+	result := convertToolsToAnthropicFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "tool_with_defaults", result[0].OfTool.Name)
+
+	// Verify only the required parameter is in the required list.
+	require.Len(t, result[0].OfTool.InputSchema.Required, 1)
+	assert.Contains(t, result[0].OfTool.InputSchema.Required, "required_param")
+}
+
+func TestConvertMessagesToAnthropicFormat_EmptyContent(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: ""},
+		{Role: types.RoleAssistant, Content: ""},
+	}
+
+	result := convertMessagesToAnthropicFormat(messages)
+
+	// Empty content messages should still be converted.
+	assert.Len(t, result, 2)
+}
+
+func TestConvertMessagesToAnthropicFormat_UnknownRole(t *testing.T) {
+	messages := []types.Message{
+		{Role: "unknown", Content: "This should be skipped"},
+		{Role: types.RoleUser, Content: "Valid message"},
+	}
+
+	result := convertMessagesToAnthropicFormat(messages)
+
+	// Unknown roles should be skipped.
+	assert.Len(t, result, 1)
+}
+
+func TestExtractConfig_AllOverrides(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						Model:     "claude-3-opus-20240229",
+						ApiKeyEnv: "CUSTOM_ANTHROPIC_KEY",
+						MaxTokens: 32768,
+						BaseURL:   "https://api.custom.anthropic.com/v1",
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+	})
+
+	assert.True(t, config.Enabled)
+	assert.Equal(t, "claude-3-opus-20240229", config.Model)
+	assert.Equal(t, "CUSTOM_ANTHROPIC_KEY", config.APIKeyEnv)
+	assert.Equal(t, 32768, config.MaxTokens)
+	assert.Equal(t, "https://api.custom.anthropic.com/v1", config.BaseURL)
+}

@@ -772,3 +772,277 @@ func TestAWSRegionValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestExtractConfig_NilProviders(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled:   true,
+				Providers: nil,
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	// Should use defaults when providers is nil.
+	assert.True(t, config.Enabled)
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+	assert.Equal(t, DefaultRegion, config.BaseURL)
+}
+
+func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"openai": {
+						Model: "gpt-4o",
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	// Should use defaults when this provider is not configured.
+	assert.True(t, config.Enabled)
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+	assert.Equal(t, DefaultRegion, config.BaseURL)
+}
+
+func TestExtractConfig_NilProviderConfig(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": nil, // Explicitly nil provider config.
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	// Should use defaults when provider config is nil.
+	assert.True(t, config.Enabled)
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+	assert.Equal(t, DefaultRegion, config.BaseURL)
+}
+
+func TestConvertMessagesToBedrockFormat_UnknownRole(t *testing.T) {
+	messages := []types.Message{
+		{Role: "unknown", Content: "This should be skipped"},
+		{Role: types.RoleUser, Content: "Valid message"},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	// Unknown roles should be skipped.
+	require.Len(t, result, 1)
+	assert.Equal(t, "user", result[0]["role"])
+	assert.Equal(t, "Valid message", result[0]["content"])
+}
+
+func TestConvertMessagesToBedrockFormat_EmptyContent(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: ""},
+		{Role: types.RoleAssistant, Content: ""},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	// Empty content messages should still be converted.
+	require.Len(t, result, 2)
+	assert.Equal(t, "", result[0]["content"])
+	assert.Equal(t, "", result[1]["content"])
+}
+
+func TestConvertToolsToBedrockFormat_NoParameters(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "no_params_tool",
+			description: "Tool without parameters",
+			parameters:  []tools.Parameter{},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "no_params_tool", result[0]["name"])
+
+	inputSchema, ok := result[0]["input_schema"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "object", inputSchema["type"])
+
+	properties, ok := inputSchema["properties"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Empty(t, properties)
+
+	required, ok := inputSchema["required"].([]string)
+	require.True(t, ok)
+	assert.Empty(t, required)
+}
+
+func TestConvertToolsToBedrockFormat_OnlyOptionalParameters(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "optional_params_tool",
+			description: "Tool with only optional parameters",
+			parameters: []tools.Parameter{
+				{Name: "opt1", Type: tools.ParamTypeString, Description: "Optional 1", Required: false},
+				{Name: "opt2", Type: tools.ParamTypeInt, Description: "Optional 2", Required: false},
+			},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	inputSchema, ok := result[0]["input_schema"].(map[string]interface{})
+	require.True(t, ok)
+
+	required, ok := inputSchema["required"].([]string)
+	require.True(t, ok)
+	assert.Empty(t, required) // No required parameters.
+
+	properties, ok := inputSchema["properties"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Len(t, properties, 2) // Both optional parameters should be in properties.
+}
+
+func TestParseBedrockResponse_MixedContentTypes(t *testing.T) {
+	// Test response with unknown content types mixed in.
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Hello"},
+			{"type": "image", "data": "base64data"},
+			{"type": "text", "text": " World"},
+			{"type": "unknown_type", "data": "ignored"}
+		],
+		"stop_reason": "end_turn"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	// Only text content should be extracted.
+	assert.Equal(t, "Hello World", result.Content)
+}
+
+func TestParseBedrockResponse_ToolUseWithNullInput(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_null",
+				"name": "tool_with_null_input",
+				"input": null
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Nil(t, result.ToolCalls[0].Input)
+}
+
+func TestParseBedrockResponse_LargeUsage(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Response"}
+		],
+		"stop_reason": "end_turn",
+		"usage": {
+			"input_tokens": 1000000,
+			"output_tokens": 500000
+		}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(1000000), result.Usage.InputTokens)
+	assert.Equal(t, int64(500000), result.Usage.OutputTokens)
+	assert.Equal(t, int64(1500000), result.Usage.TotalTokens)
+}
+
+func TestClientGetters_CustomMaxTokens(t *testing.T) {
+	tests := []struct {
+		name      string
+		maxTokens int
+	}{
+		{"Small", 1024},
+		{"Default", 4096},
+		{"Large", 8192},
+		{"Very Large", 200000},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := &Client{
+				client: nil,
+				config: &base.Config{
+					Enabled:   true,
+					Model:     DefaultModel,
+					BaseURL:   DefaultRegion,
+					MaxTokens: tt.maxTokens,
+				},
+				region: DefaultRegion,
+			}
+
+			assert.Equal(t, tt.maxTokens, client.GetMaxTokens())
+		})
+	}
+}
+
+func TestExtractConfig_AllOverrides(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": {
+						Model:     "anthropic.claude-3-opus-20240229-v1:0",
+						MaxTokens: 32768,
+						BaseURL:   "eu-central-1",
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	assert.True(t, config.Enabled)
+	assert.Equal(t, "anthropic.claude-3-opus-20240229-v1:0", config.Model)
+	assert.Equal(t, 32768, config.MaxTokens)
+	assert.Equal(t, "eu-central-1", config.BaseURL)
+}

@@ -338,13 +338,19 @@ func TestManager_GetDiagnosticsForFile(t *testing.T) {
 		ctx:      ctx,
 	}
 
-	// Get diagnostics for file that has diagnostics from both clients
+	// Get diagnostics for file that has diagnostics from both clients.
 	diagnostics := manager.GetDiagnosticsForFile("/test/config.yaml")
 
 	assert.Len(t, diagnostics, 3) // 2 from yaml-ls + 1 from terraform-ls
-	assert.Equal(t, "Error 1", diagnostics[0].Message)
-	assert.Equal(t, "Warning 1", diagnostics[1].Message)
-	assert.Equal(t, "Error 2", diagnostics[2].Message)
+
+	// Check that all expected diagnostics are present (order is non-deterministic due to map iteration).
+	messages := make([]string, len(diagnostics))
+	for i, d := range diagnostics {
+		messages[i] = d.Message
+	}
+	assert.Contains(t, messages, "Error 1")
+	assert.Contains(t, messages, "Warning 1")
+	assert.Contains(t, messages, "Error 2")
 
 	// Get diagnostics for file that doesn't exist
 	emptyDiagnostics := manager.GetDiagnosticsForFile("/test/nonexistent.yaml")
