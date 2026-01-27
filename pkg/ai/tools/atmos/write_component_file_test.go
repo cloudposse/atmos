@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -82,10 +83,12 @@ func TestWriteComponentFileTool_Execute(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "variable \"cidr_block\"")
 
-		// Verify permissions.
-		info, err := os.Stat(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		// Verify permissions (skip on Windows as it doesn't support Unix file permissions).
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(filePath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		}
 	})
 
 	t.Run("successfully creates parent directories", func(t *testing.T) {
@@ -222,10 +225,12 @@ func TestWriteFileWithDirs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "test content", string(content))
 
-		// Check permissions.
-		info, err := os.Stat(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		// Check permissions (skip on Windows as it doesn't support Unix file permissions).
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(filePath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		}
 	})
 
 	t.Run("successfully creates parent directories", func(t *testing.T) {
@@ -238,9 +243,11 @@ func TestWriteFileWithDirs(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "nested content", string(content))
 
-		// Check directory permissions.
-		dirInfo, err := os.Stat(filepath.Join(tmpDir, "a", "b", "c"))
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o755), dirInfo.Mode().Perm())
+		// Check directory permissions (skip on Windows as it doesn't support Unix file permissions).
+		if runtime.GOOS != "windows" {
+			dirInfo, err := os.Stat(filepath.Join(tmpDir, "a", "b", "c"))
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o755), dirInfo.Mode().Perm())
+		}
 	})
 }

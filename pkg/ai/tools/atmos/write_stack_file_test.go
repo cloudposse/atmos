@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -84,10 +85,12 @@ func TestWriteStackFileTool_Execute(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, string(content), "cidr_block: 10.1.0.0/16")
 
-		// Verify permissions.
-		info, err := os.Stat(filePath)
-		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		// Verify permissions (skip on Windows as it doesn't support Unix file permissions).
+		if runtime.GOOS != "windows" {
+			info, err := os.Stat(filePath)
+			require.NoError(t, err)
+			assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		}
 	})
 
 	t.Run("successfully creates parent directories", func(t *testing.T) {

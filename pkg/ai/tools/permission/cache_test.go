@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 )
 
@@ -458,15 +459,17 @@ func TestPermissionCache_FilePermissions(t *testing.T) {
 	// Add a permission to trigger file creation.
 	cache.AddAllow("test_tool")
 
-	// Check file permissions.
-	info, err := os.Stat(cache.filePath)
-	if err != nil {
-		t.Fatalf("Failed to stat cache file: %v", err)
-	}
+	// Check file permissions (skip on Windows as it doesn't support Unix file permissions).
+	if runtime.GOOS != "windows" {
+		info, err := os.Stat(cache.filePath)
+		if err != nil {
+			t.Fatalf("Failed to stat cache file: %v", err)
+		}
 
-	// Verify file is readable and writable by owner only (0600 for security).
-	mode := info.Mode().Perm()
-	if mode != 0o600 {
-		t.Errorf("Expected file permissions 0600, got %o", mode)
+		// Verify file is readable and writable by owner only (0600 for security).
+		mode := info.Mode().Perm()
+		if mode != 0o600 {
+			t.Errorf("Expected file permissions 0600, got %o", mode)
+		}
 	}
 }

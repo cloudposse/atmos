@@ -2,6 +2,7 @@ package atmos
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -114,6 +115,10 @@ func TestExecuteBashCommandTool_Execute_BlacklistedCommand(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_WorkingDirectory(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test that requires bash on Windows")
+	}
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}
@@ -134,6 +139,10 @@ func TestExecuteBashCommandTool_Execute_WorkingDirectory(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_CommandFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test that requires bash on Windows")
+	}
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}
@@ -153,6 +162,10 @@ func TestExecuteBashCommandTool_Execute_CommandFails(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_ShellFeatures(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test that requires bash on Windows")
+	}
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}
@@ -171,6 +184,10 @@ func TestExecuteBashCommandTool_Execute_ShellFeatures(t *testing.T) {
 }
 
 func TestExecuteBashCommandTool_Execute_GitCommand(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test that requires bash on Windows")
+	}
+
 	config := &schema.AtmosConfiguration{
 		BasePath: "/tmp",
 	}

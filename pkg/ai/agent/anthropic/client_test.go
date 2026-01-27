@@ -1,13 +1,35 @@
 package anthropic
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ai/agent/base"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// mockTool implements the tools.Tool interface for testing.
+type mockTool struct {
+	name               string
+	description        string
+	parameters         []tools.Parameter
+	requiresPermission bool
+	isRestricted       bool
+}
+
+func (m *mockTool) Name() string                  { return m.name }
+func (m *mockTool) Description() string           { return m.description }
+func (m *mockTool) Parameters() []tools.Parameter { return m.parameters }
+func (m *mockTool) RequiresPermission() bool      { return m.requiresPermission }
+func (m *mockTool) IsRestricted() bool            { return m.isRestricted }
+func (m *mockTool) Execute(_ context.Context, _ map[string]interface{}) (*tools.Result, error) {
+	return &tools.Result{Success: true}, nil
+}
 
 func TestExtractConfig(t *testing.T) {
 	tests := []struct {
@@ -102,6 +124,33 @@ func TestNewSimpleClient_Disabled(t *testing.T) {
 	assert.Contains(t, err.Error(), "AI features are disabled")
 }
 
+func TestNewSimpleClient_MissingAPIKey(t *testing.T) {
+	// Use a unique env var name that definitely does not exist.
+	envVar := "NONEXISTENT_ANTHROPIC_KEY_XYZZY"
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"anthropic": {
+						ApiKeyEnv: envVar,
+					},
+				},
+			},
+		},
+	}
+
+	client, err := NewSimpleClient(atmosConfig)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+	assert.Contains(t, err.Error(), "API key not found")
+}
+
+// Note: TestNewSimpleClient_WithAPIKey is skipped because viper's AutomaticEnv
+// doesn't reliably pick up env vars set with t.Setenv in tests. The actual
+// API key retrieval is tested indirectly through integration tests.
+
 func TestSimpleClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
@@ -124,24 +173,24 @@ func TestConvertToolsToAnthropicFormat(t *testing.T) {
 	mockTool := &mockTool{
 		name:        "test_tool",
 		description: "A test tool for verification",
-		parameters: []mockParameter{
+		parameters: []tools.Parameter{
 			{
-				name:        "query",
-				paramType:   "string",
-				description: "The search query",
-				required:    true,
+				Name:        "query",
+				Type:        "string",
+				Description: "The search query",
+				Required:    true,
 			},
 			{
-				name:        "max_results",
-				paramType:   "integer",
-				description: "Maximum number of results",
-				required:    false,
+				Name:        "max_results",
+				Type:        "integer",
+				Description: "Maximum number of results",
+				Required:    false,
 			},
 			{
-				name:        "verbose",
-				paramType:   "boolean",
-				description: "Enable verbose output",
-				required:    false,
+				Name:        "verbose",
+				Type:        "boolean",
+				Description: "Enable verbose output",
+				Required:    false,
 			},
 		},
 	}
@@ -152,24 +201,143 @@ func TestConvertToolsToAnthropicFormat(t *testing.T) {
 	assert.Len(t, mockTool.parameters, 3)
 
 	// Verify parameter types match JSON Schema spec.
-	assert.Equal(t, "string", mockTool.parameters[0].paramType)
-	assert.Equal(t, "integer", mockTool.parameters[1].paramType, "Should be 'integer', not 'int'")
-	assert.Equal(t, "boolean", mockTool.parameters[2].paramType, "Should be 'boolean', not 'bool'")
+	assert.Equal(t, "string", string(mockTool.parameters[0].Type))
+	assert.Equal(t, "integer", string(mockTool.parameters[1].Type), "Should be 'integer', not 'int'")
+	assert.Equal(t, "boolean", string(mockTool.parameters[2].Type), "Should be 'boolean', not 'bool'")
 }
 
-// mockTool implements a simple test tool.
-type mockTool struct {
-	name        string
-	description string
-	parameters  []mockParameter
+func TestConvertToolsToAnthropicFormat_Empty(t *testing.T) {
+	availableTools := []tools.Tool{}
+	result := convertToolsToAnthropicFormat(availableTools)
+
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
 }
 
-type mockParameter struct {
-	name        string
-	paramType   string
-	description string
-	required    bool
+func TestConvertToolsToAnthropicFormat_SingleTool(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "test_tool",
+			description: "A test tool",
+			parameters: []tools.Parameter{
+				{Name: "param1", Type: tools.ParamTypeString, Description: "First param", Required: true},
+			},
+		},
+	}
+
+	result := convertToolsToAnthropicFormat(availableTools)
+
+	assert.Len(t, result, 1)
+	assert.NotNil(t, result[0].OfTool)
+	assert.Equal(t, "test_tool", result[0].OfTool.Name)
+	assert.Equal(t, "A test tool", result[0].OfTool.Description.Value)
 }
+
+func TestConvertToolsToAnthropicFormat_MultipleTools(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "tool_a",
+			description: "Tool A",
+			parameters:  []tools.Parameter{},
+		},
+		&mockTool{
+			name:        "tool_b",
+			description: "Tool B",
+			parameters: []tools.Parameter{
+				{Name: "input", Type: tools.ParamTypeString, Description: "Input", Required: true},
+			},
+		},
+	}
+
+	result := convertToolsToAnthropicFormat(availableTools)
+
+	assert.Len(t, result, 2)
+	assert.Equal(t, "tool_a", result[0].OfTool.Name)
+	assert.Equal(t, "tool_b", result[1].OfTool.Name)
+}
+
+func TestConvertToolsToAnthropicFormat_AllParameterTypes(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "comprehensive_tool",
+			description: "Tool with all parameter types",
+			parameters: []tools.Parameter{
+				{Name: "string_param", Type: tools.ParamTypeString, Description: "String parameter", Required: true},
+				{Name: "int_param", Type: tools.ParamTypeInt, Description: "Integer parameter", Required: true},
+				{Name: "bool_param", Type: tools.ParamTypeBool, Description: "Boolean parameter", Required: false},
+				{Name: "array_param", Type: tools.ParamTypeArray, Description: "Array parameter", Required: false},
+				{Name: "object_param", Type: tools.ParamTypeObject, Description: "Object parameter", Required: false},
+			},
+		},
+	}
+
+	result := convertToolsToAnthropicFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "comprehensive_tool", result[0].OfTool.Name)
+	assert.Equal(t, "object", string(result[0].OfTool.InputSchema.Type))
+
+	// Verify required fields.
+	require.Len(t, result[0].OfTool.InputSchema.Required, 2)
+	assert.Contains(t, result[0].OfTool.InputSchema.Required, "string_param")
+	assert.Contains(t, result[0].OfTool.InputSchema.Required, "int_param")
+}
+
+func TestConvertMessagesToAnthropicFormat_Empty(t *testing.T) {
+	messages := []types.Message{}
+	result := convertMessagesToAnthropicFormat(messages)
+
+	assert.NotNil(t, result)
+	assert.Empty(t, result)
+}
+
+func TestConvertMessagesToAnthropicFormat_SingleUserMessage(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello, world!"},
+	}
+
+	result := convertMessagesToAnthropicFormat(messages)
+
+	assert.Len(t, result, 1)
+}
+
+func TestConvertMessagesToAnthropicFormat_SingleAssistantMessage(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleAssistant, Content: "Hello! How can I help you?"},
+	}
+
+	result := convertMessagesToAnthropicFormat(messages)
+
+	assert.Len(t, result, 1)
+}
+
+func TestConvertMessagesToAnthropicFormat_MultipleMessages(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "What is 2+2?"},
+		{Role: types.RoleAssistant, Content: "2+2 equals 4."},
+		{Role: types.RoleUser, Content: "Thanks!"},
+	}
+
+	result := convertMessagesToAnthropicFormat(messages)
+
+	assert.Len(t, result, 3)
+}
+
+func TestConvertMessagesToAnthropicFormat_SystemMessageSkipped(t *testing.T) {
+	messages := []types.Message{
+		{Role: types.RoleSystem, Content: "You are a helpful assistant."},
+		{Role: types.RoleUser, Content: "Hello"},
+	}
+
+	result := convertMessagesToAnthropicFormat(messages)
+
+	// System messages should be skipped (they go via System parameter, not Messages).
+	assert.Len(t, result, 1)
+}
+
+// Note: Tests for parseAnthropicResponse are not included because the Anthropic SDK
+// uses internal types (ContentBlockUnion) that cannot be easily constructed in tests.
+// The response parsing is tested indirectly through integration tests.
 
 func TestToolSchema_JSONSchemaCompliance(t *testing.T) {
 	// Verify that our tool schema structure matches JSON Schema draft 2020-12 requirements.
@@ -346,6 +514,67 @@ func TestExtractCacheConfig(t *testing.T) {
 				cacheProjectMemory: false,
 			},
 		},
+		{
+			name: "No provider config",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						Enabled:   true,
+						Providers: nil,
+					},
+				},
+			},
+			expectedCache: &cacheConfig{
+				enabled:            true,
+				cacheSystemPrompt:  true,
+				cacheProjectMemory: true,
+			},
+		},
+		{
+			name: "Different provider only",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"openai": {
+								Model: "gpt-4o",
+							},
+						},
+					},
+				},
+			},
+			expectedCache: &cacheConfig{
+				enabled:            true,
+				cacheSystemPrompt:  true,
+				cacheProjectMemory: true,
+			},
+		},
+		{
+			name: "Cache enabled with both options true by default",
+			atmosConfig: &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						Enabled: true,
+						Providers: map[string]*schema.AIProviderConfig{
+							"anthropic": {
+								Model: "claude-sonnet-4-20250514",
+								Cache: &schema.AICacheSettings{
+									Enabled:            true,
+									CacheSystemPrompt:  false,
+									CacheProjectMemory: false,
+								},
+							},
+						},
+					},
+				},
+			},
+			expectedCache: &cacheConfig{
+				enabled:            true,
+				cacheSystemPrompt:  true, // Defaults to true when both are false.
+				cacheProjectMemory: true, // Defaults to true when both are false.
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -411,6 +640,22 @@ func TestBuildSystemPrompt_CachingDisabledPerPrompt(t *testing.T) {
 	assert.Empty(t, textBlock.CacheControl.Type, "Cache control should not be set when disabled per-prompt")
 }
 
+func TestBuildSystemPrompt_EmptyPrompt(t *testing.T) {
+	client := &SimpleClient{
+		config: &base.Config{
+			Enabled: true,
+		},
+		cache: &cacheConfig{
+			enabled:           true,
+			cacheSystemPrompt: true,
+		},
+	}
+
+	textBlock := client.buildSystemPrompt("", true)
+
+	assert.Empty(t, textBlock.Text)
+}
+
 func TestCacheConfiguration_CostSavings(t *testing.T) {
 	// This test documents the cost savings from token caching.
 	// Anthropic provides 90% discount on cached input tokens.
@@ -470,4 +715,27 @@ func TestCacheConfiguration_CostSavings(t *testing.T) {
 			t.Logf("  Description: %s", tt.description)
 		})
 	}
+}
+
+func TestDefaultConstants(t *testing.T) {
+	assert.Equal(t, "anthropic", ProviderName)
+	assert.Equal(t, 4096, DefaultMaxTokens)
+	assert.Equal(t, "claude-sonnet-4-20250514", DefaultModel)
+	assert.Equal(t, "ANTHROPIC_API_KEY", DefaultAPIKeyEnv)
+}
+
+func TestConfig_AllFields(t *testing.T) {
+	config := &base.Config{
+		Enabled:   true,
+		Model:     "test-model",
+		APIKeyEnv: "TEST_KEY",
+		MaxTokens: 1000,
+		BaseURL:   "https://api.example.com",
+	}
+
+	assert.True(t, config.Enabled)
+	assert.Equal(t, "test-model", config.Model)
+	assert.Equal(t, "TEST_KEY", config.APIKeyEnv)
+	assert.Equal(t, 1000, config.MaxTokens)
+	assert.Equal(t, "https://api.example.com", config.BaseURL)
 }
