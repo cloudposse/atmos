@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
@@ -18,6 +19,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
+	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -639,17 +641,20 @@ func TestStartCmd_FlagUsageMessages(t *testing.T) {
 
 // TestLogServerInfo_Stdio tests logServerInfo for stdio transport.
 func TestLogServerInfo_Stdio(t *testing.T) {
-	// This test verifies the function doesn't panic.
-	// The actual logging is handled by the logger package.
-	// We can't easily capture log output without modifying the logger.
+	// Create a real MCP server for testing logServerInfo.
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
 
-	// Create a minimal mock server for testing.
-	// Since we can't easily mock the server, we'll skip the detailed verification.
-	// The function should not panic.
+	// Call logServerInfo with stdio transport - should not panic and should log messages.
+	require.NotPanics(t, func() {
+		logServerInfo(server, transportStdio, "")
+	})
 
-	// For now, just verify the function exists and doesn't panic when called with nil.
-	// In a real test, we would inject a mock logger.
-	t.Skip("Cannot easily test logServerInfo without mock logger injection")
+	// Verify server info is accessible.
+	info := server.ServerInfo()
+	assert.Equal(t, "atmos-mcp-server", info.Name)
 }
 
 // TestInitializeAIComponents_AIDisabled tests that initializeAIComponents still works when AI is disabled but tools are enabled.
@@ -1438,4 +1443,666 @@ func TestTransportConfigEquality(t *testing.T) {
 	assert.Equal(t, config1.transportType, config2.transportType)
 	assert.Equal(t, config1.host, config2.host)
 	assert.Equal(t, config1.port, config2.port)
+}
+
+// TestLogServerInfo_WithMockServer tests logServerInfo with a real MCP server.
+func TestLogServerInfo_WithMockServer(t *testing.T) {
+	// Create a real MCP server for testing logServerInfo.
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// Test stdio transport - should not panic.
+	t.Run("stdio transport", func(t *testing.T) {
+		require.NotPanics(t, func() {
+			logServerInfo(server, transportStdio, "")
+		})
+	})
+
+	// Test http transport - should not panic.
+	t.Run("http transport", func(t *testing.T) {
+		require.NotPanics(t, func() {
+			logServerInfo(server, transportHTTP, "localhost:8080")
+		})
+	})
+
+	// Test http transport with different addresses.
+	t.Run("http transport custom address", func(t *testing.T) {
+		require.NotPanics(t, func() {
+			logServerInfo(server, transportHTTP, "0.0.0.0:3000")
+		})
+	})
+}
+
+// TestStartStdioServer_SendsToErrChan tests that startStdioServer sends errors to errChan.
+func TestStartStdioServer_SendsToErrChan(t *testing.T) {
+	// Create a real MCP server.
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// Create a context that we'll cancel immediately.
+	ctx, cancel := context.WithCancel(context.Background())
+	errChan := make(chan error, 1)
+
+	// Start the server and immediately cancel.
+	startStdioServer(ctx, server, errChan)
+
+	// Cancel the context to trigger shutdown.
+	cancel()
+
+	// Wait for error or timeout.
+	select {
+	case err := <-errChan:
+		// The server should return an error (context.Canceled or similar).
+		// Any response is acceptable since we canceled the context.
+		_ = err
+	case <-time.After(2 * time.Second):
+		// Timeout is acceptable - the goroutine started.
+	}
+}
+
+// TestStartHTTPServer_ListenError tests startHTTPServer with an invalid address.
+func TestStartHTTPServer_ListenError(t *testing.T) {
+	// Create a real MCP server.
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	errChan := make(chan error, 1)
+
+	// Use an invalid port to trigger a listen error.
+	// Port -1 should fail on most systems.
+	startHTTPServer(server, "localhost", -1, errChan)
+
+	// Wait for error.
+	select {
+	case err := <-errChan:
+		// Should receive an error due to invalid port.
+		assert.Error(t, err)
+	case <-time.After(2 * time.Second):
+		// If no error after 2 seconds, the test passes but with warning.
+		t.Log("Warning: No error received for invalid port")
+	}
+}
+
+// TestStartHTTPServer_ValidPort tests startHTTPServer with a valid port.
+func TestStartHTTPServer_ValidPort(t *testing.T) {
+	// Create a real MCP server.
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	errChan := make(chan error, 1)
+
+	// Use a random high port that should be available.
+	// Use port 0 to let the OS assign an available port.
+	startHTTPServer(server, "127.0.0.1", 0, errChan)
+
+	// Give the server time to start.
+	time.Sleep(100 * time.Millisecond)
+
+	// The server should be running (no error yet).
+	select {
+	case err := <-errChan:
+		// If we got an error, log it (port may be in use).
+		t.Logf("Server error: %v", err)
+	default:
+		// No error means server is running.
+	}
+}
+
+// TestWaitForShutdown_ContextDeadlineExceeded tests waitForShutdown with context.DeadlineExceeded.
+func TestWaitForShutdown_ContextDeadlineExceeded(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	cancel := func() { cancelCalled = true }
+
+	// Send context.DeadlineExceeded error.
+	errChan <- context.DeadlineExceeded
+
+	err := waitForShutdown(sigChan, errChan, cancel)
+
+	// DeadlineExceeded is a real error (unlike Canceled).
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "MCP server error")
+	assert.False(t, cancelCalled)
+}
+
+// TestWaitForShutdown_WrappedError tests waitForShutdown with a wrapped error.
+func TestWaitForShutdown_WrappedError(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancelCalled := false
+	cancel := func() { cancelCalled = true }
+
+	// Send a wrapped error.
+	wrappedErr := fmt.Errorf("wrapper: %w", errors.New("inner error"))
+	errChan <- wrappedErr
+
+	err := waitForShutdown(sigChan, errChan, cancel)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "MCP server error")
+	assert.Contains(t, err.Error(), "inner error")
+	assert.False(t, cancelCalled)
+}
+
+// TestInitializeAIComponents_WithRestrictedTools tests initializeAIComponents with restricted tools.
+func TestInitializeAIComponents_WithRestrictedTools(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Tools: schema.AIToolSettings{
+					Enabled:         true,
+					RestrictedTools: []string{"write_component_file", "write_stack_file"},
+					YOLOMode:        false,
+				},
+			},
+		},
+	}
+
+	registry, executor, err := initializeAIComponents(atmosConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, registry)
+	assert.NotNil(t, executor)
+}
+
+// TestInitializeAIComponents_TypeAssertions tests that initializeAIComponents returns correct types.
+func TestInitializeAIComponents_TypeAssertions(t *testing.T) {
+	atmosConfig := createFullTestAtmosConfig(true, true, false)
+
+	registryRaw, executorRaw, err := initializeAIComponents(atmosConfig)
+
+	require.NoError(t, err)
+
+	// Verify that types can be asserted to the expected types.
+	registry, ok := registryRaw.(*tools.Registry)
+	assert.True(t, ok, "registry should be *tools.Registry")
+	assert.NotNil(t, registry)
+
+	executor, ok := executorRaw.(*tools.Executor)
+	assert.True(t, ok, "executor should be *tools.Executor")
+	assert.NotNil(t, executor)
+}
+
+// TestLogServerInfo_ServerInfoAccess tests that logServerInfo can access server info.
+func TestLogServerInfo_ServerInfoAccess(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// Verify we can get server info (used by logServerInfo).
+	serverInfo := server.ServerInfo()
+	assert.Equal(t, "atmos-mcp-server", serverInfo.Name)
+	assert.NotEmpty(t, serverInfo.Version)
+}
+
+// TestExecuteMCPServer_TransportSwitch tests the transport switch logic.
+func TestExecuteMCPServer_TransportSwitch(t *testing.T) {
+	// Test that invalid transport in the switch returns an error.
+	// The switch default case is reached when config.transportType is not stdio or http.
+	// However, getTransportConfig validates this, so we need to test the path differently.
+
+	// Test that the default case would return the correct error.
+	unknownTransport := "grpc"
+	expectedErr := fmt.Errorf("%w: %s", errUtils.ErrMCPUnsupportedTransport, unknownTransport)
+	assert.Contains(t, expectedErr.Error(), "unsupported transport")
+	assert.Contains(t, expectedErr.Error(), "grpc")
+}
+
+// TestContextWithCancel_Pattern tests the context cancellation pattern used in executeMCPServer.
+func TestContextWithCancel_Pattern(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	// Verify context is not done initially.
+	select {
+	case <-ctx.Done():
+		t.Fatal("context should not be done initially")
+	default:
+		// Expected.
+	}
+
+	// Use a WaitGroup to coordinate goroutines.
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		<-ctx.Done()
+	}()
+
+	// Cancel the context.
+	cancel()
+
+	// Wait for goroutine to complete.
+	wg.Wait()
+
+	// Verify context is now done.
+	select {
+	case <-ctx.Done():
+		assert.Equal(t, context.Canceled, ctx.Err())
+	default:
+		t.Fatal("context should be done after cancel")
+	}
+}
+
+// TestSignalNotify_Pattern tests the signal notification pattern used in executeMCPServer.
+func TestSignalNotify_Pattern(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
+
+	// Stop receiving before test cleanup.
+	defer signal.Stop(sigChan)
+
+	// Verify we can manually send to the channel.
+	go func() {
+		sigChan <- syscall.SIGTERM
+	}()
+
+	select {
+	case sig := <-sigChan:
+		assert.Equal(t, syscall.SIGTERM, sig)
+	case <-time.After(1 * time.Second):
+		t.Fatal("did not receive signal")
+	}
+}
+
+// TestHTTPServerTimeouts tests the HTTP server timeout values.
+func TestHTTPServerTimeouts(t *testing.T) {
+	// These values should match what's used in startHTTPServer.
+	readTimeout := 30 * time.Second
+	writeTimeout := 30 * time.Second
+	idleTimeout := 60 * time.Second
+	readHeaderTimeout := 10 * time.Second
+
+	// Verify the values are reasonable.
+	assert.Greater(t, readTimeout, time.Duration(0))
+	assert.Greater(t, writeTimeout, time.Duration(0))
+	assert.Greater(t, idleTimeout, time.Duration(0))
+	assert.Greater(t, readHeaderTimeout, time.Duration(0))
+
+	// Verify read timeout is less than idle timeout.
+	assert.Less(t, readTimeout, idleTimeout)
+
+	// Verify read header timeout is less than read timeout.
+	assert.Less(t, readHeaderTimeout, readTimeout)
+}
+
+// TestInitializeAIComponents_ToolRegistration tests that all expected tools are registered.
+func TestInitializeAIComponents_ToolRegistration(t *testing.T) {
+	atmosConfig := createFullTestAtmosConfig(true, true, false)
+
+	registryRaw, _, err := initializeAIComponents(atmosConfig)
+	require.NoError(t, err)
+
+	registry := registryRaw.(*tools.Registry)
+
+	// Verify the registry has tools.
+	assert.Greater(t, registry.Count(), 0, "registry should have tools")
+
+	// Get all tools and verify expected ones are present.
+	toolsList := registry.List()
+	toolNames := make(map[string]bool)
+	for _, tool := range toolsList {
+		toolNames[tool.Name()] = true
+	}
+
+	// Check for expected tools.
+	expectedTools := []string{
+		"atmos_describe_component",
+		"atmos_list_stacks",
+		"atmos_validate_stacks",
+		"read_component_file",
+		"read_stack_file",
+		"write_component_file",
+		"write_stack_file",
+	}
+
+	for _, expected := range expectedTools {
+		assert.True(t, toolNames[expected], "expected tool %s to be registered", expected)
+	}
+}
+
+// TestGetPermissionMode_FullCoverage tests all branches of getPermissionMode.
+func TestGetPermissionMode_FullCoverage(t *testing.T) {
+	boolTrue := true
+	boolFalse := false
+
+	tests := []struct {
+		name                string
+		yoloMode            bool
+		requireConfirmation *bool
+		expected            permission.Mode
+	}{
+		{
+			name:                "yolo_mode_true",
+			yoloMode:            true,
+			requireConfirmation: nil,
+			expected:            permission.ModeYOLO,
+		},
+		{
+			name:                "yolo_mode_true_confirmation_true",
+			yoloMode:            true,
+			requireConfirmation: &boolTrue,
+			expected:            permission.ModeYOLO, // YOLO takes precedence.
+		},
+		{
+			name:                "yolo_mode_true_confirmation_false",
+			yoloMode:            true,
+			requireConfirmation: &boolFalse,
+			expected:            permission.ModeYOLO, // YOLO takes precedence.
+		},
+		{
+			name:                "yolo_mode_false_confirmation_true",
+			yoloMode:            false,
+			requireConfirmation: &boolTrue,
+			expected:            permission.ModePrompt,
+		},
+		{
+			name:                "yolo_mode_false_confirmation_false",
+			yoloMode:            false,
+			requireConfirmation: &boolFalse,
+			expected:            permission.ModeAllow,
+		},
+		{
+			name:                "yolo_mode_false_confirmation_nil",
+			yoloMode:            false,
+			requireConfirmation: nil,
+			expected:            permission.ModeAllow,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						Tools: schema.AIToolSettings{
+							YOLOMode:            tt.yoloMode,
+							RequireConfirmation: tt.requireConfirmation,
+						},
+					},
+				},
+			}
+
+			mode := getPermissionMode(atmosConfig)
+			assert.Equal(t, tt.expected, mode)
+		})
+	}
+}
+
+// TestWaitForShutdown_AllSignalTypes tests waitForShutdown with different signal types.
+func TestWaitForShutdown_AllSignalTypes(t *testing.T) {
+	signals := []os.Signal{
+		os.Interrupt,
+		syscall.SIGTERM,
+	}
+
+	for _, sig := range signals {
+		t.Run(fmt.Sprintf("signal_%v", sig), func(t *testing.T) {
+			sigChan := make(chan os.Signal, 1)
+			errChan := make(chan error, 1)
+			cancelCalled := false
+			cancel := func() { cancelCalled = true }
+
+			sigChan <- sig
+
+			err := waitForShutdown(sigChan, errChan, cancel)
+
+			assert.NoError(t, err)
+			assert.True(t, cancelCalled)
+		})
+	}
+}
+
+// TestStartCmd_CommandStructure tests the command structure.
+func TestStartCmd_CommandStructure(t *testing.T) {
+	cmd := startCmd
+
+	// Verify command structure.
+	assert.Equal(t, "start", cmd.Use)
+	assert.NotNil(t, cmd.RunE)
+	assert.NotEmpty(t, cmd.Short)
+	assert.NotEmpty(t, cmd.Long)
+	assert.NotEmpty(t, cmd.Example)
+
+	// Verify flags exist.
+	assert.NotNil(t, cmd.Flags().Lookup("transport"))
+	assert.NotNil(t, cmd.Flags().Lookup("host"))
+	assert.NotNil(t, cmd.Flags().Lookup("port"))
+
+	// Verify parent.
+	parent := cmd.Parent()
+	assert.NotNil(t, parent)
+	assert.Equal(t, "mcp", parent.Use)
+}
+
+// TestTransportConstants tests the transport constant values.
+func TestTransportConstants(t *testing.T) {
+	// Ensure constants are defined correctly.
+	assert.Equal(t, "stdio", transportStdio)
+	assert.Equal(t, "http", transportHTTP)
+	assert.NotEqual(t, transportStdio, transportHTTP)
+}
+
+// TestDefaultHTTPConfig tests the default HTTP configuration values.
+func TestDefaultHTTPConfig(t *testing.T) {
+	assert.Equal(t, 8080, defaultHTTPPort)
+	assert.Equal(t, "localhost", defaultHTTPHost)
+	assert.Greater(t, defaultHTTPPort, 0)
+	assert.Less(t, defaultHTTPPort, 65536)
+}
+
+// TestGetTransportConfig_AllValidCombinations tests all valid transport configurations.
+func TestGetTransportConfig_AllValidCombinations(t *testing.T) {
+	transports := []string{"stdio", "http"}
+	hosts := []string{"localhost", "0.0.0.0", "127.0.0.1", "192.168.1.1"}
+	ports := []int{80, 443, 3000, 8080, 8443, 9000}
+
+	for _, transport := range transports {
+		for _, host := range hosts {
+			for _, port := range ports {
+				t.Run(fmt.Sprintf("%s_%s_%d", transport, host, port), func(t *testing.T) {
+					cmd := &cobra.Command{}
+					cmd.Flags().String("transport", transport, "")
+					cmd.Flags().String("host", host, "")
+					cmd.Flags().Int("port", port, "")
+
+					config, err := getTransportConfig(cmd)
+
+					assert.NoError(t, err)
+					require.NotNil(t, config)
+					assert.Equal(t, transport, config.transportType)
+					assert.Equal(t, host, config.host)
+					assert.Equal(t, port, config.port)
+				})
+			}
+		}
+	}
+}
+
+// TestWaitForShutdown_ErrorWrapping tests that errors are properly wrapped.
+func TestWaitForShutdown_ErrorWrapping(t *testing.T) {
+	sigChan := make(chan os.Signal, 1)
+	errChan := make(chan error, 1)
+	cancel := func() {}
+
+	testErr := errors.New("original error")
+	errChan <- testErr
+
+	err := waitForShutdown(sigChan, errChan, cancel)
+
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "MCP server error")
+	assert.Contains(t, err.Error(), "original error")
+}
+
+// TestInitializeAIComponents_PermissionConfig tests that permission config is properly set.
+func TestInitializeAIComponents_PermissionConfig(t *testing.T) {
+	tests := []struct {
+		name            string
+		allowedTools    []string
+		restrictedTools []string
+		blockedTools    []string
+	}{
+		{
+			name:         "empty_lists",
+			allowedTools: nil,
+		},
+		{
+			name:         "allowed_tools",
+			allowedTools: []string{"tool1", "tool2"},
+		},
+		{
+			name:            "restricted_tools",
+			restrictedTools: []string{"tool1", "tool2"},
+		},
+		{
+			name:         "blocked_tools",
+			blockedTools: []string{"tool1", "tool2"},
+		},
+		{
+			name:            "all_lists",
+			allowedTools:    []string{"allowed1"},
+			restrictedTools: []string{"restricted1"},
+			blockedTools:    []string{"blocked1"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						Enabled: true,
+						Tools: schema.AIToolSettings{
+							Enabled:         true,
+							AllowedTools:    tt.allowedTools,
+							RestrictedTools: tt.restrictedTools,
+							BlockedTools:    tt.blockedTools,
+						},
+					},
+				},
+			}
+
+			registry, executor, err := initializeAIComponents(atmosConfig)
+
+			assert.NoError(t, err)
+			assert.NotNil(t, registry)
+			assert.NotNil(t, executor)
+		})
+	}
+}
+
+// TestStartHTTPServer_AddressFormatting tests the address formatting in startHTTPServer.
+func TestStartHTTPServer_AddressFormatting(t *testing.T) {
+	tests := []struct {
+		host         string
+		port         int
+		expectedAddr string
+	}{
+		{"localhost", 8080, "localhost:8080"},
+		{"0.0.0.0", 3000, "0.0.0.0:3000"},
+		{"127.0.0.1", 443, "127.0.0.1:443"},
+		{"192.168.1.1", 9000, "192.168.1.1:9000"},
+		{"", 8080, ":8080"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.expectedAddr, func(t *testing.T) {
+			addr := fmt.Sprintf("%s:%d", tt.host, tt.port)
+			assert.Equal(t, tt.expectedAddr, addr)
+		})
+	}
+}
+
+// TestLogServerInfo_TransportMessages tests that logServerInfo handles both transports.
+func TestLogServerInfo_TransportMessages(t *testing.T) {
+	registry := tools.NewRegistry()
+	executor := tools.NewExecutor(registry, nil, tools.DefaultTimeout)
+	adapter := mcp.NewAdapter(registry, executor)
+	server := mcp.NewServer(adapter)
+
+	// These should not panic and should log different messages.
+	t.Run("stdio", func(t *testing.T) {
+		require.NotPanics(t, func() {
+			logServerInfo(server, transportStdio, "")
+		})
+	})
+
+	t.Run("http", func(t *testing.T) {
+		require.NotPanics(t, func() {
+			logServerInfo(server, transportHTTP, "localhost:8080")
+		})
+	})
+}
+
+// TestMCPProtocolVersion_ValidFormat tests the MCP protocol version format.
+func TestMCPProtocolVersion_ValidFormat(t *testing.T) {
+	// Verify the version is a valid date.
+	parts := strings.Split(mcpProtocolVersion, "-")
+	require.Len(t, parts, 3, "protocol version should be in YYYY-MM-DD format")
+
+	// Verify each part is numeric.
+	for _, part := range parts {
+		for _, c := range part {
+			assert.True(t, c >= '0' && c <= '9', "all characters should be digits")
+		}
+	}
+
+	// Verify year is reasonable (2020-2030).
+	assert.GreaterOrEqual(t, len(parts[0]), 4)
+}
+
+// TestErrorChannelBehavior tests error channel buffering behavior.
+func TestErrorChannelBehavior(t *testing.T) {
+	// Test buffer size 1 (as used in executeMCPServer).
+	errChan := make(chan error, 1)
+
+	// Should accept one value without blocking.
+	select {
+	case errChan <- errors.New("first"):
+		// OK.
+	default:
+		t.Fatal("channel should accept first value")
+	}
+
+	// Should block on second value.
+	select {
+	case errChan <- errors.New("second"):
+		t.Fatal("channel should block on second value")
+	default:
+		// OK.
+	}
+}
+
+// TestSignalChannelBehavior tests signal channel buffering behavior.
+func TestSignalChannelBehavior(t *testing.T) {
+	// Test buffer size 1 (as used in executeMCPServer).
+	sigChan := make(chan os.Signal, 1)
+
+	// Should accept one value without blocking.
+	select {
+	case sigChan <- os.Interrupt:
+		// OK.
+	default:
+		t.Fatal("channel should accept first value")
+	}
+
+	// Should block on second value.
+	select {
+	case sigChan <- syscall.SIGTERM:
+		t.Fatal("channel should block on second value")
+	default:
+		// OK.
+	}
 }

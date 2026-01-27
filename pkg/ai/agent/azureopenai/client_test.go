@@ -2,9 +2,13 @@ package azureopenai
 
 import (
 	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/openai/openai-go"
+	"github.com/openai/openai-go/option"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -916,4 +920,825 @@ func TestParseOpenAIResponse_ComplexToolArguments(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, true, options["verbose"])
 	assert.Equal(t, float64(10), options["limit"]) // JSON numbers are float64.
+}
+
+// Helper function to create a mock OpenAI server for testing.
+func newMockOpenAIServer(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(handler)
+}
+
+// newTestClient creates a Client for testing purposes, bypassing the API key check.
+// This is used to test client methods without requiring actual API credentials.
+//
+//nolint:unparam // model parameter kept for test flexibility.
+func newTestClient(t *testing.T, baseURL, model string, maxTokens int) *Client {
+	t.Helper()
+
+	// Create an OpenAI client with a fake API key pointing to our mock server.
+	client := openai.NewClient(
+		option.WithAPIKey("test-api-key"),
+		option.WithBaseURL(baseURL),
+		option.WithHeader("api-version", DefaultAPIVersion),
+	)
+
+	return &Client{
+		client: &client,
+		config: &base.Config{
+			Enabled:   true,
+			Model:     model,
+			APIKeyEnv: "TEST_API_KEY",
+			MaxTokens: maxTokens,
+			BaseURL:   baseURL,
+		},
+		apiVersion: DefaultAPIVersion,
+	}
+}
+
+// createMockChatCompletionResponse creates a mock OpenAI ChatCompletion response.
+//
+//nolint:unparam // finishReason parameter kept for test flexibility.
+func createMockChatCompletionResponse(content string, finishReason string) map[string]interface{} {
+	return map[string]interface{}{
+		"id":      "chatcmpl-test123",
+		"object":  "chat.completion",
+		"created": 1699999999,
+		"model":   "gpt-4o",
+		"choices": []map[string]interface{}{
+			{
+				"index": 0,
+				"message": map[string]interface{}{
+					"role":    "assistant",
+					"content": content,
+				},
+				"finish_reason": finishReason,
+			},
+		},
+		"usage": map[string]interface{}{
+			"prompt_tokens":     10,
+			"completion_tokens": 20,
+			"total_tokens":      30,
+		},
+	}
+}
+
+// createMockToolCallResponse creates a mock OpenAI response with tool calls.
+func createMockToolCallResponse(toolName, toolID, args string) map[string]interface{} {
+	return map[string]interface{}{
+		"id":      "chatcmpl-test456",
+		"object":  "chat.completion",
+		"created": 1699999999,
+		"model":   "gpt-4o",
+		"choices": []map[string]interface{}{
+			{
+				"index": 0,
+				"message": map[string]interface{}{
+					"role":    "assistant",
+					"content": "",
+					"tool_calls": []map[string]interface{}{
+						{
+							"id":   toolID,
+							"type": "function",
+							"function": map[string]interface{}{
+								"name":      toolName,
+								"arguments": args,
+							},
+						},
+					},
+				},
+				"finish_reason": "tool_calls",
+			},
+		},
+		"usage": map[string]interface{}{
+			"prompt_tokens":     15,
+			"completion_tokens": 25,
+			"total_tokens":      40,
+		},
+	}
+}
+
+// Note: TestNewClient_Success is tested indirectly via TestSendMessage_Success and similar tests
+// which create a mock server and verify full client creation. The viper.AutomaticEnv() used in
+// GetAPIKey doesn't reliably pick up env vars set with t.Setenv in tests.
+
+func TestNewClient_SuccessWithDirectConstruction(t *testing.T) {
+	// Test client construction with a directly created config.
+	// This tests the Client struct directly without going through NewClient.
+	config := &base.Config{
+		Enabled:   true,
+		Model:     "gpt-4o-deployment",
+		APIKeyEnv: "TEST_KEY",
+		MaxTokens: 8192,
+		BaseURL:   "https://test-resource.openai.azure.com",
+	}
+
+	client := &Client{
+		client:     nil, // We don't need a real openai client for this test.
+		config:     config,
+		apiVersion: DefaultAPIVersion,
+	}
+
+	// Verify all configuration was applied correctly.
+	assert.Equal(t, "gpt-4o-deployment", client.GetModel())
+	assert.Equal(t, 8192, client.GetMaxTokens())
+	assert.Equal(t, "https://test-resource.openai.azure.com", client.GetBaseURL())
+	assert.Equal(t, DefaultAPIVersion, client.GetAPIVersion())
+}
+
+func TestClient_WithDifferentModels(t *testing.T) {
+	tests := []struct {
+		name      string
+		model     string
+		maxTokens int
+	}{
+		{"gpt-4o", "gpt-4o", 4096},
+		{"gpt-35-turbo", "gpt-35-turbo", 4096},
+		{"gpt-4-turbo", "gpt-4-turbo", 8192},
+		{"custom-deployment", "my-custom-gpt4-deployment", 16384},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a client directly with the config for testing.
+			config := &base.Config{
+				Enabled:   true,
+				Model:     tt.model,
+				APIKeyEnv: "TEST_KEY",
+				MaxTokens: tt.maxTokens,
+				BaseURL:   "https://test.openai.azure.com",
+			}
+
+			client := &Client{
+				client:     nil,
+				config:     config,
+				apiVersion: DefaultAPIVersion,
+			}
+
+			assert.Equal(t, tt.model, client.GetModel())
+			assert.Equal(t, tt.maxTokens, client.GetMaxTokens())
+		})
+	}
+}
+
+func TestExtractConfig_DefaultValuesApplied(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"azureopenai": {
+						BaseURL: "https://test.openai.azure.com",
+						// Model and MaxTokens not specified - should use defaults.
+					},
+				},
+			},
+		},
+	}
+
+	// Test that ExtractConfig applies defaults correctly.
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		APIKeyEnv: DefaultAPIKeyEnv,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   "",
+	})
+
+	// Verify default values were applied.
+	assert.Equal(t, DefaultModel, config.Model)
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+	assert.Equal(t, DefaultAPIKeyEnv, config.APIKeyEnv)
+}
+
+func TestSendMessage_Success(t *testing.T) {
+	// Create mock server.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Verify request method and path.
+		assert.Equal(t, "POST", r.Method)
+		assert.Contains(t, r.URL.Path, "chat/completions")
+
+		// Return mock response.
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("Hello! How can I help you?", "stop")
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	// Send a message.
+	ctx := context.Background()
+	response, err := client.SendMessage(ctx, "Hello")
+
+	require.NoError(t, err)
+	assert.Equal(t, "Hello! How can I help you?", response)
+}
+
+func TestSendMessage_EmptyResponse(t *testing.T) {
+	// Create mock server that returns empty choices.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]interface{}{
+			"id":      "chatcmpl-empty",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "gpt-4o",
+			"choices": []map[string]interface{}{}, // Empty choices.
+		}
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	ctx := context.Background()
+	response, err := client.SendMessage(ctx, "Hello")
+
+	assert.Error(t, err)
+	assert.Empty(t, response)
+	assert.Contains(t, err.Error(), "no response choices")
+}
+
+func TestSendMessage_APIError(t *testing.T) {
+	// Create mock server that returns an error.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"error": {"message": "Internal server error", "type": "server_error"}}`))
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	ctx := context.Background()
+	response, err := client.SendMessage(ctx, "Hello")
+
+	assert.Error(t, err)
+	assert.Empty(t, response)
+	assert.Contains(t, err.Error(), "failed to send message")
+}
+
+func TestSendMessageWithTools_Success(t *testing.T) {
+	// Create mock server.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockToolCallResponse("test_tool", "call_123", `{"param1": "value1"}`)
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "test_tool",
+			description: "A test tool",
+			parameters: []tools.Parameter{
+				{Name: "param1", Type: tools.ParamTypeString, Description: "First param", Required: true},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithTools(ctx, "Use the test tool", availableTools)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	assert.Equal(t, types.StopReasonToolUse, response.StopReason)
+	require.Len(t, response.ToolCalls, 1)
+	assert.Equal(t, "test_tool", response.ToolCalls[0].Name)
+	assert.Equal(t, "call_123", response.ToolCalls[0].ID)
+	assert.Equal(t, "value1", response.ToolCalls[0].Input["param1"])
+}
+
+func TestSendMessageWithTools_NoToolCall(t *testing.T) {
+	// Create mock server that returns a normal response (no tool call).
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("I don't need to use any tools.", "stop")
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "test_tool",
+			description: "A test tool",
+			parameters:  []tools.Parameter{},
+		},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithTools(ctx, "Hello", availableTools)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	assert.Equal(t, types.StopReasonEndTurn, response.StopReason)
+	assert.Empty(t, response.ToolCalls)
+	assert.Equal(t, "I don't need to use any tools.", response.Content)
+}
+
+func TestSendMessageWithTools_APIError(t *testing.T) {
+	// Create mock server that returns an error.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error": {"message": "Invalid request", "type": "invalid_request_error"}}`))
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "test_tool",
+			description: "A test tool",
+			parameters:  []tools.Parameter{},
+		},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithTools(ctx, "Use the tool", availableTools)
+
+	assert.Error(t, err)
+	assert.Nil(t, response)
+	assert.Contains(t, err.Error(), "failed to send message")
+}
+
+func TestSendMessageWithHistory_Success(t *testing.T) {
+	// Create mock server.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Verify the request body contains the conversation history.
+		var reqBody map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+
+		// Verify messages array exists.
+		messages, ok := reqBody["messages"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, messages, 3) // system, user, assistant messages.
+
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("Based on our conversation, the answer is 42.", "stop")
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	messages := []types.Message{
+		{Role: types.RoleSystem, Content: "You are a helpful assistant."},
+		{Role: types.RoleUser, Content: "What is the answer to life?"},
+		{Role: types.RoleAssistant, Content: "The answer is 42."},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithHistory(ctx, messages)
+
+	require.NoError(t, err)
+	assert.Equal(t, "Based on our conversation, the answer is 42.", response)
+}
+
+func TestSendMessageWithHistory_EmptyHistory(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("No history provided.", "stop")
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithHistory(ctx, []types.Message{})
+
+	require.NoError(t, err)
+	assert.Equal(t, "No history provided.", response)
+}
+
+func TestSendMessageWithHistory_APIError(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error": {"message": "Rate limit exceeded", "type": "rate_limit_error"}}`))
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithHistory(ctx, messages)
+
+	assert.Error(t, err)
+	assert.Empty(t, response)
+}
+
+func TestSendMessageWithHistory_EmptyChoices(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]interface{}{
+			"id":      "chatcmpl-empty",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "gpt-4o",
+			"choices": []map[string]interface{}{},
+		}
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithHistory(ctx, messages)
+
+	assert.Error(t, err)
+	assert.Empty(t, response)
+	assert.Contains(t, err.Error(), "no response choices")
+}
+
+func TestSendMessageWithToolsAndHistory_Success(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Verify the request contains both messages and tools.
+		var reqBody map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+
+		// Verify messages array exists.
+		messages, ok := reqBody["messages"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, messages, 2)
+
+		// Verify tools array exists.
+		toolsArr, ok := reqBody["tools"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, toolsArr, 1)
+
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockToolCallResponse("describe_component", "call_789", `{"component": "vpc", "stack": "dev"}`)
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	messages := []types.Message{
+		{Role: types.RoleSystem, Content: "You are an Atmos assistant."},
+		{Role: types.RoleUser, Content: "Describe the vpc component in dev stack"},
+	}
+
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "describe_component",
+			description: "Describe an Atmos component",
+			parameters: []tools.Parameter{
+				{Name: "component", Type: tools.ParamTypeString, Required: true},
+				{Name: "stack", Type: tools.ParamTypeString, Required: true},
+			},
+		},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	assert.Equal(t, types.StopReasonToolUse, response.StopReason)
+	require.Len(t, response.ToolCalls, 1)
+	assert.Equal(t, "describe_component", response.ToolCalls[0].Name)
+	assert.Equal(t, "vpc", response.ToolCalls[0].Input["component"])
+	assert.Equal(t, "dev", response.ToolCalls[0].Input["stack"])
+}
+
+func TestSendMessageWithToolsAndHistory_APIError(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error": {"message": "Invalid API key", "type": "authentication_error"}}`))
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+	}
+
+	availableTools := []tools.Tool{
+		&mockTool{name: "test_tool", description: "Test"},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+
+	assert.Error(t, err)
+	assert.Nil(t, response)
+}
+
+func TestSendMessageWithSystemPromptAndTools_Success(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Verify the request contains system prompt, atmos memory, and tools.
+		var reqBody map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+
+		// Verify messages array - should have system prompt + atmos memory + user message.
+		messages, ok := reqBody["messages"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, messages, 3)
+
+		// First message should be system prompt.
+		msg0 := messages[0].(map[string]interface{})
+		assert.Equal(t, "system", msg0["role"])
+
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("I understand the system context.", "stop")
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	systemPrompt := "You are an Atmos infrastructure assistant."
+	atmosMemory := "Project uses AWS and has VPC, EKS components."
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "What components are available?"},
+	}
+	availableTools := []tools.Tool{
+		&mockTool{name: "list_components", description: "List available components"},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	assert.Equal(t, "I understand the system context.", response.Content)
+}
+
+func TestSendMessageWithSystemPromptAndTools_EmptySystemPrompt(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+
+		// With empty system prompt and atmos memory, should only have user message.
+		messages, ok := reqBody["messages"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, messages, 1)
+
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("Response without system context.", "stop")
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello"},
+	}
+	availableTools := []tools.Tool{}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithSystemPromptAndTools(ctx, "", "", messages, availableTools)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+}
+
+func TestSendMessageWithSystemPromptAndTools_OnlyAtmosMemory(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		var reqBody map[string]interface{}
+		err := json.NewDecoder(r.Body).Decode(&reqBody)
+		require.NoError(t, err)
+
+		// Should have atmos memory + user message.
+		messages, ok := reqBody["messages"].([]interface{})
+		require.True(t, ok)
+		require.Len(t, messages, 2)
+
+		w.Header().Set("Content-Type", "application/json")
+		response := createMockChatCompletionResponse("Using atmos memory.", "stop")
+		err = json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	atmosMemory := "This project uses Terraform for infrastructure."
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "What tools do we use?"},
+	}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithSystemPromptAndTools(ctx, "", atmosMemory, messages, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+}
+
+func TestClient_ContextCancellation(t *testing.T) {
+	// Create a server that takes a long time to respond.
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		// Check if the context is already cancelled.
+		select {
+		case <-r.Context().Done():
+			return
+		default:
+			// Server doesn't respond before timeout.
+			// The test will cancel context before this completes.
+		}
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	// Create a cancelled context.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately.
+
+	_, err := client.SendMessage(ctx, "Hello")
+	assert.Error(t, err)
+}
+
+func TestToolConversion_AllParameterTypes(t *testing.T) {
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "comprehensive_tool",
+			description: "Tool with all parameter types",
+			parameters: []tools.Parameter{
+				{Name: "string_param", Type: tools.ParamTypeString, Description: "String parameter", Required: true},
+				{Name: "int_param", Type: tools.ParamTypeInt, Description: "Integer parameter", Required: true},
+				{Name: "bool_param", Type: tools.ParamTypeBool, Description: "Boolean parameter", Required: false},
+				{Name: "array_param", Type: tools.ParamTypeArray, Description: "Array parameter", Required: false},
+				{Name: "object_param", Type: tools.ParamTypeObject, Description: "Object parameter", Required: false},
+			},
+		},
+	}
+
+	result := openaicompat.ConvertToolsToOpenAIFormat(availableTools)
+
+	require.Len(t, result, 1)
+	toolDef := result[0]
+
+	// Verify function definition.
+	assert.Equal(t, "comprehensive_tool", toolDef.Function.Name)
+	assert.Equal(t, "Tool with all parameter types", toolDef.Function.Description.Value)
+
+	// Verify parameters structure.
+	params := toolDef.Function.Parameters
+	require.NotNil(t, params)
+
+	// Check type is object.
+	paramType, ok := params["type"]
+	assert.True(t, ok)
+	assert.Equal(t, "object", paramType)
+
+	// Check properties.
+	props, ok := params["properties"].(map[string]interface{})
+	assert.True(t, ok)
+	assert.Len(t, props, 5)
+
+	// Check required fields.
+	required, ok := params["required"].([]string)
+	assert.True(t, ok)
+	assert.Contains(t, required, "string_param")
+	assert.Contains(t, required, "int_param")
+	assert.NotContains(t, required, "bool_param")
+	assert.NotContains(t, required, "array_param")
+	assert.NotContains(t, required, "object_param")
+}
+
+func TestPrependSystemMessages(t *testing.T) {
+	tests := []struct {
+		name           string
+		systemPrompt   string
+		atmosMemory    string
+		messages       []types.Message
+		expectedLength int
+	}{
+		{
+			name:           "both system prompt and atmos memory",
+			systemPrompt:   "You are a helpful assistant.",
+			atmosMemory:    "Project context here.",
+			messages:       []types.Message{{Role: types.RoleUser, Content: "Hello"}},
+			expectedLength: 3,
+		},
+		{
+			name:           "only system prompt",
+			systemPrompt:   "You are a helpful assistant.",
+			atmosMemory:    "",
+			messages:       []types.Message{{Role: types.RoleUser, Content: "Hello"}},
+			expectedLength: 2,
+		},
+		{
+			name:           "only atmos memory",
+			systemPrompt:   "",
+			atmosMemory:    "Project context here.",
+			messages:       []types.Message{{Role: types.RoleUser, Content: "Hello"}},
+			expectedLength: 2,
+		},
+		{
+			name:           "neither system prompt nor atmos memory",
+			systemPrompt:   "",
+			atmosMemory:    "",
+			messages:       []types.Message{{Role: types.RoleUser, Content: "Hello"}},
+			expectedLength: 1,
+		},
+		{
+			name:           "empty messages",
+			systemPrompt:   "System",
+			atmosMemory:    "Memory",
+			messages:       []types.Message{},
+			expectedLength: 2,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := base.PrependSystemMessages(tt.systemPrompt, tt.atmosMemory, tt.messages)
+			assert.Len(t, result, tt.expectedLength)
+
+			// Verify order: system prompt first, then atmos memory, then messages.
+			idx := 0
+			if tt.systemPrompt != "" {
+				assert.Equal(t, types.RoleSystem, result[idx].Role)
+				assert.Equal(t, tt.systemPrompt, result[idx].Content)
+				idx++
+			}
+			if tt.atmosMemory != "" {
+				assert.Equal(t, types.RoleSystem, result[idx].Role)
+				assert.Equal(t, tt.atmosMemory, result[idx].Content)
+				idx++
+			}
+			// Remaining should be the original messages.
+			for i, msg := range tt.messages {
+				assert.Equal(t, msg.Role, result[idx+i].Role)
+				assert.Equal(t, msg.Content, result[idx+i].Content)
+			}
+		})
+	}
+}
+
+func TestUsageTracking(t *testing.T) {
+	server := newMockOpenAIServer(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		response := map[string]interface{}{
+			"id":      "chatcmpl-usage",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "gpt-4o",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Test response",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     150,
+				"completion_tokens": 75,
+				"total_tokens":      225,
+			},
+		}
+		err := json.NewEncoder(w).Encode(response)
+		require.NoError(t, err)
+	})
+	defer server.Close()
+
+	client := newTestClient(t, server.URL, "gpt-4o", 4096)
+
+	availableTools := []tools.Tool{}
+	messages := []types.Message{{Role: types.RoleUser, Content: "Hello"}}
+
+	ctx := context.Background()
+	response, err := client.SendMessageWithToolsAndHistory(ctx, messages, availableTools)
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+	require.NotNil(t, response.Usage)
+
+	assert.Equal(t, int64(150), response.Usage.InputTokens)
+	assert.Equal(t, int64(75), response.Usage.OutputTokens)
+	assert.Equal(t, int64(225), response.Usage.TotalTokens)
 }

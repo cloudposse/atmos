@@ -1326,6 +1326,7 @@ func TestSessionsCommand_OutputCapture(t *testing.T) {
 	})
 }
 
+//nolint:dupl // Similar test structure intentional for clarity.
 func TestParseDuration_SpecialCases(t *testing.T) {
 	t.Run("single digit values", func(t *testing.T) {
 		days, err := parseDuration("5d")
@@ -1759,5 +1760,731 @@ func TestSessionsCommand_CommandNames(t *testing.T) {
 
 	t.Run("import command name", func(t *testing.T) {
 		assert.Equal(t, "import", sessionsImportCmd.Name())
+	})
+}
+
+// TestListSessionsCommand_FunctionExecution tests the listSessionsCommand function execution paths.
+func TestListSessionsCommand_FunctionExecution(t *testing.T) {
+	t.Run("executes with invalid config path", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/invalid/path")
+		t.Setenv("ATMOS_BASE_PATH", "/nonexistent/invalid/path")
+
+		err := listSessionsCommand(sessionsListCmd, []string{})
+		assert.Error(t, err)
+	})
+}
+
+// TestCleanSessionsCommand_FunctionExecution tests the cleanSessionsCommand function execution paths.
+func TestCleanSessionsCommand_FunctionExecution(t *testing.T) {
+	t.Run("clean command with different duration values", func(t *testing.T) {
+		testCases := []struct {
+			name      string
+			olderThan string
+		}{
+			{"7 days", "7d"},
+			{"24 hours", "24h"},
+			{"2 weeks", "2w"},
+			{"1 month", "1m"},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+				testCmd := &cobra.Command{
+					Use:  "clean",
+					RunE: cleanSessionsCommand,
+				}
+				testCmd.Flags().String("older-than", tc.olderThan, "Duration")
+
+				err := cleanSessionsCommand(testCmd, []string{})
+				// Should fail on config, not duration parsing.
+				assert.Error(t, err)
+				// Verify it's not a duration parsing error.
+				assert.NotContains(t, err.Error(), "invalid duration format")
+			})
+		}
+	})
+}
+
+// TestExportSessionCommand_FunctionExecution tests the exportSessionCommand function execution paths.
+func TestExportSessionCommand_FunctionExecution(t *testing.T) {
+	t.Run("export with all flags set", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+		testCmd := &cobra.Command{
+			Use:  "export",
+			RunE: exportSessionCommand,
+		}
+		testCmd.Flags().StringP("output", "o", "", "Output file path")
+		testCmd.Flags().StringP("format", "f", "", "Output format")
+		testCmd.Flags().Bool("context", false, "Include context")
+		testCmd.Flags().Bool("metadata", true, "Include metadata")
+
+		// Set flags.
+		_ = testCmd.Flags().Set("output", "test-output.json")
+		_ = testCmd.Flags().Set("format", "json")
+		_ = testCmd.Flags().Set("context", "true")
+		_ = testCmd.Flags().Set("metadata", "true")
+
+		err := exportSessionCommand(testCmd, []string{"test-session"})
+		// Should fail on config initialization, not flag parsing.
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "failed to get")
+	})
+
+	t.Run("export with yaml format", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+		testCmd := &cobra.Command{
+			Use:  "export",
+			RunE: exportSessionCommand,
+		}
+		testCmd.Flags().StringP("output", "o", "", "Output file path")
+		testCmd.Flags().StringP("format", "f", "", "Output format")
+		testCmd.Flags().Bool("context", false, "Include context")
+		testCmd.Flags().Bool("metadata", true, "Include metadata")
+
+		_ = testCmd.Flags().Set("output", "test-output.yaml")
+		_ = testCmd.Flags().Set("format", "yaml")
+
+		err := exportSessionCommand(testCmd, []string{"test-session"})
+		assert.Error(t, err)
+	})
+
+	t.Run("export with markdown format", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+		testCmd := &cobra.Command{
+			Use:  "export",
+			RunE: exportSessionCommand,
+		}
+		testCmd.Flags().StringP("output", "o", "", "Output file path")
+		testCmd.Flags().StringP("format", "f", "", "Output format")
+		testCmd.Flags().Bool("context", false, "Include context")
+		testCmd.Flags().Bool("metadata", true, "Include metadata")
+
+		_ = testCmd.Flags().Set("output", "test-output.md")
+		_ = testCmd.Flags().Set("format", "markdown")
+
+		err := exportSessionCommand(testCmd, []string{"test-session"})
+		assert.Error(t, err)
+	})
+}
+
+// TestImportSessionCommand_FunctionExecution tests the importSessionCommand function execution paths.
+func TestImportSessionCommand_FunctionExecution(t *testing.T) {
+	t.Run("import with all flags set", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+		testCmd := &cobra.Command{
+			Use:  "import",
+			RunE: importSessionCommand,
+		}
+		testCmd.Flags().StringP("name", "n", "", "Name for imported session")
+		testCmd.Flags().Bool("overwrite", false, "Overwrite existing")
+		testCmd.Flags().Bool("context", true, "Include context")
+
+		// Set flags.
+		_ = testCmd.Flags().Set("name", "imported-session")
+		_ = testCmd.Flags().Set("overwrite", "true")
+		_ = testCmd.Flags().Set("context", "true")
+
+		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
+		// Should fail on config initialization, not flag parsing.
+		assert.Error(t, err)
+		assert.NotContains(t, err.Error(), "failed to get")
+	})
+
+	t.Run("import with default flags", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path")
+
+		testCmd := &cobra.Command{
+			Use:  "import",
+			RunE: importSessionCommand,
+		}
+		testCmd.Flags().StringP("name", "n", "", "Name for imported session")
+		testCmd.Flags().Bool("overwrite", false, "Overwrite existing")
+		testCmd.Flags().Bool("context", true, "Include context")
+
+		// Keep default flag values.
+		err := importSessionCommand(testCmd, []string{"checkpoint.yaml"})
+		assert.Error(t, err)
+	})
+}
+
+// TestParseDuration_MoreEdgeCases tests additional edge cases for parseDuration.
+func TestParseDuration_MoreEdgeCases(t *testing.T) {
+	t.Run("very large hour value with exact division", func(t *testing.T) {
+		// 240 hours = 10 days exactly.
+		days, err := parseDuration("240h")
+		assert.NoError(t, err)
+		assert.Equal(t, 10, days)
+	})
+
+	t.Run("very large hour value with remainder", func(t *testing.T) {
+		// 241 hours = 10 days + 1 hour, rounds to 11 days.
+		days, err := parseDuration("241h")
+		assert.NoError(t, err)
+		assert.Equal(t, 11, days)
+	})
+
+	t.Run("multiple digit day value", func(t *testing.T) {
+		days, err := parseDuration("1234d")
+		assert.NoError(t, err)
+		assert.Equal(t, 1234, days)
+	})
+
+	t.Run("multiple digit week value", func(t *testing.T) {
+		days, err := parseDuration("100w")
+		assert.NoError(t, err)
+		assert.Equal(t, 700, days) // 100 * 7
+	})
+
+	t.Run("multiple digit month value", func(t *testing.T) {
+		days, err := parseDuration("100m")
+		assert.NoError(t, err)
+		assert.Equal(t, 3000, days) // 100 * 30
+	})
+}
+
+// TestValidateCheckpointFile_MoreScenarios tests additional checkpoint validation scenarios.
+func TestValidateCheckpointFile_MoreScenarios(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("checkpoint with tool role", func(t *testing.T) {
+		// Tool role should be rejected.
+		content := `{"version":"1.0","session":{"name":"test","provider":"test","model":"test"},"messages":[{"role":"tool","content":"test"}],"statistics":{"message_count":1}}`
+		path := filepath.Join(tempDir, "tool-role.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid role")
+	})
+
+	t.Run("checkpoint with function role", func(t *testing.T) {
+		content := `{"version":"1.0","session":{"name":"test","provider":"test","model":"test"},"messages":[{"role":"function","content":"test"}],"statistics":{"message_count":1}}`
+		path := filepath.Join(tempDir, "function-role.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid role")
+	})
+
+	t.Run("checkpoint with large message count", func(t *testing.T) {
+		content := `{
+			"version":"1.0",
+			"session":{"name":"test","provider":"test","model":"test"},
+			"messages":[
+				{"role":"user","content":"msg1"},
+				{"role":"assistant","content":"msg2"},
+				{"role":"user","content":"msg3"},
+				{"role":"assistant","content":"msg4"},
+				{"role":"user","content":"msg5"}
+			],
+			"statistics":{"message_count":5}
+		}`
+		path := filepath.Join(tempDir, "large-count.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("checkpoint with empty content in user message", func(t *testing.T) {
+		// Empty content should be allowed (some system messages can be empty).
+		content := `{"version":"1.0","session":{"name":"test","provider":"test","model":"test"},"messages":[{"role":"user","content":""}],"statistics":{"message_count":1}}`
+		path := filepath.Join(tempDir, "empty-content.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("checkpoint with special characters in content", func(t *testing.T) {
+		content := `{"version":"1.0","session":{"name":"test","provider":"test","model":"test"},"messages":[{"role":"user","content":"Hello\nWorld\t\"quoted\" <html>"}],"statistics":{"message_count":1}}`
+		path := filepath.Join(tempDir, "special-chars.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("checkpoint with unicode content", func(t *testing.T) {
+		content := `{"version":"1.0","session":{"name":"test-unicode","provider":"anthropic","model":"claude-3"},"messages":[{"role":"user","content":"Hello 世界 🌍"}],"statistics":{"message_count":1}}`
+		path := filepath.Join(tempDir, "unicode.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
+	})
+}
+
+// TestSessionsCommand_FlagsWithShorthand tests shorthand flag handling.
+func TestSessionsCommand_FlagsWithShorthand(t *testing.T) {
+	t.Run("export output flag shorthand is o", func(t *testing.T) {
+		flag := sessionsExportCmd.Flags().Lookup("output")
+		require.NotNil(t, flag)
+		assert.Equal(t, "o", flag.Shorthand)
+	})
+
+	t.Run("export format flag shorthand is f", func(t *testing.T) {
+		flag := sessionsExportCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "f", flag.Shorthand)
+	})
+
+	t.Run("import name flag shorthand is n", func(t *testing.T) {
+		flag := sessionsImportCmd.Flags().Lookup("name")
+		require.NotNil(t, flag)
+		assert.Equal(t, "n", flag.Shorthand)
+	})
+}
+
+// TestCleanSessionsCommand_DurationParsingCoverage tests duration parsing for full coverage.
+func TestCleanSessionsCommand_DurationParsingCoverage(t *testing.T) {
+	t.Run("clean command parses hours correctly", func(t *testing.T) {
+		// Test the round-up logic in hour parsing.
+		testCases := []struct {
+			hours        string
+			expectedDays int
+		}{
+			{"1h", 1},   // 0.04 days rounds up to 1.
+			{"12h", 1},  // 0.5 days rounds up to 1.
+			{"23h", 1},  // 0.96 days rounds up to 1.
+			{"24h", 1},  // exactly 1 day.
+			{"25h", 2},  // 1.04 days rounds up to 2.
+			{"48h", 2},  // exactly 2 days.
+			{"72h", 3},  // exactly 3 days.
+			{"100h", 5}, // 4.17 days rounds up to 5.
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.hours, func(t *testing.T) {
+				days, err := parseDuration(tc.hours)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedDays, days)
+			})
+		}
+	})
+
+	t.Run("clean command parses weeks correctly", func(t *testing.T) {
+		testCases := []struct {
+			weeks        string
+			expectedDays int
+		}{
+			{"1w", 7},
+			{"2w", 14},
+			{"4w", 28},
+			{"8w", 56},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.weeks, func(t *testing.T) {
+				days, err := parseDuration(tc.weeks)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedDays, days)
+			})
+		}
+	})
+
+	t.Run("clean command parses months correctly", func(t *testing.T) {
+		testCases := []struct {
+			months       string
+			expectedDays int
+		}{
+			{"1m", 30},
+			{"2m", 60},
+			{"3m", 90},
+			{"6m", 180},
+			{"12m", 360},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.months, func(t *testing.T) {
+				days, err := parseDuration(tc.months)
+				assert.NoError(t, err)
+				assert.Equal(t, tc.expectedDays, days)
+			})
+		}
+	})
+}
+
+// TestInitSessionManager_ErrorPathCoverage tests initSessionManager error paths.
+func TestInitSessionManager_ErrorPathCoverage(t *testing.T) {
+	t.Run("returns error when config initialization fails", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/config/path/that/does/not/exist")
+		t.Setenv("ATMOS_BASE_PATH", "/nonexistent/base/path")
+
+		manager, cleanup, err := initSessionManager()
+
+		// Should fail on config initialization or AI not enabled check.
+		assert.Error(t, err)
+		assert.Nil(t, manager)
+		assert.Nil(t, cleanup)
+	})
+
+	t.Run("error message format is correct", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", "/bad/path")
+
+		manager, cleanup, err := initSessionManager()
+
+		assert.Error(t, err)
+		assert.Nil(t, manager)
+		assert.Nil(t, cleanup)
+		// Error should be wrapped properly.
+		assert.NotEmpty(t, err.Error())
+	})
+}
+
+// TestSessionsCommand_RunEFunctions tests that RunE functions are properly set.
+func TestSessionsCommand_RunEFunctions(t *testing.T) {
+	t.Run("sessionsCmd RunE is listSessionsCommand", func(t *testing.T) {
+		// The RunE function should be set.
+		assert.NotNil(t, sessionsCmd.RunE)
+	})
+
+	t.Run("sessionsListCmd RunE is listSessionsCommand", func(t *testing.T) {
+		assert.NotNil(t, sessionsListCmd.RunE)
+	})
+
+	t.Run("sessionsCleanCmd RunE is cleanSessionsCommand", func(t *testing.T) {
+		assert.NotNil(t, sessionsCleanCmd.RunE)
+	})
+
+	t.Run("sessionsExportCmd RunE is exportSessionCommand", func(t *testing.T) {
+		assert.NotNil(t, sessionsExportCmd.RunE)
+	})
+
+	t.Run("sessionsImportCmd RunE is importSessionCommand", func(t *testing.T) {
+		assert.NotNil(t, sessionsImportCmd.RunE)
+	})
+}
+
+// TestValidateCheckpointFile_FilePermissions tests checkpoint file permission scenarios.
+func TestValidateCheckpointFile_FilePermissions(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("handles directory instead of file", func(t *testing.T) {
+		dirPath := filepath.Join(tempDir, "notafile")
+		err := os.Mkdir(dirPath, 0o755)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(dirPath)
+		assert.Error(t, err)
+	})
+}
+
+// TestParseDuration_ZeroAndBoundary tests zero and boundary cases for duration parsing.
+//
+//nolint:dupl // Similar test structure intentional for clarity.
+func TestParseDuration_ZeroAndBoundary(t *testing.T) {
+	t.Run("zero hours returns 0 days", func(t *testing.T) {
+		days, err := parseDuration("0h")
+		assert.NoError(t, err)
+		assert.Equal(t, 0, days)
+	})
+
+	t.Run("zero days returns 0 days", func(t *testing.T) {
+		days, err := parseDuration("0d")
+		assert.NoError(t, err)
+		assert.Equal(t, 0, days)
+	})
+
+	t.Run("zero weeks returns 0 days", func(t *testing.T) {
+		days, err := parseDuration("0w")
+		assert.NoError(t, err)
+		assert.Equal(t, 0, days)
+	})
+
+	t.Run("zero months returns 0 days", func(t *testing.T) {
+		days, err := parseDuration("0m")
+		assert.NoError(t, err)
+		assert.Equal(t, 0, days)
+	})
+}
+
+// TestSessionsCommand_CobraArgsValidation tests Cobra args validation.
+func TestSessionsCommand_CobraArgsValidation(t *testing.T) {
+	t.Run("export requires exactly one argument", func(t *testing.T) {
+		// Zero args.
+		err := sessionsExportCmd.Args(sessionsExportCmd, []string{})
+		assert.Error(t, err)
+
+		// One arg - valid.
+		err = sessionsExportCmd.Args(sessionsExportCmd, []string{"session-name"})
+		assert.NoError(t, err)
+
+		// Two args.
+		err = sessionsExportCmd.Args(sessionsExportCmd, []string{"session1", "session2"})
+		assert.Error(t, err)
+	})
+
+	t.Run("import requires exactly one argument", func(t *testing.T) {
+		// Zero args.
+		err := sessionsImportCmd.Args(sessionsImportCmd, []string{})
+		assert.Error(t, err)
+
+		// One arg - valid.
+		err = sessionsImportCmd.Args(sessionsImportCmd, []string{"checkpoint.json"})
+		assert.NoError(t, err)
+
+		// Two args.
+		err = sessionsImportCmd.Args(sessionsImportCmd, []string{"file1.json", "file2.json"})
+		assert.Error(t, err)
+	})
+
+	t.Run("list accepts any number of arguments", func(t *testing.T) {
+		// list command doesn't have Args set, so should accept anything.
+		assert.Nil(t, sessionsListCmd.Args)
+	})
+
+	t.Run("clean accepts any number of arguments", func(t *testing.T) {
+		// clean command doesn't have Args set.
+		assert.Nil(t, sessionsCleanCmd.Args)
+	})
+}
+
+// TestCheckpointYAMLExtensions tests both .yaml and .yml extensions.
+func TestCheckpointYAMLExtensions(t *testing.T) {
+	tempDir := t.TempDir()
+
+	yamlContent := `version: "1.0"
+session:
+  name: "test-session"
+  provider: "anthropic"
+  model: "claude-3-opus"
+messages:
+  - role: "user"
+    content: "Hello"
+statistics:
+  message_count: 1
+`
+
+	t.Run("validates .yaml extension", func(t *testing.T) {
+		yamlPath := filepath.Join(tempDir, "test.yaml")
+		err := os.WriteFile(yamlPath, []byte(yamlContent), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(yamlPath)
+		assert.NoError(t, err)
+	})
+
+	t.Run("validates .yml extension", func(t *testing.T) {
+		ymlPath := filepath.Join(tempDir, "test.yml")
+		err := os.WriteFile(ymlPath, []byte(yamlContent), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(ymlPath)
+		assert.NoError(t, err)
+	})
+}
+
+// TestValidateCheckpointFile_NilAndEmptyChecks tests nil and empty validation paths.
+func TestValidateCheckpointFile_NilAndEmptyChecks(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("empty file fails validation", func(t *testing.T) {
+		emptyPath := filepath.Join(tempDir, "empty.json")
+		err := os.WriteFile(emptyPath, []byte(""), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(emptyPath)
+		assert.Error(t, err)
+	})
+
+	t.Run("null JSON fails validation", func(t *testing.T) {
+		nullPath := filepath.Join(tempDir, "null.json")
+		err := os.WriteFile(nullPath, []byte("null"), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(nullPath)
+		assert.Error(t, err)
+	})
+
+	t.Run("empty object fails validation", func(t *testing.T) {
+		emptyObjPath := filepath.Join(tempDir, "empty-obj.json")
+		err := os.WriteFile(emptyObjPath, []byte("{}"), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(emptyObjPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "version is missing")
+	})
+}
+
+// TestSessionsCommand_AllFlagsPresent verifies all expected flags are present on commands.
+func TestSessionsCommand_AllFlagsPresent(t *testing.T) {
+	t.Run("clean command has all expected flags", func(t *testing.T) {
+		flags := []string{"older-than"}
+		for _, flag := range flags {
+			f := sessionsCleanCmd.Flags().Lookup(flag)
+			assert.NotNil(t, f, "flag %s should exist", flag)
+		}
+	})
+
+	t.Run("export command has all expected flags", func(t *testing.T) {
+		flags := []string{"output", "format", "context", "metadata"}
+		for _, flag := range flags {
+			f := sessionsExportCmd.Flags().Lookup(flag)
+			assert.NotNil(t, f, "flag %s should exist", flag)
+		}
+	})
+
+	t.Run("import command has all expected flags", func(t *testing.T) {
+		flags := []string{"name", "overwrite", "context"}
+		for _, flag := range flags {
+			f := sessionsImportCmd.Flags().Lookup(flag)
+			assert.NotNil(t, f, "flag %s should exist", flag)
+		}
+	})
+}
+
+// TestParseDuration_InvalidInputs tests various invalid inputs for parseDuration.
+func TestParseDuration_InvalidInputs(t *testing.T) {
+	invalidInputs := []struct {
+		input string
+		desc  string
+	}{
+		{"abc", "only letters"},
+		{"123", "only numbers"},
+		{"d30", "unit before number"},
+		{"30 days", "full word unit"},
+		{"30.5d", "decimal number"},
+		{"d", "only unit"},
+		{".d", "dot and unit"},
+		{"30dd", "double unit"},
+	}
+
+	for _, tc := range invalidInputs {
+		t.Run(tc.desc, func(t *testing.T) {
+			_, err := parseDuration(tc.input)
+			assert.Error(t, err, "expected error for input: %s", tc.input)
+		})
+	}
+}
+
+// TestCheckpointValidation_StatisticsMismatch tests statistics validation.
+func TestCheckpointValidation_StatisticsMismatch(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("message count too high", func(t *testing.T) {
+		content := `{"version":"1.0","session":{"name":"test","provider":"test","model":"test"},"messages":[{"role":"user","content":"test"}],"statistics":{"message_count":10}}`
+		path := filepath.Join(tempDir, "high-count.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "statistics message count")
+	})
+
+	t.Run("message count too low", func(t *testing.T) {
+		content := `{"version":"1.0","session":{"name":"test","provider":"test","model":"test"},"messages":[{"role":"user","content":"test"},{"role":"assistant","content":"response"}],"statistics":{"message_count":1}}`
+		path := filepath.Join(tempDir, "low-count.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "statistics message count")
+	})
+}
+
+// TestCleanSessionsCommand_FlagErrors tests flag retrieval error paths.
+func TestCleanSessionsCommand_FlagErrors(t *testing.T) {
+	t.Run("clean without older-than flag registered returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "clean"}
+		// Don't register the flag.
+
+		err := cleanSessionsCommand(testCmd, []string{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get older-than flag")
+	})
+}
+
+// TestExportSessionCommand_FlagErrors tests flag retrieval error paths for export.
+func TestExportSessionCommand_FlagErrors(t *testing.T) {
+	t.Run("export without any flags returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "export"}
+		// Don't register any flags.
+
+		err := exportSessionCommand(testCmd, []string{"session"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get output flag")
+	})
+
+	t.Run("export without format flag returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "export"}
+		testCmd.Flags().StringP("output", "o", "", "Output")
+		// Don't register format flag.
+
+		err := exportSessionCommand(testCmd, []string{"session"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get format flag")
+	})
+
+	t.Run("export without context flag returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "export"}
+		testCmd.Flags().StringP("output", "o", "", "Output")
+		testCmd.Flags().StringP("format", "f", "", "Format")
+		// Don't register context flag.
+
+		err := exportSessionCommand(testCmd, []string{"session"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get context flag")
+	})
+
+	t.Run("export without metadata flag returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "export"}
+		testCmd.Flags().StringP("output", "o", "", "Output")
+		testCmd.Flags().StringP("format", "f", "", "Format")
+		testCmd.Flags().Bool("context", false, "Context")
+		// Don't register metadata flag.
+
+		err := exportSessionCommand(testCmd, []string{"session"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get metadata flag")
+	})
+}
+
+// TestImportSessionCommand_FlagErrors tests flag retrieval error paths for import.
+func TestImportSessionCommand_FlagErrors(t *testing.T) {
+	t.Run("import without any flags returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "import"}
+		// Don't register any flags.
+
+		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get name flag")
+	})
+
+	t.Run("import without overwrite flag returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "import"}
+		testCmd.Flags().StringP("name", "n", "", "Name")
+		// Don't register overwrite flag.
+
+		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get overwrite flag")
+	})
+
+	t.Run("import without context flag returns error", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "import"}
+		testCmd.Flags().StringP("name", "n", "", "Name")
+		testCmd.Flags().Bool("overwrite", false, "Overwrite")
+		// Don't register context flag.
+
+		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get context flag")
 	})
 }

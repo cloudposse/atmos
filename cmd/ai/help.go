@@ -71,61 +71,8 @@ Examples:
 				errUtils.ErrAINotEnabled)
 		}
 
-		var topic string
-		if len(args) > 0 {
-			topic = args[0]
-		} else {
-			topic = "general"
-		}
-
-		// Prepare help question based on topic.
-		var question string
-		switch strings.ToLower(topic) {
-		case "stacks":
-			question = "Explain Atmos stacks in detail. What are they, how do they work, and what are best practices for organizing stacks?"
-		case "components":
-			question = "Explain Atmos components in detail. What are they, how do they relate to stacks, and what are best practices for creating reusable components?"
-		case "templating", "templates":
-			question = "Explain Atmos templating capabilities. How do Go templates work in Atmos, what functions are available, and how can I use them effectively?"
-		case "workflows":
-			question = "Explain Atmos workflow orchestration. How do workflows work, when should I use them, and what are some common patterns?"
-		case "validation", "validate":
-			question = "Explain Atmos configuration validation. How does schema validation work, how can I validate my configurations, and what are common validation issues?"
-		case "vendoring", "vendor":
-			question = "Explain Atmos component vendoring. How does vendoring work, when should I use it, and what are best practices for managing external components?"
-		case "inheritance":
-			question = "Explain Atmos stack inheritance. How does configuration inheritance work, what are the precedence rules, and what are best practices for using inheritance?"
-		case "affected":
-			question = "Explain Atmos affected components detection. How does it work, when should I use it, and how can I integrate it into CI/CD pipelines?"
-		case "terraform":
-			question = "Explain how Atmos works with Terraform. What are the key integration features, best practices, and how do I manage Terraform components in Atmos?"
-		case "helmfile":
-			question = "Explain how Atmos works with Helmfile. What are the key integration features, best practices, and how do I manage Helmfile components in Atmos?"
-		case "atlantis":
-			question = "Explain Atmos integration with Atlantis. How do I configure Atlantis for Atmos, generate repo configs, and what are best practices?"
-		case "spacelift":
-			question = "Explain Atmos integration with Spacelift. How do I configure Spacelift for Atmos, set up stacks, and what are best practices?"
-		case "backends", "backend":
-			question = "Explain Terraform backend configuration in Atmos. How are backends configured, how do I generate backend configs, and what are best practices?"
-		case "imports":
-			question = "Explain Atmos stack imports. How do imports work, what can be imported, and what are best practices for organizing imports?"
-		case "overrides":
-			question = "Explain Atmos configuration overrides. How do overrides work, what is the precedence order, and what are best practices for using overrides?"
-		case "catalogs", "catalog":
-			question = "Explain Atmos component catalogs. What are they, how do they work, and how can I create and use component catalogs?"
-		case "mixins":
-			question = "Explain Atmos mixins. What are they, how do they work with vendoring, and what are best practices for using mixins?"
-		case "schemas", "schema":
-			question = "Explain Atmos schemas and JSON Schema validation. How do I define schemas, validate configurations, and what are common schema patterns?"
-		case "opa", "policies":
-			question = "Explain OPA (Open Policy Agent) integration in Atmos. How do I write policies, validate with OPA, and what are common policy patterns?"
-		case "settings":
-			question = "Explain Atmos settings configuration. What settings are available in atmos.yaml, how do they affect behavior, and what are best practices?"
-		case "general":
-			question = "Provide a comprehensive overview of Atmos. Explain the key concepts, architecture, and how all the pieces fit together."
-		default:
-			question = fmt.Sprintf("Explain '%s' in the context of Atmos. Provide detailed information, examples, and best practices.", topic)
-		}
+		topic := getTopicFromArgs(args)
+		question := getHelpQuestionForTopic(topic)
 
 		log.Debug("Getting AI help", "topic", topic)
 
@@ -159,4 +106,66 @@ Examples:
 
 func init() {
 	aiCmd.AddCommand(helpCmd)
+}
+
+// getHelpQuestionForTopic returns the appropriate AI question for a given help topic.
+// It handles case-insensitive matching and topic aliases.
+//
+//nolint:revive,cyclop,funlen // High complexity is acceptable for this topic switch statement.
+func getHelpQuestionForTopic(topic string) string {
+	switch strings.ToLower(topic) {
+	case "stacks":
+		return "Explain Atmos stacks in detail. What are they, how do they work, and what are best practices for organizing stacks?"
+	case "components":
+		return "Explain Atmos components in detail. What are they, how do they relate to stacks, and what are best practices for creating reusable components?"
+	case "templating", "templates":
+		return "Explain Atmos templating capabilities. How do Go templates work in Atmos, what functions are available, and how can I use them effectively?"
+	case "workflows":
+		return "Explain Atmos workflow orchestration. How do workflows work, when should I use them, and what are some common patterns?"
+	case "validation", "validate":
+		return "Explain Atmos configuration validation. How does schema validation work, how can I validate my configurations, and what are common validation issues?"
+	case "vendoring", "vendor":
+		return "Explain Atmos component vendoring. How does vendoring work, when should I use it, and what are best practices for managing external components?"
+	case "inheritance":
+		return "Explain Atmos stack inheritance. How does configuration inheritance work, what are the precedence rules, and what are best practices for using inheritance?"
+	case "affected":
+		return "Explain Atmos affected components detection. How does it work, when should I use it, and how can I integrate it into CI/CD pipelines?"
+	case "terraform":
+		return "Explain how Atmos works with Terraform. What are the key integration features, best practices, and how do I manage Terraform components in Atmos?"
+	case "helmfile":
+		return "Explain how Atmos works with Helmfile. What are the key integration features, best practices, and how do I manage Helmfile components in Atmos?"
+	case "atlantis":
+		return "Explain Atmos integration with Atlantis. How do I configure Atlantis for Atmos, generate repo configs, and what are best practices?"
+	case "spacelift":
+		return "Explain Atmos integration with Spacelift. How do I configure Spacelift for Atmos, set up stacks, and what are best practices?"
+	case "backends", "backend":
+		return "Explain Terraform backend configuration in Atmos. How are backends configured, how do I generate backend configs, and what are best practices?"
+	case "imports":
+		return "Explain Atmos stack imports. How do imports work, what can be imported, and what are best practices for organizing imports?"
+	case "overrides":
+		return "Explain Atmos configuration overrides. How do overrides work, what is the precedence order, and what are best practices for using overrides?"
+	case "catalogs", "catalog":
+		return "Explain Atmos component catalogs. What are they, how do they work, and how can I create and use component catalogs?"
+	case "mixins":
+		return "Explain Atmos mixins. What are they, how do they work with vendoring, and what are best practices for using mixins?"
+	case "schemas", "schema":
+		return "Explain Atmos schemas and JSON Schema validation. How do I define schemas, validate configurations, and what are common schema patterns?"
+	case "opa", "policies":
+		return "Explain OPA (Open Policy Agent) integration in Atmos. How do I write policies, validate with OPA, and what are common policy patterns?"
+	case "settings":
+		return "Explain Atmos settings configuration. What settings are available in atmos.yaml, how do they affect behavior, and what are best practices?"
+	case "general":
+		return "Provide a comprehensive overview of Atmos. Explain the key concepts, architecture, and how all the pieces fit together."
+	default:
+		return fmt.Sprintf("Explain '%s' in the context of Atmos. Provide detailed information, examples, and best practices.", topic)
+	}
+}
+
+// getTopicFromArgs extracts the help topic from command arguments.
+// Returns "general" if no arguments are provided.
+func getTopicFromArgs(args []string) string {
+	if len(args) > 0 {
+		return args[0]
+	}
+	return "general"
 }
