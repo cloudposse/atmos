@@ -1,11 +1,14 @@
 package ai
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestHelpCommand_BasicProperties(t *testing.T) {
@@ -513,4 +516,262 @@ func TestHelpCommand_TopicAliasConsistency(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestHelpCommand_AIDisabled(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create a minimal atmos.yaml with AI disabled.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: false
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir (automatically cleaned up by t.Chdir).
+	t.Chdir(tempDir)
+
+	t.Run("help command returns error when AI is disabled", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{"stacks"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "AI features are not enabled")
+	})
+
+	t.Run("help command returns error for general topic when AI disabled", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "AI features are not enabled")
+	})
+}
+
+func TestGetTopicFromArgs_AdditionalCases(t *testing.T) {
+	tests := []struct {
+		name          string
+		args          []string
+		expectedTopic string
+	}{
+		{
+			name:          "special characters in topic",
+			args:          []string{"topic-with-dashes"},
+			expectedTopic: "topic-with-dashes",
+		},
+		{
+			name:          "numeric topic",
+			args:          []string{"123"},
+			expectedTopic: "123",
+		},
+		{
+			name:          "mixed case topic",
+			args:          []string{"StackS"},
+			expectedTopic: "StackS",
+		},
+		{
+			name:          "unicode topic",
+			args:          []string{"\u00e9l\u00e8ve"},
+			expectedTopic: "\u00e9l\u00e8ve",
+		},
+		{
+			name:          "topic with underscore",
+			args:          []string{"my_topic"},
+			expectedTopic: "my_topic",
+		},
+		{
+			name:          "very long topic",
+			args:          []string{"this-is-a-very-long-topic-name-that-exceeds-normal-length"},
+			expectedTopic: "this-is-a-very-long-topic-name-that-exceeds-normal-length",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			topic := getTopicFromArgs(tt.args)
+			assert.Equal(t, tt.expectedTopic, topic)
+		})
+	}
+}
+
+func TestGetHelpQuestionForTopic_AllCasesExplicitly(t *testing.T) {
+	// Test each case in the switch statement explicitly to ensure coverage.
+	tests := []struct {
+		topic    string
+		contains []string
+	}{
+		{"stacks", []string{"Atmos stacks", "organizing stacks"}},
+		{"components", []string{"Atmos components", "reusable components"}},
+		{"templating", []string{"templating capabilities", "Go templates"}},
+		{"templates", []string{"templating capabilities", "Go templates"}},
+		{"workflows", []string{"workflow orchestration", "patterns"}},
+		{"validation", []string{"configuration validation", "schema validation"}},
+		{"validate", []string{"configuration validation", "schema validation"}},
+		{"vendoring", []string{"component vendoring", "external"}},
+		{"vendor", []string{"component vendoring", "external"}},
+		{"inheritance", []string{"stack inheritance", "precedence rules"}},
+		{"affected", []string{"affected components detection", "CI/CD"}},
+		{"terraform", []string{"Terraform", "integration features"}},
+		{"helmfile", []string{"Helmfile", "integration features"}},
+		{"atlantis", []string{"Atlantis", "repo configs"}},
+		{"spacelift", []string{"Spacelift", "stacks"}},
+		{"backends", []string{"backend configuration", "Terraform"}},
+		{"backend", []string{"backend configuration", "Terraform"}},
+		{"imports", []string{"stack imports", "imported"}},
+		{"overrides", []string{"configuration overrides", "precedence order"}},
+		{"catalogs", []string{"component catalogs", "create and use"}},
+		{"catalog", []string{"component catalogs", "create and use"}},
+		{"mixins", []string{"mixins", "vendoring"}},
+		{"schemas", []string{"schemas", "JSON Schema"}},
+		{"schema", []string{"schemas", "JSON Schema"}},
+		{"opa", []string{"OPA", "policy"}},
+		{"policies", []string{"OPA", "policy"}},
+		{"settings", []string{"settings configuration", "atmos.yaml"}},
+		{"general", []string{"comprehensive overview", "key concepts"}},
+	}
+
+	for _, tt := range tests {
+		t.Run("topic_"+tt.topic, func(t *testing.T) {
+			question := getHelpQuestionForTopic(tt.topic)
+			for _, expected := range tt.contains {
+				assert.Contains(t, question, expected,
+					"Question for topic '%s' should contain '%s'", tt.topic, expected)
+			}
+		})
+	}
+}
+
+func TestGetHelpQuestionForTopic_DefaultCase(t *testing.T) {
+	tests := []struct {
+		name  string
+		topic string
+	}{
+		{"unknown topic", "unknown-topic"},
+		{"random string", "asdfghjkl"},
+		{"misspelled topic", "stackss"},
+		{"partial match", "stack"},
+		{"number-prefixed", "123stacks"},
+		{"special chars only", "!@#$%"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			question := getHelpQuestionForTopic(tt.topic)
+			// Default case should include the topic and standard context.
+			assert.Contains(t, question, tt.topic)
+			assert.Contains(t, question, "context of Atmos")
+			assert.Contains(t, question, "detailed information")
+			assert.Contains(t, question, "best practices")
+		})
+	}
+}
+
+func TestHelpCommand_UsesRunE(t *testing.T) {
+	t.Run("help command uses RunE for error handling", func(t *testing.T) {
+		assert.NotNil(t, helpCmd.RunE, "help command should have RunE set")
+		assert.Nil(t, helpCmd.Run, "help command should not have Run set when RunE is used")
+	})
+}
+
+func TestHelpCommand_CommandName(t *testing.T) {
+	assert.Equal(t, "help", helpCmd.Name())
+}
+
+func TestHelpCommand_CommandUsageString(t *testing.T) {
+	// Verify the Use field follows the expected pattern.
+	assert.Equal(t, "help [topic]", helpCmd.Use)
+	// The [topic] indicates an optional positional argument.
+}
+
+func TestHelpCommand_SubcommandRegistration(t *testing.T) {
+	// Verify help is registered as a subcommand of ai.
+	t.Run("help is a subcommand of ai", func(t *testing.T) {
+		subcommands := aiCmd.Commands()
+		found := false
+		for _, cmd := range subcommands {
+			if cmd.Name() == "help" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "help should be a subcommand of ai")
+	})
+}
+
+func TestHelpCommand_InvalidConfigPath(t *testing.T) {
+	tests := []struct {
+		name       string
+		configPath string
+	}{
+		{
+			name:       "nonexistent path",
+			configPath: "/this/path/does/not/exist",
+		},
+		{
+			name:       "deeply nested nonexistent path",
+			configPath: "/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", tt.configPath)
+
+			testCmd := &cobra.Command{
+				Use: "test-help",
+			}
+
+			err := helpCmd.RunE(testCmd, []string{"stacks"})
+			assert.Error(t, err)
+		})
+	}
+}
+
+func TestHelpCommand_HasShortDescription(t *testing.T) {
+	assert.NotEmpty(t, helpCmd.Short, "help command should have a short description")
+	assert.Equal(t, "Get AI-powered help on Atmos topics", helpCmd.Short)
+}
+
+func TestHelpCommand_HasLongDescription(t *testing.T) {
+	assert.NotEmpty(t, helpCmd.Long, "help command should have a long description")
+	assert.Greater(t, len(helpCmd.Long), len(helpCmd.Short), "long description should be longer than short")
 }

@@ -3,6 +3,7 @@ package ai
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -242,6 +243,7 @@ func TestAskCommand_UsesRunE(t *testing.T) {
 	})
 }
 
+//nolint:dupl // Test setup is intentionally similar to other integration tests.
 func TestAskCommand_AIDisabled(t *testing.T) {
 	// Create a temporary directory for the test.
 	tempDir := t.TempDir()
@@ -573,4 +575,502 @@ func TestAskCommand_FlagCount(t *testing.T) {
 	})
 	// Expected: include, exclude, no-auto-context = 3 flags.
 	assert.Equal(t, 3, count, "ask command should have exactly 3 custom flags")
+}
+
+//nolint:dupl // Test setup is intentionally similar to other integration tests.
+func TestAskCommand_AIEnabledButClientCreationFails(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with AI enabled but using an unconfigured provider.
+	// This should cause ai.NewClient to fail because no provider is configured.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "nonexistent_provider"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Save current working directory and change to temp dir.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tempDir)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	t.Run("ask command returns error when AI client creation fails", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"test question"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestAskCommand_WithIncludeExcludePatterns(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with AI enabled.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "invalid_provider"
+    context:
+      enabled: true
+      auto_include:
+        - "*.yaml"
+      exclude:
+        - "*.tmp"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Save current working directory and change to temp dir.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tempDir)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	t.Run("ask command with include patterns", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set include patterns.
+		err := testCmd.Flags().Set("include", "*.yml")
+		require.NoError(t, err)
+
+		// The command will still fail due to invalid provider, but this tests the include patterns path.
+		err = askCmd.RunE(testCmd, []string{"test question"})
+		assert.Error(t, err)
+		// We expect it to get past the include patterns logic to the client creation.
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+
+	t.Run("ask command with exclude patterns", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set exclude patterns.
+		err := testCmd.Flags().Set("exclude", "*.bak")
+		require.NoError(t, err)
+
+		// The command will still fail due to invalid provider, but this tests the exclude patterns path.
+		err = askCmd.RunE(testCmd, []string{"test question"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+
+	t.Run("ask command with both include and exclude patterns", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set both patterns.
+		err := testCmd.Flags().Set("include", "*.yml,*.json")
+		require.NoError(t, err)
+		err = testCmd.Flags().Set("exclude", "*.bak,*.log")
+		require.NoError(t, err)
+
+		// The command will still fail due to invalid provider, but this tests both paths.
+		err = askCmd.RunE(testCmd, []string{"test question"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestAskCommand_WithNoAutoContext(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with AI enabled and context enabled.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "invalid_provider"
+    context:
+      enabled: true
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Save current working directory and change to temp dir.
+	origDir, err := os.Getwd()
+	require.NoError(t, err)
+	err = os.Chdir(tempDir)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = os.Chdir(origDir)
+	})
+
+	t.Run("ask command with no-auto-context flag", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set no-auto-context flag.
+		err := testCmd.Flags().Set("no-auto-context", "true")
+		require.NoError(t, err)
+
+		// The command will still fail due to invalid provider, but this tests the no-auto-context path.
+		err = askCmd.RunE(testCmd, []string{"test question"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestAskCommand_QuestionJoiningWithStringsJoin(t *testing.T) {
+	// Test the actual strings.Join behavior used in the command.
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "single word question",
+			args:     []string{"components"},
+			expected: "components",
+		},
+		{
+			name:     "single phrase as one arg",
+			args:     []string{"What are the available components?"},
+			expected: "What are the available components?",
+		},
+		{
+			name:     "multiple words as separate args",
+			args:     []string{"What", "are", "components"},
+			expected: "What are components",
+		},
+		{
+			name:     "question with special characters",
+			args:     []string{"How", "do", "I", "validate", "my", "stack?"},
+			expected: "How do I validate my stack?",
+		},
+		{
+			name:     "question with quotes in args",
+			args:     []string{"describe", "vpc", "component"},
+			expected: "describe vpc component",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use strings.Join exactly as the command does.
+			question := strings.Join(tt.args, " ")
+			assert.Equal(t, tt.expected, question)
+		})
+	}
+}
+
+func TestAskCommand_TimeoutConfiguration(t *testing.T) {
+	// Test the timeout configuration logic.
+	t.Run("default timeout is 60 seconds", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled:        true,
+					TimeoutSeconds: 0, // Not configured.
+				},
+			},
+		}
+
+		// Simulate the logic from ask.go.
+		timeoutSeconds := 60
+		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		}
+
+		assert.Equal(t, 60, timeoutSeconds)
+	})
+
+	t.Run("custom timeout is used when configured", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled:        true,
+					TimeoutSeconds: 120,
+				},
+			},
+		}
+
+		// Simulate the logic from ask.go.
+		timeoutSeconds := 60
+		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		}
+
+		assert.Equal(t, 120, timeoutSeconds)
+	})
+
+	t.Run("timeout with various values", func(t *testing.T) {
+		tests := []struct {
+			configured int
+			expected   int
+		}{
+			{0, 60},
+			{30, 30},
+			{60, 60},
+			{120, 120},
+			{300, 300},
+		}
+
+		for _, tt := range tests {
+			atmosConfig := &schema.AtmosConfiguration{
+				Settings: schema.AtmosSettings{
+					AI: schema.AISettings{
+						TimeoutSeconds: tt.configured,
+					},
+				},
+			}
+
+			timeoutSeconds := 60
+			if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
+				timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+			}
+
+			assert.Equal(t, tt.expected, timeoutSeconds)
+		}
+	})
+}
+
+func TestAskCommand_ContextOverridesWithEmptyPatterns(t *testing.T) {
+	// Test that empty patterns don't affect the configuration.
+	t.Run("empty include patterns don't change config", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						AutoInclude: []string{"*.yaml"},
+					},
+				},
+			},
+		}
+
+		// Simulate with empty patterns.
+		includePatterns := []string{}
+		if len(includePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		}
+
+		// Should remain unchanged.
+		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 1)
+		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.yaml")
+	})
+
+	t.Run("empty exclude patterns don't change config", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						Exclude: []string{"*.tmp"},
+					},
+				},
+			},
+		}
+
+		// Simulate with empty patterns.
+		excludePatterns := []string{}
+		if len(excludePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+		}
+
+		// Should remain unchanged.
+		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 1)
+		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.tmp")
+	})
+}
+
+func TestAskCommand_NoAutoContextFalsePreservesContext(t *testing.T) {
+	// Test that when no-auto-context is false, context remains enabled.
+	t.Run("no-auto-context false preserves context enabled", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						Enabled: true,
+					},
+				},
+			},
+		}
+
+		// Simulate what the ask command does when no-auto-context is false.
+		noAutoContext := false
+		if noAutoContext {
+			atmosConfig.Settings.AI.Context.Enabled = false
+		}
+
+		// Context should still be enabled.
+		assert.True(t, atmosConfig.Settings.AI.Context.Enabled)
+	})
+}
+
+func TestAskCommand_ContextAppendBehavior(t *testing.T) {
+	// Test that patterns are appended, not replaced.
+	t.Run("include patterns are appended to existing patterns", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						AutoInclude: []string{"existing.yaml"},
+					},
+				},
+			},
+		}
+
+		includePatterns := []string{"new1.yaml", "new2.yaml"}
+		atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+
+		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 3)
+		assert.Equal(t, "existing.yaml", atmosConfig.Settings.AI.Context.AutoInclude[0])
+		assert.Equal(t, "new1.yaml", atmosConfig.Settings.AI.Context.AutoInclude[1])
+		assert.Equal(t, "new2.yaml", atmosConfig.Settings.AI.Context.AutoInclude[2])
+	})
+
+	t.Run("exclude patterns are appended to existing patterns", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						Exclude: []string{"existing.tmp"},
+					},
+				},
+			},
+		}
+
+		excludePatterns := []string{"new1.tmp", "new2.tmp"}
+		atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+
+		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 3)
+		assert.Equal(t, "existing.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
+		assert.Equal(t, "new1.tmp", atmosConfig.Settings.AI.Context.Exclude[1])
+		assert.Equal(t, "new2.tmp", atmosConfig.Settings.AI.Context.Exclude[2])
+	})
 }

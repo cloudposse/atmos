@@ -13,6 +13,38 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// LSPServer defines the interface for LSP server operations.
+// This interface enables dependency injection and testing.
+type LSPServer interface {
+	RunStdio() error
+	RunTCP(address string) error
+	RunWebSocket(address string) error
+}
+
+// ServerFactory is a function type for creating LSP servers.
+// This allows for dependency injection in tests.
+type ServerFactory func(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (LSPServer, error)
+
+// ConfigLoader is a function type for loading Atmos configuration.
+// This allows for dependency injection in tests.
+type ConfigLoader func(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error)
+
+// defaultServerFactory creates a real LSP server.
+var defaultServerFactory ServerFactory = func(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (LSPServer, error) {
+	return server.NewServer(ctx, atmosConfig)
+}
+
+// defaultConfigLoader loads Atmos configuration using the standard method.
+var defaultConfigLoader ConfigLoader = cfg.InitCliConfig
+
+// serverFactory is the current server factory used by executeLSPStart.
+// It can be replaced in tests.
+var serverFactory = defaultServerFactory
+
+// configLoader is the current config loader used by executeLSPStart.
+// It can be replaced in tests.
+var configLoader = defaultConfigLoader
+
 // NewLSPCommand creates a new `atmos lsp` command.
 func NewLSPCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -69,13 +101,13 @@ func executeLSPStart(_ *cobra.Command, transport, address string) error {
 
 	// Load Atmos configuration.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{}
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+	atmosConfig, err := configLoader(configAndStacksInfo, true)
 	if err != nil {
 		return err
 	}
 
 	// Create LSP server.
-	lspServer, err := server.NewServer(ctx, &atmosConfig)
+	lspServer, err := serverFactory(ctx, &atmosConfig)
 	if err != nil {
 		return err
 	}

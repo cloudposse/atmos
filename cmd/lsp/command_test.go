@@ -1,6 +1,8 @@
 package lsp
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -9,7 +11,63 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// mockLSPServer is a mock implementation of the LSPServer interface for testing.
+type mockLSPServer struct {
+	runStdioFunc     func() error
+	runTCPFunc       func(address string) error
+	runWebSocketFunc func(address string) error
+}
+
+// RunStdio implements LSPServer.RunStdio.
+func (m *mockLSPServer) RunStdio() error {
+	if m.runStdioFunc != nil {
+		return m.runStdioFunc()
+	}
+	return nil
+}
+
+// RunTCP implements LSPServer.RunTCP.
+func (m *mockLSPServer) RunTCP(address string) error {
+	if m.runTCPFunc != nil {
+		return m.runTCPFunc(address)
+	}
+	return nil
+}
+
+// RunWebSocket implements LSPServer.RunWebSocket.
+func (m *mockLSPServer) RunWebSocket(address string) error {
+	if m.runWebSocketFunc != nil {
+		return m.runWebSocketFunc(address)
+	}
+	return nil
+}
+
+// setupMockFactories sets up mock factories for testing and returns a cleanup function.
+func setupMockFactories(
+	mockConfigLoader ConfigLoader,
+	mockServerFactory ServerFactory,
+) func() {
+	// Save original factories.
+	origConfigLoader := configLoader
+	origServerFactory := serverFactory
+
+	// Set mock factories.
+	if mockConfigLoader != nil {
+		configLoader = mockConfigLoader
+	}
+	if mockServerFactory != nil {
+		serverFactory = mockServerFactory
+	}
+
+	// Return cleanup function.
+	return func() {
+		configLoader = origConfigLoader
+		serverFactory = origServerFactory
+	}
+}
 
 // TestNewLSPCommand tests the NewLSPCommand function.
 func TestNewLSPCommand(t *testing.T) {
@@ -494,4 +552,553 @@ func TestLSPCommand_FParseErrWhitelist(t *testing.T) {
 
 	// Unknown flags should NOT be allowed (strict parsing).
 	assert.False(t, cmd.FParseErrWhitelist.UnknownFlags)
+}
+
+// TestExecuteLSPStart_ConfigLoaderError tests that executeLSPStart returns config loader errors.
+func TestExecuteLSPStart_ConfigLoaderError(t *testing.T) {
+	configErr := errors.New("config loading failed")
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, configErr
+		},
+		nil,
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	err := executeLSPStart(cmd, "stdio", "localhost:7777")
+
+	require.Error(t, err)
+	assert.Equal(t, configErr, err)
+}
+
+// TestExecuteLSPStart_ServerFactoryError tests that executeLSPStart returns server factory errors.
+func TestExecuteLSPStart_ServerFactoryError(t *testing.T) {
+	serverErr := errors.New("server creation failed")
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return nil, serverErr
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	err := executeLSPStart(cmd, "stdio", "localhost:7777")
+
+	require.Error(t, err)
+	assert.Equal(t, serverErr, err)
+}
+
+// TestExecuteLSPStart_StdioTransport tests the stdio transport execution path.
+func TestExecuteLSPStart_StdioTransport(t *testing.T) {
+	var stdioCalledWith bool
+
+	mockServer := &mockLSPServer{
+		runStdioFunc: func() error {
+			stdioCalledWith = true
+			return nil
+		},
+	}
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return mockServer, nil
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	err := executeLSPStart(cmd, "stdio", "localhost:7777")
+
+	require.NoError(t, err)
+	assert.True(t, stdioCalledWith, "RunStdio should have been called")
+}
+
+// TestExecuteLSPStart_TCPTransport tests the TCP transport execution path.
+func TestExecuteLSPStart_TCPTransport(t *testing.T) {
+	var tcpAddress string
+
+	mockServer := &mockLSPServer{
+		runTCPFunc: func(address string) error {
+			tcpAddress = address
+			return nil
+		},
+	}
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return mockServer, nil
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	err := executeLSPStart(cmd, "tcp", "0.0.0.0:8080")
+
+	require.NoError(t, err)
+	assert.Equal(t, "0.0.0.0:8080", tcpAddress, "RunTCP should have been called with correct address")
+}
+
+// TestExecuteLSPStart_WebSocketTransport tests the websocket transport execution path.
+func TestExecuteLSPStart_WebSocketTransport(t *testing.T) {
+	var wsAddress string
+
+	mockServer := &mockLSPServer{
+		runWebSocketFunc: func(address string) error {
+			wsAddress = address
+			return nil
+		},
+	}
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return mockServer, nil
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	err := executeLSPStart(cmd, "websocket", "localhost:9000")
+
+	require.NoError(t, err)
+	assert.Equal(t, "localhost:9000", wsAddress, "RunWebSocket should have been called with correct address")
+}
+
+// TestExecuteLSPStart_WSTransportAlias tests the ws alias for websocket transport.
+func TestExecuteLSPStart_WSTransportAlias(t *testing.T) {
+	var wsAddress string
+
+	mockServer := &mockLSPServer{
+		runWebSocketFunc: func(address string) error {
+			wsAddress = address
+			return nil
+		},
+	}
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return mockServer, nil
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	err := executeLSPStart(cmd, "ws", "localhost:9001")
+
+	require.NoError(t, err)
+	assert.Equal(t, "localhost:9001", wsAddress, "RunWebSocket should have been called with ws alias")
+}
+
+// TestExecuteLSPStart_InvalidTransportWithMock tests the invalid transport error with mocked dependencies.
+func TestExecuteLSPStart_InvalidTransportWithMock(t *testing.T) {
+	tests := []struct {
+		name      string
+		transport string
+	}{
+		{name: "unknown transport", transport: "unknown"},
+		{name: "empty transport", transport: ""},
+		{name: "http transport", transport: "http"},
+		{name: "grpc transport", transport: "grpc"},
+		{name: "unix transport", transport: "unix"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cleanup := setupMockFactories(
+				func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+					return schema.AtmosConfiguration{}, nil
+				},
+				func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+					return &mockLSPServer{}, nil
+				},
+			)
+			defer cleanup()
+
+			cmd := &cobra.Command{}
+			err := executeLSPStart(cmd, tt.transport, "localhost:7777")
+
+			require.Error(t, err)
+			assert.ErrorIs(t, err, errUtils.ErrLSPInvalidTransport)
+			assert.Contains(t, err.Error(), tt.transport)
+			assert.Contains(t, err.Error(), "must be 'stdio', 'tcp', or 'websocket'")
+		})
+	}
+}
+
+// TestExecuteLSPStart_TransportRunErrors tests that transport run errors are properly returned.
+func TestExecuteLSPStart_TransportRunErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		transport string
+		setupMock func() *mockLSPServer
+	}{
+		{
+			name:      "stdio error",
+			transport: "stdio",
+			setupMock: func() *mockLSPServer {
+				return &mockLSPServer{
+					runStdioFunc: func() error {
+						return errors.New("stdio error")
+					},
+				}
+			},
+		},
+		{
+			name:      "tcp error",
+			transport: "tcp",
+			setupMock: func() *mockLSPServer {
+				return &mockLSPServer{
+					runTCPFunc: func(_ string) error {
+						return errors.New("tcp error")
+					},
+				}
+			},
+		},
+		{
+			name:      "websocket error",
+			transport: "websocket",
+			setupMock: func() *mockLSPServer {
+				return &mockLSPServer{
+					runWebSocketFunc: func(_ string) error {
+						return errors.New("websocket error")
+					},
+				}
+			},
+		},
+		{
+			name:      "ws alias error",
+			transport: "ws",
+			setupMock: func() *mockLSPServer {
+				return &mockLSPServer{
+					runWebSocketFunc: func(_ string) error {
+						return errors.New("ws error")
+					},
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockServer := tt.setupMock()
+
+			cleanup := setupMockFactories(
+				func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+					return schema.AtmosConfiguration{}, nil
+				},
+				func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+					return mockServer, nil
+				},
+			)
+			defer cleanup()
+
+			cmd := &cobra.Command{}
+			err := executeLSPStart(cmd, tt.transport, "localhost:7777")
+
+			require.Error(t, err)
+		})
+	}
+}
+
+// TestExecuteLSPStart_AllTransportTypes tests all valid transport types with mock.
+func TestExecuteLSPStart_AllTransportTypes(t *testing.T) {
+	tests := []struct {
+		name                string
+		transport           string
+		address             string
+		expectedMethod      string
+		expectedAddress     string
+		expectAddressLogged bool
+	}{
+		{
+			name:                "stdio transport",
+			transport:           "stdio",
+			address:             "localhost:7777",
+			expectedMethod:      "stdio",
+			expectAddressLogged: false,
+		},
+		{
+			name:                "tcp transport",
+			transport:           "tcp",
+			address:             "0.0.0.0:8080",
+			expectedMethod:      "tcp",
+			expectedAddress:     "0.0.0.0:8080",
+			expectAddressLogged: true,
+		},
+		{
+			name:                "websocket transport",
+			transport:           "websocket",
+			address:             "localhost:9000",
+			expectedMethod:      "websocket",
+			expectedAddress:     "localhost:9000",
+			expectAddressLogged: true,
+		},
+		{
+			name:                "ws alias transport",
+			transport:           "ws",
+			address:             "localhost:9001",
+			expectedMethod:      "websocket",
+			expectedAddress:     "localhost:9001",
+			expectAddressLogged: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calledMethod string
+			var calledAddress string
+
+			mockServer := &mockLSPServer{
+				runStdioFunc: func() error {
+					calledMethod = "stdio"
+					return nil
+				},
+				runTCPFunc: func(address string) error {
+					calledMethod = "tcp"
+					calledAddress = address
+					return nil
+				},
+				runWebSocketFunc: func(address string) error {
+					calledMethod = "websocket"
+					calledAddress = address
+					return nil
+				},
+			}
+
+			cleanup := setupMockFactories(
+				func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+					return schema.AtmosConfiguration{}, nil
+				},
+				func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+					return mockServer, nil
+				},
+			)
+			defer cleanup()
+
+			cmd := &cobra.Command{}
+			err := executeLSPStart(cmd, tt.transport, tt.address)
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedMethod, calledMethod)
+			if tt.expectAddressLogged {
+				assert.Equal(t, tt.expectedAddress, calledAddress)
+			}
+		})
+	}
+}
+
+// TestLSPServerInterface_Compliance verifies the mockLSPServer implements LSPServer.
+func TestLSPServerInterface_Compliance(t *testing.T) {
+	var _ LSPServer = (*mockLSPServer)(nil)
+}
+
+// TestDefaultFactories tests that default factories are set correctly.
+func TestDefaultFactories(t *testing.T) {
+	// Verify that default factories are not nil.
+	assert.NotNil(t, defaultServerFactory)
+	assert.NotNil(t, defaultConfigLoader)
+}
+
+// TestSetupMockFactories_Cleanup tests that the cleanup function properly restores factories.
+func TestSetupMockFactories_Cleanup(t *testing.T) {
+	// Create a marker to verify the mock is in place.
+	mockConfigCalled := false
+
+	// Setup mocks.
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			mockConfigCalled = true
+			return schema.AtmosConfiguration{}, errors.New("mock config")
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return nil, errors.New("mock server")
+		},
+	)
+
+	// Verify mocks are in place by calling them.
+	_, err := configLoader(schema.ConfigAndStacksInfo{}, true)
+	require.Error(t, err)
+	assert.True(t, mockConfigCalled, "mock config loader should have been called")
+
+	// Run cleanup.
+	cleanup()
+
+	// Verify cleanup runs without panic.
+	assert.NotNil(t, configLoader)
+	assert.NotNil(t, serverFactory)
+
+	// After cleanup, calling configLoader should use the default which behaves differently.
+	// We cannot directly compare functions, but we verified the mock was replaced during the test.
+}
+
+// TestSetupMockFactories_PartialMock tests setting only one mock factory.
+func TestSetupMockFactories_PartialMock(t *testing.T) {
+	// Create a marker to verify only config loader is mocked.
+	mockConfigCalled := false
+
+	// Only mock config loader.
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			mockConfigCalled = true
+			return schema.AtmosConfiguration{}, errors.New("mocked config error")
+		},
+		nil, // Do not mock server factory.
+	)
+	defer cleanup()
+
+	// Verify config loader is mocked.
+	_, err := configLoader(schema.ConfigAndStacksInfo{}, true)
+	require.Error(t, err)
+	assert.True(t, mockConfigCalled, "mock config loader should have been called")
+	assert.Contains(t, err.Error(), "mocked config error")
+
+	// Server factory should still be the default (not nil).
+	assert.NotNil(t, serverFactory)
+}
+
+// TestExecuteLSPStart_ConfigLoaderReceivesCorrectParams tests that config loader is called with correct parameters.
+func TestExecuteLSPStart_ConfigLoaderReceivesCorrectParams(t *testing.T) {
+	var receivedProcessStacks bool
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, processStacks bool) (schema.AtmosConfiguration, error) {
+			receivedProcessStacks = processStacks
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			return &mockLSPServer{}, nil
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	_ = executeLSPStart(cmd, "stdio", "localhost:7777")
+
+	// Verify processStacks is true (as per the implementation).
+	assert.True(t, receivedProcessStacks)
+}
+
+// TestExecuteLSPStart_ServerFactoryReceivesConfig tests that server factory receives the config from config loader.
+func TestExecuteLSPStart_ServerFactoryReceivesConfig(t *testing.T) {
+	expectedConfig := schema.AtmosConfiguration{
+		BasePath: "/test/path",
+	}
+	var receivedConfig *schema.AtmosConfiguration
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return expectedConfig, nil
+		},
+		func(_ context.Context, cfg *schema.AtmosConfiguration) (LSPServer, error) {
+			receivedConfig = cfg
+			return &mockLSPServer{}, nil
+		},
+	)
+	defer cleanup()
+
+	cmd := &cobra.Command{}
+	_ = executeLSPStart(cmd, "stdio", "localhost:7777")
+
+	require.NotNil(t, receivedConfig)
+	assert.Equal(t, expectedConfig.BasePath, receivedConfig.BasePath)
+}
+
+// TestNewLSPStartCommand_RunE tests that the command's RunE handler calls executeLSPStart.
+func TestNewLSPStartCommand_RunE(t *testing.T) {
+	var executeCalled bool
+	var capturedAddress string
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, nil
+		},
+		func(_ context.Context, _ *schema.AtmosConfiguration) (LSPServer, error) {
+			executeCalled = true
+			return &mockLSPServer{
+				runStdioFunc: func() error {
+					return nil
+				},
+				runTCPFunc: func(addr string) error {
+					capturedAddress = addr
+					return nil
+				},
+			}, nil
+		},
+	)
+	defer cleanup()
+
+	// Test with default flags (stdio).
+	t.Run("default stdio", func(t *testing.T) {
+		executeCalled = false
+		cmd := NewLSPStartCommand()
+		cmd.SetArgs([]string{})
+		err := cmd.Execute()
+
+		require.NoError(t, err)
+		assert.True(t, executeCalled, "executeLSPStart should have been called via RunE")
+	})
+
+	// Test with custom transport.
+	t.Run("tcp transport", func(t *testing.T) {
+		executeCalled = false
+		capturedAddress = ""
+		cmd := NewLSPStartCommand()
+		cmd.SetArgs([]string{"--transport=tcp", "--address=0.0.0.0:9999"})
+		err := cmd.Execute()
+
+		require.NoError(t, err)
+		assert.True(t, executeCalled, "executeLSPStart should have been called via RunE")
+		assert.Equal(t, "0.0.0.0:9999", capturedAddress)
+	})
+}
+
+// TestNewLSPStartCommand_RunE_Error tests that errors from executeLSPStart propagate through RunE.
+func TestNewLSPStartCommand_RunE_Error(t *testing.T) {
+	expectedErr := errors.New("test error")
+
+	cleanup := setupMockFactories(
+		func(_ schema.ConfigAndStacksInfo, _ bool) (schema.AtmosConfiguration, error) {
+			return schema.AtmosConfiguration{}, expectedErr
+		},
+		nil,
+	)
+	defer cleanup()
+
+	cmd := NewLSPStartCommand()
+	cmd.SetArgs([]string{})
+	err := cmd.Execute()
+
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+}
+
+// TestDefaultServerFactory tests the default server factory.
+func TestDefaultServerFactory(t *testing.T) {
+	// Verify that the default server factory is set and can be called.
+	// We cannot test the actual server creation without a valid config,
+	// but we can verify it is not nil.
+	assert.NotNil(t, defaultServerFactory)
+}
+
+// TestDefaultConfigLoader tests the default config loader.
+func TestDefaultConfigLoader(t *testing.T) {
+	// Verify that the default config loader is set.
+	assert.NotNil(t, defaultConfigLoader)
 }
