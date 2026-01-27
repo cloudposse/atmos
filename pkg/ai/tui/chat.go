@@ -1297,6 +1297,19 @@ Always take action using tools rather than describing what action you would take
 				systemPrompt = m.currentSkill.SystemPrompt
 			}
 
+			// Append available skills XML to system prompt (Agent Skills integration guide).
+			// This helps the model understand what skills are available and their purposes.
+			if m.skillRegistry != nil {
+				currentSkillName := ""
+				if m.currentSkill != nil {
+					currentSkillName = m.currentSkill.Name
+				}
+				skillsXML := m.skillRegistry.ToPromptXML(currentSkillName)
+				if skillsXML != "" {
+					systemPrompt = systemPrompt + "\n\n" + skillsXML
+				}
+			}
+
 			// Get ATMOS.md content for caching.
 			var atmosMemory string
 			if m.memoryMgr != nil {
@@ -1495,6 +1508,19 @@ Always take action using tools rather than describing what action you would take
 	if m.currentSkill != nil && m.currentSkill.SystemPrompt != "" {
 		systemPrompt = m.currentSkill.SystemPrompt
 	}
+
+	// Append available skills XML to system prompt (Agent Skills integration guide).
+	if m.skillRegistry != nil {
+		currentSkillName := ""
+		if m.currentSkill != nil {
+			currentSkillName = m.currentSkill.Name
+		}
+		skillsXML := m.skillRegistry.ToPromptXML(currentSkillName)
+		if skillsXML != "" {
+			systemPrompt = systemPrompt + "\n\n" + skillsXML
+		}
+	}
+
 	var atmosMemory string
 	if m.memoryMgr != nil {
 		atmosMemory = m.memoryMgr.GetContext()

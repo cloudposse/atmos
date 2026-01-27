@@ -82,9 +82,13 @@ pkg/ai/skills/
 ├── registry.go        # Thread-safe registry
 ├── builtin.go         # Built-in skill definitions
 ├── loader.go          # Load skills from config
-└── prompts/
-    └── embedded.go    # SKILL.md parser with go:embed
-    └── *.SKILL.md     # 5 built-in skill files
+└── builtin/
+    ├── embedded.go    # go:embed for */SKILL.md
+    ├── general/SKILL.md
+    ├── stack-analyzer/SKILL.md
+    ├── component-refactor/SKILL.md
+    ├── security-auditor/SKILL.md
+    └── config-validator/SKILL.md
 ```
 
 ## CLI Commands (Post-Migration)
@@ -141,6 +145,4 @@ All phases have been completed:
 ## References
 
 - [Agent Skills Specification](https://agentskills.io/specification)
-- [Agentic AI Foundation](https://lfaidata.foundation/blog/2025/10/23/announcing-the-agentic-ai-foundation/)
-- [Atmos Skills Documentation](/ai/skills)
-- [Atmos Skill Marketplace](/ai/skill-marketplace)
+- [Linux Foundation AI & Data](https://lfaidata.foundation)

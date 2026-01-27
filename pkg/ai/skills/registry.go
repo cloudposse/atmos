@@ -3,6 +3,7 @@ package skills
 import (
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -161,4 +162,43 @@ func (r *Registry) Has(name string) bool {
 
 	_, exists := r.skills[name]
 	return exists
+}
+
+// ToPromptXML generates an XML block listing available skills for injection into the system prompt.
+// This follows the Agent Skills integration guide recommendation for Claude models.
+// The XML format helps the model understand what skills are available and when to use them.
+func (r *Registry) ToPromptXML(currentSkillName string) string {
+	skills := r.List()
+	if len(skills) == 0 {
+		return ""
+	}
+
+	var sb strings.Builder
+	sb.WriteString("<available_skills>\n")
+	sb.WriteString("  <current_skill>")
+	sb.WriteString(currentSkillName)
+	sb.WriteString("</current_skill>\n")
+	sb.WriteString("  <skills>\n")
+
+	for _, skill := range skills {
+		sb.WriteString("    <skill>\n")
+		sb.WriteString("      <name>")
+		sb.WriteString(skill.Name)
+		sb.WriteString("</name>\n")
+		sb.WriteString("      <description>")
+		sb.WriteString(skill.Description)
+		sb.WriteString("</description>\n")
+		if skill.Category != "" {
+			sb.WriteString("      <category>")
+			sb.WriteString(skill.Category)
+			sb.WriteString("</category>\n")
+		}
+		sb.WriteString("    </skill>\n")
+	}
+
+	sb.WriteString("  </skills>\n")
+	sb.WriteString("  <note>The user can switch skills using Ctrl+A in the TUI. Each skill provides specialized expertise.</note>\n")
+	sb.WriteString("</available_skills>")
+
+	return sb.String()
 }

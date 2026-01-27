@@ -58,4 +58,11 @@ exclude = [
   "img\\.shields\\.io/github/release/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
+  # LF AI Foundation blog links (may change or be unavailable)
+  "lfaidata\\.foundation",
+  # Test data placeholder URLs (intentional)
+  "github\\.com/test/",
+  # Planned documentation paths (not yet published)
+  "file://.*/ai/skills",
+  "file://.*/ai/skill-marketplace",
 ]
