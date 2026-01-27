@@ -172,10 +172,10 @@ func TestGetCompletionItems(t *testing.T) {
 			docContent: "invalid:\n\ttab",
 			position:   protocol.Position{Line: 0, Character: 0},
 			checkItems: func(t *testing.T, items []protocol.CompletionItem) {
-				// Should return empty on invalid YAML.
-				assert.Len(t, items, 0)
+				// Should still offer completions to help user fix the document.
+				assert.Greater(t, len(items), 0)
 			},
-			description: "Invalid YAML should return no completions",
+			description: "Invalid YAML should still return completions to assist user",
 		},
 		{
 			name:       "empty line",

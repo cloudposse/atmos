@@ -53,6 +53,11 @@ func (h *Handler) getWordAtPosition(line string, char int) string {
 		return ""
 	}
 
+	// If cursor is on a non-word character, return empty.
+	if !isWordChar(line[char]) {
+		return ""
+	}
+
 	// Find word boundaries.
 	start := char
 	end := char
@@ -106,6 +111,8 @@ func (h *Handler) getKeywordDocumentation(word string) string {
 		"region": "**region**\n\nCloud provider region.\n\nExample: `region: us-east-1`",
 
 		"enabled": "**enabled**\n\nEnable or disable a component.\n\nExample: `enabled: true`",
+
+		"tags": "**tags**\n\nResource tags to apply to cloud resources.\n\nExample:\n```yaml\nvars:\n  tags:\n    Environment: prod\n    Team: platform\n```",
 	}
 
 	if doc, ok := docs[word]; ok {

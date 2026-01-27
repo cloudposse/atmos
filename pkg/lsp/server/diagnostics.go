@@ -115,7 +115,16 @@ func (h *Handler) extractErrorPosition(err error) (int, int) {
 
 	errMsg := err.Error()
 
-	// Try to extract "line X" pattern.
+	// Try to extract "line X: column Y" pattern first (more specific).
+	lineColRegex := regexp.MustCompile(`line\s+(\d+):\s*column\s+(\d+)`)
+	if matches := lineColRegex.FindStringSubmatch(errMsg); len(matches) > 2 {
+		lineNum, _ := strconv.Atoi(matches[1])
+		colNum, _ := strconv.Atoi(matches[2])
+		// YAML reports 1-based lines and columns, LSP uses 0-based.
+		return lineNum - 1, colNum - 1
+	}
+
+	// Try to extract "line X" pattern (less specific).
 	// YAML errors typically look like: "yaml: line 5: mapping values are not allowed in this context"
 	lineRegex := regexp.MustCompile(`line\s+(\d+)`)
 	if matches := lineRegex.FindStringSubmatch(errMsg); len(matches) > 1 {
@@ -123,15 +132,6 @@ func (h *Handler) extractErrorPosition(err error) (int, int) {
 			// YAML reports 1-based lines, LSP uses 0-based.
 			return lineNum - 1, 0
 		}
-	}
-
-	// Try to extract "line X: column Y" pattern.
-	lineColRegex := regexp.MustCompile(`line\s+(\d+):\s*column\s+(\d+)`)
-	if matches := lineColRegex.FindStringSubmatch(errMsg); len(matches) > 2 {
-		lineNum, _ := strconv.Atoi(matches[1])
-		colNum, _ := strconv.Atoi(matches[2])
-		// YAML reports 1-based lines and columns, LSP uses 0-based.
-		return lineNum - 1, colNum - 1
 	}
 
 	// No position found, return 0:0.

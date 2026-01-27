@@ -39,10 +39,9 @@ func (h *Handler) getCompletionItems(doc *Document, pos protocol.Position) []pro
 	var items []protocol.CompletionItem
 
 	// Parse the document to understand context.
+	// We continue even if YAML is invalid since user may be mid-typing.
 	var content map[string]interface{}
-	if err := yaml.Unmarshal([]byte(doc.Text), &content); err != nil {
-		return items
-	}
+	_ = yaml.Unmarshal([]byte(doc.Text), &content)
 
 	// Get the line at the cursor position.
 	lines := strings.Split(doc.Text, "\n")
@@ -51,33 +50,67 @@ func (h *Handler) getCompletionItems(doc *Document, pos protocol.Position) []pro
 	}
 
 	currentLine := lines[pos.Line]
+	// Handle position beyond line length.
+	if int(pos.Character) > len(currentLine) {
+		return items
+	}
 	currentLine = currentLine[:pos.Character]
 	trimmedLine := strings.TrimSpace(currentLine)
 
+	// Detect parent scope by looking at previous lines with less indentation.
+	parentScope := h.getParentScope(lines, int(pos.Line))
+
 	// Provide context-aware completions.
 
-	// Top-level keys.
-	if trimmedLine == "" || !strings.Contains(trimmedLine, ":") {
+	// Top-level keys - only when at root level (no parent scope).
+	if parentScope == "" && (trimmedLine == "" || !strings.Contains(trimmedLine, ":")) {
 		items = append(items, h.getTopLevelCompletions()...)
 		return items
 	}
 
-	// Component types.
-	if strings.Contains(currentLine, "components:") {
+	// Component types - when under components: scope.
+	if parentScope == "components" || strings.Contains(currentLine, "components:") {
 		items = append(items, h.getComponentTypeCompletions()...)
 	}
 
-	// Common Atmos variables.
-	if strings.Contains(currentLine, "vars:") {
+	// Common Atmos variables - when under vars: scope.
+	if parentScope == "vars" || strings.Contains(currentLine, "vars:") {
 		items = append(items, h.getCommonVarCompletions()...)
 	}
 
-	// Settings.
-	if strings.Contains(currentLine, "settings:") {
+	// Settings - when under settings: scope.
+	if parentScope == "settings" || strings.Contains(currentLine, "settings:") {
 		items = append(items, h.getSettingsCompletions()...)
 	}
 
 	return items
+}
+
+// getParentScope determines the parent YAML key based on indentation.
+func (h *Handler) getParentScope(lines []string, currentLineNum int) string {
+	if currentLineNum == 0 {
+		return ""
+	}
+
+	currentLine := lines[currentLineNum]
+	currentIndent := len(currentLine) - len(strings.TrimLeft(currentLine, " \t"))
+
+	// Look backwards to find the parent key with less indentation.
+	for i := currentLineNum - 1; i >= 0; i-- {
+		line := lines[i]
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+
+		lineIndent := len(line) - len(strings.TrimLeft(line, " \t"))
+		if lineIndent < currentIndent && strings.HasSuffix(trimmed, ":") {
+			// Found a parent key.
+			return strings.TrimSuffix(trimmed, ":")
+		}
+	}
+
+	return ""
 }
 
 // getTopLevelCompletions returns top-level Atmos stack keys.
