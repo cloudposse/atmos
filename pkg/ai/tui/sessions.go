@@ -80,22 +80,22 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 		m.sess = msg.session
 		m.messages = make([]ChatMessage, 0)
 
-		// Restore agent from session if available.
-		if msg.session != nil && msg.session.Agent != "" && m.agentRegistry != nil {
-			if agent, err := m.agentRegistry.Get(msg.session.Agent); err == nil {
-				// Load agent's system prompt from file (if configured).
-				systemPrompt, promptErr := agent.LoadSystemPrompt()
+		// Restore skill from session if available.
+		if msg.session != nil && msg.session.Skill != "" && m.skillRegistry != nil {
+			if skill, err := m.skillRegistry.Get(msg.session.Skill); err == nil {
+				// Load skill's system prompt from file (if configured).
+				systemPrompt, promptErr := skill.LoadSystemPrompt()
 				if promptErr != nil {
-					log.Debug(fmt.Sprintf("Failed to load system prompt for agent %q: %v, using default", agent.Name, promptErr))
+					log.Debug(fmt.Sprintf("Failed to load system prompt for skill %q: %v, using default", skill.Name, promptErr))
 					// Keep the existing SystemPrompt as fallback.
 				} else {
-					// Update agent with loaded prompt.
-					agent.SystemPrompt = systemPrompt
+					// Update skill with loaded prompt.
+					skill.SystemPrompt = systemPrompt
 				}
-				m.currentAgent = agent
+				m.currentSkill = skill
 			} else {
-				// If agent not found, log and fall back to default.
-				log.Debug(fmt.Sprintf("Agent %q from session not found, using current agent", msg.session.Agent))
+				// If skill not found, log and fall back to default.
+				log.Debug(fmt.Sprintf("Skill %q from session not found, using current skill", msg.session.Skill))
 			}
 		}
 

@@ -1,0 +1,919 @@
+---
+title: AI Skill Marketplace
+sidebar_position: 8
+sidebar_label: Skill Marketplace
+description: Install and share community AI skills from GitHub
+id: skill-marketplace
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+# AI Skill Marketplace
+
+<Experimental />
+
+:::info Not Claude's Marketplace
+The Atmos Skill Marketplace is **not related to Anthropic's Claude marketplace**. This is Atmos's own system for installing and sharing specialized AI skills from GitHub repositories. These skills work within the Atmos ecosystem to provide domain-specific expertise for infrastructure management. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
+:::
+
+:::caution Coming Soon
+The Skill Marketplace infrastructure is implemented and ready to use. However, community-contributed skills are still in development. You can create and share your own skills today, but the official catalog of community skills is coming soon.
+:::
+
+The Atmos AI Skill Marketplace enables you to install, share, and use community-created AI skills from GitHub repositories. Extend Atmos with specialized skills created by the community or publish your own custom skills for others to use.
+
+## Overview
+
+The Skill Marketplace provides:
+
+- **Easy Installation** - Install skills directly from GitHub with a single command
+- **Security Validation** - Automatic validation of skill metadata and version compatibility
+- **Community Sharing** - Publish and discover skills created by the Atmos community
+- **Local Management** - Track installed skills in a local registry at `~/.atmos/skills/`
+- **Version Control** - Install specific versions using Git tags or branches
+- **Safety Features** - Confirmation prompts for skills requesting destructive tool access
+
+### How It Works
+
+1. **Skill Repositories**: Developers create skills with `SKILL.md` files containing metadata and prompts
+2. **GitHub Hosting**: Skills are published as public GitHub repositories
+3. **Installation**: Users install skills with `atmos ai skill install <github-url>`
+4. **Local Registry**: Installed skills are tracked in `~/.atmos/skills/registry.json`
+5. **Automatic Loading**: Installed skills appear in the TUI skill selector (Ctrl+A)
+
+## Installing Skills
+
+### From GitHub
+
+Install skills using various GitHub URL formats:
+
+<Terminal title="terminal">
+```bash
+# GitHub shorthand (recommended)
+atmos ai skill install github.com/cloudposse/atmos-skill-terraform
+
+# With specific version tag
+atmos ai skill install github.com/cloudposse/atmos-skill-terraform@v1.2.3
+
+# With branch name
+atmos ai skill install github.com/cloudposse/atmos-skill-terraform@main
+
+# Full HTTPS URL
+atmos ai skill install https://github.com/cloudposse/atmos-skill-terraform.git
+
+# SSH URL
+atmos ai skill install git@github.com:cloudposse/atmos-skill-terraform.git
+```
+</Terminal>
+
+### Installation Process
+
+When you install a skill, Atmos:
+
+1. **Downloads** the repository from GitHub
+2. **Validates** the SKILL.md file structure and metadata
+3. **Checks** version compatibility with your Atmos version
+4. **Prompts** for confirmation (shows tool access and permissions)
+5. **Installs** to `~/.atmos/skills/github.com/<owner>/<repo>/`
+6. **Registers** in the local skill registry
+
+### Installation Options
+
+#### Force Reinstall
+
+Reinstall a skill that's already installed:
+
+<Terminal title="terminal">
+```bash
+atmos ai skill install github.com/cloudposse/atmos-skill-terraform --force
+```
+</Terminal>
+
+#### Skip Confirmation
+
+Install without interactive confirmation prompt:
+
+<Terminal title="terminal">
+```bash
+atmos ai skill install github.com/cloudposse/atmos-skill-terraform --skip-confirm
+```
+</Terminal>
+
+:::warning Security Consideration
+Only use `--skip-confirm` with skills from trusted sources. Always review skill metadata before installing, especially the `tools.allowed` section.
+:::
+
+### Example Installation Session
+
+<Terminal title="terminal">
+```bash
+$ atmos ai skill install github.com/cloudposse/atmos-skill-terraform
+
+Downloading skill from https://github.com/cloudposse/atmos-skill-terraform.git...
+
+Skill: Terraform Expert
+Author: Cloud Posse
+Version: 1.0.0
+Repository: https://github.com/cloudposse/atmos-skill-terraform
+
+Tool Access:
+  Allowed: atmos_describe_component, read_component_file, search_files, execute_bash
+
+Warning: This skill requests access to destructive operations.
+   Review the skill source before using:
+   https://github.com/cloudposse/atmos-skill-terraform
+
+Do you want to install this skill? [y/N] y
+
+Skill "Terraform Expert" installed successfully
+  Version: 1.0.0
+  Location: /Users/you/.atmos/skills/github.com/cloudposse/atmos-skill-terraform
+
+Usage: Switch to this skill in the TUI with Ctrl+A
+```
+</Terminal>
+
+## Managing Installed Skills
+
+### List Installed Skills
+
+View all installed community skills:
+
+<Terminal title="terminal">
+```bash
+atmos ai skill list
+```
+</Terminal>
+
+**Example output:**
+
+```
+Installed Community Skills:
+
++----------------------+-------------------------+---------+-----------------------------------------+-------------+
+| NAME                 | DISPLAY NAME            | VERSION | SOURCE                                  | STATUS      |
++----------------------+-------------------------+---------+-----------------------------------------+-------------+
+| atmos-skill-cost     | Cost Optimizer          | 2.1.0   | github.com/cloudposse/atmos-skill-cost  | Enabled     |
+| atmos-skill-terraform| Terraform Expert        | 1.0.0   | github.com/cloudposse/atmos-skill-...   | Enabled     |
+| custom-compliance    | Compliance Auditor      | 1.5.2   | github.com/myorg/compliance-skill       | Disabled    |
++----------------------+-------------------------+---------+-----------------------------------------+-------------+
+
+Total: 3 skills (2 enabled, 1 disabled)
+```
+
+### Uninstall a Skill
+
+Remove an installed skill:
+
+<Terminal title="terminal">
+```bash
+# Interactive confirmation
+atmos ai skill uninstall atmos-skill-terraform
+
+# Force uninstall (no confirmation)
+atmos ai skill uninstall atmos-skill-terraform --force
+```
+</Terminal>
+
+This removes:
+- Skill files from `~/.atmos/skills/`
+- Registry entry from `registry.json`
+
+### Enable/Disable Skills
+
+*(Coming soon)* Temporarily disable skills without uninstalling:
+
+<Terminal title="terminal">
+```bash
+# Disable skill (keeps files, removes from TUI)
+atmos ai skill disable atmos-skill-terraform
+
+# Re-enable skill
+atmos ai skill enable atmos-skill-terraform
+```
+</Terminal>
+
+## Creating Marketplace Skills
+
+### SKILL.md Format
+
+Skills follow the [Agent Skills open standard](https://agentskills.io) format - a single SKILL.md file with YAML frontmatter and Markdown body:
+
+```
+your-skill-repo/
+├── SKILL.md             # Skill definition (required)
+├── README.md            # Documentation (recommended)
+├── examples/            # Usage examples (optional)
+└── LICENSE              # License file (recommended)
+```
+
+### SKILL.md Structure
+
+The SKILL.md file combines metadata and system prompt in one file:
+
+<File title="SKILL.md">
+```markdown
+---
+# Basic Information
+name: terraform-expert
+display_name: "Terraform Expert"
+version: 1.0.0
+author: Cloud Posse
+description: >
+  Specialized AI skill for Terraform component development,
+  debugging, and best practices.
+
+# Category (one of: general, analysis, refactor, security, validation, optimization)
+category: refactor
+icon: "🔧"
+
+# Atmos Compatibility
+atmos:
+  min_version: 1.50.0
+  max_version: ""
+
+# Tool Access (optional)
+tools:
+  allowed:
+    - atmos_describe_component
+    - atmos_list_components
+    - read_component_file
+    - list_component_files
+    - search_files
+    - read_file
+    - edit_file
+    - execute_bash
+
+  restricted:
+    - edit_file
+    - execute_bash
+
+# Capabilities (optional)
+capabilities:
+  - terraform-development
+  - component-refactoring
+  - best-practices
+
+# Dependencies (optional)
+dependencies:
+  - git
+  - terraform
+
+# Environment Variables (optional)
+env:
+  - name: TF_VERSION
+    required: false
+    description: Terraform version to use for validation
+
+# Links
+repository: https://github.com/cloudposse/atmos-skill-terraform
+documentation: https://docs.example.com/terraform-skill
+---
+
+# Skill: Terraform Expert
+
+## Role
+
+You are a specialized AI skill for Terraform component development,
+debugging, and applying infrastructure-as-code best practices within
+the Atmos framework.
+
+## Your Expertise
+
+- **Terraform Development** - Writing and maintaining Terraform modules
+- **Component Architecture** - Designing reusable Atmos components
+- **Best Practices** - Applying HashiCorp and Cloud Posse patterns
+- **Debugging** - Troubleshooting plan/apply errors
+- **Refactoring** - Improving existing Terraform code quality
+
+## Instructions
+
+### Analysis Workflow
+
+When a user asks you to analyze or improve Terraform code:
+
+1. **Read the component** - Use `read_component_file` to examine main.tf, variables.tf, outputs.tf
+2. **Understand context** - Use `atmos_describe_component` to see how component is used in stacks
+3. **Identify improvements** - Check for:
+   - Outdated syntax
+   - Missing required providers version constraints
+   - Hardcoded values that should be variables
+   - Missing outputs
+   - Poor resource naming
+   - Security issues
+
+4. **Propose changes** - Explain each improvement before implementing
+5. **Implement incrementally** - Make one change at a time
+6. **Validate** - Run `terraform validate` after changes
+
+### Coding Standards
+
+Apply these Terraform best practices:
+
+**Resource Naming:**
+- Use underscores for resource names: `aws_instance.web_server`
+- Descriptive names: `aws_s3_bucket.artifact_storage` not `aws_s3_bucket.bucket`
+
+**Variables:**
+- Always include description
+- Set appropriate types (string, number, bool, list, map)
+- Use sensible defaults where applicable
+- Group related variables with blank lines
+
+**Outputs:**
+- Include description for all outputs
+- Export all resources that other components might reference
+
+**Modules:**
+- Pin module versions: `version = "~> 5.0"`
+- Use semantic versioning
+
+### Tool Usage
+
+- **Read before write**: Always read files before editing
+- **Validate changes**: Run `terraform validate` after modifications
+- **Test incrementally**: Make small changes and verify each one
+- **Explain reasoning**: Tell the user why you're making each change
+
+### Response Style
+
+- Be concise but thorough
+- Show code examples for recommendations
+- Use Terraform terminology correctly
+- Cite official Terraform documentation when relevant
+- Format code blocks with ```hcl or ```terraform
+
+## Example Interactions
+
+### Example 1: Component Analysis
+
+User: "Analyze the VPC component and suggest improvements"
+
+Your approach:
+1. Read component files: main.tf, variables.tf, outputs.tf
+2. Check component usage: `atmos describe component vpc -s prod-use1`
+3. Identify issues: missing outputs, hardcoded CIDRs, no provider version
+4. Propose specific improvements with code examples
+5. Offer to implement changes incrementally
+
+### Example 2: Debugging
+
+User: "I'm getting 'Error: Reference to undeclared resource' in my EKS component"
+
+Your approach:
+1. Read the component file with the error
+2. Search for the resource reference causing the issue
+3. Explain the root cause clearly
+4. Provide the fix with explanation
+5. Suggest related improvements if found
+
+## Best Practices Summary
+
+**From Atmos Documentation:**
+
+- Use component catalog pattern for reusability
+- Follow stack inheritance hierarchy
+- Use mixins for cross-cutting concerns
+- Leverage atmos.Component() for cross-stack dependencies
+- Keep components focused and composable
+
+**From Terraform Best Practices:**
+
+- Use remote state for production
+- Enable state locking
+- Use workspaces appropriately
+- Apply the principle of least privilege for IAM
+- Enable encryption at rest and in transit
+- Tag all resources consistently
+
+## Restrictions
+
+- Always confirm before executing `terraform apply` or destructive commands
+- Never commit secrets or credentials to code
+- Avoid making multiple unrelated changes simultaneously
+- Don't modify state files manually
+```
+</File>
+
+### Required Frontmatter Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Unique skill identifier (kebab-case) |
+| `display_name` | string | User-facing display name |
+| `version` | string | Semantic version (e.g., `1.2.3`) |
+| `author` | string | Author name or organization |
+| `description` | string | Brief description of skill purpose |
+| `category` | string | One of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization` |
+| `atmos.min_version` | string | Minimum compatible Atmos version |
+| `repository` | string | GitHub repository URL |
+
+### Publishing Your Skill
+
+1. **Create repository**:
+   <Terminal title="terminal">
+   ```bash
+   mkdir atmos-skill-terraform
+   cd atmos-skill-terraform
+   git init
+   ```
+   </Terminal>
+
+2. **Create SKILL.md**:
+   <Terminal title="terminal">
+   ```bash
+   # Create SKILL.md with frontmatter and prompt
+   vim SKILL.md
+   vim README.md
+   ```
+   </Terminal>
+
+3. **Commit and push**:
+   <Terminal title="terminal">
+   ```bash
+   git add .
+   git commit -m "Initial skill release"
+   git remote add origin git@github.com:yourorg/atmos-skill-terraform.git
+   git push -u origin main
+   ```
+   </Terminal>
+
+4. **Tag version**:
+   <Terminal title="terminal">
+   ```bash
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+   </Terminal>
+
+5. **Share with community**:
+   - Add to [Atmos Skills Community List](https://github.com/cloudposse/atmos/discussions)
+   - Include installation instructions in README
+   - Add usage examples
+
+### Testing Your Skill Locally
+
+Before publishing, test your skill:
+
+<Terminal title="terminal">
+```bash
+# Install from local directory (for testing)
+atmos ai skill install file:///path/to/your-skill
+
+# Or install from your GitHub repo
+atmos ai skill install github.com/yourorg/atmos-skill-terraform
+
+# Test in TUI
+atmos ai chat
+# Press Ctrl+A, select your skill
+# Test various prompts and workflows
+```
+</Terminal>
+
+## Validation Rules
+
+Atmos validates all skills during installation. Your skill must pass these checks:
+
+### Metadata Validation
+
+#### Required Fields
+- `name` must be present and kebab-case
+- `display_name` must be present
+- `version` must be valid semantic version
+- `author` must be present
+- `description` must be present
+- `category` must be one of: `general`, `analysis`, `refactor`, `security`, `validation`, `optimization`
+- `atmos.min_version` must be present and valid
+- `repository` must be present
+
+#### Tool Configuration
+- Tool names must be valid Atmos tools
+- No tool can appear in both `allowed` and `restricted` lists
+
+### File Validation
+
+#### SKILL.md
+- File must exist with valid YAML frontmatter
+- Frontmatter must be surrounded by `---` delimiters
+- Markdown body must not be empty
+- File should be under 100KB for optimal performance
+
+### Version Compatibility
+
+#### Atmos Version Checks
+- Your Atmos version must be &gt;= `atmos.min_version`
+- If `atmos.max_version` specified, your version must be &lt;= max version
+
+**Example validation error:**
+
+```
+Error: skill validation failed: skill requires Atmos >= 1.50.0,
+but current version is 1.48.0
+```
+
+**Fix:** Upgrade Atmos or use an older version of the skill:
+
+<Terminal title="terminal">
+```bash
+# Upgrade Atmos
+brew upgrade atmos
+
+# Or install older skill version
+atmos ai skill install github.com/user/skill@v0.9.0
+```
+</Terminal>
+
+## Security Considerations
+
+### Tool Access Control
+
+Skills declare which tools they need access to. Review these carefully:
+
+#### Safe Tools (Read-only)
+```yaml
+tools:
+  allowed:
+    - atmos_describe_component      # Read component config
+    - atmos_list_stacks            # List stacks
+    - read_file                    # Read files
+    - read_component_file          # Read component files
+    - search_files                 # Search in files
+```
+
+#### Potentially Dangerous Tools
+```yaml
+tools:
+  allowed:
+    - edit_file                    # Modifies files
+    - write_file                   # Creates files
+    - execute_bash                 # Executes commands
+    - atmos_terraform_apply        # Applies Terraform
+    - atmos_terraform_destroy      # Destroys infrastructure
+```
+
+:::danger Review Before Installing
+**Always review skill source code on GitHub before installing skills that request:**
+- File write access (`edit_file`, `write_file`)
+- Command execution (`execute_bash`)
+- Infrastructure changes (`terraform_apply`, `terraform_destroy`, `helmfile_apply`)
+:::
+
+### Restricted Tools
+
+Use the `restricted` field to require confirmation for sensitive operations:
+
+<File title="SKILL.md frontmatter">
+```yaml
+tools:
+  allowed:
+    - read_file
+    - edit_file
+    - execute_bash
+
+  restricted:
+    - edit_file        # User must confirm before editing
+    - execute_bash     # User must confirm before executing
+```
+</File>
+
+This creates a two-tier safety system:
+1. **Allowed** - Skill can use these tools
+2. **Restricted** - Skill can use, but user must confirm each usage
+
+### Security Best Practices
+
+**For Users:**
+- Only install skills from trusted sources
+- Review skill repository on GitHub before installing
+- Check tool access in SKILL.md frontmatter
+- Read skill prompt to understand behavior
+- Start with `--skip-confirm=false` (default) until you trust a skill
+- Be cautious with skills requesting `terraform_apply`, `execute_bash`, or `edit_file`
+
+**For Skill Authors:**
+- Request minimal tool access (principle of least privilege)
+- Mark destructive tools as `restricted`
+- Document all tool usage in prompt
+- Include clear descriptions in frontmatter
+- Add security warnings in README
+- Keep prompts focused and transparent
+
+## Marketplace Skill vs Built-in Skill vs Custom Skill
+
+Atmos has three types of skills:
+
+| Feature | Built-in Skills | Marketplace Skills | Custom Skills |
+|---------|----------------|-------------------|---------------|
+| **Location** | Compiled into Atmos binary | `~/.atmos/skills/` | `atmos.yaml` config |
+| **Installation** | Pre-installed | `atmos ai skill install` | Add to config file |
+| **Updates** | Atmos releases | Git pull/reinstall | Edit config |
+| **Sharing** | Everyone has them | Share via GitHub | Team only (via config repo) |
+| **Examples** | General, Stack Analyzer | Community contributions | Company-specific |
+| **Format** | `pkg/ai/skills/builtin/*/SKILL.md` | Repository's `SKILL.md` | Inline in `atmos.yaml` |
+| **Version Control** | Atmos version | Git tags/branches | Config file changes |
+
+### When to Use Each
+
+**Use Built-in Skills:**
+- Standard Atmos workflows
+- Proven, tested skills
+- No installation needed
+- Examples: Stack Analyzer, Security Auditor
+
+**Use Marketplace Skills:**
+- Specialized community tools
+- Reusable across teams/organizations
+- Version-controlled skills
+- Examples: Cost optimizer, compliance checker, cloud provider specialists
+
+**Use Custom Skills:**
+- Company-specific workflows
+- One-off experimental skills
+- Team-internal tools
+- Quick prototypes
+
+## Example Marketplace Skills
+
+### Terraform State Migrator
+
+<File title="SKILL.md">
+```markdown
+---
+name: terraform-state-migrator
+display_name: "Terraform State Migrator"
+version: 1.0.0
+author: Cloud Posse
+description: Helps migrate Terraform state between backends and workspaces
+category: refactor
+
+atmos:
+  min_version: 1.50.0
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - read_component_file
+    - read_file
+    - execute_bash
+  restricted:
+    - execute_bash
+
+repository: https://github.com/cloudposse/atmos-skill-state-migrator
+---
+
+# Skill: Terraform State Migrator
+
+## Role
+You are an expert in Terraform state migrations...
+
+[Full prompt content here]
+```
+</File>
+
+### Cost Optimization Analyzer
+
+<File title="SKILL.md">
+```markdown
+---
+name: cost-optimizer
+display_name: "AWS Cost Optimizer"
+version: 2.0.0
+author: Example Corp
+description: Analyzes infrastructure configurations for cost optimization opportunities
+category: optimization
+
+atmos:
+  min_version: 1.48.0
+  max_version: 2.0.0
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - atmos_describe_stacks
+    - atmos_list_stacks
+    - read_component_file
+    - read_stack_file
+    - search_files
+
+capabilities:
+  - cost-analysis
+  - rightsizing-recommendations
+  - reserved-instance-planning
+
+env:
+  - name: AWS_COST_THRESHOLD
+    required: false
+    description: Monthly cost threshold for recommendations (default 1000)
+
+repository: https://github.com/example/atmos-skill-cost-optimizer
+documentation: https://docs.example.com/cost-optimizer
+---
+
+# Skill: AWS Cost Optimizer
+
+## Role
+You are a cost optimization expert...
+
+[Full prompt content here]
+```
+</File>
+
+### Multi-Cloud Security Auditor
+
+<File title="SKILL.md">
+```markdown
+---
+name: multicloud-security
+display_name: "Multi-Cloud Security Auditor"
+version: 1.5.0
+author: Security Team
+description: Security auditing for AWS, Azure, and GCP infrastructure
+category: security
+
+atmos:
+  min_version: 1.50.0
+
+tools:
+  allowed:
+    - atmos_describe_component
+    - atmos_list_stacks
+    - atmos_validate_stacks
+    - read_component_file
+    - read_stack_file
+    - search_files
+
+capabilities:
+  - aws-security-audit
+  - azure-security-audit
+  - gcp-security-audit
+  - compliance-checking
+
+dependencies:
+  - tfsec
+  - checkov
+
+repository: https://github.com/example/atmos-skill-multicloud-security
+---
+
+# Skill: Multi-Cloud Security Auditor
+
+## Role
+You are a multi-cloud security expert...
+
+[Full prompt content here]
+```
+</File>
+
+## Troubleshooting
+
+### Skill Not Found After Installation
+
+**Symptom:** Skill installed successfully but doesn't appear in TUI (Ctrl+A)
+
+**Cause:** Skill may be disabled or registry is corrupted
+
+**Solution:**
+<Terminal title="terminal">
+```bash
+# List skills to check status
+atmos ai skill list
+
+# Check registry file
+cat ~/.atmos/skills/registry.json
+
+# Restart Atmos AI session
+atmos ai chat
+```
+</Terminal>
+
+### Version Compatibility Error
+
+**Symptom:**
+```
+Error: skill requires Atmos >= 1.50.0, but current version is 1.48.0
+```
+
+**Solution:**
+
+<Terminal title="terminal">
+```bash
+# Option 1: Upgrade Atmos
+brew upgrade atmos
+
+# Option 2: Install older skill version
+atmos ai skill install github.com/user/skill@v0.9.0
+
+# Check compatible versions in skill's README
+```
+</Terminal>
+
+### Invalid Metadata Error
+
+**Symptom:**
+```
+Error: invalid skill metadata: display_name is required
+```
+
+**Cause:** Skill repository has malformed SKILL.md frontmatter
+
+**Solution:**
+- Report issue to skill author
+- Check skill's GitHub issues for known problems
+- Try different version: `@v1.0.0` instead of `@main`
+
+### Tool Access Error
+
+**Symptom:** Skill can't use certain tools
+
+**Cause:** Tool not in skill's `allowed` list
+
+**Solution:**
+- This is intentional - skill author restricted access
+- Fork the skill and modify SKILL.md if needed (use at your own risk)
+- Request author to add tool access via GitHub issue
+
+### Skill Installation Fails
+
+**Symptom:** Download or installation errors
+
+**Solution:**
+
+<Terminal title="terminal">
+```bash
+# Check internet connection
+curl -I https://github.com
+
+# Verify GitHub URL is correct
+# Check if repository is public
+# Ensure you have git installed
+which git
+
+# Try with HTTPS instead of SSH
+atmos ai skill install https://github.com/user/repo.git
+```
+</Terminal>
+
+### Registry Corruption
+
+**Symptom:** `Error: registry corrupted` or JSON parse errors
+
+**Solution:**
+
+<Terminal title="terminal">
+```bash
+# Backup current registry
+cp ~/.atmos/skills/registry.json ~/.atmos/skills/registry.json.backup
+
+# Reset registry (removes all skill registrations, but keeps skill files)
+rm ~/.atmos/skills/registry.json
+
+# Reinstall skills
+atmos ai skill install github.com/user/skill1
+atmos ai skill install github.com/user/skill2
+```
+</Terminal>
+
+## Related Documentation
+
+- [AI Skills](/ai/skills) - Built-in skills and skill system overview
+- [AI Configuration](/ai/configuration) - Configure AI providers
+- [AI Chat Command](/cli/commands/ai/chat) - Interactive AI chat interface
+- [Tool Execution](/ai/tools) - How AI skills use tools
+
+## Community
+
+### Discover Skills
+
+Browse community skills:
+- [Atmos Skills Discussion](https://github.com/cloudposse/atmos/discussions) - Official skill directory
+- [Awesome Atmos](https://github.com/cloudposse/awesome-atmos) - Curated list of Atmos resources
+
+### Share Your Skill
+
+Share your skill with the community:
+1. Create skill repository on GitHub
+2. Add comprehensive README with examples
+3. Tag initial release (`v1.0.0`)
+4. Post in [Atmos Discussions](https://github.com/cloudposse/atmos/discussions)
+5. Add `atmos-skill` topic to your repository
+
+### Skill Naming Convention
+
+Follow these conventions for community skills:
+
+**Repository name:**
+- Prefix with `atmos-skill-`
+- Use kebab-case
+- Be descriptive
+- Examples: `atmos-skill-terraform`, `atmos-skill-cost-optimizer`
+
+**Skill name in SKILL.md:**
+- No prefix needed
+- Use kebab-case
+- Examples: `terraform-expert`, `cost-optimizer`, `security-auditor`
+
+**Display name:**
+- Human-readable
+- Title Case
+- Examples: "Terraform Expert", "Cost Optimizer", "Security Auditor"

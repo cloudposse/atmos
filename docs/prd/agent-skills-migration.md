@@ -2,21 +2,27 @@
 
 ## Overview
 
-This document outlines the plan to align Atmos Agents with the [Agent Skills](https://agentskills.io) open standard, which is now governed by the Linux Foundation's Agentic AI Foundation (AAIF).
+This document outlines the plan to align Atmos with the [Agent Skills](https://agentskills.io) open standard, which is governed by the Linux Foundation's Agentic AI Foundation (AAIF).
 
-## Current State
+**Status: COMPLETED** - The migration from "Agents" to "Skills" terminology and SKILL.md format is complete.
 
-Atmos uses a two-file format for community agents:
+## Summary of Changes
 
-```
-my-agent/
-├── .agent.yaml    # Metadata (YAML)
-└── prompt.md      # System prompt (Markdown)
-```
+### Terminology Changes
+- **Agents** → **Skills** throughout the codebase
+- **pkg/ai/agents/** → **pkg/ai/skills/**
+- **cmd/ai/agent/** → **cmd/ai/skill/**
+- `atmos ai agent` → `atmos ai skill` commands
+- `default_agent` → `default_skill` config option
+- TUI references updated (skill selector, skill icons, etc.)
 
-## Target State
+### Format Changes
+- **Old format**: `.agent.yaml` + `prompt.md` (two files)
+- **New format**: `SKILL.md` (single file with YAML frontmatter + Markdown body)
 
-The Agent Skills standard uses a single-file format:
+## Current State (Post-Migration)
+
+Skills use a single-file format following the Agent Skills open standard:
 
 ```
 my-skill/
@@ -26,168 +32,115 @@ my-skill/
 └── assets/        # Optional: images, diagrams, etc.
 ```
 
-## Format Comparison
+### SKILL.md Format
 
-### Current Atmos Format
-
-**.agent.yaml:**
-```yaml
-name: test-agent
-display_name: Test Agent
+```markdown
+---
+name: terraform-expert
+display_name: "Terraform Expert"
+description: Specialized AI skill for Terraform development
 version: 1.0.0
-author: Test Author
-description: A test agent for unit testing
-category: general
+author: Cloud Posse
+category: refactor
+icon: "🔧"
 
 atmos:
-  min_version: 1.0.0
-  max_version: ""
-
-prompt:
-  file: prompt.md
+  min_version: 1.50.0
 
 tools:
   allowed:
-    - describe_stacks
-    - describe_component
+    - atmos_describe_component
+    - read_component_file
+    - search_files
   restricted:
-    - terraform_apply
-    - terraform_destroy
+    - edit_file
+    - execute_bash
 
-repository: https://github.com/test/test-agent
-license: MIT
-```
-
-**prompt.md:**
-```markdown
-# Agent: Test Agent
-
-You are a test agent designed for unit testing the Atmos agent marketplace functionality.
-
-## Capabilities
-
-- Testing agent installation
-- Testing agent validation
-- Testing agent registry operations
-```
-
-### Agent Skills Standard Format
-
-**SKILL.md:**
-```markdown
----
-name: test-agent
-description: A test agent for unit testing the Atmos agent marketplace functionality
-license: MIT
-compatibility:
-  atmos: ">=1.0.0"
-metadata:
-  author: Test Author
-  version: 1.0.0
-  category: general
-  display_name: Test Agent
-  repository: https://github.com/test/test-agent
-allowed-tools:
-  - describe_stacks
-  - describe_component
+repository: https://github.com/cloudposse/atmos-skill-terraform
 ---
 
-# Agent: Test Agent
+# Skill: Terraform Expert
 
-You are a test agent designed for unit testing the Atmos agent marketplace functionality.
+You are a specialized AI skill for Terraform component development...
 
-## Capabilities
+## Your Expertise
 
-- Testing agent installation
-- Testing agent validation
-- Testing agent registry operations
+- Terraform Development
+- Component Architecture
+- Best Practices
+
+## Instructions
+
+[Detailed instructions here]
 ```
 
-## Migration Strategy
+## Package Structure (Post-Migration)
 
-### Phase 1: Add SKILL.md Support (Non-Breaking)
+```
+pkg/ai/skills/
+├── skill.go           # Skill struct and methods
+├── registry.go        # Thread-safe registry
+├── builtin.go         # Built-in skill definitions
+├── loader.go          # Load skills from config
+└── prompts/
+    └── embedded.go    # SKILL.md parser with go:embed
+    └── *.SKILL.md     # 5 built-in skill files
+```
 
-1. **Update parser** to support both formats:
-   - If `SKILL.md` exists, parse it (new format)
-   - If `.agent.yaml` exists, parse it (legacy format)
-   - Support both during transition period
+## CLI Commands (Post-Migration)
 
-2. **Update documentation** to recommend `SKILL.md` format for new agents
+```bash
+# Install skill from marketplace
+atmos ai skill install github.com/cloudposse/atmos-skill-terraform
 
-3. **Add validation** for Agent Skills specification compliance
+# List installed skills
+atmos ai skill list
 
-### Phase 2: Update Built-in Agents
+# Uninstall skill
+atmos ai skill uninstall terraform-expert
+```
 
-1. Convert 5 built-in agents to use embedded `SKILL.md` content
-2. Maintain internal Go struct representation (no runtime change)
-
-### Phase 3: Deprecate Legacy Format
-
-1. Add deprecation warnings for `.agent.yaml` format
-2. Provide migration tool: `atmos agent migrate`
-3. Update all documentation
-
-### Phase 4: Remove Legacy Support
-
-1. Remove `.agent.yaml` parser (major version bump)
-2. Finalize Agent Skills-only support
-
-## Field Mapping
-
-| Atmos Field | Agent Skills Field |
-|-------------|-------------------|
-| `name` | `name` |
-| `description` | `description` |
-| `display_name` | `metadata.display_name` |
-| `version` | `metadata.version` |
-| `author` | `metadata.author` |
-| `category` | `metadata.category` |
-| `atmos.min_version` | `compatibility.atmos` |
-| `tools.allowed` | `allowed-tools` |
-| `tools.restricted` | (not in standard - Atmos extension) |
-| `repository` | `metadata.repository` |
-| `license` | `license` |
-
-## Atmos Extensions
-
-The Agent Skills standard allows custom metadata. Atmos-specific extensions:
+## Configuration (Post-Migration)
 
 ```yaml
-metadata:
-  # Standard fields
-  author: Test Author
-  version: 1.0.0
+settings:
+  ai:
+    enabled: true
+    default_provider: anthropic
+    default_skill: general  # Changed from default_agent
 
-  # Atmos extensions
-  category: general
-  display_name: Test Agent
-  repository: https://github.com/test/test-agent
-
-  # Atmos-specific: restricted tools (not in standard)
-  restricted-tools:
-    - terraform_apply
-    - terraform_destroy
+    skills:  # Changed from agents
+      custom-skill:
+        display_name: "Custom Skill"
+        description: "My custom skill"
+        system_prompt: |
+          You are a custom skill...
+        allowed_tools:
+          - atmos_describe_component
 ```
 
-## Benefits of Migration
+## Migration Completed
 
-1. **Industry Alignment**: Follows open standard backed by Anthropic, OpenAI, Block
+All phases have been completed:
+
+| Phase | Status | Description |
+|-------|--------|-------------|
+| Phase 1: Add SKILL.md Support | ✅ Complete | Parser supports SKILL.md format |
+| Phase 2: Update Built-in Skills | ✅ Complete | 5 built-in skills converted |
+| Phase 3: Rename to Skills | ✅ Complete | All code and docs updated |
+| Phase 4: Remove Legacy | ✅ Complete | Old .agent.yaml format removed |
+
+## Benefits Achieved
+
+1. **Industry Alignment**: Follows open standard backed by Linux Foundation AAIF
 2. **Interoperability**: Skills may work with other tools supporting the standard
 3. **Simpler Structure**: Single file vs. two files
 4. **Progressive Disclosure**: ~100 token metadata load, full content on demand
 5. **Ecosystem Growth**: Access to community skills from other platforms
 
-## Timeline
-
-| Phase | Status | Target |
-|-------|--------|--------|
-| Phase 1: Add SKILL.md Support | Not Started | Next minor release |
-| Phase 2: Update Built-in Agents | Not Started | Following release |
-| Phase 3: Deprecate Legacy | Not Started | 6 months after Phase 1 |
-| Phase 4: Remove Legacy | Not Started | Next major version |
-
 ## References
 
 - [Agent Skills Specification](https://agentskills.io/specification)
 - [Agentic AI Foundation](https://lfaidata.foundation/blog/2025/10/23/announcing-the-agentic-ai-foundation/)
-- [AGENTS.md Standard](https://github.com/context-labs/agents-md)
+- [Atmos Skills Documentation](/ai/skills)
+- [Atmos Skill Marketplace](/ai/skill-marketplace)

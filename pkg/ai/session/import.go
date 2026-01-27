@@ -57,7 +57,7 @@ func (m *Manager) ImportSession(ctx context.Context, checkpointPath string, opts
 		ProjectPath: projectPath,
 		Model:       checkpoint.Session.Model,
 		Provider:    checkpoint.Session.Provider,
-		Agent:       checkpoint.Session.Agent,
+		Skill:       checkpoint.Session.Skill,
 		CreatedAt:   time.Now(), // Use current time for import
 		UpdatedAt:   time.Now(),
 		Metadata:    checkpoint.Session.Metadata,

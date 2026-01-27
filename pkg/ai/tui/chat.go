@@ -17,9 +17,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
-	"github.com/cloudposse/atmos/pkg/ai/agents"
 	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/session"
+	"github.com/cloudposse/atmos/pkg/ai/skills"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -65,7 +65,7 @@ const (
 	viewModeSessionList
 	viewModeCreateSession
 	viewModeProviderSelect
-	viewModeAgentSelect
+	viewModeSkillSelect
 )
 
 // ChatModel represents the state of the chat TUI.
@@ -109,10 +109,10 @@ type ChatModel struct {
 	lastUsage            *aiTypes.Usage        // Usage from the last AI response
 	maxHistoryMessages   int                   // Maximum conversation messages to keep in history (0 = unlimited)
 	maxHistoryTokens     int                   // Maximum tokens in conversation history (0 = unlimited)
-	agentRegistry        *agents.Registry      // Registry of available agents
-	currentAgent         *agents.Agent         // Currently active agent
-	agentSelectMode      bool                  // Whether we're in agent selection mode
-	selectedAgentIdx     int                   // Selected agent index in agent selection UI
+	skillRegistry        *skills.Registry      // Registry of available skills
+	currentSkill         *skills.Skill         // Currently active skill
+	skillSelectMode      bool                  // Whether we're in skill selection mode
+	selectedSkillIdx     int                   // Selected skill index in skill selection UI
 }
 
 // ChatMessage represents a single message in the chat.
@@ -166,29 +166,29 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		maxHistoryTokens = atmosConfig.Settings.AI.MaxHistoryTokens
 	}
 
-	// Load agent registry and set default agent.
-	agentRegistry, err := agents.LoadAgents(atmosConfig)
+	// Load skill registry and set default skill.
+	skillRegistry, err := skills.LoadSkills(atmosConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load agents: %w", err)
+		return nil, fmt.Errorf("failed to load skills: %w", err)
 	}
 
-	defaultAgentName := agents.GetDefaultAgent(atmosConfig)
-	currentAgent, err := agentRegistry.Get(defaultAgentName)
+	defaultSkillName := skills.GetDefaultSkill(atmosConfig)
+	currentSkill, err := skillRegistry.Get(defaultSkillName)
 	if err != nil {
-		// Fall back to general agent if default not found.
-		log.Debug(fmt.Sprintf("Default agent %q not found, falling back to general: %v", defaultAgentName, err))
-		currentAgent, _ = agentRegistry.Get(agents.GeneralAgent)
+		// Fall back to general skill if default not found.
+		log.Debug(fmt.Sprintf("Default skill %q not found, falling back to general: %v", defaultSkillName, err))
+		currentSkill, _ = skillRegistry.Get(skills.GeneralSkill)
 	}
 
-	// Load the initial agent's system prompt from file (if configured).
-	if currentAgent != nil {
-		systemPrompt, promptErr := currentAgent.LoadSystemPrompt()
+	// Load the initial skill's system prompt from file (if configured).
+	if currentSkill != nil {
+		systemPrompt, promptErr := currentSkill.LoadSystemPrompt()
 		if promptErr != nil {
-			log.Debug(fmt.Sprintf("Failed to load system prompt for initial agent %q: %v, using default", currentAgent.Name, promptErr))
+			log.Debug(fmt.Sprintf("Failed to load system prompt for initial skill %q: %v, using default", currentSkill.Name, promptErr))
 			// Keep the existing SystemPrompt as fallback.
 		} else {
-			// Update agent with loaded prompt.
-			currentAgent.SystemPrompt = systemPrompt
+			// Update skill with loaded prompt.
+			currentSkill.SystemPrompt = systemPrompt
 		}
 	}
 
@@ -214,8 +214,8 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		renderedMessages:     make([]string, 0),
 		maxHistoryMessages:   maxHistoryMessages,
 		maxHistoryTokens:     maxHistoryTokens,
-		agentRegistry:        agentRegistry,
-		currentAgent:         currentAgent,
+		skillRegistry:        skillRegistry,
+		currentSkill:         currentSkill,
 	}
 
 	// Register compaction status callback to show progress in chat.
@@ -718,8 +718,8 @@ func (m *ChatModel) View() string {
 		return m.createSessionView()
 	case viewModeProviderSelect:
 		return m.providerSelectView()
-	case viewModeAgentSelect:
-		return m.agentSelectView()
+	case viewModeSkillSelect:
+		return m.skillSelectView()
 	default:
 		return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
 	}
@@ -781,7 +781,7 @@ func (m *ChatModel) footerView() string {
 			Foreground(lipgloss.Color("240")).
 			Italic(true)
 
-		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+A: Agent | Alt+Drag: Select Text | Ctrl+C: Quit")
+		help := helpStyle.Render("Enter: Send | Ctrl+J: Newline | Ctrl+L: Sessions | Ctrl+N: New | Ctrl+P: Provider | Ctrl+A: Skill | Alt+Drag: Select Text | Ctrl+C: Quit")
 		content = fmt.Sprintf("%s\n%s", m.textarea.View(), help)
 	}
 
@@ -918,17 +918,17 @@ func (m *ChatModel) updateViewportContent() {
 		case roleAssistant:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorCyan))
-			// Include alien emoji, provider name, and agent icon in the prefix.
+			// Include alien emoji, provider name, and skill icon in the prefix.
 			provider := msg.Provider
 			if provider == "" {
 				provider = "unknown"
 			}
-			// Add agent icon if we have a current agent
-			agentIcon := ""
-			if m.currentAgent != nil {
-				agentIcon = " " + getAgentIcon(m.currentAgent.Name)
+			// Add skill icon if we have a current skill.
+			skillIcon := ""
+			if m.currentSkill != nil {
+				skillIcon = " " + getSkillIcon(m.currentSkill.Name)
 			}
-			prefix = fmt.Sprintf("Atmos AI 👽 (%s)%s:", provider, agentIcon)
+			prefix = fmt.Sprintf("Atmos AI 👽 (%s)%s:", provider, skillIcon)
 		case roleSystem:
 			style = lipgloss.NewStyle().
 				Foreground(lipgloss.Color(theme.ColorRed)).
@@ -1280,7 +1280,7 @@ func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Con
 
 		// Use tool calling if tools are available.
 		if len(availableTools) > 0 {
-			// Get system prompt from current agent, or use default if no agent is set.
+			// Get system prompt from current skill, or use default if no skill is set.
 			systemPrompt := `You are an AI assistant for Atmos infrastructure management. You have access to tools that allow you to perform actions.
 
 IMPORTANT: When you need to perform an action (read files, edit files, search, execute commands, etc.), you MUST use the available tools. Do NOT just describe what you would do - actually use the tools to do it.
@@ -1293,8 +1293,8 @@ For example:
 
 Always take action using tools rather than describing what action you would take.`
 
-			if m.currentAgent != nil && m.currentAgent.SystemPrompt != "" {
-				systemPrompt = m.currentAgent.SystemPrompt
+			if m.currentSkill != nil && m.currentSkill.SystemPrompt != "" {
+				systemPrompt = m.currentSkill.SystemPrompt
 			}
 
 			// Get ATMOS.md content for caching.
@@ -1492,8 +1492,8 @@ For example:
 
 Always take action using tools rather than describing what action you would take.`
 
-	if m.currentAgent != nil && m.currentAgent.SystemPrompt != "" {
-		systemPrompt = m.currentAgent.SystemPrompt
+	if m.currentSkill != nil && m.currentSkill.SystemPrompt != "" {
+		systemPrompt = m.currentSkill.SystemPrompt
 	}
 	var atmosMemory string
 	if m.memoryMgr != nil {
@@ -2146,8 +2146,8 @@ func (m *ChatModel) providerSelectView() string {
 	return content.String()
 }
 
-// getAgentIcon returns the icon/emoji for a given agent.
-func getAgentIcon(agentName string) string {
+// getSkillIcon returns the icon/emoji for a given skill.
+func getSkillIcon(skillName string) string {
 	icons := map[string]string{
 		"general":            "🤖", // Robot - general purpose
 		"stack-analyzer":     "📊", // Chart - data analysis
@@ -2156,38 +2156,38 @@ func getAgentIcon(agentName string) string {
 		"config-validator":   "✅", // Checkmark - validation
 	}
 
-	if icon, ok := icons[agentName]; ok {
+	if icon, ok := icons[skillName]; ok {
 		return icon
 	}
 	return "🤖" // Default to robot icon
 }
 
-// agentSelectView renders the agent selection interface.
-func (m *ChatModel) agentSelectView() string {
+// skillSelectView renders the skill selection interface.
+func (m *ChatModel) skillSelectView() string {
 	var content strings.Builder
 
-	// Title
+	// Title.
 	titleStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(theme.ColorCyan)).
 		MarginBottom(1)
-	content.WriteString(titleStyle.Render("Switch AI Agent"))
+	content.WriteString(titleStyle.Render("Switch AI Skill"))
 	content.WriteString(newlineChar)
 
-	// Help text
+	// Help text.
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGray)).
 		Margin(0, 0, 1, 0)
 	content.WriteString(helpStyle.Render("↑/↓: Navigate | Enter: Select | Esc/q: Cancel"))
 	content.WriteString(doubleNewline)
 
-	// Current agent indicator
-	currentAgentName := ""
-	if m.currentAgent != nil {
-		currentAgentName = m.currentAgent.Name
+	// Current skill indicator.
+	currentSkillName := ""
+	if m.currentSkill != nil {
+		currentSkillName = m.currentSkill.Name
 	}
 
-	// Agent list
+	// Skill list.
 	selectedStyle := lipgloss.NewStyle().
 		Bold(true).
 		Foreground(lipgloss.Color(theme.ColorCyan)).
@@ -2196,33 +2196,33 @@ func (m *ChatModel) agentSelectView() string {
 	currentStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorGreen))
 
-	// Get all available agents
-	availableAgents := m.agentRegistry.List()
+	// Get all available skills.
+	availableSkills := m.skillRegistry.List()
 
-	for i, agent := range availableAgents {
+	for i, skill := range availableSkills {
 		var line string
 		prefix := "  "
-		if i == m.selectedAgentIdx {
+		if i == m.selectedSkillIdx {
 			prefix = "▶ "
 		}
 
-		// Add agent icon to display name
-		agentIcon := getAgentIcon(agent.Name)
-		agentInfo := fmt.Sprintf("%s%s %s", prefix, agentIcon, agent.DisplayName)
-		if agent.Name == currentAgentName {
-			agentInfo += " (current)"
+		// Add skill icon to display name.
+		skillIcon := getSkillIcon(skill.Name)
+		skillInfo := fmt.Sprintf("%s%s %s", prefix, skillIcon, skill.DisplayName)
+		if skill.Name == currentSkillName {
+			skillInfo += " (current)"
 		}
-		if agent.IsBuiltIn {
-			agentInfo += " [built-in]"
+		if skill.IsBuiltIn {
+			skillInfo += " [built-in]"
 		}
-		agentInfo += fmt.Sprintf("\n    %s", agent.Description)
+		skillInfo += fmt.Sprintf("\n    %s", skill.Description)
 
-		if i == m.selectedAgentIdx {
-			line = selectedStyle.Render(agentInfo)
-		} else if agent.Name == currentAgentName {
-			line = currentStyle.Render(agentInfo)
+		if i == m.selectedSkillIdx {
+			line = selectedStyle.Render(skillInfo)
+		} else if skill.Name == currentSkillName {
+			line = currentStyle.Render(skillInfo)
 		} else {
-			line = normalStyle.Render(agentInfo)
+			line = normalStyle.Render(skillInfo)
 		}
 
 		content.WriteString(line)

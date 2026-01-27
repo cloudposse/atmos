@@ -53,7 +53,7 @@ import (
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
 	_ "github.com/cloudposse/atmos/cmd/ai"
-	_ "github.com/cloudposse/atmos/cmd/ai/agent"
+	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	"github.com/cloudposse/atmos/cmd/internal"

@@ -55,7 +55,7 @@ func (m *Manager) SetCompactStatusCallback(callback CompactStatusCallback) {
 }
 
 // CreateSession creates a new session.
-func (m *Manager) CreateSession(ctx context.Context, name, model, provider, agent string, metadata map[string]interface{}) (*Session, error) {
+func (m *Manager) CreateSession(ctx context.Context, name, model, provider, skill string, metadata map[string]interface{}) (*Session, error) {
 	// Generate unique ID.
 	id := uuid.New().String()
 
@@ -70,7 +70,7 @@ func (m *Manager) CreateSession(ctx context.Context, name, model, provider, agen
 		ProjectPath: m.projectPath,
 		Model:       model,
 		Provider:    provider,
-		Agent:       agent,
+		Skill:       skill,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
 		Metadata:    metadata,

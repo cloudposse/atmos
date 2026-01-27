@@ -70,7 +70,7 @@ func (m *Manager) buildCheckpoint(session *Session, messages []*Message, opts Ex
 			Name:        session.Name,
 			Provider:    session.Provider,
 			Model:       session.Model,
-			Agent:       session.Agent,
+			Skill:       session.Skill,
 			ProjectPath: session.ProjectPath,
 			CreatedAt:   session.CreatedAt,
 			UpdatedAt:   session.UpdatedAt,
@@ -188,8 +188,8 @@ func exportMarkdown(checkpoint *Checkpoint, outputPath string) error {
 	}
 	fmt.Fprintf(file, "**Provider:** %s\n", checkpoint.Session.Provider)
 	fmt.Fprintf(file, "**Model:** %s\n", checkpoint.Session.Model)
-	if checkpoint.Session.Agent != "" {
-		fmt.Fprintf(file, "**Agent:** %s\n", checkpoint.Session.Agent)
+	if checkpoint.Session.Skill != "" {
+		fmt.Fprintf(file, "**Skill:** %s\n", checkpoint.Session.Skill)
 	}
 	fmt.Fprintf(file, "**Created:** %s\n", checkpoint.Session.CreatedAt.Format(time.RFC3339))
 	fmt.Fprintf(file, "**Messages:** %d\n\n", checkpoint.Statistics.MessageCount)

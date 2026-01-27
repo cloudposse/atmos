@@ -140,10 +140,10 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 		}
 		provider := configuredProviders[m.createForm.selectedProvider]
 
-		// Get current agent name (default to empty string if not set)
-		agentName := ""
-		if m.currentAgent != nil {
-			agentName = m.currentAgent.Name
+		// Get current skill name (default to empty string if not set).
+		skillName := ""
+		if m.currentSkill != nil {
+			skillName = m.currentSkill.Name
 		}
 
 		// Create session
@@ -155,7 +155,7 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 			name,
 			provider.Model, // Use model from atmos.yaml
 			provider.Name,
-			agentName, // Current agent
+			skillName, // Current skill
 			nil,       // metadata
 		)
 		if err != nil {

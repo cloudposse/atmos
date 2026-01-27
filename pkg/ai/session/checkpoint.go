@@ -45,8 +45,8 @@ type CheckpointSession struct {
 	// Model is the AI model used.
 	Model string `json:"model" yaml:"model"`
 
-	// Agent is the AI agent name (optional).
-	Agent string `json:"agent,omitempty" yaml:"agent,omitempty"`
+	// Skill is the AI skill name (optional).
+	Skill string `json:"skill,omitempty" yaml:"skill,omitempty"`
 
 	// ProjectPath is the project path where session was created.
 	ProjectPath string `json:"project_path" yaml:"project_path"`

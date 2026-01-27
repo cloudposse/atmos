@@ -84,7 +84,7 @@ func (s *SQLiteStorage) Migrate() error {
 			project_path TEXT NOT NULL,
 			model TEXT NOT NULL,
 			provider TEXT NOT NULL,
-			agent TEXT NOT NULL DEFAULT '',
+			skill TEXT NOT NULL DEFAULT '',
 			created_at TIMESTAMP NOT NULL,
 			updated_at TIMESTAMP NOT NULL,
 			metadata TEXT
@@ -149,7 +149,7 @@ func (s *SQLiteStorage) CreateSession(ctx context.Context, session *Session) err
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `INSERT INTO sessions (id, name, project_path, model, provider, agent, created_at, updated_at, metadata)
+	query := `INSERT INTO sessions (id, name, project_path, model, provider, skill, created_at, updated_at, metadata)
 	          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
 
 	_, err = s.db.ExecContext(ctx, query,
@@ -158,7 +158,7 @@ func (s *SQLiteStorage) CreateSession(ctx context.Context, session *Session) err
 		session.ProjectPath,
 		session.Model,
 		session.Provider,
-		session.Agent,
+		session.Skill,
 		session.CreatedAt,
 		session.UpdatedAt,
 		string(metadataJSON),
@@ -172,7 +172,7 @@ func (s *SQLiteStorage) CreateSession(ctx context.Context, session *Session) err
 
 // GetSession retrieves a session by ID.
 func (s *SQLiteStorage) GetSession(ctx context.Context, id string) (*Session, error) {
-	query := `SELECT id, name, project_path, model, provider, agent, created_at, updated_at, metadata
+	query := `SELECT id, name, project_path, model, provider, skill, created_at, updated_at, metadata
 	          FROM sessions WHERE id = ?`
 
 	var session Session
@@ -184,7 +184,7 @@ func (s *SQLiteStorage) GetSession(ctx context.Context, id string) (*Session, er
 		&session.ProjectPath,
 		&session.Model,
 		&session.Provider,
-		&session.Agent,
+		&session.Skill,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 		&metadataJSON,
@@ -209,7 +209,7 @@ func (s *SQLiteStorage) GetSession(ctx context.Context, id string) (*Session, er
 
 // GetSessionByName retrieves a session by name and project path.
 func (s *SQLiteStorage) GetSessionByName(ctx context.Context, projectPath, name string) (*Session, error) {
-	query := `SELECT id, name, project_path, model, provider, agent, created_at, updated_at, metadata
+	query := `SELECT id, name, project_path, model, provider, skill, created_at, updated_at, metadata
 	          FROM sessions WHERE project_path = ? AND name = ?
 	          ORDER BY updated_at DESC LIMIT 1`
 
@@ -222,7 +222,7 @@ func (s *SQLiteStorage) GetSessionByName(ctx context.Context, projectPath, name 
 		&session.ProjectPath,
 		&session.Model,
 		&session.Provider,
-		&session.Agent,
+		&session.Skill,
 		&session.CreatedAt,
 		&session.UpdatedAt,
 		&metadataJSON,
@@ -247,7 +247,7 @@ func (s *SQLiteStorage) GetSessionByName(ctx context.Context, projectPath, name 
 
 // ListSessions returns all sessions for a project.
 func (s *SQLiteStorage) ListSessions(ctx context.Context, projectPath string, limit int) ([]*Session, error) {
-	query := `SELECT s.id, s.name, s.project_path, s.model, s.provider, s.agent, s.created_at, s.updated_at, s.metadata, COALESCE(COUNT(m.id), 0) as message_count
+	query := `SELECT s.id, s.name, s.project_path, s.model, s.provider, s.skill, s.created_at, s.updated_at, s.metadata, COALESCE(COUNT(m.id), 0) as message_count
 	          FROM sessions s
 	          LEFT JOIN messages m ON s.id = m.session_id
 	          WHERE s.project_path = ?
@@ -273,7 +273,7 @@ func (s *SQLiteStorage) ListSessions(ctx context.Context, projectPath string, li
 			&session.ProjectPath,
 			&session.Model,
 			&session.Provider,
-			&session.Agent,
+			&session.Skill,
 			&session.CreatedAt,
 			&session.UpdatedAt,
 			&metadataJSON,
@@ -308,14 +308,14 @@ func (s *SQLiteStorage) UpdateSession(ctx context.Context, session *Session) err
 		return fmt.Errorf("failed to marshal metadata: %w", err)
 	}
 
-	query := `UPDATE sessions SET name = ?, model = ?, provider = ?, agent = ?, updated_at = ?, metadata = ?
+	query := `UPDATE sessions SET name = ?, model = ?, provider = ?, skill = ?, updated_at = ?, metadata = ?
 	          WHERE id = ?`
 
 	result, err := s.db.ExecContext(ctx, query,
 		session.Name,
 		session.Model,
 		session.Provider,
-		session.Agent,
+		session.Skill,
 		session.UpdatedAt,
 		string(metadataJSON),
 		session.ID,

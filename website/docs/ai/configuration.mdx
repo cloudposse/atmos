@@ -162,17 +162,17 @@ settings:
     max_context_lines: 500                # Maximum lines per file (default: 500)
     max_history_messages: 20              # Maximum conversation messages to keep (default: 0 = unlimited)
     max_history_tokens: 8000              # Maximum tokens in conversation history (default: 0 = unlimited)
-    default_agent: "general"              # Default AI agent (default: "general")
+    default_skill: "general"              # Default AI skill (default: "general")
 ```
 </File>
 
-## AI Agents Configuration
+## AI Skills Configuration
 
-Atmos AI includes specialized agents for different tasks. You can use built-in agents or create custom ones.
+Atmos AI includes specialized skills for different tasks. You can use built-in skills or create custom ones.
 
-### Built-in Agents
+### Built-in Skills
 
-Atmos ships with 5 built-in agents:
+Atmos ships with 5 built-in skills:
 
 - **general** (default) - General-purpose assistant for all operations
 - **stack-analyzer** - Specialized in analyzing stack configurations and dependencies
@@ -180,11 +180,11 @@ Atmos ships with 5 built-in agents:
 - **security-auditor** - Focused on security review and vulnerability detection
 - **config-validator** - Validates YAML configurations and schema compliance
 
-Switch between agents during a chat session by pressing **Ctrl+A**.
+Switch between skills during a chat session by pressing **Ctrl+A**.
 
-### Custom Agents
+### Custom Skills
 
-Create your own specialized agents:
+Create your own specialized skills:
 
 <File title="atmos.yaml">
 ```yaml
@@ -192,10 +192,10 @@ settings:
   ai:
     enabled: true
     default_provider: "anthropic"
-    default_agent: "stack-analyzer"     # Use stack analyzer by default
+    default_skill: "stack-analyzer"     # Use stack analyzer by default
 
-    # Define custom agents
-    agents:
+    # Define custom skills
+    skills:
       cost-optimizer:
         display_name: "Cost Optimizer"
         description: "Analyzes infrastructure for cost savings opportunities"
@@ -220,21 +220,21 @@ settings:
 ```
 </File>
 
-### Agent Configuration Schema
+### Skill Configuration Schema
 
 ```yaml
-agents:
-  <agent-name>:
+skills:
+  <skill-name>:
     display_name: string          # User-facing name (required)
-    description: string           # What this agent does (required)
+    description: string           # What this skill does (required)
     system_prompt: string         # Specialized instructions (required)
     category: string              # "analysis", "refactor", "security", etc.
     allowed_tools: []             # Tool names (empty = all tools)
     restricted_tools: []          # Tools requiring confirmation
 ```
 
-:::tip AI Agents
-For complete agent documentation including examples and best practices, see [AI Agents](/ai/agents).
+:::tip AI Skills
+For complete skill documentation including examples and best practices, see [AI Skills](/ai/skills).
 :::
 
 ## Provider-Specific Configuration

@@ -70,8 +70,8 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		return m.handleProviderSelectKeys(msg)
 	}
 
-	if m.currentView == viewModeAgentSelect {
-		return m.handleAgentSelectKeys(msg)
+	if m.currentView == viewModeSkillSelect {
+		return m.handleSkillSelectKeys(msg)
 	}
 
 	// Handle chat view Enter key variants.
@@ -141,16 +141,16 @@ func (m *ChatModel) handleKeyMsg(msg tea.KeyMsg) tea.Cmd {
 		}
 		return func() tea.Msg { return nil }
 	case "ctrl+a":
-		// Open agent selection.
-		if m.agentRegistry != nil {
-			m.currentView = viewModeAgentSelect
-			m.selectedAgentIdx = 0
-			// Find current agent index in available agents.
-			availableAgents := m.agentRegistry.List()
-			if m.currentAgent != nil {
-				for i, agent := range availableAgents {
-					if agent.Name == m.currentAgent.Name {
-						m.selectedAgentIdx = i
+		// Open skill selection.
+		if m.skillRegistry != nil {
+			m.currentView = viewModeSkillSelect
+			m.selectedSkillIdx = 0
+			// Find current skill index in available skills.
+			availableSkills := m.skillRegistry.List()
+			if m.currentSkill != nil {
+				for i, skill := range availableSkills {
+					if skill.Name == m.currentSkill.Name {
+						m.selectedSkillIdx = i
 						break
 					}
 				}
@@ -458,10 +458,10 @@ func (m *ChatModel) handleProviderSelectKeys(msg tea.KeyMsg) tea.Cmd {
 	return func() tea.Msg { return nil }
 }
 
-// handleAgentSelectKeys processes keyboard input for the agent selection view.
-func (m *ChatModel) handleAgentSelectKeys(msg tea.KeyMsg) tea.Cmd {
-	// Get available agents.
-	availableAgents := m.agentRegistry.List()
+// handleSkillSelectKeys processes keyboard input for the skill selection view.
+func (m *ChatModel) handleSkillSelectKeys(msg tea.KeyMsg) tea.Cmd {
+	// Get available skills.
+	availableSkills := m.skillRegistry.List()
 
 	switch msg.String() {
 	case "ctrl+c":
@@ -474,50 +474,50 @@ func (m *ChatModel) handleAgentSelectKeys(msg tea.KeyMsg) tea.Cmd {
 		return func() tea.Msg { return nil }
 	case "up", "k":
 		// Move selection up with wraparound.
-		if m.selectedAgentIdx > 0 {
-			m.selectedAgentIdx--
-		} else if len(availableAgents) > 0 {
-			m.selectedAgentIdx = len(availableAgents) - 1
+		if m.selectedSkillIdx > 0 {
+			m.selectedSkillIdx--
+		} else if len(availableSkills) > 0 {
+			m.selectedSkillIdx = len(availableSkills) - 1
 		}
 		return func() tea.Msg { return nil }
 	case "down", "j":
 		// Move selection down with wraparound.
-		if m.selectedAgentIdx < len(availableAgents)-1 {
-			m.selectedAgentIdx++
-		} else if len(availableAgents) > 0 {
-			m.selectedAgentIdx = 0
+		if m.selectedSkillIdx < len(availableSkills)-1 {
+			m.selectedSkillIdx++
+		} else if len(availableSkills) > 0 {
+			m.selectedSkillIdx = 0
 		}
 		return func() tea.Msg { return nil }
 	case "enter":
-		// Switch to selected agent.
-		if m.selectedAgentIdx < len(availableAgents) {
-			selectedAgent := availableAgents[m.selectedAgentIdx]
+		// Switch to selected skill.
+		if m.selectedSkillIdx < len(availableSkills) {
+			selectedSkill := availableSkills[m.selectedSkillIdx]
 
-			// Load agent's system prompt from file (if configured).
-			systemPrompt, err := selectedAgent.LoadSystemPrompt()
+			// Load skill's system prompt from file (if configured).
+			systemPrompt, err := selectedSkill.LoadSystemPrompt()
 			if err != nil {
-				log.Warn(fmt.Sprintf("Failed to load system prompt for agent %q: %v, using default", selectedAgent.Name, err))
+				log.Warn(fmt.Sprintf("Failed to load system prompt for skill %q: %v, using default", selectedSkill.Name, err))
 				// Keep the existing SystemPrompt as fallback.
 			} else {
-				// Update agent with loaded prompt.
-				selectedAgent.SystemPrompt = systemPrompt
+				// Update skill with loaded prompt.
+				selectedSkill.SystemPrompt = systemPrompt
 			}
 
-			m.currentAgent = selectedAgent
+			m.currentSkill = selectedSkill
 
-			// Persist agent to session if session management is enabled.
+			// Persist skill to session if session management is enabled.
 			if m.manager != nil && m.sess != nil {
-				m.sess.Agent = selectedAgent.Name
+				m.sess.Skill = selectedSkill.Name
 				m.sess.UpdatedAt = time.Now()
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := m.manager.UpdateSession(ctx, m.sess); err != nil {
-					log.Debug(fmt.Sprintf("Failed to persist agent to session: %v", err))
+					log.Debug(fmt.Sprintf("Failed to persist skill to session: %v", err))
 				}
 			}
 
 			// Add feedback message.
-			m.addMessage(roleSystem, fmt.Sprintf("Switched to agent: %s (%s)", selectedAgent.DisplayName, selectedAgent.Description))
+			m.addMessage(roleSystem, fmt.Sprintf("Switched to skill: %s (%s)", selectedSkill.DisplayName, selectedSkill.Description))
 			m.updateViewportContent()
 		}
 		// Return to chat view.
