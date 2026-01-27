@@ -262,7 +262,12 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 		PreserveTimes: false,
 		PreserveOwner: false,
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+			// Skip node_modules directories.
 			if strings.Contains(src, "node_modules") {
+				return true, nil
+			}
+			// Skip .terraform directories (may contain broken symlinks to temp provider caches).
+			if strings.Contains(src, ".terraform") {
 				return true, nil
 			}
 			isSocket, err := u.IsSocket(src)
