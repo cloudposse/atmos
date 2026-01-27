@@ -274,7 +274,7 @@ Use Atmos tools from **any MCP-compatible client**:
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"]
+      "args": ["mcp", "start"]
     }
   }
 }
@@ -786,10 +786,10 @@ atmos ai memory view
 **MCP Server (Claude Desktop):**
 ```bash
 # Start MCP server
-atmos mcp-server
+atmos mcp start
 
 # Or with HTTP transport
-atmos mcp-server --transport http --port 3000
+atmos mcp start --transport http --port 3000
 ```
 
 ## TUI Keyboard Shortcuts

@@ -1,4 +1,4 @@
-package mcpserver
+package mcp
 
 import (
 	"context"
@@ -38,12 +38,10 @@ type transportConfig struct {
 	port          int
 }
 
-// NewCommand creates a new mcp-server command.
-func NewCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "mcp-server",
-		Short: "Start Atmos MCP (Model Context Protocol) server",
-		Long: `Start an MCP server that exposes Atmos AI tools via the Model Context Protocol.
+var startCmd = &cobra.Command{
+	Use:   "start",
+	Short: "Start Atmos MCP server",
+	Long: `Start an MCP server that exposes Atmos AI tools via the Model Context Protocol.
 
 The MCP server allows AI assistants (Claude Desktop, Claude Code, VSCode, etc.) to access
 Atmos infrastructure management capabilities through a standardized protocol.
@@ -58,32 +56,33 @@ Example usage with Claude Desktop (stdio):
     "mcpServers": {
       "atmos": {
         "command": "atmos",
-        "args": ["mcp-server"]
+        "args": ["mcp", "start"]
       }
     }
   }
 
 Example usage with HTTP transport:
-  atmos mcp-server --transport http --port 8080
+  atmos mcp start --transport http --port 8080
 
 The server runs until interrupted (Ctrl+C) or the client disconnects.`,
-		Example: `  # Start MCP server with stdio transport (default, for desktop clients)
-  atmos mcp-server
+	Example: `  # Start MCP server with stdio transport (default, for desktop clients)
+  atmos mcp start
 
   # Start MCP server with HTTP transport
-  atmos mcp-server --transport http --port 8080
+  atmos mcp start --transport http --port 8080
 
   # Start HTTP server on custom host and port
-  atmos mcp-server --transport http --host 0.0.0.0 --port 3000`,
-		RunE: executeMCPServer,
-	}
+  atmos mcp start --transport http --host 0.0.0.0 --port 3000`,
+	RunE: executeMCPServer,
+}
 
+func init() {
 	// Add flags.
-	cmd.Flags().String("transport", transportStdio, "Transport type: stdio or http")
-	cmd.Flags().String("host", defaultHTTPHost, "Host to bind HTTP server (only for http transport)")
-	cmd.Flags().Int("port", defaultHTTPPort, "Port to bind HTTP server (only for http transport)")
+	startCmd.Flags().String("transport", transportStdio, "Transport type: stdio or http")
+	startCmd.Flags().String("host", defaultHTTPHost, "Host to bind HTTP server (only for http transport)")
+	startCmd.Flags().Int("port", defaultHTTPPort, "Port to bind HTTP server (only for http transport)")
 
-	return cmd
+	mcpCmd.AddCommand(startCmd)
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {

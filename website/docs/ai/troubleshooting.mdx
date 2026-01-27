@@ -978,7 +978,7 @@ See [Auto-Compact](/ai/sessions#auto-compact-extended-conversations) for detaile
 <Terminal title="shell">
 ```bash
 # Start MCP server manually
-atmos mcp-server
+atmos mcp start
 
 # Should output: Starting Atmos MCP server on stdio...
 ```
@@ -1001,7 +1001,7 @@ atmos version
   "mcpServers": {
     "atmos": {
       "command": "/usr/local/bin/atmos",  // Use full path
-      "args": ["mcp-server"]
+      "args": ["mcp", "start"]
     }
   }
 }
@@ -1018,7 +1018,7 @@ atmos version
 <Terminal title="shell">
 ```bash
 # Run server with debug output
-ATMOS_LOGS_LEVEL=Debug atmos mcp-server
+ATMOS_LOGS_LEVEL=Debug atmos mcp start
 ```
 </Terminal>
 
@@ -1596,7 +1596,7 @@ model: inherit
 <Terminal title="shell">
 ```bash
 # Test directly
-atmos mcp-server
+atmos mcp start
 ```
 </Terminal>
 
@@ -1615,7 +1615,7 @@ tools:
   "mcpServers": {
     "atmos": {  // Server name must match tool prefix
       "command": "/usr/local/bin/atmos",
-      "args": ["mcp-server"]
+      "args": ["mcp", "start"]
     }
   }
 }

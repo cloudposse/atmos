@@ -59,7 +59,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
-	_ "github.com/cloudposse/atmos/cmd/mcp-server"
+	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"

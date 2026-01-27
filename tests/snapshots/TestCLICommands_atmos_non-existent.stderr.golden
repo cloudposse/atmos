@@ -18,7 +18,7 @@ Valid subcommands are:
   • help
   • list
   • lsp
-  • mcp-server
+  • mcp
   • packer
   • pro
   • profile

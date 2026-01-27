@@ -194,7 +194,7 @@ Create or edit `~/.config/Claude/claude_desktop_config.json`:
   "mcpServers": {
     "atmos": {
       "command": "/usr/local/bin/atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_BASE_PATH": "/path/to/your/infrastructure"
       }
@@ -211,7 +211,7 @@ If you installed Atmos via Homebrew, use:
   "mcpServers": {
     "atmos": {
       "command": "/opt/homebrew/bin/atmos",
-      "args": ["mcp-server"]
+      "args": ["mcp", "start"]
     }
   }
 }
@@ -491,7 +491,7 @@ Your networking architecture follows these patterns:
 <Terminal title="terminal">
 ```bash
 # Test MCP server directly
-atmos mcp-server
+atmos mcp start
 
 # Should show: Starting Atmos MCP server...
 ```
@@ -543,14 +543,14 @@ Use environment variables to switch projects:
   "mcpServers": {
     "atmos-project-a": {
       "command": "/usr/local/bin/atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_BASE_PATH": "/projects/infrastructure-a"
       }
     },
     "atmos-project-b": {
       "command": "/usr/local/bin/atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_BASE_PATH": "/projects/infrastructure-b"
       }

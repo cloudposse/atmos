@@ -162,7 +162,7 @@ Add this configuration:
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "/path/to/your/atmos/project"
     }
   }
@@ -278,9 +278,9 @@ The default stdio transport is ideal for local desktop applications like Claude 
 
 #### Start the Server
 
-<Terminal title="atmos mcp-server">
+<Terminal title="atmos mcp start">
 ```bash
-atmos mcp-server
+atmos mcp start
 ```
 </Terminal>
 
@@ -298,7 +298,7 @@ Add Atmos to your Claude Desktop configuration:
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "/path/to/your/atmos/project"
     }
   }
@@ -314,7 +314,7 @@ Add Atmos to your Claude Desktop configuration:
   "mcpServers": {
     "atmos": {
       "command": "atmos.exe",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "C:\\Users\\YourName\\atmos-project"
     }
   }
@@ -338,7 +338,7 @@ If you need to pass environment variables or use a custom Atmos installation:
   "mcpServers": {
     "atmos": {
       "command": "/usr/local/bin/atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "/home/user/infrastructure",
       "env": {
         "ANTHROPIC_API_KEY": "your-key-here",
@@ -358,7 +358,7 @@ If you need to pass environment variables or use a custom Atmos installation:
   "mcpServers": {
     "atmos": {
       "command": "C:\\Program Files\\atmos\\atmos.exe",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "C:\\Users\\YourName\\infrastructure"
     }
   }
@@ -411,7 +411,7 @@ Create or edit `.vscode/mcp.json` in your project:
     "atmos": {
       "type": "stdio",
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "${workspaceFolder}"
     }
   }
@@ -441,7 +441,7 @@ VS Code can automatically detect MCP configurations from Claude Desktop. Enable 
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "/path/to/your/atmos/project",
       "env": {
         "ATMOS_BASE_PATH": "/path/to/your/atmos/project"
@@ -479,7 +479,7 @@ VS Code can automatically detect MCP configurations from Claude Desktop. Enable 
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "/path/to/your/atmos/project",
       "env": {},
       "alwaysAllow": [],
@@ -508,7 +508,8 @@ Create `.continue/mcpServers/atmos.yaml` in your workspace:
 name: atmos
 command: atmos
 args:
-  - mcp-server
+  - mcp
+  - start
 cwd: /path/to/your/atmos/project
 env:
   ATMOS_BASE_PATH: /path/to/your/atmos/project
@@ -525,7 +526,8 @@ mcpServers:
   - name: atmos
     command: atmos
     args:
-      - mcp-server
+      - mcp
+      - start
     cwd: /path/to/your/atmos/project
     env:
       ATMOS_BASE_PATH: /path/to/your/atmos/project
@@ -542,7 +544,7 @@ Windsurf uses a similar configuration to Cursor:
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "cwd": "/path/to/your/atmos/project"
     }
   }
@@ -590,15 +592,15 @@ Beyond desktop applications and IDE extensions, several AI CLI tools support MCP
 claude mcp add --transport http atmos http://localhost:8080
 
 # stdio transport (local server)
-claude mcp add --transport stdio atmos -- atmos mcp-server
+claude mcp add --transport stdio atmos -- atmos mcp start
 
 # With environment variables
 claude mcp add --transport stdio atmos \
   --env ATMOS_BASE_PATH=/path/to/project \
-  -- atmos mcp-server
+  -- atmos mcp start
 
 # With specific scope
-claude mcp add --scope project --transport stdio atmos -- atmos mcp-server
+claude mcp add --scope project --transport stdio atmos -- atmos mcp start
 ```
 </Terminal>
 
@@ -626,7 +628,7 @@ claude mcp remove atmos
     "atmos": {
       "type": "stdio",
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_BASE_PATH": "${PROJECT_ROOT}"
       }
@@ -657,13 +659,13 @@ gemini --version
 <Terminal title="gemini mcp add">
 ```bash
 # stdio transport (local server)
-gemini mcp add atmos atmos mcp-server
+gemini mcp add atmos atmos mcp start
 
 # HTTP transport
 gemini mcp add --transport http atmos http://localhost:8080
 
 # With environment variables
-gemini mcp add atmos -e ATMOS_BASE_PATH=/path/to/project atmos mcp-server
+gemini mcp add atmos -e ATMOS_BASE_PATH=/path/to/project atmos mcp start
 
 # With custom headers (HTTP)
 gemini mcp add --transport http atmos http://localhost:8080 \
@@ -695,7 +697,7 @@ gemini
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_BASE_PATH": "$HOME/infrastructure"
       },
@@ -731,7 +733,7 @@ npm install -g @openai/codex
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_BASE_PATH": "/path/to/project"
       }
@@ -772,10 +774,10 @@ grok --version
 grok
 
 # Within the CLI, add MCP server
-/mcp add atmos "atmos" "mcp-server"
+/mcp add atmos "atmos" "mcp" "start"
 
 # Add with environment variables
-/mcp add atmos "atmos" "mcp-server" "--env=ATMOS_BASE_PATH=/path/to/project"
+/mcp add atmos "atmos" "mcp" "start" "--env=ATMOS_BASE_PATH=/path/to/project"
 
 # List MCP servers
 /mcp list --verbose
@@ -790,14 +792,14 @@ grok
 <Terminal title="grok mcp add">
 ```bash
 # stdio transport
-grok mcp add atmos --transport stdio --command "atmos" --args "mcp-server"
+grok mcp add atmos --transport stdio --command "atmos" --args "mcp,start"
 
 # HTTP transport
 grok mcp add atmos --transport http --url "http://localhost:8080"
 
 # With environment variables
 grok mcp add atmos --transport stdio \
-  --command "atmos" --args "mcp-server" \
+  --command "atmos" --args "mcp,start" \
   --env "ATMOS_BASE_PATH=/path/to/project"
 ```
 </Terminal>
@@ -811,7 +813,7 @@ grok mcp add atmos --transport stdio \
     "servers": {
       "atmos": {
         "command": "atmos",
-        "args": ["mcp-server"],
+        "args": ["mcp", "start"],
         "env": {
           "ATMOS_BASE_PATH": "/path/to/infrastructure"
         }
@@ -851,16 +853,16 @@ The HTTP transport is ideal for remote access, cloud environments, and multiple 
 
 #### Start HTTP Server
 
-<Terminal title="atmos mcp-server --transport http">
+<Terminal title="atmos mcp start --transport http">
 ```bash
 # Default: localhost:8080
-atmos mcp-server --transport http
+atmos mcp start --transport http
 
 # Custom host and port
-atmos mcp-server --transport http --host 0.0.0.0 --port 3000
+atmos mcp start --transport http --host 0.0.0.0 --port 3000
 
 # Bind to all interfaces for remote access
-atmos mcp-server --transport http --host 0.0.0.0 --port 8080
+atmos mcp start --transport http --host 0.0.0.0 --port 8080
 ```
 </Terminal>
 
@@ -916,16 +918,16 @@ For remote access from Cloud Desktop or web clients:
 <Terminal title="examples">
 ```bash
 # Start with stdio transport (default)
-atmos mcp-server
+atmos mcp start
 
 # Start HTTP server on default port
-atmos mcp-server --transport http
+atmos mcp start --transport http
 
 # Start HTTP server on custom port
-atmos mcp-server --transport http --port 3000
+atmos mcp start --transport http --port 3000
 
 # Start HTTP server accessible from network
-atmos mcp-server --transport http --host 0.0.0.0 --port 8080
+atmos mcp start --transport http --host 0.0.0.0 --port 8080
 ```
 </Terminal>
 
@@ -1144,7 +1146,7 @@ Understanding how MCP servers run helps clarify their behavior and operational r
 #### How It Works
 
 1. **Client Launches Server as Subprocess**
-   - When Claude Desktop starts, it spawns `atmos mcp-server` as a child process
+   - When Claude Desktop starts, it spawns `atmos mcp start` as a child process
    - The server process is directly managed by the client application
    - Process lifecycle is tied to the client session
 
@@ -1206,7 +1208,7 @@ Unlike stdio, **HTTP transport servers can run as background daemons:**
 
 ```bash
 # Start HTTP server in background
-atmos mcp-server --transport http --host 0.0.0.0 --port 8080 &
+atmos mcp start --transport http --host 0.0.0.0 --port 8080 &
 
 # Or use process managers
 systemctl start atmos-mcp-server  # systemd
@@ -1248,7 +1250,7 @@ This is how **all** MCP stdio servers work, including official reference impleme
 **"Should I run stdio servers in the background?"**
 
 No. stdio servers are designed to run as foreground subprocesses. If you need a background server:
-- Use HTTP transport instead: `atmos mcp-server --transport http`
+- Use HTTP transport instead: `atmos mcp start --transport http`
 - Set up proper daemon management (systemd, Docker, etc.)
 - Implement security measures (authentication, TLS)
 
@@ -1335,7 +1337,7 @@ For secure remote access:
 ssh -L 8080:localhost:8080 user@remote-server
 
 # On the remote server
-atmos mcp-server --transport http --host localhost --port 8080
+atmos mcp start --transport http --host localhost --port 8080
 
 # Now access via localhost:8080 on your local machine
 ```
@@ -1374,7 +1376,7 @@ Planned for future releases:
    which atmos
 
    # Test the MCP server command directly
-   atmos mcp-server
+   atmos mcp start
    # Should output: "MCP server started (stdio transport)"
    # Press Ctrl+C to exit
    ```
@@ -1431,7 +1433,7 @@ Planned for future releases:
      "mcpServers": {
        "atmos": {
          "command": "atmos",
-         "args": ["mcp-server"],
+         "args": ["mcp", "start"],
          "cwd": "/full/path/to/your/atmos/project"
        }
      }
@@ -1443,7 +1445,7 @@ Planned for future releases:
    <Terminal title="manual test">
    ```bash
    cd /path/to/your/atmos/project
-   atmos mcp-server
+   atmos mcp start
    # Should start without errors
    # Press Ctrl+C to exit
    ```
@@ -1460,7 +1462,7 @@ which atmos
   "mcpServers": {
     "atmos": {
       "command": "/usr/local/bin/atmos",
-      "args": ["mcp-server"]
+      "args": ["mcp", "start"]
     }
   }
 }
@@ -1479,7 +1481,7 @@ curl http://localhost:8080/health
 lsof -i :8080
 
 # Test with different port
-atmos mcp-server --transport http --port 3000
+atmos mcp start --transport http --port 3000
 ```
 </Terminal>
 
@@ -1603,7 +1605,7 @@ WORKDIR /atmos
 
 EXPOSE 8080
 
-CMD ["atmos", "mcp-server", "--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
+CMD ["atmos", "mcp", "start", "--transport", "http", "--host", "0.0.0.0", "--port", "8080"]
 ```
 </File>
 
@@ -1725,7 +1727,7 @@ server {
 
 Atmos offers two ways to use AI capabilities:
 
-| Feature | `atmos ai chat` | `atmos mcp-server` |
+| Feature | `atmos ai chat` | `atmos mcp start` |
 |---------|----------------|-------------------|
 | **Access** | Built-in CLI | Any MCP client |
 | **Interface** | Terminal TUI | Client-dependent |
@@ -1738,7 +1740,7 @@ Atmos offers two ways to use AI capabilities:
 **When to use each:**
 
 - **Use `atmos ai chat`** when working directly in the terminal
-- **Use `atmos mcp-server`** when integrating with Claude Desktop, VSCode, or custom applications
+- **Use `atmos mcp start`** when integrating with Claude Desktop, VSCode, or custom applications
 
 You can use both simultaneously - they're complementary features!
 

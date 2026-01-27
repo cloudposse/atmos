@@ -23,7 +23,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 15+ tools with granular permission system
 - **Permission Cache** - Persistent permission decisions with 80%+ prompt reduction
-- **Agent System** - 5 built-in specialized agents (marketplace planned)
+- **Agent System** - 5 built-in specialized agents + marketplace infrastructure
 - **MCP Integration** - stdio/HTTP transports for external clients
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management
@@ -690,7 +690,7 @@ All tests passing with 100% coverage: `pkg/ai/tools/permission/cache_test.go`
 
 ### 4. Agent System
 
-**Status:** ✅ Production Ready (Built-in Agents & Marketplace)
+**Status:** ✅ Production Ready (Built-in Agents); Marketplace Infrastructure Ready (Community Agents Coming Soon)
 
 #### Overview
 
@@ -862,10 +862,10 @@ MCP integration enables Atmos tools to be accessed from any MCP-compatible clien
 **Start MCP Server:**
 ```bash
 # stdio (default)
-atmos mcp-server
+atmos mcp start
 
 # HTTP
-atmos mcp-server --transport http --port 3000
+atmos mcp start --transport http --port 3000
 ```
 
 **Claude Desktop Configuration:**
@@ -874,7 +874,7 @@ atmos mcp-server --transport http --port 3000
   "mcpServers": {
     "atmos": {
       "command": "atmos",
-      "args": ["mcp-server"],
+      "args": ["mcp", "start"],
       "env": {
         "ATMOS_CLI_CONFIG_PATH": "/path/to/atmos.yaml"
       }
@@ -895,7 +895,7 @@ atmos mcp-server --transport http --port 3000
                  │
 ┌────────────────▼───────────────────────────┐
 │         Atmos MCP Server                   │
-│         (atmos mcp-server)                 │
+│         (atmos mcp start)                 │
 ├────────────────────────────────────────────┤
 │ • JSON-RPC 2.0 Protocol Handler            │
 │ • Transport Layer (stdio/HTTP)             │
@@ -945,7 +945,7 @@ settings:
 - **Location**: `pkg/mcp/`
 - **Server**: `pkg/mcp/server.go` (uses official MCP SDK)
 - **Adapter**: `pkg/mcp/adapter.go` (converts Atmos tools to MCP format)
-- **Command**: `cmd/mcp-server/`
+- **Command**: `cmd/mcp/`
 - **Documentation**: `website/docs/ai/mcp-server.mdx`
 
 ---
@@ -1533,10 +1533,10 @@ atmos ai memory update --section project_context
 
 ```bash
 # Start MCP server (stdio)
-atmos mcp-server
+atmos mcp start
 
 # Start HTTP server
-atmos mcp-server --transport http --port 3000
+atmos mcp start --transport http --port 3000
 ```
 
 ---

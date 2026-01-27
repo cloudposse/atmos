@@ -11,6 +11,7 @@ import (
 	log "github.com/charmbracelet/log"
 
 	"github.com/cloudposse/atmos/pkg/ai/agents"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -134,7 +135,7 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 	// 10. Success.
 	fmt.Printf("\n✓ Agent %q installed successfully\n", metadata.DisplayName)
 	fmt.Printf("  Version: %s\n", metadata.Version)
-	fmt.Printf("  Location: %s\n", installPath)
+	fmt.Printf("  Location: %s\n", redactHomePath(installPath))
 	fmt.Printf("\nUsage: Switch to this agent in the TUI with Ctrl+A\n")
 
 	return nil
@@ -241,6 +242,19 @@ func (i *Installer) LoadInstalledAgents(registry *agents.Registry) error {
 func (i *Installer) getInstallPath(source *SourceInfo) string {
 	agentsDir, _ := GetAgentsDir()
 	return filepath.Join(agentsDir, source.FullPath)
+}
+
+// redactHomePath replaces the home directory portion of a path with ~ for display.
+// This avoids logging sensitive home directory paths while still providing useful information.
+func redactHomePath(path string) string {
+	homeDir, err := homedir.Dir()
+	if err != nil {
+		return "~/.atmos/agents/..."
+	}
+	if strings.HasPrefix(path, homeDir) {
+		return "~" + strings.TrimPrefix(path, homeDir)
+	}
+	return path
 }
 
 // confirmInstallation prompts user to confirm agent installation.
