@@ -5,7 +5,7 @@ This example demonstrates how to configure and use the Atmos AI Assistant featur
 - **Multi-provider configuration** - Configure multiple AI providers (Anthropic, OpenAI, Ollama)
 - **Session management** - Persistent conversation history with auto-compact
 - **Tool execution** - AI-powered infrastructure inspection
-- **Custom agents** - Specialized AI agents for different tasks
+- **Custom skills** - Specialized AI skills for different tasks
 - **Project memory** - Persistent context via ATMOS.md
 
 ## Prerequisites
@@ -98,16 +98,16 @@ AI: [Uses atmos_describe_component tool]
     ...
 ```
 
-### Custom Agents
+### Custom Skills
 
-This example includes a custom "cost-optimizer" agent:
+This example includes a custom "cost-optimizer" skill:
 
 ```bash
-# Press Ctrl+A during chat to switch agents
-# Or set default agent in atmos.yaml
+# Press Ctrl+A during chat to switch skills
+# Or set default skill in atmos.yaml
 ```
 
-Agents provide specialized behavior and restricted tool access for specific tasks.
+Skills provide specialized behavior and restricted tool access for specific tasks.
 
 ### Project Memory (ATMOS.md)
 
@@ -188,7 +188,7 @@ atmos workflow ai-demo
 | Key           | Action             |
 |---------------|--------------------|
 | `Ctrl+P`      | Switch AI provider |
-| `Ctrl+A`      | Switch AI agent    |
+| `Ctrl+A`      | Switch AI skill    |
 | `Ctrl+N`      | Create new session |
 | `Ctrl+L`      | List sessions      |
 | `Ctrl+C`      | Exit chat          |
@@ -200,5 +200,5 @@ atmos workflow ai-demo
 - [AI Assistant Documentation](https://atmos.tools/ai/)
 - [AI Configuration](https://atmos.tools/ai/configuration)
 - [AI Providers](https://atmos.tools/ai/providers)
-- [AI Agents](https://atmos.tools/ai/agents)
+- [AI Skills](https://atmos.tools/ai/skills)
 - [Session Management](https://atmos.tools/ai/sessions)

@@ -1,5 +1,5 @@
 # Atmos AI Assistant Example Configuration
-# This demonstrates multi-provider AI configuration with sessions, tools, and custom agents.
+# This demonstrates multi-provider AI configuration with sessions, tools, and custom skills.
 #
 # Documentation: https://atmos.tools/ai
 
@@ -46,9 +46,9 @@ settings:
     # Docs: https://atmos.tools/ai/providers
     default_provider: "anthropic"
 
-    # Default agent to use
-    # Docs: https://atmos.tools/ai/agents
-    default_agent: "general"
+    # Default skill to use
+    # Docs: https://atmos.tools/ai/skills
+    default_skill: "general"
 
     # Context settings - control what information is sent to the AI
     # Docs: https://atmos.tools/ai/configuration#context-settings
@@ -162,11 +162,11 @@ settings:
       auto_update: false
       create_if_missing: true
 
-    # Custom agents - specialized AI personas for different tasks
-    # Docs: https://atmos.tools/ai/agents
-    agents:
+    # Custom skills - specialized AI personas for different tasks
+    # Docs: https://atmos.tools/ai/skills
+    skills:
       # Cost optimization specialist
-      # Docs: https://atmos.tools/ai/agents#custom-agents
+      # Docs: https://atmos.tools/ai/skills#custom-skills
       cost-optimizer:
         display_name: "Cost Optimizer"
         description: "Analyzes infrastructure for cost savings opportunities"
@@ -196,7 +196,7 @@ settings:
         restricted_tools: []
 
       # Security auditor
-      # Docs: https://atmos.tools/ai/agents#custom-agents
+      # Docs: https://atmos.tools/ai/skills#custom-skills
       security-reviewer:
         display_name: "Security Reviewer"
         description: "Reviews infrastructure for security best practices"
