@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -81,9 +82,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
-				assert.Contains(t, cfg.BasePath, tempDirPath)
+				assert.Equal(t, "./", cfg.BasePath)
 				assert.Contains(t, cfg.CliConfigPath, tempDirPath)
 				configPathInfo, err := os.Stat(cfg.CliConfigPath)
 				require.NoError(t, err)
@@ -107,8 +106,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
+				assert.Equal(t, "./", cfg.BasePath)
 				assert.Contains(t, cfg.CliConfigPath, tempDirPath)
 				configPathInfo, err := os.Stat(cfg.CliConfigPath)
 				require.NoError(t, err)
@@ -130,8 +128,8 @@ terraform:
 				require.NoError(t, err)
 				// check if the atmos config path is set to empty
 				assert.Equal(t, "", cfg.CliConfigPath)
-				// Base path should be converted to absolute, even when using default value "."
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
+				// check if the base path is set correctly from the default value
+				assert.Equal(t, ".", cfg.BasePath)
 				// check if the apply auto approve is set correctly from the default value
 				assert.Equal(t, false, cfg.Components.Terraform.ApplyAutoApprove)
 			},
@@ -144,8 +142,7 @@ terraform:
 			processStacks: true,
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
+				assert.Equal(t, "./", cfg.BasePath)
 				assert.Contains(t, cfg.CliConfigPath, filepath.Join("examples", "demo-stacks"))
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
@@ -179,9 +176,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path, even when sourced from env var.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
-				assert.Contains(t, cfg.BasePath, "env/test/path")
+				assert.Equal(t, "env/test/path", cfg.BasePath)
 			},
 		},
 		{
@@ -194,9 +189,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path, even when sourced from env var.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
-				assert.Contains(t, cfg.BasePath, "env/test/path")
+				assert.Equal(t, "env/test/path", cfg.BasePath)
 			},
 		},
 		{
@@ -222,9 +215,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath from shell command execution should also be converted to absolute.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
-				assert.Contains(t, cfg.BasePath, "Hello, World!")
+				assert.Equal(t, "Hello, World!", strings.TrimSpace(cfg.BasePath))
 			},
 		},
 		{
@@ -292,8 +283,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
+				assert.Equal(t, "./", cfg.BasePath)
 				assert.Contains(t, cfg.CliConfigPath, filepath.Join("fixtures", "scenarios", "atmos-configuration"))
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
@@ -308,8 +298,7 @@ terraform:
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
-				// BasePath should be converted to absolute path.
-				assert.True(t, filepath.IsAbs(cfg.BasePath), "BasePath should be absolute")
+				assert.Equal(t, "./", cfg.BasePath)
 				assert.Contains(t, cfg.CliConfigPath, filepath.Join("fixtures", "scenarios", "atmos-cli-imports"))
 				baseInfo, err := os.Stat(cfg.BasePath)
 				require.NoError(t, err)
