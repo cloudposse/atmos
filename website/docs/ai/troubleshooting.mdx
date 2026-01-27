@@ -1158,19 +1158,19 @@ lsp:
 
 See [LSP Integration Documentation](/lsp/lsp-client) for detailed configuration.
 
-## AI Agents
+## AI Skills
 
-### Agent Not Available in Selector
+### Skill Not Available in Selector
 
-**Problem**: Pressing Ctrl+A shows agent selector, but a specific agent is missing.
+**Problem**: Pressing Ctrl+A shows skill selector, but a specific skill is missing.
 
 **Solutions**:
 
-1. **Check agent configuration**:
+1. **Check skill configuration**:
 <Terminal title="shell">
 ```bash
-# Verify agent is defined in atmos.yaml
-atmos describe config | grep -A 20 "agents:"
+# Verify skill is defined in atmos.yaml
+atmos describe config | grep -A 20 "skills:"
 ```
 </Terminal>
 
@@ -1180,9 +1180,9 @@ atmos describe config | grep -A 20 "agents:"
 ```yaml
 settings:
   ai:
-    agents:
-      my-agent:              # Agent name
-        display_name: "My Agent"  # ✅ Required
+    skills:
+      my-skill:              # Skill name
+        display_name: "My Skill"  # ✅ Required
         description: "..."        # ✅ Required
         system_prompt: "..."      # ✅ Required
         # category, allowed_tools, restricted_tools are optional
@@ -1192,35 +1192,35 @@ settings:
 **Common mistakes**:
 - Missing required fields (`display_name`, `description`, `system_prompt`)
 - Invalid YAML indentation
-- Agent name contains spaces (use hyphens: `my-agent` not `my agent`)
+- Skill name contains spaces (use hyphens: `my-skill` not `my skill`)
 
-### Agent Not Using Specialized Prompt
+### Skill Not Using Specialized Prompt
 
-**Problem**: Switched to a specialized agent, but it's not behaving as expected.
+**Problem**: Switched to a specialized skill, but it's not behaving as expected.
 
 **Symptoms**:
-- Agent gives generic responses instead of specialized ones
-- Agent doesn't follow its domain-specific instructions
-- No confirmation message when switching agents
+- Skill gives generic responses instead of specialized ones
+- Skill doesn't follow its domain-specific instructions
+- No confirmation message when switching skills
 
 **Solutions**:
 
-1. **Verify agent switch was successful**:
+1. **Verify skill switch was successful**:
 
-When you select an agent with Ctrl+A and press Enter, you should see:
+When you select a skill with Ctrl+A and press Enter, you should see:
 ```
-System: Switched to agent: Stack Analyzer (Analyze stack configurations and dependencies)
+System: Switched to skill: Stack Analyzer (Analyze stack configurations and dependencies)
 ```
 
-If you don't see this message, the agent didn't activate.
+If you don't see this message, the skill didn't activate.
 
-2. **Check agent's system prompt**:
+2. **Check skill's system prompt**:
 
 <File title="atmos.yaml">
 ```yaml
 settings:
   ai:
-    agents:
+    skills:
       stack-analyzer:
         display_name: "Stack Analyzer"
         description: "Analyzes stack configurations"
@@ -1239,25 +1239,25 @@ The `system_prompt` field must be a string with clear instructions. Use `|` for 
 
 3. **Test with a specific question**:
 
-After switching agents, ask a domain-specific question:
+After switching skills, ask a domain-specific question:
 
 <Terminal title="atmos ai chat">
 ```bash
 # Switch to Stack Analyzer (Ctrl+A)
 You: "Analyze the inheritance chain for prod-use1-eks"
 
-# The agent should follow its systematic approach
+# The skill should follow its systematic approach
 AI: Starting with high-level overview...
     1. Base configuration: catalog/eks/defaults.yaml
     ...
 ```
 </Terminal>
 
-If the agent gives a generic response, its system prompt may not be detailed enough.
+If the skill gives a generic response, its system prompt may not be detailed enough.
 
-### Custom Agent Not Working
+### Custom Skill Not Working
 
-**Problem**: Created a custom agent, but it's not working as expected.
+**Problem**: Created a custom skill, but it's not working as expected.
 
 **Checklist**:
 
@@ -1267,7 +1267,7 @@ If the agent gives a generic response, its system prompt may not be detailed eno
 ```yaml
 settings:
   ai:
-    agents:
+    skills:
       cost-optimizer:
         display_name: "Cost Optimizer"        # ✅ Required
         description: "Finds cost savings"     # ✅ Required
@@ -1320,8 +1320,8 @@ system_prompt: "Help with cost optimization"
 ```yaml
 settings:
   ai:
-    agents:
-      my-agent:
+    skills:
+      my-skill:
         allowed_tools:
           - atmos_describe_component      # ✅ Correct
           - read_file                     # ✅ Correct
@@ -1346,7 +1346,7 @@ settings:
 
 See [AI Tools](/ai/tools) for complete list.
 
-### Agent Switch Not Responding
+### Skill Switch Not Responding
 
 **Problem**: Press Ctrl+A, but nothing happens.
 
@@ -1367,16 +1367,16 @@ If you're in the middle of typing a message, the textarea may capture Ctrl+A. Cl
 - Press Esc to clear
 - Then press Ctrl+A
 
-3. **Verify agent registry loaded**:
+3. **Verify skill registry loaded**:
 
-If agents failed to load from configuration, the agent selector will be empty.
+If skills failed to load from configuration, the skill selector will be empty.
 
 <Terminal title="shell">
 ```bash
-# Test agent loading
-atmos ai chat --session test-agents
+# Test skill loading
+atmos ai chat --session test-skills
 
-# Try to open agent selector
+# Try to open skill selector
 # Press Ctrl+A
 
 # If you see an empty selector, check configuration
@@ -1384,27 +1384,27 @@ atmos describe config | grep -A 50 "ai:"
 ```
 </Terminal>
 
-### Tool Access Denied for Agent
+### Tool Access Denied for Skill
 
-**Problem**: Agent says it cannot use a specific tool.
+**Problem**: Skill says it cannot use a specific tool.
 
 **Example**:
 ```
 You: "Edit the VPC component"
-Agent: "I don't have access to the edit_file tool"
+AI: "I don't have access to the edit_file tool"
 ```
 
-**Reason**: The agent's `allowed_tools` list doesn't include `edit_file`.
+**Reason**: The skill's `allowed_tools` list doesn't include `edit_file`.
 
 **Solutions**:
 
-1. **Check agent's tool permissions**:
+1. **Check skill's tool permissions**:
 
 <File title="atmos.yaml">
 ```yaml
 settings:
   ai:
-    agents:
+    skills:
       security-auditor:
         display_name: "Security Auditor"
         description: "Security review"
@@ -1423,7 +1423,7 @@ settings:
 ```yaml
 settings:
   ai:
-    agents:
+    skills:
       security-auditor:
         allowed_tools:
           - atmos_describe_component
@@ -1433,18 +1433,18 @@ settings:
 ```
 </File>
 
-3. **Or use an agent with full tool access**:
+3. **Or use a skill with full tool access**:
 
-Press Ctrl+A and switch to the **General** agent, which has access to all tools.
+Press Ctrl+A and switch to the **General** skill, which has access to all tools.
 
-**Design consideration**: Some agents intentionally have restricted tool access for safety. For example:
+**Design consideration**: Some skills intentionally have restricted tool access for safety. For example:
 - **Security Auditor**: Read-only (cannot modify files)
 - **Config Validator**: Validation tools only (cannot execute commands)
 - **Component Refactor**: Has `edit_file`, but it's in `restricted_tools` (requires confirmation)
 
-### Default Agent Not Applying
+### Default Skill Not Applying
 
-**Problem**: Set `default_agent` in config, but chat still starts with "General" agent.
+**Problem**: Set `default_skill` in config, but chat still starts with "General" skill.
 
 **Check**:
 
@@ -1452,9 +1452,9 @@ Press Ctrl+A and switch to the **General** agent, which has access to all tools.
 ```yaml
 settings:
   ai:
-    default_agent: "stack-analyzer"    # ✅ Agent name (not display name)
+    default_skill: "stack-analyzer"    # ✅ Skill name (not display name)
 
-    agents:
+    skills:
       stack-analyzer:                  # ✅ Must match exactly
         display_name: "Stack Analyzer"
         description: "..."
@@ -1463,9 +1463,9 @@ settings:
 </File>
 
 **Common mistakes**:
-- Using `display_name` instead of agent key: `default_agent: "Stack Analyzer"` ❌
-- Typo in agent name: `default_agent: "stack_analyzer"` ❌ (should be `stack-analyzer`)
-- Agent not defined in `agents` section
+- Using `display_name` instead of skill key: `default_skill: "Stack Analyzer"` ❌
+- Typo in skill name: `default_skill: "stack_analyzer"` ❌ (should be `stack-analyzer`)
+- Skill not defined in `skills` section
 
 **Verify**:
 
@@ -1474,14 +1474,14 @@ settings:
 # Start chat and check first message
 atmos ai chat
 
-# The initial greeting should indicate the active agent
-# Look for: "Switched to agent: Stack Analyzer" or similar
+# The initial greeting should indicate the active skill
+# Look for: "Switched to skill: Stack Analyzer" or similar
 ```
 </Terminal>
 
-### Agent Configuration Not Loading
+### Skill Configuration Not Loading
 
-**Problem**: Defined custom agents in `atmos.yaml`, but they're not appearing.
+**Problem**: Defined custom skills in `atmos.yaml`, but they're not appearing.
 
 **Debug steps**:
 
@@ -1503,31 +1503,31 @@ atmos describe config
 settings:
   ai:                        # 2 spaces
     enabled: true            # 4 spaces
-    agents:                  # 4 spaces
-      my-agent:              # 6 spaces
+    skills:                  # 4 spaces
+      my-skill:              # 6 spaces
         display_name: "..."  # 8 spaces
         description: "..."   # 8 spaces
         system_prompt: "..." # 8 spaces
 ```
 </File>
 
-3. **Verify agents section location**:
+3. **Verify skills section location**:
 
-Agents must be under `settings.ai.agents`, not `settings.agents` or `ai.agents`.
+Skills must be under `settings.ai.skills`, not `settings.skills` or `ai.skills`.
 
 ❌ **Wrong**:
 ```yaml
 settings:
-  agents:           # Wrong location
-    my-agent: ...
+  skills:           # Wrong location
+    my-skill: ...
 ```
 
 ✅ **Correct**:
 ```yaml
 settings:
   ai:
-    agents:         # Under ai section
-      my-agent: ...
+    skills:         # Under ai section
+      my-skill: ...
 ```
 
 4. **Test with minimal config**:
@@ -1544,15 +1544,15 @@ settings:
         model: "claude-sonnet-4-5"
         api_key_env: "ANTHROPIC_API_KEY"
 
-    agents:
-      test-agent:
+    skills:
+      test-skill:
         display_name: "Test"
-        description: "Test agent"
-        system_prompt: "You are a test agent."
+        description: "Test skill"
+        system_prompt: "You are a test skill."
 ```
 </File>
 
-Start chat and press Ctrl+A. If "Test" appears, your syntax is correct and you can add more complex agents.
+Start chat and press Ctrl+A. If "Test" appears, your syntax is correct and you can add more complex skills.
 
 ## Claude Code Subagents
 

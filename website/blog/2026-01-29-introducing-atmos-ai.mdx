@@ -507,7 +507,7 @@ settings:
         model: "claude-sonnet-4-20250514"
         cache:
           enabled: true              # Enable prompt caching
-          cache_system_prompt: true  # Cache agent system prompt
+          cache_system_prompt: true  # Cache skill system prompt
           cache_project_memory: true # Cache ATMOS.md content
 ```
 
@@ -568,11 +568,11 @@ AI: Welcome! Let me analyze your Atmos configuration...
 ### 2. Security Audit
 
 ```bash
-atmos ai chat --agent security-auditor
+atmos ai chat --skill security-auditor
 
 You: Audit our production VPC security
 
-AI: [Switches to Security Auditor agent]
+AI: [Switches to Security Auditor skill]
     [Analyzes prod VPC configuration]
 
     Security Analysis for prod-use1-network:
@@ -599,7 +599,7 @@ AI: [Switches to Security Auditor agent]
 ### 3. Configuration Debugging
 
 ```bash
-atmos ai chat --agent config-validator
+atmos ai chat --skill config-validator
 
 You: My stack validation is failing with "undefined variable"
 
@@ -737,8 +737,8 @@ atmos ai chat --session infrastructure-review
 # Specific provider
 atmos ai chat --provider ollama
 
-# Specific agent
-atmos ai chat --agent security-auditor
+# Specific skill
+atmos ai chat --skill security-auditor
 ```
 
 **Quick Questions:**
@@ -798,7 +798,7 @@ atmos mcp start --transport http --port 3000
 - **Ctrl+N** - Create new session with provider selection
 - **Ctrl+L** - Switch between sessions
 - **Ctrl+P** - Switch AI provider mid-conversation
-- **Ctrl+A** - Switch AI agent
+- **Ctrl+A** - Switch AI skill
 - **↑/↓** - Navigate message history
 - **Ctrl+J** - Add newline (alternative to Shift+Enter)
 - **Ctrl+C** - Quit
@@ -1094,24 +1094,24 @@ Atmos AI can automatically discover and include relevant project files in conver
 
 Learn more: [Context Discovery Documentation](/ai#automatic-context-discovery)
 
-### Agent Marketplace (Coming Soon)
+### Skill Marketplace (Coming Soon)
 
-Install community-created specialized agents:
+Install community-created specialized skills following the [Agent Skills open standard](https://agentskills.io):
 
 ```bash
-# Install custom agent
-atmos ai agent install github.com/cloudposse/agent-cost-analyzer
+# Install custom skill
+atmos ai skill install github.com/cloudposse/skill-cost-analyzer
 
 # Use it
-atmos ai chat --agent cost-analyzer
+atmos ai chat --skill cost-analyzer
 > "Analyze infrastructure costs across all environments"
 ```
 
 **Coming features:**
 - Version management
-- Agent dependencies
-- Private agent registries
-- Agent composition
+- Skill dependencies
+- Private skill registries
+- Skill composition
 
 ## Security & Privacy
 
@@ -1197,20 +1197,20 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - ✅ **Automatic Context Discovery** - Intelligent file discovery with .gitignore support and caching
 
 ### Short-term (Next 3 Months)
-- **Agent Marketplace** - Install community agents
+- **Skill Marketplace** - Install community skills from the Agent Skills registry
 - **Enhanced LSP** - More language servers (HCL, JSON Schema)
 - **Advanced Analytics** - Token usage tracking, cost analysis
 - **Auto-Fix Suggestions** - AI-powered configuration fixes
 
 ### Medium-term (3-6 Months)
-- **Multi-Agent Workflows** - Agent delegation and collaboration
+- **Multi-Skill Workflows** - Skill delegation and collaboration
 - **Enhanced Memory** - Automatic memory updates from conversations
 - **IDE Plugins** - Native VSCode/JetBrains integration
 - **Team Collaboration** - Shared sessions across teams
 
 ### Long-term (6-12 Months)
-- **Private Agent Registries** - Company-specific agents
-- **Advanced Security** - Agent sandboxing, GPG signatures
+- **Private Skill Registries** - Company-specific skills
+- **Advanced Security** - Skill sandboxing, GPG signatures
 - **Centralized Management** - Organization-wide policies
 - **Advanced Workflows** - Task decomposition, parallel execution
 
