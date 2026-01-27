@@ -1467,8 +1467,12 @@ vars:
 		enabledStr = "true"
 	}
 
+	// Use filepath.ToSlash to convert Windows backslashes to forward slashes in YAML.
+	// Backslashes in YAML are interpreted as escape characters (e.g., \U → unicode escape).
+	basePath := filepath.ToSlash(tmpDir)
+
 	atmosYaml := `
-base_path: "` + tmpDir + `"
+base_path: "` + basePath + `"
 stacks:
   base_path: stacks
   included_paths:
