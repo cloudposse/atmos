@@ -11,7 +11,7 @@ verbose = "info"
 no_progress = true
 
 # Timeout for each request (seconds)
-timeout = 30
+timeout = 60
 
 # Retry failed requests
 max_retries = 3
@@ -38,6 +38,8 @@ exclude = [
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)
   "gnu\\.org",
+  # Linux Foundation specs (slow response times)
+  "refspecs\\.linuxfoundation\\.org",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)
