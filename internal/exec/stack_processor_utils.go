@@ -599,6 +599,14 @@ func processYAMLConfigFileWithContextInternal(
 		return map[string]any{}, map[string]map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, map[string]any{}, nil, nil
 	}
 
+	// Track whether context was originally provided from outside (e.g., via import context).
+	// This is important because we should only process templates during import when:
+	// 1. The file has a .tmpl extension, OR
+	// 2. Context was explicitly passed from outside (not just extracted from the file itself)
+	// Without this check, files with locals/settings/vars/env sections would have their templates
+	// processed prematurely, before component-specific context (like atmos_component) is available.
+	originalContextProvided := len(context) > 0
+
 	// Extract and resolve file-scoped locals before template processing.
 	// Locals can reference other locals using {{ .locals.X }} syntax.
 	// The resolved locals are added to the template context so they're available during template processing.
@@ -628,8 +636,11 @@ func processYAMLConfigFileWithContextInternal(
 	// Process `Go` templates in the imported stack manifest if it has a template extension
 	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
 	// Other .tmpl files are processed only when context is provided (backward compatibility)
+	// IMPORTANT: Use originalContextProvided (not len(context) > 0) to avoid processing templates
+	// when the only context is from file extraction (locals/settings/vars/env). Templates like
+	// {{ .atmos_component }} should be deferred until component processing when that context is available.
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
-	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
+	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || originalContextProvided) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		var tmplErr error
 		stackManifestTemplatesProcessed, tmplErr = ProcessTmpl(atmosConfig, relativeFilePath, stackYamlConfig, context, ignoreMissingTemplateValues)
 		if tmplErr != nil {
