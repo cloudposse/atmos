@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	// Import ollama provider to register it for tests.
+	_ "github.com/cloudposse/atmos/pkg/ai/agent/ollama"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -1745,4 +1747,424 @@ func TestChatCmd_RunE_MemoryWithSections(t *testing.T) {
 	err = chatCmd.RunE(chatCmd, []string{})
 	// Will fail at AI client creation, but memory sections path is exercised.
 	require.Error(t, err)
+}
+
+// createChatOllamaConfig creates atmos.yaml config with ollama provider for testing.
+// Ollama provider accepts dummy API keys, allowing client creation to succeed.
+// Returns the temp directory path containing the config.
+func createChatOllamaConfig(t *testing.T, extraConfig string) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	// Create required directories for atmos config.
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	// Create a dummy stack file to avoid "no stacks found" error.
+	dummyStack := `
+vars:
+  stage: test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
+
+	// Use filepath.ToSlash to convert Windows backslashes to forward slashes in YAML.
+	basePath := filepath.ToSlash(tmpDir)
+
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+settings:
+  ai:
+    enabled: true
+    default_provider: ollama
+    providers:
+      ollama:
+        model: "llama3.3:70b"
+        max_tokens: 4096
+` + extraConfig
+
+	err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
+	require.NoError(t, err)
+
+	return tmpDir
+}
+
+// TestChatCmd_RunE_OllamaWithSessions tests session initialization with ollama provider.
+// Ollama allows client creation to succeed, so we can test session code paths.
+// Note: This test exercises the session initialization code path.
+func TestChatCmd_RunE_OllamaWithSessions(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: ".atmos/sessions"
+      max_sessions: 100
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	// Create the sessions directory.
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	// Test named session creation.
+	err := chatCmd.Flags().Set("session", "ollama-test-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at tui.RunChat (no terminal), but session creation is exercised.
+	require.Error(t, err)
+	// The error should be from chat session failing, not from session creation.
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaWithTools tests tools initialization with ollama provider.
+func TestChatCmd_RunE_OllamaWithTools(t *testing.T) {
+	extraConfig := `
+    tools:
+      enabled: true
+      yolo_mode: false
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at tui.RunChat, but tools initialization is exercised.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaWithMemory tests memory initialization with ollama provider.
+func TestChatCmd_RunE_OllamaWithMemory(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      auto_update: false
+      create_if_miss: true
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at tui.RunChat, but memory initialization is exercised.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaAllFeatures tests all features with ollama provider.
+func TestChatCmd_RunE_OllamaAllFeatures(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: ".atmos/sessions"
+      max_sessions: 50
+    tools:
+      enabled: true
+      yolo_mode: true
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      auto_update: true
+      create_if_miss: true
+      sections:
+        - context
+        - commands
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	// Create the sessions directory.
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "full-feature-test")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at tui.RunChat, but all initialization paths are exercised.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaSessionStorageInitError tests session storage initialization error.
+func TestChatCmd_RunE_OllamaSessionStorageInitError(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows - permission handling differs")
+	}
+
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: "/nonexistent/readonly/path/sessions"
+      max_sessions: 100
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "test-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Should fail at session storage initialization.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "session storage")
+}
+
+// TestChatCmd_RunE_OllamaMemoryLoadError tests memory loading error handling.
+func TestChatCmd_RunE_OllamaMemoryLoadError(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: true
+      file_path: "nonexistent-memory.md"
+      auto_update: false
+      create_if_miss: false
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Memory load failure is logged as warning, execution continues.
+	// Will fail at tui.RunChat.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaToolsInitError tests tools initialization error handling.
+func TestChatCmd_RunE_OllamaToolsInitError(t *testing.T) {
+	// Tools initialization should not fail even with unusual config.
+	// This tests the warning path when tools fail to initialize.
+	extraConfig := `
+    tools:
+      enabled: true
+      allowed_tools:
+        - nonexistent_tool
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Tools init failure is logged as warning, execution continues.
+	// Will fail at tui.RunChat.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaAnonymousSession tests anonymous session creation.
+func TestChatCmd_RunE_OllamaAnonymousSession(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: ".atmos/sessions"
+      max_sessions: 100
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	// Create the sessions directory.
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	// Test anonymous session creation (empty session name).
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaWithToolsDisabled tests running with tools disabled.
+func TestChatCmd_RunE_OllamaWithToolsDisabled(t *testing.T) {
+	extraConfig := `
+    tools:
+      enabled: false
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Tools disabled path is exercised.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaWithMemoryDisabled tests running with memory disabled.
+func TestChatCmd_RunE_OllamaWithMemoryDisabled(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: false
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Memory disabled path is exercised.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaWithSessionsDisabled tests running with sessions disabled.
+func TestChatCmd_RunE_OllamaWithSessionsDisabled(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: false
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "ignored-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Sessions disabled path is exercised.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestGetProviderFromConfig_DefaultFallback tests the default "anthropic" fallback when provider is empty.
+func TestGetProviderFromConfig_DefaultFallback(t *testing.T) {
+	// Test that empty DefaultProvider falls back to "anthropic".
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				DefaultProvider: "",
+			},
+		},
+	}
+	result := getProviderFromConfig(atmosConfig)
+	assert.Equal(t, "anthropic", result)
+}
+
+// TestGetSessionStoragePath_EmptyPath tests the default path when Sessions.Path is empty.
+func TestGetSessionStoragePath_EmptyPath(t *testing.T) {
+	basePath := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Sessions: schema.AISessionSettings{
+					Path: "", // Empty path should default to ".atmos/sessions".
+				},
+			},
+		},
+	}
+	result := getSessionStoragePath(atmosConfig)
+	// Should include the default path.
+	assert.Contains(t, result, ".atmos")
+	assert.Contains(t, result, "sessions")
+	assert.Contains(t, result, "sessions.db")
+	// Should be based on basePath.
+	assert.True(t, strings.HasPrefix(result, basePath))
+}
+
+// TestGetPermissionMode_RequireConfirmationTrue tests when RequireConfirmation is explicitly true.
+func TestGetPermissionMode_RequireConfirmationTrue(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					YOLOMode:            false,
+					RequireConfirmation: boolPtr(true),
+				},
+			},
+		},
+	}
+	result := getPermissionMode(atmosConfig)
+	assert.Equal(t, permission.ModePrompt, result)
+}
+
+// TestGetPermissionMode_RequireConfirmationFalse tests when RequireConfirmation is explicitly false.
+func TestGetPermissionMode_RequireConfirmationFalse(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					YOLOMode:            false,
+					RequireConfirmation: boolPtr(false),
+				},
+			},
+		},
+	}
+	result := getPermissionMode(atmosConfig)
+	assert.Equal(t, permission.ModeAllow, result)
+}
+
+// TestChatCmd_RunE_OllamaWithMemorySuccess tests memory load success path.
+func TestChatCmd_RunE_OllamaWithMemorySuccess(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      auto_update: false
+      create_if_miss: true
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	// Create the ATMOS.md file so memory loading succeeds.
+	memoryContent := `# Project Memory
+This is a test memory file.
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "ATMOS.md"), []byte(memoryContent), 0o644)
+	require.NoError(t, err)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err = chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Memory load succeeds, then fails at tui.RunChat.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
 }

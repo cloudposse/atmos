@@ -1,3 +1,4 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
 package skill
 
 import (
@@ -674,4 +675,273 @@ Another test skill.
 	require.True(t, ok, "Registry should have skills field")
 	_, skillExists := skills["another-skill"]
 	assert.False(t, skillExists, "Skill should be removed from registry after uninstall")
+}
+
+func TestUninstallCmd_RunE_InstallerInitFailure(t *testing.T) {
+	// Reset flags before test.
+	resetFlags := func() {
+		forceFlag := uninstallCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("fails when home directory is unwritable", func(t *testing.T) {
+		resetFlags()
+
+		// Create a temp directory and set up an unwritable skills path.
+		tempHome := t.TempDir()
+
+		// Create .atmos/skills as a file (not a directory) to cause registry failure.
+		atmosDir := filepath.Join(tempHome, ".atmos")
+		err := os.MkdirAll(atmosDir, 0o755)
+		require.NoError(t, err)
+
+		// Create skills as a file, not a directory, to cause registry creation to fail.
+		skillsFile := filepath.Join(atmosDir, "skills")
+		err = os.WriteFile(skillsFile, []byte("not a directory"), 0o644)
+		require.NoError(t, err)
+
+		// Set HOME to temp directory.
+		t.Setenv("HOME", tempHome)
+
+		// Reset homedir cache to pick up new HOME.
+		homedir.Reset()
+		homedir.DisableCache = true
+		t.Cleanup(func() {
+			homedir.Reset()
+			homedir.DisableCache = false
+		})
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the command - should fail during installer initialization.
+		err = uninstallCmd.RunE(uninstallCmd, []string{"some-skill"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Verify we get an error about initialization.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to initialize installer")
+	})
+}
+
+func TestUninstallCmd_RunE_ForceFlagVariations(t *testing.T) {
+	// Reset flags helper.
+	resetFlags := func() {
+		forceFlag := uninstallCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+	}
+
+	tests := []struct {
+		name       string
+		force      bool
+		skillName  string
+		wantErrMsg string
+	}{
+		{
+			name:       "without force flag - skill not found",
+			force:      false,
+			skillName:  "nonexistent-skill-force-test",
+			wantErrMsg: "not found",
+		},
+		{
+			name:       "with force flag - skill not found",
+			force:      true,
+			skillName:  "nonexistent-skill-force-test-2",
+			wantErrMsg: "not found",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+
+			if tt.force {
+				require.NoError(t, uninstallCmd.Flags().Set("force", "true"))
+			}
+
+			// Capture stdout.
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Run with nonexistent skill.
+			err := uninstallCmd.RunE(uninstallCmd, []string{tt.skillName})
+
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Drain the pipe.
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), tt.wantErrMsg)
+		})
+	}
+}
+
+func TestUninstallCmd_RunE_MultipleSkills(t *testing.T) {
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory.
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Create the skills directory and multiple mock skills.
+	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
+	err := os.MkdirAll(skillsDir, 0o755)
+	require.NoError(t, err)
+
+	// Create first skill directory.
+	skill1Path := filepath.Join(skillsDir, "github.com", "example", "skill-one")
+	err = os.MkdirAll(skill1Path, 0o755)
+	require.NoError(t, err)
+
+	skillMD1 := `---
+name: skill-one
+description: First test skill
+---
+
+First test skill.
+`
+	err = os.WriteFile(filepath.Join(skill1Path, "SKILL.md"), []byte(skillMD1), 0o644)
+	require.NoError(t, err)
+
+	// Create second skill directory.
+	skill2Path := filepath.Join(skillsDir, "github.com", "example", "skill-two")
+	err = os.MkdirAll(skill2Path, 0o755)
+	require.NoError(t, err)
+
+	skillMD2 := `---
+name: skill-two
+description: Second test skill
+---
+
+Second test skill.
+`
+	err = os.WriteFile(filepath.Join(skill2Path, "SKILL.md"), []byte(skillMD2), 0o644)
+	require.NoError(t, err)
+
+	now := time.Now()
+	registry := map[string]interface{}{
+		"version": "1.0.0",
+		"skills": map[string]interface{}{
+			"skill-one": map[string]interface{}{
+				"name":         "skill-one",
+				"display_name": "Skill One",
+				"source":       "github.com/example/skill-one",
+				"version":      "v1.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         skill1Path,
+				"is_builtin":   false,
+				"enabled":      true,
+			},
+			"skill-two": map[string]interface{}{
+				"name":         "skill-two",
+				"display_name": "Skill Two",
+				"source":       "github.com/example/skill-two",
+				"version":      "v2.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         skill2Path,
+				"is_builtin":   false,
+				"enabled":      true,
+			},
+		},
+	}
+
+	registryData, err := json.MarshalIndent(registry, "", "  ")
+	require.NoError(t, err)
+
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	err = os.WriteFile(registryPath, registryData, 0o600)
+	require.NoError(t, err)
+
+	// Set force flag.
+	forceFlag := uninstallCmd.Flags().Lookup("force")
+	if forceFlag != nil {
+		_ = forceFlag.Value.Set("true")
+	}
+
+	// Capture stdout.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Uninstall first skill.
+	err = uninstallCmd.RunE(uninstallCmd, []string{"skill-one"})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Drain the pipe.
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	require.NoError(t, err)
+
+	// Verify first skill was removed.
+	_, statErr := os.Stat(skill1Path)
+	assert.True(t, os.IsNotExist(statErr), "First skill directory should be removed")
+
+	// Verify second skill still exists.
+	_, statErr = os.Stat(skill2Path)
+	assert.False(t, os.IsNotExist(statErr), "Second skill directory should still exist")
+
+	// Verify registry was updated.
+	registryContent, readErr := os.ReadFile(registryPath)
+	require.NoError(t, readErr)
+
+	var updatedRegistry map[string]interface{}
+	err = json.Unmarshal(registryContent, &updatedRegistry)
+	require.NoError(t, err)
+
+	skills, ok := updatedRegistry["skills"].(map[string]interface{})
+	require.True(t, ok)
+	_, skill1Exists := skills["skill-one"]
+	_, skill2Exists := skills["skill-two"]
+	assert.False(t, skill1Exists, "skill-one should be removed from registry")
+	assert.True(t, skill2Exists, "skill-two should still be in registry")
+}
+
+func TestUninstallCmd_ForceFlagGetBool(t *testing.T) {
+	// Reset flags.
+	forceFlag := uninstallCmd.Flags().Lookup("force")
+	if forceFlag != nil {
+		_ = forceFlag.Value.Set("false")
+	}
+
+	// Verify GetBool works correctly after flag is registered.
+	force, err := uninstallCmd.Flags().GetBool("force")
+	require.NoError(t, err)
+	assert.False(t, force)
+
+	// Set to true and verify.
+	err = uninstallCmd.Flags().Set("force", "true")
+	require.NoError(t, err)
+
+	force, err = uninstallCmd.Flags().GetBool("force")
+	require.NoError(t, err)
+	assert.True(t, force)
 }

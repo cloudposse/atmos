@@ -2012,3 +2012,162 @@ settings:
 		assert.Contains(t, err.Error(), "failed to get AI response")
 	})
 }
+
+func TestAskCommand_OllamaWithContextThatRequiresPrompt(t *testing.T) {
+	// This test uses Ollama provider with context gathering that triggers the prompted path.
+	// We use send_context: true and prompt_on_send: false to avoid interactive prompts.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider, context gathering enabled, send_context=true.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: true
+    prompt_on_send: false
+    timeout_seconds: 5
+    context:
+      enabled: true
+      show_files: false
+      auto_include:
+        - "*.yaml"
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+  environment: development
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	// Unset to let config drive behavior.
+	os.Unsetenv("ATMOS_AI_SEND_CONTEXT")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("ollama with send_context enabled gathers context", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"What components are available in my stacks?"})
+		assert.Error(t, err)
+		// Should fail at SendMessage due to connection error, but after context gathering.
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestAskCommand_GatherContextWarningPath(t *testing.T) {
+	// This test triggers the GatherStackContext warning path when context discovery fails.
+	// We use a non-existent stacks path to cause context gathering to fail.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create a stack file to make config loading work.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider and context enabled.
+	// Point stacks to a non-existent directory inside the config to cause context gathering to warn.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: true
+    prompt_on_send: false
+    timeout_seconds: 5
+    context:
+      enabled: true
+      auto_include:
+        - "*.nonexistent"
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	// Unset to let config drive behavior.
+	os.Unsetenv("ATMOS_AI_SEND_CONTEXT")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("context gathering proceeds with warning when no files found", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"What stacks do I have?"})
+		assert.Error(t, err)
+		// Should fail at SendMessage due to connection error.
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}

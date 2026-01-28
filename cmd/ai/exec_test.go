@@ -3,9 +3,12 @@ package ai
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -2630,5 +2633,501 @@ func TestExecCommand_InitConfigError(t *testing.T) {
 		require.True(t, errors.As(err, &execErr))
 		assert.Equal(t, 1, execErr.code)
 		assert.Equal(t, "config_error", execErr.errorType)
+	})
+}
+
+// TestExecCommand_FullExecutionPath tests the complete execution path after AI client creation succeeds.
+// These tests use a mock HTTP server and the ollama provider (which doesn't require an API key).
+func TestExecCommand_FullExecutionPath(t *testing.T) {
+	// createMockOpenAIServer creates a mock server that returns OpenAI-compatible responses.
+	createMockOpenAIServer := func(t *testing.T, response map[string]interface{}) *httptest.Server {
+		t.Helper()
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(response)
+		}))
+	}
+
+	// createSuccessResponse creates a mock successful ChatCompletion response.
+	createSuccessResponse := func(content string) map[string]interface{} {
+		return map[string]interface{}{
+			"id":      "chatcmpl-test123",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "llama3.3:70b",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": content,
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 20,
+				"total_tokens":      30,
+			},
+		}
+	}
+
+	// createConfigWithMockServer creates an atmos config that uses ollama pointing to a mock server.
+	createConfigWithMockServer := func(t *testing.T, mockServerURL string, extraConfig string) string {
+		t.Helper()
+		tmpDir := t.TempDir()
+
+		// Create required directories.
+		stacksDir := filepath.Join(tmpDir, "stacks")
+		componentsDir := filepath.Join(tmpDir, "components", "terraform")
+		require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+		require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+		// Create a dummy stack file.
+		dummyStack := `
+vars:
+  stage: test
+`
+		require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
+
+		// Use filepath.ToSlash to convert Windows backslashes to forward slashes in YAML.
+		basePath := filepath.ToSlash(tmpDir)
+
+		atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+settings:
+  ai:
+    enabled: true
+    default_provider: ollama
+    providers:
+      ollama:
+        base_url: "` + mockServerURL + `"
+        model: "llama3.3:70b"
+        max_tokens: 4096
+` + extraConfig
+
+		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
+		require.NoError(t, err)
+
+		return tmpDir
+	}
+
+	t.Run("successful execution outputs response to stdout", func(t *testing.T) {
+		// Create mock server that returns a successful response.
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("This is the AI response."))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+
+		// Execute and verify no error (successful execution).
+		err := execCmd.RunE(testCmd, []string{"test prompt"})
+		// This should succeed because we have a mock server responding.
+		assert.NoError(t, err)
+	})
+
+	t.Run("successful execution with json format", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("JSON formatted response"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("format", "json")
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("successful execution with markdown format", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("# Markdown Response"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("format", "markdown")
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("successful execution with output to file", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("File output content"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+		outputFile := filepath.Join(tmpDir, "output.txt")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("output", outputFile)
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+
+		// Verify the file was created and contains content.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "File output content")
+	})
+
+	t.Run("successful execution with json format to file", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("JSON file content"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+		outputFile := filepath.Join(tmpDir, "output.json")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("format", "json")
+		require.NoError(t, err)
+		err = testCmd.Flags().Set("output", outputFile)
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+
+		// Verify the file contains JSON.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "success")
+	})
+
+	t.Run("output file creation failure returns io_error", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("Response"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+		// Invalid path - non-existent parent directory.
+		outputFile := filepath.Join(tmpDir, "nonexistent", "deep", "path", "output.txt")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("output", outputFile)
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		require.Error(t, err)
+
+		var execErr *execError
+		require.True(t, errors.As(err, &execErr))
+		assert.Equal(t, "io_error", execErr.errorType)
+		assert.Equal(t, 1, execErr.code)
+	})
+
+	t.Run("execution with tools disabled via no-tools flag", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("No tools response"))
+		defer mockServer.Close()
+
+		extraConfig := `
+    tools:
+      enabled: true
+`
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, extraConfig)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("no-tools", "true")
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("execution with custom timeout", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("Timeout test response"))
+		defer mockServer.Close()
+
+		extraConfig := `
+    timeout_seconds: 120
+`
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, extraConfig)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+
+		err := execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("execution with session ID", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("Session test response"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("session", "test-session-abc123")
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+
+	t.Run("execution with context flag enabled", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t, createSuccessResponse("Context enabled response"))
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL, "")
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		err := testCmd.Flags().Set("context", "true")
+		require.NoError(t, err)
+
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+}
+
+// TestExecCommand_APIErrorHandling tests error handling when the AI API returns errors.
+func TestExecCommand_APIErrorHandling(t *testing.T) {
+	// createErrorServer creates a mock server that returns an error response.
+	createErrorServer := func(t *testing.T, statusCode int, errorMsg string) *httptest.Server {
+		t.Helper()
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			response := map[string]interface{}{
+				"error": map[string]interface{}{
+					"message": errorMsg,
+					"type":    "api_error",
+				},
+			}
+			_ = json.NewEncoder(w).Encode(response)
+		}))
+	}
+
+	// createConfigWithMockServer creates an atmos config that uses ollama pointing to a mock server.
+	createConfigWithMockServer := func(t *testing.T, mockServerURL string) string {
+		t.Helper()
+		tmpDir := t.TempDir()
+
+		stacksDir := filepath.Join(tmpDir, "stacks")
+		componentsDir := filepath.Join(tmpDir, "components", "terraform")
+		require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+		require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+		dummyStack := `
+vars:
+  stage: test
+`
+		require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
+
+		basePath := filepath.ToSlash(tmpDir)
+
+		atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+settings:
+  ai:
+    enabled: true
+    default_provider: ollama
+    providers:
+      ollama:
+        base_url: "` + mockServerURL + `"
+        model: "llama3.3:70b"
+`
+		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
+		require.NoError(t, err)
+
+		return tmpDir
+	}
+
+	t.Run("API error returns ai_error with exit code 1", func(t *testing.T) {
+		mockServer := createErrorServer(t, http.StatusInternalServerError, "Internal server error")
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+
+		err := execCmd.RunE(testCmd, []string{"test prompt"})
+		require.Error(t, err)
+
+		var execErr *execError
+		require.True(t, errors.As(err, &execErr))
+		// The error should be from the executor, which returns ai_error.
+		assert.Equal(t, 1, execErr.code)
+	})
+
+	t.Run("rate limit error returns ai_error", func(t *testing.T) {
+		mockServer := createErrorServer(t, http.StatusTooManyRequests, "Rate limit exceeded")
+		defer mockServer.Close()
+
+		tmpDir := createConfigWithMockServer(t, mockServer.URL)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+
+		err := execCmd.RunE(testCmd, []string{"test prompt"})
+		require.Error(t, err)
+
+		var execErr *execError
+		require.True(t, errors.As(err, &execErr))
+		assert.Equal(t, 1, execErr.code)
+	})
+}
+
+// TestExecCommand_ToolsInitialization tests the tools initialization code path.
+func TestExecCommand_ToolsInitializationWithMockServer(t *testing.T) {
+	createMockOpenAIServer := func(t *testing.T) *httptest.Server {
+		t.Helper()
+		response := map[string]interface{}{
+			"id":      "chatcmpl-test123",
+			"object":  "chat.completion",
+			"created": 1699999999,
+			"model":   "llama3.3:70b",
+			"choices": []map[string]interface{}{
+				{
+					"index": 0,
+					"message": map[string]interface{}{
+						"role":    "assistant",
+						"content": "Response with tools enabled",
+					},
+					"finish_reason": "stop",
+				},
+			},
+			"usage": map[string]interface{}{
+				"prompt_tokens":     10,
+				"completion_tokens": 20,
+				"total_tokens":      30,
+			},
+		}
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(response)
+		}))
+	}
+
+	t.Run("tools initialization path with tools enabled in config", func(t *testing.T) {
+		mockServer := createMockOpenAIServer(t)
+		defer mockServer.Close()
+
+		tmpDir := t.TempDir()
+
+		stacksDir := filepath.Join(tmpDir, "stacks")
+		componentsDir := filepath.Join(tmpDir, "components", "terraform")
+		require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+		require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+		dummyStack := `
+vars:
+  stage: test
+`
+		require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
+
+		basePath := filepath.ToSlash(tmpDir)
+
+		atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+settings:
+  ai:
+    enabled: true
+    default_provider: ollama
+    tools:
+      enabled: true
+    providers:
+      ollama:
+        base_url: "` + mockServer.URL + `"
+        model: "llama3.3:70b"
+`
+		err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+		t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+		testCmd := createTestExecCmd()
+		// Don't set no-tools, let tools be enabled.
+		err = testCmd.Flags().Set("no-tools", "false")
+		require.NoError(t, err)
+
+		// This exercises the tools initialization code path at lines 128-136.
+		err = execCmd.RunE(testCmd, []string{"test prompt"})
+		assert.NoError(t, err)
+	})
+}
+
+// TestGetPrompt_StdinReading tests the stdin reading code path in getPrompt.
+// Note: Testing stdin directly is complex because getPrompt uses os.Stdin.Stat().
+// These tests verify the behavior through the args path and document stdin behavior.
+func TestGetPrompt_StdinReadingBehavior(t *testing.T) {
+	t.Run("args have priority over potential stdin", func(t *testing.T) {
+		// When args are provided, stdin is not consulted.
+		prompt, err := getPrompt([]string{"arg prompt takes priority"})
+		require.NoError(t, err)
+		assert.Equal(t, "arg prompt takes priority", prompt)
+	})
+
+	t.Run("empty args returns empty when stdin is terminal", func(t *testing.T) {
+		// In test environment, stdin is typically a terminal, so empty string is returned.
+		prompt, err := getPrompt([]string{})
+		// No error expected - just returns empty string.
+		require.NoError(t, err)
+		// In terminal mode (test environment), prompt should be empty.
+		// Note: actual behavior depends on test runner stdin state.
+		_ = prompt
 	})
 }

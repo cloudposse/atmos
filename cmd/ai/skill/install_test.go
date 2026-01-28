@@ -1,14 +1,18 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
 package skill
 
 import (
 	"bytes"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 func TestInstallCmd_BasicProperties(t *testing.T) {
@@ -491,5 +495,297 @@ func TestInstallCmd_FlagDefaults(t *testing.T) {
 		flag := installCmd.Flags().Lookup("yes")
 		require.NotNil(t, flag)
 		assert.Equal(t, "false", flag.DefValue)
+	})
+}
+
+func TestInstallCmd_RunE_InstallerInitFailure(t *testing.T) {
+	// Reset flags before test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("fails when home directory is unwritable", func(t *testing.T) {
+		resetFlags()
+
+		// Create a temp directory and make it unwritable.
+		tempHome := t.TempDir()
+
+		// Create .atmos/skills as a file (not a directory) to cause write failure.
+		atmosDir := filepath.Join(tempHome, ".atmos")
+		err := os.MkdirAll(atmosDir, 0o755)
+		require.NoError(t, err)
+
+		// Create skills as a file, not a directory, to cause registry creation to fail.
+		skillsFile := filepath.Join(atmosDir, "skills")
+		err = os.WriteFile(skillsFile, []byte("not a directory"), 0o644)
+		require.NoError(t, err)
+
+		// Set HOME to temp directory.
+		t.Setenv("HOME", tempHome)
+
+		// Reset homedir cache to pick up new HOME.
+		homedir.Reset()
+		homedir.DisableCache = true
+		t.Cleanup(func() {
+			homedir.Reset()
+			homedir.DisableCache = false
+		})
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the command - should fail during installer initialization.
+		err = installCmd.RunE(installCmd, []string{"github.com/user/repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Verify we get an error about initialization.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to initialize installer")
+	})
+}
+
+func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
+	// Reset flags before test.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("uses context in installer", func(t *testing.T) {
+		resetFlags()
+		_ = installCmd.Flags().Set("yes", "true")
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run with a valid source - it will fail at download but shows context is used.
+		err := installCmd.RunE(installCmd, []string{"github.com/nonexistent/repo@v1.0.0"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		assert.Error(t, err)
+		// Verify output shows downloading started.
+		assert.Contains(t, buf.String(), "Downloading skill from")
+	})
+}
+
+func TestInstallCmd_RunE_AllFlagCombinations(t *testing.T) {
+	// Reset flags helper.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	tests := []struct {
+		name  string
+		force bool
+		yes   bool
+	}{
+		{"neither flag", false, false},
+		{"force only", true, false},
+		{"yes only", false, true},
+		{"both flags", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resetFlags()
+
+			if tt.force {
+				require.NoError(t, installCmd.Flags().Set("force", "true"))
+			}
+			if tt.yes {
+				require.NoError(t, installCmd.Flags().Set("yes", "true"))
+			}
+
+			// Capture stdout.
+			oldStdout := os.Stdout
+			r, w, _ := os.Pipe()
+			os.Stdout = w
+
+			// Run with valid source.
+			err := installCmd.RunE(installCmd, []string{"github.com/test-user/test-repo"})
+
+			w.Close()
+			os.Stdout = oldStdout
+
+			// Drain the pipe.
+			var buf bytes.Buffer
+			_, _ = io.Copy(&buf, r)
+
+			// All should fail at download.
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "download")
+		})
+	}
+}
+
+func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
+	// Reset flags before test.
+	forceFlag := installCmd.Flags().Lookup("force")
+	if forceFlag != nil {
+		_ = forceFlag.Value.Set("true")
+	}
+	yesFlag := installCmd.Flags().Lookup("yes")
+	if yesFlag != nil {
+		_ = yesFlag.Value.Set("true")
+	}
+
+	// Capture stdout.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Run the command.
+	err := installCmd.RunE(installCmd, []string{"github.com/cloudposse/test-skill@v2.0.0"})
+
+	w.Close()
+	os.Stdout = oldStdout
+
+	// Drain the pipe.
+	var buf bytes.Buffer
+	_, _ = io.Copy(&buf, r)
+
+	// Should proceed to download stage.
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "download")
+
+	// Verify download message was printed.
+	output := buf.String()
+	assert.Contains(t, output, "Downloading skill from")
+}
+
+// TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.
+// This is more of an integration test since it sets up a mock download.
+// Note: This test requires mocking the downloader which is complex, so we focus
+// on testing other aspects of the RunE function.
+func TestInstallCmd_RunE_FlagParsingSuccess(t *testing.T) {
+	// Reset flags helper.
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("force flag parsing succeeds", func(t *testing.T) {
+		resetFlags()
+
+		// Verify GetBool works correctly.
+		force, err := installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.False(t, force)
+
+		// Set to true and verify.
+		require.NoError(t, installCmd.Flags().Set("force", "true"))
+
+		force, err = installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.True(t, force)
+	})
+
+	t.Run("yes flag parsing succeeds", func(t *testing.T) {
+		resetFlags()
+
+		// Verify GetBool works correctly.
+		yes, err := installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.False(t, yes)
+
+		// Set to true and verify.
+		require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+		yes, err = installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.True(t, yes)
+	})
+}
+
+func TestInstallCmd_RunE_SuccessPathCoverage(t *testing.T) {
+	// This test exercises the path up to the point where installer.Install is called.
+	// Since installer.Install requires network access to download the skill,
+	// the successful return path (line 86) cannot be covered without mocking.
+
+	resetFlags := func() {
+		forceFlag := installCmd.Flags().Lookup("force")
+		if forceFlag != nil {
+			_ = forceFlag.Value.Set("false")
+		}
+		yesFlag := installCmd.Flags().Lookup("yes")
+		if yesFlag != nil {
+			_ = yesFlag.Value.Set("false")
+		}
+	}
+
+	t.Run("successful flag parsing leads to install attempt", func(t *testing.T) {
+		resetFlags()
+		require.NoError(t, installCmd.Flags().Set("force", "true"))
+		require.NoError(t, installCmd.Flags().Set("yes", "true"))
+
+		// Verify flags are correctly parsed.
+		force, err := installCmd.Flags().GetBool("force")
+		require.NoError(t, err)
+		assert.True(t, force)
+
+		yes, err := installCmd.Flags().GetBool("yes")
+		require.NoError(t, err)
+		assert.True(t, yes)
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		// Run the command - it will fail at download, but exercises all code paths.
+		err = installCmd.RunE(installCmd, []string{"github.com/testorg/testskill"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Verify it proceeded past flag parsing and installer creation.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "download")
 	})
 }
