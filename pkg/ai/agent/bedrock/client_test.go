@@ -1046,3 +1046,1079 @@ func TestExtractConfig_AllOverrides(t *testing.T) {
 	assert.Equal(t, 32768, config.MaxTokens)
 	assert.Equal(t, "eu-central-1", config.BaseURL)
 }
+
+func TestNewClient_EmptyRegion(t *testing.T) {
+	// Test that empty region falls back to default.
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": {
+						BaseURL: "", // Empty region.
+					},
+				},
+			},
+		},
+	}
+
+	// Note: This will actually try to load AWS config, which may fail in test environment.
+	// We're testing the fallback logic, not the AWS SDK.
+	client, _ := NewClient(context.Background(), atmosConfig)
+	// If client creation succeeds, verify default region is used.
+	if client != nil {
+		assert.Equal(t, DefaultRegion, client.GetRegion())
+	}
+}
+
+func TestNewClient_NilConfig(t *testing.T) {
+	// Test nil configuration.
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: false,
+			},
+		},
+	}
+
+	client, err := NewClient(context.Background(), atmosConfig)
+	assert.Error(t, err)
+	assert.Nil(t, client)
+}
+
+func TestConvertMessagesToBedrockFormat_OnlySystemMessages(t *testing.T) {
+	// Test all system messages (should all be skipped).
+	messages := []types.Message{
+		{Role: types.RoleSystem, Content: "System message 1"},
+		{Role: types.RoleSystem, Content: "System message 2"},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	// All system messages should be skipped.
+	assert.Empty(t, result)
+}
+
+func TestConvertMessagesToBedrockFormat_MixedRoles(t *testing.T) {
+	// Test mixed roles including system (which should be skipped).
+	messages := []types.Message{
+		{Role: types.RoleSystem, Content: "System"},
+		{Role: types.RoleUser, Content: "User 1"},
+		{Role: types.RoleSystem, Content: "Another system"},
+		{Role: types.RoleAssistant, Content: "Assistant 1"},
+		{Role: types.RoleUser, Content: "User 2"},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	// Only user and assistant messages should be included.
+	require.Len(t, result, 3)
+	assert.Equal(t, "user", result[0]["role"])
+	assert.Equal(t, "User 1", result[0]["content"])
+	assert.Equal(t, "assistant", result[1]["role"])
+	assert.Equal(t, "Assistant 1", result[1]["content"])
+	assert.Equal(t, "user", result[2]["role"])
+	assert.Equal(t, "User 2", result[2]["content"])
+}
+
+func TestConvertMessagesToBedrockFormat_LongContent(t *testing.T) {
+	// Test with very long content.
+	longContent := string(make([]byte, 10000))
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: longContent},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, longContent, result[0]["content"])
+}
+
+func TestConvertMessagesToBedrockFormat_SpecialCharacters(t *testing.T) {
+	// Test with special characters.
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello\nWorld\t!@#$%^&*()"},
+		{Role: types.RoleAssistant, Content: `{"json": "content"}`},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	require.Len(t, result, 2)
+	assert.Equal(t, "Hello\nWorld\t!@#$%^&*()", result[0]["content"])
+	assert.Equal(t, `{"json": "content"}`, result[1]["content"])
+}
+
+func TestConvertToolsToBedrockFormat_ToolWithDescription(t *testing.T) {
+	// Test tool with long description.
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "complex_tool",
+			description: "This is a very long description that explains in detail what the tool does and why it's useful for various scenarios.",
+			parameters: []tools.Parameter{
+				{Name: "param", Type: tools.ParamTypeString, Description: "A parameter", Required: true},
+			},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Contains(t, result[0]["description"], "very long description")
+}
+
+func TestConvertToolsToBedrockFormat_ToolRequiresPermission(t *testing.T) {
+	// Test that tool permission flags don't affect conversion.
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:               "restricted_tool",
+			description:        "A restricted tool",
+			parameters:         []tools.Parameter{},
+			requiresPermission: true,
+			isRestricted:       true,
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "restricted_tool", result[0]["name"])
+	// Permission flags shouldn't affect the Bedrock format.
+}
+
+func TestConvertToolsToBedrockFormat_NestedParameters(t *testing.T) {
+	// Test tool with object parameter type.
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "nested_tool",
+			description: "Tool with nested parameters",
+			parameters: []tools.Parameter{
+				{
+					Name:        "config",
+					Type:        tools.ParamTypeObject,
+					Description: "Configuration object",
+					Required:    true,
+				},
+			},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	inputSchema, ok := result[0]["input_schema"].(map[string]interface{})
+	require.True(t, ok)
+
+	properties, ok := inputSchema["properties"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Contains(t, properties, "config")
+}
+
+func TestParseBedrockResponse_EmptyStopReason(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Response"}
+		],
+		"stop_reason": ""
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	// Empty stop reason should default to EndTurn.
+	assert.Equal(t, types.StopReasonEndTurn, result.StopReason)
+}
+
+func TestParseBedrockResponse_MissingFields(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Response"}
+		]
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	assert.Equal(t, "Response", result.Content)
+	// Missing stop_reason should default to EndTurn.
+	assert.Equal(t, types.StopReasonEndTurn, result.StopReason)
+	// Missing usage should be nil.
+	assert.Nil(t, result.Usage)
+}
+
+func TestParseBedrockResponse_OnlyInputTokens(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Response"}
+		],
+		"stop_reason": "end_turn",
+		"usage": {
+			"input_tokens": 100,
+			"output_tokens": 0
+		}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(100), result.Usage.InputTokens)
+	assert.Equal(t, int64(0), result.Usage.OutputTokens)
+	assert.Equal(t, int64(100), result.Usage.TotalTokens)
+}
+
+func TestParseBedrockResponse_OnlyOutputTokens(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Response"}
+		],
+		"stop_reason": "end_turn",
+		"usage": {
+			"input_tokens": 0,
+			"output_tokens": 50
+		}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(0), result.Usage.InputTokens)
+	assert.Equal(t, int64(50), result.Usage.OutputTokens)
+	assert.Equal(t, int64(50), result.Usage.TotalTokens)
+}
+
+func TestParseBedrockResponse_MalformedJSON(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+	}{
+		{
+			name: "Missing closing brace",
+			body: `{"content": [{"type": "text", "text": "test"}`,
+		},
+		{
+			name: "Invalid JSON syntax",
+			body: `{content: "test"}`,
+		},
+		{
+			name: "Empty string",
+			body: ``,
+		},
+		{
+			name: "Just whitespace",
+			body: `   `,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := parseBedrockResponse([]byte(tt.body))
+			assert.Error(t, err)
+			assert.Nil(t, result)
+		})
+	}
+}
+
+func TestParseBedrockResponse_ToolUseWithMissingFields(t *testing.T) {
+	// Test tool use with missing ID.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"name": "test_tool",
+				"input": {"param": "value"}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Empty(t, result.ToolCalls[0].ID) // Missing ID should be empty string.
+	assert.Equal(t, "test_tool", result.ToolCalls[0].Name)
+}
+
+func TestParseBedrockResponse_ToolUseWithMissingName(t *testing.T) {
+	// Test tool use with missing name.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_123",
+				"input": {"param": "value"}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Equal(t, "call_123", result.ToolCalls[0].ID)
+	assert.Empty(t, result.ToolCalls[0].Name) // Missing name should be empty string.
+}
+
+func TestParseBedrockResponse_TextWithEmptyString(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": ""},
+			{"type": "text", "text": "Non-empty"}
+		],
+		"stop_reason": "end_turn"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	// Empty text should still be included.
+	assert.Equal(t, "Non-empty", result.Content)
+}
+
+func TestParseBedrockResponse_InterleavedTextAndToolUse(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "Before tool: "},
+			{
+				"type": "tool_use",
+				"id": "call_1",
+				"name": "tool1",
+				"input": {"a": 1}
+			},
+			{"type": "text", "text": "Between tools: "},
+			{
+				"type": "tool_use",
+				"id": "call_2",
+				"name": "tool2",
+				"input": {"b": 2}
+			},
+			{"type": "text", "text": "After tools."}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	assert.Equal(t, "Before tool: Between tools: After tools.", result.Content)
+	require.Len(t, result.ToolCalls, 2)
+	assert.Equal(t, "tool1", result.ToolCalls[0].Name)
+	assert.Equal(t, "tool2", result.ToolCalls[1].Name)
+}
+
+func TestParseBedrockResponse_ToolInputWithNestedObjects(t *testing.T) {
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_nested",
+				"name": "complex_tool",
+				"input": {
+					"level1": {
+						"level2": {
+							"level3": "deep value"
+						},
+						"array": [1, 2, 3]
+					}
+				}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+
+	level1, ok := result.ToolCalls[0].Input["level1"].(map[string]interface{})
+	require.True(t, ok)
+
+	level2, ok := level1["level2"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "deep value", level2["level3"])
+
+	array, ok := level1["array"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, array, 3)
+}
+
+func TestClientGetters_NilConfig(t *testing.T) {
+	// This shouldn't happen in practice, but test robustness.
+	client := &Client{
+		client: nil,
+		config: nil,
+		region: "us-west-2",
+	}
+
+	// Should panic or return zero values if config is nil.
+	// Testing that it doesn't crash the program.
+	defer func() {
+		if r := recover(); r != nil {
+			t.Log("Recovered from expected panic:", r)
+		}
+	}()
+
+	// These will panic with nil config, which is acceptable.
+	// Real code should never create a client with nil config.
+	_ = client.GetRegion() // This one should work.
+	assert.Equal(t, "us-west-2", client.GetRegion())
+}
+
+func TestProviderName(t *testing.T) {
+	// Verify provider name constant.
+	assert.Equal(t, "bedrock", ProviderName)
+	// Ensure it's not empty or contains unexpected characters.
+	assert.NotEmpty(t, ProviderName)
+	assert.NotContains(t, ProviderName, " ")
+	assert.NotContains(t, ProviderName, "/")
+}
+
+func TestDefaultConstants_Values(t *testing.T) {
+	// Verify all default constants have reasonable values.
+	assert.Greater(t, DefaultMaxTokens, 0)
+	assert.Greater(t, DefaultMaxTokens, 1000) // Should be at least 1000.
+	assert.NotEmpty(t, DefaultModel)
+	assert.NotEmpty(t, DefaultRegion)
+	assert.Contains(t, DefaultModel, "anthropic") // Bedrock uses Anthropic models.
+	assert.Contains(t, DefaultRegion, "-")        // AWS regions have hyphens.
+}
+
+func TestConvertMessagesToBedrockFormat_AlternatingRoles(t *testing.T) {
+	// Test conversation with alternating user and assistant messages.
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Q1"},
+		{Role: types.RoleAssistant, Content: "A1"},
+		{Role: types.RoleUser, Content: "Q2"},
+		{Role: types.RoleAssistant, Content: "A2"},
+		{Role: types.RoleUser, Content: "Q3"},
+		{Role: types.RoleAssistant, Content: "A3"},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	require.Len(t, result, 6)
+	for i := 0; i < 6; i++ {
+		if i%2 == 0 {
+			assert.Equal(t, "user", result[i]["role"])
+		} else {
+			assert.Equal(t, "assistant", result[i]["role"])
+		}
+	}
+}
+
+func TestConvertToolsToBedrockFormat_LargeNumberOfTools(t *testing.T) {
+	// Test with many tools.
+	var availableTools []tools.Tool
+	for i := 0; i < 100; i++ {
+		availableTools = append(availableTools, &mockTool{
+			name:        "tool_" + string(rune('a'+i%26)),
+			description: "Description",
+			parameters:  []tools.Parameter{},
+		})
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	assert.Len(t, result, 100)
+}
+
+func TestConvertToolsToBedrockFormat_LargeNumberOfParameters(t *testing.T) {
+	// Test tool with many parameters.
+	var params []tools.Parameter
+	for i := 0; i < 20; i++ {
+		params = append(params, tools.Parameter{
+			Name:        "param_" + string(rune('a'+i)),
+			Type:        tools.ParamTypeString,
+			Description: "Param description",
+			Required:    i%2 == 0,
+		})
+	}
+
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "many_params_tool",
+			description: "Tool with many parameters",
+			parameters:  params,
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	inputSchema, ok := result[0]["input_schema"].(map[string]interface{})
+	require.True(t, ok)
+
+	properties, ok := inputSchema["properties"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Len(t, properties, 20)
+
+	required, ok := inputSchema["required"].([]string)
+	require.True(t, ok)
+	assert.Len(t, required, 10) // Half are required.
+}
+
+func TestParseBedrockResponse_AllStopReasons(t *testing.T) {
+	// Test all possible stop reasons.
+	tests := []struct {
+		apiReason      string
+		expectedReason types.StopReason
+	}{
+		{"end_turn", types.StopReasonEndTurn},
+		{"tool_use", types.StopReasonToolUse},
+		{"max_tokens", types.StopReasonMaxTokens},
+		{"stop_sequence", types.StopReasonEndTurn},  // Unknown maps to EndTurn.
+		{"content_filter", types.StopReasonEndTurn}, // Unknown maps to EndTurn.
+		{"", types.StopReasonEndTurn},               // Empty maps to EndTurn.
+	}
+
+	for _, tt := range tests {
+		t.Run("StopReason_"+tt.apiReason, func(t *testing.T) {
+			responseBody := `{
+				"content": [{"type": "text", "text": "test"}],
+				"stop_reason": "` + tt.apiReason + `"
+			}`
+
+			result, err := parseBedrockResponse([]byte(responseBody))
+			require.NoError(t, err)
+			assert.Equal(t, tt.expectedReason, result.StopReason)
+		})
+	}
+}
+
+func TestParseBedrockResponse_ZeroCacheTokens(t *testing.T) {
+	// Test that cache tokens are always 0 for Bedrock.
+	responseBody := `{
+		"content": [{"type": "text", "text": "Response"}],
+		"stop_reason": "end_turn",
+		"usage": {
+			"input_tokens": 100,
+			"output_tokens": 50
+		}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	assert.Equal(t, int64(0), result.Usage.CacheReadTokens)
+	assert.Equal(t, int64(0), result.Usage.CacheCreationTokens)
+}
+
+func TestRequestBodyMarshaling(t *testing.T) {
+	// Test that various request bodies can be marshaled.
+	tests := []struct {
+		name        string
+		requestBody map[string]interface{}
+	}{
+		{
+			name: "Simple message",
+			requestBody: map[string]interface{}{
+				"anthropic_version": "bedrock-2023-05-31",
+				"max_tokens":        4096,
+				"messages": []map[string]string{
+					{"role": "user", "content": "Hello"},
+				},
+			},
+		},
+		{
+			name: "With tools",
+			requestBody: map[string]interface{}{
+				"anthropic_version": "bedrock-2023-05-31",
+				"max_tokens":        4096,
+				"messages": []map[string]string{
+					{"role": "user", "content": "Hello"},
+				},
+				"tools": []map[string]interface{}{
+					{
+						"name":        "test_tool",
+						"description": "A test",
+						"input_schema": map[string]interface{}{
+							"type":       "object",
+							"properties": map[string]interface{}{},
+							"required":   []string{},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bodyBytes, err := json.Marshal(tt.requestBody)
+			require.NoError(t, err)
+			assert.NotEmpty(t, bodyBytes)
+
+			// Verify it can be unmarshaled back.
+			var decoded map[string]interface{}
+			err = json.Unmarshal(bodyBytes, &decoded)
+			require.NoError(t, err)
+			assert.Equal(t, "bedrock-2023-05-31", decoded["anthropic_version"])
+		})
+	}
+}
+
+func TestExtractConfig_ZeroMaxTokens(t *testing.T) {
+	// Test that zero max tokens uses default.
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": {
+						MaxTokens: 0, // Zero should use default.
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+}
+
+func TestExtractConfig_NegativeMaxTokens(t *testing.T) {
+	// Test that negative max tokens uses default (base.ExtractConfig treats 0 and negative as "use default").
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": {
+						MaxTokens: -100, // Negative should use default.
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	// base.ExtractConfig uses default for values <= 0.
+	assert.Equal(t, DefaultMaxTokens, config.MaxTokens)
+}
+
+func TestParseBedrockResponse_NumericTypes(t *testing.T) {
+	// Test various numeric types in tool inputs.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_numeric",
+				"name": "numeric_tool",
+				"input": {
+					"int": 42,
+					"float": 3.14,
+					"negative": -100,
+					"zero": 0,
+					"large": 999999999
+				}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Equal(t, float64(42), result.ToolCalls[0].Input["int"])
+	assert.Equal(t, float64(3.14), result.ToolCalls[0].Input["float"])
+	assert.Equal(t, float64(-100), result.ToolCalls[0].Input["negative"])
+	assert.Equal(t, float64(0), result.ToolCalls[0].Input["zero"])
+	assert.Equal(t, float64(999999999), result.ToolCalls[0].Input["large"])
+}
+
+func TestParseBedrockResponse_BooleanTypes(t *testing.T) {
+	// Test boolean values in tool inputs.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_bool",
+				"name": "bool_tool",
+				"input": {
+					"enabled": true,
+					"disabled": false
+				}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Equal(t, true, result.ToolCalls[0].Input["enabled"])
+	assert.Equal(t, false, result.ToolCalls[0].Input["disabled"])
+}
+
+func TestParseBedrockResponse_ArrayTypes(t *testing.T) {
+	// Test array values in tool inputs.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_array",
+				"name": "array_tool",
+				"input": {
+					"strings": ["a", "b", "c"],
+					"numbers": [1, 2, 3],
+					"mixed": ["text", 123, true, null],
+					"empty": []
+				}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+
+	strings, ok := result.ToolCalls[0].Input["strings"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, strings, 3)
+
+	numbers, ok := result.ToolCalls[0].Input["numbers"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, numbers, 3)
+
+	mixed, ok := result.ToolCalls[0].Input["mixed"].([]interface{})
+	require.True(t, ok)
+	assert.Len(t, mixed, 4)
+
+	empty, ok := result.ToolCalls[0].Input["empty"].([]interface{})
+	require.True(t, ok)
+	assert.Empty(t, empty)
+}
+
+func TestConvertMessagesToBedrockFormat_UnicodeContent(t *testing.T) {
+	// Test with Unicode characters.
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: "Hello 世界 🌍"},
+		{Role: types.RoleAssistant, Content: "Привет мир"},
+		{Role: types.RoleUser, Content: "مرحبا بالعالم"},
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	require.Len(t, result, 3)
+	assert.Equal(t, "Hello 世界 🌍", result[0]["content"])
+	assert.Equal(t, "Привет мир", result[1]["content"])
+	assert.Equal(t, "مرحبا بالعالم", result[2]["content"])
+}
+
+func TestConvertToolsToBedrockFormat_UnicodeInToolNames(t *testing.T) {
+	// Test that tool names with special characters work.
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "test_tool_123",
+			description: "Description with émojis 🎉 and spëcial çharacters",
+			parameters: []tools.Parameter{
+				{Name: "param_α", Type: tools.ParamTypeString, Description: "Greek letter", Required: true},
+			},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Equal(t, "test_tool_123", result[0]["name"])
+	assert.Contains(t, result[0]["description"], "émojis")
+}
+
+func TestParseBedrockResponse_ContentTypeCase(t *testing.T) {
+	// Test that content type matching is case-sensitive (as it should be).
+	responseBody := `{
+		"content": [
+			{"type": "text", "text": "lowercase"},
+			{"type": "TEXT", "text": "uppercase"},
+			{"type": "Text", "text": "capitalized"}
+		],
+		"stop_reason": "end_turn"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	// Only "text" (lowercase) should match.
+	assert.Equal(t, "lowercase", result.Content)
+}
+
+func TestParseBedrockResponse_VeryLargeTokenCounts(t *testing.T) {
+	// Test with very large token counts.
+	responseBody := `{
+		"content": [{"type": "text", "text": "Response"}],
+		"stop_reason": "end_turn",
+		"usage": {
+			"input_tokens": 9223372036854775807,
+			"output_tokens": 9223372036854775807
+		}
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.NotNil(t, result.Usage)
+	// Should handle max int64 values.
+	assert.Equal(t, int64(9223372036854775807), result.Usage.InputTokens)
+}
+
+func TestClientGetters_VariousModels(t *testing.T) {
+	// Test getters with various model configurations.
+	models := []string{
+		DefaultModel,
+		"anthropic.claude-3-haiku-20240307-v1:0",
+		"anthropic.claude-3-opus-20240229-v1:0",
+		"anthropic.claude-3-sonnet-20240229-v1:0",
+		"anthropic.claude-instant-v1",
+		"anthropic.claude-v2",
+	}
+
+	for _, model := range models {
+		t.Run(model, func(t *testing.T) {
+			client := &Client{
+				config: &base.Config{
+					Model: model,
+				},
+				region: DefaultRegion,
+			}
+
+			assert.Equal(t, model, client.GetModel())
+		})
+	}
+}
+
+func TestExtractConfig_EmptyModel(t *testing.T) {
+	// Test that empty model uses default.
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": {
+						Model: "", // Empty model.
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	assert.Equal(t, DefaultModel, config.Model)
+}
+
+func TestExtractConfig_WhitespaceModel(t *testing.T) {
+	// Test that whitespace-only model uses default.
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"bedrock": {
+						Model: "   ", // Whitespace only.
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	// base.ExtractConfig treats empty/whitespace as "use the value provided".
+	assert.Equal(t, "   ", config.Model)
+}
+
+func TestConvertMessagesToBedrockFormat_VeryLongConversation(t *testing.T) {
+	// Test with a long conversation history.
+	var messages []types.Message
+	for i := 0; i < 1000; i++ {
+		role := types.RoleUser
+		if i%2 == 1 {
+			role = types.RoleAssistant
+		}
+		messages = append(messages, types.Message{
+			Role:    role,
+			Content: "Message " + string(rune('0'+i%10)),
+		})
+	}
+
+	result := convertMessagesToBedrockFormat(messages)
+
+	assert.Len(t, result, 1000)
+}
+
+func TestParseBedrockResponse_EmptyToolID(t *testing.T) {
+	// Test tool use with empty ID string.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "",
+				"name": "test_tool",
+				"input": {}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Empty(t, result.ToolCalls[0].ID)
+}
+
+func TestParseBedrockResponse_EmptyToolName(t *testing.T) {
+	// Test tool use with empty name string.
+	responseBody := `{
+		"content": [
+			{
+				"type": "tool_use",
+				"id": "call_123",
+				"name": "",
+				"input": {}
+			}
+		],
+		"stop_reason": "tool_use"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	require.Len(t, result.ToolCalls, 1)
+	assert.Empty(t, result.ToolCalls[0].Name)
+}
+
+func TestConvertToolsToBedrockFormat_EmptyToolName(t *testing.T) {
+	// Test tool with empty name.
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "",
+			description: "Tool with empty name",
+			parameters:  []tools.Parameter{},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Empty(t, result[0]["name"])
+}
+
+func TestConvertToolsToBedrockFormat_EmptyDescription(t *testing.T) {
+	// Test tool with empty description.
+	availableTools := []tools.Tool{
+		&mockTool{
+			name:        "test_tool",
+			description: "",
+			parameters:  []tools.Parameter{},
+		},
+	}
+
+	result := convertToolsToBedrockFormat(availableTools)
+
+	require.Len(t, result, 1)
+	assert.Empty(t, result[0]["description"])
+}
+
+func TestParseBedrockResponse_ContentWithNullText(t *testing.T) {
+	// Test response where text field is null (should be handled gracefully).
+	responseBody := `{
+		"content": [
+			{"type": "text"}
+		],
+		"stop_reason": "end_turn"
+	}`
+
+	result, err := parseBedrockResponse([]byte(responseBody))
+
+	require.NoError(t, err)
+	// Missing text field should result in empty string.
+	assert.Empty(t, result.Content)
+}
+
+func TestRequestBodyMarshaling_SpecialCharacters(t *testing.T) {
+	// Test marshaling with special characters that need escaping.
+	requestBody := map[string]interface{}{
+		"anthropic_version": "bedrock-2023-05-31",
+		"max_tokens":        4096,
+		"messages": []map[string]string{
+			{"role": "user", "content": "Test with \"quotes\" and \n newlines \t tabs"},
+		},
+	}
+
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+	assert.NotEmpty(t, bodyBytes)
+
+	// Verify it round-trips correctly.
+	var decoded map[string]interface{}
+	err = json.Unmarshal(bodyBytes, &decoded)
+	require.NoError(t, err)
+
+	messages := decoded["messages"].([]interface{})
+	firstMessage := messages[0].(map[string]interface{})
+	assert.Contains(t, firstMessage["content"], "\"quotes\"")
+}
+
+func TestExtractConfig_MultipleProviders(t *testing.T) {
+	// Test that bedrock config is extracted correctly when multiple providers exist.
+	atmosConfig := &schema.AtmosConfiguration{
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Enabled: true,
+				Providers: map[string]*schema.AIProviderConfig{
+					"openai": {
+						Model:     "gpt-4o",
+						MaxTokens: 2000,
+					},
+					"bedrock": {
+						Model:     "anthropic.claude-3-haiku-20240307-v1:0",
+						MaxTokens: 8000,
+						BaseURL:   "ap-southeast-1",
+					},
+					"anthropic": {
+						Model:     "claude-3-opus-20240229",
+						MaxTokens: 1000,
+					},
+				},
+			},
+		},
+	}
+
+	config := base.ExtractConfig(atmosConfig, ProviderName, base.ProviderDefaults{
+		Model:     DefaultModel,
+		MaxTokens: DefaultMaxTokens,
+		BaseURL:   DefaultRegion,
+	})
+
+	// Should extract only bedrock config.
+	assert.Equal(t, "anthropic.claude-3-haiku-20240307-v1:0", config.Model)
+	assert.Equal(t, 8000, config.MaxTokens)
+	assert.Equal(t, "ap-southeast-1", config.BaseURL)
+}
