@@ -2109,6 +2109,176 @@ func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
 	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
 }
 
+// TestProcessTemplatesInSection tests the processTemplatesInSection helper function directly.
+func TestProcessTemplatesInSection(t *testing.T) {
+	tests := []struct {
+		name           string
+		section        map[string]any
+		context        map[string]any
+		expectedResult map[string]any
+		expectError    bool
+	}{
+		{
+			name:           "nil section returns nil",
+			section:        nil,
+			context:        map[string]any{"locals": map[string]any{"stage": "dev"}},
+			expectedResult: nil,
+			expectError:    false,
+		},
+		{
+			name:           "empty section returns empty",
+			section:        map[string]any{},
+			context:        map[string]any{"locals": map[string]any{"stage": "dev"}},
+			expectedResult: map[string]any{},
+			expectError:    false,
+		},
+		{
+			name: "section without templates returns as-is",
+			section: map[string]any{
+				"enabled": true,
+				"name":    "my-component",
+			},
+			context: map[string]any{"locals": map[string]any{"stage": "dev"}},
+			expectedResult: map[string]any{
+				"enabled": true,
+				"name":    "my-component",
+			},
+			expectError: false,
+		},
+		{
+			name: "section with template references locals",
+			section: map[string]any{
+				"stage": "{{ .locals.stage }}",
+			},
+			context: map[string]any{"locals": map[string]any{"stage": "dev"}},
+			expectedResult: map[string]any{
+				"stage": "dev",
+			},
+			expectError: false,
+		},
+		{
+			name: "nested section with templates",
+			section: map[string]any{
+				"context": map[string]any{
+					"stage":       "{{ .locals.stage }}",
+					"environment": "{{ .locals.environment }}",
+				},
+			},
+			context: map[string]any{"locals": map[string]any{
+				"stage":       "dev",
+				"environment": "us-east-1",
+			}},
+			expectedResult: map[string]any{
+				"context": map[string]any{
+					"stage":       "dev",
+					"environment": "us-east-1",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name: "mixed static and template values",
+			section: map[string]any{
+				"enabled": true,
+				"stage":   "{{ .locals.stage }}",
+				"region":  "us-west-2",
+			},
+			context: map[string]any{"locals": map[string]any{"stage": "prod"}},
+			expectedResult: map[string]any{
+				"enabled": true,
+				"stage":   "prod",
+				"region":  "us-west-2",
+			},
+			expectError: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+
+			result, err := processTemplatesInSection(atmosConfig, tt.section, tt.context, "test.yaml")
+
+			if tt.expectError {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+
+			if tt.section == nil {
+				assert.Nil(t, result)
+				return
+			}
+
+			if len(tt.section) == 0 {
+				assert.Equal(t, tt.section, result)
+				return
+			}
+
+			// For sections with templates, check expected results.
+			for key, expected := range tt.expectedResult {
+				if nestedExpected, ok := expected.(map[string]any); ok {
+					nestedResult, ok := result[key].(map[string]any)
+					require.True(t, ok, "result[%s] should be a map", key)
+					for nestedKey, nestedValue := range nestedExpected {
+						assert.Equal(t, nestedValue, nestedResult[nestedKey], "result[%s][%s] mismatch", key, nestedKey)
+					}
+				} else {
+					assert.Equal(t, expected, result[key], "result[%s] mismatch", key)
+				}
+			}
+		})
+	}
+}
+
+// TestProcessTemplatesInSection_EdgeCases tests edge cases for processTemplatesInSection.
+func TestProcessTemplatesInSection_EdgeCases(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("section with no template markers", func(t *testing.T) {
+		section := map[string]any{
+			"name":    "test",
+			"enabled": true,
+			"count":   42,
+		}
+		context := map[string]any{"locals": map[string]any{"stage": "dev"}}
+
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+
+		require.NoError(t, err)
+		assert.Equal(t, section, result, "section without templates should be returned as-is")
+	})
+
+	t.Run("section with list values", func(t *testing.T) {
+		section := map[string]any{
+			"tags": []string{"tag1", "tag2"},
+		}
+		context := map[string]any{"locals": map[string]any{"stage": "dev"}}
+
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+	})
+
+	t.Run("section with integer values", func(t *testing.T) {
+		section := map[string]any{
+			"port":     8080,
+			"replicas": 3,
+		}
+		context := map[string]any{"locals": map[string]any{"stage": "dev"}}
+
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+
+		require.NoError(t, err)
+		assert.NotNil(t, result)
+		// Integer values should be preserved.
+		assert.Equal(t, 8080, result["port"])
+		assert.Equal(t, 3, result["replicas"])
+	})
+}
+
 // TestAtmosProTemplateRegression tests that {{ .atmos_component }} templates in non-.tmpl files
 // with settings sections don't fail during import processing.
 // This is a regression test for issue where 1.205 inadvertently triggers template processing
