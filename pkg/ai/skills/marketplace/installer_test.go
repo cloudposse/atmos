@@ -658,7 +658,8 @@ func TestGetInstallPath(t *testing.T) {
 
 	assert.Contains(t, result, ".atmos")
 	assert.Contains(t, result, "skills")
-	assert.Contains(t, result, "github.com/user/repo")
+	// Use filepath.ToSlash to normalize for cross-platform comparison.
+	assert.Contains(t, filepath.ToSlash(result), "github.com/user/repo")
 }
 
 func TestRedactHomePath_WithHomePrefix(t *testing.T) {
