@@ -190,8 +190,11 @@ func ProcessComponentConfig(
 		configAndStacksInfo.Command = command
 	}
 
-	// Populate AuthContext from AuthManager if provided (from --identity flag).
+	// Populate AuthContext and AuthManager from AuthManager if provided (from --identity flag).
+	// The AuthManager is stored for YAML functions like !terraform.state that need the full
+	// authentication context to access remote state.
 	if authManager != nil {
+		configAndStacksInfo.AuthManager = authManager
 		managerStackInfo := authManager.GetStackInfo()
 		if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 			configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
