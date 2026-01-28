@@ -132,6 +132,52 @@ func getCredentialNamespace(atmosConfig *schema.AtmosConfiguration) string {
 }
 ```
 
+### Namespace Sanitization
+
+The `sanitize()` function ensures namespace values are safe for filesystem paths and prevent security issues:
+
+**Allowed Characters:**
+- ASCII alphanumeric characters: `a-z`, `A-Z`, `0-9`
+- Hyphen: `-`
+- Underscore: `_`
+
+**Sanitization Rules:**
+1. Replace any disallowed character with hyphen (`-`)
+2. Collapse consecutive hyphens to a single hyphen
+3. Trim leading and trailing non-alphanumeric characters
+4. Convert to lowercase for consistency
+5. Enforce maximum length of 64 characters (truncate if longer)
+6. If result is empty after sanitization, fall back to path hash
+
+**Security Considerations:**
+- Prevents path traversal attacks (no `/`, `\`, `..`)
+- Ensures cross-platform filesystem compatibility
+- Deterministic output for the same input
+
+```go
+// Pseudocode
+func sanitize(input string) string {
+    // Replace disallowed characters with hyphen
+    result := regexp.MustCompile(`[^a-zA-Z0-9_-]`).ReplaceAllString(input, "-")
+
+    // Collapse consecutive hyphens
+    result = regexp.MustCompile(`-+`).ReplaceAllString(result, "-")
+
+    // Trim leading/trailing hyphens and underscores
+    result = strings.Trim(result, "-_")
+
+    // Convert to lowercase
+    result = strings.ToLower(result)
+
+    // Enforce maximum length
+    if len(result) > 64 {
+        result = result[:64]
+    }
+
+    return result
+}
+```
+
 ## Implementation Details
 
 ### Schema Changes
