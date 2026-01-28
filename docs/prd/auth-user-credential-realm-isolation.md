@@ -73,21 +73,23 @@ Introduce a **realm** that differentiates credential storage between different r
 
 **After (isolated):**
 ```text
-~/.config/atmos/aws/aws-user-{realm}/credentials
-                            └─ Unique per repository/customer
+~/.config/atmos/aws/{realm}/{provider}/credentials
+                     └─ Realm is top-level directory
 ```
 
 **Examples:**
 ```text
 # Customer A (explicit realm)
-~/.config/atmos/aws/aws-user-customer-acme/credentials
+~/.config/atmos/aws/customer-acme/aws-user/credentials
 
 # Customer B (explicit realm)
-~/.config/atmos/aws/aws-user-customer-beta/credentials
+~/.config/atmos/aws/customer-beta/aws-user/credentials
 
 # Customer C (automatic hash realm)
-~/.config/atmos/aws/aws-user-a1b2c3d4/credentials
+~/.config/atmos/aws/a1b2c3d4/aws-user/credentials
 ```
+
+**Note:** The realm is the top-level directory, not appended to the provider name. This ensures both provider names and identity names are isolated per realm. See [Auth Realm Architecture PRD](./auth-realm-architecture.md) for full details.
 
 ## Configuration
 
@@ -203,22 +205,22 @@ type AuthConfiguration struct {
 ```go
 // pkg/auth/cloud/aws/files.go
 
-// GetCredentialsPath now includes realm in the path
+// GetCredentialsPath returns path with realm as top-level directory.
+// Result: ~/.config/atmos/aws/{realm}/{provider}/credentials
 func (m *AWSFileManager) GetCredentialsPath(providerName, realm string) string {
-    dirName := providerName
     if realm != "" {
-        dirName = fmt.Sprintf("%s-%s", providerName, realm)
+        return filepath.Join(m.baseDir, realm, providerName, "credentials")
     }
-    return filepath.Join(m.baseDir, dirName, "credentials")
+    return filepath.Join(m.baseDir, providerName, "credentials")
 }
 
-// GetConfigPath now includes realm in the path
+// GetConfigPath returns path with realm as top-level directory.
+// Result: ~/.config/atmos/aws/{realm}/{provider}/config
 func (m *AWSFileManager) GetConfigPath(providerName, realm string) string {
-    dirName := providerName
     if realm != "" {
-        dirName = fmt.Sprintf("%s-%s", providerName, realm)
+        return filepath.Join(m.baseDir, realm, providerName, "config")
     }
-    return filepath.Join(m.baseDir, dirName, "config")
+    return filepath.Join(m.baseDir, providerName, "config")
 }
 ```
 
@@ -297,7 +299,7 @@ Run 'atmos auth login' to authenticate with this identity.
 Existing cached credentials will not be found after this update because:
 
 1. Old path: `~/.config/atmos/aws/aws-user/credentials`
-2. New path: `~/.config/atmos/aws/aws-user-{realm}/credentials`
+2. New path: `~/.config/atmos/aws/{realm}/aws-user/credentials`
 
 ### Mitigation
 
@@ -375,9 +377,10 @@ func TestCredentialRealmIsolation(t *testing.T) {
 
 ## Related Documents
 
-1. **[AWS Authentication File Isolation PRD](./aws-auth-file-isolation.md)** - Current AWS implementation
-2. **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** - Pattern this extends
-3. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design
+1. **[Auth Realm Architecture PRD](./auth-realm-architecture.md)** - Complete realm architecture and implementation guide
+2. **[AWS Authentication File Isolation PRD](./aws-auth-file-isolation.md)** - Current AWS implementation
+3. **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** - Pattern this extends
+4. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design
 
 ## Success Metrics
 
