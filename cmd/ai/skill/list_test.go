@@ -2,8 +2,10 @@ package skill
 
 import (
 	"bytes"
+	"encoding/json"
 	"io"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -11,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
+	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
 func TestListCmd_BasicProperties(t *testing.T) {
@@ -913,4 +916,541 @@ func TestListCmd_OutputMessages(t *testing.T) {
 		assert.NotEmpty(t, listCmd.Long)
 		assert.NotEmpty(t, listCmd.Short)
 	})
+}
+
+// TestListCmd_EmptySkillsList tests the output when no skills are installed.
+// This test uses a temporary HOME directory to ensure a clean registry.
+func TestListCmd_EmptySkillsList(t *testing.T) {
+	// Save original HOME.
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory (t.Setenv auto-restores after test).
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+
+	// Restore cache settings after test.
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Reset the detailed flag to default.
+	flag := listCmd.Flags().Lookup("detailed")
+	if flag != nil {
+		flag.Value.Set("false")
+	}
+
+	// Capture stdout.
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	// Execute the command - should show no skills message.
+	err := listCmd.RunE(listCmd, []string{})
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, copyErr := io.Copy(&buf, r)
+	require.NoError(t, copyErr)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify the empty skills output message.
+	assert.Contains(t, output, "No skills installed")
+	assert.Contains(t, output, "Install a skill with")
+	assert.Contains(t, output, "atmos ai skill install")
+}
+
+// TestListCmd_WithInstalledSkills tests listing skills when they are present.
+// This test creates a mock registry with skills to verify the output.
+func TestListCmd_WithInstalledSkills(t *testing.T) {
+	// Save original HOME.
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory (t.Setenv auto-restores after test).
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+
+	// Restore cache settings after test.
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Create the skills directory and registry with a test skill.
+	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
+	err := os.MkdirAll(skillsDir, 0o755)
+	require.NoError(t, err)
+
+	now := time.Now()
+	registry := map[string]interface{}{
+		"version": "1.0.0",
+		"skills": map[string]interface{}{
+			"test-skill": map[string]interface{}{
+				"name":         "test-skill",
+				"display_name": "Test Skill",
+				"source":       "github.com/example/test-skill",
+				"version":      "v1.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         filepath.Join(skillsDir, "test-skill"),
+				"is_builtin":   false,
+				"enabled":      true,
+			},
+		},
+	}
+
+	registryData, err := json.MarshalIndent(registry, "", "  ")
+	require.NoError(t, err)
+
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	err = os.WriteFile(registryPath, registryData, 0o600)
+	require.NoError(t, err)
+
+	t.Run("summary mode", func(t *testing.T) {
+		// Reset the detailed flag to default.
+		flag := listCmd.Flags().Lookup("detailed")
+		if flag != nil {
+			flag.Value.Set("false")
+		}
+
+		// Capture stdout.
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := listCmd.RunE(listCmd, []string{})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		_, copyErr := io.Copy(&buf, r)
+		require.NoError(t, copyErr)
+		require.NoError(t, err)
+
+		output := buf.String()
+
+		// Verify summary output contains skill info.
+		assert.Contains(t, output, "Installed skills (1)")
+		assert.Contains(t, output, "Test Skill")
+		assert.Contains(t, output, "github.com/example/test-skill @ v1.0.0")
+		assert.Contains(t, output, "Ctrl+A")
+		// Summary mode should show checkmark for enabled skill.
+		assert.Contains(t, output, "✓")
+	})
+
+	t.Run("detailed mode", func(t *testing.T) {
+		// Set the detailed flag.
+		flag := listCmd.Flags().Lookup("detailed")
+		if flag != nil {
+			flag.Value.Set("true")
+		}
+
+		// Capture stdout.
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := listCmd.RunE(listCmd, []string{})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		_, copyErr := io.Copy(&buf, r)
+		require.NoError(t, copyErr)
+		require.NoError(t, err)
+
+		output := buf.String()
+
+		// Verify detailed output contains more info.
+		assert.Contains(t, output, "Installed skills (1)")
+		assert.Contains(t, output, "Test Skill")
+		assert.Contains(t, output, "Enabled")
+		assert.Contains(t, output, "Name:")
+		assert.Contains(t, output, "Source:")
+		assert.Contains(t, output, "Version:")
+		assert.Contains(t, output, "Installed:")
+		assert.Contains(t, output, "Type:")
+		assert.Contains(t, output, "Community")
+	})
+}
+
+// TestListCmd_WithMultipleSkills tests listing multiple skills.
+func TestListCmd_WithMultipleSkills(t *testing.T) {
+	// Save original HOME.
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory (t.Setenv auto-restores after test).
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+
+	// Restore cache settings after test.
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Create the skills directory and registry with multiple skills.
+	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
+	err := os.MkdirAll(skillsDir, 0o755)
+	require.NoError(t, err)
+
+	now := time.Now()
+	registry := map[string]interface{}{
+		"version": "1.0.0",
+		"skills": map[string]interface{}{
+			"alpha-skill": map[string]interface{}{
+				"name":         "alpha-skill",
+				"display_name": "Alpha Skill",
+				"source":       "github.com/example/alpha",
+				"version":      "v1.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         filepath.Join(skillsDir, "alpha-skill"),
+				"is_builtin":   false,
+				"enabled":      true,
+			},
+			"beta-skill": map[string]interface{}{
+				"name":         "beta-skill",
+				"display_name": "Beta Skill",
+				"source":       "github.com/example/beta",
+				"version":      "v2.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         filepath.Join(skillsDir, "beta-skill"),
+				"is_builtin":   false,
+				"enabled":      false,
+			},
+			"gamma-skill": map[string]interface{}{
+				"name":         "gamma-skill",
+				"display_name": "Gamma Skill",
+				"source":       "github.com/example/gamma",
+				"version":      "v3.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         filepath.Join(skillsDir, "gamma-skill"),
+				"is_builtin":   true,
+				"enabled":      true,
+			},
+		},
+	}
+
+	registryData, err := json.MarshalIndent(registry, "", "  ")
+	require.NoError(t, err)
+
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	err = os.WriteFile(registryPath, registryData, 0o600)
+	require.NoError(t, err)
+
+	t.Run("summary mode shows all skills", func(t *testing.T) {
+		// Reset the detailed flag.
+		flag := listCmd.Flags().Lookup("detailed")
+		if flag != nil {
+			flag.Value.Set("false")
+		}
+
+		// Capture stdout.
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := listCmd.RunE(listCmd, []string{})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		_, copyErr := io.Copy(&buf, r)
+		require.NoError(t, copyErr)
+		require.NoError(t, err)
+
+		output := buf.String()
+
+		// Verify all skills are listed.
+		assert.Contains(t, output, "Installed skills (3)")
+		assert.Contains(t, output, "Alpha Skill")
+		assert.Contains(t, output, "Beta Skill")
+		assert.Contains(t, output, "Gamma Skill")
+		// Verify enabled/disabled symbols.
+		assert.Contains(t, output, "✓") // For enabled skills.
+		assert.Contains(t, output, "✗") // For disabled skill.
+	})
+
+	t.Run("detailed mode shows all skill details", func(t *testing.T) {
+		// Set the detailed flag.
+		flag := listCmd.Flags().Lookup("detailed")
+		if flag != nil {
+			flag.Value.Set("true")
+		}
+
+		// Capture stdout.
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := listCmd.RunE(listCmd, []string{})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		_, copyErr := io.Copy(&buf, r)
+		require.NoError(t, copyErr)
+		require.NoError(t, err)
+
+		output := buf.String()
+
+		// Verify all skills with detailed info.
+		assert.Contains(t, output, "Installed skills (3)")
+		assert.Contains(t, output, "Alpha Skill")
+		assert.Contains(t, output, "Beta Skill")
+		assert.Contains(t, output, "Gamma Skill")
+		// Verify types are shown.
+		assert.Contains(t, output, "Community")
+		assert.Contains(t, output, "Built-in")
+		// Verify enabled/disabled status.
+		assert.Contains(t, output, "Enabled")
+		assert.Contains(t, output, "Disabled")
+	})
+}
+
+// TestListCmd_CorruptedRegistry tests behavior when the registry file is corrupted.
+func TestListCmd_CorruptedRegistry(t *testing.T) {
+	// Save original HOME.
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory (t.Setenv auto-restores after test).
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+
+	// Restore cache settings after test.
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Create the skills directory with a corrupted registry file.
+	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
+	err := os.MkdirAll(skillsDir, 0o755)
+	require.NoError(t, err)
+
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	err = os.WriteFile(registryPath, []byte("this is not valid json"), 0o600)
+	require.NoError(t, err)
+
+	// Reset the detailed flag.
+	flag := listCmd.Flags().Lookup("detailed")
+	if flag != nil {
+		flag.Value.Set("false")
+	}
+
+	// Execute the command - should return an error.
+	err = listCmd.RunE(listCmd, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to initialize installer")
+}
+
+// TestListCmd_SkillWithDisabledStatus tests that disabled skills show correctly.
+func TestListCmd_SkillWithDisabledStatus(t *testing.T) {
+	// Save original HOME.
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory (t.Setenv auto-restores after test).
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+
+	// Restore cache settings after test.
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Create the skills directory and registry with a disabled skill.
+	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
+	err := os.MkdirAll(skillsDir, 0o755)
+	require.NoError(t, err)
+
+	now := time.Now()
+	registry := map[string]interface{}{
+		"version": "1.0.0",
+		"skills": map[string]interface{}{
+			"disabled-skill": map[string]interface{}{
+				"name":         "disabled-skill",
+				"display_name": "Disabled Skill",
+				"source":       "github.com/example/disabled",
+				"version":      "v1.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         filepath.Join(skillsDir, "disabled-skill"),
+				"is_builtin":   false,
+				"enabled":      false,
+			},
+		},
+	}
+
+	registryData, err := json.MarshalIndent(registry, "", "  ")
+	require.NoError(t, err)
+
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	err = os.WriteFile(registryPath, registryData, 0o600)
+	require.NoError(t, err)
+
+	t.Run("summary mode shows disabled symbol", func(t *testing.T) {
+		// Reset the detailed flag.
+		flag := listCmd.Flags().Lookup("detailed")
+		if flag != nil {
+			flag.Value.Set("false")
+		}
+
+		// Capture stdout.
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := listCmd.RunE(listCmd, []string{})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		_, copyErr := io.Copy(&buf, r)
+		require.NoError(t, copyErr)
+		require.NoError(t, err)
+
+		output := buf.String()
+
+		// Verify disabled skill shows with X symbol.
+		assert.Contains(t, output, "✗")
+		assert.Contains(t, output, "Disabled Skill")
+	})
+
+	t.Run("detailed mode shows Disabled status", func(t *testing.T) {
+		// Set the detailed flag.
+		flag := listCmd.Flags().Lookup("detailed")
+		if flag != nil {
+			flag.Value.Set("true")
+		}
+
+		// Capture stdout.
+		old := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := listCmd.RunE(listCmd, []string{})
+
+		w.Close()
+		os.Stdout = old
+
+		var buf bytes.Buffer
+		_, copyErr := io.Copy(&buf, r)
+		require.NoError(t, copyErr)
+		require.NoError(t, err)
+
+		output := buf.String()
+
+		// Verify detailed output shows Disabled.
+		assert.Contains(t, output, "Disabled")
+		assert.Contains(t, output, "Disabled Skill")
+	})
+}
+
+// TestListCmd_SkillWithBuiltInStatus tests that built-in skills show correctly.
+func TestListCmd_SkillWithBuiltInStatus(t *testing.T) {
+	// Save original HOME.
+	// Create a temp directory to use as HOME.
+	tempHome := t.TempDir()
+
+	// Set HOME to temp directory (t.Setenv auto-restores after test).
+	t.Setenv("HOME", tempHome)
+
+	// Reset homedir cache to pick up new HOME.
+	homedir.Reset()
+	homedir.DisableCache = true
+
+	// Restore cache settings after test.
+	t.Cleanup(func() {
+		homedir.Reset()
+		homedir.DisableCache = false
+	})
+
+	// Create the skills directory and registry with a built-in skill.
+	skillsDir := filepath.Join(tempHome, ".atmos", "skills")
+	err := os.MkdirAll(skillsDir, 0o755)
+	require.NoError(t, err)
+
+	now := time.Now()
+	registry := map[string]interface{}{
+		"version": "1.0.0",
+		"skills": map[string]interface{}{
+			"builtin-skill": map[string]interface{}{
+				"name":         "builtin-skill",
+				"display_name": "Built-in Skill",
+				"source":       "built-in",
+				"version":      "v1.0.0",
+				"installed_at": now.Format(time.RFC3339),
+				"updated_at":   now.Format(time.RFC3339),
+				"path":         filepath.Join(skillsDir, "builtin-skill"),
+				"is_builtin":   true,
+				"enabled":      true,
+			},
+		},
+	}
+
+	registryData, err := json.MarshalIndent(registry, "", "  ")
+	require.NoError(t, err)
+
+	registryPath := filepath.Join(skillsDir, "registry.json")
+	err = os.WriteFile(registryPath, registryData, 0o600)
+	require.NoError(t, err)
+
+	// Set the detailed flag to see the type.
+	flag := listCmd.Flags().Lookup("detailed")
+	if flag != nil {
+		flag.Value.Set("true")
+	}
+
+	// Capture stdout.
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = listCmd.RunE(listCmd, []string{})
+
+	w.Close()
+	os.Stdout = old
+
+	var buf bytes.Buffer
+	_, copyErr := io.Copy(&buf, r)
+	require.NoError(t, copyErr)
+	require.NoError(t, err)
+
+	output := buf.String()
+
+	// Verify built-in skill shows correct type.
+	assert.Contains(t, output, "Type:         Built-in")
 }

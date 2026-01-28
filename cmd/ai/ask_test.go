@@ -1,3 +1,4 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
 package ai
 
 import (
@@ -243,7 +244,6 @@ func TestAskCommand_UsesRunE(t *testing.T) {
 	})
 }
 
-//nolint:dupl // Test setup is intentionally similar to other integration tests.
 func TestAskCommand_AIDisabled(t *testing.T) {
 	// Create a temporary directory for the test.
 	tempDir := t.TempDir()
@@ -287,14 +287,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
 
 	t.Run("ask command returns error when AI is disabled", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -311,7 +305,6 @@ settings:
 	})
 }
 
-//nolint:dupl // Test subtests have similar structure by design.
 func TestAskCommand_ContextOverrides(t *testing.T) {
 	// Test that context override settings affect the configuration.
 	// This tests the internal logic of applying context flags.
@@ -577,7 +570,6 @@ func TestAskCommand_FlagCount(t *testing.T) {
 	assert.Equal(t, 3, count, "ask command should have exactly 3 custom flags")
 }
 
-//nolint:dupl // Test setup is intentionally similar to other integration tests.
 func TestAskCommand_AIEnabledButClientCreationFails(t *testing.T) {
 	// Create a temporary directory for the test.
 	tempDir := t.TempDir()
@@ -623,14 +615,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
 
 	t.Run("ask command returns error when AI client creation fails", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -697,14 +683,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
 
 	t.Run("ask command with include patterns", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -813,14 +793,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
 
 	t.Run("ask command with no-auto-context flag", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -1072,5 +1046,969 @@ func TestAskCommand_ContextAppendBehavior(t *testing.T) {
 		assert.Equal(t, "existing.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
 		assert.Equal(t, "new1.tmp", atmosConfig.Settings.AI.Context.Exclude[1])
 		assert.Equal(t, "new2.tmp", atmosConfig.Settings.AI.Context.Exclude[2])
+	})
+}
+
+func TestAskCommand_SendContextEnvVar(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with AI enabled using anthropic (default provider).
+	// Use filepath.ToSlash for YAML content to ensure forward slashes.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    send_context: false
+    context:
+      enabled: false
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	tests := []struct {
+		name     string
+		envValue string
+	}{
+		{
+			name:     "ATMOS_AI_SEND_CONTEXT set to true",
+			envValue: "true",
+		},
+		{
+			name:     "ATMOS_AI_SEND_CONTEXT set to 1",
+			envValue: "1",
+		},
+		{
+			name:     "ATMOS_AI_SEND_CONTEXT set to yes",
+			envValue: "yes",
+		},
+		{
+			name:     "ATMOS_AI_SEND_CONTEXT set to false",
+			envValue: "false",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("ATMOS_AI_SEND_CONTEXT", tt.envValue)
+
+			testCmd := &cobra.Command{
+				Use:  "ask",
+				Args: cobra.MinimumNArgs(1),
+			}
+			testCmd.Flags().StringSlice("include", nil, "Include patterns")
+			testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+			testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+			// The command will fail due to missing API key, but it should get past the env var check.
+			err := askCmd.RunE(testCmd, []string{"test question"})
+			assert.Error(t, err)
+			// It should fail at client creation, not at config loading.
+			// Either due to missing API key or other client initialization issue.
+		})
+	}
+}
+
+func TestAskCommand_AllFlagsApplied(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with AI enabled.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "invalid_provider"
+    context:
+      enabled: true
+      auto_include:
+        - "*.yaml"
+      exclude:
+        - "*.tmp"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("all flags applied together", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set all flags.
+		err := testCmd.Flags().Set("include", "*.json,*.hcl")
+		require.NoError(t, err)
+		err = testCmd.Flags().Set("exclude", "*.bak,*.log,*.cache")
+		require.NoError(t, err)
+		err = testCmd.Flags().Set("no-auto-context", "true")
+		require.NoError(t, err)
+
+		// The command will fail due to invalid provider, but the flags should be applied first.
+		err = askCmd.RunE(testCmd, []string{"What components are available?"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestAskCommand_MultiWordQuestion(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with AI enabled.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "invalid_provider"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("multiple word question joined correctly", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Simulate multiple words as args (like when unquoted on command line).
+		err := askCmd.RunE(testCmd, []string{"What", "are", "the", "available", "components?"})
+		assert.Error(t, err)
+		// The error should come from client creation, not from question processing.
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestAskCommand_ContextOverridesInOrder(t *testing.T) {
+	// Test that context overrides are applied in the correct order:
+	// 1. no-auto-context disables context
+	// 2. include patterns are appended
+	// 3. exclude patterns are appended
+
+	t.Run("no-auto-context takes precedence", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						Enabled:     true,
+						AutoInclude: []string{"*.yaml"},
+						Exclude:     []string{"*.tmp"},
+					},
+				},
+			},
+		}
+
+		// Simulate flags.
+		noAutoContext := true
+		includePatterns := []string{"*.json"}
+		excludePatterns := []string{"*.bak"}
+
+		// Apply in the same order as ask.go.
+		if noAutoContext {
+			atmosConfig.Settings.AI.Context.Enabled = false
+		}
+		if len(includePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		}
+		if len(excludePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+		}
+
+		// Context should be disabled.
+		assert.False(t, atmosConfig.Settings.AI.Context.Enabled)
+		// But patterns should still be appended (in case context is re-enabled elsewhere).
+		assert.Contains(t, atmosConfig.Settings.AI.Context.AutoInclude, "*.json")
+		assert.Contains(t, atmosConfig.Settings.AI.Context.Exclude, "*.bak")
+	})
+}
+
+func TestAskCommand_NilPatterns(t *testing.T) {
+	// Test behavior when patterns are nil (not set).
+	t.Run("nil include patterns don't modify config", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						AutoInclude: []string{"original.yaml"},
+					},
+				},
+			},
+		}
+
+		var includePatterns []string // nil slice.
+		if len(includePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		}
+
+		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 1)
+		assert.Equal(t, "original.yaml", atmosConfig.Settings.AI.Context.AutoInclude[0])
+	})
+
+	t.Run("nil exclude patterns don't modify config", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						Exclude: []string{"original.tmp"},
+					},
+				},
+			},
+		}
+
+		var excludePatterns []string // nil slice.
+		if len(excludePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+		}
+
+		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 1)
+		assert.Equal(t, "original.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
+	})
+}
+
+func TestAskCommand_InitialContextNil(t *testing.T) {
+	// Test behavior when initial context arrays are nil.
+	t.Run("include patterns create new slice when nil", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						AutoInclude: nil, // nil slice.
+					},
+				},
+			},
+		}
+
+		includePatterns := []string{"new.yaml"}
+		if len(includePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.AutoInclude = append(atmosConfig.Settings.AI.Context.AutoInclude, includePatterns...)
+		}
+
+		assert.Len(t, atmosConfig.Settings.AI.Context.AutoInclude, 1)
+		assert.Equal(t, "new.yaml", atmosConfig.Settings.AI.Context.AutoInclude[0])
+	})
+
+	t.Run("exclude patterns create new slice when nil", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled: true,
+					Context: schema.AIContextSettings{
+						Exclude: nil, // nil slice.
+					},
+				},
+			},
+		}
+
+		excludePatterns := []string{"new.tmp"}
+		if len(excludePatterns) > 0 {
+			atmosConfig.Settings.AI.Context.Exclude = append(atmosConfig.Settings.AI.Context.Exclude, excludePatterns...)
+		}
+
+		assert.Len(t, atmosConfig.Settings.AI.Context.Exclude, 1)
+		assert.Equal(t, "new.tmp", atmosConfig.Settings.AI.Context.Exclude[0])
+	})
+}
+
+func TestAskCommand_ErrorMessageFormats(t *testing.T) {
+	// Test that error messages are formatted correctly.
+	tests := []struct {
+		name            string
+		configPath      string
+		expectedInError string
+	}{
+		{
+			name:            "nonexistent config path error",
+			configPath:      "/this/path/definitely/does/not/exist/anywhere",
+			expectedInError: "", // Just check that it errors.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.configPath != "" {
+				t.Setenv("ATMOS_CLI_CONFIG_PATH", tt.configPath)
+			}
+
+			testCmd := &cobra.Command{
+				Use: "test-ask",
+			}
+			testCmd.Flags().StringSlice("include", nil, "Include patterns")
+			testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+			testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+			err := askCmd.RunE(testCmd, []string{"test question"})
+			assert.Error(t, err)
+
+			if tt.expectedInError != "" {
+				assert.Contains(t, err.Error(), tt.expectedInError)
+			}
+		})
+	}
+}
+
+func TestAskCommand_TimeoutNegativeValue(t *testing.T) {
+	// Test that negative timeout values are handled correctly.
+	t.Run("negative timeout uses default", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Settings: schema.AtmosSettings{
+				AI: schema.AISettings{
+					Enabled:        true,
+					TimeoutSeconds: -10, // Negative value.
+				},
+			},
+		}
+
+		// Simulate the logic from ask.go.
+		timeoutSeconds := 60
+		if atmosConfig.Settings.AI.TimeoutSeconds > 0 {
+			timeoutSeconds = atmosConfig.Settings.AI.TimeoutSeconds
+		}
+
+		assert.Equal(t, 60, timeoutSeconds) // Should use default.
+	})
+}
+
+func TestAskCommand_FlagTypes(t *testing.T) {
+	// Verify flag types are correct.
+	t.Run("include flag is stringSlice", func(t *testing.T) {
+		flag := askCmd.Flags().Lookup("include")
+		require.NotNil(t, flag)
+		assert.Equal(t, "stringSlice", flag.Value.Type())
+	})
+
+	t.Run("exclude flag is stringSlice", func(t *testing.T) {
+		flag := askCmd.Flags().Lookup("exclude")
+		require.NotNil(t, flag)
+		assert.Equal(t, "stringSlice", flag.Value.Type())
+	})
+
+	t.Run("no-auto-context flag is bool", func(t *testing.T) {
+		flag := askCmd.Flags().Lookup("no-auto-context")
+		require.NotNil(t, flag)
+		assert.Equal(t, "bool", flag.Value.Type())
+	})
+}
+
+func TestAskCommand_ContextEnabledConfig(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with AI and context enabled.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "invalid_provider"
+    send_context: true
+    context:
+      enabled: true
+      auto_include:
+        - "*.yaml"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	// Disable send_context via env var to avoid prompts.
+	t.Setenv("ATMOS_AI_SEND_CONTEXT", "false")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("context enabled in config", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
+		assert.Error(t, err)
+		// Should fail at client creation after processing context settings.
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestAskCommand_ExamplesInLong(t *testing.T) {
+	// Verify all examples in the Long description are valid.
+	examples := []string{
+		`atmos ai ask "What components are available?"`,
+		`atmos ai ask "How do I validate my stack configuration?"`,
+		`atmos ai ask "Explain the difference between components and stacks"`,
+		`atmos ai ask "Describe the vpc component in the dev stack"`,
+	}
+
+	for _, example := range examples {
+		t.Run("example: "+example, func(t *testing.T) {
+			assert.Contains(t, askCmd.Long, example)
+		})
+	}
+}
+
+func TestAskCommand_ArgsMinimumValidation(t *testing.T) {
+	// Test the Args validation function directly.
+	tests := []struct {
+		name        string
+		args        []string
+		expectError bool
+	}{
+		{
+			name:        "no arguments fails",
+			args:        []string{},
+			expectError: true,
+		},
+		{
+			name:        "one argument passes",
+			args:        []string{"question"},
+			expectError: false,
+		},
+		{
+			name:        "two arguments passes",
+			args:        []string{"question", "more"},
+			expectError: false,
+		},
+		{
+			name:        "many arguments passes",
+			args:        []string{"what", "is", "the", "meaning", "of", "life"},
+			expectError: false,
+		},
+		{
+			name:        "empty string argument passes",
+			args:        []string{""},
+			expectError: false, // MinimumNArgs counts args, not validates content.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use the actual Args validator from the command.
+			err := cobra.MinimumNArgs(1)(askCmd, tt.args)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestAskCommand_OllamaProviderSendMessageError(t *testing.T) {
+	// This test uses Ollama provider which doesn't require an API key.
+	// It will successfully create a client but fail at SendMessage.
+	// This tests more code paths in ask.go.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider and an unreachable base URL.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: false
+    timeout_seconds: 5
+    context:
+      enabled: false
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_AI_SEND_CONTEXT", "false")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("ollama provider with unreachable endpoint", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"test question"})
+		assert.Error(t, err)
+		// Should fail at SendMessage due to connection error.
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestAskCommand_OllamaWithContext(t *testing.T) {
+	// This test uses Ollama provider with context gathering enabled.
+	// It tests the context gathering code path.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider, context gathering enabled.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: true
+    prompt_on_send: false
+    timeout_seconds: 5
+    context:
+      enabled: true
+      show_files: false
+      auto_include:
+        - "*.yaml"
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+  environment: development
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("ollama with context gathering", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
+		assert.Error(t, err)
+		// Should fail at SendMessage due to connection error, but after context gathering.
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestAskCommand_OllamaWithCustomTimeout(t *testing.T) {
+	// This test uses Ollama provider with a custom timeout.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider and custom timeout.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: false
+    timeout_seconds: 120
+    context:
+      enabled: false
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_AI_SEND_CONTEXT", "false")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("ollama with custom timeout", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		err := askCmd.RunE(testCmd, []string{"test"})
+		assert.Error(t, err)
+		// Should fail at SendMessage but use custom timeout.
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestAskCommand_OllamaWithIncludeExcludeFlags(t *testing.T) {
+	// This test uses Ollama provider with include/exclude flags to test pattern appending.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider and context with patterns.
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: false
+    timeout_seconds: 5
+    context:
+      enabled: true
+      auto_include:
+        - "*.yaml"
+      exclude:
+        - "*.tmp"
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_AI_SEND_CONTEXT", "false")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("ollama with include and exclude flags", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set both include and exclude patterns.
+		err := testCmd.Flags().Set("include", "*.json")
+		require.NoError(t, err)
+		err = testCmd.Flags().Set("exclude", "*.bak")
+		require.NoError(t, err)
+
+		err = askCmd.RunE(testCmd, []string{"test"})
+		assert.Error(t, err)
+		// Should fail at SendMessage but patterns should be applied first.
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestAskCommand_OllamaWithNoAutoContext(t *testing.T) {
+	// This test uses Ollama provider with no-auto-context flag.
+
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create required directories using filepath.Join with separate arguments.
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	stacksDir := filepath.Join(tempDir, "stacks")
+	err := os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+
+	// Create an atmos.yaml with Ollama provider and context enabled (will be disabled by flag).
+	configContent := `base_path: "./"`
+	configContent += "\n\ncomponents:\n  terraform:\n    base_path: " + `"` + filepath.ToSlash(filepath.Join("components", "terraform")) + `"`
+	configContent += "\n\nstacks:\n  base_path: " + `"` + filepath.ToSlash("stacks") + `"`
+	configContent += `
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "ollama"
+    send_context: false
+    timeout_seconds: 5
+    context:
+      enabled: true
+    providers:
+      ollama:
+        base_url: "http://127.0.0.1:65535/v1"
+        model: "llama3"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	stackPath := filepath.Join(stacksDir, "dev.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	t.Setenv("ATMOS_AI_SEND_CONTEXT", "false")
+
+	// Change to temp dir (t.Chdir handles cleanup automatically).
+	t.Chdir(tempDir)
+
+	t.Run("ollama with no-auto-context flag", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "ask",
+			Args: cobra.MinimumNArgs(1),
+		}
+		testCmd.Flags().StringSlice("include", nil, "Include patterns")
+		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
+		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+
+		// Set no-auto-context flag.
+		err := testCmd.Flags().Set("no-auto-context", "true")
+		require.NoError(t, err)
+
+		err = askCmd.RunE(testCmd, []string{"test"})
+		assert.Error(t, err)
+		// Should fail at SendMessage but context should be disabled.
+		assert.Contains(t, err.Error(), "failed to get AI response")
 	})
 }

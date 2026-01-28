@@ -1,3 +1,4 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
 package ai
 
 import (
@@ -774,4 +775,362 @@ func TestHelpCommand_HasShortDescription(t *testing.T) {
 func TestHelpCommand_HasLongDescription(t *testing.T) {
 	assert.NotEmpty(t, helpCmd.Long, "help command should have a long description")
 	assert.Greater(t, len(helpCmd.Long), len(helpCmd.Short), "long description should be longer than short")
+}
+
+func TestHelpCommand_AIEnabledButClientCreationFails(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with AI enabled but using an unconfigured provider.
+	// This should cause ai.NewClient to fail because no provider is configured.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "nonexistent_provider"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir (automatically cleaned up by t.Chdir).
+	t.Chdir(tempDir)
+
+	t.Run("help command returns error when AI client creation fails", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{"stacks"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+
+	t.Run("help command returns error for general topic when client creation fails", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+
+	t.Run("help command returns error for unknown topic when client creation fails", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{"unknown-topic-xyz"})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to create AI client")
+	})
+}
+
+func TestHelpCommand_AIEnabledWithDifferentTopics(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with AI enabled but using an unconfigured provider.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "invalid_provider"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+
+	// Change to temp dir.
+	t.Chdir(tempDir)
+
+	// Test multiple topics to exercise different code paths.
+	topics := []string{
+		"stacks",
+		"components",
+		"terraform",
+		"inheritance",
+		"affected",
+		"workflows",
+		"validation",
+		"vendoring",
+		"helmfile",
+		"atlantis",
+		"spacelift",
+		"backends",
+		"imports",
+		"overrides",
+		"catalogs",
+		"mixins",
+		"schemas",
+		"opa",
+		"settings",
+		"general",
+		"custom-topic",
+	}
+
+	for _, topic := range topics {
+		t.Run("topic_"+topic, func(t *testing.T) {
+			testCmd := &cobra.Command{
+				Use:  "help",
+				Args: cobra.MaximumNArgs(1),
+			}
+
+			err := helpCmd.RunE(testCmd, []string{topic})
+			// Should reach the client creation and fail there.
+			assert.Error(t, err)
+			assert.Contains(t, err.Error(), "failed to create AI client")
+		})
+	}
+}
+
+func TestHelpCommand_AIClientCreatedButSendMessageFails(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with AI enabled using anthropic provider.
+	// We'll set a fake API key which will allow client creation but fail on SendMessage.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    timeout_seconds: 5
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	// Set a fake API key to allow client creation.
+	t.Setenv("ANTHROPIC_API_KEY", "fake-api-key-for-testing")
+
+	// Change to temp dir.
+	t.Chdir(tempDir)
+
+	t.Run("help command returns error when SendMessage fails with fake API key", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{"stacks"})
+		// Should fail when trying to send message with fake API key.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestHelpCommand_CustomTimeoutConfiguration(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml with custom timeout_seconds.
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    timeout_seconds: 120
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	// Set a fake API key to allow client creation.
+	t.Setenv("ANTHROPIC_API_KEY", "fake-api-key-for-testing")
+
+	// Change to temp dir.
+	t.Chdir(tempDir)
+
+	t.Run("help command uses custom timeout from configuration", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{"general"})
+		// Should fail when trying to send message, but this exercises the timeout code path.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
+}
+
+func TestHelpCommand_DefaultTimeoutConfiguration(t *testing.T) {
+	// Create a temporary directory for the test.
+	tempDir := t.TempDir()
+
+	// Create an atmos.yaml without timeout_seconds (uses default 60).
+	configContent := `base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{stage}"
+
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+`
+
+	// Write the config file.
+	configPath := filepath.Join(tempDir, "atmos.yaml")
+	err := os.WriteFile(configPath, []byte(configContent), 0o600)
+	require.NoError(t, err)
+
+	// Create required directories.
+	err = os.MkdirAll(filepath.Join(tempDir, "components", "terraform"), 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(filepath.Join(tempDir, "stacks"), 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  stage: dev
+`
+	err = os.WriteFile(filepath.Join(tempDir, "stacks", "dev.yaml"), []byte(stackContent), 0o600)
+	require.NoError(t, err)
+
+	// Set environment for the tests.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+	// Set a fake API key to allow client creation.
+	t.Setenv("ANTHROPIC_API_KEY", "fake-api-key-for-testing")
+
+	// Change to temp dir.
+	t.Chdir(tempDir)
+
+	t.Run("help command uses default timeout when not configured", func(t *testing.T) {
+		testCmd := &cobra.Command{
+			Use:  "help",
+			Args: cobra.MaximumNArgs(1),
+		}
+
+		err := helpCmd.RunE(testCmd, []string{"components"})
+		// Should fail when trying to send message, but this exercises the default timeout code path.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get AI response")
+	})
 }

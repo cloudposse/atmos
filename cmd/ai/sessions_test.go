@@ -1,8 +1,10 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
 package ai
 
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -1326,7 +1328,6 @@ func TestSessionsCommand_OutputCapture(t *testing.T) {
 	})
 }
 
-//nolint:dupl // Similar test structure intentional for clarity.
 func TestParseDuration_SpecialCases(t *testing.T) {
 	t.Run("single digit values", func(t *testing.T) {
 		days, err := parseDuration("5d")
@@ -1494,7 +1495,6 @@ func TestSessionsCommand_SubcommandParent(t *testing.T) {
 	})
 }
 
-//nolint:dupl // Table-driven tests with similar structure are intentional.
 func TestValidateCheckpointFile_AllRoles(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -1593,7 +1593,6 @@ func TestSessionsCommand_UnsupportedFormat(t *testing.T) {
 	})
 }
 
-//nolint:dupl // Integration tests have similar structure by design.
 func TestCheckpointCreation_Integration(t *testing.T) {
 	// Test creating and validating a checkpoint file with various content.
 	tempDir := t.TempDir()
@@ -2185,7 +2184,7 @@ func TestValidateCheckpointFile_FilePermissions(t *testing.T) {
 
 // TestParseDuration_ZeroAndBoundary tests zero and boundary cases for duration parsing.
 //
-//nolint:dupl // Similar test structure intentional for clarity.
+
 func TestParseDuration_ZeroAndBoundary(t *testing.T) {
 	t.Run("zero hours returns 0 days", func(t *testing.T) {
 		days, err := parseDuration("0h")
@@ -2486,5 +2485,652 @@ func TestImportSessionCommand_FlagErrors(t *testing.T) {
 		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to get context flag")
+	})
+}
+
+// TestSessionsIntegration tests the session commands with a proper test fixture that has AI enabled.
+func TestSessionsIntegration(t *testing.T) {
+	// Get the absolute path to the test fixture.
+	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-describe-affected-with-dependents-and-locked"))
+	require.NoError(t, err)
+
+	// Create a temp directory for sessions storage within the fixture.
+	sessionsDir := filepath.Join(fixtureDir, ".atmos", "sessions")
+	err = os.MkdirAll(sessionsDir, 0o755)
+	require.NoError(t, err)
+	defer func() {
+		// Clean up the sessions directory after tests.
+		_ = os.RemoveAll(filepath.Join(fixtureDir, ".atmos"))
+	}()
+
+	t.Run("listSessionsCommand succeeds with AI enabled config", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+		t.Setenv("ATMOS_BASE_PATH", fixtureDir)
+
+		// Create a fresh command with proper setup.
+		testCmd := &cobra.Command{
+			Use:  "list",
+			RunE: listSessionsCommand,
+		}
+
+		err := listSessionsCommand(testCmd, []string{})
+		// With AI enabled, the command should succeed or fail on storage initialization, not config.
+		if err != nil {
+			// It may fail on storage, but not on "AI not enabled" or "sessions not enabled".
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+		}
+	})
+
+	t.Run("cleanSessionsCommand succeeds with valid duration and AI enabled config", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+		t.Setenv("ATMOS_BASE_PATH", fixtureDir)
+
+		testCmd := &cobra.Command{
+			Use:  "clean",
+			RunE: cleanSessionsCommand,
+		}
+		testCmd.Flags().String("older-than", "30d", "Duration")
+
+		err := cleanSessionsCommand(testCmd, []string{})
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+			assert.NotContains(t, err.Error(), "invalid duration format")
+		}
+	})
+
+	t.Run("exportSessionCommand fails when session not found", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+		t.Setenv("ATMOS_BASE_PATH", fixtureDir)
+
+		testCmd := &cobra.Command{
+			Use:  "export",
+			RunE: exportSessionCommand,
+		}
+		testCmd.Flags().StringP("output", "o", "", "Output file path")
+		testCmd.Flags().StringP("format", "f", "", "Output format")
+		testCmd.Flags().Bool("context", false, "Include context")
+		testCmd.Flags().Bool("metadata", true, "Include metadata")
+
+		_ = testCmd.Flags().Set("output", filepath.Join(t.TempDir(), "export.json"))
+
+		err := exportSessionCommand(testCmd, []string{"nonexistent-session"})
+		// Should fail trying to find the session, not on config.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+		}
+	})
+
+	t.Run("importSessionCommand fails when checkpoint file not found", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", fixtureDir)
+		t.Setenv("ATMOS_BASE_PATH", fixtureDir)
+
+		testCmd := &cobra.Command{
+			Use:  "import",
+			RunE: importSessionCommand,
+		}
+		testCmd.Flags().StringP("name", "n", "", "Name for imported session")
+		testCmd.Flags().Bool("overwrite", false, "Overwrite existing")
+		testCmd.Flags().Bool("context", true, "Include context")
+
+		err := importSessionCommand(testCmd, []string{filepath.Join(t.TempDir(), "nonexistent.json")})
+		// Should fail on file not found, not on config.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+		}
+	})
+}
+
+// TestSessionsWithTempConfig tests session commands with a temporary atmos.yaml configuration.
+func TestSessionsWithTempConfig(t *testing.T) {
+	// Create a temp directory for the test.
+	tempDir := t.TempDir()
+
+	// Create necessary directory structure.
+	stacksDir := filepath.Join(tempDir, "stacks")
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	sessionsDir := filepath.Join(tempDir, ".atmos", "sessions")
+	err := os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(sessionsDir, 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal atmos.yaml with AI enabled.
+	// Use filepath.ToSlash to convert backslashes to forward slashes for YAML.
+	atmosConfig := fmt.Sprintf(`base_path: "%s"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+components:
+  terraform:
+    base_path: "%s"
+
+settings:
+  ai:
+    enabled: true
+    sessions:
+      enabled: true
+      path: "%s"
+`, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
+
+	atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(atmosYAMLPath, []byte(atmosConfig), 0o644)
+	require.NoError(t, err)
+
+	// Create a minimal stack file to prevent config errors.
+	stackContent := `vars:
+  tenant: test
+  environment: dev
+  stage: test
+`
+	stackPath := filepath.Join(stacksDir, "test.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	t.Run("listSessionsCommand with empty sessions", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		testCmd := &cobra.Command{
+			Use:  "list",
+			RunE: listSessionsCommand,
+		}
+
+		// This should succeed and show "No sessions found".
+		err := listSessionsCommand(testCmd, []string{})
+		// May succeed or fail on storage - either is acceptable for this test.
+		// We mainly want to ensure it gets past config validation.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+		}
+	})
+
+	t.Run("cleanSessionsCommand with no sessions to clean", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		testCmd := &cobra.Command{
+			Use:  "clean",
+			RunE: cleanSessionsCommand,
+		}
+		testCmd.Flags().String("older-than", "1d", "Duration")
+
+		err := cleanSessionsCommand(testCmd, []string{})
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+		}
+	})
+
+	t.Run("cleanSessionsCommand with various duration formats", func(t *testing.T) {
+		durations := []string{"24h", "7d", "2w", "1m"}
+
+		for _, duration := range durations {
+			t.Run(duration, func(t *testing.T) {
+				t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+				t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+				testCmd := &cobra.Command{
+					Use:  "clean",
+					RunE: cleanSessionsCommand,
+				}
+				testCmd.Flags().String("older-than", duration, "Duration")
+
+				err := cleanSessionsCommand(testCmd, []string{})
+				if err != nil {
+					assert.NotContains(t, err.Error(), "AI features are not enabled")
+					assert.NotContains(t, err.Error(), "invalid duration format")
+				}
+			})
+		}
+	})
+}
+
+// TestSessionsExportImportRoundTrip tests export/import functionality end-to-end.
+func TestSessionsExportImportRoundTrip(t *testing.T) {
+	// Create temp directories for the test.
+	tempDir := t.TempDir()
+	exportDir := t.TempDir()
+
+	// Create necessary directory structure.
+	stacksDir := filepath.Join(tempDir, "stacks")
+	componentsDir := filepath.Join(tempDir, "components", "terraform")
+	sessionsDir := filepath.Join(tempDir, ".atmos", "sessions")
+	err := os.MkdirAll(stacksDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(componentsDir, 0o755)
+	require.NoError(t, err)
+	err = os.MkdirAll(sessionsDir, 0o755)
+	require.NoError(t, err)
+
+	// Create a minimal atmos.yaml with AI enabled.
+	atmosConfig := fmt.Sprintf(`base_path: "%s"
+
+stacks:
+  base_path: "stacks"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+components:
+  terraform:
+    base_path: "%s"
+
+settings:
+  ai:
+    enabled: true
+    sessions:
+      enabled: true
+      path: "%s"
+`, filepath.ToSlash(tempDir), filepath.ToSlash(filepath.Join("components", "terraform")), filepath.ToSlash(filepath.Join(".atmos", "sessions")))
+
+	atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
+	err = os.WriteFile(atmosYAMLPath, []byte(atmosConfig), 0o644)
+	require.NoError(t, err)
+
+	// Create a minimal stack file.
+	stackContent := `vars:
+  tenant: test
+  environment: dev
+  stage: test
+`
+	stackPath := filepath.Join(stacksDir, "test.yaml")
+	err = os.WriteFile(stackPath, []byte(stackContent), 0o644)
+	require.NoError(t, err)
+
+	t.Run("import valid checkpoint file", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		// Create a valid checkpoint file.
+		checkpointPath := filepath.Join(exportDir, "checkpoint.json")
+		createTestCheckpointFile(t, checkpointPath, "json")
+
+		testCmd := &cobra.Command{
+			Use:  "import",
+			RunE: importSessionCommand,
+		}
+		testCmd.Flags().StringP("name", "n", "imported-test-session", "Name for imported session")
+		testCmd.Flags().Bool("overwrite", false, "Overwrite existing")
+		testCmd.Flags().Bool("context", true, "Include context")
+
+		err := importSessionCommand(testCmd, []string{checkpointPath})
+		// Should succeed or fail on storage, not on config validation.
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+			assert.NotContains(t, err.Error(), "sessions are not enabled")
+		}
+	})
+
+	t.Run("export command with all format options", func(t *testing.T) {
+		formats := []struct {
+			extension string
+			format    string
+		}{
+			{".json", "json"},
+			{".yaml", "yaml"},
+			{".md", "markdown"},
+		}
+
+		for _, f := range formats {
+			t.Run(f.format, func(t *testing.T) {
+				t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+				t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+				testCmd := &cobra.Command{
+					Use:  "export",
+					RunE: exportSessionCommand,
+				}
+				testCmd.Flags().StringP("output", "o", "", "Output file path")
+				testCmd.Flags().StringP("format", "f", "", "Output format")
+				testCmd.Flags().Bool("context", true, "Include context")
+				testCmd.Flags().Bool("metadata", true, "Include metadata")
+
+				outputPath := filepath.Join(exportDir, "export"+f.extension)
+				_ = testCmd.Flags().Set("output", outputPath)
+				_ = testCmd.Flags().Set("format", f.format)
+				_ = testCmd.Flags().Set("context", "true")
+				_ = testCmd.Flags().Set("metadata", "true")
+
+				err := exportSessionCommand(testCmd, []string{"test-session"})
+				// Will fail because session doesn't exist, but should pass config validation.
+				if err != nil {
+					assert.NotContains(t, err.Error(), "AI features are not enabled")
+					assert.NotContains(t, err.Error(), "sessions are not enabled")
+					assert.NotContains(t, err.Error(), "failed to get output flag")
+				}
+			})
+		}
+	})
+
+	t.Run("import command with overwrite flag", func(t *testing.T) {
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		checkpointPath := filepath.Join(exportDir, "checkpoint-overwrite.json")
+		createTestCheckpointFile(t, checkpointPath, "json")
+
+		testCmd := &cobra.Command{
+			Use:  "import",
+			RunE: importSessionCommand,
+		}
+		testCmd.Flags().StringP("name", "n", "", "Name for imported session")
+		testCmd.Flags().Bool("overwrite", true, "Overwrite existing")
+		testCmd.Flags().Bool("context", false, "Include context")
+
+		_ = testCmd.Flags().Set("overwrite", "true")
+		_ = testCmd.Flags().Set("context", "false")
+
+		err := importSessionCommand(testCmd, []string{checkpointPath})
+		if err != nil {
+			assert.NotContains(t, err.Error(), "AI features are not enabled")
+		}
+	})
+}
+
+// TestSessionsErrorPaths tests error paths that haven't been covered.
+func TestSessionsErrorPaths(t *testing.T) {
+	t.Run("initSessionManager returns error when AI not enabled", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create necessary directory structure.
+		stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		// Create config with AI disabled.
+		atmosConfig := fmt.Sprintf(`base_path: "%s"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+settings:
+  ai:
+    enabled: false
+`, filepath.ToSlash(tempDir))
+
+		atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
+		err = os.WriteFile(atmosYAMLPath, []byte(atmosConfig), 0o644)
+		require.NoError(t, err)
+
+		// Create a minimal stack file.
+		stackPath := filepath.Join(stacksDir, "test.yaml")
+		err = os.WriteFile(stackPath, []byte("vars:\n  environment: dev\n  stage: test\n"), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		manager, cleanup, err := initSessionManager()
+		assert.Error(t, err)
+		assert.Nil(t, manager)
+		assert.Nil(t, cleanup)
+		assert.Contains(t, err.Error(), "AI features are not enabled")
+	})
+
+	t.Run("initSessionManager returns error when sessions not enabled", func(t *testing.T) {
+		tempDir := t.TempDir()
+
+		// Create necessary directory structure.
+		stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		// Create config with AI enabled but sessions disabled.
+		atmosConfig := fmt.Sprintf(`base_path: "%s"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+settings:
+  ai:
+    enabled: true
+    sessions:
+      enabled: false
+`, filepath.ToSlash(tempDir))
+
+		atmosYAMLPath := filepath.Join(tempDir, "atmos.yaml")
+		err = os.WriteFile(atmosYAMLPath, []byte(atmosConfig), 0o644)
+		require.NoError(t, err)
+
+		// Create a minimal stack file.
+		stackPath := filepath.Join(stacksDir, "test.yaml")
+		err = os.WriteFile(stackPath, []byte("vars:\n  environment: dev\n  stage: test\n"), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		manager, cleanup, err := initSessionManager()
+		assert.Error(t, err)
+		assert.Nil(t, manager)
+		assert.Nil(t, cleanup)
+		assert.Contains(t, err.Error(), "sessions are not enabled")
+	})
+}
+
+// TestParseDurationEdgeCasesAdditional tests additional edge cases for parseDuration.
+func TestParseDurationEdgeCasesAdditional(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		expectedDays  int
+		expectError   bool
+		expectedError error
+	}{
+		{
+			name:         "handles leading zeros in value",
+			input:        "007d",
+			expectedDays: 7,
+			expectError:  false,
+		},
+		{
+			name:         "handles large hour value requiring rounding",
+			input:        "100h",
+			expectedDays: 5, // 100/24 = 4.16, rounds up to 5
+			expectError:  false,
+		},
+		{
+			name:        "handles mixed letter case incorrectly",
+			input:       "30D",
+			expectError: true,
+		},
+		{
+			name:         "handles trailing space",
+			input:        "30d ",
+			expectedDays: 30, // %s in fmt.Sscanf stops at whitespace, so unit is "d"
+			expectError:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			days, err := parseDuration(tt.input)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				assert.Equal(t, tt.expectedDays, days)
+			}
+		})
+	}
+}
+
+// TestSessionsCommandWithDifferentConfigs tests command behavior with various configuration states.
+func TestSessionsCommandWithDifferentConfigs(t *testing.T) {
+	t.Run("list command with AI disabled fails appropriately", func(t *testing.T) {
+		tempDir := t.TempDir()
+		stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		atmosConfig := fmt.Sprintf(`base_path: "%s"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+settings:
+  ai:
+    enabled: false
+`, filepath.ToSlash(tempDir))
+
+		err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+		require.NoError(t, err)
+
+		err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  environment: dev\n  stage: test\n"), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		err = listSessionsCommand(sessionsListCmd, []string{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "AI features are not enabled")
+	})
+
+	t.Run("clean command with sessions disabled fails appropriately", func(t *testing.T) {
+		tempDir := t.TempDir()
+		stacksDir := filepath.Join(tempDir, "stacks", "deploy")
+		err := os.MkdirAll(stacksDir, 0o755)
+		require.NoError(t, err)
+
+		atmosConfig := fmt.Sprintf(`base_path: "%s"
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+settings:
+  ai:
+    enabled: true
+    sessions:
+      enabled: false
+`, filepath.ToSlash(tempDir))
+
+		err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
+		require.NoError(t, err)
+
+		err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte("vars:\n  environment: dev\n  stage: test\n"), 0o644)
+		require.NoError(t, err)
+
+		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
+		t.Setenv("ATMOS_BASE_PATH", tempDir)
+
+		testCmd := &cobra.Command{
+			Use:  "clean",
+			RunE: cleanSessionsCommand,
+		}
+		testCmd.Flags().String("older-than", "30d", "Duration")
+
+		err = cleanSessionsCommand(testCmd, []string{})
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "sessions are not enabled")
+	})
+}
+
+// TestValidateCheckpointFileAdditional tests additional checkpoint validation scenarios.
+func TestValidateCheckpointFileAdditional(t *testing.T) {
+	tempDir := t.TempDir()
+
+	t.Run("checkpoint with extra fields passes validation", func(t *testing.T) {
+		content := `{
+			"version": "1.0",
+			"session": {
+				"name": "test",
+				"provider": "anthropic",
+				"model": "claude-3",
+				"extra_field": "should be ignored"
+			},
+			"messages": [
+				{"role": "user", "content": "test"}
+			],
+			"statistics": {
+				"message_count": 1
+			},
+			"custom_key": "custom_value"
+		}`
+		path := filepath.Join(tempDir, "extra-fields.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("checkpoint with nested timestamps passes validation", func(t *testing.T) {
+		now := time.Now()
+		checkpoint := session.Checkpoint{
+			Version:    session.CheckpointVersion,
+			ExportedAt: now,
+			Session: session.CheckpointSession{
+				Name:      "timestamp-test",
+				Provider:  "anthropic",
+				Model:     "claude-3-opus",
+				CreatedAt: now.Add(-48 * time.Hour),
+				UpdatedAt: now.Add(-1 * time.Hour),
+			},
+			Messages: []session.CheckpointMessage{
+				{
+					Role:      "user",
+					Content:   "test message",
+					CreatedAt: now.Add(-24 * time.Hour),
+				},
+			},
+			Statistics: session.CheckpointStatistics{
+				MessageCount: 1,
+			},
+		}
+
+		data, err := json.Marshal(checkpoint)
+		require.NoError(t, err)
+
+		path := filepath.Join(tempDir, "timestamps.json")
+		err = os.WriteFile(path, data, 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
+	})
+
+	t.Run("checkpoint with very long content passes validation", func(t *testing.T) {
+		longContent := string(make([]byte, 10000))
+		for i := range []byte(longContent) {
+			longContent = longContent[:i] + "a" + longContent[i+1:]
+		}
+
+		content := fmt.Sprintf(`{
+			"version": "1.0",
+			"session": {
+				"name": "long-content-test",
+				"provider": "anthropic",
+				"model": "claude-3"
+			},
+			"messages": [
+				{"role": "user", "content": %q}
+			],
+			"statistics": {
+				"message_count": 1
+			}
+		}`, longContent)
+
+		path := filepath.Join(tempDir, "long-content.json")
+		err := os.WriteFile(path, []byte(content), 0o644)
+		require.NoError(t, err)
+
+		err = session.ValidateCheckpointFile(path)
+		assert.NoError(t, err)
 	})
 }

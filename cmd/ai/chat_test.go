@@ -1,6 +1,8 @@
+//nolint:dupl // Test files contain similar setup code by design for isolation and clarity.
 package ai
 
 import (
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -1269,4 +1271,478 @@ func TestChatCmd_ToolsConfig(t *testing.T) {
 		assert.Equal(t, []string{"execute_bash_command"}, atmosConfig.Settings.AI.Tools.RestrictedTools)
 		assert.Equal(t, []string{"dangerous_tool"}, atmosConfig.Settings.AI.Tools.BlockedTools)
 	})
+}
+
+// createChatValidAtmosConfig creates a valid atmos.yaml config file for chat command testing.
+// Returns the temp directory path containing the config.
+func createChatValidAtmosConfig(t *testing.T, aiEnabled bool, extraConfig string) string {
+	t.Helper()
+
+	tmpDir := t.TempDir()
+
+	// Create required directories for atmos config.
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	// Create a dummy stack file to avoid "no stacks found" error.
+	dummyStack := `
+vars:
+  stage: test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
+
+	enabledStr := "false"
+	if aiEnabled {
+		enabledStr = "true"
+	}
+
+	// Use filepath.ToSlash to convert Windows backslashes to forward slashes in YAML.
+	basePath := filepath.ToSlash(tmpDir)
+
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+settings:
+  ai:
+    enabled: ` + enabledStr + `
+    default_provider: anthropic
+` + extraConfig
+
+	err := os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644)
+	require.NoError(t, err)
+
+	return tmpDir
+}
+
+// TestChatCmd_RunE_AIDisabled tests that the chat command returns an error when AI is disabled.
+func TestChatCmd_RunE_AIDisabled(t *testing.T) {
+	tmpDir := createChatValidAtmosConfig(t, false, "")
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	// Reset session flag.
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	// Execute the RunE function.
+	err = chatCmd.RunE(chatCmd, []string{})
+
+	// Should fail because AI is disabled.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "AI")
+}
+
+// TestChatCmd_RunE_AIClientCreationFailure tests the AI client creation failure path.
+func TestChatCmd_RunE_AIClientCreationFailure(t *testing.T) {
+	tmpDir := createChatValidAtmosConfig(t, true, "")
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	// Clear any API key env vars to ensure client creation fails.
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	// Reset session flag.
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	// Execute the RunE function.
+	err = chatCmd.RunE(chatCmd, []string{})
+
+	// Should fail at AI client creation.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to create AI client")
+}
+
+// TestChatCmd_RunE_SessionEnabled tests session management initialization.
+func TestChatCmd_RunE_SessionEnabled(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: ".atmos/sessions"
+      max_sessions: 100
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	// Create the sessions directory.
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	t.Run("session enabled without session name", func(t *testing.T) {
+		err := chatCmd.Flags().Set("session", "")
+		require.NoError(t, err)
+
+		err = chatCmd.RunE(chatCmd, []string{})
+		// Will fail at AI client creation, but session initialization path is exercised.
+		require.Error(t, err)
+	})
+
+	t.Run("session enabled with session name", func(t *testing.T) {
+		err := chatCmd.Flags().Set("session", "test-session")
+		require.NoError(t, err)
+
+		err = chatCmd.RunE(chatCmd, []string{})
+		// Will fail at AI client creation, but session creation path is exercised.
+		require.Error(t, err)
+	})
+}
+
+// TestChatCmd_RunE_ToolsEnabled tests tools initialization path.
+func TestChatCmd_RunE_ToolsEnabled(t *testing.T) {
+	extraConfig := `
+    tools:
+      enabled: true
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but tools initialization path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_MemoryEnabled tests memory initialization path.
+func TestChatCmd_RunE_MemoryEnabled(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      auto_update: false
+      create_if_miss: true
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but memory initialization path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_AllFeaturesEnabled tests with all AI features enabled.
+func TestChatCmd_RunE_AllFeaturesEnabled(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: ".atmos/sessions"
+      max_sessions: 50
+    tools:
+      enabled: true
+      yolo_mode: false
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      auto_update: true
+      create_if_miss: true
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	// Create the sessions directory.
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "full-feature-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but all initialization paths are exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_ConfigLoadError tests config loading error path.
+func TestChatCmd_RunE_ConfigLoadError(t *testing.T) {
+	// Point to a non-existent directory.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "/nonexistent/path/to/config")
+	t.Setenv("ATMOS_BASE_PATH", "/nonexistent/path")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_SessionStorageError tests session storage initialization error.
+func TestChatCmd_RunE_SessionStorageError(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: "/nonexistent/readonly/path/sessions"
+      max_sessions: 100
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "test-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at session storage initialization or AI client creation.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_ProviderConfigurations tests different provider configurations.
+func TestChatCmd_RunE_ProviderConfigurations(t *testing.T) {
+	providers := []string{"anthropic", "openai", "gemini", "grok", "ollama"}
+
+	for _, provider := range providers {
+		t.Run("provider_"+provider, func(t *testing.T) {
+			extraConfig := `
+    default_provider: ` + provider + `
+    providers:
+      ` + provider + `:
+        model: "test-model"
+        max_tokens: 4096
+`
+			tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+			t.Setenv("ATMOS_BASE_PATH", tmpDir)
+			// Clear API keys to ensure client creation fails predictably.
+			t.Setenv("ANTHROPIC_API_KEY", "")
+			t.Setenv("OPENAI_API_KEY", "")
+			t.Setenv("GOOGLE_API_KEY", "")
+			t.Setenv("XAI_API_KEY", "")
+
+			err := chatCmd.Flags().Set("session", "")
+			require.NoError(t, err)
+
+			err = chatCmd.RunE(chatCmd, []string{})
+			require.Error(t, err)
+		})
+	}
+}
+
+// TestChatCmd_RunE_SessionWithAbsolutePath tests session storage with absolute path.
+func TestChatCmd_RunE_SessionWithAbsolutePath(t *testing.T) {
+	// Create a separate temp directory for sessions.
+	sessionsDir := t.TempDir()
+
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: "` + filepath.ToSlash(sessionsDir) + `"
+      max_sessions: 100
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "absolute-path-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but absolute session path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_EmptySessionName tests anonymous session creation.
+func TestChatCmd_RunE_EmptySessionName(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: true
+      path: ".atmos/sessions"
+      max_sessions: 100
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	// Create the sessions directory.
+	sessionsDir := filepath.Join(tmpDir, ".atmos", "sessions")
+	require.NoError(t, os.MkdirAll(sessionsDir, 0o755))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	// Explicitly set empty session name to trigger anonymous session creation.
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but anonymous session creation path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_ToolsDisabled tests when tools are explicitly disabled.
+func TestChatCmd_RunE_ToolsDisabled(t *testing.T) {
+	extraConfig := `
+    tools:
+      enabled: false
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but tools disabled path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_MemoryDisabled tests when memory is explicitly disabled.
+func TestChatCmd_RunE_MemoryDisabled(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: false
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but memory disabled path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_SessionsDisabled tests when sessions are explicitly disabled.
+func TestChatCmd_RunE_SessionsDisabled(t *testing.T) {
+	extraConfig := `
+    sessions:
+      enabled: false
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "ignored-session")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but sessions disabled path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_ToolsWithYOLOMode tests tools with YOLO mode enabled.
+func TestChatCmd_RunE_ToolsWithYOLOMode(t *testing.T) {
+	extraConfig := `
+    tools:
+      enabled: true
+      yolo_mode: true
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but YOLO mode path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_ToolsWithRequireConfirmation tests tools with require_confirmation setting.
+func TestChatCmd_RunE_ToolsWithRequireConfirmation(t *testing.T) {
+	extraConfig := `
+    tools:
+      enabled: true
+      require_confirmation: true
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but require_confirmation path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_MemoryWithCustomFilePath tests memory with custom file path.
+func TestChatCmd_RunE_MemoryWithCustomFilePath(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: true
+      file_path: "custom-memory.md"
+      auto_update: true
+      create_if_miss: false
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but custom memory path is exercised.
+	require.Error(t, err)
+}
+
+// TestChatCmd_RunE_MemoryWithSections tests memory with custom sections.
+func TestChatCmd_RunE_MemoryWithSections(t *testing.T) {
+	extraConfig := `
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      sections:
+        - context
+        - commands
+        - patterns
+        - custom
+`
+	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+	t.Setenv("ANTHROPIC_API_KEY", "")
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Will fail at AI client creation, but memory sections path is exercised.
+	require.Error(t, err)
 }
