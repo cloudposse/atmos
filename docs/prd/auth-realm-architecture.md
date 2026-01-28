@@ -10,6 +10,10 @@ This document defines the authentication realm architecture for Atmos. A realm p
 
 **Solution:** Introduce realms as the top-level isolation boundary for all credential storage. By default, realms are automatically derived from the repository path, ensuring zero-configuration isolation.
 
+**Implementation Scope:**
+- **AWS:** Will be implemented with this PRD (AWS authentication is currently implemented)
+- **Azure:** Will be implemented when Azure authentication is built (Azure auth is documented but not yet implemented—see [Azure Authentication File Isolation PRD](./azure-auth-file-isolation.md))
+
 ---
 
 ## What is a Realm?
@@ -82,12 +86,14 @@ Please update your auth.realm configuration or ATMOS_AUTH_REALM environment vari
 
 The realm becomes the **top-level directory** under the atmos base path, with cloud as the next level:
 
-| Cloud | Current Path | With Realm |
-|-------|--------------|------------|
-| AWS | `~/.config/atmos/aws/{provider}/` | `~/.config/atmos/{realm}/aws/{provider}/` |
-| Azure | `~/.azure/atmos/{provider}/` | `~/.config/atmos/{realm}/azure/{provider}/` |
+| Cloud | Current Path | With Realm | Status |
+|-------|--------------|------------|--------|
+| AWS | `~/.config/atmos/aws/{provider}/` | `~/.config/atmos/{realm}/aws/{provider}/` | ✅ Will be implemented |
+| Azure | `~/.azure/atmos/{provider}/` | `~/.config/atmos/{realm}/azure/{provider}/` | 🚧 Future (Azure auth not yet implemented) |
 
 **Note:** All cloud providers now share the same base path (`~/.config/atmos/`) with realm as the top-level directory, followed by cloud type, then provider.
+
+**Azure Note:** Azure authentication is documented in the [Azure Authentication File Isolation PRD](./azure-auth-file-isolation.md) but not yet implemented. When Azure auth is implemented, it will include realm support from the start.
 
 ### Directory Structure
 
@@ -349,14 +355,14 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 | `pkg/auth/credentials/keyring_noop.go` | Include realm in key format |
 | `pkg/auth/cloud/aws/files.go` | Realm as top-level directory in paths |
 | `pkg/auth/cloud/aws/setup.go` | Pass realm to file operations |
-| `pkg/auth/cloud/azure/files.go` | Realm as top-level directory in paths |
+| `pkg/auth/cloud/azure/files.go` | Realm as top-level directory in paths (**Future** - when Azure auth is implemented) |
 | `pkg/auth/manager.go` | Store realm, update `NewAuthManager` |
 | `pkg/auth/manager_chain.go` | Use realm in credential lookups |
 | `pkg/auth/identities/aws/user.go` | Pass realm through PostAuthenticate |
 | `pkg/auth/identities/aws/assume_role.go` | Pass realm through PostAuthenticate |
 | `pkg/auth/identities/aws/permission_set.go` | Pass realm through PostAuthenticate |
 | `pkg/auth/identities/aws/assume_root.go` | Pass realm through PostAuthenticate |
-| `pkg/auth/identities/azure/subscription.go` | Pass realm through PostAuthenticate |
+| `pkg/auth/identities/azure/subscription.go` | Pass realm through PostAuthenticate (**Future** - when Azure auth is implemented) |
 | `pkg/auth/hooks.go` | Pass `CliConfigPath` to manager creation |
 | `cmd/auth_whoami.go` | Display realm in status output |
 

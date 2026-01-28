@@ -8,6 +8,10 @@ This document describes the credential realm isolation feature that prevents cre
 
 **Key Problem:** AWS credentials are cached globally based only on identity name, causing credential cross-contamination between different repositories with the same identity names.
 
+**Implementation Scope:**
+- **AWS:** Will be implemented with this PRD (AWS authentication is currently implemented)
+- **Azure:** Will be implemented when Azure authentication is built (Azure auth is documented but not yet implemented—see [Azure Authentication File Isolation PRD](./azure-auth-file-isolation.md))
+
 ## Problem Statement
 
 ### The Issue
