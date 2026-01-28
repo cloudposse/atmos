@@ -43,6 +43,10 @@ Any solution must work within these constraints:
 
 ## Solution: Hybrid Realm Approach
 
+### What is a Realm?
+
+An authentication realm defines a complete, isolated authentication universe in which identities, credential authorities, resolution rules, and authentication semantics are evaluated together. In Atmos, a realm establishes the top-level boundary that determines which identities exist, how they authenticate, and where their credentials are stored and resolved.
+
 ### Concept
 
 Introduce a **realm** that differentiates credential storage between different repositories/customers. The realm is derived from:
