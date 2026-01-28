@@ -1347,7 +1347,7 @@ This implementation follows the [Universal Identity Provider File Isolation Patt
 4. **[Auth Credential Realm Isolation PRD](./auth-user-credential-realm-isolation.md)** - Original realm problem statement
 5. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
 6. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
-7. **[XDG Specification](https://specifications.freedesktop.org/basedir-spec-latest.html)** - Official standard
+7. **[XDG Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)** - Official standard
 
 ## Changelog
 
