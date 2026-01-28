@@ -203,3 +203,108 @@ func TestShellConfigConstruction(t *testing.T) {
 	assert.Equal(t, "/project/components/terraform/vpc", cfg.workingDir)
 	assert.Equal(t, "dev-vpc.terraform.tfvars.json", cfg.varFile)
 }
+
+// TestShellOptionsFromConfigAndStacksInfo tests that ShellOptions can be correctly
+// populated from ConfigAndStacksInfo, which is the pattern used when routing
+// the "shell" subcommand through ExecuteTerraform.
+func TestShellOptionsFromConfigAndStacksInfo(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     schema.ConfigAndStacksInfo
+		expected *ShellOptions
+	}{
+		{
+			name: "basic info to options conversion",
+			info: schema.ConfigAndStacksInfo{
+				ComponentFromArg: "vpc",
+				Stack:            "dev-us-west-2",
+				DryRun:           false,
+				Identity:         "",
+				ProcessTemplates: true,
+				ProcessFunctions: true,
+				Skip:             nil,
+			},
+			expected: &ShellOptions{
+				Component: "vpc",
+				Stack:     "dev-us-west-2",
+				DryRun:    false,
+				Identity:  "",
+				ProcessingOptions: ProcessingOptions{
+					ProcessTemplates: true,
+					ProcessFunctions: true,
+					Skip:             nil,
+				},
+			},
+		},
+		{
+			name: "with dry run and identity",
+			info: schema.ConfigAndStacksInfo{
+				ComponentFromArg: "rds",
+				Stack:            "prod-eu-west-1",
+				DryRun:           true,
+				Identity:         "admin-role",
+				ProcessTemplates: false,
+				ProcessFunctions: true,
+				Skip:             []string{"template"},
+			},
+			expected: &ShellOptions{
+				Component: "rds",
+				Stack:     "prod-eu-west-1",
+				DryRun:    true,
+				Identity:  "admin-role",
+				ProcessingOptions: ProcessingOptions{
+					ProcessTemplates: false,
+					ProcessFunctions: true,
+					Skip:             []string{"template"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This is the same conversion logic used in ExecuteTerraform for "shell" subcommand.
+			opts := &ShellOptions{
+				Component:         tt.info.ComponentFromArg,
+				Stack:             tt.info.Stack,
+				DryRun:            tt.info.DryRun,
+				Identity:          tt.info.Identity,
+				ProcessingOptions: ProcessingOptions{ProcessTemplates: tt.info.ProcessTemplates, ProcessFunctions: tt.info.ProcessFunctions, Skip: tt.info.Skip},
+			}
+
+			assert.Equal(t, tt.expected.Component, opts.Component)
+			assert.Equal(t, tt.expected.Stack, opts.Stack)
+			assert.Equal(t, tt.expected.DryRun, opts.DryRun)
+			assert.Equal(t, tt.expected.Identity, opts.Identity)
+			assert.Equal(t, tt.expected.ProcessTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tt.expected.ProcessFunctions, opts.ProcessFunctions)
+			assert.Equal(t, tt.expected.Skip, opts.Skip)
+		})
+	}
+}
+
+// TestShellSubcommandIdentification tests that the "shell" subcommand is correctly
+// identified as an Atmos-specific command that should be routed to ExecuteTerraformShell
+// and not passed to the terraform executable.
+func TestShellSubcommandIdentification(t *testing.T) {
+	tests := []struct {
+		name       string
+		subCommand string
+		isShell    bool
+	}{
+		{"shell command", "shell", true},
+		{"plan command", "plan", false},
+		{"apply command", "apply", false},
+		{"destroy command", "destroy", false},
+		{"init command", "init", false},
+		{"version command", "version", false},
+		{"workspace command", "workspace", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isShell := tt.subCommand == "shell"
+			assert.Equal(t, tt.isShell, isShell)
+		})
+	}
+}

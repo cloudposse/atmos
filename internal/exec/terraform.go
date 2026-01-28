@@ -121,6 +121,19 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
+	// Handle "shell" subcommand - this is an Atmos-specific command that opens an interactive shell
+	// configured for the terraform component. It should not be passed to terraform executable.
+	if info.SubCommand == "shell" {
+		opts := &ShellOptions{
+			Component:         info.ComponentFromArg,
+			Stack:             info.Stack,
+			DryRun:            info.DryRun,
+			Identity:          info.Identity,
+			ProcessingOptions: ProcessingOptions{ProcessTemplates: info.ProcessTemplates, ProcessFunctions: info.ProcessFunctions, Skip: info.Skip},
+		}
+		return ExecuteTerraformShell(opts, &atmosConfig)
+	}
+
 	// Get component-specific auth config and merge with global auth config.
 	// This allows components to define their own auth identities and defaults in stack configurations.
 	// Start with global config.
