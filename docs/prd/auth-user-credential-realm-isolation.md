@@ -192,6 +192,12 @@ func validate(input string) error {
         return errors.New("realm cannot end with hyphen or underscore")
     }
 
+    // Check for consecutive hyphens or underscores
+    if strings.Contains(input, "--") || strings.Contains(input, "__") ||
+       strings.Contains(input, "-_") || strings.Contains(input, "_-") {
+        return errors.New("realm cannot contain consecutive hyphens or underscores")
+    }
+
     return nil
 }
 ```
