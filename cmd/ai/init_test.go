@@ -346,3 +346,37 @@ func TestInitializeAIToolsAndExecutor_ToolRegistration(t *testing.T) {
 	toolCount := registry.Count()
 	assert.Greater(t, toolCount, 5, "Expected more than 5 tools to be registered")
 }
+
+// TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter tests that when permission
+// cache initialization fails, the function uses NewCLIPrompter (without cache).
+// This exercises line 54: prompter = permission.NewCLIPrompter().
+func TestInitializeAIToolsAndExecutor_NilPermCacheUsesSimplePrompter(t *testing.T) {
+	// To trigger the permCache = nil path, we need to make permission.NewPermissionCache fail.
+	// One way is to create a file (not directory) at the .atmos path location.
+	basePath := t.TempDir()
+
+	// Create .atmos as a file, which will cause the permission cache to fail on mkdir.
+	atmosPath := filepath.Join(basePath, ".atmos")
+	err := os.WriteFile(atmosPath, []byte("blocking file to fail permission cache"), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Settings: schema.AtmosSettings{
+			AI: schema.AISettings{
+				Tools: schema.AIToolSettings{
+					Enabled:  true,
+					YOLOMode: false, // Not YOLO mode - will use prompter
+				},
+			},
+		},
+	}
+
+	// The function should still succeed because it handles permCache failure gracefully
+	// by using NewCLIPrompter() instead of NewCLIPrompterWithCache().
+	registry, executor, err := initializeAIToolsAndExecutor(atmosConfig)
+
+	assert.NoError(t, err)
+	assert.NotNil(t, registry)
+	assert.NotNil(t, executor)
+}

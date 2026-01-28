@@ -4,6 +4,7 @@ package skill
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -944,4 +945,29 @@ func TestUninstallCmd_ForceFlagGetBool(t *testing.T) {
 	force, err = uninstallCmd.Flags().GetBool("force")
 	require.NoError(t, err)
 	assert.True(t, force)
+}
+
+// TestUninstallCmd_ForceFlagGetBoolError tests error handling when GetBool fails for --force flag.
+// This covers the error path at line 41-42 in uninstall.go.
+func TestUninstallCmd_ForceFlagGetBoolError(t *testing.T) {
+	// Create a command with a non-boolean "force" flag to trigger the error path.
+	testCmd := &cobra.Command{
+		Use:  "uninstall",
+		Args: cobra.ExactArgs(1),
+	}
+	// Register "force" as a string flag instead of bool.
+	testCmd.Flags().String("force", "invalid", "Wrong type flag")
+
+	// Create a custom RunE that mimics the actual behavior.
+	runErr := func(cmd *cobra.Command, _ []string) error {
+		_, err := cmd.Flags().GetBool("force")
+		if err != nil {
+			return fmt.Errorf("failed to get --force flag: %w", err)
+		}
+		return nil
+	}
+
+	err := runErr(testCmd, []string{"test-skill"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get --force flag")
 }

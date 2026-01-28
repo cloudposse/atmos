@@ -789,3 +789,66 @@ func TestInstallCmd_RunE_SuccessPathCoverage(t *testing.T) {
 		assert.Contains(t, err.Error(), "download")
 	})
 }
+
+// TestInstallCmd_RunE_MissingFlags tests the error paths when flags are missing.
+// These paths (lines 61, 66) are normally unreachable because flags are registered
+// in init(). To test them, we create a fresh command without flags.
+func TestInstallCmd_RunE_MissingFlags(t *testing.T) {
+	t.Run("missing force flag returns error", func(t *testing.T) {
+		// Create a fresh command without the force flag.
+		cmd := &cobra.Command{
+			Use:  "install <source>",
+			Args: cobra.ExactArgs(1),
+			RunE: installCmd.RunE, // Reuse the same RunE function.
+		}
+		// Only add the yes flag, not force.
+		cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := cmd.RunE(cmd, []string{"github.com/user/repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Should fail when trying to get the missing force flag.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get --force flag")
+	})
+
+	t.Run("missing yes flag returns error", func(t *testing.T) {
+		// Create a fresh command without the yes flag.
+		cmd := &cobra.Command{
+			Use:  "install <source>",
+			Args: cobra.ExactArgs(1),
+			RunE: installCmd.RunE, // Reuse the same RunE function.
+		}
+		// Only add the force flag, not yes.
+		cmd.Flags().Bool("force", false, "Reinstall if skill is already installed")
+
+		// Capture stdout.
+		oldStdout := os.Stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+
+		err := cmd.RunE(cmd, []string{"github.com/user/repo"})
+
+		w.Close()
+		os.Stdout = oldStdout
+
+		// Drain the pipe.
+		var buf bytes.Buffer
+		_, _ = io.Copy(&buf, r)
+
+		// Should fail when trying to get the missing yes flag.
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to get --yes flag")
+	})
+}

@@ -933,14 +933,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	t.Run("initMemoryCommand creates ATMOS.md", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -1109,14 +1103,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	t.Run("initMemoryCommand fails when AI is disabled", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -1201,14 +1189,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	t.Run("showMemoryCommand returns nil when memory disabled but file exists", func(t *testing.T) {
 		// Create the memory file.
@@ -1276,14 +1258,8 @@ settings:
 	// Set a non-existent editor to force an error.
 	t.Setenv("EDITOR", "/nonexistent/editor/that/does/not/exist")
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	t.Run("editMemoryCommand fails with non-existent editor", func(t *testing.T) {
 		err := editMemoryCommand(memoryEditCmd, []string{})
@@ -1344,14 +1320,8 @@ settings:
 	// Set a non-existent editor to force an error (but after file creation).
 	t.Setenv("EDITOR", "/nonexistent/editor/that/does/not/exist")
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	t.Run("editMemoryCommand creates file then fails on editor", func(t *testing.T) {
 		// This tests the file creation path in editMemoryCommand.
@@ -1419,14 +1389,8 @@ settings:
 	// Set environment for the tests.
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	// Save current working directory and change to temp dir.
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Test initMemoryManager returns manager and config.
 	manager, atmosConfig, err := initMemoryManager()
@@ -1535,13 +1499,8 @@ settings:
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call show command - should succeed as file exists and is valid.
 	err = showMemoryCommand(memoryShowCmd, []string{})
@@ -1606,13 +1565,8 @@ This content won't be included because it's not in the configured sections.
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call show command - should succeed but context should be empty.
 	err = showMemoryCommand(memoryShowCmd, []string{})
@@ -1680,13 +1634,8 @@ settings:
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call validate command - should fail because file can't be read.
 	err = validateMemoryCommand(memoryValidateCmd, []string{})
@@ -1752,13 +1701,8 @@ atmos list stacks
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call validate command - should succeed with sections reported.
 	err = validateMemoryCommand(memoryValidateCmd, []string{})
@@ -1814,13 +1758,8 @@ settings:
 	// Set EDITOR to a command that exits successfully (true on Unix).
 	t.Setenv("EDITOR", "true")
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call edit command - should succeed with 'true' editor.
 	err = editMemoryCommand(memoryEditCmd, []string{})
@@ -1878,13 +1817,8 @@ settings:
 	// This still tests the code path where no custom editor is set via env.
 	t.Setenv("EDITOR", "/nonexistent/default/editor")
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call edit command - will fail because the editor doesn't exist.
 	err = editMemoryCommand(memoryEditCmd, []string{})
@@ -1940,13 +1874,8 @@ settings:
 	// Set EDITOR to a successful command so we can reach file creation.
 	t.Setenv("EDITOR", "true")
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// This test verifies the code path where file doesn't exist and gets created.
 	// The test passes when the file is created successfully.
@@ -2010,13 +1939,8 @@ Just a simple file with no actual sections.
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call validate command - should succeed even with no sections.
 	err = validateMemoryCommand(memoryValidateCmd, []string{})
@@ -2080,13 +2004,8 @@ settings:
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// On non-Windows, this should fail because the file can't be read.
 	if runtime.GOOS != "windows" {
@@ -2176,13 +2095,8 @@ This is project context content.
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call show command - should succeed but print "empty" message because sections don't match.
 	err = showMemoryCommand(memoryShowCmd, []string{})
@@ -2241,13 +2155,8 @@ settings:
 	// The actual vim default path is tested indirectly through other tests.
 	os.Unsetenv("EDITOR")
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Skip this test in environments where vim would hang.
 	// The code path for empty EDITOR -> vim fallback exists but
@@ -2308,13 +2217,8 @@ settings:
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	t.Run("initMemoryCommand fails when CreateDefault fails", func(t *testing.T) {
 		testCmd := &cobra.Command{
@@ -2391,13 +2295,8 @@ More test content.
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Call show command - should succeed but hit the empty context branch.
 	// The sections configured don't match what's in the file, so GetContext returns "".
@@ -2454,13 +2353,8 @@ settings:
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 	t.Setenv("EDITOR", "true") // A successful editor to get past initial checks.
 
-	origDir, err := os.Getwd()
-	require.NoError(t, err)
-	err = os.Chdir(tempDir)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		_ = os.Chdir(origDir)
-	})
+	// Change to temp dir for testing.
+	t.Chdir(tempDir)
 
 	// Make the tempDir read-only AFTER chdir to cause CreateDefault to fail.
 	err = os.Chmod(tempDir, 0o555)

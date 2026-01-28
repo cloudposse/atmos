@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -3129,5 +3130,193 @@ func TestGetPrompt_StdinReadingBehavior(t *testing.T) {
 		// In terminal mode (test environment), prompt should be empty.
 		// Note: actual behavior depends on test runner stdin state.
 		_ = prompt
+	})
+}
+
+// mockStdinSource is a test helper that mocks stdin for testing getPrompt.
+type mockStdinSource struct {
+	data      []byte
+	readIndex int
+	mode      os.FileMode
+	statErr   error
+	readErr   error
+}
+
+// mockFileInfo implements os.FileInfo for mock stdin.
+type mockFileInfo struct {
+	mode os.FileMode
+}
+
+func (m mockFileInfo) Name() string       { return "stdin" }
+func (m mockFileInfo) Size() int64        { return 0 }
+func (m mockFileInfo) Mode() os.FileMode  { return m.mode }
+func (m mockFileInfo) ModTime() time.Time { return time.Time{} }
+func (m mockFileInfo) IsDir() bool        { return false }
+func (m mockFileInfo) Sys() interface{}   { return nil }
+
+func (m *mockStdinSource) Stat() (os.FileInfo, error) {
+	if m.statErr != nil {
+		return nil, m.statErr
+	}
+	return mockFileInfo{mode: m.mode}, nil
+}
+
+func (m *mockStdinSource) Read(p []byte) (n int, err error) {
+	if m.readErr != nil {
+		return 0, m.readErr
+	}
+	if m.readIndex >= len(m.data) {
+		return 0, io.EOF
+	}
+	n = copy(p, m.data[m.readIndex:])
+	m.readIndex += n
+	return n, nil
+}
+
+// TestGetPrompt_WithMockStdin tests getPrompt with mocked stdin to cover all branches.
+func TestGetPrompt_WithMockStdin(t *testing.T) {
+	// Save original stdin reader and restore after tests.
+	originalStdinReader := stdinReader
+	t.Cleanup(func() {
+		stdinReader = originalStdinReader
+	})
+
+	t.Run("reads prompt from pipe (non-terminal stdin)", func(t *testing.T) {
+		// Mock stdin as a pipe (not a character device).
+		stdinReader = &mockStdinSource{
+			data: []byte("  piped prompt content  \n"),
+			mode: os.ModeNamedPipe, // Not a terminal.
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "piped prompt content", prompt)
+	})
+
+	t.Run("reads multiline prompt from stdin", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte("line1\nline2\nline3"),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "line1\nline2\nline3", prompt)
+	})
+
+	t.Run("handles empty stdin data", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte(""),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "", prompt)
+	})
+
+	t.Run("handles whitespace-only stdin", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte("   \t\n   "),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "", prompt)
+	})
+
+	t.Run("handles unicode content from stdin", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte("Hello 世界 🌍"),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "Hello 世界 🌍", prompt)
+	})
+
+	t.Run("returns error when stdin stat fails", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			statErr: errors.New("stat error: device not available"),
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to stat stdin")
+		assert.Contains(t, err.Error(), "device not available")
+		assert.Equal(t, "", prompt)
+	})
+
+	t.Run("returns error when stdin read fails", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			mode:    os.ModeNamedPipe,
+			readErr: errors.New("read error: broken pipe"),
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "failed to read from stdin")
+		assert.Contains(t, err.Error(), "broken pipe")
+		assert.Equal(t, "", prompt)
+	})
+
+	t.Run("terminal mode returns empty string", func(t *testing.T) {
+		// os.ModeCharDevice indicates a terminal.
+		stdinReader = &mockStdinSource{
+			data: []byte("this should not be read"),
+			mode: os.ModeCharDevice,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "", prompt)
+	})
+
+	t.Run("args take precedence over stdin", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte("stdin data that should be ignored"),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{"arg prompt"})
+		require.NoError(t, err)
+		assert.Equal(t, "arg prompt", prompt)
+	})
+
+	t.Run("handles large stdin content", func(t *testing.T) {
+		// Create a large prompt (10KB).
+		largeContent := strings.Repeat("large content ", 700)
+		stdinReader = &mockStdinSource{
+			data: []byte(largeContent),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, strings.TrimSpace(largeContent), prompt)
+	})
+
+	t.Run("handles stdin with special characters", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte("test \"quoted\" and 'single' $var {json} [array]"),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "test \"quoted\" and 'single' $var {json} [array]", prompt)
+	})
+
+	t.Run("handles stdin with leading/trailing newlines", func(t *testing.T) {
+		stdinReader = &mockStdinSource{
+			data: []byte("\n\n\nmiddle content\n\n\n"),
+			mode: os.ModeNamedPipe,
+		}
+
+		prompt, err := getPrompt([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, "middle content", prompt)
 	})
 }

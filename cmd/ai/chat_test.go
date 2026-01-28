@@ -1427,9 +1427,9 @@ func TestChatCmd_RunE_MemoryEnabled(t *testing.T) {
 	extraConfig := `
     memory:
       enabled: true
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
       auto_update: false
-      create_if_miss: true
+      create_if_missing: true
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1457,9 +1457,9 @@ func TestChatCmd_RunE_AllFeaturesEnabled(t *testing.T) {
       yolo_mode: false
     memory:
       enabled: true
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
       auto_update: true
-      create_if_miss: true
+      create_if_missing: true
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1705,9 +1705,9 @@ func TestChatCmd_RunE_MemoryWithCustomFilePath(t *testing.T) {
 	extraConfig := `
     memory:
       enabled: true
-      file_path: "custom-memory.md"
+      file: "custom-memory.md"
       auto_update: true
-      create_if_miss: false
+      create_if_missing: false
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
 
@@ -1728,7 +1728,7 @@ func TestChatCmd_RunE_MemoryWithSections(t *testing.T) {
 	extraConfig := `
     memory:
       enabled: true
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
       sections:
         - context
         - commands
@@ -1803,6 +1803,9 @@ settings:
 // Ollama allows client creation to succeed, so we can test session code paths.
 // Note: This test exercises the session initialization code path.
 func TestChatCmd_RunE_OllamaWithSessions(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     sessions:
       enabled: true
@@ -1831,6 +1834,9 @@ func TestChatCmd_RunE_OllamaWithSessions(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaWithTools tests tools initialization with ollama provider.
 func TestChatCmd_RunE_OllamaWithTools(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     tools:
       enabled: true
@@ -1852,12 +1858,15 @@ func TestChatCmd_RunE_OllamaWithTools(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaWithMemory tests memory initialization with ollama provider.
 func TestChatCmd_RunE_OllamaWithMemory(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     memory:
       enabled: true
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
       auto_update: false
-      create_if_miss: true
+      create_if_missing: true
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -1875,6 +1884,9 @@ func TestChatCmd_RunE_OllamaWithMemory(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaAllFeatures tests all features with ollama provider.
 func TestChatCmd_RunE_OllamaAllFeatures(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     sessions:
       enabled: true
@@ -1885,9 +1897,9 @@ func TestChatCmd_RunE_OllamaAllFeatures(t *testing.T) {
       yolo_mode: true
     memory:
       enabled: true
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
       auto_update: true
-      create_if_miss: true
+      create_if_missing: true
       sections:
         - context
         - commands
@@ -1912,6 +1924,9 @@ func TestChatCmd_RunE_OllamaAllFeatures(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaSessionStorageInitError tests session storage initialization error.
 func TestChatCmd_RunE_OllamaSessionStorageInitError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	if runtime.GOOS == "windows" {
 		t.Skip("Skipping test on Windows - permission handling differs")
 	}
@@ -1938,12 +1953,15 @@ func TestChatCmd_RunE_OllamaSessionStorageInitError(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaMemoryLoadError tests memory loading error handling.
 func TestChatCmd_RunE_OllamaMemoryLoadError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     memory:
       enabled: true
-      file_path: "nonexistent-memory.md"
+      file: "nonexistent-memory.md"
       auto_update: false
-      create_if_miss: false
+      create_if_missing: false
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -1962,6 +1980,9 @@ func TestChatCmd_RunE_OllamaMemoryLoadError(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaToolsInitError tests tools initialization error handling.
 func TestChatCmd_RunE_OllamaToolsInitError(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	// Tools initialization should not fail even with unusual config.
 	// This tests the warning path when tools fail to initialize.
 	extraConfig := `
@@ -1987,6 +2008,9 @@ func TestChatCmd_RunE_OllamaToolsInitError(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaAnonymousSession tests anonymous session creation.
 func TestChatCmd_RunE_OllamaAnonymousSession(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     sessions:
       enabled: true
@@ -2013,6 +2037,9 @@ func TestChatCmd_RunE_OllamaAnonymousSession(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaWithToolsDisabled tests running with tools disabled.
 func TestChatCmd_RunE_OllamaWithToolsDisabled(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     tools:
       enabled: false
@@ -2033,6 +2060,9 @@ func TestChatCmd_RunE_OllamaWithToolsDisabled(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaWithMemoryDisabled tests running with memory disabled.
 func TestChatCmd_RunE_OllamaWithMemoryDisabled(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     memory:
       enabled: false
@@ -2053,6 +2083,9 @@ func TestChatCmd_RunE_OllamaWithMemoryDisabled(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaWithSessionsDisabled tests running with sessions disabled.
 func TestChatCmd_RunE_OllamaWithSessionsDisabled(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     sessions:
       enabled: false
@@ -2141,12 +2174,15 @@ func TestGetPermissionMode_RequireConfirmationFalse(t *testing.T) {
 
 // TestChatCmd_RunE_OllamaWithMemorySuccess tests memory load success path.
 func TestChatCmd_RunE_OllamaWithMemorySuccess(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
 	extraConfig := `
     memory:
       enabled: true
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
       auto_update: false
-      create_if_miss: true
+      create_if_missing: true
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
@@ -2165,6 +2201,121 @@ This is a test memory file.
 
 	err = chatCmd.RunE(chatCmd, []string{})
 	// Memory load succeeds, then fails at tui.RunChat.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// Note: Session resume success path (line 110-112) testing is skipped because
+// the TUI code has a nil pointer dereference issue when resuming sessions.
+// The AddMessage goroutine in TUI calls session.Manager.AddMessage which then
+// tries to access a nil session object at manager.go:136.
+
+// TestChatCmd_RunE_OllamaMemoryLoadSuccess tests the memory load success path.
+// This test creates a valid ATMOS.md file that can be loaded successfully.
+func TestChatCmd_RunE_OllamaMemoryLoadSuccess(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
+	// First create the config without memory enabled to get the base directory.
+	tmpDir := t.TempDir()
+
+	// Create required directories for atmos config.
+	stacksDir := filepath.Join(tmpDir, "stacks")
+	componentsDir := filepath.Join(tmpDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(stacksDir, 0o755))
+	require.NoError(t, os.MkdirAll(componentsDir, 0o755))
+
+	// Create a dummy stack file to avoid "no stacks found" error.
+	dummyStack := `
+vars:
+  stage: test
+`
+	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
+
+	// Create the ATMOS.md memory file BEFORE creating the config.
+	memoryContent := `# Project Memory
+
+This is a test memory file for the project.
+
+## Context
+Test project context.
+
+## Commands
+- test command 1
+- test command 2
+`
+	memoryFilePath := filepath.Join(tmpDir, "ATMOS.md")
+	require.NoError(t, os.WriteFile(memoryFilePath, []byte(memoryContent), 0o644))
+
+	// Use filepath.ToSlash to convert Windows backslashes to forward slashes in YAML.
+	basePath := filepath.ToSlash(tmpDir)
+	// Use absolute path for memory file to avoid path resolution issues in tests.
+	memoryFilePathSlash := filepath.ToSlash(memoryFilePath)
+
+	atmosYaml := `
+base_path: "` + basePath + `"
+stacks:
+  base_path: stacks
+  included_paths:
+    - "*.yaml"
+  name_pattern: "{stage}"
+components:
+  terraform:
+    base_path: components/terraform
+settings:
+  ai:
+    enabled: true
+    default_provider: ollama
+    providers:
+      ollama:
+        model: "llama3.3:70b"
+        max_tokens: 4096
+    memory:
+      enabled: true
+      file: "` + memoryFilePathSlash + `"
+      auto_update: false
+      create_if_missing: false
+`
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "atmos.yaml"), []byte(atmosYaml), 0o644))
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Memory load should succeed (exercises line 157), then fail at tui.RunChat.
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCmd_RunE_OllamaToolsInitWarn tests the tools initialization warning path.
+// This is exercised when initializeAIToolsAndExecutor returns an error.
+func TestChatCmd_RunE_OllamaToolsInitWarn(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
+	}
+	// Tools initialization currently doesn't fail for standard configs,
+	// but this test sets up a scenario where tools are enabled.
+	// The initializeAIToolsAndExecutor function is designed to log warnings
+	// and continue rather than fail, so we're testing the successful path here.
+	extraConfig := `
+    tools:
+      enabled: true
+      blocked_tools:
+        - all_nonexistent_tools
+`
+	tmpDir := createChatOllamaConfig(t, extraConfig)
+
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
+	t.Setenv("ATMOS_BASE_PATH", tmpDir)
+
+	err := chatCmd.Flags().Set("session", "")
+	require.NoError(t, err)
+
+	err = chatCmd.RunE(chatCmd, []string{})
+	// Tools initialization succeeds, then fails at tui.RunChat.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
 }

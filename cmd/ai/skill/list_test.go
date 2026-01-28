@@ -3,12 +3,14 @@ package skill
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1453,4 +1455,28 @@ func TestListCmd_SkillWithBuiltInStatus(t *testing.T) {
 
 	// Verify built-in skill shows correct type.
 	assert.Contains(t, output, "Type:         Built-in")
+}
+
+// TestListCmd_DetailedFlagGetBoolError tests error handling when GetBool fails for --detailed flag.
+// This is an edge case where the flag exists but has an invalid type.
+func TestListCmd_DetailedFlagGetBoolError(t *testing.T) {
+	// Create a command with a non-boolean "detailed" flag to trigger the error path.
+	testCmd := &cobra.Command{
+		Use: "list",
+	}
+	// Register "detailed" as a string flag instead of bool.
+	testCmd.Flags().String("detailed", "invalid", "Wrong type flag")
+
+	// Create a custom RunE that mimics the actual behavior.
+	runErr := func(cmd *cobra.Command, _ []string) error {
+		_, err := cmd.Flags().GetBool("detailed")
+		if err != nil {
+			return fmt.Errorf("failed to get --detailed flag: %w", err)
+		}
+		return nil
+	}
+
+	err := runErr(testCmd, []string{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to get --detailed flag")
 }

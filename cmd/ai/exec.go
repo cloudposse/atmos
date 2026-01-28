@@ -192,6 +192,17 @@ Examples:
 	},
 }
 
+// stdinSource represents a source for reading stdin data.
+// It can be swapped in tests to simulate pipe input.
+type stdinSource interface {
+	Stat() (os.FileInfo, error)
+	Read(p []byte) (n int, err error)
+}
+
+// stdinReader is the stdin source used by getPrompt.
+// In production it uses os.Stdin; tests can swap it.
+var stdinReader stdinSource = os.Stdin
+
 // getPrompt gets the prompt from args or stdin.
 func getPrompt(args []string) (string, error) {
 	// If prompt provided as argument, use it.
@@ -200,14 +211,14 @@ func getPrompt(args []string) (string, error) {
 	}
 
 	// Check if stdin has data (pipe or redirect).
-	stat, err := os.Stdin.Stat()
+	stat, err := stdinReader.Stat()
 	if err != nil {
 		return "", fmt.Errorf("failed to stat stdin: %w", err)
 	}
 
 	// If stdin is not a terminal (pipe or redirect), read from it.
 	if (stat.Mode() & os.ModeCharDevice) == 0 {
-		data, err := io.ReadAll(os.Stdin)
+		data, err := io.ReadAll(stdinReader)
 		if err != nil {
 			return "", fmt.Errorf("failed to read from stdin: %w", err)
 		}
