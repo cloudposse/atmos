@@ -839,3 +839,591 @@ func TestProcessCommandLineArgs_FromPlanBeforeComponent(t *testing.T) {
 	// where the component name could be mistakenly used as the plan file path.
 	require.Error(t, err, "ProcessCommandLineArgs should return error when --from-plan precedes component name")
 }
+
+// TestProcessArgsAndFlags_TwoWordCommands tests two-word terraform commands like "providers lock".
+// This includes both the standard form (separate words) and the quoted form (single argument).
+func TestProcessArgsAndFlags_TwoWordCommands(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentType     string
+		inputArgsAndFlags []string
+		wantSubCommand    string
+		wantSubCommand2   string
+		wantComponent     string
+		wantAdditional    []string
+		wantErr           bool
+	}{
+		// Providers commands - separate words.
+		{
+			name:              "providers lock - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "lock", "my-component"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    nil,
+			wantErr:           false,
+		},
+		{
+			name:              "providers lock - separate words with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "lock", "my-component", "-platform=linux_amd64"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-platform=linux_amd64"},
+			wantErr:           false,
+		},
+		{
+			name:              "providers mirror - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "mirror", "my-component"},
+			wantSubCommand:    "providers mirror",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "providers schema - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "schema", "my-component"},
+			wantSubCommand:    "providers schema",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Providers commands - quoted (single argument).
+		{
+			name:              "providers lock - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers lock", "my-component"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    nil,
+			wantErr:           false,
+		},
+		{
+			name:              "providers lock - quoted with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers lock", "my-component", "-platform=darwin_amd64"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-platform=darwin_amd64"},
+			wantErr:           false,
+		},
+		{
+			name:              "providers mirror - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers mirror", "my-component"},
+			wantSubCommand:    "providers mirror",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// State commands - separate words.
+		{
+			name:              "state list - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "list", "my-component"},
+			wantSubCommand:    "state list",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state mv - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "mv", "my-component"},
+			wantSubCommand:    "state mv",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// State commands - quoted.
+		{
+			name:              "state list - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state list", "my-component"},
+			wantSubCommand:    "state list",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Workspace commands - separate words.
+		{
+			name:              "workspace select - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "select", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "select",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace list - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "list", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "list",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Workspace commands - quoted.
+		{
+			name:              "workspace select - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace select", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "select",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Write varfile - separate words.
+		{
+			name:              "write varfile - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"write", "varfile", "my-component"},
+			wantSubCommand:    "write",
+			wantSubCommand2:   "varfile",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Write varfile - quoted.
+		{
+			name:              "write varfile - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"write varfile", "my-component"},
+			wantSubCommand:    "write",
+			wantSubCommand2:   "varfile",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Error cases.
+		{
+			name:              "providers lock - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "lock"},
+			wantErr:           true,
+		},
+		{
+			name:              "providers lock quoted - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers lock"},
+			wantErr:           true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSubCommand, got.SubCommand, "SubCommand mismatch")
+			assert.Equal(t, tt.wantSubCommand2, got.SubCommand2, "SubCommand2 mismatch")
+			assert.Equal(t, tt.wantComponent, got.ComponentFromArg, "ComponentFromArg mismatch")
+			if tt.wantAdditional != nil {
+				assert.Equal(t, tt.wantAdditional, got.AdditionalArgsAndFlags, "AdditionalArgsAndFlags mismatch")
+			}
+		})
+	}
+}
+
+// TestParseTwoWordCommand tests the parseTwoWordCommand helper function.
+func TestParseTwoWordCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    *twoWordCommandResult
+		wantNil bool
+	}{
+		{
+			name:    "empty args",
+			args:    []string{},
+			wantNil: true,
+		},
+		{
+			name:    "single word command",
+			args:    []string{"plan"},
+			wantNil: true,
+		},
+		{
+			name: "providers lock - quoted",
+			args: []string{"providers lock", "component"},
+			want: &twoWordCommandResult{
+				subCommand: "providers lock",
+				argCount:   1,
+			},
+		},
+		{
+			name: "providers lock - separate",
+			args: []string{"providers", "lock", "component"},
+			want: &twoWordCommandResult{
+				subCommand: "providers lock",
+				argCount:   2,
+			},
+		},
+		{
+			name: "state list - quoted",
+			args: []string{"state list", "component"},
+			want: &twoWordCommandResult{
+				subCommand: "state list",
+				argCount:   1,
+			},
+		},
+		{
+			name: "workspace select - quoted",
+			args: []string{"workspace select", "component"},
+			want: &twoWordCommandResult{
+				subCommand:  "workspace",
+				subCommand2: "select",
+				argCount:    1,
+			},
+		},
+		{
+			name: "write varfile - separate",
+			args: []string{"write", "varfile", "component"},
+			want: &twoWordCommandResult{
+				subCommand:  "write",
+				subCommand2: "varfile",
+				argCount:    2,
+			},
+		},
+		{
+			name:    "unknown two-word command",
+			args:    []string{"unknown command", "component"},
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseTwoWordCommand(tt.args)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want.subCommand, got.subCommand)
+			assert.Equal(t, tt.want.subCommand2, got.subCommand2)
+			assert.Equal(t, tt.want.argCount, got.argCount)
+		})
+	}
+}
+
+// TestParseQuotedTwoWordCommand tests the parseQuotedTwoWordCommand helper function.
+func TestParseQuotedTwoWordCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		arg     string
+		want    *twoWordCommandResult
+		wantNil bool
+	}{
+		{
+			name:    "single word",
+			arg:     "plan",
+			wantNil: true,
+		},
+		{
+			name: "providers lock",
+			arg:  "providers lock",
+			want: &twoWordCommandResult{
+				subCommand: "providers lock",
+				argCount:   1,
+			},
+		},
+		{
+			name: "providers mirror",
+			arg:  "providers mirror",
+			want: &twoWordCommandResult{
+				subCommand: "providers mirror",
+				argCount:   1,
+			},
+		},
+		{
+			name: "providers schema",
+			arg:  "providers schema",
+			want: &twoWordCommandResult{
+				subCommand: "providers schema",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state list",
+			arg:  "state list",
+			want: &twoWordCommandResult{
+				subCommand: "state list",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state mv",
+			arg:  "state mv",
+			want: &twoWordCommandResult{
+				subCommand: "state mv",
+				argCount:   1,
+			},
+		},
+		{
+			name: "workspace select",
+			arg:  "workspace select",
+			want: &twoWordCommandResult{
+				subCommand:  "workspace",
+				subCommand2: "select",
+				argCount:    1,
+			},
+		},
+		{
+			name: "write varfile",
+			arg:  "write varfile",
+			want: &twoWordCommandResult{
+				subCommand:  "write",
+				subCommand2: "varfile",
+				argCount:    1,
+			},
+		},
+		{
+			name:    "unknown command",
+			arg:     "foo bar",
+			wantNil: true,
+		},
+		{
+			name:    "providers with unknown subcommand",
+			arg:     "providers unknown",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseQuotedTwoWordCommand(tt.arg)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want.subCommand, got.subCommand)
+			assert.Equal(t, tt.want.subCommand2, got.subCommand2)
+			assert.Equal(t, tt.want.argCount, got.argCount)
+		})
+	}
+}
+
+// TestParseSeparateTwoWordCommand tests the parseSeparateTwoWordCommand helper function.
+func TestParseSeparateTwoWordCommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		first   string
+		second  string
+		want    *twoWordCommandResult
+		wantNil bool
+	}{
+		{
+			name:   "providers lock",
+			first:  "providers",
+			second: "lock",
+			want: &twoWordCommandResult{
+				subCommand: "providers lock",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state list",
+			first:  "state",
+			second: "list",
+			want: &twoWordCommandResult{
+				subCommand: "state list",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "workspace new",
+			first:  "workspace",
+			second: "new",
+			want: &twoWordCommandResult{
+				subCommand:  "workspace",
+				subCommand2: "new",
+				argCount:    2,
+			},
+		},
+		{
+			name:   "write varfile",
+			first:  "write",
+			second: "varfile",
+			want: &twoWordCommandResult{
+				subCommand:  "write",
+				subCommand2: "varfile",
+				argCount:    2,
+			},
+		},
+		{
+			name:    "unknown command",
+			first:   "foo",
+			second:  "bar",
+			wantNil: true,
+		},
+		{
+			name:    "state with unknown subcommand",
+			first:   "state",
+			second:  "unknown",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseSeparateTwoWordCommand(tt.first, tt.second)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want.subCommand, got.subCommand)
+			assert.Equal(t, tt.want.subCommand2, got.subCommand2)
+			assert.Equal(t, tt.want.argCount, got.argCount)
+		})
+	}
+}
+
+// TestProcessTerraformTwoWordCommand tests the processTerraformTwoWordCommand helper function.
+func TestProcessTerraformTwoWordCommand(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		wantProcessed  bool
+		wantErr        bool
+		wantSubCommand string
+		wantComponent  string
+	}{
+		{
+			name:          "not a two-word command",
+			args:          []string{"plan", "component"},
+			wantProcessed: false,
+			wantErr:       false,
+		},
+		{
+			name:           "providers lock with component",
+			args:           []string{"providers", "lock", "my-component"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "providers lock",
+			wantComponent:  "my-component",
+		},
+		{
+			name:           "providers lock quoted with component",
+			args:           []string{"providers lock", "my-component"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "providers lock",
+			wantComponent:  "my-component",
+		},
+		{
+			name:          "providers lock without component",
+			args:          []string{"providers", "lock"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+		{
+			name:          "providers lock quoted without component",
+			args:          []string{"providers lock"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ArgsAndFlagsInfo{}
+			processed, err := processTerraformTwoWordCommand(info, tt.args)
+
+			assert.Equal(t, tt.wantProcessed, processed)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			if tt.wantProcessed {
+				assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+				assert.Equal(t, tt.wantComponent, info.ComponentFromArg)
+			}
+		})
+	}
+}
+
+// TestProcessSingleCommand tests the processSingleCommand helper function.
+func TestProcessSingleCommand(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		wantErr        bool
+		wantSubCommand string
+		wantComponent  string
+		wantAdditional []string
+	}{
+		{
+			name:           "single arg - subcommand only",
+			args:           []string{"plan"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+		},
+		{
+			name:           "two args - subcommand and component",
+			args:           []string{"plan", "my-component"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantComponent:  "my-component",
+		},
+		{
+			name:           "three args - with additional",
+			args:           []string{"plan", "my-component", "-var=foo=bar"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantComponent:  "my-component",
+			wantAdditional: []string{"-var=foo=bar"},
+		},
+		{
+			name:           "subcommand with flag instead of component",
+			args:           []string{"plan", "--help"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantAdditional: []string{"--help"},
+		},
+		{
+			name:    "empty second argument",
+			args:    []string{"plan", ""},
+			wantErr: true,
+		},
+		{
+			name:    "invalid flag format",
+			args:    []string{"plan", "--"},
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ArgsAndFlagsInfo{}
+			err := processSingleCommand(info, tt.args)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+			assert.Equal(t, tt.wantComponent, info.ComponentFromArg)
+			if tt.wantAdditional != nil {
+				assert.Equal(t, tt.wantAdditional, info.AdditionalArgsAndFlags)
+			}
+		})
+	}
+}

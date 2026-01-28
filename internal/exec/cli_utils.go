@@ -24,6 +24,17 @@ const (
 	errFlagFormat = "%w: flag: %s"
 )
 
+// Terraform two-word command constants.
+const (
+	cmdWrite     = "write"
+	cmdVarfile   = "varfile"
+	cmdWorkspace = "workspace"
+	cmdState     = "state"
+	cmdProviders = "providers"
+	// Format string for two-word commands like "state list".
+	cmdFmtSpaced = "%s %s"
+)
+
 // `commonFlags` are a list of flags that Atmos understands, but the underlying tools do not (e.g., Terraform/OpenTofu, Helmfile, Packer, etc.).
 // These flags get removed from the arg list after Atmos uses them, so the underlying tool does not get passed a flag it doesn't accept.
 var commonFlags = []string{
@@ -201,6 +212,164 @@ func ProcessCommandLineArgs(
 	return configAndStacksInfo, nil
 }
 
+// twoWordCommandResult holds the result of parsing a two-word terraform command.
+type twoWordCommandResult struct {
+	subCommand  string
+	subCommand2 string
+	argCount    int // Number of arguments consumed (1 for quoted, 2 for separate).
+}
+
+// Known terraform two-word subcommands.
+var (
+	workspaceSubcommands = []string{"list", "select", "new", "delete", "show"}
+	stateSubcommands     = []string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}
+	providersSubcommands = []string{"lock", "mirror", "schema"}
+)
+
+// parseTwoWordCommand checks if the arguments represent a terraform two-word command.
+// It handles both quoted forms (e.g., "providers lock") and separate forms (e.g., "providers", "lock").
+// Returns nil if no two-word command is detected.
+func parseTwoWordCommand(args []string) *twoWordCommandResult {
+	if len(args) == 0 {
+		return nil
+	}
+
+	// First, check if the first argument is a quoted two-word command (e.g., "providers lock").
+	firstArg := args[0]
+	if strings.Contains(firstArg, " ") {
+		if result := parseQuotedTwoWordCommand(firstArg); result != nil {
+			return result
+		}
+	}
+
+	// If not a quoted command, check for separate word commands.
+	if len(args) > 1 {
+		return parseSeparateTwoWordCommand(args[0], args[1])
+	}
+
+	return nil
+}
+
+// parseQuotedTwoWordCommand parses a quoted two-word command like "providers lock".
+func parseQuotedTwoWordCommand(arg string) *twoWordCommandResult {
+	parts := strings.SplitN(arg, " ", 2)
+	if len(parts) != 2 {
+		return nil
+	}
+
+	first, second := parts[0], parts[1]
+
+	switch first {
+	case cmdWrite:
+		if second == cmdVarfile {
+			return &twoWordCommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 1}
+		}
+	case cmdWorkspace:
+		if u.SliceContainsString(workspaceSubcommands, second) {
+			return &twoWordCommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 1}
+		}
+	case cmdState:
+		if u.SliceContainsString(stateSubcommands, second) {
+			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 1}
+		}
+	case cmdProviders:
+		if u.SliceContainsString(providersSubcommands, second) {
+			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 1}
+		}
+	}
+
+	return nil
+}
+
+// processTerraformTwoWordCommand handles terraform two-word commands (e.g., "providers lock").
+// Returns true if a two-word command was processed, false otherwise.
+func processTerraformTwoWordCommand(info *schema.ArgsAndFlagsInfo, args []string) (bool, error) {
+	twoWordResult := parseTwoWordCommand(args)
+	if twoWordResult == nil {
+		return false, nil
+	}
+
+	info.SubCommand = twoWordResult.subCommand
+	info.SubCommand2 = twoWordResult.subCommand2
+
+	// The component argument is at index argCount.
+	// For quoted commands like "providers lock", argCount=1, so component is at [1].
+	// For separate commands like "providers" "lock", argCount=2, so component is at [2].
+	componentArgIndex := twoWordResult.argCount
+	if len(args) <= componentArgIndex {
+		return true, fmt.Errorf("%w: command %q requires an argument", errUtils.ErrMissingComponent, info.SubCommand)
+	}
+
+	info.ComponentFromArg = args[componentArgIndex]
+	if len(args) > componentArgIndex+1 {
+		info.AdditionalArgsAndFlags = args[componentArgIndex+1:]
+	}
+
+	return true, nil
+}
+
+// processSingleCommand handles parsing for single-word commands (non-two-word commands).
+// It sets the subcommand, component, and additional args on the info struct.
+func processSingleCommand(info *schema.ArgsAndFlagsInfo, args []string) error {
+	info.SubCommand = args[0]
+	if len(args) <= 1 {
+		return nil
+	}
+
+	secondArg := args[1]
+	if len(secondArg) == 0 {
+		return fmt.Errorf("%w: invalid empty argument provided", errUtils.ErrInvalidArguments)
+	}
+
+	if strings.HasPrefix(secondArg, "--") {
+		if len(secondArg) <= 2 {
+			return fmt.Errorf("%w: invalid option format: %s", errUtils.ErrInvalidArguments, secondArg)
+		}
+		info.AdditionalArgsAndFlags = []string{secondArg}
+	} else {
+		info.ComponentFromArg = secondArg
+		// Check if argument is an explicit path that needs resolution.
+		// Only resolve as a filesystem path if the argument explicitly indicates a path:
+		// - "." (current directory).
+		// - Starts with "./" or "../" (relative path).
+		// - Starts with "/" (absolute path).
+		// Otherwise, treat it as a component name (even if it contains slashes).
+		if comp.IsExplicitComponentPath(secondArg) {
+			info.NeedsPathResolution = true
+		}
+	}
+
+	if len(args) > 2 {
+		info.AdditionalArgsAndFlags = args[2:]
+	}
+
+	return nil
+}
+
+// parseSeparateTwoWordCommand parses a two-word command passed as separate arguments.
+func parseSeparateTwoWordCommand(first, second string) *twoWordCommandResult {
+	switch first {
+	case cmdWrite:
+		if second == cmdVarfile {
+			return &twoWordCommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 2}
+		}
+	case cmdWorkspace:
+		if u.SliceContainsString(workspaceSubcommands, second) {
+			return &twoWordCommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 2}
+		}
+	case cmdState:
+		if u.SliceContainsString(stateSubcommands, second) {
+			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 2}
+		}
+	case cmdProviders:
+		if u.SliceContainsString(providersSubcommands, second) {
+			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 2}
+		}
+	}
+
+	return nil
+}
+
 // processArgsAndFlags processes args and flags from the provided CLI arguments/flags
 //
 // Deprecated: use Cobra command flag parser instead.
@@ -218,7 +387,10 @@ func processArgsAndFlags(
 	// just set the subcommand and return - don't auto-show help.
 	// Interactive prompts will handle missing args if available,
 	// otherwise validation will show appropriate errors.
-	if len(inputArgsAndFlags) == 1 && info.SubCommand == "" {
+	// Exception: Don't return early if the single argument contains a space,
+	// as it might be a quoted two-word command like "providers lock" that needs
+	// further processing.
+	if len(inputArgsAndFlags) == 1 && info.SubCommand == "" && !strings.Contains(inputArgsAndFlags[0], " ") {
 		info.SubCommand = inputArgsAndFlags[0]
 		return info, nil
 	}
@@ -658,83 +830,25 @@ func processArgsAndFlags(
 		info.SubCommand = additionalArgsAndFlags[0]
 	}
 
-	if len(additionalArgsAndFlags) > 1 {
-		twoWordsCommand := false
+	if len(additionalArgsAndFlags) == 0 {
+		return info, nil
+	}
 
-		// Handle terraform two-words commands
-		// https://developer.hashicorp.com/terraform/cli/commands
-		if componentType == "terraform" {
-			// Handle the custom legacy command `terraform write varfile` (NOTE: use `terraform generate varfile` instead)
-			if additionalArgsAndFlags[0] == "write" && additionalArgsAndFlags[1] == "varfile" {
-				info.SubCommand = "write"
-				info.SubCommand2 = "varfile"
-				twoWordsCommand = true
-			}
-
-			// `terraform workspace` commands
-			// https://developer.hashicorp.com/terraform/cli/commands/workspace
-			if additionalArgsAndFlags[0] == "workspace" &&
-				u.SliceContainsString([]string{"list", "select", "new", "delete", "show"}, additionalArgsAndFlags[1]) {
-				info.SubCommand = "workspace"
-				info.SubCommand2 = additionalArgsAndFlags[1]
-				twoWordsCommand = true
-			}
-
-			// `terraform state` commands
-			// https://developer.hashicorp.com/terraform/cli/commands/state
-			if additionalArgsAndFlags[0] == "state" &&
-				u.SliceContainsString([]string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}, additionalArgsAndFlags[1]) {
-				info.SubCommand = fmt.Sprintf("state %s", additionalArgsAndFlags[1])
-				twoWordsCommand = true
-			}
-
-			// `terraform providers` commands
-			// https://developer.hashicorp.com/terraform/cli/commands/providers
-			if additionalArgsAndFlags[0] == "providers" &&
-				u.SliceContainsString([]string{"lock", "mirror", "schema"}, additionalArgsAndFlags[1]) {
-				info.SubCommand = fmt.Sprintf("providers %s", additionalArgsAndFlags[1])
-				twoWordsCommand = true
-			}
+	// Handle terraform two-word commands (e.g., "providers lock", "state list", "workspace select").
+	// https://developer.hashicorp.com/terraform/cli/commands
+	if componentType == "terraform" {
+		processed, err := processTerraformTwoWordCommand(&info, additionalArgsAndFlags)
+		if err != nil {
+			return info, err
 		}
-
-		if twoWordsCommand {
-			if len(additionalArgsAndFlags) > 2 {
-				info.ComponentFromArg = additionalArgsAndFlags[2]
-			} else {
-				return info, fmt.Errorf("command \"%s\" requires an argument", info.SubCommand)
-			}
-			if len(additionalArgsAndFlags) > 3 {
-				info.AdditionalArgsAndFlags = additionalArgsAndFlags[3:]
-			}
-		} else {
-			info.SubCommand = additionalArgsAndFlags[0]
-			if len(additionalArgsAndFlags) > 1 {
-				secondArg := additionalArgsAndFlags[1]
-				if len(secondArg) == 0 {
-					return info, fmt.Errorf("invalid empty argument provided")
-				}
-				if strings.HasPrefix(secondArg, "--") {
-					if len(secondArg) <= 2 {
-						return info, fmt.Errorf("invalid option format: %s", secondArg)
-					}
-					info.AdditionalArgsAndFlags = []string{secondArg}
-				} else {
-					info.ComponentFromArg = secondArg
-					// Check if argument is an explicit path that needs resolution.
-					// Only resolve as a filesystem path if the argument explicitly indicates a path:
-					// - "." (current directory).
-					// - Starts with "./" or "../" (relative path).
-					// - Starts with "/" (absolute path).
-					// Otherwise, treat it as a component name (even if it contains slashes).
-					if comp.IsExplicitComponentPath(secondArg) {
-						info.NeedsPathResolution = true
-					}
-				}
-			}
-			if len(additionalArgsAndFlags) > 2 {
-				info.AdditionalArgsAndFlags = additionalArgsAndFlags[2:]
-			}
+		if processed {
+			return info, nil
 		}
+	}
+
+	// Not a two-word command, process as single command.
+	if err := processSingleCommand(&info, additionalArgsAndFlags); err != nil {
+		return info, err
 	}
 
 	return info, nil
