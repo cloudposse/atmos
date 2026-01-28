@@ -73,23 +73,23 @@ Introduce a **realm** that differentiates credential storage between different r
 
 **After (isolated):**
 ```text
-~/.config/atmos/aws/{realm}/{provider}/credentials
-                     └─ Realm is top-level directory
+~/.config/atmos/{realm}/{cloud}/{provider}/credentials
+                 └─ Realm is top-level directory, above cloud
 ```
 
 **Examples:**
 ```text
 # Customer A (explicit realm)
-~/.config/atmos/aws/customer-acme/aws-user/credentials
+~/.config/atmos/customer-acme/aws/aws-user/credentials
 
 # Customer B (explicit realm)
-~/.config/atmos/aws/customer-beta/aws-user/credentials
+~/.config/atmos/customer-beta/aws/aws-user/credentials
 
 # Customer C (automatic hash realm)
-~/.config/atmos/aws/a1b2c3d4/aws-user/credentials
+~/.config/atmos/a1b2c3d4/aws/aws-user/credentials
 ```
 
-**Note:** The realm is the top-level directory, not appended to the provider name. This ensures both provider names and identity names are isolated per realm. See [Auth Realm Architecture PRD](./auth-realm-architecture.md) for full details.
+**Note:** The realm is the top-level directory under `~/.config/atmos/`, followed by cloud type (`aws`, `azure`), then provider name. This ensures complete isolation across realms, cloud providers, and provider configurations. See [Auth Realm Architecture PRD](./auth-realm-architecture.md) for full details.
 
 ## Configuration
 
@@ -121,68 +121,91 @@ When no explicit realm is configured, the system automatically generates one:
 
 ```go
 // Pseudocode
-func getCredentialRealm(atmosConfig *schema.AtmosConfiguration) string {
+func getCredentialRealm(atmosConfig *schema.AtmosConfiguration) (string, error) {
     // Priority 1: Environment variable
     if envRealm := os.Getenv("ATMOS_AUTH_REALM"); envRealm != "" {
-        return sanitize(envRealm)
+        if err := validate(envRealm); err != nil {
+            return "", err
+        }
+        return envRealm, nil
     }
 
     // Priority 2: Explicit configuration
     if atmosConfig.Auth.Realm != "" {
-        return sanitize(atmosConfig.Auth.Realm)
+        if err := validate(atmosConfig.Auth.Realm); err != nil {
+            return "", err
+        }
+        return atmosConfig.Auth.Realm, nil
     }
 
     // Priority 3: Automatic hash of config path
     hash := sha256.Sum256([]byte(atmosConfig.CliConfigPath))
-    return hex.EncodeToString(hash[:])[:8]  // First 8 characters
+    return hex.EncodeToString(hash[:])[:8], nil  // First 8 characters
 }
 ```
 
-### Realm Sanitization
+### Realm Validation
 
-The `sanitize()` function ensures realm values are safe for filesystem paths and prevent security issues:
+The `validate()` function ensures realm values are safe for filesystem paths. **Invalid values result in an error—no sanitization is performed.**
 
 **Allowed Characters:**
-- ASCII alphanumeric characters: `a-z`, `A-Z`, `0-9`
+- ASCII lowercase alphanumeric characters: `a-z`, `0-9`
 - Hyphen: `-`
 - Underscore: `_`
 
-**Sanitization Rules:**
-1. Replace any disallowed character with hyphen (`-`)
-2. Collapse consecutive hyphens to a single hyphen
-3. Trim leading and trailing non-alphanumeric characters
-4. Convert to lowercase for consistency
-5. Enforce maximum length of 64 characters (truncate if longer)
-6. If result is empty after sanitization, fall back to path hash
+**Validation Rules:**
+1. Must contain only allowed characters (lowercase alphanumeric, hyphen, underscore)
+2. Must not be empty
+3. Must not start or end with hyphen or underscore
+4. Must not contain consecutive hyphens or underscores
+5. Maximum 64 characters
+6. Must not contain path traversal sequences (`/`, `\`, `..`)
 
-**Security Considerations:**
-- Prevents path traversal attacks (no `/`, `\`, `..`)
-- Ensures cross-platform filesystem compatibility
-- Deterministic output for the same input
+**Error Behavior:** Invalid realm values result in an immediate error with a clear message. The user must fix the configuration—no automatic transformation is applied.
 
 ```go
 // Pseudocode
-func sanitize(input string) string {
-    // Replace disallowed characters with hyphen
-    result := regexp.MustCompile(`[^a-zA-Z0-9_-]`).ReplaceAllString(input, "-")
-
-    // Collapse consecutive hyphens
-    result = regexp.MustCompile(`-+`).ReplaceAllString(result, "-")
-
-    // Trim leading/trailing hyphens and underscores
-    result = strings.Trim(result, "-_")
-
-    // Convert to lowercase
-    result = strings.ToLower(result)
-
-    // Enforce maximum length
-    if len(result) > 64 {
-        result = result[:64]
+func validate(input string) error {
+    if input == "" {
+        return errors.New("realm cannot be empty")
     }
 
-    return result
+    if len(input) > 64 {
+        return fmt.Errorf("realm exceeds maximum length of 64 characters: %d", len(input))
+    }
+
+    // Check for invalid characters
+    invalidChars := regexp.MustCompile(`[^a-z0-9_-]`).FindAllString(input, -1)
+    if len(invalidChars) > 0 {
+        return fmt.Errorf("realm contains invalid characters: %v", invalidChars)
+    }
+
+    // Check start/end
+    if strings.HasPrefix(input, "-") || strings.HasPrefix(input, "_") {
+        return errors.New("realm cannot start with hyphen or underscore")
+    }
+    if strings.HasSuffix(input, "-") || strings.HasSuffix(input, "_") {
+        return errors.New("realm cannot end with hyphen or underscore")
+    }
+
+    return nil
 }
 ```
+
+**Example error:**
+```
+Error: Invalid realm value 'My/Realm'
+
+Realm values must contain only lowercase letters, numbers, hyphens, and underscores.
+Invalid characters found: /, M, R
+
+Please update your auth.realm configuration or ATMOS_AUTH_REALM environment variable.
+```
+
+**Security Considerations:**
+- Prevents path traversal attacks (validation rejects `/`, `\`, `..`)
+- Ensures cross-platform filesystem compatibility
+- Deterministic behavior—same input always produces same result (valid or error)
 
 ## Implementation Details
 
@@ -206,23 +229,25 @@ type AuthConfiguration struct {
 // pkg/auth/cloud/aws/files.go
 
 // GetCredentialsPath returns path with realm as top-level directory.
-// Result: ~/.config/atmos/aws/{realm}/{provider}/credentials
+// Result: ~/.config/atmos/{realm}/aws/{provider}/credentials
 func (m *AWSFileManager) GetCredentialsPath(providerName, realm string) string {
     if realm != "" {
-        return filepath.Join(m.baseDir, realm, providerName, "credentials")
+        return filepath.Join(m.baseDir, realm, "aws", providerName, "credentials")
     }
-    return filepath.Join(m.baseDir, providerName, "credentials")
+    return filepath.Join(m.baseDir, "aws", providerName, "credentials")
 }
 
 // GetConfigPath returns path with realm as top-level directory.
-// Result: ~/.config/atmos/aws/{realm}/{provider}/config
+// Result: ~/.config/atmos/{realm}/aws/{provider}/config
 func (m *AWSFileManager) GetConfigPath(providerName, realm string) string {
     if realm != "" {
-        return filepath.Join(m.baseDir, realm, providerName, "config")
+        return filepath.Join(m.baseDir, realm, "aws", providerName, "config")
     }
-    return filepath.Join(m.baseDir, providerName, "config")
+    return filepath.Join(m.baseDir, "aws", providerName, "config")
 }
 ```
+
+**Note:** The `baseDir` is now `~/.config/atmos` (not `~/.config/atmos/aws`) since realm is the top-level directory.
 
 ### Identity Implementation Changes
 
@@ -299,7 +324,7 @@ Run 'atmos auth login' to authenticate with this identity.
 Existing cached credentials will not be found after this update because:
 
 1. Old path: `~/.config/atmos/aws/aws-user/credentials`
-2. New path: `~/.config/atmos/aws/{realm}/aws-user/credentials`
+2. New path: `~/.config/atmos/{realm}/aws/aws-user/credentials`
 
 ### Mitigation
 
@@ -321,12 +346,17 @@ Existing cached credentials will not be found after this update because:
    - Environment variable override
    - Configuration file value
    - Automatic hash generation
-   - Sanitization of invalid characters
+   - Validation of invalid characters (error cases)
 
-2. **Path generation**:
+2. **Realm validation**:
+   - Valid realm values accepted
+   - Invalid characters rejected with clear error
+   - Edge cases (empty, too long, starts/ends with hyphen)
+
+3. **Path generation**:
    - With explicit realm
    - With automatic realm
-   - Without realm (backward compatibility testing)
+   - Correct directory structure (`{realm}/{cloud}/{provider}`)
 
 ### Integration Tests
 

@@ -45,19 +45,32 @@ By default, the realm is automatically computed as the SHA256 hash (first 8 char
 ### Realm Value Requirements
 
 **Allowed characters:**
-- ASCII alphanumeric: `a-z`, `A-Z`, `0-9`
+- ASCII lowercase alphanumeric: `a-z`, `0-9`
 - Hyphen: `-`
 - Underscore: `_`
 
-**Sanitization rules (for explicit values):**
-1. Replace disallowed characters with hyphen
-2. Collapse consecutive hyphens
-3. Trim leading/trailing non-alphanumeric characters
-4. Convert to lowercase
+**Validation rules (for explicit values):**
+1. Must contain only allowed characters (lowercase alphanumeric, hyphen, underscore)
+2. Must not be empty
+3. Must not start or end with hyphen or underscore
+4. Must not contain consecutive hyphens or underscores
 5. Maximum 64 characters
+6. Must not contain path traversal sequences (`/`, `\`, `..`)
+
+**Error behavior:** Invalid realm values result in an immediate error with a clear message explaining what characters are allowed. No sanitization is performed—the user must provide a valid realm value.
+
+**Example error:**
+```
+Error: Invalid realm value 'my/realm'
+
+Realm values must contain only lowercase letters, numbers, hyphens, and underscores.
+The following characters are not allowed: /
+
+Please update your auth.realm configuration or ATMOS_AUTH_REALM environment variable.
+```
 
 **Security:**
-- Prevents path traversal attacks (no `/`, `\`, `..`)
+- Prevents path traversal attacks (validation rejects `/`, `\`, `..`)
 - Cross-platform filesystem compatibility
 - Deterministic output
 
@@ -67,34 +80,42 @@ By default, the realm is automatically computed as the SHA256 hash (first 8 char
 
 ### Credential File Storage
 
-The realm becomes the **top-level directory** under the cloud-specific base path:
+The realm becomes the **top-level directory** under the atmos base path, with cloud as the next level:
 
 | Cloud | Current Path | With Realm |
 |-------|--------------|------------|
-| AWS | `~/.config/atmos/aws/{provider}/` | `~/.config/atmos/aws/{realm}/{provider}/` |
-| Azure | `~/.azure/atmos/{provider}/` | `~/.azure/atmos/{realm}/{provider}/` |
+| AWS | `~/.config/atmos/aws/{provider}/` | `~/.config/atmos/{realm}/aws/{provider}/` |
+| Azure | `~/.azure/atmos/{provider}/` | `~/.config/atmos/{realm}/azure/{provider}/` |
+
+**Note:** All cloud providers now share the same base path (`~/.config/atmos/`) with realm as the top-level directory, followed by cloud type, then provider.
 
 ### Directory Structure
 
 ```
-~/.config/atmos/aws/
+~/.config/atmos/
 ├── a1b2c3d4/                      # Realm (auto-hash from Customer A's path)
-│   ├── aws-sso/
-│   │   ├── credentials            # INI file with identity profiles
-│   │   └── config
-│   └── aws-user/
-│       ├── credentials
-│       └── config
+│   └── aws/
+│       ├── aws-sso/
+│       │   ├── credentials        # INI file with identity profiles
+│       │   └── config
+│       └── aws-user/
+│           ├── credentials
+│           └── config
 │
 ├── b5c6d7e8/                      # Realm (auto-hash from Customer B's path)
-│   └── aws-sso/                   # Same provider name, different realm
-│       ├── credentials
-│       └── config
+│   └── aws/
+│       └── aws-sso/               # Same provider name, different realm
+│           ├── credentials
+│           └── config
 │
 └── customer-acme/                 # Realm (explicit config)
-    └── aws-sso/
-        ├── credentials
-        └── config
+    ├── aws/
+    │   └── aws-sso/
+    │       ├── credentials
+    │       └── config
+    └── azure/
+        └── azure-cli/
+            └── credentials
 ```
 
 ### Keyring Storage
@@ -114,8 +135,8 @@ Keyring keys include realm prefix:
 When credentials are set up, file paths include the realm:
 
 ```bash
-AWS_SHARED_CREDENTIALS_FILE=~/.config/atmos/aws/a1b2c3d4/aws-sso/credentials
-AWS_CONFIG_FILE=~/.config/atmos/aws/a1b2c3d4/aws-sso/config
+AWS_SHARED_CREDENTIALS_FILE=~/.config/atmos/a1b2c3d4/aws/aws-sso/credentials
+AWS_CONFIG_FILE=~/.config/atmos/a1b2c3d4/aws/aws-sso/config
 ```
 
 ---
@@ -139,7 +160,7 @@ manager.realm (stored in auth manager)
 │         └──► keyring key: "atmos:a1b2c3d4:core-root/terraform"
 │
 ├──► awsFileManager.GetCredentialsPath(provider, realm)
-│         └──► ~/.config/atmos/aws/a1b2c3d4/aws-sso/credentials
+│         └──► ~/.config/atmos/a1b2c3d4/aws/aws-sso/credentials
 │
 └──► PostAuthenticateParams.Realm
            │
@@ -175,10 +196,12 @@ type RealmInfo struct {
 }
 
 // GetRealm computes the realm with proper precedence.
-func GetRealm(configRealm, cliConfigPath string) RealmInfo
+// Returns error if explicit realm value contains invalid characters.
+func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error)
 
-// sanitize ensures realm values are filesystem-safe.
-func sanitize(input string) string
+// validate checks that a realm value contains only allowed characters.
+// Returns error describing invalid characters if validation fails.
+func validate(input string) error
 ```
 
 ### Schema Changes
@@ -239,27 +262,29 @@ type PostAuthenticateParams struct {
 
 ```go
 // GetCredentialsPath returns path with realm as top-level directory.
-// Result: ~/.config/atmos/aws/{realm}/{provider}/credentials
+// Result: ~/.config/atmos/{realm}/aws/{provider}/credentials
 func (m *AWSFileManager) GetCredentialsPath(providerName, realm string) string {
     if realm != "" {
-        return filepath.Join(m.baseDir, realm, providerName, "credentials")
+        return filepath.Join(m.baseDir, realm, "aws", providerName, "credentials")
     }
-    return filepath.Join(m.baseDir, providerName, "credentials")
+    return filepath.Join(m.baseDir, "aws", providerName, "credentials")
 }
 
 // GetConfigPath returns path with realm as top-level directory.
-// Result: ~/.config/atmos/aws/{realm}/{provider}/config
+// Result: ~/.config/atmos/{realm}/aws/{provider}/config
 func (m *AWSFileManager) GetConfigPath(providerName, realm string) string {
     if realm != "" {
-        return filepath.Join(m.baseDir, realm, providerName, "config")
+        return filepath.Join(m.baseDir, realm, "aws", providerName, "config")
     }
-    return filepath.Join(m.baseDir, providerName, "config")
+    return filepath.Join(m.baseDir, "aws", providerName, "config")
 }
 ```
 
+**Note:** The `baseDir` changes from `~/.config/atmos/aws` to `~/.config/atmos` since realm is now top-level.
+
 **File:** `pkg/auth/cloud/azure/files.go`
 
-Similar changes for Azure file manager.
+Similar changes for Azure file manager, using `"azure"` as the cloud subdirectory.
 
 ### Manager Changes
 
@@ -314,7 +339,7 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 | File | Change |
 |------|--------|
-| `pkg/auth/realm/realm.go` | **NEW** - Realm computation and sanitization |
+| `pkg/auth/realm/realm.go` | **NEW** - Realm computation and validation |
 | `pkg/schema/schema_auth.go` | Add `Realm` field to `AuthConfig` |
 | `pkg/auth/types/interfaces.go` | Update `CredentialStore` interface, `PostAuthenticateParams` |
 | `pkg/auth/types/whoami.go` | Add `Realm`, `RealmSource` to `WhoamiInfo` |
@@ -412,7 +437,7 @@ auth:
 Existing cached credentials will not be found after this update because paths change:
 
 - **Old:** `~/.config/atmos/aws/aws-sso/credentials`
-- **New:** `~/.config/atmos/aws/{realm}/aws-sso/credentials`
+- **New:** `~/.config/atmos/{realm}/aws/aws-sso/credentials`
 
 ### Expected Behavior
 
@@ -460,9 +485,10 @@ atmos auth login
 ### Unit Tests
 
 1. Realm computation with env var, config, and auto-hash
-2. Sanitization of realm values
-3. Path generation with realm
-4. Keyring key format with realm
+2. Validation of realm values (valid and invalid cases)
+3. Error messages for invalid realm values
+4. Path generation with realm
+5. Keyring key format with realm
 
 ### Integration Tests
 
