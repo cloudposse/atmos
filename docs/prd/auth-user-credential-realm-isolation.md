@@ -1,8 +1,8 @@
-# Auth Credential Namespace Isolation PRD
+# Auth Credential Realm Isolation PRD
 
 ## Executive Summary
 
-This document describes the credential namespace isolation feature that prevents credential collisions when the same identity names are used across different repositories. This is critical for consultants and engineers who work with multiple customers that use identical identity names (e.g., `core-root/terraform`).
+This document describes the credential realm isolation feature that prevents credential collisions when the same identity names are used across different repositories. This is critical for consultants and engineers who work with multiple customers that use identical identity names (e.g., `core-root/terraform`).
 
 **Status:** 📋 **Proposed** - Ready for implementation.
 
@@ -41,22 +41,22 @@ Any solution must work within these constraints:
 3. **Pre-authentication**: Must work before AWS authentication (cannot use account ID)
 4. **Works offline**: Must function without any external services
 
-## Solution: Hybrid Namespace Approach
+## Solution: Hybrid Realm Approach
 
 ### Concept
 
-Introduce a **namespace** that differentiates credential storage between different repositories/customers. The namespace is derived from:
+Introduce a **realm** that differentiates credential storage between different repositories/customers. The realm is derived from:
 
-1. `ATMOS_AUTH_NAMESPACE` environment variable (highest priority)
-2. `auth.namespace` in `atmos.yaml` (explicit configuration)
+1. `ATMOS_AUTH_REALM` environment variable (highest priority)
+2. `auth.realm` in `atmos.yaml` (explicit configuration)
 3. SHA256 hash of `CliConfigPath` (automatic fallback)
 
 ### Precedence Order
 
 | Priority | Source | Example | Use Case |
 |----------|--------|---------|----------|
-| 1 (highest) | `ATMOS_AUTH_NAMESPACE` env var | `customer-acme` | CI/CD pipelines, automation |
-| 2 | `auth.namespace` in `atmos.yaml` | `customer-acme` | Explicit configuration, portable |
+| 1 (highest) | `ATMOS_AUTH_REALM` env var | `customer-acme` | CI/CD pipelines, automation |
+| 2 | `auth.realm` in `atmos.yaml` | `customer-acme` | Explicit configuration, portable |
 | 3 (fallback) | SHA256 hash of `CliConfigPath` | `a1b2c3d4` | Automatic isolation without config |
 
 ### Directory Structure Change
@@ -69,19 +69,19 @@ Introduce a **namespace** that differentiates credential storage between differe
 
 **After (isolated):**
 ```text
-~/.config/atmos/aws/aws-user-{namespace}/credentials
+~/.config/atmos/aws/aws-user-{realm}/credentials
                             └─ Unique per repository/customer
 ```
 
 **Examples:**
 ```text
-# Customer A (explicit namespace)
+# Customer A (explicit realm)
 ~/.config/atmos/aws/aws-user-customer-acme/credentials
 
-# Customer B (explicit namespace)
+# Customer B (explicit realm)
 ~/.config/atmos/aws/aws-user-customer-beta/credentials
 
-# Customer C (automatic hash namespace)
+# Customer C (automatic hash realm)
 ~/.config/atmos/aws/aws-user-a1b2c3d4/credentials
 ```
 
@@ -90,8 +90,8 @@ Introduce a **namespace** that differentiates credential storage between differe
 ### Environment Variable
 
 ```bash
-# Override namespace for CI/CD or testing
-export ATMOS_AUTH_NAMESPACE="customer-acme"
+# Override realm for CI/CD or testing
+export ATMOS_AUTH_REALM="customer-acme"
 atmos terraform plan -s plat-ue1-prod
 ```
 
@@ -100,7 +100,7 @@ atmos terraform plan -s plat-ue1-prod
 ```yaml
 # atmos.yaml
 auth:
-  namespace: "customer-acme"  # Optional: explicit namespace
+  realm: "customer-acme"  # Optional: explicit realm
 
   providers:
     aws-sso:
@@ -109,21 +109,21 @@ auth:
         # ... provider configuration
 ```
 
-### Automatic Namespace (Default)
+### Automatic Realm (Default)
 
-When no explicit namespace is configured, the system automatically generates one:
+When no explicit realm is configured, the system automatically generates one:
 
 ```go
 // Pseudocode
-func getCredentialNamespace(atmosConfig *schema.AtmosConfiguration) string {
+func getCredentialRealm(atmosConfig *schema.AtmosConfiguration) string {
     // Priority 1: Environment variable
-    if envNS := os.Getenv("ATMOS_AUTH_NAMESPACE"); envNS != "" {
-        return sanitize(envNS)
+    if envRealm := os.Getenv("ATMOS_AUTH_REALM"); envRealm != "" {
+        return sanitize(envRealm)
     }
 
     // Priority 2: Explicit configuration
-    if atmosConfig.Auth.Namespace != "" {
-        return sanitize(atmosConfig.Auth.Namespace)
+    if atmosConfig.Auth.Realm != "" {
+        return sanitize(atmosConfig.Auth.Realm)
     }
 
     // Priority 3: Automatic hash of config path
@@ -132,9 +132,9 @@ func getCredentialNamespace(atmosConfig *schema.AtmosConfiguration) string {
 }
 ```
 
-### Namespace Sanitization
+### Realm Sanitization
 
-The `sanitize()` function ensures namespace values are safe for filesystem paths and prevent security issues:
+The `sanitize()` function ensures realm values are safe for filesystem paths and prevent security issues:
 
 **Allowed Characters:**
 - ASCII alphanumeric characters: `a-z`, `A-Z`, `0-9`
@@ -187,10 +187,10 @@ func sanitize(input string) string {
 type AuthConfiguration struct {
     // Existing fields...
 
-    // Namespace provides credential isolation between different repositories
+    // Realm provides credential isolation between different repositories
     // or customer environments that may use the same identity names.
     // If not set, defaults to a hash of the atmos.yaml directory path.
-    Namespace string `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+    Realm string `json:"realm,omitempty" yaml:"realm,omitempty"`
 }
 ```
 
@@ -199,20 +199,20 @@ type AuthConfiguration struct {
 ```go
 // pkg/auth/cloud/aws/files.go
 
-// GetCredentialsPath now includes namespace in the path
-func (m *AWSFileManager) GetCredentialsPath(providerName, namespace string) string {
+// GetCredentialsPath now includes realm in the path
+func (m *AWSFileManager) GetCredentialsPath(providerName, realm string) string {
     dirName := providerName
-    if namespace != "" {
-        dirName = fmt.Sprintf("%s-%s", providerName, namespace)
+    if realm != "" {
+        dirName = fmt.Sprintf("%s-%s", providerName, realm)
     }
     return filepath.Join(m.baseDir, dirName, "credentials")
 }
 
-// GetConfigPath now includes namespace in the path
-func (m *AWSFileManager) GetConfigPath(providerName, namespace string) string {
+// GetConfigPath now includes realm in the path
+func (m *AWSFileManager) GetConfigPath(providerName, realm string) string {
     dirName := providerName
-    if namespace != "" {
-        dirName = fmt.Sprintf("%s-%s", providerName, namespace)
+    if realm != "" {
+        dirName = fmt.Sprintf("%s-%s", providerName, realm)
     }
     return filepath.Join(m.baseDir, dirName, "config")
 }
@@ -220,7 +220,7 @@ func (m *AWSFileManager) GetConfigPath(providerName, namespace string) string {
 
 ### Identity Implementation Changes
 
-All identity implementations must pass namespace through credential storage:
+All identity implementations must pass realm through credential storage:
 
 - `pkg/auth/identities/aws/user.go`
 - `pkg/auth/identities/aws/assume_role.go`
@@ -232,10 +232,10 @@ All identity implementations must pass namespace through credential storage:
 ```go
 // pkg/auth/credentials/store.go
 
-// Key format now includes namespace
-func createKeyringKey(providerName, identityName, namespace string) string {
-    if namespace != "" {
-        return fmt.Sprintf("atmos:%s:%s:%s", namespace, providerName, identityName)
+// Key format now includes realm
+func createKeyringKey(providerName, identityName, realm string) string {
+    if realm != "" {
+        return fmt.Sprintf("atmos:%s:%s:%s", realm, providerName, identityName)
     }
     return fmt.Sprintf("atmos:%s:%s", providerName, identityName)
 }
@@ -243,27 +243,27 @@ func createKeyringKey(providerName, identityName, namespace string) string {
 
 ## User Experience
 
-### Namespace Visibility
+### Realm Visibility
 
-The namespace is displayed in `atmos auth status` output:
+The realm is displayed in `atmos auth status` output:
 
 ```bash
 $ atmos auth status
 
-Credential Namespace: customer-acme
-  Source: atmos.yaml (auth.namespace)
+Credential Realm: customer-acme
+  Source: atmos.yaml (auth.realm)
 
 Active Identities:
   ✓ core-root/terraform (aws-user)
     Expires: 2026-01-28T15:30:00Z
 ```
 
-Or with automatic namespace:
+Or with automatic realm:
 
 ```bash
 $ atmos auth status
 
-Credential Namespace: a1b2c3d4
+Credential Realm: a1b2c3d4
   Source: auto-generated from /Users/dev/customer-acme/infrastructure
 
 Active Identities:
@@ -273,15 +273,15 @@ Active Identities:
 
 ### Clear Messaging
 
-When credentials are not found due to namespace mismatch:
+When credentials are not found due to realm mismatch:
 
 ```
 Error: No cached credentials found for identity 'core-root/terraform'
 
-The credential namespace 'customer-beta' does not contain cached credentials
+The credential realm 'customer-beta' does not contain cached credentials
 for this identity. This may happen when:
   - Switching between different customer repositories
-  - Using a different namespace than when you last authenticated
+  - Using a different realm than when you last authenticated
 
 Run 'atmos auth login' to authenticate with this identity.
 ```
@@ -293,7 +293,7 @@ Run 'atmos auth login' to authenticate with this identity.
 Existing cached credentials will not be found after this update because:
 
 1. Old path: `~/.config/atmos/aws/aws-user/credentials`
-2. New path: `~/.config/atmos/aws/aws-user-{namespace}/credentials`
+2. New path: `~/.config/atmos/aws/aws-user-{realm}/credentials`
 
 ### Mitigation
 
@@ -305,27 +305,27 @@ Existing cached credentials will not be found after this update because:
 
 1. Deploy new Atmos version
 2. Run `atmos auth login` in each repository to re-authenticate
-3. (Optional) Configure explicit `auth.namespace` for portability
+3. (Optional) Configure explicit `auth.realm` for portability
 
 ## Testing Strategy
 
 ### Unit Tests
 
-1. **Namespace generation**:
+1. **Realm generation**:
    - Environment variable override
    - Configuration file value
    - Automatic hash generation
    - Sanitization of invalid characters
 
 2. **Path generation**:
-   - With explicit namespace
-   - With automatic namespace
-   - Without namespace (backward compatibility testing)
+   - With explicit realm
+   - With automatic realm
+   - Without realm (backward compatibility testing)
 
 ### Integration Tests
 
 ```go
-func TestCredentialNamespaceIsolation(t *testing.T) {
+func TestCredentialRealmIsolation(t *testing.T) {
     // Create two mock repositories with same identity name
     repoA := setupMockRepo(t, "customer-a")
     repoB := setupMockRepo(t, "customer-b")
@@ -360,14 +360,14 @@ func TestCredentialNamespaceIsolation(t *testing.T) {
 
 | Scenario | Outcome |
 |----------|---------|
-| Same identity name across customers | Isolated by namespace |
+| Same identity name across customers | Isolated by realm |
 | Switch between repos | Different credential directories |
 | Unique INI profile sections | No credential collision |
 
 ### Residual Risks
 
-1. **Same namespace across repos**: If users explicitly configure the same namespace in different repos, credentials will still be shared (intentional)
-2. **Path changes**: Moving a repository changes the automatic namespace, requiring re-authentication
+1. **Same realm across repos**: If users explicitly configure the same realm in different repos, credentials will still be shared (intentional)
+2. **Path changes**: Moving a repository changes the automatic realm, requiring re-authentication
 
 ## Related Documents
 
@@ -381,13 +381,13 @@ This feature is successful when:
 
 1. ✅ **Credential isolation**: Different repositories with same identity names use separate credentials
 2. ✅ **Zero configuration default**: Works out-of-the-box without user configuration
-3. ✅ **Explicit control**: Users can configure explicit namespaces for portability
+3. ✅ **Explicit control**: Users can configure explicit realms for portability
 4. ✅ **CI/CD support**: Environment variable allows automation scenarios
-5. ✅ **Clear visibility**: Namespace displayed in `atmos auth status`
-6. ✅ **Test coverage**: >80% coverage for namespace-related code
+5. ✅ **Clear visibility**: Realm displayed in `atmos auth status`
+6. ✅ **Test coverage**: >80% coverage for realm-related code
 
 ## Changelog
 
 | Date | Version | Changes |
 |------|---------|---------|
-| 2026-01-28 | 1.0 | Initial PRD created for credential namespace isolation |
+| 2026-01-28 | 1.0 | Initial PRD created for credential realm isolation |
