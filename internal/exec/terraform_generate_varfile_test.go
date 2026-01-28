@@ -150,7 +150,7 @@ func TestVarfileOptions_Validation(t *testing.T) {
 			opts: &VarfileOptions{
 				Component: "rds",
 				Stack:     "prod-eu-west-1",
-				File:      "/tmp/test.tfvars.json",
+				File:      filepath.Join("tmp", "test.tfvars.json"),
 				ProcessingOptions: ProcessingOptions{
 					ProcessTemplates: true,
 					ProcessFunctions: true,

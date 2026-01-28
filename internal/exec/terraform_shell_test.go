@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -445,6 +446,11 @@ func TestShellOptionsValidation(t *testing.T) {
 
 // TestShellConfigWithWorkdirProvisioner tests shellConfig when workdir provisioner is active.
 func TestShellConfigWithWorkdirProvisioner(t *testing.T) {
+	// Use platform-agnostic paths.
+	componentPathOriginal := filepath.Join("components", "terraform", "vpc")
+	workdirPathVpc := filepath.Join("workdir", "terraform", "vpc")
+	workdirPathTemp := filepath.Join("tmp", "atmos-workdir-123", "vpc")
+
 	tests := []struct {
 		name             string
 		componentSection map[string]any
@@ -454,27 +460,27 @@ func TestShellConfigWithWorkdirProvisioner(t *testing.T) {
 		{
 			name:             "no workdir - uses component path",
 			componentSection: map[string]any{},
-			originalPath:     "/components/terraform/vpc",
-			expectedCfgPath:  "/components/terraform/vpc",
+			originalPath:     componentPathOriginal,
+			expectedCfgPath:  componentPathOriginal,
 		},
 		{
 			name: "workdir set - uses workdir path",
 			componentSection: map[string]any{
-				provWorkdir.WorkdirPathKey: "/workdir/terraform/vpc",
+				provWorkdir.WorkdirPathKey: workdirPathVpc,
 			},
-			originalPath:    "/components/terraform/vpc",
-			expectedCfgPath: "/workdir/terraform/vpc",
+			originalPath:    componentPathOriginal,
+			expectedCfgPath: workdirPathVpc,
 		},
 		{
 			name: "workdir set with vars - uses workdir path",
 			componentSection: map[string]any{
-				provWorkdir.WorkdirPathKey: "/tmp/atmos-workdir-123/vpc",
+				provWorkdir.WorkdirPathKey: workdirPathTemp,
 				"vars": map[string]any{
 					"environment": "dev",
 				},
 			},
-			originalPath:    "/components/terraform/vpc",
-			expectedCfgPath: "/tmp/atmos-workdir-123/vpc",
+			originalPath:    componentPathOriginal,
+			expectedCfgPath: workdirPathTemp,
 		},
 	}
 
