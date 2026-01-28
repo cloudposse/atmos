@@ -1849,6 +1849,143 @@ locals:
 	}
 }
 
+// TestExtractAndAddLocalsToContext_BidirectionalReferences tests that settings can reference locals
+// and vars can reference settings that reference locals. This addresses GitHub issue #2032:
+// "1.205 regression: Settings can't refer to locals anymore".
+func TestExtractAndAddLocalsToContext_BidirectionalReferences(t *testing.T) {
+	tests := []struct {
+		name                   string
+		yamlContent            string
+		expectedContextLocals  map[string]any
+		expectedContextVars    map[string]any
+		expectedContextSetting map[string]any
+	}{
+		{
+			name: "settings referencing locals",
+			yamlContent: `
+locals:
+  stage: dev
+settings:
+  context:
+    stage: dev
+    stage_from_local: "{{ .locals.stage }}"
+`,
+			expectedContextLocals: map[string]any{
+				"stage": "dev",
+			},
+			expectedContextSetting: map[string]any{
+				"context": map[string]any{
+					"stage":            "dev",
+					"stage_from_local": "dev",
+				},
+			},
+		},
+		{
+			name: "vars referencing settings that reference locals",
+			yamlContent: `
+locals:
+  stage: dev
+settings:
+  context:
+    stage: dev
+    stage_from_local: "{{ .locals.stage }}"
+vars:
+  stage: dev
+  setting_referring_to_local: "{{ .settings.context.stage_from_local }}"
+`,
+			expectedContextLocals: map[string]any{
+				"stage": "dev",
+			},
+			expectedContextSetting: map[string]any{
+				"context": map[string]any{
+					"stage":            "dev",
+					"stage_from_local": "dev",
+				},
+			},
+			expectedContextVars: map[string]any{
+				"stage":                      "dev",
+				"setting_referring_to_local": "dev",
+			},
+		},
+		{
+			name: "bidirectional locals and settings references",
+			yamlContent: `
+locals:
+  stage: dev
+  stage_from_setting: "{{ .settings.context.stage }}"
+settings:
+  context:
+    stage: dev
+    stage_from_local: "{{ .locals.stage }}"
+vars:
+  stage: dev
+  local_referring_to_setting: "{{ .locals.stage_from_setting }}"
+  setting_referring_to_local: "{{ .settings.context.stage_from_local }}"
+`,
+			expectedContextLocals: map[string]any{
+				"stage":              "dev",
+				"stage_from_setting": "dev",
+			},
+			expectedContextSetting: map[string]any{
+				"context": map[string]any{
+					"stage":            "dev",
+					"stage_from_local": "dev",
+				},
+			},
+			expectedContextVars: map[string]any{
+				"stage":                      "dev",
+				"local_referring_to_setting": "dev",
+				"setting_referring_to_local": "dev",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+			context := make(map[string]any)
+
+			resultContext, err := extractAndAddLocalsToContext(atmosConfig, tt.yamlContent, "test.yaml", "test.yaml", context)
+
+			require.NoError(t, err)
+			require.NotNil(t, resultContext)
+
+			// Check locals in context.
+			if tt.expectedContextLocals != nil {
+				locals, ok := resultContext["locals"].(map[string]any)
+				require.True(t, ok, "context should have locals")
+				for key, expected := range tt.expectedContextLocals {
+					assert.Equal(t, expected, locals[key], "context.locals[%s] mismatch", key)
+				}
+			}
+
+			// Check settings in context (should be template-processed).
+			if tt.expectedContextSetting != nil {
+				settings, ok := resultContext["settings"].(map[string]any)
+				require.True(t, ok, "context should have settings")
+				// Deep check nested settings.
+				expectedContext, hasContext := tt.expectedContextSetting["context"].(map[string]any)
+				if hasContext {
+					actualContext, actualHasContext := settings["context"].(map[string]any)
+					require.True(t, actualHasContext, "settings should have context")
+					for key, expected := range expectedContext {
+						assert.Equal(t, expected, actualContext[key], "context.settings.context[%s] mismatch", key)
+					}
+				}
+			}
+
+			// Check vars in context (should be template-processed).
+			if tt.expectedContextVars != nil {
+				vars, ok := resultContext["vars"].(map[string]any)
+				require.True(t, ok, "context should have vars")
+				for key, expected := range tt.expectedContextVars {
+					assert.Equal(t, expected, vars[key], "context.vars[%s] mismatch", key)
+				}
+			}
+		})
+	}
+}
+
 // TestExtractLocalsFromRawYAML_SectionOnlyLocals tests that section-only locals (without global locals)
 // are properly detected and processed. This covers the HasTerraformLocals/HasHelmfileLocals/HasPackerLocals
 // branches in buildLocalsResult.

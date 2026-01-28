@@ -14,6 +14,7 @@ import (
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/pkg/errors"
 	"github.com/santhosh-tekuri/jsonschema/v5"
+	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -122,6 +123,42 @@ func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extr
 	return result
 }
 
+// processTemplatesInSection processes Go templates in a section (settings, vars, or env) using the provided context.
+// This allows sections to reference resolved locals and other processed sections.
+// Returns the processed section or an error if template processing fails.
+func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section map[string]any, context map[string]any, filePath string) (map[string]any, error) {
+	defer perf.Track(atmosConfig, "exec.processTemplatesInSection")()
+
+	if len(section) == 0 {
+		return section, nil
+	}
+
+	// Convert section to YAML for template processing.
+	yamlStr, err := u.ConvertToYAML(section)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert section to YAML: %w", err)
+	}
+
+	// Quick check: if no template markers, return as-is.
+	if !strings.Contains(yamlStr, "{{") {
+		return section, nil
+	}
+
+	// Process templates in the YAML string.
+	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, true)
+	if err != nil {
+		return nil, fmt.Errorf("failed to process templates in section: %w", err)
+	}
+
+	// Parse the processed YAML back to a map.
+	var result map[string]any
+	if err := yaml.Unmarshal([]byte(processed), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse processed section YAML: %w", err)
+	}
+
+	return result, nil
+}
+
 // extractAndAddLocalsToContext extracts locals from YAML and adds them to the template context.
 // Returns the updated context and any error encountered during locals extraction.
 // Note: The "locals" key in context is reserved for file-scoped locals and will override
@@ -143,7 +180,7 @@ func extractAndAddLocalsToContext(
 	// Locals are file-scoped and should NOT inherit across file boundaries.
 	// This ensures that each file only has access to its own locals.
 	if context != nil {
-		delete(context, "locals")
+		delete(context, cfg.LocalsSectionName)
 	}
 
 	extractResult, localsErr := extractLocalsFromRawYAML(atmosConfig, yamlContent, filePath)
@@ -184,26 +221,69 @@ func extractAndAddLocalsToContext(
 		context = make(map[string]any)
 	}
 
-	// Add settings, vars, env from the file to the context.
-	// These allow templates in the file (including locals) to reference these sections.
-	// This enables patterns like:
-	//   settings:
-	//     substage: dev
+	// Add resolved locals to the template context first.
+	// This allows settings/vars/env templates to reference locals.
+	context[cfg.LocalsSectionName] = extractResult.locals
+	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
+
+	// Process templates in settings, vars, env sections using the resolved locals.
+	// This enables bidirectional references between locals and settings:
 	//   locals:
-	//     domain: '{{ .settings.substage }}.example.com'
+	//     stage: dev
+	//   settings:
+	//     context:
+	//       stage_from_local: '{{ .locals.stage }}'  # Now resolves to "dev"
+	//   vars:
+	//     setting_value: '{{ .settings.context.stage_from_local }}'  # Now resolves to "dev"
+	//
+	// Note: We need to process these sections AFTER locals are resolved so they can reference .locals,
+	// but BEFORE adding them to the context so vars can reference the resolved settings values.
+	localsOnlyContext := map[string]any{cfg.LocalsSectionName: extractResult.locals}
+
+	// Process templates in settings if it contains template expressions.
 	if extractResult.settings != nil {
-		context[cfg.SettingsSectionName] = extractResult.settings
+		processedSettings, err := processTemplatesInSection(atmosConfig, extractResult.settings, localsOnlyContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in settings section", "file", relativeFilePath, "error", err)
+			// Fall back to raw settings on error.
+			context[cfg.SettingsSectionName] = extractResult.settings
+		} else {
+			context[cfg.SettingsSectionName] = processedSettings
+		}
 	}
 	if extractResult.vars != nil {
-		context[cfg.VarsSectionName] = extractResult.vars
+		// For vars, we need both locals and processed settings available.
+		varsContext := map[string]any{cfg.LocalsSectionName: extractResult.locals}
+		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
+			varsContext[cfg.SettingsSectionName] = processedSettings
+		}
+		processedVars, err := processTemplatesInSection(atmosConfig, extractResult.vars, varsContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in vars section", "file", relativeFilePath, "error", err)
+			// Fall back to raw vars on error.
+			context[cfg.VarsSectionName] = extractResult.vars
+		} else {
+			context[cfg.VarsSectionName] = processedVars
+		}
 	}
 	if extractResult.env != nil {
-		context[cfg.EnvSectionName] = extractResult.env
+		// For env, we need locals, processed settings, and processed vars available.
+		envContext := map[string]any{cfg.LocalsSectionName: extractResult.locals}
+		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
+			envContext[cfg.SettingsSectionName] = processedSettings
+		}
+		if processedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok {
+			envContext[cfg.VarsSectionName] = processedVars
+		}
+		processedEnv, err := processTemplatesInSection(atmosConfig, extractResult.env, envContext, relativeFilePath)
+		if err != nil {
+			log.Debug("Failed to process templates in env section", "file", relativeFilePath, "error", err)
+			// Fall back to raw env on error.
+			context[cfg.EnvSectionName] = extractResult.env
+		} else {
+			context[cfg.EnvSectionName] = processedEnv
+		}
 	}
-
-	// Add resolved locals to the template context.
-	context["locals"] = extractResult.locals
-	log.Trace("Extracted and resolved locals", "file", relativeFilePath, "count", len(extractResult.locals))
 
 	return context, nil
 }
