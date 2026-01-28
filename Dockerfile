@@ -26,7 +26,7 @@ RUN set -ex; \
     # Install toolchain used with Atmos \
     apt-get -y install --no-install-recommends terraform kubectl helmfile helm; \
     # Install the helm-diff plugin required by Helmfile
-    helm plugin install https://github.com/databus23/helm-diff; \
+    helm plugin install --verify=false https://github.com/databus23/helm-diff; \
     # Clean up the package lists to keep the image clean
     rm -rf /var/lib/apt/lists/*
 
