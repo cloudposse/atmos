@@ -1,5 +1,7 @@
 # Regression: Template variables `.atmos_component` and `.atmos_stack` fail in 1.205
 
+**Date:** 2026-01-28
+
 ## Issue Summary
 
 Starting in Atmos 1.205, stack manifests that use `{{ .atmos_component }}` or `{{ .atmos_stack }}`

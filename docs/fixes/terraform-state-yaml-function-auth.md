@@ -1,5 +1,7 @@
 # Issue: !terraform.state YAML function not using internal authentication
 
+**Date:** 2026-01-28
+
 ## Problem
 
 The `!terraform.state` YAML function does not use Atmos internal authentication (AWS SSO)
