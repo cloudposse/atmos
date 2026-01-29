@@ -573,6 +573,13 @@ func ProcessStackConfig(
 		result[cfg.NameSectionName] = stackManifestName
 	}
 
+	// Include the resolved locals section for template processing in describe_stacks.
+	// The locals are resolved during import processing and need to be available
+	// when templates like {{ .locals.X }} are processed in component sections.
+	if localsSection, ok := config[cfg.LocalsSectionName].(map[string]any); ok && len(localsSection) > 0 {
+		result[cfg.LocalsSectionName] = localsSection
+	}
+
 	return result, nil
 }
 

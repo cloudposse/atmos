@@ -205,6 +205,14 @@ func ExecuteDescribeStacks(
 			finalStacksMap[stackName].(map[string]any)[cfg.ComponentsSectionName] = make(map[string]any)
 		}
 
+		// Extract stack-level (file-level) locals for template processing.
+		// Stack-level locals are available in templates like {{ .locals.X }} and need to be merged
+		// with component-level locals for template execution.
+		var stackLocals map[string]any
+		if sl, ok := stackSection.(map[string]any)[cfg.LocalsSectionName].(map[string]any); ok {
+			stackLocals = sl
+		}
+
 		if componentsSection, ok := stackSection.(map[string]any)[cfg.ComponentsSectionName].(map[string]any); ok {
 
 			// Terraform.
@@ -331,6 +339,31 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						// Extract and merge locals for template processing.
+						// Stack-level (file-level) locals are merged with component-level locals.
+						// Component-level locals take precedence over stack-level locals.
+						// This allows templates like {{ .locals.X }} to access both levels of locals.
+						var componentLocals map[string]any
+						if componentLocals, ok = componentSection[cfg.LocalsSectionName].(map[string]any); !ok {
+							componentLocals = map[string]any{}
+						}
+
+						// Merge stack-level and component-level locals (component takes precedence).
+						mergedLocals := make(map[string]any)
+						for k, v := range stackLocals {
+							mergedLocals[k] = v
+						}
+						for k, v := range componentLocals {
+							mergedLocals[k] = v
+						}
+
+						// Track original component-level local keys for restoration after template processing.
+						// Only these keys should be preserved in the final output.
+						originalComponentLocals := make(map[string]any)
+						for k := range componentLocals {
+							originalComponentLocals[k] = true // Marker value - only keys matter.
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -345,6 +378,7 @@ func ExecuteDescribeStacks(
 							ComponentOverridesSection: overridesSection,
 							ComponentBackendSection:   backendSection,
 							ComponentBackendType:      backendTypeSection,
+							OriginalComponentLocals:   originalComponentLocals,
 							ComponentSection: map[string]any{
 								cfg.VarsSectionName:        varsSection,
 								cfg.MetadataSectionName:    metadataSection,
@@ -356,6 +390,7 @@ func ExecuteDescribeStacks(
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.LocalsSectionName:      mergedLocals,
 							},
 						}
 
@@ -588,6 +623,31 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						// Extract and merge locals for template processing.
+						// Stack-level (file-level) locals are merged with component-level locals.
+						// Component-level locals take precedence over stack-level locals.
+						// This allows templates like {{ .locals.X }} to access both levels of locals.
+						var componentLocals map[string]any
+						if componentLocals, ok = componentSection[cfg.LocalsSectionName].(map[string]any); !ok {
+							componentLocals = map[string]any{}
+						}
+
+						// Merge stack-level and component-level locals (component takes precedence).
+						mergedLocals := make(map[string]any)
+						for k, v := range stackLocals {
+							mergedLocals[k] = v
+						}
+						for k, v := range componentLocals {
+							mergedLocals[k] = v
+						}
+
+						// Track original component-level local keys for restoration after template processing.
+						// Only these keys should be preserved in the final output.
+						originalComponentLocals := make(map[string]any)
+						for k := range componentLocals {
+							originalComponentLocals[k] = true // Marker value - only keys matter.
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -602,6 +662,7 @@ func ExecuteDescribeStacks(
 							ComponentOverridesSection: overridesSection,
 							ComponentBackendSection:   backendSection,
 							ComponentBackendType:      backendTypeSection,
+							OriginalComponentLocals:   originalComponentLocals,
 							ComponentSection: map[string]any{
 								cfg.VarsSectionName:        varsSection,
 								cfg.MetadataSectionName:    metadataSection,
@@ -613,6 +674,7 @@ func ExecuteDescribeStacks(
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.LocalsSectionName:      mergedLocals,
 							},
 						}
 
@@ -822,6 +884,31 @@ func ExecuteDescribeStacks(
 							backendTypeSection = ""
 						}
 
+						// Extract and merge locals for template processing.
+						// Stack-level (file-level) locals are merged with component-level locals.
+						// Component-level locals take precedence over stack-level locals.
+						// This allows templates like {{ .locals.X }} to access both levels of locals.
+						var componentLocals map[string]any
+						if componentLocals, ok = componentSection[cfg.LocalsSectionName].(map[string]any); !ok {
+							componentLocals = map[string]any{}
+						}
+
+						// Merge stack-level and component-level locals (component takes precedence).
+						mergedLocals := make(map[string]any)
+						for k, v := range stackLocals {
+							mergedLocals[k] = v
+						}
+						for k, v := range componentLocals {
+							mergedLocals[k] = v
+						}
+
+						// Track original component-level local keys for restoration after template processing.
+						// Only these keys should be preserved in the final output.
+						originalComponentLocals := make(map[string]any)
+						for k := range componentLocals {
+							originalComponentLocals[k] = true // Marker value - only keys matter.
+						}
+
 						configAndStacksInfo := schema.ConfigAndStacksInfo{
 							ComponentFromArg:          componentName,
 							Stack:                     stackName,
@@ -836,6 +923,7 @@ func ExecuteDescribeStacks(
 							ComponentOverridesSection: overridesSection,
 							ComponentBackendSection:   backendSection,
 							ComponentBackendType:      backendTypeSection,
+							OriginalComponentLocals:   originalComponentLocals,
 							ComponentSection: map[string]any{
 								cfg.VarsSectionName:        varsSection,
 								cfg.MetadataSectionName:    metadataSection,
@@ -847,6 +935,7 @@ func ExecuteDescribeStacks(
 								cfg.OverridesSectionName:   overridesSection,
 								cfg.BackendSectionName:     backendSection,
 								cfg.BackendTypeSectionName: backendTypeSection,
+								cfg.LocalsSectionName:      mergedLocals,
 							},
 						}
 

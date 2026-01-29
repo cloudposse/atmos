@@ -3,6 +3,7 @@ package tests
 import (
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -931,6 +932,13 @@ func TestLocalsSettingsAccessNotCrossFile(t *testing.T) {
 func TestComponentLevelLocals(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/locals-component-level")
 
+	// Reset viper and clear caches to ensure clean state.
+	viper.Reset()
+	exec.ClearFindStacksMapCache()
+	exec.ClearMergeContexts()
+	exec.ClearFileContentCache()
+	exec.ClearBaseComponentConfigCache()
+
 	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	require.NoError(t, err)
 
@@ -1023,8 +1031,9 @@ func TestComponentLevelLocals(t *testing.T) {
 func TestExampleLocals(t *testing.T) {
 	t.Chdir("../examples/locals")
 
-	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
+	_ = atmosConfig
 
 	tests := []struct {
 		name         string

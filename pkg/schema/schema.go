@@ -810,6 +810,7 @@ type ConfigAndStacksInfo struct {
 	ComponentIsEnabled        bool
 	ComponentIsLocked         bool
 	ComponentMetadataSection  AtmosSectionMapType
+	OriginalComponentLocals   AtmosSectionMapType // Stores original component-level locals for restoration after template processing.
 	TerraformWorkspace        string
 	JsonSchemaDir             string
 	OpaDir                    string

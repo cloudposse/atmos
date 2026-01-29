@@ -169,6 +169,55 @@ func ProcessComponentConfig(
 		}
 	}
 
+	// Merge stack-level locals with component-level locals for template processing.
+	// Templates like {{ .locals.X }} need access to both.
+	// Component-level locals take precedence over stack-level locals.
+	//
+	// IMPORTANT: We make a shallow copy of componentSection before modifying it.
+	// This prevents the modification from persisting in stacksMap, which could
+	// affect subsequent calls to ProcessComponentConfig.
+	//
+	// Track original component-level locals only once (first pass).
+	if configAndStacksInfo.OriginalComponentLocals == nil {
+		var componentLocalKeys map[string]bool
+		if existingLocals, ok := componentSection[cfg.LocalsSectionName].(map[string]any); ok && len(existingLocals) > 0 {
+			componentLocalKeys = make(map[string]bool, len(existingLocals))
+			for k := range existingLocals {
+				componentLocalKeys[k] = true
+			}
+		}
+		// Store original component local keys for filtering after template processing.
+		configAndStacksInfo.OriginalComponentLocals = make(map[string]any)
+		for k := range componentLocalKeys {
+			configAndStacksInfo.OriginalComponentLocals[k] = true // Marker value - only keys matter.
+		}
+	}
+
+	// Make a shallow copy of componentSection to avoid modifying the original stacksMap.
+	// This MUST happen on every call, not just the first pass.
+	componentSectionCopy := make(map[string]any, len(componentSection))
+	for k, v := range componentSection {
+		componentSectionCopy[k] = v
+	}
+	componentSection = componentSectionCopy
+
+	// Merge stack-level locals with component-level locals.
+	// This MUST happen on every call to ensure locals are available for template processing.
+	if stackLocals, ok := stackSection[cfg.LocalsSectionName].(map[string]any); ok && len(stackLocals) > 0 {
+		mergedLocals := make(map[string]any)
+		// First add stack-level locals.
+		for k, v := range stackLocals {
+			mergedLocals[k] = v
+		}
+		// Then override with component-level locals (they take precedence).
+		if existingLocals, ok := componentSectionCopy[cfg.LocalsSectionName].(map[string]any); ok {
+			for k, v := range existingLocals {
+				mergedLocals[k] = v
+			}
+		}
+		componentSection[cfg.LocalsSectionName] = mergedLocals
+	}
+
 	configAndStacksInfo.ComponentSection = componentSection
 	configAndStacksInfo.ComponentVarsSection = componentVarsSection
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
@@ -720,6 +769,24 @@ func ProcessStacks(
 	configAndStacksInfo.TerraformWorkspace = workspace
 	configAndStacksInfo.ComponentSection["workspace"] = workspace
 
+	// Spacelift stack - compute BEFORE template processing so it can be referenced in templates.
+	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if spaceliftStackName != "" {
+		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
+	}
+
+	// Atlantis project - compute BEFORE template processing so it can be referenced in templates.
+	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
+	if err != nil {
+		return configAndStacksInfo, err
+	}
+	if atlantisProjectName != "" {
+		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
+	}
+
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
 		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
@@ -775,24 +842,6 @@ func ProcessStacks(
 
 	if processTemplates || processYamlFunctions {
 		postProcessTemplatesAndYamlFunctions(&configAndStacksInfo)
-	}
-
-	// Spacelift stack.
-	spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if spaceliftStackName != "" {
-		configAndStacksInfo.ComponentSection["spacelift_stack"] = spaceliftStackName
-	}
-
-	// Atlantis project.
-	atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(atmosConfig, configAndStacksInfo)
-	if err != nil {
-		return configAndStacksInfo, err
-	}
-	if atlantisProjectName != "" {
-		configAndStacksInfo.ComponentSection["atlantis_project"] = atlantisProjectName
 	}
 
 	// Process the ENV variables from the `env` section.
@@ -1105,5 +1154,40 @@ func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndS
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.WorkspaceSectionName].(string); ok {
 		configAndStacksInfo.TerraformWorkspace = i
+	}
+
+	// Filter locals to keep only component-level locals (with their resolved values).
+	// Stack-level locals were merged for template resolution but should not appear in output.
+	// Component-level locals (user-defined in component section) should be preserved.
+	filterComponentLocals(configAndStacksInfo)
+}
+
+// filterComponentLocals filters the locals section to keep only component-level locals.
+// OriginalComponentLocals contains the keys that were originally defined in the component.
+// This function removes stack-level locals that were merged for template resolution.
+func filterComponentLocals(configAndStacksInfo *schema.ConfigAndStacksInfo) {
+	if len(configAndStacksInfo.OriginalComponentLocals) == 0 {
+		// No original component locals - remove the merged locals entirely.
+		delete(configAndStacksInfo.ComponentSection, cfg.LocalsSectionName)
+		return
+	}
+
+	// Get the resolved locals and filter to keep only the original component keys.
+	resolvedLocals, ok := configAndStacksInfo.ComponentSection[cfg.LocalsSectionName].(map[string]any)
+	if !ok {
+		return
+	}
+
+	filteredLocals := make(map[string]any)
+	for k := range configAndStacksInfo.OriginalComponentLocals {
+		if v, exists := resolvedLocals[k]; exists {
+			filteredLocals[k] = v
+		}
+	}
+
+	if len(filteredLocals) > 0 {
+		configAndStacksInfo.ComponentSection[cfg.LocalsSectionName] = filteredLocals
+	} else {
+		delete(configAndStacksInfo.ComponentSection, cfg.LocalsSectionName)
 	}
 }

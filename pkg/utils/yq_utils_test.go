@@ -277,7 +277,7 @@ func TestIsScalarString(t *testing.T) {
 		{
 			name:     "empty string",
 			input:    "",
-			expected: true,
+			expected: false, // Empty strings should go through YAML parsing which converts them to nil.
 		},
 		{
 			name:     "string ending with single colon",

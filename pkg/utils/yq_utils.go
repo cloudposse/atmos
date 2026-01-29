@@ -142,9 +142,10 @@ func isScalarString(s string) bool {
 	if strings.HasPrefix(s, "#") && !strings.Contains(s, "\n") {
 		return true
 	}
-	// Empty strings are scalars.
+	// Empty strings should go through YAML parsing which converts them to nil.
+	// This is the expected behavior for YQ default value expressions.
 	if s == "" {
-		return true
+		return false
 	}
 	// Check for YAML flow syntax (maps or arrays).
 	if strings.HasPrefix(s, "{") || strings.HasPrefix(s, "[") {

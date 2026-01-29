@@ -126,6 +126,9 @@ func buildLocalsResult(rawConfig map[string]any, localsCtx *LocalsContext) *extr
 // processTemplatesInSection processes Go templates in a section (settings, vars, or env) using the provided context.
 // This allows sections to reference resolved locals and other processed sections.
 // Returns the processed section or an error if template processing fails.
+// IMPORTANT: Uses ignoreMissingTemplateValues=false so that templates referencing values not in the
+// current context (like {{ .atmos_component }}) will fail, and the caller can fall back to raw values.
+// This preserves those templates for later processing when the full context is available.
 func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section map[string]any, context map[string]any, filePath string) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "exec.processTemplatesInSection")()
 
@@ -145,7 +148,10 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	}
 
 	// Process templates in the YAML string.
-	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, true)
+	// Use ignoreMissingTemplateValues=false so templates with missing values fail
+	// (e.g., {{ .atmos_component }} when component context isn't available yet).
+	// The caller will fall back to raw values, preserving templates for later processing.
+	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, false)
 	if err != nil {
 		return nil, fmt.Errorf("failed to process templates in section: %w", err)
 	}
@@ -713,12 +719,14 @@ func processYAMLConfigFileWithContextInternal(
 	stackManifestTemplatesProcessed := stackYamlConfig
 	stackManifestTemplatesErrorMessage := ""
 
-	// Process `Go` templates in the imported stack manifest if it has a template extension
-	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates
-	// Other .tmpl files are processed only when context is provided (backward compatibility)
+	// Process `Go` templates in the imported stack manifest if it has a template extension.
+	// Files with .yaml.tmpl or .yml.tmpl extensions are always processed as templates.
+	// Other .tmpl files are processed only when context is provided (backward compatibility).
 	// IMPORTANT: Use originalContextProvided (not len(context) > 0) to avoid processing templates
 	// when the only context is from file extraction (locals/settings/vars/env). Templates like
 	// {{ .atmos_component }} should be deferred until component processing when that context is available.
+	// Templates referencing locals (like {{ .locals.X }}) are resolved later in describe_stacks.go
+	// where both resolved locals and component context are available.
 	// https://atmos.tools/core-concepts/stacks/imports#go-templates-in-imports
 	if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || originalContextProvided) { //nolint:nestif // Template processing error handling requires conditional formatting based on context
 		var tmplErr error
@@ -751,6 +759,26 @@ func processYAMLConfigFileWithContextInternal(
 			e := fmt.Errorf("%w: stack manifest '%s'\n%v%s", errUtils.ErrInvalidStackManifest, relativeFilePath, err, stackManifestTemplatesErrorMessage)
 			return nil, nil, nil, nil, nil, nil, nil, nil, e
 		}
+	}
+
+	// Store resolved file-level sections in stackConfigMap so they're available during describe_stacks.
+	// The context contains resolved values from extractAndAddLocalsToContext, but the YAML content
+	// (and thus stackConfigMap) may still have unresolved template expressions.
+	// By updating stackConfigMap with resolved values, we ensure templates like {{ .locals.X }}
+	// and {{ .vars.X }} can be resolved correctly.
+	if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
+		stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
+	}
+	// Also store resolved vars, settings, and env sections.
+	// These may contain templates like {{ .locals.X }} that have been resolved.
+	if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
+		stackConfigMap[cfg.VarsSectionName] = resolvedVars
+	}
+	if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
+		stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
+	}
+	if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
+		stackConfigMap[cfg.EnvSectionName] = resolvedEnv
 	}
 
 	// Enable provenance tracking in merge context if tracking is enabled
@@ -1115,6 +1143,10 @@ func processYAMLConfigFileWithContextInternal(
 			}
 
 			// Append to stackConfigs in order.
+			// IMPORTANT: Remove locals section from import configs before merging.
+			// Locals are file-scoped and should NOT propagate to importing files.
+			// Each file can only access its own locals, not those from imports.
+			delete(result.yamlConfig, cfg.LocalsSectionName)
 			stackConfigs = append(stackConfigs, result.yamlConfig)
 
 			// Record metadata for this import.
