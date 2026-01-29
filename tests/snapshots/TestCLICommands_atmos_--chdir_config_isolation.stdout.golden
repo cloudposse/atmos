@@ -23,9 +23,11 @@ components:
     helm_aws_profile_pattern: ""
     cluster_name_pattern: ""
     command: ""
+    auto_generate_files: false
   packer:
     base_path: ""
     command: ""
+    auto_generate_files: false
 stacks:
   base_path: chdir-isolation-stacks
   included_paths:
@@ -51,6 +53,7 @@ settings:
       wrap: false
     color: true
     no_color: false
+  experimental: warn
   inject_github_token: true
   inject_bitbucket_token: true
   inject_gitlab_token: true
