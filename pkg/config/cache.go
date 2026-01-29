@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -90,8 +91,13 @@ func LoadCache() (CacheConfig, error) {
 		return cfg, nil
 	}
 
-	// Return read/unmarshal errors.
+	// On Windows, cache read errors are silently ignored because file locking
+	// is a no-op and corrupted cache files should not block normal operation.
 	if readErr != nil {
+		if runtime.GOOS == "windows" {
+			log.Trace("Cache read error ignored on Windows", "error", readErr, "file", cacheFile)
+			return CacheConfig{}, nil
+		}
 		return cfg, readErr
 	}
 
