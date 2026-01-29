@@ -2,6 +2,7 @@ package exec
 
 import (
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -12,6 +13,16 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// absTestPath returns a platform-appropriate absolute path for tests.
+// On Windows, filepath.IsAbs requires a drive letter prefix (e.g., C:\),
+// while on Unix systems a leading "/" is sufficient.
+func absTestPath(name string) string {
+	if runtime.GOOS == "windows" {
+		return `C:\` + name
+	}
+	return "/" + name
+}
 
 // newTestCommandWithGlobalFlags creates a test command with all global flags registered
 // using the flag registry pattern. This ensures test commands have the same flags as
@@ -1893,12 +1904,12 @@ func TestProcessTerraformCompoundSubcommand(t *testing.T) {
 		},
 		{
 			name:               "workspace list with path component sets NeedsPathResolution",
-			args:               []string{"workspace", "list", "/abs/path/component"},
+			args:               []string{"workspace", "list", absTestPath("abs/path/component")},
 			wantProcessed:      true,
 			wantErr:            false,
 			wantSubCommand:     "workspace",
 			wantSubCommand2:    "list",
-			wantComponent:      "/abs/path/component",
+			wantComponent:      absTestPath("abs/path/component"),
 			wantPathResolution: true,
 		},
 		{
@@ -2044,10 +2055,10 @@ func TestProcessSingleCommand(t *testing.T) {
 		},
 		{
 			name:               "component with absolute path sets NeedsPathResolution",
-			args:               []string{"plan", "/absolute/path/component"},
+			args:               []string{"plan", absTestPath("absolute/path/component")},
 			wantErr:            false,
 			wantSubCommand:     "plan",
-			wantComponent:      "/absolute/path/component",
+			wantComponent:      absTestPath("absolute/path/component"),
 			wantPathResolution: true,
 		},
 		{
