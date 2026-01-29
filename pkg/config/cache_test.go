@@ -10,6 +10,7 @@ import (
 
 	"github.com/adrg/xdg"
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -404,7 +405,8 @@ func TestWithCacheFileLockTimeout(t *testing.T) {
 	// Start two concurrent operations.
 	for i := 0; i < 2; i++ {
 		go func() {
-			err := withCacheFileLock(cacheFile, func() error {
+			lock := cache.NewFileLock(cacheFile)
+			err := lock.WithLock(func() error {
 				// Simulate some work.
 				time.Sleep(10 * time.Millisecond)
 				return nil

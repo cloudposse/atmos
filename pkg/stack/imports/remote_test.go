@@ -11,8 +11,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// newTestRemoteImporter creates a RemoteImporter for testing with a temp cache directory.
+func newTestRemoteImporter(t *testing.T, atmosConfig *schema.AtmosConfiguration) *RemoteImporter {
+	t.Helper()
+	tempDir := t.TempDir()
+
+	// Create a FileCache with the temp directory.
+	testCache, err := cache.NewFileCache("test", cache.WithBaseDir(tempDir))
+	require.NoError(t, err)
+
+	importer, err := NewRemoteImporter(atmosConfig, WithCache(testCache))
+	require.NoError(t, err)
+
+	return importer
+}
 
 func TestRemoteImporter_Download_HTTP(t *testing.T) {
 	// Create a mock HTTP server.
@@ -30,13 +46,9 @@ components:
 	}))
 	defer server.Close()
 
-	// Create temp cache directory.
-	cacheDir := t.TempDir()
-
-	// Create RemoteImporter with custom cache dir.
+	// Create RemoteImporter with test cache.
 	atmosConfig := &schema.AtmosConfiguration{}
-	importer, err := NewRemoteImporter(atmosConfig, WithCacheDir(cacheDir))
-	require.NoError(t, err)
+	importer := newTestRemoteImporter(t, atmosConfig)
 
 	// Download the file.
 	localPath, err := importer.Download(server.URL + "/config.yaml")
@@ -62,30 +74,22 @@ func TestRemoteImporter_Download_NotFound(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create temp cache directory.
-	cacheDir := t.TempDir()
-
-	// Create RemoteImporter.
+	// Create RemoteImporter with test cache.
 	atmosConfig := &schema.AtmosConfiguration{}
-	importer, err := NewRemoteImporter(atmosConfig, WithCacheDir(cacheDir))
-	require.NoError(t, err)
+	importer := newTestRemoteImporter(t, atmosConfig)
 
 	// Download should fail.
-	_, err = importer.Download(server.URL + "/nonexistent.yaml")
+	_, err := importer.Download(server.URL + "/nonexistent.yaml")
 	assert.Error(t, err)
 }
 
 func TestRemoteImporter_Download_LocalPath_Error(t *testing.T) {
-	// Create temp cache directory.
-	cacheDir := t.TempDir()
-
-	// Create RemoteImporter.
+	// Create RemoteImporter with test cache.
 	atmosConfig := &schema.AtmosConfiguration{}
-	importer, err := NewRemoteImporter(atmosConfig, WithCacheDir(cacheDir))
-	require.NoError(t, err)
+	importer := newTestRemoteImporter(t, atmosConfig)
 
 	// Trying to download a local path should fail.
-	_, err = importer.Download("catalog/vpc.yaml")
+	_, err := importer.Download("catalog/vpc.yaml")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "invalid remote import")
 }
@@ -99,13 +103,9 @@ func TestRemoteImporter_ClearCache(t *testing.T) {
 	}))
 	defer server.Close()
 
-	// Create temp cache directory.
-	cacheDir := t.TempDir()
-
-	// Create RemoteImporter.
+	// Create RemoteImporter with test cache.
 	atmosConfig := &schema.AtmosConfiguration{}
-	importer, err := NewRemoteImporter(atmosConfig, WithCacheDir(cacheDir))
-	require.NoError(t, err)
+	importer := newTestRemoteImporter(t, atmosConfig)
 
 	// Download a file.
 	localPath, err := importer.Download(server.URL + "/config.yaml")
@@ -133,10 +133,10 @@ func TestProcessImportPath_Local(t *testing.T) {
 		importPath string
 		expected   string
 	}{
-		{"catalog path", "catalog/vpc", filepath.Join("/stacks", "catalog/vpc")},
-		{"mixins path", "mixins/region", filepath.Join("/stacks", "mixins/region")},
-		{"relative dot", "./local", filepath.Join("/stacks", "./local")},
-		{"relative parent", "../shared", filepath.Join("/stacks", "../shared")},
+		{"catalog path", "catalog/vpc", filepath.Join(basePath, "catalog", "vpc")},
+		{"mixins path", "mixins/region", filepath.Join(basePath, "mixins", "region")},
+		{"relative dot", "./local", filepath.Join(basePath, ".", "local")},
+		{"relative parent", "../shared", filepath.Join(basePath, "..", "shared")},
 	}
 
 	for _, tt := range tests {

@@ -520,7 +520,7 @@ type importFileResult struct {
 
 // processYAMLConfigFileWithContextInternal is the internal recursive implementation.
 //
-//nolint:gocognit,revive,cyclop,funlen
+//nolint:gocognit,revive,cyclop,funlen,nestif
 func processYAMLConfigFileWithContextInternal(
 	atmosConfig *schema.AtmosConfiguration,
 	basePath string,

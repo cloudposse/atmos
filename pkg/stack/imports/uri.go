@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/hashicorp/go-getter"
 )
 
@@ -18,6 +19,8 @@ var scpURLPattern = regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-
 //   - Local: "/absolute/path", "./relative/path", "../parent/path", "components/terraform"
 //   - Remote: "github.com/owner/repo", "https://example.com", "git.company.com/repo"
 func IsLocalPath(uri string) bool {
+	defer perf.Track(nil, "imports.IsLocalPath")()
+
 	// Local paths start with /, ./, ../, or are relative paths without scheme.
 	// Examples: "/abs/path", "./rel/path", "../parent", "components/terraform".
 	if hasLocalPathPrefix(uri) {
@@ -57,6 +60,8 @@ func IsLocalPath(uri string) bool {
 // IsRemote returns true if the URI is a remote URL that should be downloaded.
 // This is the inverse of IsLocalPath.
 func IsRemote(uri string) bool {
+	defer perf.Track(nil, "imports.IsRemote")()
+
 	return !IsLocalPath(uri)
 }
 
@@ -65,6 +70,8 @@ func IsRemote(uri string) bool {
 //   - true: "https://github.com", "git::https://...", "s3::https://..."
 //   - false: "github.com/repo", "./local/path", "components/terraform"
 func HasSchemeSeparator(uri string) bool {
+	defer perf.Track(nil, "imports.HasSchemeSeparator")()
+
 	return strings.Contains(uri, "://") || strings.Contains(uri, "::")
 }
 
@@ -115,6 +122,8 @@ func isDomainLikeURI(uri string) bool {
 // 4. .git extension in path (not in host).
 // 5. Azure DevOps _git/ pattern in path.
 func IsGitURI(uri string) bool {
+	defer perf.Track(nil, "imports.IsGitURI")()
+
 	// Check for explicit git:: forced getter prefix.
 	if strings.HasPrefix(uri, "git::") {
 		return true
@@ -167,16 +176,22 @@ func IsGitURI(uri string) bool {
 
 // IsHTTPURI checks if the URI is an HTTP/HTTPS URL.
 func IsHTTPURI(uri string) bool {
+	defer perf.Track(nil, "imports.IsHTTPURI")()
+
 	return strings.HasPrefix(uri, "http://") || strings.HasPrefix(uri, "https://")
 }
 
 // IsS3URI checks if the URI is an S3 URI.
 // Go-getter supports both explicit s3:: prefix and auto-detected .amazonaws.com URLs.
 func IsS3URI(uri string) bool {
+	defer perf.Track(nil, "imports.IsS3URI")()
+
 	return strings.HasPrefix(uri, "s3::") || strings.Contains(uri, ".amazonaws.com/")
 }
 
 // IsGCSURI checks if the URI is a Google Cloud Storage URI.
 func IsGCSURI(uri string) bool {
+	defer perf.Track(nil, "imports.IsGCSURI")()
+
 	return strings.HasPrefix(uri, "gcs::") || strings.HasPrefix(uri, "gcs://")
 }
