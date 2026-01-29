@@ -497,3 +497,292 @@ atlantis_project: tenant1-ue2-dev-top-level-component1
 ## Key Insight
 
 Template processing order matters. Any values that should be available for template resolution must be computed and added to the context BEFORE calling `ProcessTmplWithDatasources`.
+
+---
+
+# Fix: Premature Template Processing During Imports (Atmos Pro Regression)
+
+**Date**: 2025-01-28
+
+**Related to**: GitHub Issue [#2032](https://github.com/cloudposse/atmos/issues/2032)
+
+## Problem
+
+After the locals feature changes in PR #1994, non-`.tmpl` files that defined `settings`, `vars`, or `env` sections had their Go templates processed prematurely during import. This broke templates like `{{ .atmos_component }}` that are only available during component processing, not during import.
+
+### Example
+
+```yaml
+# stacks/mixins/atmos-pro.yaml (imported by other stacks)
+settings:
+  pro:
+    enabled: true
+    pull_request:
+      opened:
+        workflows:
+          atmos-terraform-plan.yaml:
+            inputs:
+              component: "{{ .atmos_component }}"  # Should be deferred
+```
+
+**Expected**: The `{{ .atmos_component }}` template is preserved during import and resolved later during component processing when the full context is available.
+
+**Actual (before fix)**: The locals feature changes added settings/vars/env to the template context during `extractAndAddLocalsToContext()`, making `len(context) > 0`. This triggered the `if len(context) > 0` check that gates template processing for non-`.tmpl` files. Since `atmos_component` was not in the context at import time, the template failed or resolved to `<no value>`.
+
+## Root Cause
+
+In `processYAMLConfigFileWithContextInternal()`, the condition for processing templates was:
+
+```go
+if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || len(context) > 0) {
+```
+
+Before the locals feature, `context` was only populated when explicitly passed from outside (e.g., via imports with explicit context). After PR #1994, `extractAndAddLocalsToContext()` populated the context with settings/vars/env from the file itself, making `len(context) > 0` even when no external context was provided.
+
+## Solution
+
+### Part 1: Track Whether Context Was Externally Provided
+
+Added `originalContextProvided` flag before `extractAndAddLocalsToContext()` modifies the context:
+
+```go
+// Track whether context was originally provided from outside (e.g., via import context).
+originalContextProvided := len(context) > 0
+```
+
+Changed the template processing condition to use this flag:
+
+```go
+if !skipTemplatesProcessingInImports && (u.IsTemplateFile(filePath) || originalContextProvided) {
+```
+
+This ensures templates are only processed during import when:
+1. The file has a `.tmpl` extension, OR
+2. Context was explicitly passed from outside (not just extracted from the file itself)
+
+### Part 2: Persist Resolved Sections in stackConfigMap
+
+After `extractAndAddLocalsToContext()` resolves templates in settings/vars/env, the resolved values need to be stored back into `stackConfigMap` so downstream processing can use them:
+
+```go
+if resolvedLocals, ok := context[cfg.LocalsSectionName].(map[string]any); ok && len(resolvedLocals) > 0 {
+    stackConfigMap[cfg.LocalsSectionName] = resolvedLocals
+}
+if resolvedVars, ok := context[cfg.VarsSectionName].(map[string]any); ok && len(resolvedVars) > 0 {
+    stackConfigMap[cfg.VarsSectionName] = resolvedVars
+}
+if resolvedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok && len(resolvedSettings) > 0 {
+    stackConfigMap[cfg.SettingsSectionName] = resolvedSettings
+}
+if resolvedEnv, ok := context[cfg.EnvSectionName].(map[string]any); ok && len(resolvedEnv) > 0 {
+    stackConfigMap[cfg.EnvSectionName] = resolvedEnv
+}
+```
+
+Without this, the YAML content (and thus `stackConfigMap`) would still have unresolved template expressions, even though the context had resolved values.
+
+### Part 3: Remove Locals From Import Configs Before Merging
+
+Locals are file-scoped and must not propagate to importing files. Added deletion before appending to `stackConfigs`:
+
+```go
+// IMPORTANT: Remove locals section from import configs before merging.
+// Locals are file-scoped and should NOT propagate to importing files.
+delete(result.yamlConfig, cfg.LocalsSectionName)
+stackConfigs = append(stackConfigs, result.yamlConfig)
+```
+
+### Part 4: Pass Resolved Locals Through ProcessStackConfig
+
+In `ProcessStackConfig()` (`stack_processor_process_stacks.go`), the resolved locals need to be included in the result so they're available to `describe_stacks` for template processing:
+
+```go
+if localsSection, ok := config[cfg.LocalsSectionName].(map[string]any); ok && len(localsSection) > 0 {
+    result[cfg.LocalsSectionName] = localsSection
+}
+```
+
+## Files Changed
+
+- **`internal/exec/stack_processor_utils.go`**:
+  - Added `originalContextProvided` flag to prevent premature template processing
+  - Store resolved sections back into `stackConfigMap`
+  - Delete locals from import configs before merging
+
+- **`internal/exec/stack_processor_process_stacks.go`**:
+  - Pass resolved locals through `ProcessStackConfig` result
+
+- **`internal/exec/stack_processor_utils_test.go`**:
+  - Added `TestAtmosProTemplateRegression` regression test
+  - Added `tests/fixtures/scenarios/atmos-pro-template-regression/` fixture
+
+## Testing
+
+`TestAtmosProTemplateRegression` verifies that:
+- A non-`.tmpl` file with settings and `{{ .atmos_component }}` templates processes without error
+- The `{{ .atmos_component }}` template is preserved (not processed) at import time
+- The settings section structure is intact
+
+## Key Insight
+
+When adding context to template processing, distinguish between "context extracted from the file for locals resolution" and "context explicitly provided from outside for template processing." Only the latter should trigger template processing in non-`.tmpl` files.
+
+---
+
+# Fix: Describe Stacks Locals Integration
+
+**Date**: 2025-01-28
+
+**Related to**: GitHub Issue [#2032](https://github.com/cloudposse/atmos/issues/2032)
+
+## Problem
+
+The `describe stacks` code path (used by `atmos describe stacks` and `atmos describe component`) did not have access to stack-level locals for template processing in component sections.
+
+## Solution
+
+In `ExecuteDescribeStacks()` (`describe_stacks.go`), added locals extraction and merging for all three component types (terraform, helmfile, packer):
+
+1. **Extract stack-level locals** from the stack section at the top of each stack's processing
+2. **Merge with component-level locals** for each component (component takes precedence)
+3. **Track original component-level local keys** via `OriginalComponentLocals` for post-processing filtering
+4. **Include merged locals** in `ConfigAndStacksInfo.ComponentSection` for template processing
+
+```go
+// Extract stack-level locals.
+var stackLocals map[string]any
+if sl, ok := stackSection.(map[string]any)[cfg.LocalsSectionName].(map[string]any); ok {
+    stackLocals = sl
+}
+
+// For each component: merge stack + component locals.
+mergedLocals := make(map[string]any)
+for k, v := range stackLocals {
+    mergedLocals[k] = v
+}
+for k, v := range componentLocals {
+    mergedLocals[k] = v
+}
+
+// Track original component keys for filtering.
+originalComponentLocals := make(map[string]any)
+for k := range componentLocals {
+    originalComponentLocals[k] = true
+}
+```
+
+This pattern is applied identically for terraform, helmfile, and packer component sections.
+
+## Files Changed
+
+- **`internal/exec/describe_stacks.go`**: Added locals extraction and merging for all three component types
+
+## Key Insight
+
+The `describe stacks` path processes components differently from the `ProcessStacks` path used by `terraform apply`/`plan`. Both paths need access to merged locals for template resolution, so the merging logic must exist in both places.
+
+---
+
+# Fix: Dangling .terraform Symlinks in Describe Affected Tests
+
+**Date**: 2025-01-28
+
+## Problem
+
+The `TestDescribeAffectedWith*` tests in `describe_affected_test.go` were failing locally with:
+
+```
+stat ../../examples/secrets-masking/components/terraform/secrets-demo/.terraform/providers/
+registry.terraform.io/hashicorp/null/3.2.4/darwin_arm64: no such file or directory
+```
+
+## Root Cause
+
+The test copies the entire repository into a temp directory using `cp.Copy(pathPrefix, tempDir, copyOptions)` where `pathPrefix` is `"../../"` (the repo root). A previous test run (`TestCLICommands/secrets-masking_terraform_plan`) had created a `.terraform/providers/` directory inside `examples/secrets-masking/` that contained a symlink pointing to a temporary directory:
+
+```
+darwin_arm64 -> /private/var/folders/.../TestCLICommands.../darwin_arm64
+```
+
+That temporary directory no longer exists, making the symlink dangling. When `cp.Copy` tried to `stat` the symlink target, it failed.
+
+## Solution
+
+Added `.terraform` to the skip list in the copy options, alongside the existing `node_modules` skip:
+
+```go
+Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
+    if strings.Contains(src, "node_modules") ||
+        strings.Contains(src, ".terraform") {
+        return true, nil
+    }
+```
+
+`.terraform` directories are local artifacts created by `terraform init`. They should never be copied when cloning the repo for testing, just like `node_modules`.
+
+## Files Changed
+
+- **`internal/exec/describe_affected_test.go`**: Added `.terraform` to copy skip filter
+
+## Testing
+
+All 8 `TestDescribeAffectedWith*` tests pass after the fix.
+
+---
+
+# Summary: Complete Fix for Issue #2032
+
+The full fix for the "1.205 regression: Settings can't refer to locals anymore" issue spans multiple interconnected changes across two processing paths:
+
+## Processing Pipeline (After Fix)
+
+```
+1. Parse raw YAML
+2. Extract and resolve file-scoped locals (can reference raw settings/vars/env)
+3. Process templates in settings using resolved locals
+4. Process templates in vars using resolved locals + processed settings
+5. Process templates in env using all of the above
+6. Store resolved sections in stackConfigMap
+7. Guard against premature template processing during imports
+8. Remove locals from import configs (file-scoped isolation)
+9. Pass resolved locals through ProcessStackConfig
+10. Merge stack-level + component-level locals in describe_stacks / ProcessComponentConfig
+11. Compute spacelift_stack / atlantis_project BEFORE template processing
+12. Process component templates with full context
+13. Filter locals in output (keep only component-level, remove stack-level)
+```
+
+## All Files Changed
+
+| File | Changes |
+|------|---------|
+| `internal/exec/stack_processor_utils.go` | `processTemplatesInSection()`, bidirectional resolution, `originalContextProvided` guard, resolved sections persistence, import locals cleanup |
+| `internal/exec/utils.go` | Locals merging with shallow copy, `OriginalComponentLocals` tracking, `filterComponentLocals()`, spacelift/atlantis reordering |
+| `internal/exec/describe_stacks.go` | Stack-level locals extraction, merge with component locals, `OriginalComponentLocals` initialization (terraform/helmfile/packer) |
+| `internal/exec/stack_processor_process_stacks.go` | Pass resolved locals through `ProcessStackConfig` |
+| `pkg/schema/schema.go` | `OriginalComponentLocals` field on `ConfigAndStacksInfo` |
+| `internal/exec/stack_processor_utils_test.go` | `TestExtractAndAddLocalsToContext_BidirectionalReferences`, `TestProcessTemplatesInSection`, `TestAtmosProTemplateRegression` |
+| `tests/cli_locals_test.go` | Cache clearing in `TestComponentLevelLocals`, `TestExampleLocals` config init fix |
+| `internal/exec/describe_affected_test.go` | `.terraform` skip in copy options |
+
+## Test Coverage
+
+| Test | Validates |
+|------|-----------|
+| `TestExtractAndAddLocalsToContext_BidirectionalReferences` | Core issue: settings ↔ locals bidirectional references |
+| `TestProcessTemplatesInSection` | New helper function (nil, empty, no-template, nested, mixed) |
+| `TestProcessTemplatesInSection_EdgeCases` | Lists, integers, no-template-markers |
+| `TestAtmosProTemplateRegression` | `{{ .atmos_component }}` preserved during import |
+| `TestLocalsNotInFinalOutput` | Stack-level locals filtered from component output |
+| `TestComponentLevelLocals` | Component-level locals preserved (4 sub-tests) |
+| `TestLocalsSettingsAccessSameFile` | Locals access settings from same file (PR #1994) |
+| `TestLocalsSettingsAccessDescribeStacks` | Same-file access via describe stacks path (PR #1994) |
+| `TestLocalsSettingsAccessNotCrossFile` | Cross-file access correctly blocked (PR #1994) |
+| `TestExampleLocals` | Example fixture works end-to-end (PR #1994) |
+| `TestDescribeAffectedWith*` (8 tests) | Describe affected with .terraform skip |
+
+## Backward Compatibility
+
+- **PR #1939** (file-scoped locals): All existing behavior preserved — file-scoped isolation, dependency resolution, cycle detection, section-specific locals, component-level locals with inheritance, `describe locals` command.
+- **PR #1994** (locals access to settings/vars/env): Locals can still reference settings/vars/env from the same file. YAML functions in locals still work.
+- **Pre-locals behavior**: Files without locals continue to work exactly as before. The `originalContextProvided` guard ensures no premature template processing.
