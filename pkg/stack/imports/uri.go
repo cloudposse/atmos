@@ -14,6 +14,9 @@ import (
 // scpURLPattern matches SCP-style Git URLs (e.g., git@github.com:owner/repo.git).
 var scpURLPattern = regexp.MustCompile(`^(([\w.-]+)@)?([\w.-]+\.[\w.-]+):([\w./-]+)(\.git)?(.*)$`)
 
+// versionPattern matches version-like strings (e.g., "v1.0", "1.2.3", "v2").
+var versionPattern = regexp.MustCompile(`^[vV]?\d+(\.\d+)*$`)
+
 // IsLocalPath checks if the URI is a local file system path.
 // Examples:
 //   - Local: "/absolute/path", "./relative/path", "../parent/path", "components/terraform"
@@ -102,16 +105,59 @@ func hasSubdirectoryDelimiter(uri string) bool {
 }
 
 // isDomainLikeURI checks if the URI has a domain-like structure (hostname.domain/path).
+// This excludes paths with version-like patterns (e.g., configs/v1.0/base).
 func isDomainLikeURI(uri string) bool {
-	dotPos := strings.Index(uri, ".")
-	if dotPos <= 0 || dotPos >= len(uri)-1 {
+	// Find the first slash to separate potential host from path.
+	slashPos := strings.Index(uri, "/")
+
+	// If no slash, check if the entire string looks like a domain.
+	var potentialHost string
+	if slashPos == -1 {
+		potentialHost = uri
+	} else {
+		potentialHost = uri[:slashPos]
+	}
+
+	// A domain-like host must have a dot and characters on both sides.
+	dotPos := strings.Index(potentialHost, ".")
+	if dotPos <= 0 || dotPos >= len(potentialHost)-1 {
 		return false
 	}
 
-	// Check if there's a slash after the dot (indicating a domain with path).
-	afterDot := uri[dotPos+1:]
-	slashPos := strings.Index(afterDot, "/")
-	return slashPos > 0
+	// Check for common TLD-like endings or known domain patterns.
+	// This helps distinguish "git.company.com" from "configs/v1.0".
+	afterDot := potentialHost[dotPos+1:]
+
+	// Common TLDs and domain suffixes that indicate a real domain.
+	knownSuffixes := []string{
+		"com", "org", "net", "io", "dev", "co", "edu", "gov", "mil",
+		"uk", "de", "fr", "jp", "cn", "au", "ca", "nl", "se", "no",
+	}
+	for _, suffix := range knownSuffixes {
+		if strings.EqualFold(afterDot, suffix) || strings.HasSuffix(strings.ToLower(afterDot), "."+suffix) {
+			return true
+		}
+	}
+
+	// Check for domain-like patterns (e.g., "company.internal", "gitlab.mycompany.com").
+	// Must have at least 2 characters after the dot and not look like a version number.
+	if len(afterDot) >= 2 {
+		// Exclude version-like patterns (e.g., "v1.0", "2.0", "1.2.3").
+		if isVersionLike(potentialHost) {
+			return false
+		}
+		// If there's a path after the host and the host has a dot, it's likely a domain.
+		if slashPos > 0 {
+			return true
+		}
+	}
+
+	return false
+}
+
+// isVersionLike checks if a string looks like a version number (e.g., "v1.0", "1.2.3", "v2").
+func isVersionLike(s string) bool {
+	return versionPattern.MatchString(s)
 }
 
 // IsGitURI checks if the URI appears to be a Git repository URL.

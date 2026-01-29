@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -91,7 +92,7 @@ func TestRemoteImporter_Download_LocalPath_Error(t *testing.T) {
 	// Trying to download a local path should fail.
 	_, err := importer.Download("catalog/vpc.yaml")
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid remote import")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidRemoteImport)
 }
 
 func TestRemoteImporter_ClearCache(t *testing.T) {

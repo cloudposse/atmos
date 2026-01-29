@@ -35,7 +35,7 @@ Teams often need to share stack configurations across multiple repositories or o
 
 ## Supported URL Formats
 
-Remote imports support all go-getter URL formats:
+Remote imports leverage [go-getter](https://github.com/hashicorp/go-getter) for downloading. Here are some common formats:
 
 | Format | Example |
 |--------|---------|
@@ -45,6 +45,8 @@ Remote imports support all go-getter URL formats:
 | S3 | `s3::https://s3.amazonaws.com/bucket/key.yaml` |
 | GCS | `gcs::gs://bucket/path/config.yaml` |
 | Git SSH | `git@github.com:org/repo.git//path/to/file.yaml` |
+
+See the [go-getter documentation](https://github.com/hashicorp/go-getter#url-format) for additional supported formats.
 
 ## How to Use It
 

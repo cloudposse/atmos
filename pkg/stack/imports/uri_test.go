@@ -46,6 +46,12 @@ func TestIsLocalPath(t *testing.T) {
 		{"file with extension", "catalog/vpc.yaml", true},
 		{"file with dots in name", "path/to/file.config.yaml", true},
 		{"azure devops", "dev.azure.com/org/project/_git/repo", false},
+
+		// Version-like paths (should be local, not mistaken for domains).
+		{"version path v1.0", "configs/v1.0/base", true},
+		{"version path v2.1.3", "stacks/v2.1.3/deploy", true},
+		{"version path numeric", "releases/1.0/stable", true},
+		{"nested version path", "catalog/modules/v3.2/vpc", true},
 	}
 
 	for _, tt := range tests {

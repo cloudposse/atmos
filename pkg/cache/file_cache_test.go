@@ -188,7 +188,39 @@ func TestKeyToFilename(t *testing.T) {
 		} else {
 			assert.NotEqual(t, f1, f2)
 		}
-		// Verify filename is valid (no special characters).
-		assert.Regexp(t, `^[a-f0-9]+$`, f1)
+		// Verify filename is valid (hex hash with optional extension).
+		assert.Regexp(t, `^[a-f0-9]+(\.(yaml|yml|json|toml|hcl|tf))?$`, f1)
+	}
+}
+
+func TestKeyToFilename_PreservesExtension(t *testing.T) {
+	tests := []struct {
+		key      string
+		expected string
+	}{
+		// Keys with valid extensions should preserve them.
+		{"https://example.com/config.yaml", ".yaml"},
+		{"https://example.com/config.yml", ".yml"},
+		{"https://example.com/config.json", ".json"},
+		{"https://example.com/config.toml", ".toml"},
+		{"https://example.com/config.hcl", ".hcl"},
+		{"https://example.com/config.tf", ".tf"},
+		// Keys with query strings should extract extension from path.
+		{"github.com/org/repo//path/config.yaml?ref=v1.0", ".yaml"},
+		// Keys without valid extensions should not have extension.
+		{"https://example.com/config.txt", ""},
+		{"https://example.com/config", ""},
+		{"simple-key", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.key, func(t *testing.T) {
+			filename := keyToFilename(tt.key)
+			if tt.expected == "" {
+				assert.Regexp(t, `^[a-f0-9]+$`, filename)
+			} else {
+				assert.Contains(t, filename, tt.expected)
+			}
+		})
 	}
 }

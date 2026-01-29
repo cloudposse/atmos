@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
@@ -80,10 +81,46 @@ func NewFileCache(subpath string, opts ...FileCacheOption) (*FileCache, error) {
 }
 
 // keyToFilename converts a cache key to a filename using SHA256 hashing.
-// This ensures valid filenames regardless of key content.
+// This ensures valid filenames regardless of key content while preserving
+// the original file extension for proper template processing.
 func keyToFilename(key string) string {
 	hash := sha256.Sum256([]byte(key))
-	return fmt.Sprintf("%x", hash[:8])
+	base := fmt.Sprintf("%x", hash[:8])
+
+	// Extract and preserve the file extension from the key.
+	// This is important for template processing which may need to know the file type.
+	ext := extractExtension(key)
+	if ext != "" {
+		return base + ext
+	}
+	return base
+}
+
+// extractExtension extracts the file extension from a URL or path.
+// It handles query strings and fragments that may appear in URLs.
+func extractExtension(uri string) string {
+	// Remove query string and fragment.
+	path := uri
+	if idx := strings.Index(path, "?"); idx != -1 {
+		path = path[:idx]
+	}
+	if idx := strings.Index(path, "#"); idx != -1 {
+		path = path[:idx]
+	}
+
+	// Get the base name and extract extension.
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+
+	// Only return common config file extensions.
+	validExts := map[string]bool{
+		".yaml": true, ".yml": true, ".json": true,
+		".toml": true, ".hcl": true, ".tf": true,
+	}
+	if validExts[strings.ToLower(ext)] {
+		return ext
+	}
+	return ""
 }
 
 // Get returns the cached content for a key.

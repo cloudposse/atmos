@@ -122,6 +122,13 @@ components:
 
 // TestRemoteStackImports_SkipIfMissing tests that skip_if_missing works for remote imports.
 func TestRemoteStackImports_SkipIfMissing(t *testing.T) {
+	// Create a mock HTTP server that returns 404.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("Not Found"))
+	}))
+	defer server.Close()
+
 	// Create temporary test fixture.
 	tempDir := t.TempDir()
 
@@ -158,10 +165,10 @@ stacks:
 	err = os.WriteFile(filepath.Join(tempDir, "atmos.yaml"), []byte(atmosConfig), 0o644)
 	require.NoError(t, err)
 
-	// Create stack that imports from non-existent URL with skip_if_missing.
-	stackContent := `
+	// Create stack that imports from the mock server (which returns 404) with skip_if_missing.
+	stackContent := fmt.Sprintf(`
 import:
-  - path: "https://nonexistent.invalid/config.yaml"
+  - path: "%s/config.yaml"
     skip_if_missing: true
 
 vars:
@@ -172,7 +179,7 @@ components:
     myapp:
       vars:
         name: "test-app"
-`
+`, server.URL)
 	err = os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(stackContent), 0o644)
 	require.NoError(t, err)
 
