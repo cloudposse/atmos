@@ -3,10 +3,11 @@ title: atmos terraform state
 sidebar_label: state
 sidebar_class_name: command
 id: state
+description: Manage the Terraform state for an Atmos component in a stack. Supports operations like list, move, pull, push, replace-provider, rm, and show.
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
 
 <Intro>
 Use this command to manage the Terraform state for an Atmos component in a stack. Supports operations like list, move, pull, push, replace-provider, rm, and show.
@@ -16,10 +17,8 @@ Use this command to manage the Terraform state for an Atmos component in a stack
 
 ## Usage
 
-Execute the `terraform state` command like this:
-
 ```shell
-atmos terraform state <component> -s <stack> [options]
+atmos terraform state <subcommand> <component> -s <stack> [options]
 ```
 
 This command provides subcommands for advanced state management. These are useful for manipulating the Terraform state when necessary, though manual state manipulation should be done carefully.
@@ -27,6 +26,11 @@ This command provides subcommands for advanced state management. These are usefu
 :::info Atmos Behavior
 Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. Additionally, Atmos blocks state modifications if the component is locked (`metadata.locked: true`). The state operations themselves are handled by native Terraform.
 :::
+
+## Subcommands
+
+<DocCardList />
+
 ## Examples
 
 ### List Resources in State
@@ -92,10 +96,6 @@ atmos terraform state rm vpc -s dev aws_instance.web
         ```
     </dd>
 </dl>
-
-## Native Terraform Flags
-
-This command supports native `terraform state` flags such as Subcommands include `list`, `show`, `mv`, `rm`, `pull`, `push`, `replace-provider`. Use `-state` to specify state file path..
 
 ## Related Commands
 

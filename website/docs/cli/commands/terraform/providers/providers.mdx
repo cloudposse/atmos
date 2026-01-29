@@ -3,10 +3,11 @@ title: atmos terraform providers
 sidebar_label: providers
 sidebar_class_name: command
 id: providers
+description: Display provider requirements and configurations for an Atmos component's Terraform configuration in a stack.
 ---
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
-import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
 
 <Intro>
 Use this command to display provider requirements and configurations for an Atmos component's Terraform configuration in a stack.
@@ -16,10 +17,8 @@ Use this command to display provider requirements and configurations for an Atmo
 
 ## Usage
 
-Execute the `terraform providers` command like this:
-
 ```shell
-atmos terraform providers <component> -s <stack> [options]
+atmos terraform providers <component> -s <stack> [subcommand] [options]
 ```
 
 This command shows information about the provider requirements of the configuration in the current working directory.
@@ -27,6 +26,11 @@ This command shows information about the provider requirements of the configurat
 :::info Atmos Behavior
 Atmos provides standard setup for this command including automatic `terraform init` and workspace selection. The provider information display is handled by native Terraform.
 :::
+
+## Subcommands
+
+<DocCardList />
+
 ## Examples
 
 ### Show Providers
@@ -36,11 +40,11 @@ Atmos provides standard setup for this command including automatic `terraform in
 atmos terraform providers vpc -s dev
 ```
 
-### Show Provider Tree
+### Show Provider Schema
 
 ```shell
-# Show providers used by each module
-atmos terraform providers vpc -s dev schema
+# Show schemas for providers used in the configuration
+atmos terraform providers schema vpc -s dev
 ```
 
 ### Lock Provider Versions
@@ -48,6 +52,13 @@ atmos terraform providers vpc -s dev schema
 ```shell
 # Generate dependency lock file
 atmos terraform providers lock vpc -s dev -platform=linux_amd64 -platform=darwin_amd64
+```
+
+### Mirror Providers
+
+```shell
+# Save local copies of all required provider plugins
+atmos terraform providers mirror vpc -s dev /path/to/mirror
 ```
 
 ## Arguments
@@ -85,10 +96,6 @@ atmos terraform providers lock vpc -s dev -platform=linux_amd64 -platform=darwin
         ```
     </dd>
 </dl>
-
-## Native Terraform Flags
-
-This command supports native `terraform providers` flags such as Subcommands include `schema` for detailed schema info, `lock` for dependency locking, `mirror` for provider mirroring.
 
 ## Related Commands
 
