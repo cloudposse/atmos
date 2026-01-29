@@ -134,6 +134,12 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 		return true
 	}
 
+	// PR versions (pr:NNNN) always need re-exec - never skip.
+	if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
+		log.Debug("PR version requested, will re-exec", "requested", requestedVersion)
+		return false
+	}
+
 	// Normalize versions for comparison (strip 'v' prefix).
 	currentVersion := strings.TrimPrefix(Version, "v")
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
@@ -191,6 +197,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, error) {
 	defer perf.Track(nil, "version.findOrInstallVersionWithConfig")()
 
+	// Handle PR versions (pr:NNNN) - install from PR artifact.
+	if prNumber, isPR := toolchain.IsPRVersion(version); isPR {
+		return findOrInstallPRVersion(prNumber, cfg)
+	}
+
 	// Try to find existing installation.
 	binaryPath, err := cfg.Finder.FindBinaryPath("cloudposse", "atmos", version)
 	if err == nil && binaryPath != "" {
@@ -210,6 +221,28 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	binaryPath, err = cfg.Finder.FindBinaryPath("cloudposse", "atmos", version)
 	if err != nil {
 		return "", fmt.Errorf("installed Atmos %s but could not find binary: %w", version, err)
+	}
+
+	return binaryPath, nil
+}
+
+// findOrInstallPRVersion finds the binary for a PR version, installing if needed.
+func findOrInstallPRVersion(prNumber int, cfg *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallPRVersion")()
+
+	// Check if already installed.
+	prVersionDir := fmt.Sprintf("pr-%d", prNumber)
+	binaryPath, err := cfg.Finder.FindBinaryPath("cloudposse", "atmos", prVersionDir)
+	if err == nil && binaryPath != "" {
+		log.Debug("Found existing PR installation", "pr", prNumber, "path", binaryPath)
+		return binaryPath, nil
+	}
+
+	// Install from PR artifact.
+	log.Debug("PR version not installed, installing from artifact", "pr", prNumber)
+	binaryPath, err = toolchain.InstallFromPR(prNumber, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to install Atmos from PR #%d: %w", prNumber, err)
 	}
 
 	return binaryPath, nil
