@@ -12,7 +12,7 @@ When a component is configured with a `source` attribute for JIT vendoring, thes
 
 ### Example
 
-A JIT vendored component configuration:
+A JIT-vendored component configuration:
 
 ```yaml
 components:
@@ -60,9 +60,9 @@ Added tests in `path_utils_test.go`:
 ## Impact
 
 Both `generate varfile` and `generate backend` commands now properly support:
-- JIT vendored components (components with `source` configuration)
+- JIT-vendored components (components with `source` configuration)
 - Components that use `workdir` provisioner
-- Components outside of the standard `components/terraform` directory
+- Components outside the standard `components/terraform` directory
 
 ## Related Files
 

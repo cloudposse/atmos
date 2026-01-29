@@ -25,7 +25,8 @@ RUN set -ex; \
     curl -1sSLf "https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh" | bash -s -- /usr/local/bin; \
     # Install toolchain used with Atmos \
     apt-get -y install --no-install-recommends terraform kubectl helmfile helm; \
-    # Install the helm-diff plugin required by Helmfile
+    # Install the helm-diff plugin required by Helmfile.
+    # Helm 4 requires --verify=false because helm-diff does not ship .prov signature files.
     helm plugin install --verify=false https://github.com/databus23/helm-diff; \
     # Clean up the package lists to keep the image clean
     rm -rf /var/lib/apt/lists/*

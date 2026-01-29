@@ -79,6 +79,7 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 			// Ensure stderr is restored and pipe ends are closed even on panic.
 			defer func() {
 				os.Stderr = oldStderr
+				_ = w.Close()
 				r.Close()
 			}()
 
