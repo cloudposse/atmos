@@ -1,4 +1,4 @@
-# Fix: terraform providers lock command not working
+# Fix: terraform compound subcommands (providers lock, state list, workspace select, etc.)
 
 **Date**: 2025-01-28
 
@@ -6,7 +6,9 @@
 
 ## Problem
 
-The `atmos terraform "providers lock"` command (and similar compound terraform subcommands) stopped working. When using quotes around the compound subcommand, atmos was not properly recognizing it as a valid subcommand.
+Terraform compound subcommands — `providers lock`, `state list`, `workspace select`, and others — were not working correctly.
+When using quotes around the compound subcommand (e.g., `"providers lock"`), atmos was not properly recognizing it as a valid subcommand.
+Additionally, these commands were handled via hardcoded argument parsing rather than the Cobra command tree.
 
 ### Example
 
@@ -35,6 +37,8 @@ The command-line argument parsing in `processArgsAndFlags` had two issues:
 
 ## Solution
 
+### Part 1: Argument parsing fix (`internal/exec/cli_utils.go`)
+
 Modified `internal/exec/cli_utils.go` with a modular, well-tested approach:
 
 1. **Helper functions for compound subcommand parsing**:
@@ -53,21 +57,47 @@ Modified `internal/exec/cli_utils.go` with a modular, well-tested approach:
    - Quoted form: `["providers lock", "component"]` → component at index 1
    - Separate form: `["providers", "lock", "component"]` → component at index 2
 
+### Part 2: Cobra command tree registration (`cmd/terraform/`)
+
+Following the command registry pattern, compound subcommands are now registered as proper
+Cobra child commands in the command tree, enabling standard Cobra routing:
+
+1. **`cmd/terraform/utils.go`** - `newTerraformPassthroughSubcommand()` helper creates Cobra
+   child commands that delegate to the parent command's execution flow.
+
+2. **`cmd/terraform/state.go`** - Registers `list`, `mv`, `pull`, `push`, `replace-provider`,
+   `rm`, `show` as children of `stateCmd`.
+
+3. **`cmd/terraform/providers.go`** - Registers `lock`, `mirror`, `schema` as children
+   of `providersCmd`.
+
+4. **`cmd/terraform/workspace.go`** - Registers `list`, `select`, `new`, `delete`, `show`
+   as children of `workspaceCmd`. Uses `RegisterPersistentFlags` so sub-subcommands inherit
+   backend execution flags. Has a workspace-specific `newWorkspacePassthroughSubcommand()`
+   that binds both `terraformParser` and `workspaceParser`.
+
+The legacy compound subcommand parsing in `processArgsAndFlags` is retained as a fallback
+for the interactive UI path (which bypasses Cobra) and backward compatibility.
+
 ## Supported Compound Subcommands
 
 The following terraform compound subcommands are now supported in both quoted and separate forms:
 
-| Command | Subcommands |
-| ------- | ----------- |
-| `providers` | lock, mirror, schema |
-| `state` | list, mv, pull, push, replace-provider, rm, show |
-| `workspace` | list, select, new, delete, show |
-| `write` | varfile (legacy, use `generate varfile`) |
+| Command     | Subcommands                                      |
+|-------------|--------------------------------------------------|
+| `providers` | lock, mirror, schema                             |
+| `state`     | list, mv, pull, push, replace-provider, rm, show |
+| `workspace` | list, select, new, delete, show                  |
+| `write`     | varfile (legacy, use `generate varfile`)         |
 
 ## Files Changed
 
 - `internal/exec/cli_utils.go`: Modified argument parsing to support quoted compound subcommands
 - `internal/exec/cli_utils_test.go`: Added comprehensive tests for compound subcommand handling
+- `cmd/terraform/utils.go`: Added `newTerraformPassthroughSubcommand()` helper
+- `cmd/terraform/state.go`: Registered state sub-subcommands as Cobra children
+- `cmd/terraform/providers.go`: Registered providers sub-subcommands as Cobra children
+- `cmd/terraform/workspace.go`: Registered workspace sub-subcommands as Cobra children, changed to persistent flags
 
 ## Testing
 
