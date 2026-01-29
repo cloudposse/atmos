@@ -77,6 +77,15 @@ func NewFileCache(subpath string, opts ...FileCacheOption) (*FileCache, error) {
 		opt(c)
 	}
 
+	// Ensure the cache directory exists after options are applied.
+	// This handles the case where WithBaseDir specifies a custom path.
+	if err := os.MkdirAll(c.baseDir, DefaultCacheDirPerm); err != nil {
+		return nil, errUtils.Build(errUtils.ErrCacheDirectoryCreation).
+			WithCause(err).
+			WithContext("path", c.baseDir).
+			Err()
+	}
+
 	return c, nil
 }
 
