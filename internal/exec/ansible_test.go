@@ -197,9 +197,9 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 
 func TestConstructAnsibleComponentVarfileName(t *testing.T) {
 	tests := []struct {
-		name          string
-		info          *schema.ConfigAndStacksInfo
-		expectedName  string
+		name         string
+		info         *schema.ConfigAndStacksInfo
+		expectedName string
 	}{
 		{
 			name: "basic component",
