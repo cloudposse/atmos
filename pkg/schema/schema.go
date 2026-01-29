@@ -75,6 +75,7 @@ type AtmosConfiguration struct {
 	TerraformDirAbsolutePath      string             `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
 	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
 	PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
+	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -473,11 +474,21 @@ type Packer struct {
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
+type Ansible struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Ansible operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+}
+
 type Components struct {
 	// Built-in component types (legacy - will migrate to plugin model in future phases).
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible   Ansible   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -501,6 +512,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Helmfile, true
 	case "packer":
 		return c.Packer, true
+	case "ansible":
+		return c.Ansible, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
@@ -632,6 +645,8 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir               string
 	PackerCommand             string
 	PackerDir                 string
+	AnsibleCommand            string
+	AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -789,6 +804,8 @@ type ConfigAndStacksInfo struct {
 	HelmfileDir               string
 	PackerCommand             string
 	PackerDir                 string
+	AnsibleCommand            string
+	AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string

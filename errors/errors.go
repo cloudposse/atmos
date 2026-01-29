@@ -470,15 +470,35 @@ var (
 	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
 	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
 
+	// Ansible configuration errors.
+	ErrMissingAnsibleBasePath = errors.New("ansible base path is required")
+
+	// Ansible-specific subsection errors.
+	ErrInvalidAnsibleSection  = errors.New("invalid ansible section")
+	ErrInvalidAnsibleCommand  = errors.New("invalid ansible command")
+	ErrInvalidAnsibleVars     = errors.New("invalid ansible vars section")
+	ErrInvalidAnsibleSettings = errors.New("invalid ansible settings section")
+	ErrInvalidAnsibleEnv      = errors.New("invalid ansible env section")
+	ErrInvalidAnsibleAuth     = errors.New("invalid ansible auth section")
+
+	// Ansible execution errors.
+	ErrAnsibleExecutionFailed  = errors.New("ansible execution failed")
+	ErrAnsiblePlaybookMissing  = errors.New("ansible playbook is required")
+	ErrAnsibleInventoryMissing = errors.New("ansible inventory is required")
+	ErrAnsibleComponentMissing = errors.New("ansible component not found")
+	ErrAnsibleSettingsInvalid  = errors.New("invalid ansible component settings")
+
 	// Component type-specific section errors.
 	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
 	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
 	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
+	ErrInvalidComponentsAnsible   = errors.New("invalid components.ansible section")
 
 	// Specific component configuration errors.
 	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
 	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
 	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
+	ErrInvalidSpecificAnsibleComponent   = errors.New("invalid ansible component configuration")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")

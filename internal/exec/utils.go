@@ -312,6 +312,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
+		atmosConfig.AnsibleDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,

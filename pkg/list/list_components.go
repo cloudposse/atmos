@@ -36,6 +36,11 @@ func getStackComponents(stackData any) ([]string, error) {
 		allComponents = append(allComponents, lo.Keys(packerComponents)...)
 	}
 
+	// Extract ansible components
+	if ansibleComponents, ok := componentsMap["ansible"].(map[string]any); ok {
+		allComponents = append(allComponents, lo.Keys(ansibleComponents)...)
+	}
+
 	// If no components found, return an error
 	if len(allComponents) == 0 {
 		return nil, errUtils.ErrNoComponentsFound
