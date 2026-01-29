@@ -21,6 +21,7 @@ import (
 	m "github.com/cloudposse/atmos/pkg/merge"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	stackimports "github.com/cloudposse/atmos/pkg/stack/imports"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -828,77 +829,97 @@ func processYAMLConfigFileWithContextInternal(
 			return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w in the manifest '%s'", errUtils.ErrInvalidImport, relativeFilePath)
 		}
 
-		// If the import file is specified without extension, use `.yaml` as default
-		impWithExt := imp
-		ext := filepath.Ext(imp)
-		if ext == "" {
-			extensions := []string{
-				u.YamlFileExtension,
-				u.YmlFileExtension,
-				u.YamlTemplateExtension,
-				u.YmlTemplateExtension,
-			}
+		var importMatches []string
 
-			found := false
-			for _, extension := range extensions {
-				testPath := filepath.Join(basePath, imp+extension)
-				if _, err := os.Stat(testPath); err == nil {
-					impWithExt = imp + extension
-					found = true
-					break
+		// Check if the import is a remote URL.
+		if stackimports.IsRemote(imp) {
+			// Download the remote import.
+			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath)
+			localPath, err := stackimports.DownloadRemoteImport(atmosConfig, imp)
+			if err != nil {
+				if importStruct.SkipIfMissing {
+					log.Debug("Skipping missing remote import", "uri", imp)
+					continue
+				}
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w '%s' in file '%s': %w",
+					errUtils.ErrDownloadRemoteImport, imp, relativeFilePath, err)
+			}
+			// Remote imports return a single file path.
+			importMatches = []string{localPath}
+		} else {
+			// Local import - handle extension resolution and glob matching.
+			impWithExt := imp
+			ext := filepath.Ext(imp)
+			if ext == "" {
+				extensions := []string{
+					u.YamlFileExtension,
+					u.YmlFileExtension,
+					u.YamlTemplateExtension,
+					u.YmlTemplateExtension,
+				}
+
+				found := false
+				for _, extension := range extensions {
+					testPath := filepath.Join(basePath, imp+extension)
+					if _, err := os.Stat(testPath); err == nil {
+						impWithExt = imp + extension
+						found = true
+						break
+					}
+				}
+
+				if !found {
+					// Default to .yaml if no file is found.
+					impWithExt = imp + u.DefaultStackConfigFileExtension
+				}
+			} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
+				// Check if there's a template version of this file.
+				templatePath := impWithExt + u.TemplateExtension
+				if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
+					impWithExt = templatePath
 				}
 			}
 
-			if !found {
-				// Default to .yaml if no file is found
-				impWithExt = imp + u.DefaultStackConfigFileExtension
+			impWithExtPath := filepath.Join(basePath, impWithExt)
+
+			if impWithExtPath == filePath {
+				errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
+					relativeFilePath,
+					imp)
+				return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
 			}
-		} else if ext == u.YamlFileExtension || ext == u.YmlFileExtension {
-			// Check if there's a template version of this file
-			templatePath := impWithExt + u.TemplateExtension
-			if _, err := os.Stat(filepath.Join(basePath, templatePath)); err == nil {
-				impWithExt = templatePath
-			}
-		}
 
-		impWithExtPath := filepath.Join(basePath, impWithExt)
-
-		if impWithExtPath == filePath {
-			errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
-				relativeFilePath,
-				imp)
-			return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-		}
-
-		// Find all import matches in the glob
-		importMatches, err := u.GetGlobMatches(impWithExtPath)
-		if err != nil || len(importMatches) == 0 {
-			// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container)
-			// TODO: review `doublestar` library
-
+			// Find all import matches in the glob.
+			var err error
 			importMatches, err = u.GetGlobMatches(impWithExtPath)
 			if err != nil || len(importMatches) == 0 {
-				// The import was not found -> check if the import is a Go template; if not, return the error
-				isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
-				if err2 != nil {
-					return nil, nil, nil, nil, nil, nil, nil, nil, err2
-				}
+				// Retry (b/c we are using `doublestar` library and it sometimes has issues reading many files in a Docker container).
+				// TODO: review `doublestar` library.
 
-				// If the import is not a Go template and SkipIfMissing is false, return the error
-				if !isGolangTemplate && !importStruct.SkipIfMissing {
-					if err != nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
-							imp,
-							relativeFilePath,
-							err,
-						)
-						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
-					} else if importMatches == nil {
-						errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
-							imp,
-							relativeFilePath,
-						)
-						return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+				importMatches, err = u.GetGlobMatches(impWithExtPath)
+				if err != nil || len(importMatches) == 0 {
+					// The import was not found -> check if the import is a Go template; if not, return the error.
+					isGolangTemplate, err2 := IsGolangTemplate(atmosConfig, imp)
+					if err2 != nil {
+						return nil, nil, nil, nil, nil, nil, nil, nil, err2
+					}
+
+					// If the import is not a Go template and SkipIfMissing is false, return the error.
+					if !isGolangTemplate && !importStruct.SkipIfMissing {
+						if err != nil {
+							errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
+								imp,
+								relativeFilePath,
+								err,
+							)
+							return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+						} else if importMatches == nil {
+							errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
+								imp,
+								relativeFilePath,
+							)
+							return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+						}
 					}
 				}
 			}

@@ -1,0 +1,31 @@
+# Demo stack that imports from both local and remote sources.
+#
+# This demonstrates the remote stack imports feature:
+# - Local imports work as before (catalog/base)
+# - Remote imports are downloaded via go-getter and merged
+#
+# Note: The remote import URL points to a fixture file in the atmos repo.
+# This example works once the remote-stack-imports feature is merged to main.
+
+import:
+  # Local import - provides base component configuration
+  - catalog/base
+
+  # Remote import - fetches shared configuration from GitHub
+  # This URL points to the test fixture in the atmos repo
+  - https://raw.githubusercontent.com/cloudposse/atmos/main/tests/fixtures/remote-imports/shared.yaml
+
+vars:
+  stage: demo
+
+components:
+  terraform:
+    myapp:
+      metadata:
+        type: real
+      vars:
+        environment: "demo"
+        # These values will be overridden by the remote import:
+        # - imported_from: "remote"
+        # - remote_import_test: true
+        # - shared_setting: "value-from-remote"
