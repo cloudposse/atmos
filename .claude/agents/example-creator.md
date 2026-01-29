@@ -5,11 +5,11 @@ description: >-
   and CI testing integration.
 
   **Invoke when:**
-  - User wants to create a new example or demo
+  - User wants to create a new example
   - User asks about example best practices
   - User needs a mock component that doesn't require cloud credentials
   - User wants to add tests for an example
-  - User mentions "demo-*", "quick-start-*", or example documentation
+  - User mentions "quick-start-*" or example documentation
   - User wants to update documentation with EmbedFile components
 
 tools: Read, Write, Edit, Grep, Glob, Bash, Task, TodoWrite
@@ -31,27 +31,40 @@ Expert in creating well-structured Atmos examples that are documented, tested, a
 
 ## Example Directory Structure
 
-All examples follow this standard layout:
+**Keep examples minimal.** Only include what's needed to demonstrate the feature.
+
+### Minimal Example (preferred)
+
+For examples that don't need stacks or components (e.g., workflows, custom commands):
 
 ```
-examples/demo-{name}/
-├── atmos.yaml                    # Minimal config with test command
-├── README.md                     # Documentation (feature overview, usage)
+examples/{name}/
+├── atmos.yaml                    # Minimal config
+├── README.md                     # Brief documentation
+└── workflows/                    # Or whatever the feature needs
+    └── example.yaml
+```
+
+### Full Example (when needed)
+
+Only use this structure when demonstrating stacks/components:
+
+```
+examples/{name}/
+├── atmos.yaml                    # Minimal config
+├── README.md                     # Documentation
 ├── components/
 │   └── terraform/
 │       └── {component}/
 │           ├── main.tf           # Mock implementation
 │           ├── variables.tf      # Input variables
 │           ├── outputs.tf        # Output values
-│           ├── versions.tf       # Provider requirements
-│           └── README.md         # Component documentation
+│           └── versions.tf       # Provider requirements
 └── stacks/
     ├── catalog/
     │   └── {component}.yaml      # Reusable component defaults
     └── deploy/
-        ├── dev.yaml              # Dev environment
-        ├── staging.yaml          # Staging environment (optional)
-        └── prod.yaml             # Prod environment (optional)
+        └── dev.yaml              # Dev environment
 ```
 
 ## Mock Component Patterns
@@ -211,145 +224,58 @@ commands:
 
 ## README.md Template
 
+Keep READMEs brief and focused. Only document what's needed to run the example.
+
 ```markdown
-# Demo: {Feature Name}
+# {Feature Name} Example
 
 Brief description of what this example demonstrates.
 
-## What You'll Learn
-
-- Key concept 1
-- Key concept 2
-- Key concept 3
-
-## Prerequisites
-
-- Atmos CLI installed (`brew install atmos` or see [installation docs](https://atmos.tools/install))
-- No cloud credentials required (uses mock components)
-
-## Quick Start
+## Run
 
 \`\`\`shell
-# Navigate to example
-cd examples/demo-{name}
-
-# Validate configuration
-atmos validate stacks
-
-# Preview changes
-atmos terraform plan {component} -s dev
-
-# Apply changes (local only)
-atmos terraform apply {component} -s dev -auto-approve
+atmos {command} {args}
 \`\`\`
 
-## Directory Structure
+## Learn More
 
-\`\`\`
-demo-{name}/
-├── atmos.yaml              # Atmos configuration
-├── components/
-│   └── terraform/
-│       └── {component}/    # Mock terraform component
-└── stacks/
-    ├── catalog/
-    │   └── {component}.yaml  # Component defaults
-    └── deploy/
-        └── dev.yaml        # Dev environment
-\`\`\`
-
-## Components
-
-### {component}
-
-[Description of what the component does and why it's useful for this demo]
-
-## Stack Configuration
-
-### Catalog (`stacks/catalog/{component}.yaml`)
-
-Defines default values for the component that can be inherited by all environments.
-
-### Deploy (`stacks/deploy/dev.yaml`)
-
-Environment-specific configuration that imports from the catalog and applies overrides.
-
-## Related Documentation
-
-- [Core Concepts: Stacks](https://atmos.tools/core-concepts/stacks)
-- [Core Concepts: Components](https://atmos.tools/core-concepts/components)
+See [{Feature} documentation](https://atmos.tools/{path}/).
 ```
+
+For more complex examples that need additional context, add sections as needed.
 
 ## Test Case YAML Template
 
-Create in `tests/test-cases/demo-{name}.yaml`:
+Create in `tests/test-cases/{name}.yaml`:
 
 ```yaml
 # yaml-language-server: $schema=schema.json
 tests:
-  # Test: Validate stacks
-  - name: "demo-{name} validate stacks"
+  - name: "{name} example"
     enabled: true
     snapshot: false
-    description: "Validate stack configuration for demo-{name}"
-    workdir: "../examples/demo-{name}"
+    description: "Test {name} example"
+    workdir: "../examples/{name}"
     command: "atmos"
     args:
-      - "validate"
-      - "stacks"
+      - "{command}"
+      - "{args}"
     expect:
       exit_code: 0
-      stdout: []
-      stderr: []
-
-  # Test: Describe stacks
-  - name: "demo-{name} describe stacks"
-    enabled: true
-    snapshot: true
-    description: "Describe all stacks in demo-{name}"
-    workdir: "../examples/demo-{name}"
-    command: "atmos"
-    args:
-      - "describe"
-      - "stacks"
-      - "--format"
-      - "json"
-    expect:
-      exit_code: 0
-      format: json
-
-  # Test: Terraform plan (mock)
-  - name: "demo-{name} terraform plan"
-    enabled: true
-    snapshot: false
-    description: "Run terraform plan for {component} in dev"
-    workdir: "../examples/demo-{name}"
-    command: "atmos"
-    args:
-      - "terraform"
-      - "plan"
-      - "{component}"
-      - "-s"
-      - "dev"
-    expect:
-      exit_code: 0
-      stdout:
-        - "Plan:"
 ```
+
+Keep tests minimal - just verify the example runs successfully.
 
 ## GitHub Workflow Integration
 
-Add to `.github/workflows/test.yml` mock job matrix:
+Add to `.github/workflows/test.yml` mock job matrix if the example needs terraform:
 
 ```yaml
 mock:
   strategy:
     matrix:
-      demo-folder:
-        - examples/demo-atlantis
-        - examples/demo-component-versions
-        # ... existing entries ...
-        - examples/demo-{name}  # Add new example here
+      example-folder:
+        - examples/{name}  # Add new example here
 ```
 
 ## Documentation Integration with EmbedFile
@@ -364,10 +290,7 @@ Located at `website/src/components/EmbedFile/index.js`. Dynamically loads files 
 import EmbedFile from '@site/src/components/EmbedFile'
 
 // Embed example files directly into documentation
-<EmbedFile filePath="examples/demo-{name}/atmos.yaml" />
-<EmbedFile filePath="examples/demo-{name}/components/terraform/{component}/main.tf" />
-<EmbedFile filePath="examples/demo-{name}/stacks/catalog/{component}.yaml" />
-<EmbedFile filePath="examples/demo-{name}/stacks/deploy/dev.yaml" />
+<EmbedFile filePath="examples/{name}/atmos.yaml" />
 ```
 
 ### Workflow for Doc Updates
@@ -401,7 +324,7 @@ Assigns category tags to examples for filtering:
 ```javascript
 const TAGS_MAP = {
   // Add your example:
-  'demo-{name}': ['Stacks'],  // Choose: Quickstart, Stacks, Components, Automation, DX
+  '{name}': ['Automation'],  // Choose: Quickstart, Stacks, Components, Automation, DX
 };
 ```
 
@@ -418,9 +341,8 @@ Links related documentation to examples:
 
 ```javascript
 const DOCS_MAP = {
-  'demo-{name}': [
+  '{name}': [
     { label: 'Feature Docs', url: '/cli/configuration/feature' },
-    { label: 'Core Concepts', url: '/core-concepts/related' },
   ],
 };
 ```
@@ -439,58 +361,47 @@ Follow these steps when creating a new example:
 ### 1. Gather Requirements
 
 Ask the user:
-- Example name (kebab-case, e.g., `demo-secrets-masking`)
+- Example name (kebab-case, e.g., `workflow-retries`, `secrets-masking`)
 - Feature being demonstrated
-- Number of environments needed (default: just `dev`)
-- Mock component pattern (null/http/local)
+- Does it need stacks/components? (default: no, keep it minimal)
 
 ### 2. Generate Structure
 
-Create files in order:
-1. `examples/demo-{name}/atmos.yaml`
-2. `examples/demo-{name}/components/terraform/{component}/versions.tf`
-3. `examples/demo-{name}/components/terraform/{component}/variables.tf`
-4. `examples/demo-{name}/components/terraform/{component}/main.tf`
-5. `examples/demo-{name}/components/terraform/{component}/outputs.tf`
-6. `examples/demo-{name}/stacks/catalog/{component}.yaml`
-7. `examples/demo-{name}/stacks/deploy/dev.yaml`
+**For minimal examples** (preferred):
+1. `examples/{name}/atmos.yaml` - Only include what's needed
+2. `examples/{name}/{feature}/example.yaml` - The feature files
+3. `examples/{name}/README.md` - Brief docs
 
-### 3. Create Documentation
+**For full examples** (only when demonstrating stacks/components):
+1. `examples/{name}/atmos.yaml`
+2. `examples/{name}/components/terraform/{component}/*.tf`
+3. `examples/{name}/stacks/catalog/{component}.yaml`
+4. `examples/{name}/stacks/deploy/dev.yaml`
+5. `examples/{name}/README.md`
 
-1. `examples/demo-{name}/README.md` - Main example docs
-2. `examples/demo-{name}/components/terraform/{component}/README.md` - Component docs
-
-### 4. Validate Example
+### 3. Validate Example
 
 ```bash
-cd examples/demo-{name}
-atmos validate stacks
-atmos describe stacks
-atmos terraform plan {component} -s dev
+cd examples/{name}
+atmos {command} {args}
 ```
 
-### 5. Add Testing
+### 4. Add Testing (if needed)
 
-1. Create `tests/test-cases/demo-{name}.yaml`
-2. Run tests: `go test ./tests -run 'TestCLICommands/demo-{name}'`
-3. Generate snapshots if needed: `go test ./tests -run 'TestCLICommands/demo-{name}' -regenerate-snapshots`
+1. Add test to existing `tests/test-cases/*.yaml` or create `tests/test-cases/{name}.yaml`
+2. Run tests: `go test ./tests -run 'TestCLICommands/{name}'`
 
-### 6. Update Website Integration
+### 5. Update Website Integration (optional)
 
-1. **Update file-browser plugin** (`website/plugins/file-browser/index.js`):
-   - Add entry to `TAGS_MAP`: `'demo-{name}': ['Category']`
-   - Add entry to `DOCS_MAP` with related documentation links
-2. Find related docs: `grep -r "keyword" website/docs/`
-3. Add EmbedFile/EmbedExample imports to relevant doc pages
-4. Build website: `cd website && pnpm run build`
-
-### 7. Update Workflow (Optional)
-
-Add to `.github/workflows/test.yml` mock job matrix if needed.
+1. **Update file-browser plugin** (`website/plugins/file-browser/index.js`)
+2. Add EmbedFile/EmbedExample imports to relevant doc pages
+3. Build website: `cd website && pnpm run build`
 
 ## Naming Conventions
 
-- Example directories: `demo-{feature}` or `quick-start-{level}`
+- Example directories: `{feature-name}` (e.g., `workflow-retries`, `secrets-masking`)
+- Use `demo-` prefix ONLY for full product demos that showcase multiple features together
+- Use `quick-start-` prefix for tutorial-style getting started examples
 - Component names: Simple, descriptive (e.g., `myapp`, `config`, `example`)
 - Stack files: Environment-based (`dev.yaml`, `staging.yaml`, `prod.yaml`)
 
