@@ -345,42 +345,6 @@ func ExecuteAnsible(
 	)
 }
 
-// ExecuteAnsibleVersion executes `ansible --version` and returns the version info.
-func ExecuteAnsibleVersion(info *schema.ConfigAndStacksInfo) (map[string]any, error) {
-	defer perf.Track(nil, "exec.ExecuteAnsibleVersion")()
-
-	atmosConfig, err := cfg.InitCliConfig(*info, true)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get ansible command from config.
-	command := atmosConfig.Components.Ansible.Command
-	if command == "" {
-		command = cfg.AnsibleComponentType
-	}
-
-	// Execute ansible --version directly (output goes to stdout).
-	err = ExecuteShellCommand(
-		atmosConfig,
-		command,
-		[]string{"--version"},
-		"",
-		nil,
-		false,
-		info.RedirectStdErr,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	result := map[string]any{
-		"command": command,
-	}
-
-	return result, nil
-}
-
 // GetAnsiblePlaybookFromSettings extracts the playbook from settings.ansible.playbook.
 func GetAnsiblePlaybookFromSettings(settingsSection *schema.AtmosSectionMapType) (string, error) {
 	defer perf.Track(nil, "exec.GetAnsiblePlaybookFromSettings")()
