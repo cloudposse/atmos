@@ -81,7 +81,8 @@ func TestRemoteImporter_Download_NotFound(t *testing.T) {
 
 	// Download should fail.
 	_, err := importer.Download(server.URL + "/nonexistent.yaml")
-	assert.Error(t, err)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadRemoteImport)
 }
 
 func TestRemoteImporter_Download_LocalPath_Error(t *testing.T) {

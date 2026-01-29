@@ -19,8 +19,8 @@ var versionPattern = regexp.MustCompile(`^[vV]?\d+(\.\d+)*$`)
 
 // IsLocalPath checks if the URI is a local file system path.
 // Examples:
-//   - Local: "/absolute/path", "./relative/path", "../parent/path", "components/terraform"
-//   - Remote: "github.com/owner/repo", "https://example.com", "git.company.com/repo"
+//   - Local: "/absolute/path", "./relative/path", "../parent/path", "components/terraform".
+//   - Remote: "github.com/owner/repo", "https://example.com", "git.company.com/repo".
 func IsLocalPath(uri string) bool {
 	defer perf.Track(nil, "imports.IsLocalPath")()
 
@@ -70,8 +70,8 @@ func IsRemote(uri string) bool {
 
 // HasSchemeSeparator checks if the URI contains a scheme separator.
 // Examples:
-//   - true: "https://github.com", "git::https://...", "s3::https://..."
-//   - false: "github.com/repo", "./local/path", "components/terraform"
+//   - true: "https://github.com", "git::https://...", "s3::https://...".
+//   - false: "github.com/repo", "./local/path", "components/terraform".
 func HasSchemeSeparator(uri string) bool {
 	defer perf.Track(nil, "imports.HasSchemeSeparator")()
 
