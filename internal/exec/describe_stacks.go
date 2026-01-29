@@ -206,7 +206,7 @@ func ExecuteDescribeStacks(
 		}
 
 		// Extract stack-level (file-level) locals for template processing.
-		// Stack-level locals are available in templates like {{ .locals.X }} and need to be merged
+		// Stack-level locals are available in templates like {{ .locals.X }} and need to be merged.
 		// with component-level locals for template execution.
 		var stackLocals map[string]any
 		if sl, ok := stackSection.(map[string]any)[cfg.LocalsSectionName].(map[string]any); ok {

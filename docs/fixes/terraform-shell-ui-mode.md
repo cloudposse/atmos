@@ -1,6 +1,6 @@
 # Fix: terraform shell not working from Atmos UI
 
-**Date**: 2025-01-28
+**Date**: 2026-01-28
 
 **GitHub Issue**: [#2017](https://github.com/cloudposse/atmos/issues/2017)
 
