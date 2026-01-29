@@ -6,7 +6,9 @@ This document defines the implementation of Azure authentication file isolation 
 
 **Status:** 🚧 **Planned** - This PRD defines the implementation plan for Azure file isolation.
 
-**Goal:** Migrate Azure authentication from writing to `~/.azure/` (user's directory) to `~/.config/atmos/azure/` (Atmos-managed directory) for credential isolation, clean logout, and XDG compliance.
+**Goal:** Migrate Azure authentication from writing to `~/.azure/` (user's directory) to `~/.config/atmos/{realm}/azure/` (Atmos-managed directory) for credential isolation, clean logout, and XDG compliance.
+
+**Note:** This PRD will be implemented with realm support from the start. See [Auth Realm Architecture PRD](./auth-realm-architecture.md) for realm design.
 
 ## Problem Statement
 
@@ -99,24 +101,26 @@ AZURE_CONFIG_DIR=~/.azure
 #   - ~/.azure/msal_token_cache.json
 #   - ~/.azure/azureProfile.json
 
-# With Atmos (isolated)
-AZURE_CONFIG_DIR=~/.config/atmos/azure/azure-oidc
+# With Atmos (isolated by realm)
+AZURE_CONFIG_DIR=~/.config/atmos/a1b2c3d4/azure/azure-oidc
 # Azure SDK/CLI reads:
-#   - ~/.config/atmos/azure/azure-oidc/msal_token_cache.json
-#   - ~/.config/atmos/azure/azure-oidc/azureProfile.json
+#   - ~/.config/atmos/a1b2c3d4/azure/azure-oidc/msal_token_cache.json
+#   - ~/.config/atmos/a1b2c3d4/azure/azure-oidc/azureProfile.json
 # User's ~/.azure/ is never touched!
+# Different realms have completely isolated credentials!
 ```
 
 ### Pattern to Follow
 
-Azure must implement the same file isolation pattern as AWS:
+Azure must implement the same file isolation pattern as AWS, including realm support:
 
-- **Isolated storage**: `~/.config/atmos/azure/{provider-name}/` (XDG-compliant)
+- **Isolated storage**: `~/.config/atmos/{realm}/azure/{provider-name}/` (XDG-compliant with realm)
 - **Environment control**: `AZURE_CONFIG_DIR` redirects SDK to Atmos paths
 - **Clean logout**: Delete provider directory without touching user's `~/.azure/` files
 - **Multi-provider**: Multiple Azure providers coexist in separate directories
+- **Realm isolation**: Credentials are isolated per realm (customer/repository)
 
-See **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** for requirements and **[AWS Authentication File Isolation](./aws-auth-file-isolation.md)** for reference implementation.
+See **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** for requirements, **[AWS Authentication File Isolation](./aws-auth-file-isolation.md)** for reference implementation, and **[Auth Realm Architecture PRD](./auth-realm-architecture.md)** for realm design.
 
 ## Design Goals
 
@@ -164,40 +168,52 @@ This PRD implements patterns defined in:
 
 ### Universal Identity Provider File Pattern
 
-**All identity providers MUST follow this structure:**
+**All identity providers MUST follow this structure with realm as top-level directory:**
 
 ```text
-~/.config/atmos/{cloud}/       # XDG_CONFIG_HOME/atmos/{cloud}
-├── {provider-name-1}/         # Provider-specific subdirectory
-│   ├── credentials.*          # Credentials (format varies by provider)
-│   ├── config.*               # Config (format varies by provider)
-│   └── cache.*                # Token cache (format varies by provider)
-└── {provider-name-2}/         # Multiple providers can coexist
-    └── ...
+~/.config/atmos/{realm}/       # XDG_CONFIG_HOME/atmos/{realm}
+├── {cloud}/                   # Cloud-specific subdirectory (aws, azure, gcp)
+│   ├── {provider-name-1}/     # Provider-specific subdirectory
+│   │   ├── credentials.*      # Credentials (format varies by provider)
+│   │   ├── config.*           # Config (format varies by provider)
+│   │   └── cache.*            # Token cache (format varies by provider)
+│   └── {provider-name-2}/     # Multiple providers can coexist
+│       └── ...
 ```
 
 **Examples:**
 ```text
-~/.config/atmos/aws/aws-sso/credentials           # AWS SSO provider
-~/.config/atmos/aws/aws-sso/config                # AWS config
-~/.config/atmos/azure/azure-oidc/msal_token_cache.json   # Azure OIDC provider
-~/.config/atmos/azure/azure-oidc/azureProfile.json       # Azure profile
-~/.config/atmos/gcp/gcp-sa/credentials.json       # GCP service account (future)
-~/.config/atmos/github/github-app/token.json      # GitHub app (future)
+~/.config/atmos/a1b2c3d4/aws/aws-sso/credentials           # AWS SSO provider
+~/.config/atmos/a1b2c3d4/aws/aws-sso/config                # AWS config
+~/.config/atmos/a1b2c3d4/azure/azure-oidc/msal_token_cache.json   # Azure OIDC provider
+~/.config/atmos/a1b2c3d4/azure/azure-oidc/azureProfile.json       # Azure profile
+~/.config/atmos/customer-acme/gcp/gcp-sa/credentials.json  # GCP service account (future)
+~/.config/atmos/customer-acme/github/github-app/token.json # GitHub app (future)
 ```
+
+See **[Auth Realm Architecture PRD](./auth-realm-architecture.md)** for complete realm design.
 
 ### Azure-Specific Implementation
 
 #### File Structure
 
 ```text
-~/.config/atmos/azure/         # XDG_CONFIG_HOME/atmos/azure
-├── azure-oidc/                # OIDC/Device Code provider
-│   ├── msal_token_cache.json  # MSAL token cache
-│   └── azureProfile.json      # Azure CLI profile
-└── azure-sp/                  # Service Principal provider (future)
-    ├── credentials.json       # Service principal credentials
-    └── config.json            # Azure config
+~/.config/atmos/{realm}/azure/  # XDG_CONFIG_HOME/atmos/{realm}/azure
+├── azure-oidc/                 # OIDC/Device Code provider
+│   ├── msal_token_cache.json   # MSAL token cache
+│   └── azureProfile.json       # Azure CLI profile
+└── azure-sp/                   # Service Principal provider (future)
+    ├── credentials.json        # Service principal credentials
+    └── config.json             # Azure config
+```
+
+**Realm examples:**
+```text
+# Customer A (explicit realm in atmos.yaml)
+~/.config/atmos/customer-acme/azure/azure-oidc/msal_token_cache.json
+
+# Customer B (automatic realm from path hash)
+~/.config/atmos/b5c6d7e8/azure/azure-oidc/msal_token_cache.json
 ```
 
 #### Azure SDK Environment Variables
@@ -208,7 +224,7 @@ The Azure SDK and Azure CLI respect these environment variables:
 
 1. **`AZURE_CONFIG_DIR`** - Azure CLI config directory (contains `msal_token_cache.json` and `azureProfile.json`)
    - Default: `~/.azure` on Unix/macOS, `%USERPROFILE%\.azure` on Windows
-   - **Atmos sets this to**: `~/.config/atmos/azure/{provider-name}`
+   - **Atmos sets this to**: `~/.config/atmos/{realm}/azure/{provider-name}`
    - This is the **primary isolation mechanism** for Azure
 
 2. **Authentication Credentials** (cleared to prevent conflicts):
@@ -233,7 +249,7 @@ This table shows the direct parallels between AWS and Azure implementations:
 
 | Aspect | AWS Implementation | Azure Implementation | Notes |
 |--------|-------------------|---------------------|-------|
-| **Base Directory** | `~/.config/atmos/aws/` | `~/.config/atmos/azure/` | Both use XDG config directory |
+| **Base Directory** | `~/.config/atmos/{realm}/aws/` | `~/.config/atmos/{realm}/azure/` | Both use XDG config directory with realm |
 | **Provider Directory** | `aws-sso/`, `aws-user/` | `azure-oidc/`, `azure-sp/` | Provider name from `atmos.yaml` |
 | **Credential Files** | `credentials` (INI)<br/>`config` (INI) | `msal_token_cache.json` (JSON)<br/>`azureProfile.json` (JSON) | Format differs by SDK convention |
 | **Primary Isolation Env Var** | `AWS_SHARED_CREDENTIALS_FILE`<br/>`AWS_CONFIG_FILE` | `AZURE_CONFIG_DIR` | Azure uses directory, AWS uses files |
@@ -245,7 +261,7 @@ This table shows the direct parallels between AWS and Azure implementations:
 | **Setup Functions** | `pkg/auth/cloud/aws/setup.go` | `pkg/auth/cloud/azure/setup.go` | Same pattern |
 | **Env Preparation** | `pkg/auth/cloud/aws/env.go` | `pkg/auth/cloud/azure/env.go` | Same logic flow |
 | **Auth Context** | `AWSAuthContext{...}` | `AzureAuthContext{...}` | Parallel schemas |
-| **Clean Logout** | `rm -rf ~/.config/atmos/aws/{provider}` | `rm -rf ~/.config/atmos/azure/{provider}` | Identical |
+| **Clean Logout** | `rm -rf ~/.config/atmos/{realm}/aws/{provider}` | `rm -rf ~/.config/atmos/{realm}/azure/{provider}` | Identical |
 | **User Directory** | `~/.aws/` (never modified) | `~/.azure/` (never modified) | Isolation guarantee |
 
 **Key Differences:**
@@ -257,11 +273,12 @@ This table shows the direct parallels between AWS and Azure implementations:
 
 **Parallel Design Principles:**
 
-1. **XDG Compliance**: Both use `~/.config/atmos/{cloud}/` for credential storage
-2. **Provider Scoping**: Both use provider-specific subdirectories for multi-provider support
-3. **Environment Variable Control**: Both use environment variables to redirect SDKs
-4. **Clean Logout**: Both enable logout by deleting a single directory
-5. **User Isolation**: Both never modify user's manual configuration (`~/.aws/` or `~/.azure/`)
+1. **Realm Isolation**: Both use `~/.config/atmos/{realm}/` as top-level directory for credential isolation
+2. **XDG Compliance**: Both use `~/.config/atmos/{realm}/{cloud}/` for credential storage
+3. **Provider Scoping**: Both use provider-specific subdirectories for multi-provider support
+4. **Environment Variable Control**: Both use environment variables to redirect SDKs
+5. **Clean Logout**: Both enable logout by deleting a single directory
+6. **User Isolation**: Both never modify user's manual configuration (`~/.aws/` or `~/.azure/`)
 
 ### Code Architecture
 
@@ -336,34 +353,37 @@ func NewAzureFileManager(basePath string) (*AzureFileManager, error) {
     }, nil
 }
 
-// GetProviderDir returns the provider-specific directory path.
-// Example: ~/.config/atmos/azure/azure-oidc
-func (m *AzureFileManager) GetProviderDir(providerName string) string {
-    return filepath.Join(m.baseDir, providerName)
+// GetProviderDir returns the provider-specific directory path with realm.
+// Example: ~/.config/atmos/a1b2c3d4/azure/azure-oidc
+func (m *AzureFileManager) GetProviderDir(providerName, realm string) string {
+    if realm != "" {
+        return filepath.Join(m.baseDir, realm, "azure", providerName)
+    }
+    return filepath.Join(m.baseDir, "azure", providerName)
 }
 
 // GetMSALCachePath returns the path to the MSAL token cache file.
-// Example: ~/.config/atmos/azure/azure-oidc/msal_token_cache.json
-func (m *AzureFileManager) GetMSALCachePath(providerName string) string {
-    return filepath.Join(m.GetProviderDir(providerName), "msal_token_cache.json")
+// Example: ~/.config/atmos/a1b2c3d4/azure/azure-oidc/msal_token_cache.json
+func (m *AzureFileManager) GetMSALCachePath(providerName, realm string) string {
+    return filepath.Join(m.GetProviderDir(providerName, realm), "msal_token_cache.json")
 }
 
 // GetProfilePath returns the path to the Azure profile file.
-// Example: ~/.config/atmos/azure/azure-oidc/azureProfile.json
-func (m *AzureFileManager) GetProfilePath(providerName string) string {
-    return filepath.Join(m.GetProviderDir(providerName), "azureProfile.json")
+// Example: ~/.config/atmos/a1b2c3d4/azure/azure-oidc/azureProfile.json
+func (m *AzureFileManager) GetProfilePath(providerName, realm string) string {
+    return filepath.Join(m.GetProviderDir(providerName, realm), "azureProfile.json")
 }
 
 // GetCredentialsPath returns the path to the credentials file (for service principals).
-// Example: ~/.config/atmos/azure/azure-sp/credentials.json
-func (m *AzureFileManager) GetCredentialsPath(providerName string) string {
-    return filepath.Join(m.GetProviderDir(providerName), "credentials.json")
+// Example: ~/.config/atmos/a1b2c3d4/azure/azure-sp/credentials.json
+func (m *AzureFileManager) GetCredentialsPath(providerName, realm string) string {
+    return filepath.Join(m.GetProviderDir(providerName, realm), "credentials.json")
 }
 
 // GetConfigPath returns the path to the config file.
-// Example: ~/.config/atmos/azure/azure-oidc/config.json
-func (m *AzureFileManager) GetConfigPath(providerName string) string {
-    return filepath.Join(m.GetProviderDir(providerName), "config.json")
+// Example: ~/.config/atmos/a1b2c3d4/azure/azure-oidc/config.json
+func (m *AzureFileManager) GetConfigPath(providerName, realm string) string {
+    return filepath.Join(m.GetProviderDir(providerName, realm), "config.json")
 }
 
 // GetBaseDir returns the base directory path.
@@ -1321,11 +1341,13 @@ This implementation follows the [Universal Identity Provider File Isolation Patt
 
 ## Related Documents
 
-1. **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** - Canonical pattern (REQUIRED READING)
-2. **[AWS Authentication File Isolation](./aws-auth-file-isolation.md)** - Reference implementation
-3. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
-4. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
-5. **[XDG Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)** - Official standard
+1. **[Auth Realm Architecture PRD](./auth-realm-architecture.md)** - Realm design and implementation (REQUIRED READING)
+2. **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** - Canonical pattern (REQUIRED READING)
+3. **[AWS Authentication File Isolation](./aws-auth-file-isolation.md)** - Reference implementation
+4. **[Auth Credential Realm Isolation PRD](./auth-user-credential-realm-isolation.md)** - Original realm problem statement
+5. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
+6. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
+7. **[XDG Specification](https://specifications.freedesktop.org/basedir/basedir-spec-latest.html)** - Official standard
 
 ## Changelog
 
