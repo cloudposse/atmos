@@ -215,7 +215,7 @@ func TestConstructAnsibleComponentVarfileName(t *testing.T) {
 				ContextPrefix: "prod-eu-west-1",
 				Component:     "database/postgres",
 			},
-			expectedName: "prod-eu-west-1-database/postgres.ansible.vars.yaml",
+			expectedName: "prod-eu-west-1-database-postgres.ansible.vars.yaml",
 		},
 		{
 			name: "empty context prefix",

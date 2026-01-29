@@ -96,7 +96,7 @@ func ExecuteAnsible(
 	// Check if the component exists as an Ansible component.
 	componentPath, err := u.GetComponentPath(&atmosConfig, "ansible", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component path: %w", err)
+		return errors.Join(errUtils.ErrPathResolution, fmt.Errorf("component path: %w", err))
 	}
 
 	// Auto-generate files BEFORE path validation when the following conditions hold.
@@ -127,7 +127,7 @@ func ExecuteAnsible(
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 			defer cancel()
 			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.AnsibleComponentType, info.ComponentSection, info.AuthContext); err != nil {
-				return fmt.Errorf("failed to auto-provision component source: %w", err)
+				return errors.Join(errUtils.ErrProvisionerFailed, fmt.Errorf("auto-provision source: %w", err))
 			}
 
 			// Check if source provisioner set a workdir path (source + workdir case).
@@ -174,21 +174,21 @@ func ExecuteAnsible(
 	resolver := dependencies.NewResolver(&atmosConfig)
 	deps, err := resolver.ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component dependencies: %w", err)
+		return errors.Join(errUtils.ErrDependencyResolution, err)
 	}
 
 	if len(deps) > 0 {
 		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
-			return fmt.Errorf("failed to install component dependencies: %w", err)
+			return errors.Join(errUtils.ErrDependencyResolution, fmt.Errorf("install dependencies: %w", err))
 		}
 
 		// Build PATH with toolchain binaries and add to component environment.
 		// This does NOT modify the global process environment - only the subprocess environment.
 		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
 		if err != nil {
-			return fmt.Errorf("failed to build toolchain PATH: %w", err)
+			return errors.Join(errUtils.ErrPathResolution, fmt.Errorf("toolchain PATH: %w", err))
 		}
 
 		// Propagate toolchain PATH into environment for subprocess.
@@ -249,7 +249,6 @@ func ExecuteAnsible(
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Write variables to a file.
-	varFile := constructAnsibleComponentVarfileName(info)
 	varFilePath := constructAnsibleComponentVarfilePath(&atmosConfig, info)
 
 	log.Debug("Writing the variables to file", "file", varFilePath)
@@ -299,8 +298,8 @@ func ExecuteAnsible(
 			return errUtils.ErrAnsiblePlaybookMissing
 		}
 
-		// Add extra-vars file.
-		allArgsAndFlags = append(allArgsAndFlags, []string{"--extra-vars", "@" + varFile}...)
+		// Add extra-vars file using full path for workdir/source provisioning scenarios.
+		allArgsAndFlags = append(allArgsAndFlags, []string{"--extra-vars", "@" + varFilePath}...)
 
 		// Add inventory if specified.
 		if inventory != "" {
@@ -387,8 +386,13 @@ func GetAnsibleInventoryFromSettings(settingsSection *schema.AtmosSectionMapType
 }
 
 // constructAnsibleComponentVarfileName constructs the variable file name for an Ansible component.
+// Component names containing path separators are sanitized to avoid creating nested directories.
 func constructAnsibleComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
-	return fmt.Sprintf("%s-%s.ansible.vars.yaml", info.ContextPrefix, info.Component)
+	// Sanitize component name by replacing path separators with dashes.
+	// This ensures the varfile name is a flat filename, not a nested path.
+	sanitizedComponent := strings.ReplaceAll(info.Component, "/", "-")
+	sanitizedComponent = strings.ReplaceAll(sanitizedComponent, string(filepath.Separator), "-")
+	return fmt.Sprintf("%s-%s.ansible.vars.yaml", info.ContextPrefix, sanitizedComponent)
 }
 
 // constructAnsibleComponentVarfilePath constructs the full path to the variable file.

@@ -2,9 +2,11 @@ package ansible
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	l "github.com/cloudposse/atmos/pkg/list"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -12,10 +14,20 @@ import (
 
 // stackFlagCompletion provides completion values for the --stack flag.
 // This is set on the flag registry to avoid import cycle with internal/exec.
-func stackFlagCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+func stackFlagCompletion(cmd *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "ansible.stackFlagCompletion")()
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Parse global flags to honor config selection flags.
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
@@ -34,7 +46,7 @@ func stackFlagCompletion(_ *cobra.Command, _ []string, _ string) ([]string, cobr
 }
 
 // componentArgCompletion provides completion values for positional component arguments.
-func componentArgCompletion(_ *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
+func componentArgCompletion(cmd *cobra.Command, args []string, _ string) ([]string, cobra.ShellCompDirective) {
 	defer perf.Track(nil, "ansible.componentArgCompletion")()
 
 	// Skip component completion if one was already provided.
@@ -42,7 +54,17 @@ func componentArgCompletion(_ *cobra.Command, args []string, _ string) ([]string
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}
 
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	// Parse global flags to honor config selection flags.
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
 	if err != nil {
 		return nil, cobra.ShellCompDirectiveNoFileComp
 	}

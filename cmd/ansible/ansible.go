@@ -109,9 +109,19 @@ func ansibleGlobalFlagsHandler(cmd *cobra.Command, args []string) error {
 	return cmd.Usage()
 }
 
-// buildConfigAndStacksInfo creates a ConfigAndStacksInfo with stack from flag or env.
+// buildConfigAndStacksInfo creates a ConfigAndStacksInfo with global flags populated.
+// This ensures config selection flags (--base-path, --config, --config-path, --profile)
+// are properly honored when initializing CLI config.
 func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
-	info := schema.ConfigAndStacksInfo{}
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+
+	info := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
 
 	// Get stack from flag if provided.
 	if stackFlag := cmd.Flag("stack"); stackFlag != nil && stackFlag.Value.String() != "" {

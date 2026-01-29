@@ -15,11 +15,17 @@ Use these subcommands to interact with [Ansible](https://docs.ansible.com/ansibl
 for automating infrastructure configuration, application deployment, and orchestration.
 </Intro>
 
+<Screengrab title="atmos ansible --help" slug="atmos-ansible--help" />
+
 ## Usage
 
 <Terminal>
 ```shell
-atmos ansible <sub-command> <atmos-component> --stack <atmos-stack> [atmos-flags] -- [ansible-options]
+# For playbook subcommand (requires component and stack)
+atmos ansible playbook <atmos-component> --stack <atmos-stack> [atmos-flags] -- [ansible-options]
+
+# For version subcommand (no arguments required)
+atmos ansible version
 ```
 </Terminal>
 

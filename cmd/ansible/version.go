@@ -1,12 +1,14 @@
-// https://docs.ansible.com/ansible/latest/cli/ansible.html
+// Ansible CLI docs: https://docs.ansible.com/ansible/latest/cli/ansible.html.
 
 package ansible
 
 import (
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -25,10 +27,20 @@ To see all available options, refer to https://docs.ansible.com/ansible/latest/c
 }
 
 // runVersion executes the ansible version command.
-func runVersion(cmd *cobra.Command, args []string) error {
+func runVersion(cmd *cobra.Command, _ []string) error {
+	// Parse global flags to honor config selection flags.
+	v := viper.GetViper()
+	globalFlags := flags.ParseGlobalFlags(cmd, v)
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		AtmosBasePath:           globalFlags.BasePath,
+		AtmosConfigFilesFromArg: globalFlags.Config,
+		AtmosConfigDirsFromArg:  globalFlags.ConfigPath,
+		ProfilesFromArg:         globalFlags.Profile,
+	}
+
 	// For version command, we just need to execute ansible --version directly.
 	// No need for full Atmos config or stack processing.
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
+	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
 	if err != nil {
 		return err
 	}

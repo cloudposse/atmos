@@ -1,4 +1,4 @@
-// https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html
+// Ansible playbook CLI docs: https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html.
 
 package ansible
 
