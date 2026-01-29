@@ -121,6 +121,21 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
+	// Handle "shell" subcommand when invoked from the Atmos interactive UI (ExecuteAtmosCmd).
+	// The direct CLI path goes through cmd/terraform/shell.go and never reaches this function.
+	// The UI path bypasses the Cobra command tree and dispatches through ExecuteTerraform(),
+	// so we must intercept "shell" here to avoid passing it to the terraform executable.
+	if info.SubCommand == "shell" {
+		opts := &ShellOptions{
+			Component:         info.ComponentFromArg,
+			Stack:             info.Stack,
+			DryRun:            info.DryRun,
+			Identity:          info.Identity,
+			ProcessingOptions: ProcessingOptions{ProcessTemplates: info.ProcessTemplates, ProcessFunctions: info.ProcessFunctions, Skip: info.Skip},
+		}
+		return ExecuteTerraformShell(opts, &atmosConfig)
+	}
+
 	// Get component-specific auth config and merge with global auth config.
 	// This allows components to define their own auth identities and defaults in stack configurations.
 	// Start with global config.

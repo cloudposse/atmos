@@ -7,6 +7,7 @@ description: This command calculates the `terraform` workspace for an Atmos comp
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
 
 <Intro>
 Use this command to calculate the `terraform` workspace for an Atmos component (from the context variables and stack config). It will
@@ -20,7 +21,7 @@ run `terraform init -reconfigure` and then select the workspace by executing the
 Execute the `terraform workspace` command like this:
 
 ```shell
-atmos terraform workspace <component> -s <stack>
+atmos terraform workspace <component> -s <stack> [subcommand] [options]
 ```
 
 This command calculates the `terraform` workspace for an Atmos component (from the context variables and stack config), then
@@ -31,6 +32,10 @@ If the workspace does not exist, the command creates it by executing the `terraf
 :::tip
 Run `atmos terraform workspace --help` to see all the available options
 :::
+
+## Subcommands
+
+<DocCardList />
 
 ## Configuration
 

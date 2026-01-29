@@ -179,3 +179,221 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "aws/bastion", val)
 }
+
+// TestGetComponentBasePath tests the getComponentBasePath function.
+func TestGetComponentBasePath(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+			Helmfile: schema.Helmfile{
+				BasePath: "components/helmfile",
+			},
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		componentKind string
+		expected      string
+	}{
+		{
+			name:          "terraform component",
+			componentKind: config.TerraformSectionName,
+			expected:      "components/terraform",
+		},
+		{
+			name:          "helmfile component",
+			componentKind: config.HelmfileSectionName,
+			expected:      "components/helmfile",
+		},
+		{
+			name:          "packer component",
+			componentKind: config.PackerSectionName,
+			expected:      "components/packer",
+		},
+		{
+			name:          "unknown component kind",
+			componentKind: "unknown",
+			expected:      "",
+		},
+		{
+			name:          "empty component kind",
+			componentKind: "",
+			expected:      "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getComponentBasePath(atmosConfig, tt.componentKind)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildComponentInfo tests the buildComponentInfo function.
+func TestBuildComponentInfo(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+			Helmfile: schema.Helmfile{
+				BasePath: "components/helmfile",
+			},
+			Packer: schema.Packer{
+				BasePath: "components/packer",
+			},
+		},
+	}
+
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		componentKind    string
+		expectedType     string
+		expectedPath     string
+		hasPath          bool
+	}{
+		{
+			name: "terraform component with base component",
+			componentSection: map[string]any{
+				config.ComponentSectionName: "vpc",
+			},
+			componentKind: config.TerraformSectionName,
+			expectedType:  config.TerraformSectionName,
+			expectedPath:  "components/terraform/vpc",
+			hasPath:       true,
+		},
+		{
+			name: "helmfile component",
+			componentSection: map[string]any{
+				config.ComponentSectionName: "nginx-ingress",
+			},
+			componentKind: config.HelmfileSectionName,
+			expectedType:  config.HelmfileSectionName,
+			expectedPath:  "components/helmfile/nginx-ingress",
+			hasPath:       true,
+		},
+		{
+			name: "packer component",
+			componentSection: map[string]any{
+				config.ComponentSectionName: "aws/bastion",
+			},
+			componentKind: config.PackerSectionName,
+			expectedType:  config.PackerSectionName,
+			expectedPath:  "components/packer/aws/bastion",
+			hasPath:       true,
+		},
+		{
+			name: "component with folder prefix",
+			componentSection: map[string]any{
+				config.ComponentSectionName: "vpc",
+				config.MetadataSectionName: map[string]any{
+					"component_folder_prefix": "myprefix",
+				},
+			},
+			componentKind: config.TerraformSectionName,
+			expectedType:  config.TerraformSectionName,
+			expectedPath:  "components/terraform/myprefix/vpc",
+			hasPath:       true,
+		},
+		{
+			name: "missing component name",
+			componentSection: map[string]any{
+				config.ComponentSectionName: "",
+			},
+			componentKind: config.TerraformSectionName,
+			expectedType:  config.TerraformSectionName,
+			hasPath:       false,
+		},
+		{
+			name:             "no component section key",
+			componentSection: map[string]any{},
+			componentKind:    config.TerraformSectionName,
+			expectedType:     config.TerraformSectionName,
+			hasPath:          false,
+		},
+		{
+			name: "unknown component kind - no base path",
+			componentSection: map[string]any{
+				config.ComponentSectionName: "test",
+			},
+			componentKind: "unknown",
+			expectedType:  "unknown",
+			hasPath:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildComponentInfo(atmosConfig, tt.componentSection, tt.componentKind)
+			assert.Equal(t, tt.expectedType, result["component_type"])
+
+			if tt.hasPath {
+				path, ok := result[config.ComponentPathSectionName].(string)
+				assert.True(t, ok, "component_path should be present")
+				// Normalize for cross-platform comparison.
+				assert.Equal(t, tt.expectedPath, path)
+			} else {
+				_, ok := result[config.ComponentPathSectionName]
+				assert.False(t, ok, "component_path should not be present")
+			}
+		})
+	}
+}
+
+// TestGetStackManifestName tests the getStackManifestName function.
+func TestGetStackManifestName(t *testing.T) {
+	tests := []struct {
+		name         string
+		stackSection any
+		expected     string
+	}{
+		{
+			name: "stack with name field",
+			stackSection: map[string]any{
+				"name": "custom-stack-name",
+			},
+			expected: "custom-stack-name",
+		},
+		{
+			name: "stack without name field",
+			stackSection: map[string]any{
+				"vars": map[string]any{"stage": "dev"},
+			},
+			expected: "",
+		},
+		{
+			name: "stack with empty name",
+			stackSection: map[string]any{
+				"name": "",
+			},
+			expected: "",
+		},
+		{
+			name: "stack with non-string name",
+			stackSection: map[string]any{
+				"name": 42,
+			},
+			expected: "",
+		},
+		{
+			name:         "nil stack section",
+			stackSection: nil,
+			expected:     "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := getStackManifestName(tt.stackSection)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}

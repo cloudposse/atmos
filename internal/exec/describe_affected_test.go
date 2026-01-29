@@ -262,7 +262,8 @@ func setupDescribeAffectedTest(t *testing.T) (atmosConfig schema.AtmosConfigurat
 		PreserveTimes: false,
 		PreserveOwner: false,
 		Skip: func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-			if strings.Contains(src, "node_modules") {
+			if strings.Contains(src, "node_modules") ||
+				strings.Contains(src, ".terraform") {
 				return true, nil
 			}
 			isSocket, err := u.IsSocket(src)

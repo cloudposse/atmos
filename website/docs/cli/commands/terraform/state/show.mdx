@@ -1,0 +1,91 @@
+---
+title: atmos terraform state show
+sidebar_label: state show
+sidebar_class_name: command
+id: show
+description: Show a resource in the Terraform state.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to show the attributes of a single resource in the Terraform state for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform state show --help" slug="atmos-terraform-state-show--help" />
+
+## Usage
+
+Execute the `terraform state show` command like this:
+
+```shell
+atmos terraform state show <component> -s <stack> <address> [options]
+```
+
+This command displays detailed information about a single resource instance in the Terraform state. This is useful for inspecting the current attributes and metadata of a managed resource.
+
+:::tip
+Run `atmos terraform state show --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Show details of a specific resource
+atmos terraform state show vpc -s dev aws_vpc.main
+
+# Show a resource within a module
+atmos terraform state show vpc -s dev module.web.aws_instance.main
+
+# Show an indexed resource
+atmos terraform state show vpc -s dev 'aws_subnet.public[0]'
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+
+    <dt>`address` <em>(required)</em></dt>
+    <dd>
+        The address of the resource instance to show.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform state show vpc -s dev --dry-run aws_vpc.main
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform state show vpc -s dev --skip-init aws_vpc.main
+        ```
+    </dd>
+</dl>
+
+Additional native Terraform flags such as `-state` are passed through to Terraform.
+
+## See Also
+
+- [`atmos terraform state`](/cli/commands/terraform/state) - State management overview
+- [`atmos terraform state list`](/cli/commands/terraform/state/list) - List resources in the state
+- [`atmos terraform state rm`](/cli/commands/terraform/state/rm) - Remove instances from the state

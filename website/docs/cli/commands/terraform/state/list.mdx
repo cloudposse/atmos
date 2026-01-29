@@ -1,0 +1,83 @@
+---
+title: atmos terraform state list
+sidebar_label: state list
+sidebar_class_name: command
+id: list
+description: List resources in the Terraform state.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to list resources in the Terraform state for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform state list --help" slug="atmos-terraform-state-list--help" />
+
+## Usage
+
+Execute the `terraform state list` command like this:
+
+```shell
+atmos terraform state list <component> -s <stack> [options]
+```
+
+This command lists all resource instances tracked in the Terraform state for the specified component. Use it to inspect what resources Terraform is managing.
+
+:::tip
+Run `atmos terraform state list --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# List all resources in the state
+atmos terraform state list vpc -s dev
+
+# Filter resources by address
+atmos terraform state list vpc -s dev aws_subnet.public
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform state list vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform state list vpc -s dev --skip-init
+        ```
+    </dd>
+</dl>
+
+Additional native Terraform flags such as `-state` and `-id` are passed through to Terraform.
+
+## See Also
+
+- [`atmos terraform state`](/cli/commands/terraform/state) - State management overview
+- [`atmos terraform state show`](/cli/commands/terraform/state/show) - Show a resource in the state
+- [`atmos terraform state mv`](/cli/commands/terraform/state/mv) - Move an item in the state

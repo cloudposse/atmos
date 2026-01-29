@@ -133,6 +133,45 @@ func TestValidateBackendTypeRequirements(t *testing.T) {
 	}
 }
 
+// TestExecuteTerraformGenerateBackendCmd_Deprecated tests the deprecated command returns an error.
+func TestExecuteTerraformGenerateBackendCmd_Deprecated(t *testing.T) {
+	err := ExecuteTerraformGenerateBackendCmd(nil, nil)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDeprecatedCmdNotCallable)
+}
+
+// TestWriteBackendConfigFile_DryRun tests that writeBackendConfigFile skips writing in dry-run mode.
+func TestWriteBackendConfigFile_DryRun(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:        "vpc",
+		ComponentFolderPrefix: "",
+		DryRun:                true,
+	}
+
+	config := map[string]any{
+		"terraform": map[string]any{
+			"backend": map[string]any{
+				"s3": map[string]any{
+					"bucket": "test-bucket",
+				},
+			},
+		},
+	}
+
+	err := writeBackendConfigFile(atmosConfig, info, config)
+	assert.NoError(t, err, "dry-run should not return error")
+}
+
 func TestValidateBackendTypeRequirementsTypeAssertions(t *testing.T) {
 	tests := []struct {
 		name        string

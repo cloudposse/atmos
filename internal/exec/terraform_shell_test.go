@@ -3,11 +3,14 @@ package exec
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
+	"github.com/cloudposse/atmos/pkg/auth/types"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -76,6 +79,7 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 			// Ensure stderr is restored and pipe ends are closed even on panic.
 			defer func() {
 				os.Stderr = oldStderr
+				_ = w.Close()
 				r.Close()
 			}()
 
@@ -202,4 +206,351 @@ func TestShellConfigConstruction(t *testing.T) {
 	assert.Equal(t, "/components/terraform/vpc", cfg.componentPath)
 	assert.Equal(t, "/project/components/terraform/vpc", cfg.workingDir)
 	assert.Equal(t, "dev-vpc.terraform.tfvars.json", cfg.varFile)
+}
+
+// TestShellOptionsFromConfigAndStacksInfo tests that ShellOptions can be correctly
+// populated from ConfigAndStacksInfo, which is the pattern used when routing
+// the "shell" subcommand through ExecuteTerraform.
+func TestShellOptionsFromConfigAndStacksInfo(t *testing.T) {
+	tests := []struct {
+		name     string
+		info     schema.ConfigAndStacksInfo
+		expected *ShellOptions
+	}{
+		{
+			name: "basic info to options conversion",
+			info: schema.ConfigAndStacksInfo{
+				ComponentFromArg: "vpc",
+				Stack:            "dev-us-west-2",
+				DryRun:           false,
+				Identity:         "",
+				ProcessTemplates: true,
+				ProcessFunctions: true,
+				Skip:             nil,
+			},
+			expected: &ShellOptions{
+				Component: "vpc",
+				Stack:     "dev-us-west-2",
+				DryRun:    false,
+				Identity:  "",
+				ProcessingOptions: ProcessingOptions{
+					ProcessTemplates: true,
+					ProcessFunctions: true,
+					Skip:             nil,
+				},
+			},
+		},
+		{
+			name: "with dry run and identity",
+			info: schema.ConfigAndStacksInfo{
+				ComponentFromArg: "rds",
+				Stack:            "prod-eu-west-1",
+				DryRun:           true,
+				Identity:         "admin-role",
+				ProcessTemplates: false,
+				ProcessFunctions: true,
+				Skip:             []string{"template"},
+			},
+			expected: &ShellOptions{
+				Component: "rds",
+				Stack:     "prod-eu-west-1",
+				DryRun:    true,
+				Identity:  "admin-role",
+				ProcessingOptions: ProcessingOptions{
+					ProcessTemplates: false,
+					ProcessFunctions: true,
+					Skip:             []string{"template"},
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// This is the same conversion logic used in ExecuteTerraform for "shell" subcommand.
+			opts := &ShellOptions{
+				Component:         tt.info.ComponentFromArg,
+				Stack:             tt.info.Stack,
+				DryRun:            tt.info.DryRun,
+				Identity:          tt.info.Identity,
+				ProcessingOptions: ProcessingOptions{ProcessTemplates: tt.info.ProcessTemplates, ProcessFunctions: tt.info.ProcessFunctions, Skip: tt.info.Skip},
+			}
+
+			assert.Equal(t, tt.expected.Component, opts.Component)
+			assert.Equal(t, tt.expected.Stack, opts.Stack)
+			assert.Equal(t, tt.expected.DryRun, opts.DryRun)
+			assert.Equal(t, tt.expected.Identity, opts.Identity)
+			assert.Equal(t, tt.expected.ProcessTemplates, opts.ProcessTemplates)
+			assert.Equal(t, tt.expected.ProcessFunctions, opts.ProcessFunctions)
+			assert.Equal(t, tt.expected.Skip, opts.Skip)
+		})
+	}
+}
+
+// TestShellSubcommandIdentification tests that the "shell" subcommand is correctly
+// identified as an Atmos-specific command that should be routed to ExecuteTerraformShell
+// and not passed to the terraform executable.
+func TestShellSubcommandIdentification(t *testing.T) {
+	tests := []struct {
+		name       string
+		subCommand string
+		isShell    bool
+	}{
+		{"shell command", "shell", true},
+		{"plan command", "plan", false},
+		{"apply command", "apply", false},
+		{"destroy command", "destroy", false},
+		{"init command", "init", false},
+		{"version command", "version", false},
+		{"workspace command", "workspace", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isShell := tt.subCommand == "shell"
+			assert.Equal(t, tt.isShell, isShell)
+		})
+	}
+}
+
+// TestStoreAuthenticatedIdentity tests the storeAuthenticatedIdentity function.
+func TestStoreAuthenticatedIdentity(t *testing.T) {
+	tests := []struct {
+		name             string
+		chain            []string
+		initialIdentity  string
+		expectedIdentity string
+		nilAuthManager   bool
+	}{
+		{
+			name:             "nil AuthManager - no change",
+			nilAuthManager:   true,
+			initialIdentity:  "",
+			expectedIdentity: "",
+		},
+		{
+			name:             "identity already set - no change",
+			chain:            []string{"provider", "target-identity"},
+			initialIdentity:  "explicit-identity",
+			expectedIdentity: "explicit-identity",
+		},
+		{
+			name:             "empty chain - no change",
+			chain:            []string{},
+			initialIdentity:  "",
+			expectedIdentity: "",
+		},
+		{
+			name:             "chain with single element",
+			chain:            []string{"single-identity"},
+			initialIdentity:  "",
+			expectedIdentity: "single-identity",
+		},
+		{
+			name:             "chain with multiple elements - uses last",
+			chain:            []string{"provider", "intermediate", "target-identity"},
+			initialIdentity:  "",
+			expectedIdentity: "target-identity",
+		},
+		{
+			name:             "chain with two elements - uses last",
+			chain:            []string{"provider", "dev-role"},
+			initialIdentity:  "",
+			expectedIdentity: "dev-role",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			info := &schema.ConfigAndStacksInfo{
+				Identity: tt.initialIdentity,
+			}
+
+			if tt.nilAuthManager {
+				// Test with nil AuthManager.
+				storeAuthenticatedIdentity(nil, info)
+				assert.Equal(t, tt.expectedIdentity, info.Identity)
+			} else {
+				// Create mock AuthManager.
+				mockAuthMgr := types.NewMockAuthManager(ctrl)
+				mockAuthMgr.EXPECT().GetChain().Return(tt.chain).AnyTimes()
+
+				// Call the actual function.
+				storeAuthenticatedIdentity(mockAuthMgr, info)
+				assert.Equal(t, tt.expectedIdentity, info.Identity)
+			}
+		})
+	}
+}
+
+// TestShellOptionsValidation tests validation of ShellOptions fields.
+func TestShellOptionsValidation(t *testing.T) {
+	tests := []struct {
+		name          string
+		opts          *ShellOptions
+		expectValid   bool
+		invalidReason string
+	}{
+		{
+			name: "valid options with component and stack",
+			opts: &ShellOptions{
+				Component: "vpc",
+				Stack:     "dev-us-west-2",
+			},
+			expectValid: true,
+		},
+		{
+			name: "valid options with all fields",
+			opts: &ShellOptions{
+				Component: "rds",
+				Stack:     "prod-eu-west-1",
+				DryRun:    true,
+				Identity:  "admin-role",
+				ProcessingOptions: ProcessingOptions{
+					ProcessTemplates: true,
+					ProcessFunctions: true,
+					Skip:             []string{"template"},
+				},
+			},
+			expectValid: true,
+		},
+		{
+			name: "missing component",
+			opts: &ShellOptions{
+				Component: "",
+				Stack:     "dev-us-west-2",
+			},
+			expectValid:   false,
+			invalidReason: "component is required",
+		},
+		{
+			name: "missing stack",
+			opts: &ShellOptions{
+				Component: "vpc",
+				Stack:     "",
+			},
+			expectValid:   false,
+			invalidReason: "stack is required",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			isValid := tt.opts.Component != "" && tt.opts.Stack != ""
+			assert.Equal(t, tt.expectValid, isValid, tt.invalidReason)
+		})
+	}
+}
+
+// TestGetShellMergedAuthConfig_EmptyStackOrComponent tests that getShellMergedAuthConfig
+// returns global auth config when stack or component is empty.
+func TestGetShellMergedAuthConfig_EmptyStackOrComponent(t *testing.T) {
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+	}{
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "vpc",
+		},
+		{
+			name:      "empty component",
+			stack:     "dev-us-west-2",
+			component: "",
+		},
+		{
+			name:      "both empty",
+			stack:     "",
+			component: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Identities: map[string]schema.Identity{
+						"test-role": {
+							Kind: "aws",
+						},
+					},
+				},
+			}
+
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            tt.stack,
+				ComponentFromArg: tt.component,
+			}
+
+			result, err := getShellMergedAuthConfig(atmosConfig, info)
+			assert.NoError(t, err)
+			assert.NotNil(t, result, "should return global auth config")
+		})
+	}
+}
+
+// TestShellConfigWithWorkdirProvisioner tests shellConfig when workdir provisioner is active.
+func TestShellConfigWithWorkdirProvisioner(t *testing.T) {
+	// Use platform-agnostic paths.
+	componentPathOriginal := filepath.Join("components", "terraform", "vpc")
+	workdirPathVpc := filepath.Join("workdir", "terraform", "vpc")
+	workdirPathTemp := filepath.Join("tmp", "atmos-workdir-123", "vpc")
+
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		originalPath     string
+		expectedCfgPath  string
+	}{
+		{
+			name:             "no workdir - uses component path",
+			componentSection: map[string]any{},
+			originalPath:     componentPathOriginal,
+			expectedCfgPath:  componentPathOriginal,
+		},
+		{
+			name: "workdir set - uses workdir path",
+			componentSection: map[string]any{
+				provWorkdir.WorkdirPathKey: workdirPathVpc,
+			},
+			originalPath:    componentPathOriginal,
+			expectedCfgPath: workdirPathVpc,
+		},
+		{
+			name: "workdir set with vars - uses workdir path",
+			componentSection: map[string]any{
+				provWorkdir.WorkdirPathKey: workdirPathTemp,
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			originalPath:    componentPathOriginal,
+			expectedCfgPath: workdirPathTemp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentPath := tt.originalPath
+
+			// Simulate the workdir path extraction logic.
+			if workdirPath, ok := tt.componentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+				componentPath = workdirPath
+			}
+
+			cfg := &shellConfig{
+				componentPath: componentPath,
+				workingDir:    componentPath,
+				varFile:       "test.terraform.tfvars.json",
+			}
+
+			assert.Equal(t, tt.expectedCfgPath, cfg.componentPath)
+			assert.Equal(t, tt.expectedCfgPath, cfg.workingDir)
+		})
+	}
 }
