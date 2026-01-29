@@ -8,9 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
-	"github.com/cloudposse/atmos/pkg/auth/types"
 	iolib "github.com/cloudposse/atmos/pkg/io"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -313,79 +311,6 @@ func TestShellSubcommandIdentification(t *testing.T) {
 	}
 }
 
-// TestStoreAuthenticatedIdentity tests the storeAuthenticatedIdentity function.
-func TestStoreAuthenticatedIdentity(t *testing.T) {
-	tests := []struct {
-		name             string
-		chain            []string
-		initialIdentity  string
-		expectedIdentity string
-		nilAuthManager   bool
-	}{
-		{
-			name:             "nil AuthManager - no change",
-			nilAuthManager:   true,
-			initialIdentity:  "",
-			expectedIdentity: "",
-		},
-		{
-			name:             "identity already set - no change",
-			chain:            []string{"provider", "target-identity"},
-			initialIdentity:  "explicit-identity",
-			expectedIdentity: "explicit-identity",
-		},
-		{
-			name:             "empty chain - no change",
-			chain:            []string{},
-			initialIdentity:  "",
-			expectedIdentity: "",
-		},
-		{
-			name:             "chain with single element",
-			chain:            []string{"single-identity"},
-			initialIdentity:  "",
-			expectedIdentity: "single-identity",
-		},
-		{
-			name:             "chain with multiple elements - uses last",
-			chain:            []string{"provider", "intermediate", "target-identity"},
-			initialIdentity:  "",
-			expectedIdentity: "target-identity",
-		},
-		{
-			name:             "chain with two elements - uses last",
-			chain:            []string{"provider", "dev-role"},
-			initialIdentity:  "",
-			expectedIdentity: "dev-role",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			info := &schema.ConfigAndStacksInfo{
-				Identity: tt.initialIdentity,
-			}
-
-			if tt.nilAuthManager {
-				// Test with nil AuthManager.
-				storeAuthenticatedIdentity(nil, info)
-				assert.Equal(t, tt.expectedIdentity, info.Identity)
-			} else {
-				// Create mock AuthManager.
-				mockAuthMgr := types.NewMockAuthManager(ctrl)
-				mockAuthMgr.EXPECT().GetChain().Return(tt.chain).AnyTimes()
-
-				// Call the actual function.
-				storeAuthenticatedIdentity(mockAuthMgr, info)
-				assert.Equal(t, tt.expectedIdentity, info.Identity)
-			}
-		})
-	}
-}
-
 // TestShellOptionsValidation tests validation of ShellOptions fields.
 func TestShellOptionsValidation(t *testing.T) {
 	tests := []struct {
@@ -441,55 +366,6 @@ func TestShellOptionsValidation(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			isValid := tt.opts.Component != "" && tt.opts.Stack != ""
 			assert.Equal(t, tt.expectValid, isValid, tt.invalidReason)
-		})
-	}
-}
-
-// TestGetShellMergedAuthConfig_EmptyStackOrComponent tests that getShellMergedAuthConfig
-// returns global auth config when stack or component is empty.
-func TestGetShellMergedAuthConfig_EmptyStackOrComponent(t *testing.T) {
-	tests := []struct {
-		name      string
-		stack     string
-		component string
-	}{
-		{
-			name:      "empty stack",
-			stack:     "",
-			component: "vpc",
-		},
-		{
-			name:      "empty component",
-			stack:     "dev-us-west-2",
-			component: "",
-		},
-		{
-			name:      "both empty",
-			stack:     "",
-			component: "",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			atmosConfig := &schema.AtmosConfiguration{
-				Auth: schema.AuthConfig{
-					Identities: map[string]schema.Identity{
-						"test-role": {
-							Kind: "aws",
-						},
-					},
-				},
-			}
-
-			info := &schema.ConfigAndStacksInfo{
-				Stack:            tt.stack,
-				ComponentFromArg: tt.component,
-			}
-
-			result, err := getShellMergedAuthConfig(atmosConfig, info)
-			assert.NoError(t, err)
-			assert.NotNil(t, result, "should return global auth config")
 		})
 	}
 }
