@@ -6,7 +6,7 @@
 
 ## Problem
 
-The `atmos terraform "providers lock"` command (and similar two-word terraform commands) stopped working. When using quotes around the two-word command, atmos was not properly recognizing it as a valid subcommand.
+The `atmos terraform "providers lock"` command (and similar compound terraform subcommands) stopped working. When using quotes around the compound subcommand, atmos was not properly recognizing it as a valid subcommand.
 
 ### Example
 
@@ -29,33 +29,33 @@ commands:
 
 The command-line argument parsing in `processArgsAndFlags` had two issues:
 
-1. **Early return for single arguments**: When the input had only one argument (like the quoted `"providers lock"`), the function returned early at line 221-224 before reaching the two-word command handling logic.
+1. **Early return for single arguments**: When the input had only one argument (like the quoted `"providers lock"`), the function returned early at line 221-224 before reaching the compound subcommand handling logic.
 
-2. **Hardcoded argument indices**: The two-word command handling only checked for separate arguments (e.g., `["providers", "lock", "component"]`), not for quoted single arguments (e.g., `["providers lock", "component"]`).
+2. **Hardcoded argument indices**: The compound subcommand handling only checked for separate arguments (e.g., `["providers", "lock", "component"]`), not for quoted single arguments (e.g., `["providers lock", "component"]`).
 
 ## Solution
 
 Modified `internal/exec/cli_utils.go` with a modular, well-tested approach:
 
-1. **Helper functions for two-word command parsing**:
-   - `parseTwoWordCommand()`: Main entry point that handles both quoted and separate forms.
-   - `parseQuotedTwoWordCommand()`: Parses quoted forms like `"providers lock"`.
-   - `parseSeparateTwoWordCommand()`: Parses separate forms like `["providers", "lock"]`.
-   - `processTerraformTwoWordCommand()`: Processes two-word commands and extracts component.
+1. **Helper functions for compound subcommand parsing**:
+   - `parseCompoundSubcommand()`: Main entry point that handles both quoted and separate forms.
+   - `parseQuotedCompoundSubcommand()`: Parses quoted forms like `"providers lock"`.
+   - `parseSeparateCompoundSubcommand()`: Parses separate forms like `["providers", "lock"]`.
+   - `processTerraformCompoundSubcommand()`: Processes compound subcommands and extracts component.
    - `processSingleCommand()`: Handles standard single-word commands.
 
-2. **Configurable subcommand lists**: Known two-word command subcommands are defined as package-level variables for easy maintenance:
+2. **Configurable subcommand lists**: Known compound subcommand lists are defined as package-level variables for easy maintenance:
    - `workspaceSubcommands`: list, select, new, delete, show
    - `stateSubcommands`: list, mv, pull, push, replace-provider, rm, show
    - `providersSubcommands`: lock, mirror, schema
 
-3. **Dynamic component argument indexing**: Uses `argCount` to track whether the command was 1 argument (quoted) or 2 arguments (separate), supporting both:
+3. **Dynamic component argument indexing**: Uses `argCount` to track whether the subcommand was passed as 1 argument (quoted) or 2 arguments (separate), supporting both:
    - Quoted form: `["providers lock", "component"]` → component at index 1
    - Separate form: `["providers", "lock", "component"]` → component at index 2
 
-## Supported Two-Word Commands
+## Supported Compound Subcommands
 
-The following terraform two-word commands are now supported in both quoted and separate forms:
+The following terraform compound subcommands are now supported in both quoted and separate forms:
 
 | Command | Subcommands |
 | ------- | ----------- |
@@ -66,14 +66,14 @@ The following terraform two-word commands are now supported in both quoted and s
 
 ## Files Changed
 
-- `internal/exec/cli_utils.go`: Modified argument parsing to support quoted two-word commands
-- `internal/exec/cli_utils_test.go`: Added comprehensive tests for two-word command handling
+- `internal/exec/cli_utils.go`: Modified argument parsing to support quoted compound subcommands
+- `internal/exec/cli_utils_test.go`: Added comprehensive tests for compound subcommand handling
 
 ## Testing
 
 Added comprehensive tests for all new functionality:
 
-**Integration tests (`TestProcessArgsAndFlags_TwoWordCommands`):**
+**Integration tests (`TestProcessArgsAndFlags_CompoundSubcommands`):**
 - All providers subcommands (lock, mirror, schema) in both quoted and separate forms
 - State subcommands (list, mv) in both forms
 - Workspace subcommands (select, list) in both forms
@@ -81,10 +81,10 @@ Added comprehensive tests for all new functionality:
 - Error cases for missing component arguments
 
 **Unit tests for helper functions:**
-- `TestParseTwoWordCommand`: Tests the main parsing entry point
-- `TestParseQuotedTwoWordCommand`: Tests parsing of quoted forms
-- `TestParseSeparateTwoWordCommand`: Tests parsing of separate word forms
-- `TestProcessTerraformTwoWordCommand`: Tests processing with component extraction
+- `TestParseCompoundSubcommand`: Tests the main parsing entry point
+- `TestParseQuotedCompoundSubcommand`: Tests parsing of quoted forms
+- `TestParseSeparateCompoundSubcommand`: Tests parsing of separate word forms
+- `TestProcessTerraformCompoundSubcommand`: Tests processing with component extraction
 - `TestProcessSingleCommand`: Tests single-word command processing
 
 ## Usage Examples

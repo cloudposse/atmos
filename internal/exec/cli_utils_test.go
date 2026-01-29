@@ -840,9 +840,9 @@ func TestProcessCommandLineArgs_FromPlanBeforeComponent(t *testing.T) {
 	require.Error(t, err, "ProcessCommandLineArgs should return error when --from-plan precedes component name")
 }
 
-// TestProcessArgsAndFlags_TwoWordCommands tests two-word terraform commands like "providers lock".
+// TestProcessArgsAndFlags_CompoundSubcommands tests terraform compound subcommands like "providers lock".
 // This includes both the standard form (separate words) and the quoted form (single argument).
-func TestProcessArgsAndFlags_TwoWordCommands(t *testing.T) {
+func TestProcessArgsAndFlags_CompoundSubcommands(t *testing.T) {
 	tests := []struct {
 		name              string
 		componentType     string
@@ -1035,12 +1035,12 @@ func TestProcessArgsAndFlags_TwoWordCommands(t *testing.T) {
 	}
 }
 
-// TestParseTwoWordCommand tests the parseTwoWordCommand helper function.
-func TestParseTwoWordCommand(t *testing.T) {
+// TestParseCompoundSubcommand tests the parseCompoundSubcommand helper function.
+func TestParseCompoundSubcommand(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    []string
-		want    *twoWordCommandResult
+		want    *compoundSubcommandResult
 		wantNil bool
 	}{
 		{
@@ -1056,7 +1056,7 @@ func TestParseTwoWordCommand(t *testing.T) {
 		{
 			name: "providers lock - quoted",
 			args: []string{"providers lock", "component"},
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "providers lock",
 				argCount:   1,
 			},
@@ -1064,7 +1064,7 @@ func TestParseTwoWordCommand(t *testing.T) {
 		{
 			name: "providers lock - separate",
 			args: []string{"providers", "lock", "component"},
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "providers lock",
 				argCount:   2,
 			},
@@ -1072,7 +1072,7 @@ func TestParseTwoWordCommand(t *testing.T) {
 		{
 			name: "state list - quoted",
 			args: []string{"state list", "component"},
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "state list",
 				argCount:   1,
 			},
@@ -1080,7 +1080,7 @@ func TestParseTwoWordCommand(t *testing.T) {
 		{
 			name: "workspace select - quoted",
 			args: []string{"workspace select", "component"},
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand:  "workspace",
 				subCommand2: "select",
 				argCount:    1,
@@ -1089,14 +1089,14 @@ func TestParseTwoWordCommand(t *testing.T) {
 		{
 			name: "write varfile - separate",
 			args: []string{"write", "varfile", "component"},
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand:  "write",
 				subCommand2: "varfile",
 				argCount:    2,
 			},
 		},
 		{
-			name:    "unknown two-word command",
+			name:    "unknown compound subcommand",
 			args:    []string{"unknown command", "component"},
 			wantNil: true,
 		},
@@ -1104,7 +1104,7 @@ func TestParseTwoWordCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseTwoWordCommand(tt.args)
+			got := parseCompoundSubcommand(tt.args)
 			if tt.wantNil {
 				assert.Nil(t, got)
 				return
@@ -1117,12 +1117,12 @@ func TestParseTwoWordCommand(t *testing.T) {
 	}
 }
 
-// TestParseQuotedTwoWordCommand tests the parseQuotedTwoWordCommand helper function.
-func TestParseQuotedTwoWordCommand(t *testing.T) {
+// TestParseQuotedCompoundSubcommand tests the parseQuotedCompoundSubcommand helper function.
+func TestParseQuotedCompoundSubcommand(t *testing.T) {
 	tests := []struct {
 		name    string
 		arg     string
-		want    *twoWordCommandResult
+		want    *compoundSubcommandResult
 		wantNil bool
 	}{
 		{
@@ -1133,7 +1133,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "providers lock",
 			arg:  "providers lock",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "providers lock",
 				argCount:   1,
 			},
@@ -1141,7 +1141,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "providers mirror",
 			arg:  "providers mirror",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "providers mirror",
 				argCount:   1,
 			},
@@ -1149,7 +1149,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "providers schema",
 			arg:  "providers schema",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "providers schema",
 				argCount:   1,
 			},
@@ -1157,7 +1157,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "state list",
 			arg:  "state list",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "state list",
 				argCount:   1,
 			},
@@ -1165,7 +1165,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "state mv",
 			arg:  "state mv",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "state mv",
 				argCount:   1,
 			},
@@ -1173,7 +1173,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "workspace select",
 			arg:  "workspace select",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand:  "workspace",
 				subCommand2: "select",
 				argCount:    1,
@@ -1182,7 +1182,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 		{
 			name: "write varfile",
 			arg:  "write varfile",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand:  "write",
 				subCommand2: "varfile",
 				argCount:    1,
@@ -1202,7 +1202,7 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseQuotedTwoWordCommand(tt.arg)
+			got := parseQuotedCompoundSubcommand(tt.arg)
 			if tt.wantNil {
 				assert.Nil(t, got)
 				return
@@ -1215,20 +1215,20 @@ func TestParseQuotedTwoWordCommand(t *testing.T) {
 	}
 }
 
-// TestParseSeparateTwoWordCommand tests the parseSeparateTwoWordCommand helper function.
-func TestParseSeparateTwoWordCommand(t *testing.T) {
+// TestParseSeparateCompoundSubcommand tests the parseSeparateCompoundSubcommand helper function.
+func TestParseSeparateCompoundSubcommand(t *testing.T) {
 	tests := []struct {
 		name    string
 		first   string
 		second  string
-		want    *twoWordCommandResult
+		want    *compoundSubcommandResult
 		wantNil bool
 	}{
 		{
 			name:   "providers lock",
 			first:  "providers",
 			second: "lock",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "providers lock",
 				argCount:   2,
 			},
@@ -1237,7 +1237,7 @@ func TestParseSeparateTwoWordCommand(t *testing.T) {
 			name:   "state list",
 			first:  "state",
 			second: "list",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand: "state list",
 				argCount:   2,
 			},
@@ -1246,7 +1246,7 @@ func TestParseSeparateTwoWordCommand(t *testing.T) {
 			name:   "workspace new",
 			first:  "workspace",
 			second: "new",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand:  "workspace",
 				subCommand2: "new",
 				argCount:    2,
@@ -1256,7 +1256,7 @@ func TestParseSeparateTwoWordCommand(t *testing.T) {
 			name:   "write varfile",
 			first:  "write",
 			second: "varfile",
-			want: &twoWordCommandResult{
+			want: &compoundSubcommandResult{
 				subCommand:  "write",
 				subCommand2: "varfile",
 				argCount:    2,
@@ -1278,7 +1278,7 @@ func TestParseSeparateTwoWordCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseSeparateTwoWordCommand(tt.first, tt.second)
+			got := parseSeparateCompoundSubcommand(tt.first, tt.second)
 			if tt.wantNil {
 				assert.Nil(t, got)
 				return
@@ -1291,8 +1291,8 @@ func TestParseSeparateTwoWordCommand(t *testing.T) {
 	}
 }
 
-// TestProcessTerraformTwoWordCommand tests the processTerraformTwoWordCommand helper function.
-func TestProcessTerraformTwoWordCommand(t *testing.T) {
+// TestProcessTerraformCompoundSubcommand tests the processTerraformCompoundSubcommand helper function.
+func TestProcessTerraformCompoundSubcommand(t *testing.T) {
 	tests := []struct {
 		name               string
 		args               []string
@@ -1303,7 +1303,7 @@ func TestProcessTerraformTwoWordCommand(t *testing.T) {
 		wantPathResolution bool
 	}{
 		{
-			name:          "not a two-word command",
+			name:          "not a compound subcommand",
 			args:          []string{"plan", "component"},
 			wantProcessed: false,
 			wantErr:       false,
@@ -1350,7 +1350,7 @@ func TestProcessTerraformTwoWordCommand(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			info := &schema.ArgsAndFlagsInfo{}
-			processed, err := processTerraformTwoWordCommand(info, tt.args)
+			processed, err := processTerraformCompoundSubcommand(info, tt.args)
 
 			assert.Equal(t, tt.wantProcessed, processed)
 

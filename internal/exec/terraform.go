@@ -121,8 +121,10 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Handle "shell" subcommand - this is an Atmos-specific command that opens an interactive shell.
-	// configured for the terraform component. It should not be passed to terraform executable.
+	// Handle "shell" subcommand when invoked from the Atmos interactive UI (ExecuteAtmosCmd).
+	// The direct CLI path goes through cmd/terraform/shell.go and never reaches this function.
+	// The UI path bypasses the Cobra command tree and dispatches through ExecuteTerraform(),
+	// so we must intercept "shell" here to avoid passing it to the terraform executable.
 	if info.SubCommand == "shell" {
 		opts := &ShellOptions{
 			Component:         info.ComponentFromArg,

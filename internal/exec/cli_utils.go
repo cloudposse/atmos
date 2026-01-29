@@ -24,14 +24,14 @@ const (
 	errFlagFormat = "%w: flag: %s"
 )
 
-// Terraform two-word command constants.
+// Terraform compound subcommand constants.
 const (
 	cmdWrite     = "write"
 	cmdVarfile   = "varfile"
 	cmdWorkspace = "workspace"
 	cmdState     = "state"
 	cmdProviders = "providers"
-	// Format string for two-word commands like "state list".
+	// Format string for compound subcommands like "state list".
 	cmdFmtSpaced = "%s %s"
 )
 
@@ -212,46 +212,48 @@ func ProcessCommandLineArgs(
 	return configAndStacksInfo, nil
 }
 
-// twoWordCommandResult holds the result of parsing a two-word terraform command.
-type twoWordCommandResult struct {
+// compoundSubcommandResult holds the result of parsing a compound terraform subcommand
+// (a command with its own subcommand, e.g., "providers lock", "state list").
+type compoundSubcommandResult struct {
 	subCommand  string
 	subCommand2 string
 	argCount    int // Number of arguments consumed (1 for quoted, 2 for separate).
 }
 
-// Known terraform two-word subcommands.
+// Known terraform compound subcommands (commands that have their own subcommands).
 var (
 	workspaceSubcommands = []string{"list", "select", "new", "delete", "show"}
 	stateSubcommands     = []string{"list", "mv", "pull", "push", "replace-provider", "rm", "show"}
 	providersSubcommands = []string{"lock", "mirror", "schema"}
 )
 
-// parseTwoWordCommand checks if the arguments represent a terraform two-word command.
+// parseCompoundSubcommand checks if the arguments represent a terraform compound subcommand
+// (a command with its own subcommand, e.g., "providers lock", "state list").
 // It handles both quoted forms (e.g., "providers lock") and separate forms (e.g., "providers", "lock").
-// Returns nil if no two-word command is detected.
-func parseTwoWordCommand(args []string) *twoWordCommandResult {
+// Returns nil if no compound subcommand is detected.
+func parseCompoundSubcommand(args []string) *compoundSubcommandResult {
 	if len(args) == 0 {
 		return nil
 	}
 
-	// First, check if the first argument is a quoted two-word command (e.g., "providers lock").
+	// First, check if the first argument is a quoted compound subcommand (e.g., "providers lock").
 	firstArg := args[0]
 	if strings.Contains(firstArg, " ") {
-		if result := parseQuotedTwoWordCommand(firstArg); result != nil {
+		if result := parseQuotedCompoundSubcommand(firstArg); result != nil {
 			return result
 		}
 	}
 
-	// If not a quoted command, check for separate word commands.
+	// If not a quoted command, check for separate word forms (e.g., "providers", "lock").
 	if len(args) > 1 {
-		return parseSeparateTwoWordCommand(args[0], args[1])
+		return parseSeparateCompoundSubcommand(args[0], args[1])
 	}
 
 	return nil
 }
 
-// parseQuotedTwoWordCommand parses a quoted two-word command like "providers lock".
-func parseQuotedTwoWordCommand(arg string) *twoWordCommandResult {
+// parseQuotedCompoundSubcommand parses a quoted compound subcommand like "providers lock".
+func parseQuotedCompoundSubcommand(arg string) *compoundSubcommandResult {
 	parts := strings.SplitN(arg, " ", 2)
 	if len(parts) != 2 {
 		return nil
@@ -262,40 +264,40 @@ func parseQuotedTwoWordCommand(arg string) *twoWordCommandResult {
 	switch first {
 	case cmdWrite:
 		if second == cmdVarfile {
-			return &twoWordCommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 1}
+			return &compoundSubcommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 1}
 		}
 	case cmdWorkspace:
 		if u.SliceContainsString(workspaceSubcommands, second) {
-			return &twoWordCommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 1}
+			return &compoundSubcommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 1}
 		}
 	case cmdState:
 		if u.SliceContainsString(stateSubcommands, second) {
-			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 1}
+			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 1}
 		}
 	case cmdProviders:
 		if u.SliceContainsString(providersSubcommands, second) {
-			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 1}
+			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 1}
 		}
 	}
 
 	return nil
 }
 
-// processTerraformTwoWordCommand handles terraform two-word commands (e.g., "providers lock").
-// Returns true if a two-word command was processed, false otherwise.
-func processTerraformTwoWordCommand(info *schema.ArgsAndFlagsInfo, args []string) (bool, error) {
-	twoWordResult := parseTwoWordCommand(args)
-	if twoWordResult == nil {
+// processTerraformCompoundSubcommand handles terraform compound subcommands (e.g., "providers lock").
+// Returns true if a compound subcommand was processed, false otherwise.
+func processTerraformCompoundSubcommand(info *schema.ArgsAndFlagsInfo, args []string) (bool, error) {
+	result := parseCompoundSubcommand(args)
+	if result == nil {
 		return false, nil
 	}
 
-	info.SubCommand = twoWordResult.subCommand
-	info.SubCommand2 = twoWordResult.subCommand2
+	info.SubCommand = result.subCommand
+	info.SubCommand2 = result.subCommand2
 
 	// The component argument is at index argCount.
 	// For quoted commands like "providers lock", argCount=1, so component is at [1].
 	// For separate commands like "providers" "lock", argCount=2, so component is at [2].
-	componentArgIndex := twoWordResult.argCount
+	componentArgIndex := result.argCount
 	if len(args) <= componentArgIndex {
 		return true, fmt.Errorf("%w: command %q requires an argument", errUtils.ErrMissingComponent, info.SubCommand)
 	}
@@ -350,24 +352,24 @@ func processSingleCommand(info *schema.ArgsAndFlagsInfo, args []string) error {
 	return nil
 }
 
-// parseSeparateTwoWordCommand parses a two-word command passed as separate arguments.
-func parseSeparateTwoWordCommand(first, second string) *twoWordCommandResult {
+// parseSeparateCompoundSubcommand parses a compound subcommand passed as separate arguments.
+func parseSeparateCompoundSubcommand(first, second string) *compoundSubcommandResult {
 	switch first {
 	case cmdWrite:
 		if second == cmdVarfile {
-			return &twoWordCommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 2}
+			return &compoundSubcommandResult{subCommand: cmdWrite, subCommand2: cmdVarfile, argCount: 2}
 		}
 	case cmdWorkspace:
 		if u.SliceContainsString(workspaceSubcommands, second) {
-			return &twoWordCommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 2}
+			return &compoundSubcommandResult{subCommand: cmdWorkspace, subCommand2: second, argCount: 2}
 		}
 	case cmdState:
 		if u.SliceContainsString(stateSubcommands, second) {
-			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 2}
+			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdState, second), argCount: 2}
 		}
 	case cmdProviders:
 		if u.SliceContainsString(providersSubcommands, second) {
-			return &twoWordCommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 2}
+			return &compoundSubcommandResult{subCommand: fmt.Sprintf(cmdFmtSpaced, cmdProviders, second), argCount: 2}
 		}
 	}
 
@@ -392,7 +394,7 @@ func processArgsAndFlags(
 	// Interactive prompts will handle missing args if available,
 	// otherwise validation will show appropriate errors.
 	// Exception: Don't return early if the single argument contains a space,
-	// as it might be a quoted two-word command like "providers lock" that needs
+	// as it might be a quoted compound subcommand like "providers lock" that needs
 	// further processing.
 	if len(inputArgsAndFlags) == 1 && info.SubCommand == "" && !strings.Contains(inputArgsAndFlags[0], " ") {
 		info.SubCommand = inputArgsAndFlags[0]
@@ -838,10 +840,11 @@ func processArgsAndFlags(
 		return info, nil
 	}
 
-	// Handle terraform two-word commands (e.g., "providers lock", "state list", "workspace select").
+	// Handle terraform compound subcommands (e.g., "providers lock", "state list", "workspace select").
+	// These are terraform commands that have their own subcommands.
 	// https://developer.hashicorp.com/terraform/cli/commands
 	if componentType == "terraform" {
-		processed, err := processTerraformTwoWordCommand(&info, additionalArgsAndFlags)
+		processed, err := processTerraformCompoundSubcommand(&info, additionalArgsAndFlags)
 		if err != nil {
 			return info, err
 		}
@@ -850,7 +853,7 @@ func processArgsAndFlags(
 		}
 	}
 
-	// Not a two-word command, process as single command.
+	// Not a compound subcommand, process as single command.
 	if err := processSingleCommand(&info, additionalArgsAndFlags); err != nil {
 		return info, err
 	}
