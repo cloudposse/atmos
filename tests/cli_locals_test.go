@@ -1031,9 +1031,8 @@ func TestComponentLevelLocals(t *testing.T) {
 func TestExampleLocals(t *testing.T) {
 	t.Chdir("../examples/locals")
 
-	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	_, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
-	_ = atmosConfig
 
 	tests := []struct {
 		name         string

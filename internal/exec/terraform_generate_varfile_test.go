@@ -186,6 +186,91 @@ func TestVarfileOptions_Validation(t *testing.T) {
 	}
 }
 
+// TestEnsureTerraformComponentExists_WithFolderPrefix tests component resolution with a folder prefix.
+func TestEnsureTerraformComponentExists_WithFolderPrefix(t *testing.T) {
+	tempDir := t.TempDir()
+	componentPath := filepath.Join(tempDir, "components", "terraform", "myprefix", "vpc")
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# vpc\n"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:      "vpc",
+		FinalComponent:        "vpc",
+		ComponentFolderPrefix: "myprefix",
+		ComponentSection:      map[string]any{},
+	}
+
+	err := ensureTerraformComponentExists(atmosConfig, info)
+	assert.NoError(t, err, "component with folder prefix should be found")
+}
+
+// TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath tests the error message contains base path info.
+func TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:      "missing-comp",
+		FinalComponent:        "missing-comp",
+		ComponentFolderPrefix: "",
+		ComponentSection:      map[string]any{},
+	}
+
+	err := ensureTerraformComponentExists(atmosConfig, info)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "missing-comp")
+	assert.Contains(t, err.Error(), "components/terraform")
+}
+
+// TestTryJITProvision_NilComponentSection tests that tryJITProvision handles nil ComponentSection.
+func TestTryJITProvision_NilComponentSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: nil,
+	}
+
+	err := tryJITProvision(atmosConfig, info)
+	assert.NoError(t, err, "nil component section should return nil without error")
+}
+
+// TestTryJITProvision_WithNonSourceKeys tests that component sections without source are handled.
+func TestTryJITProvision_WithNonSourceKeys(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"vars":     map[string]any{"name": "test"},
+			"settings": map[string]any{"enabled": true},
+			"metadata": map[string]any{"component": "vpc"},
+		},
+	}
+
+	err := tryJITProvision(atmosConfig, info)
+	assert.NoError(t, err, "section without source should return nil without error")
+}
+
 // TestVarfileOptions_ProcessingOptions tests that ProcessingOptions are correctly carried.
 func TestVarfileOptions_ProcessingOptions(t *testing.T) {
 	opts := &VarfileOptions{

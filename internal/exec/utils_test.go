@@ -363,6 +363,181 @@ func TestFindComponentDependencies(t *testing.T) {
 
 // TestGetFindStacksMapCacheKey tests cache key generation for FindStacksMap.
 // This validates P3.4 optimization: cache key includes atmosConfig and parameters.
+// TestFilterComponentLocals tests the filterComponentLocals function.
+func TestFilterComponentLocals(t *testing.T) {
+	tests := []struct {
+		name                    string
+		originalComponentLocals schema.AtmosSectionMapType
+		componentSection        map[string]any
+		expectedLocals          map[string]any // nil means locals key should be deleted.
+	}{
+		{
+			name:                    "no original component locals - deletes merged locals",
+			originalComponentLocals: map[string]any{},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"stack_local": "should_be_removed",
+				},
+			},
+			expectedLocals: nil,
+		},
+		{
+			name:                    "nil original component locals - deletes merged locals",
+			originalComponentLocals: nil,
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"stack_local": "should_be_removed",
+				},
+			},
+			expectedLocals: nil,
+		},
+		{
+			name: "filters to keep only component-level locals",
+			originalComponentLocals: map[string]any{
+				"engine":  true,
+				"version": true,
+			},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"engine":      "postgres",
+					"version":     "15",
+					"stack_local": "should_be_removed",
+					"namespace":   "also_removed",
+				},
+			},
+			expectedLocals: map[string]any{
+				"engine":  "postgres",
+				"version": "15",
+			},
+		},
+		{
+			name: "all original keys match - preserves all",
+			originalComponentLocals: map[string]any{
+				"key1": true,
+				"key2": true,
+			},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"key1": "value1",
+					"key2": "value2",
+				},
+			},
+			expectedLocals: map[string]any{
+				"key1": "value1",
+				"key2": "value2",
+			},
+		},
+		{
+			name: "no matching keys - deletes locals",
+			originalComponentLocals: map[string]any{
+				"missing_key": true,
+			},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"other_key": "value",
+				},
+			},
+			expectedLocals: nil,
+		},
+		{
+			name: "locals not a map - returns early",
+			originalComponentLocals: map[string]any{
+				"key1": true,
+			},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: "not_a_map",
+			},
+			// Non-map locals should remain unchanged.
+			expectedLocals: nil, // special case: not a map, function returns early.
+		},
+		{
+			name: "no locals key in component section",
+			originalComponentLocals: map[string]any{
+				"key1": true,
+			},
+			componentSection: map[string]any{
+				"vars": map[string]any{"stage": "dev"},
+			},
+			expectedLocals: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{
+				OriginalComponentLocals: tt.originalComponentLocals,
+				ComponentSection:        tt.componentSection,
+			}
+
+			filterComponentLocals(info)
+
+			if tt.expectedLocals == nil {
+				// Locals should either be deleted or not present.
+				_, hasLocals := info.ComponentSection[cfg.LocalsSectionName]
+				if tt.name == "locals not a map - returns early" {
+					// Non-map locals: function returns early without modifying.
+					assert.True(t, hasLocals, "non-map locals should remain")
+				} else {
+					assert.False(t, hasLocals, "locals should be deleted from component section")
+				}
+			} else {
+				locals, ok := info.ComponentSection[cfg.LocalsSectionName].(map[string]any)
+				assert.True(t, ok, "locals should be a map")
+				assert.Equal(t, tt.expectedLocals, locals)
+			}
+		})
+	}
+}
+
+// TestPostProcessTemplatesAndYamlFunctions_WithLocalsFiltering tests that postProcessTemplatesAndYamlFunctions
+// calls filterComponentLocals correctly.
+func TestPostProcessTemplatesAndYamlFunctions_WithLocalsFiltering(t *testing.T) {
+	tests := []struct {
+		name                    string
+		originalComponentLocals schema.AtmosSectionMapType
+		componentSection        map[string]any
+		expectLocalsPresent     bool
+	}{
+		{
+			name:                    "stack-level locals removed when no original component locals",
+			originalComponentLocals: map[string]any{},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"stack_local": "value",
+				},
+			},
+			expectLocalsPresent: false,
+		},
+		{
+			name: "component-level locals preserved",
+			originalComponentLocals: map[string]any{
+				"engine": true,
+			},
+			componentSection: map[string]any{
+				cfg.LocalsSectionName: map[string]any{
+					"engine":      "postgres",
+					"stack_local": "removed",
+				},
+			},
+			expectLocalsPresent: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ConfigAndStacksInfo{
+				OriginalComponentLocals: tt.originalComponentLocals,
+				ComponentSection:        tt.componentSection,
+			}
+
+			postProcessTemplatesAndYamlFunctions(info)
+
+			_, hasLocals := info.ComponentSection[cfg.LocalsSectionName]
+			assert.Equal(t, tt.expectLocalsPresent, hasLocals)
+		})
+	}
+}
+
 func TestGetFindStacksMapCacheKey(t *testing.T) {
 	// Create a test atmosConfig with key fields that are actually used in cache key generation.
 	// The cache key uses: StacksBaseAbsolutePath, TerraformDirAbsolutePath, ignoreMissingFiles, len(StackConfigFilesAbsolutePaths)
@@ -406,4 +581,221 @@ func TestGetFindStacksMapCacheKey(t *testing.T) {
 	assert.NotEmpty(t, key3)
 	assert.NotEmpty(t, key4)
 	assert.NotEmpty(t, key5)
+}
+
+// TestProcessComponentConfig_LocalsMerging tests the locals merging logic in ProcessComponentConfig.
+// This covers the new code that merges stack-level and component-level locals.
+func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
+	tests := []struct {
+		name                    string
+		stacksMap               map[string]any
+		stack                   string
+		component               string
+		originalComponentLocals schema.AtmosSectionMapType
+		expectedLocalsKeys      []string
+	}{
+		{
+			name: "component with locals and stack locals merged",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					cfg.LocalsSectionName: map[string]any{
+						"stack_local": "stack_value",
+					},
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"vars": map[string]any{
+									"region": "us-east-1",
+								},
+								cfg.LocalsSectionName: map[string]any{
+									"component_local": "component_value",
+								},
+								cfg.MetadataSectionName: map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			stack:              "dev",
+			component:          "vpc",
+			expectedLocalsKeys: []string{"component_local", "stack_local"},
+		},
+		{
+			name: "component without locals but stack has locals",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					cfg.LocalsSectionName: map[string]any{
+						"stack_local": "stack_value",
+					},
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"vars": map[string]any{
+									"region": "us-east-1",
+								},
+								cfg.MetadataSectionName: map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			stack:              "dev",
+			component:          "vpc",
+			expectedLocalsKeys: []string{"stack_local"},
+		},
+		{
+			name: "component with locals but no stack locals",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"vars": map[string]any{
+									"region": "us-east-1",
+								},
+								cfg.LocalsSectionName: map[string]any{
+									"component_local": "component_value",
+								},
+								cfg.MetadataSectionName: map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			stack:              "dev",
+			component:          "vpc",
+			expectedLocalsKeys: []string{"component_local"},
+		},
+		{
+			name: "component local overrides stack local with same key",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					cfg.LocalsSectionName: map[string]any{
+						"stage": "stack_dev",
+					},
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"vars": map[string]any{
+									"region": "us-east-1",
+								},
+								cfg.LocalsSectionName: map[string]any{
+									"stage": "component_dev",
+								},
+								cfg.MetadataSectionName: map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			stack:              "dev",
+			component:          "vpc",
+			expectedLocalsKeys: []string{"stage"},
+		},
+		{
+			name: "preserves OriginalComponentLocals across calls",
+			stacksMap: map[string]any{
+				"dev": map[string]any{
+					cfg.LocalsSectionName: map[string]any{
+						"stack_local": "stack_value",
+					},
+					"components": map[string]any{
+						"terraform": map[string]any{
+							"vpc": map[string]any{
+								"vars": map[string]any{
+									"region": "us-east-1",
+								},
+								cfg.LocalsSectionName: map[string]any{
+									"component_local": "component_value",
+								},
+								cfg.MetadataSectionName: map[string]any{},
+							},
+						},
+					},
+				},
+			},
+			stack:     "dev",
+			component: "vpc",
+			originalComponentLocals: map[string]any{
+				"component_local": true,
+			},
+			expectedLocalsKeys: []string{"component_local", "stack_local"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{}
+
+			configAndStacksInfo := schema.ConfigAndStacksInfo{
+				ComponentFromArg:        tt.component,
+				Stack:                   tt.stack,
+				ComponentType:           "terraform",
+				OriginalComponentLocals: tt.originalComponentLocals,
+			}
+
+			err := ProcessComponentConfig(atmosConfig, &configAndStacksInfo, tt.stack, tt.stacksMap, "terraform", tt.component, nil)
+			assert.NoError(t, err)
+
+			// Verify locals are merged in the component section.
+			if tt.expectedLocalsKeys != nil {
+				localsSection, ok := configAndStacksInfo.ComponentSection[cfg.LocalsSectionName].(map[string]any)
+				if len(tt.expectedLocalsKeys) > 0 {
+					assert.True(t, ok, "locals should be present in component section")
+					for _, key := range tt.expectedLocalsKeys {
+						_, exists := localsSection[key]
+						assert.True(t, exists, "expected local key %q to be present", key)
+					}
+				}
+			}
+
+			// Verify OriginalComponentLocals is set.
+			assert.NotNil(t, configAndStacksInfo.OriginalComponentLocals,
+				"OriginalComponentLocals should be initialized after ProcessComponentConfig")
+		})
+	}
+}
+
+// TestProcessComponentConfig_LocalsMergingDoesNotMutateOriginal tests that the locals
+// merging in ProcessComponentConfig does not mutate the original stacksMap.
+func TestProcessComponentConfig_LocalsMergingDoesNotMutateOriginal(t *testing.T) {
+	stacksMap := map[string]any{
+		"dev": map[string]any{
+			cfg.LocalsSectionName: map[string]any{
+				"stack_local": "stack_value",
+			},
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{
+							"region": "us-east-1",
+						},
+						cfg.LocalsSectionName: map[string]any{
+							"component_local": "component_value",
+						},
+						cfg.MetadataSectionName: map[string]any{},
+					},
+				},
+			},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev",
+		ComponentType:    "terraform",
+	}
+
+	err := ProcessComponentConfig(atmosConfig, &configAndStacksInfo, "dev", stacksMap, "terraform", "vpc", nil)
+	assert.NoError(t, err)
+
+	// Verify original stacksMap was not mutated.
+	originalComponent := stacksMap["dev"].(map[string]any)["components"].(map[string]any)["terraform"].(map[string]any)["vpc"].(map[string]any)
+	originalLocals := originalComponent[cfg.LocalsSectionName].(map[string]any)
+
+	// The original should NOT have the stack_local merged in.
+	_, hasStackLocal := originalLocals["stack_local"]
+	assert.False(t, hasStackLocal, "original stacksMap should not be mutated with stack-level locals")
+	assert.Equal(t, "component_value", originalLocals["component_local"])
 }

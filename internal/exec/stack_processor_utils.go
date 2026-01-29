@@ -139,7 +139,7 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	// Convert section to YAML for template processing.
 	yamlStr, err := u.ConvertToYAML(section)
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert section to YAML: %w", err)
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to convert section to YAML: %w", err))
 	}
 
 	// Quick check: if no template markers, return as-is.
@@ -153,13 +153,13 @@ func processTemplatesInSection(atmosConfig *schema.AtmosConfiguration, section m
 	// The caller will fall back to raw values, preserving templates for later processing.
 	processed, err := ProcessTmpl(atmosConfig, filePath, yamlStr, context, false)
 	if err != nil {
-		return nil, fmt.Errorf("failed to process templates in section: %w", err)
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to process templates in section: %w", err))
 	}
 
 	// Parse the processed YAML back to a map.
 	var result map[string]any
 	if err := yaml.Unmarshal([]byte(processed), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse processed section YAML: %w", err)
+		return nil, stderrors.Join(errUtils.ErrInvalidStackManifest, fmt.Errorf("failed to parse processed section YAML: %w", err))
 	}
 
 	return result, nil
@@ -686,9 +686,9 @@ func processYAMLConfigFileWithContextInternal(
 	}
 
 	// Track whether context was originally provided from outside (e.g., via import context).
-	// This is important because we should only process templates during import when:
+	// This is important because we should only process templates during import when the following conditions are met.
 	// 1. The file has a .tmpl extension, OR
-	// 2. Context was explicitly passed from outside (not just extracted from the file itself)
+	// 2. Context was explicitly passed from outside (not just extracted from the file itself).
 	// Without this check, files with locals/settings/vars/env sections would have their templates
 	// processed prematurely, before component-specific context (like atmos_component) is available.
 	originalContextProvided := len(context) > 0

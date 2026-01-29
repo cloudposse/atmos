@@ -58,7 +58,7 @@ Added two helper functions to detect and handle this edge case:
 1. **`isScalarString`**: Pre-checks if the yq result looks like a scalar string that should not be parsed as YAML. This catches strings that:
    - Start with `#` (would be stripped as comments)
    - Are empty
-   - End with colons but don't contain `: ` pattern (likely ARNs or similar identifiers)
+   - End with colons but don't contain `": "` pattern (likely ARNs or similar identifiers)
 
 2. **`isMisinterpretedScalar`**: Post-checks if the YAML parser has misinterpreted a scalar string as a single-key map with a null value. If the parsed node is a mapping with one key-value pair where the value is null and the key matches the original string minus the trailing colon(s), it's likely a misinterpreted scalar.
 

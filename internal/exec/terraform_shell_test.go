@@ -444,6 +444,55 @@ func TestShellOptionsValidation(t *testing.T) {
 	}
 }
 
+// TestGetShellMergedAuthConfig_EmptyStackOrComponent tests that getShellMergedAuthConfig
+// returns global auth config when stack or component is empty.
+func TestGetShellMergedAuthConfig_EmptyStackOrComponent(t *testing.T) {
+	tests := []struct {
+		name      string
+		stack     string
+		component string
+	}{
+		{
+			name:      "empty stack",
+			stack:     "",
+			component: "vpc",
+		},
+		{
+			name:      "empty component",
+			stack:     "dev-us-west-2",
+			component: "",
+		},
+		{
+			name:      "both empty",
+			stack:     "",
+			component: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := &schema.AtmosConfiguration{
+				Auth: schema.AuthConfig{
+					Identities: map[string]schema.Identity{
+						"test-role": {
+							Kind: "aws",
+						},
+					},
+				},
+			}
+
+			info := &schema.ConfigAndStacksInfo{
+				Stack:            tt.stack,
+				ComponentFromArg: tt.component,
+			}
+
+			result, err := getShellMergedAuthConfig(atmosConfig, info)
+			assert.NoError(t, err)
+			assert.NotNil(t, result, "should return global auth config")
+		})
+	}
+}
+
 // TestShellConfigWithWorkdirProvisioner tests shellConfig when workdir provisioner is active.
 func TestShellConfigWithWorkdirProvisioner(t *testing.T) {
 	// Use platform-agnostic paths.

@@ -2,7 +2,9 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -15,36 +17,55 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+// checkDirectoryExists checks if a directory exists, returning true if it does.
+// Returns an error only for real filesystem errors (not "not found").
+func checkDirectoryExists(path string) (bool, error) {
+	exists, err := u.IsDirectory(path)
+	if err != nil && !os.IsNotExist(err) {
+		return false, errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to check component path: %w", err))
+	}
+	return exists, nil
+}
+
 // ensureTerraformComponentExists checks if a terraform component exists and provisions it via JIT if needed.
 // It returns an error if the component cannot be found or provisioned.
 func ensureTerraformComponentExists(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) error {
 	componentPath, err := u.GetComponentPath(atmosConfig, cfg.TerraformComponentType, info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
-		return fmt.Errorf("failed to resolve component path: %w", err)
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to resolve component path: %w", err))
 	}
 
-	componentPathExists, _ := u.IsDirectory(componentPath)
-	if componentPathExists {
+	exists, err := checkDirectoryExists(componentPath)
+	if err != nil {
+		return err
+	}
+	if exists {
 		return nil
 	}
 
 	// Component doesn't exist - try JIT provisioning if source is configured.
 	if err := tryJITProvision(atmosConfig, info); err != nil {
-		return err
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, err)
 	}
 
 	// Re-check if component exists after JIT provisioning.
-	if _, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+	if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 		return nil // Workdir path was set by provisioner.
 	}
 
-	componentPathExists, _ = u.IsDirectory(componentPath)
-	if componentPathExists {
+	exists, err = checkDirectoryExists(componentPath)
+	if err != nil {
+		return err
+	}
+	if exists {
 		return nil
 	}
 
 	// Component still doesn't exist.
-	basePath, _ := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
+	basePath, err := u.GetComponentBasePath(atmosConfig, cfg.TerraformComponentType)
+	if err != nil {
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to resolve component base path: %w", err))
+	}
 	return fmt.Errorf("%w: '%s' points to '%s', but it does not exist in '%s'",
 		errUtils.ErrInvalidTerraformComponent, info.ComponentFromArg, info.FinalComponent, basePath)
 }
@@ -59,7 +80,7 @@ func tryJITProvision(atmosConfig *schema.AtmosConfiguration, info *schema.Config
 	defer cancel()
 
 	if err := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
-		return fmt.Errorf("failed to auto-provision component source: %w", err)
+		return errors.Join(errUtils.ErrInvalidTerraformComponent, fmt.Errorf("failed to auto-provision component source: %w", err))
 	}
 
 	return nil

@@ -301,6 +301,9 @@ func processTerraformTwoWordCommand(info *schema.ArgsAndFlagsInfo, args []string
 	}
 
 	info.ComponentFromArg = args[componentArgIndex]
+	if comp.IsExplicitComponentPath(info.ComponentFromArg) {
+		info.NeedsPathResolution = true
+	}
 	if len(args) > componentArgIndex+1 {
 		info.AdditionalArgsAndFlags = args[componentArgIndex+1:]
 	}
@@ -325,18 +328,19 @@ func processSingleCommand(info *schema.ArgsAndFlagsInfo, args []string) error {
 		if len(secondArg) <= 2 {
 			return fmt.Errorf("%w: invalid option format: %s", errUtils.ErrInvalidArguments, secondArg)
 		}
-		info.AdditionalArgsAndFlags = []string{secondArg}
-	} else {
-		info.ComponentFromArg = secondArg
-		// Check if argument is an explicit path that needs resolution.
-		// Only resolve as a filesystem path if the argument explicitly indicates a path:
-		// - "." (current directory).
-		// - Starts with "./" or "../" (relative path).
-		// - Starts with "/" (absolute path).
-		// Otherwise, treat it as a component name (even if it contains slashes).
-		if comp.IsExplicitComponentPath(secondArg) {
-			info.NeedsPathResolution = true
-		}
+		info.AdditionalArgsAndFlags = args[1:]
+		return nil
+	}
+
+	info.ComponentFromArg = secondArg
+	// Check if argument is an explicit path that needs resolution.
+	// Only resolve as a filesystem path if the argument explicitly indicates a path:
+	// - "." (current directory).
+	// - Starts with "./" or "../" (relative path).
+	// - Starts with "/" (absolute path).
+	// Otherwise, treat it as a component name (even if it contains slashes).
+	if comp.IsExplicitComponentPath(secondArg) {
+		info.NeedsPathResolution = true
 	}
 
 	if len(args) > 2 {

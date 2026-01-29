@@ -121,7 +121,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.RedirectStdErr)
 	}
 
-	// Handle "shell" subcommand - this is an Atmos-specific command that opens an interactive shell
+	// Handle "shell" subcommand - this is an Atmos-specific command that opens an interactive shell.
 	// configured for the terraform component. It should not be passed to terraform executable.
 	if info.SubCommand == "shell" {
 		opts := &ShellOptions{

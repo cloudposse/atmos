@@ -83,7 +83,7 @@ func EvaluateYqExpression(atmosConfig *schema.AtmosConfiguration, data any, yq s
 	// Handle scalar strings that could be misinterpreted by the YAML parser.
 	// When yq returns a scalar with UnwrapScalar=true, special characters like trailing
 	// colons can cause the YAML parser to misinterpret the value as a map.
-	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}
+	// E.g., "arn:aws:secretsmanager:...::password::" would become {"password:": null}.
 	if isScalarString(trimmedResult) {
 		return trimmedResult, nil
 	}

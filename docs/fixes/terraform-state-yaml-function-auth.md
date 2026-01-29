@@ -11,7 +11,7 @@ when running certain commands:
 - `atmos terraform shell <component> -s <stack>`
 
 This results in errors like:
-```
+```text
 Error: failed to read Terraform state for component vpc in stack core-network
 in YAML function: !terraform.state vpc ".vpc_id // \"vpc\""
 ```

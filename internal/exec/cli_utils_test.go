@@ -1294,12 +1294,13 @@ func TestParseSeparateTwoWordCommand(t *testing.T) {
 // TestProcessTerraformTwoWordCommand tests the processTerraformTwoWordCommand helper function.
 func TestProcessTerraformTwoWordCommand(t *testing.T) {
 	tests := []struct {
-		name           string
-		args           []string
-		wantProcessed  bool
-		wantErr        bool
-		wantSubCommand string
-		wantComponent  string
+		name               string
+		args               []string
+		wantProcessed      bool
+		wantErr            bool
+		wantSubCommand     string
+		wantComponent      string
+		wantPathResolution bool
 	}{
 		{
 			name:          "not a two-word command",
@@ -1335,6 +1336,15 @@ func TestProcessTerraformTwoWordCommand(t *testing.T) {
 			wantProcessed: true,
 			wantErr:       true,
 		},
+		{
+			name:               "providers lock with path component sets NeedsPathResolution",
+			args:               []string{"providers", "lock", "./my-component"},
+			wantProcessed:      true,
+			wantErr:            false,
+			wantSubCommand:     "providers lock",
+			wantComponent:      "./my-component",
+			wantPathResolution: true,
+		},
 	}
 
 	for _, tt := range tests {
@@ -1353,6 +1363,7 @@ func TestProcessTerraformTwoWordCommand(t *testing.T) {
 			if tt.wantProcessed {
 				assert.Equal(t, tt.wantSubCommand, info.SubCommand)
 				assert.Equal(t, tt.wantComponent, info.ComponentFromArg)
+				assert.Equal(t, tt.wantPathResolution, info.NeedsPathResolution)
 			}
 		})
 	}
@@ -1395,6 +1406,13 @@ func TestProcessSingleCommand(t *testing.T) {
 			wantErr:        false,
 			wantSubCommand: "plan",
 			wantAdditional: []string{"--help"},
+		},
+		{
+			name:           "flag with additional args preserves all flags",
+			args:           []string{"plan", "--help", "-var=foo"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantAdditional: []string{"--help", "-var=foo"},
 		},
 		{
 			name:    "empty second argument",

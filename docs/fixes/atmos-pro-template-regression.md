@@ -7,7 +7,7 @@
 Starting in Atmos 1.205, stack manifests that use `{{ .atmos_component }}` or `{{ .atmos_stack }}`
 in non-template files (without `.tmpl` extension) fail with:
 
-```
+```text
 Error: failed to execute describe stacks: invalid stack manifest: template: mixins/atmos-pro.yaml:4:21:
 executing "mixins/atmos-pro.yaml" at <.atmos_component>: map has no entry for key "atmos_component"
 ```
@@ -131,7 +131,7 @@ Stack description succeeds. Template variables are resolved later when component
 
 ### Actual Result (1.205)
 
-```
+```text
 Error: failed to execute describe stacks: invalid stack manifest: template: mixins/atmos-pro.yaml:4:21:
 executing "mixins/atmos-pro.yaml" at <.atmos_component>: map has no entry for key "atmos_component"
 ```

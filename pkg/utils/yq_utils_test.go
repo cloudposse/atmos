@@ -5,7 +5,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gopkg.in/op/go-logging.v1"
 	yaml "gopkg.in/yaml.v3"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 // TestEvaluateYqExpression_InvalidYAML tests the error case when yaml.Unmarshal fails.
@@ -389,6 +392,70 @@ func TestIsMisinterpretedScalar(t *testing.T) {
 			assert.Equal(t, tt.expected, result, "isMisinterpretedScalar for %q = %v, want %v", tt.yamlInput, result, tt.expected)
 		})
 	}
+}
+
+// TestConfigureYqLogger tests the configureYqLogger function.
+func TestConfigureYqLogger(t *testing.T) {
+	t.Run("nil atmosConfig uses no-op logger", func(t *testing.T) {
+		// Should not panic with nil atmosConfig.
+		configureYqLogger(nil)
+	})
+
+	t.Run("non-trace level uses no-op logger", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Logs: schema.Logs{
+				Level: LogLevelDebug,
+			},
+		}
+		// Should not panic.
+		configureYqLogger(atmosConfig)
+	})
+
+	t.Run("trace level uses default logger", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Logs: schema.Logs{
+				Level: LogLevelTrace,
+			},
+		}
+		// Should not panic.
+		configureYqLogger(atmosConfig)
+	})
+
+	t.Run("empty log level uses no-op logger", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Logs: schema.Logs{
+				Level: "",
+			},
+		}
+		// Should not panic.
+		configureYqLogger(atmosConfig)
+	})
+}
+
+// TestLogBackend tests the logBackend struct methods.
+func TestLogBackend(t *testing.T) {
+	backend := logBackend{}
+
+	t.Run("Log returns nil", func(t *testing.T) {
+		err := backend.Log(logging.ERROR, 0, nil)
+		assert.NoError(t, err)
+	})
+
+	t.Run("GetLevel returns ERROR", func(t *testing.T) {
+		level := backend.GetLevel("test")
+		assert.Equal(t, logging.ERROR, level)
+	})
+
+	t.Run("SetLevel does not panic", func(t *testing.T) {
+		assert.NotPanics(t, func() {
+			backend.SetLevel(logging.DEBUG, "test")
+		})
+	})
+
+	t.Run("IsEnabledFor returns false", func(t *testing.T) {
+		result := backend.IsEnabledFor(logging.DEBUG, "test")
+		assert.False(t, result)
+	})
 }
 
 // TestEvaluateYqExpression_StringEndingWithColon verifies that strings ending

@@ -58,7 +58,7 @@ Modified `internal/exec/cli_utils.go` with a modular, well-tested approach:
 The following terraform two-word commands are now supported in both quoted and separate forms:
 
 | Command | Subcommands |
-|---------|-------------|
+| ------- | ----------- |
 | `providers` | lock, mirror, schema |
 | `state` | list, mv, pull, push, replace-provider, rm, show |
 | `workspace` | list, select, new, delete, show |

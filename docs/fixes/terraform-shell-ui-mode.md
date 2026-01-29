@@ -30,7 +30,7 @@ atmos terraform shell my-component -s my-stack
 The Atmos interactive UI uses a different code path than direct CLI invocation:
 
 **Direct CLI path (working)**:
-```
+```text
 atmos terraform shell vpc -s dev
   ↓
 cmd/terraform/shell.go (Cobra command)
@@ -41,7 +41,7 @@ Interactive shell starts
 ```
 
 **UI path (was broken)**:
-```
+```text
 atmos (interactive UI)
   ↓
 User selects "terraform shell"
@@ -85,7 +85,7 @@ This intercepts the "shell" subcommand early (similar to "version" handling) and
 These are Atmos commands that extend terraform functionality and are not native terraform commands:
 
 | Command | Description | Now works from UI |
-|---------|-------------|-------------------|
+| ------- | ----------- | ----------------- |
 | `shell` | Opens interactive shell with component environment | ✓ |
 | `clean` | Cleans up terraform artifacts | Separate implementation |
 | `generate varfile` | Generates terraform.tfvars.json | Separate implementation |

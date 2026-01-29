@@ -171,7 +171,7 @@ The original implementation treated all locals the same. Stack-level locals were
 
 The problem was that `componentSection` directly references the map in `stacksMap`. Modifications to `componentSection` persisted in `stacksMap` and affected subsequent calls.
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────┐
 │ First Call to ProcessComponentConfig                                │
 │ ┌─────────────────────┐     ┌─────────────────────────────────────┐ │
@@ -344,7 +344,7 @@ After implementing the shallow copy fix, a new issue emerged where locals were s
 
 The `ProcessComponentConfig` function in `internal/exec/utils.go` is called multiple times during stack processing via `findComponentInStacks`. The original fix only performed locals merging on the FIRST pass (guarded by `if OriginalComponentLocals == nil`), but subsequent passes still needed the merged locals to be present for template resolution.
 
-```
+```text
 First call:  OriginalComponentLocals == nil → merges stack locals into component ✓
 Second call: OriginalComponentLocals != nil → skips merging entirely ✗ (no locals available for templates!)
 ```
@@ -691,7 +691,7 @@ The `describe stacks` path processes components differently from the `ProcessSta
 
 The `TestDescribeAffectedWith*` tests in `describe_affected_test.go` were failing locally with:
 
-```
+```text
 stat ../../examples/secrets-masking/components/terraform/secrets-demo/.terraform/providers/
 registry.terraform.io/hashicorp/null/3.2.4/darwin_arm64: no such file or directory
 ```
@@ -700,7 +700,7 @@ registry.terraform.io/hashicorp/null/3.2.4/darwin_arm64: no such file or directo
 
 The test copies the entire repository into a temp directory using `cp.Copy(pathPrefix, tempDir, copyOptions)` where `pathPrefix` is `"../../"` (the repo root). A previous test run (`TestCLICommands/secrets-masking_terraform_plan`) had created a `.terraform/providers/` directory inside `examples/secrets-masking/` that contained a symlink pointing to a temporary directory:
 
-```
+```text
 darwin_arm64 -> /private/var/folders/.../TestCLICommands.../darwin_arm64
 ```
 
@@ -736,7 +736,7 @@ The full fix for the "1.205 regression: Settings can't refer to locals anymore" 
 
 ## Processing Pipeline (After Fix)
 
-```
+```text
 1. Parse raw YAML
 2. Extract and resolve file-scoped locals (can reference raw settings/vars/env)
 3. Process templates in settings using resolved locals
@@ -755,7 +755,7 @@ The full fix for the "1.205 regression: Settings can't refer to locals anymore" 
 ## All Files Changed
 
 | File | Changes |
-|------|---------|
+| ---- | ------- |
 | `internal/exec/stack_processor_utils.go` | `processTemplatesInSection()`, bidirectional resolution, `originalContextProvided` guard, resolved sections persistence, import locals cleanup |
 | `internal/exec/utils.go` | Locals merging with shallow copy, `OriginalComponentLocals` tracking, `filterComponentLocals()`, spacelift/atlantis reordering |
 | `internal/exec/describe_stacks.go` | Stack-level locals extraction, merge with component locals, `OriginalComponentLocals` initialization (terraform/helmfile/packer) |
@@ -768,7 +768,7 @@ The full fix for the "1.205 regression: Settings can't refer to locals anymore" 
 ## Test Coverage
 
 | Test | Validates |
-|------|-----------|
+| ---- | --------- |
 | `TestExtractAndAddLocalsToContext_BidirectionalReferences` | Core issue: settings ↔ locals bidirectional references |
 | `TestProcessTemplatesInSection` | New helper function (nil, empty, no-template, nested, mixed) |
 | `TestProcessTemplatesInSection_EdgeCases` | Lists, integers, no-template-markers |
