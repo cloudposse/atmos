@@ -315,7 +315,10 @@ func NewAuthManager(
     stackInfo *schema.ConfigAndStacksInfo,
     cliConfigPath string,  // NEW: For realm computation
 ) (types.AuthManager, error) {
-    realmInfo := realm.GetRealm(config.Realm, cliConfigPath)
+    realmInfo, err := realm.GetRealm(config.Realm, cliConfigPath)
+    if err != nil {
+        return nil, fmt.Errorf("failed to compute auth realm: %w", err)
+    }
     // ...
 }
 ```

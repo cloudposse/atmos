@@ -273,12 +273,12 @@ All identity implementations must pass realm through credential storage:
 ```go
 // pkg/auth/credentials/store.go
 
-// Key format now includes realm
-func createKeyringKey(providerName, identityName, realm string) string {
+// Key format now includes realm (providerName not included per architecture PRD)
+func createKeyringKey(identityName, realm string) string {
     if realm != "" {
-        return fmt.Sprintf("atmos:%s:%s:%s", realm, providerName, identityName)
+        return fmt.Sprintf("atmos:%s:%s", realm, identityName)
     }
-    return fmt.Sprintf("atmos:%s:%s", providerName, identityName)
+    return fmt.Sprintf("atmos:%s", identityName)
 }
 ```
 
