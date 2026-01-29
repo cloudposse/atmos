@@ -216,55 +216,63 @@ func TestHasSource(t *testing.T) {
 	}
 }
 
-func TestParseDuration(t *testing.T) {
+func TestParseDurationPtr(t *testing.T) {
 	tests := []struct {
 		name     string
 		input    map[string]any
 		key      string
-		expected string // Expected duration as string, or "0s" for zero.
+		expected string // Expected duration as string, or "" for nil.
+		isNil    bool   // Whether nil is expected.
 	}{
 		{
 			name:     "valid duration string",
 			input:    map[string]any{"delay": "5s"},
 			key:      "delay",
 			expected: "5s",
+			isNil:    false,
 		},
 		{
 			name:     "valid duration with minutes",
 			input:    map[string]any{"timeout": "2m30s"},
 			key:      "timeout",
 			expected: "2m30s",
+			isNil:    false,
 		},
 		{
-			name:     "key not found returns zero",
-			input:    map[string]any{"other": "5s"},
-			key:      "delay",
-			expected: "0s",
+			name:  "key not found returns nil",
+			input: map[string]any{"other": "5s"},
+			key:   "delay",
+			isNil: true,
 		},
 		{
-			name:     "invalid duration string returns zero",
-			input:    map[string]any{"delay": "invalid"},
-			key:      "delay",
-			expected: "0s",
+			name:  "invalid duration string returns nil",
+			input: map[string]any{"delay": "invalid"},
+			key:   "delay",
+			isNil: true,
 		},
 		{
-			name:     "non-string value returns zero",
-			input:    map[string]any{"delay": 123},
-			key:      "delay",
-			expected: "0s",
+			name:  "non-string value returns nil",
+			input: map[string]any{"delay": 123},
+			key:   "delay",
+			isNil: true,
 		},
 		{
-			name:     "empty string returns zero",
-			input:    map[string]any{"delay": ""},
-			key:      "delay",
-			expected: "0s",
+			name:  "empty string returns nil",
+			input: map[string]any{"delay": ""},
+			key:   "delay",
+			isNil: true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := parseDuration(tt.input, tt.key)
-			assert.Equal(t, tt.expected, result.String())
+			result := parseDurationPtr(tt.input, tt.key)
+			if tt.isNil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, tt.expected, result.String())
+			}
 		})
 	}
 }
@@ -287,13 +295,19 @@ func TestParseRetryConfig(t *testing.T) {
 				"multiplier":       2.0,
 			},
 			validate: func(t *testing.T, cfg *schema.RetryConfig) {
-				assert.Equal(t, 5, cfg.MaxAttempts)
+				require.NotNil(t, cfg.MaxAttempts)
+				assert.Equal(t, 5, *cfg.MaxAttempts)
+				require.NotNil(t, cfg.InitialDelay)
 				assert.Equal(t, "2s", cfg.InitialDelay.String())
+				require.NotNil(t, cfg.MaxDelay)
 				assert.Equal(t, "30s", cfg.MaxDelay.String())
+				require.NotNil(t, cfg.MaxElapsedTime)
 				assert.Equal(t, "5m0s", cfg.MaxElapsedTime.String())
 				assert.Equal(t, schema.BackoffStrategy("exponential"), cfg.BackoffStrategy)
-				assert.Equal(t, 0.1, cfg.RandomJitter)
-				assert.Equal(t, 2.0, cfg.Multiplier)
+				require.NotNil(t, cfg.RandomJitter)
+				assert.Equal(t, 0.1, *cfg.RandomJitter)
+				require.NotNil(t, cfg.Multiplier)
+				assert.Equal(t, 2.0, *cfg.Multiplier)
 			},
 		},
 		{
@@ -303,9 +317,11 @@ func TestParseRetryConfig(t *testing.T) {
 				"initial_delay": "1s",
 			},
 			validate: func(t *testing.T, cfg *schema.RetryConfig) {
-				assert.Equal(t, 3, cfg.MaxAttempts)
+				require.NotNil(t, cfg.MaxAttempts)
+				assert.Equal(t, 3, *cfg.MaxAttempts)
+				require.NotNil(t, cfg.InitialDelay)
 				assert.Equal(t, "1s", cfg.InitialDelay.String())
-				assert.Equal(t, "0s", cfg.MaxDelay.String())
+				assert.Nil(t, cfg.MaxDelay, "MaxDelay should be nil when not specified")
 				assert.Equal(t, schema.BackoffStrategy(""), cfg.BackoffStrategy)
 			},
 		},
@@ -313,8 +329,8 @@ func TestParseRetryConfig(t *testing.T) {
 			name:  "empty config",
 			input: map[string]any{},
 			validate: func(t *testing.T, cfg *schema.RetryConfig) {
-				assert.Equal(t, 0, cfg.MaxAttempts)
-				assert.Equal(t, "0s", cfg.InitialDelay.String())
+				assert.Nil(t, cfg.MaxAttempts, "MaxAttempts should be nil when not specified")
+				assert.Nil(t, cfg.InitialDelay, "InitialDelay should be nil when not specified")
 			},
 		},
 		{
@@ -325,9 +341,9 @@ func TestParseRetryConfig(t *testing.T) {
 				"random_jitter":    "not-a-float",
 			},
 			validate: func(t *testing.T, cfg *schema.RetryConfig) {
-				assert.Equal(t, 0, cfg.MaxAttempts)
+				assert.Nil(t, cfg.MaxAttempts, "MaxAttempts should be nil when invalid type")
 				assert.Equal(t, schema.BackoffStrategy(""), cfg.BackoffStrategy)
-				assert.Equal(t, 0.0, cfg.RandomJitter)
+				assert.Nil(t, cfg.RandomJitter, "RandomJitter should be nil when invalid type")
 			},
 		},
 	}
@@ -360,8 +376,11 @@ func TestExtractSource_WithRetryConfig(t *testing.T) {
 	require.NotNil(t, result)
 	require.NotNil(t, result.Retry)
 
-	assert.Equal(t, 5, result.Retry.MaxAttempts)
+	require.NotNil(t, result.Retry.MaxAttempts)
+	assert.Equal(t, 5, *result.Retry.MaxAttempts)
+	require.NotNil(t, result.Retry.InitialDelay)
 	assert.Equal(t, "2s", result.Retry.InitialDelay.String())
+	require.NotNil(t, result.Retry.MaxDelay)
 	assert.Equal(t, "1m0s", result.Retry.MaxDelay.String())
 	assert.Equal(t, schema.BackoffStrategy("exponential"), result.Retry.BackoffStrategy)
 }

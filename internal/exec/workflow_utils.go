@@ -344,7 +344,9 @@ func ExecuteWorkflow(
 		switch commandType {
 		case "shell":
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
-			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+			err = retry.Do(context.Background(), step.Retry, func() error {
+				return ExecuteShell(command, commandName, ".", stepEnv, dryRun)
+			})
 		case "atmos":
 			// Parse command using shell.Fields for proper quote handling.
 			// This correctly handles arguments like -var="foo=bar" by stripping quotes.

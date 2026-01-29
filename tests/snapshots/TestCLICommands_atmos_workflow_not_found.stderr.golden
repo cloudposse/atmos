@@ -22,6 +22,8 @@
   • multi-component-query-double-quotes
   • no-steps
   • pass
+  • retry-full-config
+  • retry-success
   • shell-command-not-found
   • shell-double-hyphen-echo
   • shell-echo-args
