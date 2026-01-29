@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"time"
 
 	"github.com/google/go-github/v59/github"
 
@@ -57,6 +58,14 @@ type PRArtifactInfo struct {
 	SizeInBytes int64
 	// Download URL (requires authentication).
 	DownloadURL string
+	// RunStartedAt is when the workflow run started.
+	RunStartedAt time.Time
+}
+
+// workflowRunInfo contains metadata about a successful workflow run.
+type workflowRunInfo struct {
+	ID           int64
+	RunStartedAt time.Time
 }
 
 // GetPRArtifactInfo retrieves build artifact information for a PR.
@@ -86,15 +95,15 @@ func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*
 	log.Debug("Found PR head SHA", "sha", headSHA)
 
 	// Step 2: Find the latest successful workflow run for this SHA.
-	runID, err := findSuccessfulWorkflowRun(ctx, client, owner, repo, headSHA)
+	runInfo, err := findSuccessfulWorkflowRun(ctx, client, owner, repo, headSHA)
 	if err != nil {
 		return nil, err
 	}
 
-	log.Debug("Found successful workflow run", "runID", runID)
+	log.Debug("Found successful workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
 
 	// Step 3: Find the artifact for the current platform.
-	artifact, err := findArtifactByName(ctx, client, owner, repo, runID, artifactName)
+	artifact, err := findArtifactByName(ctx, client, owner, repo, runInfo.ID, artifactName)
 	if err != nil {
 		return nil, err
 	}
@@ -104,11 +113,12 @@ func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*
 	return &PRArtifactInfo{
 		PRNumber:     prNumber,
 		HeadSHA:      headSHA,
-		RunID:        runID,
+		RunID:        runInfo.ID,
 		ArtifactID:   artifact.GetID(),
 		ArtifactName: artifact.GetName(),
 		SizeInBytes:  artifact.GetSizeInBytes(),
 		DownloadURL:  artifact.GetArchiveDownloadURL(),
+		RunStartedAt: runInfo.RunStartedAt,
 	}, nil
 }
 
@@ -180,7 +190,7 @@ func getPRHeadSHA(ctx context.Context, client *github.Client, owner, repo string
 }
 
 // findSuccessfulWorkflowRun finds the most recent successful workflow run for a commit SHA.
-func findSuccessfulWorkflowRun(ctx context.Context, client *github.Client, owner, repo, headSHA string) (int64, error) {
+func findSuccessfulWorkflowRun(ctx context.Context, client *github.Client, owner, repo, headSHA string) (*workflowRunInfo, error) {
 	defer perf.Track(nil, "github.findSuccessfulWorkflowRun")()
 
 	// List workflow runs for the commit SHA.
@@ -194,17 +204,20 @@ func findSuccessfulWorkflowRun(ctx context.Context, client *github.Client, owner
 
 	runs, resp, err := client.Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
 	if err != nil {
-		return 0, handleGitHubAPIError(err, resp)
+		return nil, handleGitHubAPIError(err, resp)
 	}
 
 	// Find the workflow run with the correct name ("Tests").
 	for _, run := range runs.WorkflowRuns {
 		if run.GetName() == workflowName && run.GetConclusion() == "success" {
-			return run.GetID(), nil
+			return &workflowRunInfo{
+				ID:           run.GetID(),
+				RunStartedAt: run.GetRunStartedAt().Time,
+			}, nil
 		}
 	}
 
-	return 0, fmt.Errorf("%w: no successful '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+	return nil, fmt.Errorf("%w: no successful '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
 }
 
 // findArtifactByName finds an artifact by name within a workflow run.

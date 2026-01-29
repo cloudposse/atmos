@@ -18,6 +18,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 const (
@@ -34,6 +35,9 @@ const (
 
 	// Directory permissions for created directories.
 	dirPermissions = 0o755
+
+	// ShortSHALength is the number of characters to display for short SHA.
+	shortSHALength = 7
 )
 
 // PR artifact errors.
@@ -88,27 +92,61 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 	}
 
 	if showProgress {
-		ui.Successf("Found workflow run #%d", artifactInfo.RunID)
-		ui.Infof("Downloading %s (%s)", artifactInfo.ArtifactName, formatBytes(artifactInfo.SizeInBytes))
+		// Format timestamp and short SHA for enriched message.
+		timeStr := artifactInfo.RunStartedAt.Local().Format("Jan 2, 2006 at 3:04 PM")
+		shortSHA := artifactInfo.HeadSHA[:shortSHALength]
+		ui.Successf("Found workflow run #%d (sha: `%s`) from %s", artifactInfo.RunID, shortSHA, timeStr)
 	}
 
-	// Download the artifact.
-	artifactPath, err := downloadPRArtifact(ctx, token, artifactInfo)
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(artifactPath) // Clean up temp file.
+	// Download and install the artifact.
+	return downloadAndInstallArtifact(ctx, token, prNumber, artifactInfo, showProgress)
+}
 
-	// Extract and install the binary.
-	binaryPath, err := installPRArtifactBinary(prNumber, artifactPath)
-	if err != nil {
-		return "", err
-	}
+// downloadAndInstallArtifact handles the download and installation with optional progress display.
+func downloadAndInstallArtifact(
+	ctx context.Context,
+	token string,
+	prNumber int,
+	info *github.PRArtifactInfo,
+	showProgress bool,
+) (string, error) {
+	defer perf.Track(nil, "toolchain.downloadAndInstallArtifact")()
+
+	var binaryPath string
 
 	if showProgress {
-		ui.Successf("Installed to %s", binaryPath)
+		progressMsg := fmt.Sprintf("Downloading %s (%s)", info.ArtifactName, formatBytes(info.SizeInBytes))
+		err := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
+			artifactPath, downloadErr := downloadPRArtifact(ctx, token, info)
+			if downloadErr != nil {
+				return "", downloadErr
+			}
+			defer os.Remove(artifactPath)
+
+			var installErr error
+			binaryPath, installErr = installPRArtifactBinary(prNumber, artifactPath)
+			if installErr != nil {
+				return "", installErr
+			}
+			return fmt.Sprintf("Installed to %s", binaryPath), nil
+		})
+		if err != nil {
+			return "", err
+		}
+		return binaryPath, nil
 	}
 
+	// Silent mode - no progress output.
+	artifactPath, err := downloadPRArtifact(ctx, token, info)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(artifactPath)
+
+	binaryPath, err = installPRArtifactBinary(prNumber, artifactPath)
+	if err != nil {
+		return "", err
+	}
 	return binaryPath, nil
 }
 
