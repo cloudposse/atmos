@@ -5,33 +5,33 @@ authors: [osterman]
 tags: [bugfix, documentation]
 ---
 
-Fixed Artifactory store retrieval issues and corrected store documentation to accurately reflect supported backends.
+Fixed an issue where retrieving values from Artifactory stores would fail when using nested paths, and corrected store documentation to accurately reflect supported backends.
 
 <!--truncate-->
 
 ## What Changed
 
-The Artifactory store's `GetKey` method was missing configuration required by the JFrog SDK for proper file downloads. Additionally, store documentation across multiple pages contained outdated examples with unsupported backends and incorrect field names.
+### Artifactory Store Fix
 
-### Code Fix
+When using Artifactory as a store backend with nested directory structures, retrieving values would fail with a "file not found" error even though the data existed. This happened because files were being downloaded to unexpected locations within temporary directories.
 
-The `GetKey` method now includes the same JFrog SDK configuration (`Flat=true` and trailing path separator handling) that the `Get` method uses, ensuring consistent behavior for all retrieval operations.
+For example, storing a value at `dev/myapp/private_ip` and then trying to retrieve it would fail because Atmos was looking for the file in the wrong place.
+
+This is now fixed. Retrieving values from Artifactory works correctly regardless of how deeply nested your paths are.
 
 ### Documentation Corrections
 
-- **Field names**: Changed `backend` to `type` and `config` to `options` to match the actual schema
-- **Store types**: Updated `aws/ssm` to `aws-ssm-parameter-store`
-- **Removed unsupported backends**: Vault and AWS Secrets Manager examples were removed (not implemented)
-- **Added supported backends**: Azure Key Vault and Google Secret Manager now documented
-- **Artifactory guidance**: Added note about using Generic repository type
+The store documentation had several issues that could cause confusion:
 
-### Test Coverage
-
-Added comprehensive integration tests for the Artifactory store with a mock HTTP server that validates the JFrog SDK integration patterns including AQL search, checksum validation, and file path handling.
+- **Wrong field names**: Examples showed `backend` and `config` instead of the correct `type` and `options`
+- **Wrong store type names**: Examples showed `aws/ssm` instead of the correct `aws-ssm-parameter-store`
+- **Non-existent backends**: Vault and AWS Secrets Manager were documented but aren't actually implemented
+- **Missing backends**: Azure Key Vault and Google Secret Manager were implemented but not documented
+- **Artifactory setup**: Added guidance on using Generic repository type in JFrog Artifactory
 
 ## Why This Matters
 
-Users configuring external stores can now rely on accurate documentation. The Artifactory store now works correctly for both `Get` and `GetKey` operations.
+If you've been struggling to get Artifactory working as a store backend, especially with nested paths, this fix should resolve those issues. And if you've been confused by store configuration examples that didn't work, the documentation now reflects the actual supported backends and correct configuration format.
 
 ## Get Involved
 
