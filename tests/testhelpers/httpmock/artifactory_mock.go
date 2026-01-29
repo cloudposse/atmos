@@ -22,6 +22,20 @@ const (
 	bodyPreviewMax    = 500
 )
 
+// aqlResponse represents the AQL search response structure.
+// Field order matters: Results must come before Range due to JFrog SDK ContentReader bug.
+type aqlResponse struct {
+	Results []map[string]interface{} `json:"results"`
+	Range   aqlRange                 `json:"range"`
+}
+
+// aqlRange represents the range metadata in AQL responses.
+type aqlRange struct {
+	StartPos int `json:"start_pos"`
+	EndPos   int `json:"end_pos"`
+	Total    int `json:"total"`
+}
+
 // ArtifactoryMockServer provides a mock HTTP server that implements
 // enough of the JFrog Artifactory Generic repository API to test
 // the Atmos Artifactory store integration.
@@ -221,15 +235,18 @@ func (m *ArtifactoryMockServer) handleAQLSearch(w http.ResponseWriter, r *http.R
 	query := string(body)
 	results := m.buildAQLResults(query)
 
-	// Build JSON response manually to ensure "results" comes FIRST.
-	// The JFrog SDK's ContentReader has a bug where it doesn't properly skip
-	// nested objects when searching for the target key. If "range" comes before
-	// "results", the decoder gets stuck inside the range object.
-	resultsJSON, _ := json.Marshal(results)
-	responseJSON := []byte(fmt.Sprintf(
-		`{"results":%s,"range":{"start_pos":0,"end_pos":%d,"total":%d}}`,
-		string(resultsJSON), len(results), len(results),
-	))
+	// Build response using struct to ensure proper JSON encoding.
+	// Field order matters: Results must come before Range due to JFrog SDK ContentReader bug
+	// where it doesn't properly skip nested objects when searching for the target key.
+	response := aqlResponse{
+		Results: results,
+		Range: aqlRange{
+			StartPos: 0,
+			EndPos:   len(results),
+			Total:    len(results),
+		},
+	}
+	responseJSON, _ := json.Marshal(response)
 
 	// Debug log the AQL response.
 	if m.debug && m.t != nil {
