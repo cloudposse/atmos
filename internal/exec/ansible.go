@@ -17,7 +17,6 @@ import (
 	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -106,7 +105,7 @@ func ExecuteAnsible(
 	// 3. Not in dry-run mode (to avoid filesystem modifications).
 	// This allows generating entire components from stack configuration.
 	if atmosConfig.Components.Ansible.AutoGenerateFiles && !info.DryRun { //nolint:nestif
-		generateSection := tfgenerate.GetGenerateSectionFromComponent(info.ComponentSection)
+		generateSection := getGenerateSectionFromComponent(info.ComponentSection)
 		if generateSection != nil {
 			// Ensure component directory exists for file generation.
 			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
@@ -409,4 +408,19 @@ func constructAnsibleComponentWorkingDir(atmosConfig *schema.AtmosConfiguration,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
 	)
+}
+
+// getGenerateSectionFromComponent extracts the generate section from a component configuration.
+// Returns nil if the component has no generate section defined.
+func getGenerateSectionFromComponent(componentSection map[string]any) map[string]any {
+	if componentSection == nil {
+		return nil
+	}
+
+	generateSection, ok := componentSection["generate"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	return generateSection
 }

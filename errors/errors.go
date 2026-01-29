@@ -482,11 +482,7 @@ var (
 	ErrInvalidAnsibleAuth     = errors.New("invalid ansible auth section")
 
 	// Ansible execution errors.
-	ErrAnsibleExecutionFailed  = errors.New("ansible execution failed")
-	ErrAnsiblePlaybookMissing  = errors.New("ansible playbook is required")
-	ErrAnsibleInventoryMissing = errors.New("ansible inventory is required")
-	ErrAnsibleComponentMissing = errors.New("ansible component not found")
-	ErrAnsibleSettingsInvalid  = errors.New("invalid ansible component settings")
+	ErrAnsiblePlaybookMissing = errors.New("ansible playbook is required")
 
 	// Component type-specific section errors.
 	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")

@@ -403,3 +403,60 @@ func TestAnsiblePathConstructionConsistency(t *testing.T) {
 		assert.Equal(t, workingDir, filepath.Dir(varfilePath))
 	})
 }
+
+func TestGetGenerateSectionFromComponent(t *testing.T) {
+	t.Run("returns nil when component section is nil", func(t *testing.T) {
+		result := getGenerateSectionFromComponent(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil when generate section is missing", func(t *testing.T) {
+		componentSection := map[string]any{
+			"vars": map[string]any{
+				"foo": "bar",
+			},
+		}
+		result := getGenerateSectionFromComponent(componentSection)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil when generate section is not a map", func(t *testing.T) {
+		componentSection := map[string]any{
+			"generate": "not a map",
+		}
+		result := getGenerateSectionFromComponent(componentSection)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns generate section when present", func(t *testing.T) {
+		generateSection := map[string]any{
+			"files": []string{"file1.yml", "file2.yml"},
+		}
+		componentSection := map[string]any{
+			"generate": generateSection,
+		}
+		result := getGenerateSectionFromComponent(componentSection)
+		assert.Equal(t, generateSection, result)
+	})
+
+	t.Run("returns generate section with complex content", func(t *testing.T) {
+		generateSection := map[string]any{
+			"providers": map[string]any{
+				"aws": map[string]any{
+					"region": "us-east-1",
+				},
+			},
+			"backend": map[string]any{
+				"type": "s3",
+			},
+		}
+		componentSection := map[string]any{
+			"vars": map[string]any{
+				"foo": "bar",
+			},
+			"generate": generateSection,
+		}
+		result := getGenerateSectionFromComponent(componentSection)
+		assert.Equal(t, generateSection, result)
+	})
+}

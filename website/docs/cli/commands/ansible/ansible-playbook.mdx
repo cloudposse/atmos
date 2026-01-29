@@ -1,0 +1,146 @@
+---
+title: atmos ansible playbook
+sidebar_label: playbook
+sidebar_class_name: command
+id: playbook
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Use this command to run an Ansible playbook for an Atmos component in a stack, applying configuration
+changes to target hosts.
+</Intro>
+
+## Usage
+
+Execute the `ansible playbook` command like this:
+
+```shell
+atmos ansible playbook <component> --stack <stack> [flags] -- [ansible-options]
+```
+
+:::tip
+For more details on the `ansible-playbook` command and options, refer to [Ansible Playbook Documentation](https://docs.ansible.com/ansible/latest/cli/ansible-playbook.html).
+:::
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos Ansible component name or path.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em><em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--playbook` <em>(alias `-p`)</em><em>(optional)</em></dt>
+    <dd>
+        Ansible playbook file to execute. If not specified, uses the value from
+        `settings.ansible.playbook` in the stack manifest.
+
+        The command line flag takes precedence over the stack manifest setting.
+    </dd>
+
+    <dt>`--inventory` <em>(alias `-i`)</em><em>(optional)</em></dt>
+    <dd>
+        Ansible inventory source. Can be a file, directory, or dynamic inventory script.
+
+        Can also be specified via `settings.ansible.inventory` in the stack manifest.
+        The command line flag takes precedence.
+    </dd>
+
+    <dt>`--dry-run`<em>(optional)</em></dt>
+    <dd>
+        Perform a dry run without executing the playbook. Shows what commands would be run.
+    </dd>
+</dl>
+
+## Examples
+
+### Basic Usage
+
+<Terminal>
+```shell
+# Run playbook with settings from stack manifest
+atmos ansible playbook webserver --stack prod
+
+# Specify playbook explicitly
+atmos ansible playbook webserver -s prod --playbook site.yml
+
+# Specify both playbook and inventory
+atmos ansible playbook webserver -s prod -p deploy.yml -i inventory/production
+```
+</Terminal>
+
+### Passing Ansible Options
+
+Any arguments after `--` are passed directly to `ansible-playbook`:
+
+<Terminal>
+```shell
+# Check mode (dry run at Ansible level)
+atmos ansible playbook webserver -s prod -- --check
+
+# Verbose output
+atmos ansible playbook webserver -s prod -- -vvv
+
+# Limit to specific hosts
+atmos ansible playbook webserver -s prod -- --limit "web01,web02"
+
+# Run specific tags
+atmos ansible playbook webserver -s prod -- --tags "deploy"
+
+# Skip specific tags
+atmos ansible playbook webserver -s prod -- --skip-tags "slow"
+
+# Run with extra variables
+atmos ansible playbook webserver -s prod -- --extra-vars "version=1.2.3"
+```
+</Terminal>
+
+### Stack Configuration Example
+
+Configure your Ansible component in the stack manifest:
+
+```yaml
+components:
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
+        app_port: 8080
+        app_version: "1.0.0"
+      settings:
+        ansible:
+          playbook: site.yml
+          inventory: inventory/production
+```
+
+When you run `atmos ansible playbook webserver -s prod`, Atmos:
+
+1. Generates a variables file with the `vars` section
+2. Passes it to `ansible-playbook` via `--extra-vars @<varfile>`
+3. Uses the playbook and inventory from settings (or command line flags)
+4. Executes the playbook in the component directory
+
+## Variable Handling
+
+Atmos automatically generates a YAML variables file containing all variables from the component's
+`vars` section. This file is passed to Ansible using `--extra-vars @<filename>`.
+
+The generated file follows the naming convention: `<context>-<component>.ansible.vars.yaml`
+
+For example, for a component `webserver` in stack `prod-us-east-1`, the file would be:
+`prod-us-east-1-webserver.ansible.vars.yaml`
+
+The file is automatically cleaned up after the playbook execution completes.
