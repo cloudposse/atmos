@@ -30,6 +30,10 @@ atmos_cli_config:
       base_path: ""
       command: ""
       auto_generate_files: false
+    ansible:
+      base_path: ""
+      command: ""
+      auto_generate_files: false
   stacks:
     base_path: stacks
     included_paths:
