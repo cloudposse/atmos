@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -307,8 +308,10 @@ func (s *ArtifactoryStore) GetKey(key string) (interface{}, error) {
 		filePath += ".json"
 	}
 
-	// Construct the full repository path
-	repoPath := filepath.Join(s.repoName, filePath)
+	// Construct the full repository path.
+	// Use path.Join (not filepath.Join) because this is a URL path for the Artifactory API,
+	// which requires forward slashes on all platforms including Windows.
+	repoPath := path.Join(s.repoName, filePath) //nolint:forbidigo // URL path requires forward slashes
 
 	// Create a temporary directory to download the file
 	tempDir, err := os.MkdirTemp("", "atmos-artifactory-*")
