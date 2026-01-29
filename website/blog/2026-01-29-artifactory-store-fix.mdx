@@ -1,0 +1,38 @@
+---
+slug: artifactory-store-fix
+title: Artifactory Store Fix and Documentation Corrections
+authors: [osterman]
+tags: [bugfix, documentation]
+---
+
+Fixed Artifactory store retrieval issues and corrected store documentation to accurately reflect supported backends.
+
+<!--truncate-->
+
+## What Changed
+
+The Artifactory store's `GetKey` method was missing configuration required by the JFrog SDK for proper file downloads. Additionally, store documentation across multiple pages contained outdated examples with unsupported backends and incorrect field names.
+
+### Code Fix
+
+The `GetKey` method now includes the same JFrog SDK configuration (`Flat=true` and trailing path separator handling) that the `Get` method uses, ensuring consistent behavior for all retrieval operations.
+
+### Documentation Corrections
+
+- **Field names**: Changed `backend` to `type` and `config` to `options` to match the actual schema
+- **Store types**: Updated `aws/ssm` to `aws-ssm-parameter-store`
+- **Removed unsupported backends**: Vault and AWS Secrets Manager examples were removed (not implemented)
+- **Added supported backends**: Azure Key Vault and Google Secret Manager now documented
+- **Artifactory guidance**: Added note about using Generic repository type
+
+### Test Coverage
+
+Added comprehensive integration tests for the Artifactory store with a mock HTTP server that validates the JFrog SDK integration patterns including AQL search, checksum validation, and file path handling.
+
+## Why This Matters
+
+Users configuring external stores can now rely on accurate documentation. The Artifactory store now works correctly for both `Get` and `GetKey` operations.
+
+## Get Involved
+
+Have questions or feedback? Join us on [Slack](https://slack.cloudposse.com/) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
