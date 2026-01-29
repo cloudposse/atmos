@@ -236,7 +236,7 @@ func TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath(t *testing.T) {
 	err := ensureTerraformComponentExists(atmosConfig, info)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing-comp")
-	assert.Contains(t, err.Error(), "components/terraform")
+	assert.Contains(t, err.Error(), filepath.Join("components", "terraform"))
 }
 
 // TestTryJITProvision_NilComponentSection tests that tryJITProvision handles nil ComponentSection.
