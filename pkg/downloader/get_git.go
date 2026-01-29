@@ -295,7 +295,9 @@ func getRunCommand(cmd *exec.Cmd) error {
 
 // getRunCommandWithRetry wraps getRunCommand with retry logic for transient errors.
 func (g *CustomGitGetter) getRunCommandWithRetry(ctx context.Context, cmd *exec.Cmd) error {
-	if g.RetryConfig == nil || g.RetryConfig.MaxAttempts <= 1 {
+	// Skip retry if no config, or if MaxAttempts is explicitly set to 1 (single attempt).
+	// nil MaxAttempts means unlimited retries, so we should proceed with retry logic.
+	if g.RetryConfig == nil || (g.RetryConfig.MaxAttempts != nil && *g.RetryConfig.MaxAttempts <= 1) {
 		return getRunCommand(cmd)
 	}
 
