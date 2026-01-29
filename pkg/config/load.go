@@ -41,6 +41,9 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
+// osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
+var osGetwd = os.Getwd
+
 // mergedConfigFiles tracks all config files merged during a LoadConfig call.
 // This is used to extract case-sensitive map keys from all sources, not just the main config.
 // The slice is reset at the start of each LoadConfig call.
@@ -377,6 +380,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
 
+	// Experimental feature handling
+	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
+
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
 	bindEnv(v, "settings.pro.endpoint", AtmosProEndpointEnvVarName)
@@ -428,6 +434,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
+	v.SetDefault("settings.experimental", "warn")    // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
@@ -576,7 +583,7 @@ func readGitRootConfig(v *viper.Viper) error {
 
 	// Skip git root search if CWD has local Atmos config.
 	// This ensures --chdir to a directory with its own config uses only that config.
-	cwd, err := os.Getwd()
+	cwd, err := osGetwd()
 	if err != nil {
 		log.Debug("Failed to get CWD for local config check", "error", err)
 	} else {
@@ -1063,19 +1070,31 @@ func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
 // and loads their configurations into the destination viper instance.
 func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	// Search for `atmos.d/` configurations.
-	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-		log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
-		// Don't return error - just log and continue.
-		// This maintains existing behavior where .atmos.d loading is optional.
+	atmosDPath := filepath.Join(filepath.FromSlash(dirPath), "atmos.d")
+	if stat, err := os.Stat(atmosDPath); err == nil && stat.IsDir() {
+		log.Debug("Found atmos.d directory, loading configurations", "path", atmosDPath)
+		searchPattern := filepath.Join(atmosDPath, "**", "*")
+		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
+			log.Debug("Failed to load atmos.d configs", "error", err, "path", atmosDPath)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat atmos.d directory", "path", atmosDPath, "error", err)
+	} else {
+		log.Trace("No atmos.d directory found", "path", atmosDPath)
 	}
 
 	// Search for `.atmos.d` configurations.
-	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-		log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
-		// Don't return error - just log and continue.
-		// This maintains existing behavior where .atmos.d loading is optional.
+	dotAtmosDPath := filepath.Join(filepath.FromSlash(dirPath), ".atmos.d")
+	if stat, err := os.Stat(dotAtmosDPath); err == nil && stat.IsDir() {
+		log.Debug("Found .atmos.d directory, loading configurations", "path", dotAtmosDPath)
+		searchPattern := filepath.Join(dotAtmosDPath, "**", "*")
+		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
+			log.Debug("Failed to load .atmos.d configs", "error", err, "path", dotAtmosDPath)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat .atmos.d directory", "path", dotAtmosDPath, "error", err)
+	} else {
+		log.Trace("No .atmos.d directory found", "path", dotAtmosDPath)
 	}
 }
 

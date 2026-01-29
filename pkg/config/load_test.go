@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1208,6 +1209,32 @@ func TestReadGitRootConfig_SkipsWhenLocalConfigExists(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestReadGitRootConfig_GetwdError verifies that readGitRootConfig gracefully handles
+// os.Getwd failure by falling through to git root detection instead of failing.
+func TestReadGitRootConfig_GetwdError(t *testing.T) {
+	// Override osGetwd to simulate failure.
+	originalGetwd := osGetwd
+	osGetwd = func() (string, error) {
+		return "", fmt.Errorf("simulated getwd failure")
+	}
+	t.Cleanup(func() { osGetwd = originalGetwd })
+
+	// Set up a mock git root with config.
+	gitRootDir := t.TempDir()
+	createTestConfig(t, gitRootDir, `base_path: /from/git-root`)
+	t.Setenv("TEST_GIT_ROOT", gitRootDir)
+
+	v := viper.New()
+	v.SetConfigType("yaml")
+
+	err := readGitRootConfig(v)
+	require.NoError(t, err)
+
+	// When os.Getwd fails, the function should still proceed and load git root config.
+	assert.Equal(t, "/from/git-root", v.GetString("base_path"),
+		"Should load git root config when os.Getwd fails (fallthrough behavior)")
 }
 
 // TestLoadConfig_DefaultConfigWithGitRootAtmosD tests that .atmos.d at git root is loaded

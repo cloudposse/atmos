@@ -39,7 +39,7 @@ func InfoExec(toolName, outputFormat string) error {
 	installer := NewInstaller()
 
 	// Parse tool name to get owner/repo.
-	owner, repo, err := installer.parseToolSpec(toolName)
+	owner, repo, err := installer.ParseToolSpec(toolName)
 	if err != nil {
 		return fmt.Errorf("failed to resolve tool '%s': %w", toolName, err)
 	}
@@ -55,13 +55,16 @@ func InfoExec(toolName, outputFormat string) error {
 	version := resolveLatestVersion(versionInfo.ResolvedVersion, owner, repo)
 
 	// Find the tool configuration.
-	tool, err := installer.findTool(owner, repo, version)
+	tool, err := installer.FindTool(owner, repo, version)
 	if err != nil {
 		return fmt.Errorf("failed to find tool %s: %w", toolName, err)
 	}
 
-	// Get registry metadata and available versions.
-	registryName := getRegistryName(ctx)
+	// Get registry name from tool (already set by FindTool) and available versions.
+	registryName := tool.Registry
+	if registryName == "" {
+		registryName = getRegistryName(ctx)
+	}
 	availableVersions := getAvailableVersions(owner, repo, defaultVersionLimit)
 
 	// Build context for display.
@@ -112,24 +115,24 @@ func displayToolInfo(ctx *toolContext) {
 
 	// Display installed versions table.
 	if len(ctx.InstalledVersions) > 0 {
-		_ = ui.Writeln("")
-		_ = ui.Writeln("Installed Versions:")
+		ui.Writeln("")
+		ui.Writeln("Installed Versions:")
 		displayVersionsTable(ctx.InstalledVersions, ctx.DefaultVersion, width, true)
 	} else {
-		_ = ui.Writeln("")
-		_ = ui.Writeln("No versions installed")
+		ui.Writeln("")
+		ui.Writeln("No versions installed")
 	}
 
 	// Display available versions with rich metadata.
 	if len(ctx.AvailableVersions) > 0 {
-		_ = ui.Writeln("")
-		_ = ui.Writeln("Available Versions (latest 10):")
+		ui.Writeln("")
+		ui.Writeln("Available Versions (latest 10):")
 		displayVersionsWithMetadata(ctx.AvailableVersions, ctx.InstalledVersions, ctx.ConfiguredVersions, width)
 	}
 
 	// Display helpful hints.
-	_ = ui.Writeln("")
-	_ = ui.Hintf("Use `atmos toolchain install %s@<version>` to install", ctx.Name)
+	ui.Writeln("")
+	ui.Hintf("Use `atmos toolchain install %s@<version>` to install", ctx.Name)
 }
 
 // displayToolHeader displays tool metadata in a clean format.
@@ -139,16 +142,16 @@ func displayToolHeader(ctx *toolContext) {
 	if ctx.Registry != "" {
 		toolInfo += fmt.Sprintf(" (registry: %s)", ctx.Registry)
 	}
-	_ = ui.Writeln(toolInfo)
+	ui.Writeln(toolInfo)
 
 	// Tool type.
-	_ = ui.Writef("Type: %s", ctx.Tool.Type)
-	_ = ui.Writeln("")
+	ui.Writef("Type: %s", ctx.Tool.Type)
+	ui.Writeln("")
 
 	// Repository link.
 	if ctx.Tool.RepoOwner != "" && ctx.Tool.RepoName != "" {
-		_ = ui.Writef("Repository: https://github.com/%s/%s", ctx.Tool.RepoOwner, ctx.Tool.RepoName)
-		_ = ui.Writeln("")
+		ui.Writef("Repository: https://github.com/%s/%s", ctx.Tool.RepoOwner, ctx.Tool.RepoName)
+		ui.Writeln("")
 	}
 }
 
@@ -188,7 +191,7 @@ func displayVersionsTable(versions []string, defaultVersion string, terminalWidt
 	applyTableStyles(&t)
 
 	// Render and print.
-	_ = ui.Writeln(t.View())
+	ui.Writeln(t.View())
 }
 
 // displayVersionsWithMetadata displays versions with full GitHub release metadata in table format.
@@ -237,12 +240,12 @@ func displayVersionsWithMetadata(versions []versionItem, installedVersions []str
 	// Use lipgloss/table for auto column width calculation.
 	t, err := createVersionsTable(rows, tableWidth)
 	if err != nil {
-		_ = ui.Writeln(err.Error())
+		ui.Writeln(err.Error())
 		return
 	}
 
 	// Render and print to stderr (UI output).
-	_ = ui.Writeln(t.String())
+	ui.Writeln(t.String())
 }
 
 // createVersionsTable creates a styled table for version listing (matching atmos version list).
@@ -525,7 +528,7 @@ func getEvaluatedToolYAML(tool *registry.Tool, version string, installer *Instal
 	assetURL := ""
 	var err error
 	if tool.Asset != "" {
-		assetURL, err = installer.buildAssetURL(tool, version)
+		assetURL, err = installer.BuildAssetURL(tool, version)
 		if err != nil {
 			return "", fmt.Errorf("failed to build asset URL: %w", err)
 		}

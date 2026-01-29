@@ -744,6 +744,9 @@ func checkPreconditions(t *testing.T, preconditions []string) {
 	preconditionChecks := map[string]func(*testing.T){
 		"github_token":    RequireOCIAuthentication,
 		"aws_credentials": RequireAWSCredentials,
+		"terraform":       RequireTerraform,
+		"packer":          RequirePacker,
+		"helmfile":        RequireHelmfile,
 	}
 
 	// Check each precondition

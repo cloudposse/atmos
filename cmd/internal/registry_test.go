@@ -50,6 +50,10 @@ func (m *mockCommandProvider) GetAliases() []CommandAlias {
 	return m.aliases
 }
 
+func (m *mockCommandProvider) IsExperimental() bool {
+	return false
+}
+
 func TestRegister(t *testing.T) {
 	Reset() // Clear registry for clean test
 
@@ -571,4 +575,342 @@ func TestRegisterCommandCompatFlags_Concurrent(t *testing.T) {
 		require.NotNil(t, flags, "flags for %s should exist", subcommand)
 		assert.Contains(t, flags, "-var")
 	}
+}
+
+// mockExperimentalCommandProvider is a test implementation that returns IsExperimental = true.
+type mockExperimentalCommandProvider struct {
+	mockCommandProvider
+}
+
+func (m *mockExperimentalCommandProvider) IsExperimental() bool {
+	return true
+}
+
+func TestMarkCommandExperimental(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupCmd       func() *cobra.Command
+		expectedMarked []string // Command names expected to be marked
+	}{
+		{
+			name: "marks single command",
+			setupCmd: func() *cobra.Command {
+				return &cobra.Command{Use: "test"}
+			},
+			expectedMarked: []string{"test"},
+		},
+		{
+			name: "marks command with nil annotations",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{Use: "test"}
+				cmd.Annotations = nil
+				return cmd
+			},
+			expectedMarked: []string{"test"},
+		},
+		{
+			name: "marks command with existing annotations",
+			setupCmd: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "test",
+					Annotations: map[string]string{"other": "value"},
+				}
+				return cmd
+			},
+			expectedMarked: []string{"test"},
+		},
+		{
+			name: "marks command and subcommands recursively",
+			setupCmd: func() *cobra.Command {
+				parent := &cobra.Command{Use: "parent"}
+				child1 := &cobra.Command{Use: "child1"}
+				child2 := &cobra.Command{Use: "child2"}
+				grandchild := &cobra.Command{Use: "grandchild"}
+				child1.AddCommand(grandchild)
+				parent.AddCommand(child1)
+				parent.AddCommand(child2)
+				return parent
+			},
+			expectedMarked: []string{"parent", "child1", "child2", "grandchild"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setupCmd()
+
+			markCommandExperimental(cmd)
+
+			// Verify all expected commands are marked.
+			for _, name := range tt.expectedMarked {
+				foundCmd := findCommandByName(cmd, name)
+				require.NotNil(t, foundCmd, "command %q should exist", name)
+				assert.NotNil(t, foundCmd.Annotations, "annotations should not be nil for %q", name)
+				assert.Equal(t, "true", foundCmd.Annotations["experimental"], "command %q should be marked experimental", name)
+			}
+		})
+	}
+}
+
+// findCommandByName recursively searches for a command by name in the command tree.
+func findCommandByName(root *cobra.Command, name string) *cobra.Command {
+	if root.Name() == name {
+		return root
+	}
+	for _, sub := range root.Commands() {
+		if found := findCommandByName(sub, name); found != nil {
+			return found
+		}
+	}
+	return nil
+}
+
+func TestIsCommandExperimental(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func()
+		cmdName  string
+		expected bool
+	}{
+		{
+			name: "non-existent command returns false",
+			setup: func() {
+				Reset()
+			},
+			cmdName:  "nonexistent",
+			expected: false,
+		},
+		{
+			name: "non-experimental command returns false",
+			setup: func() {
+				Reset()
+				provider := &mockCommandProvider{
+					name:  "regular",
+					group: "Test",
+					cmd:   &cobra.Command{Use: "regular"},
+				}
+				Register(provider)
+			},
+			cmdName:  "regular",
+			expected: false,
+		},
+		{
+			name: "experimental command returns true",
+			setup: func() {
+				Reset()
+				provider := &mockExperimentalCommandProvider{
+					mockCommandProvider: mockCommandProvider{
+						name:  "experimental",
+						group: "Test",
+						cmd:   &cobra.Command{Use: "experimental"},
+					},
+				}
+				Register(provider)
+			},
+			cmdName:  "experimental",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			result := IsCommandExperimental(tt.cmdName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestRegisterAll_DefaultNoArgs(t *testing.T) {
+	t.Run("applies NoArgs to parent command with subcommands", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create parent command with subcommands (no Args set).
+		parentCmd := &cobra.Command{Use: "parent"}
+		childCmd := &cobra.Command{Use: "child"}
+		parentCmd.AddCommand(childCmd)
+
+		provider := &mockCommandProvider{
+			name:  "parent",
+			group: "Test",
+			cmd:   parentCmd,
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify NoArgs was applied to parent.
+		registeredCmd, _, err := rootCmd.Find([]string{"parent"})
+		require.NoError(t, err)
+		require.NotNil(t, registeredCmd.Args, "Args should be set")
+
+		// Verify NoArgs behavior: accepts zero args.
+		err = registeredCmd.Args(registeredCmd, []string{})
+		assert.NoError(t, err)
+
+		// Verify NoArgs behavior: rejects any args.
+		err = registeredCmd.Args(registeredCmd, []string{"unexpected"})
+		assert.Error(t, err)
+	})
+
+	t.Run("applies NoArgs to leaf command without subcommands", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create leaf command without subcommands (no Args set).
+		cmd := &cobra.Command{Use: "standalone"}
+
+		provider := &mockCommandProvider{
+			name:  "standalone",
+			group: "Test",
+			cmd:   cmd,
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify NoArgs was applied to leaf command.
+		registeredCmd, _, err := rootCmd.Find([]string{"standalone"})
+		require.NoError(t, err)
+		require.NotNil(t, registeredCmd.Args, "Args should be set for leaf command")
+
+		// Verify NoArgs behavior: accepts zero args.
+		err = registeredCmd.Args(registeredCmd, []string{})
+		assert.NoError(t, err)
+
+		// Verify NoArgs behavior: rejects any args.
+		err = registeredCmd.Args(registeredCmd, []string{"unexpected"})
+		assert.Error(t, err)
+	})
+
+	t.Run("does not overwrite explicit Args", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create parent command with subcommands AND explicit Args.
+		parentCmd := &cobra.Command{
+			Use:  "parent",
+			Args: cobra.MaximumNArgs(1), // Explicit Args - should not be overwritten.
+		}
+		childCmd := &cobra.Command{Use: "child"}
+		parentCmd.AddCommand(childCmd)
+
+		provider := &mockCommandProvider{
+			name:  "parent",
+			group: "Test",
+			cmd:   parentCmd,
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify original Args is preserved.
+		registeredCmd, _, err := rootCmd.Find([]string{"parent"})
+		require.NoError(t, err)
+		require.NotNil(t, registeredCmd.Args, "Args should be set")
+
+		// Verify MaximumNArgs behavior: accepts 0 or 1 args.
+		err = registeredCmd.Args(registeredCmd, []string{})
+		assert.NoError(t, err)
+		err = registeredCmd.Args(registeredCmd, []string{"one"})
+		assert.NoError(t, err)
+		err = registeredCmd.Args(registeredCmd, []string{"one", "two"})
+		assert.Error(t, err) // MaximumNArgs(1) rejects 2 args.
+	})
+
+	t.Run("does not modify command with PositionalArgsBuilder", func(t *testing.T) {
+		Reset()
+
+		rootCmd := &cobra.Command{Use: "root"}
+
+		// Create parent command with subcommands.
+		parentCmd := &cobra.Command{Use: "parent"}
+		childCmd := &cobra.Command{Use: "child"}
+		parentCmd.AddCommand(childCmd)
+
+		// Provider that returns a PositionalArgsBuilder.
+		provider := &mockProviderWithPositionalArgs{
+			mockCommandProvider: mockCommandProvider{
+				name:  "parent",
+				group: "Test",
+				cmd:   parentCmd,
+			},
+		}
+
+		Register(provider)
+		err := RegisterAll(rootCmd)
+		require.NoError(t, err)
+
+		// Verify Args was NOT set (provider has PositionalArgsBuilder).
+		registeredCmd, _, err := rootCmd.Find([]string{"parent"})
+		require.NoError(t, err)
+		assert.Nil(t, registeredCmd.Args, "Args should remain nil when PositionalArgsBuilder is set")
+	})
+}
+
+// mockProviderWithPositionalArgs is a test provider that returns a PositionalArgsBuilder.
+type mockProviderWithPositionalArgs struct {
+	mockCommandProvider
+}
+
+func (m *mockProviderWithPositionalArgs) GetPositionalArgsBuilder() *flags.PositionalArgsBuilder {
+	// Return non-nil builder to simulate command that accepts positional args.
+	return &flags.PositionalArgsBuilder{}
+}
+
+func TestRegisterAllMarksExperimentalCommands(t *testing.T) {
+	Reset()
+
+	rootCmd := &cobra.Command{Use: "root"}
+
+	// Register a non-experimental command.
+	regularProvider := &mockCommandProvider{
+		name:  "regular",
+		group: "Test",
+		cmd:   &cobra.Command{Use: "regular"},
+	}
+	Register(regularProvider)
+
+	// Register an experimental command with subcommands.
+	experimentalCmd := &cobra.Command{Use: "experimental"}
+	subCmd := &cobra.Command{Use: "sub"}
+	experimentalCmd.AddCommand(subCmd)
+
+	experimentalProvider := &mockExperimentalCommandProvider{
+		mockCommandProvider: mockCommandProvider{
+			name:  "experimental",
+			group: "Test",
+			cmd:   experimentalCmd,
+		},
+	}
+	Register(experimentalProvider)
+
+	err := RegisterAll(rootCmd)
+	require.NoError(t, err)
+
+	// Verify regular command is NOT marked experimental.
+	regularCmd, _, err := rootCmd.Find([]string{"regular"})
+	require.NoError(t, err)
+	if regularCmd.Annotations != nil {
+		assert.NotEqual(t, "true", regularCmd.Annotations["experimental"], "regular command should NOT be marked experimental")
+	}
+
+	// Verify experimental command IS marked.
+	expCmd, _, err := rootCmd.Find([]string{"experimental"})
+	require.NoError(t, err)
+	assert.NotNil(t, expCmd.Annotations)
+	assert.Equal(t, "true", expCmd.Annotations["experimental"], "experimental command should be marked")
+
+	// Verify subcommand is also marked.
+	expSubCmd, _, err := expCmd.Find([]string{"sub"})
+	require.NoError(t, err)
+	assert.NotNil(t, expSubCmd.Annotations)
+	assert.Equal(t, "true", expSubCmd.Annotations["experimental"], "subcommand should be marked experimental")
 }

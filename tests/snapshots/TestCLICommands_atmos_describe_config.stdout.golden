@@ -27,11 +27,13 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
     },
     "packer": {
       "base_path": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
     },
     "list": {
       "format": "",
@@ -109,6 +111,7 @@
         "enabled": false
       }
     },
+    "experimental": "warn",
     "docs": {
       "max_width": 0,
       "pagination": false
@@ -233,5 +236,19 @@
     "use_lock_file": false
   },
   "profiles": {},
-  "metadata": {}
+  "metadata": {},
+  "list": {
+    "components": {
+      "format": "",
+      "columns": null
+    },
+    "instances": {
+      "format": "",
+      "columns": null
+    },
+    "stacks": {
+      "format": "",
+      "columns": null
+    }
+  }
 }

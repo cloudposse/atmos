@@ -97,6 +97,8 @@ type AtmosConfiguration struct {
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
+	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -345,6 +347,9 @@ type SyntaxHighlighting struct {
 type AtmosSettings struct {
 	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	// Experimental controls how experimental features are handled.
+	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
@@ -453,11 +458,19 @@ type Helmfile struct {
 	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"`
 	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Helmfile operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
 type Packer struct {
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Packer operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
 type Components struct {
@@ -931,6 +944,7 @@ type BaseComponentConfig struct {
 	BaseComponentEnv          AtmosSectionMapType
 	BaseComponentAuth         AtmosSectionMapType
 	BaseComponentDependencies AtmosSectionMapType
+	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
 	BaseComponentMetadata     AtmosSectionMapType
 	BaseComponentProviders    AtmosSectionMapType
 	BaseComponentHooks        AtmosSectionMapType
@@ -944,6 +958,7 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
+	BaseComponentProvisionSection          AtmosSectionMapType
 	ComponentInheritanceChain              []string
 }
 
@@ -1071,4 +1086,19 @@ type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 	Width int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+}
+
+// TopLevelListConfig holds command-specific list configurations.
+// This is a top-level configuration that separates settings for different list commands.
+type TopLevelListConfig struct {
+	// Components configures the "atmos list components" command output.
+	// Shows unique component definitions (deduplicated across stacks).
+	Components ListConfig `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
+
+	// Instances configures the "atmos list instances" command output.
+	// Shows component instances (one entry per component+stack pair).
+	Instances ListConfig `yaml:"instances,omitempty" json:"instances,omitempty" mapstructure:"instances"`
+
+	// Stacks configures the "atmos list stacks" command output.
+	Stacks ListConfig `yaml:"stacks,omitempty" json:"stacks,omitempty" mapstructure:"stacks"`
 }

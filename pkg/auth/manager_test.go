@@ -1960,3 +1960,187 @@ func TestManager_AuthenticateProvider_AuthenticationFailure(t *testing.T) {
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 }
+
+func TestManager_ResolvePrincipalSetting(t *testing.T) {
+	tests := []struct {
+		name           string
+		identities     map[string]schema.Identity
+		targetIdentity string
+		key            string
+		expectedValue  interface{}
+		expectedFound  bool
+	}{
+		{
+			name: "returns value from current identity",
+			identities: map[string]schema.Identity{
+				"dev": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"region": "us-west-2"},
+				},
+			},
+			targetIdentity: "dev",
+			key:            "region",
+			expectedValue:  "us-west-2",
+			expectedFound:  true,
+		},
+		{
+			name: "returns value from parent identity when not set on current",
+			identities: map[string]schema.Identity{
+				"parent": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"region": "eu-west-1"},
+				},
+				"child": {
+					Kind:      "aws/assume-role",
+					Via:       &schema.IdentityVia{Identity: "parent"},
+					Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/test"},
+				},
+			},
+			targetIdentity: "child",
+			key:            "region",
+			expectedValue:  "eu-west-1",
+			expectedFound:  true,
+		},
+		{
+			name: "current identity overrides parent",
+			identities: map[string]schema.Identity{
+				"parent": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"region": "eu-west-1"},
+				},
+				"child": {
+					Kind:      "aws/assume-role",
+					Via:       &schema.IdentityVia{Identity: "parent"},
+					Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/test", "region": "ap-south-1"},
+				},
+			},
+			targetIdentity: "child",
+			key:            "region",
+			expectedValue:  "ap-south-1",
+			expectedFound:  true,
+		},
+		{
+			name: "returns false when key not found in chain",
+			identities: map[string]schema.Identity{
+				"dev": {
+					Kind:      "aws/permission-set",
+					Via:       &schema.IdentityVia{Provider: "sso"},
+					Principal: map[string]any{"name": "dev"},
+				},
+			},
+			targetIdentity: "dev",
+			key:            "region",
+			expectedValue:  nil,
+			expectedFound:  false,
+		},
+		{
+			name:           "returns false for non-existent identity",
+			identities:     map[string]schema.Identity{},
+			targetIdentity: "nonexistent",
+			key:            "region",
+			expectedValue:  nil,
+			expectedFound:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authConfig := &schema.AuthConfig{
+				Providers: map[string]schema.Provider{
+					"sso": {Kind: "aws/iam-identity-center", Region: "us-east-1", StartURL: "https://example.awsapps.com/start"},
+				},
+				Identities: tt.identities,
+			}
+
+			m := &manager{
+				config:          authConfig,
+				providers:       make(map[string]types.Provider),
+				identities:      make(map[string]types.Identity),
+				credentialStore: &testStore{},
+			}
+
+			val, found := m.ResolvePrincipalSetting(tt.targetIdentity, tt.key)
+			assert.Equal(t, tt.expectedFound, found)
+			assert.Equal(t, tt.expectedValue, val)
+		})
+	}
+}
+
+func TestManager_ResolveProviderConfig(t *testing.T) {
+	tests := []struct {
+		name           string
+		providers      map[string]schema.Provider
+		identities     map[string]schema.Identity
+		targetIdentity string
+		expectedRegion string
+		expectedFound  bool
+	}{
+		{
+			name: "returns provider for direct identity",
+			providers: map[string]schema.Provider{
+				"sso": {Kind: "aws/iam-identity-center", Region: "us-west-2", StartURL: "https://example.awsapps.com/start"},
+			},
+			identities: map[string]schema.Identity{
+				"dev": {
+					Kind: "aws/permission-set",
+					Via:  &schema.IdentityVia{Provider: "sso"},
+				},
+			},
+			targetIdentity: "dev",
+			expectedRegion: "us-west-2",
+			expectedFound:  true,
+		},
+		{
+			name: "returns provider for chained identity",
+			providers: map[string]schema.Provider{
+				"sso": {Kind: "aws/iam-identity-center", Region: "eu-central-1", StartURL: "https://example.awsapps.com/start"},
+			},
+			identities: map[string]schema.Identity{
+				"parent": {
+					Kind: "aws/permission-set",
+					Via:  &schema.IdentityVia{Provider: "sso"},
+				},
+				"child": {
+					Kind: "aws/assume-role",
+					Via:  &schema.IdentityVia{Identity: "parent"},
+				},
+			},
+			targetIdentity: "child",
+			expectedRegion: "eu-central-1",
+			expectedFound:  true,
+		},
+		{
+			name:           "returns false for non-existent identity",
+			providers:      map[string]schema.Provider{},
+			identities:     map[string]schema.Identity{},
+			targetIdentity: "nonexistent",
+			expectedRegion: "",
+			expectedFound:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			authConfig := &schema.AuthConfig{
+				Providers:  tt.providers,
+				Identities: tt.identities,
+			}
+
+			m := &manager{
+				config:          authConfig,
+				providers:       make(map[string]types.Provider),
+				identities:      make(map[string]types.Identity),
+				credentialStore: &testStore{},
+			}
+
+			provider, found := m.ResolveProviderConfig(tt.targetIdentity)
+			assert.Equal(t, tt.expectedFound, found)
+			if found {
+				assert.Equal(t, tt.expectedRegion, provider.Region)
+			}
+		})
+	}
+}

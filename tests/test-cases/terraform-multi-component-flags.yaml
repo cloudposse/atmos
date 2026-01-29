@@ -1,0 +1,210 @@
+# Test cases for terraform commands with multi-component flags (--all, --query, --components)
+# These tests verify that multi-component flags execute without prompting for component selection
+# Related to: PR #1976 - Fix --all flag prompting for component (issue #1945)
+tests:
+  # Test --all flag with dry-run (no actual terraform execution)
+  - name: "terraform plan --all executes without prompting"
+    enabled: true
+    tty: false  # Ensures no TTY prompts
+    description: "Verify --all flag skips component selection prompt and processes all components"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        # Should show dry-run messages for components (ui.Successf output)
+        - "Would plan"
+        - "dry run"
+
+  # Test --all flag with stack filter
+  - name: "terraform plan --all --stack executes without prompting"
+    enabled: true
+    tty: false
+    description: "Verify --all flag with stack filter skips component selection prompt"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--all"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would plan"
+        - "prod"
+        - "dry run"
+
+  # Test --query flag with dry-run
+  - name: "terraform plan --query executes without prompting"
+    enabled: true
+    tty: false
+    description: "Verify --query flag skips component selection prompt and filters by expression"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--query"
+      - ".vars.tags.team == \"eks\""
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        # Should show dry-run messages for eks team components only
+        - "Would plan"
+        - "eks"
+        - "dry run"
+
+  # Test --query flag that matches no components
+  - name: "terraform plan --query no matches"
+    enabled: true
+    tty: false
+    description: "Verify --query flag with no matches shows appropriate message"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--query"
+      - ".vars.tags.team == \"nonexistent\""
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "No components matched"
+
+  # Test --components flag with dry-run
+  - name: "terraform plan --components executes without prompting"
+    enabled: true
+    tty: false
+    description: "Verify --components flag skips component selection prompt"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--components=vpc"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would plan"
+        - "vpc"
+        - "prod"
+        - "dry run"
+
+  # Test --components flag with multiple components
+  - name: "terraform plan --components multiple"
+    enabled: true
+    tty: false
+    description: "Verify --components flag with multiple components works"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--components=vpc,eks/cluster"
+      - "-s"
+      - "prod"
+      - "--dry-run"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Would plan"
+        - "vpc"
+        - "eks/cluster"
+        - "dry run"
+
+  # Test error when --all is used with component argument
+  - name: "terraform plan --all with component error"
+    enabled: true
+    tty: false
+    description: "Verify error when --all is used with a component argument"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "-s"
+      - "prod"
+      - "--all"
+    expect:
+      exit_code: 1
+      stderr:
+        - "can't be used"
+        - "bulk operations"
+
+  # Test error when --query is used with component argument
+  - name: "terraform plan --query with component error"
+    enabled: true
+    tty: false
+    description: "Verify error when --query is used with a component argument"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "-s"
+      - "prod"
+      - "--query"
+      - ".vars.tags.team == \"eks\""
+    expect:
+      exit_code: 1
+      stderr:
+        - "can't be used"
+        - "bulk operations"
+
+  # Test error when --components is used with component argument
+  - name: "terraform plan --components with component error"
+    enabled: true
+    tty: false
+    description: "Verify error when --components is used with a component argument"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "vpc"
+      - "-s"
+      - "prod"
+      - "--components=eks/cluster"
+    expect:
+      exit_code: 1
+      stderr:
+        - "can't be used"
+        - "bulk operations"
+
+  # Test error when --affected is used with --all
+  - name: "terraform plan --affected with --all error"
+    enabled: true
+    tty: false
+    description: "Verify error when --affected is used with --all"
+    workdir: "fixtures/scenarios/terraform-apply-affected/"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "--affected"
+      - "--all"
+    expect:
+      exit_code: 1
+      stderr:
+        - "--affected"
+        - "can't be used"
+        - "--all"

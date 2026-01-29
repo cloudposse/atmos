@@ -2,6 +2,7 @@ package output
 
 import (
 	"errors"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,7 +10,22 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// testAtmosConfig returns a minimal atmos configuration for testing.
+func testAtmosConfig(basePath string, autoGenerateBackend, initRunReconfigure bool) *schema.AtmosConfiguration {
+	return &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath:                "components/terraform",
+				AutoGenerateBackendFile: autoGenerateBackend,
+				InitRunReconfigure:      initRunReconfigure,
+			},
+		},
+	}
+}
 
 func TestIsComponentProcessable(t *testing.T) {
 	tests := []struct {
@@ -125,38 +141,46 @@ func TestIsComponentProcessable(t *testing.T) {
 }
 
 func TestExtractComponentConfig(t *testing.T) {
+	// Use a temp directory for cross-platform compatibility.
+	tempDir := t.TempDir()
+
 	tests := []struct {
-		name                  string
-		sections              map[string]any
-		autoGenerateBackend   bool
-		initRunReconfigure    bool
-		expectError           bool
-		expectedErr           error
-		expectedExecutable    string
-		expectedWorkspace     string
-		expectedComponentPath string
-		expectedBackendType   string
+		name                        string
+		basePath                    string
+		sections                    map[string]any
+		autoGenerateBackend         bool
+		initRunReconfigure          bool
+		expectError                 bool
+		expectedErr                 error
+		expectedExecutable          string
+		expectedWorkspace           string
+		expectedComponentPathSuffix string // Use suffix for cross-platform compatibility.
+		expectedBackendType         string
 	}{
 		{
-			name: "valid minimal config",
+			name:     "valid minimal config",
+			basePath: tempDir,
 			sections: map[string]any{
 				cfg.CommandSectionName:   "/usr/bin/terraform",
 				cfg.WorkspaceSectionName: "test-ws",
+				cfg.ComponentSectionName: "vpc",
 				"component_info": map[string]any{
-					"component_path": "/path/to/component",
+					"component_type": "terraform",
 				},
 			},
-			autoGenerateBackend:   false,
-			initRunReconfigure:    false,
-			expectedExecutable:    "/usr/bin/terraform",
-			expectedWorkspace:     "test-ws",
-			expectedComponentPath: "/path/to/component",
+			autoGenerateBackend:         false,
+			initRunReconfigure:          false,
+			expectedExecutable:          "/usr/bin/terraform",
+			expectedWorkspace:           "test-ws",
+			expectedComponentPathSuffix: filepath.Join("components", "terraform", "vpc"),
 		},
 		{
-			name: "valid full config",
+			name:     "valid full config",
+			basePath: tempDir,
 			sections: map[string]any{
 				cfg.CommandSectionName:     "/usr/bin/opentofu",
 				cfg.WorkspaceSectionName:   "prod-ws",
+				cfg.ComponentSectionName:   "database",
 				cfg.BackendTypeSectionName: "s3",
 				cfg.BackendSectionName: map[string]any{
 					"bucket": "my-bucket",
@@ -171,64 +195,73 @@ func TestExtractComponentConfig(t *testing.T) {
 					"AWS_REGION": "us-west-2",
 				},
 				"component_info": map[string]any{
-					"component_path": "/path/to/prod",
+					"component_type": "terraform",
 				},
 			},
-			autoGenerateBackend:   true,
-			initRunReconfigure:    true,
-			expectedExecutable:    "/usr/bin/opentofu",
-			expectedWorkspace:     "prod-ws",
-			expectedComponentPath: "/path/to/prod",
-			expectedBackendType:   "s3",
+			autoGenerateBackend:         true,
+			initRunReconfigure:          true,
+			expectedExecutable:          "/usr/bin/opentofu",
+			expectedWorkspace:           "prod-ws",
+			expectedComponentPathSuffix: filepath.Join("components", "terraform", "database"),
+			expectedBackendType:         "s3",
 		},
 		{
-			name: "missing executable",
+			name:     "missing executable",
+			basePath: tempDir,
 			sections: map[string]any{
 				cfg.WorkspaceSectionName: "test-ws",
+				cfg.ComponentSectionName: "vpc",
 				"component_info": map[string]any{
-					"component_path": "/path/to/component",
+					"component_type": "terraform",
 				},
 			},
 			expectError: true,
 			expectedErr: errUtils.ErrMissingExecutable,
 		},
 		{
-			name: "missing workspace",
+			name:     "missing workspace",
+			basePath: tempDir,
 			sections: map[string]any{
-				cfg.CommandSectionName: "/usr/bin/terraform",
+				cfg.CommandSectionName:   "/usr/bin/terraform",
+				cfg.ComponentSectionName: "vpc",
 				"component_info": map[string]any{
-					"component_path": "/path/to/component",
+					"component_type": "terraform",
 				},
 			},
 			expectError: true,
 			expectedErr: errUtils.ErrMissingWorkspace,
 		},
 		{
-			name: "missing component_info",
+			name:     "missing component_info",
+			basePath: tempDir,
 			sections: map[string]any{
 				cfg.CommandSectionName:   "/usr/bin/terraform",
 				cfg.WorkspaceSectionName: "test-ws",
+				cfg.ComponentSectionName: "vpc",
 			},
 			expectError: true,
 			expectedErr: errUtils.ErrMissingComponentInfo,
 		},
 		{
-			name: "invalid component_info type",
+			name:     "invalid component_info type",
+			basePath: tempDir,
 			sections: map[string]any{
 				cfg.CommandSectionName:   "/usr/bin/terraform",
 				cfg.WorkspaceSectionName: "test-ws",
+				cfg.ComponentSectionName: "vpc",
 				"component_info":         "invalid",
 			},
 			expectError: true,
 			expectedErr: errUtils.ErrInvalidComponentInfoS,
 		},
 		{
-			name: "missing component_path in component_info",
+			name:     "missing base component name",
+			basePath: tempDir,
 			sections: map[string]any{
 				cfg.CommandSectionName:   "/usr/bin/terraform",
 				cfg.WorkspaceSectionName: "test-ws",
 				"component_info": map[string]any{
-					"other_field": "value",
+					"component_type": "terraform",
 				},
 			},
 			expectError: true,
@@ -238,7 +271,8 @@ func TestExtractComponentConfig(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			config, err := ExtractComponentConfig(tt.sections, "test-component", "test-stack", tt.autoGenerateBackend, tt.initRunReconfigure)
+			atmosConfig := testAtmosConfig(tt.basePath, tt.autoGenerateBackend, tt.initRunReconfigure)
+			config, err := ExtractComponentConfig(atmosConfig, tt.sections, "test-component", "test-stack")
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -252,7 +286,10 @@ func TestExtractComponentConfig(t *testing.T) {
 			require.NotNil(t, config)
 			assert.Equal(t, tt.expectedExecutable, config.Executable)
 			assert.Equal(t, tt.expectedWorkspace, config.Workspace)
-			assert.Equal(t, tt.expectedComponentPath, config.ComponentPath)
+			// Use suffix check for cross-platform compatibility.
+			assert.True(t, filepath.IsAbs(config.ComponentPath), "expected absolute path, got %s", config.ComponentPath)
+			assert.Contains(t, filepath.ToSlash(config.ComponentPath), filepath.ToSlash(tt.expectedComponentPathSuffix),
+				"expected path to contain %s, got %s", tt.expectedComponentPathSuffix, config.ComponentPath)
 			assert.Equal(t, tt.autoGenerateBackend, config.AutoGenerateBackend)
 			assert.Equal(t, tt.initRunReconfigure, config.InitRunReconfigure)
 
@@ -384,59 +421,98 @@ func TestExtractOptionalFields_InvalidTypes(t *testing.T) {
 }
 
 func TestExtractRequiredFields(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := testAtmosConfig(tempDir, false, false)
+
 	sections := map[string]any{
 		cfg.CommandSectionName:   "/usr/bin/terraform",
 		cfg.WorkspaceSectionName: "my-workspace",
+		cfg.ComponentSectionName: "vpc",
 		"component_info": map[string]any{
-			"component_path": "/components/terraform/vpc",
+			"component_type": "terraform",
 		},
 	}
 
 	config := &ComponentConfig{}
-	err := extractRequiredFields(sections, "vpc", "dev", config)
+	err := extractRequiredFields(atmosConfig, sections, "vpc", "dev", config)
 
 	require.NoError(t, err)
 	assert.Equal(t, "/usr/bin/terraform", config.Executable)
 	assert.Equal(t, "my-workspace", config.Workspace)
-	assert.Equal(t, "/components/terraform/vpc", config.ComponentPath)
+	// Verify the path is absolute and contains expected suffix.
+	assert.True(t, filepath.IsAbs(config.ComponentPath), "expected absolute path")
+	expectedSuffix := filepath.Join("components", "terraform", "vpc")
+	assert.Contains(t, filepath.ToSlash(config.ComponentPath), filepath.ToSlash(expectedSuffix))
 }
 
 func TestExtractComponentPath(t *testing.T) {
+	tempDir := t.TempDir()
+
 	tests := []struct {
-		name        string
-		sections    map[string]any
-		expectError bool
-		expectedErr error
-		expected    string
+		name           string
+		basePath       string
+		sections       map[string]any
+		expectError    bool
+		expectedErr    error
+		expectedSuffix string // Use suffix for cross-platform compatibility.
 	}{
 		{
-			name: "valid component_path",
+			name:     "valid component path with terraform type",
+			basePath: tempDir,
 			sections: map[string]any{
+				cfg.ComponentSectionName: "vpc",
 				"component_info": map[string]any{
-					"component_path": "/path/to/component",
+					"component_type": "terraform",
 				},
 			},
-			expected: "/path/to/component",
+			expectedSuffix: filepath.Join("components", "terraform", "vpc"),
+		},
+		{
+			name:     "component with folder prefix",
+			basePath: tempDir,
+			sections: map[string]any{
+				cfg.ComponentSectionName: "mycomponent",
+				cfg.MetadataSectionName: map[string]any{
+					"component_folder_prefix": "custom",
+				},
+				"component_info": map[string]any{
+					"component_type": "terraform",
+				},
+			},
+			expectedSuffix: filepath.Join("components", "terraform", "custom", "mycomponent"),
+		},
+		{
+			name:     "defaults to terraform type when not specified",
+			basePath: tempDir,
+			sections: map[string]any{
+				cfg.ComponentSectionName: "vpc",
+				"component_info":         map[string]any{},
+			},
+			expectedSuffix: filepath.Join("components", "terraform", "vpc"),
 		},
 		{
 			name:        "missing component_info",
-			sections:    map[string]any{},
+			basePath:    tempDir,
+			sections:    map[string]any{cfg.ComponentSectionName: "vpc"},
 			expectError: true,
 			expectedErr: errUtils.ErrMissingComponentInfo,
 		},
 		{
-			name: "invalid component_info type",
+			name:     "invalid component_info type",
+			basePath: tempDir,
 			sections: map[string]any{
-				"component_info": []string{"invalid"},
+				cfg.ComponentSectionName: "vpc",
+				"component_info":         []string{"invalid"},
 			},
 			expectError: true,
 			expectedErr: errUtils.ErrInvalidComponentInfoS,
 		},
 		{
-			name: "missing component_path in component_info",
+			name:     "missing base component name",
+			basePath: tempDir,
 			sections: map[string]any{
 				"component_info": map[string]any{
-					"name": "vpc",
+					"component_type": "terraform",
 				},
 			},
 			expectError: true,
@@ -446,15 +522,19 @@ func TestExtractComponentPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result, err := extractComponentPath(tt.sections, "comp", "stack")
+			atmosConfig := testAtmosConfig(tt.basePath, false, false)
+			result, err := extractComponentPath(atmosConfig, tt.sections, "comp", "stack")
 			if tt.expectError {
 				require.Error(t, err)
 				if tt.expectedErr != nil {
-					assert.True(t, errors.Is(err, tt.expectedErr))
+					assert.True(t, errors.Is(err, tt.expectedErr), "expected %v, got %v", tt.expectedErr, err)
 				}
 			} else {
 				require.NoError(t, err)
-				assert.Equal(t, tt.expected, result)
+				// Verify the path is absolute and contains expected suffix.
+				assert.True(t, filepath.IsAbs(result), "expected absolute path, got %s", result)
+				assert.Contains(t, filepath.ToSlash(result), filepath.ToSlash(tt.expectedSuffix),
+					"expected path to contain %s, got %s", tt.expectedSuffix, result)
 			}
 		})
 	}

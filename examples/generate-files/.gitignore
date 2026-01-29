@@ -1,0 +1,8 @@
+# Components folder (created during example usage)
+components/
+
+# Terraform
+.terraform/
+*.tfstate*
+*.tfvars.json
+backend.tf.json

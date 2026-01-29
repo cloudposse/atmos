@@ -15,6 +15,11 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
+const (
+	// Permission mask for created directories in tests (defaultMkdirPermissions).
+	defaultMkdirPermissions = 0o755
+)
+
 // verifyPermissionErrorOutput verifies output when permission errors occur.
 func verifyPermissionErrorOutput(t *testing.T, output, expectedOutput, cacheDir string) {
 	t.Helper()
@@ -162,9 +167,10 @@ func getCleanTestCases() []cleanTestCase {
 				return toolsDir, cacheDir, tempCacheDir
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted **3** files/directories from %s
-✓ Deleted **2** files from %s cache
-✓ Deleted **1** files from %s cache
+			// In NO_COLOR mode, markdown is rendered to plain text (bold becomes plain).
+			expectedOutput: `✓ Deleted 3 files/directories from %s
+✓ Deleted 2 files from %s cache
+✓ Deleted 1 files from %s cache
 `,
 		},
 		{
@@ -176,7 +182,8 @@ func getCleanTestCases() []cleanTestCase {
 					filepath.Join(base, "nonexistent-temp-cache")
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted **0** files/directories from %s
+			// In NO_COLOR mode, markdown is rendered to plain text.
+			expectedOutput: `✓ Deleted 0 files/directories from %s
 `,
 		},
 		{
@@ -198,7 +205,8 @@ func getCleanTestCases() []cleanTestCase {
 				return toolsDir, cacheDir, tempCacheDir
 			},
 			expectedError: false,
-			expectedOutput: `✓ Deleted **0** files/directories from %s
+			// In NO_COLOR mode, markdown is rendered to plain text.
+			expectedOutput: `✓ Deleted 0 files/directories from %s
 `,
 		},
 		newPermissionErrorToolsDirTestCase(),
@@ -272,10 +280,11 @@ func newPermissionErrorCacheDirTestCase() cleanTestCase {
 			return toolsDir, cacheDir, tempCacheDir
 		},
 		expectedError: false,
+		// In NO_COLOR mode, markdown is rendered to plain text.
 		expectedOutput: `Warning: failed to count files in %s: permission denied
 Warning: failed to delete %s: permission denied
-✓ Deleted **1** files/directories from %s
-✓ Deleted **1** files from %s cache
+✓ Deleted 1 files/directories from %s
+✓ Deleted 1 files from %s cache
 `,
 	}
 }
@@ -337,6 +346,14 @@ func normalizeTestOutput(output string) string {
 	// The markdown renderer wraps long lines with "\n  " (newline + 2 space indent).
 	// Collapse these back to single-line format for deterministic comparison.
 	output = strings.ReplaceAll(output, "\n  ", " ")
+
+	// Strip trailing whitespace from each line.
+	// Glamour adds padding spaces to fill terminal width during word wrapping.
+	lines := strings.Split(output, "\n")
+	for i, line := range lines {
+		lines[i] = strings.TrimRight(line, " \t")
+	}
+	output = strings.Join(lines, "\n")
 
 	// Fix hyphen word breaks from markdown wrapping.
 	// Pattern: hyphen followed by space and lowercase letter (indicates mid-word break).

@@ -145,7 +145,7 @@ func listVendorWithOptions(opts *VendorOptions) error {
 	}
 
 	if len(vendors) == 0 {
-		_ = ui.Info("No vendor configurations found")
+		ui.Info("No vendor configurations found")
 		return nil
 	}
 
@@ -218,6 +218,7 @@ func getVendorColumns(atmosConfig *schema.AtmosConfiguration, columnsFlag []stri
 	return []column.Config{
 		{Name: "Component", Value: "{{ .component }}"},
 		{Name: "Type", Value: "{{ .type }}"},
+		{Name: "Tags", Value: "{{ .tags }}"},
 		{Name: "Manifest", Value: "{{ .manifest }}"},
 		{Name: "Folder", Value: "{{ .folder }}"},
 	}

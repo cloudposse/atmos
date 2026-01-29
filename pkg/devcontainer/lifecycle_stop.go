@@ -46,7 +46,7 @@ func (m *Manager) Stop(atmosConfig *schema.AtmosConfiguration, name, instance st
 
 	container := containers[0]
 	if !strings.Contains(strings.ToLower(container.Status), "running") {
-		_ = ui.Infof("Container %s is already stopped", containerName)
+		ui.Infof("Container %s is already stopped", containerName)
 		return nil
 	}
 

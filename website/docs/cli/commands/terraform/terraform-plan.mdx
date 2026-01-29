@@ -7,10 +7,13 @@ id: plan
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use this command to generate a Terraform execution plan for an Atmos component in a stack, showing what changes would be made to your infrastructure.
 </Intro>
+
+<DemoVideo id="terraform-plan" title="atmos terraform plan" showCaption={false} />
 
 <Screengrab title="atmos terraform plan --help" slug="atmos-terraform-plan--help" />
 
@@ -275,6 +278,92 @@ Some commonly used native flags include:
         atmos terraform plan vpc -s dev -refresh-only
         ```
     </dd>
+</dl>
+
+## Multi-Component Operations
+
+Execute `terraform plan` across multiple components using filtering flags. All flags can be combined with `--dry-run` to preview what would be executed.
+
+### Plan All Components
+
+```shell
+# Plan all components in all stacks
+atmos terraform plan --all
+
+# Plan all components in a specific stack
+atmos terraform plan --all --stack prod
+atmos terraform plan --stack prod
+```
+
+### Plan Affected Components
+
+Plan only components affected by changes in the current branch (requires git):
+
+```shell
+# Plan affected components in all stacks
+atmos terraform plan --affected
+
+# Plan affected components in a specific stack
+atmos terraform plan --affected --stack prod
+
+# Include dependent components (components that depend on affected components)
+atmos terraform plan --affected --include-dependents
+
+# Clone the target reference instead of checking it out
+atmos terraform plan --affected --clone-target-ref=true
+```
+
+### Plan Specific Components
+
+```shell
+# Plan specific components in all stacks
+atmos terraform plan --components vpc,eks
+
+# Plan specific components in a specific stack
+atmos terraform plan --components vpc,eks --stack prod
+```
+
+### Plan Components by Query
+
+Filter components using [YQ](https://mikefarah.gitbook.io/yq) expressions against component configuration:
+
+```shell
+# Plan components where team tag equals "eks"
+atmos terraform plan --query '.vars.tags.team == "eks"'
+
+# Plan components in a specific account
+atmos terraform plan --query '.settings.context.account_id == 12345'
+
+# Combine with stack filter
+atmos terraform plan --query '.vars.tags.team == "eks"' --stack prod
+```
+
+### Multi-Component Flags
+
+<dl>
+    <dt>`--all`</dt>
+    <dd>Plan all components in all stacks (or specified stack with `--stack`).</dd>
+
+    <dt>`--affected`</dt>
+    <dd>Plan components affected by git changes in dependency order. Supports all flags from [`atmos describe affected`](/cli/commands/describe/affected).</dd>
+
+    <dt>`--components`</dt>
+    <dd>Plan specific components by name (comma-separated or repeated flag).</dd>
+
+    <dt>`--query`</dt>
+    <dd>Plan components matching a YQ expression. All Atmos sections are available: `vars`, `settings`, `env`, `metadata`, etc.</dd>
+
+    <dt>`--include-dependents`</dt>
+    <dd>With `--affected`, also plan components that depend on affected components, recursively.</dd>
+
+    <dt>`--ref`</dt>
+    <dd>Git reference to compare against (branch or tag). Default: `refs/remotes/origin/HEAD`.</dd>
+
+    <dt>`--sha`</dt>
+    <dd>Git commit SHA to compare against.</dd>
+
+    <dt>`--clone-target-ref`</dt>
+    <dd>Clone the target reference instead of checking it out locally.</dd>
 </dl>
 
 ## Related Commands

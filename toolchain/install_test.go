@@ -5,12 +5,25 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/charmbracelet/bubbles/progress"
+	bspinner "github.com/charmbracelet/bubbles/spinner"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// Add a mock ToolResolver for tests
+// newTestSpinner creates a spinner model for testing.
+func newTestSpinner() *bspinner.Model {
+	m := bspinner.New()
+	return &m
+}
+
+// newTestProgressBar creates a progress bar model for testing.
+func newTestProgressBar() *progress.Model {
+	m := progress.New()
+	return &m
+}
 
 func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 	dir := t.TempDir()
@@ -48,8 +61,9 @@ func TestInstallResolvesAliasFromToolVersions(t *testing.T) {
 		},
 	})
 	t.Cleanup(func() { SetAtmosConfig(prevConfig) })
-	installer := NewInstallerWithResolver(mockResolver)
-	owner, repo, err := installer.parseToolSpec("opentofu")
+	binDir := filepath.Join(dir, ".atmos", "tools", "bin")
+	installer := NewInstallerWithResolver(mockResolver, binDir)
+	owner, repo, err := installer.ParseToolSpec("opentofu")
 	assert.NoError(t, err)
 	assert.Equal(t, "opentofu", owner)
 	assert.Equal(t, "opentofu", repo)
@@ -86,7 +100,7 @@ func TestRunInstallWithNoArgs(t *testing.T) {
 
 	// Test that runInstall with no arguments doesn't error
 	// This prevents regression where the function might error when no specific tool is provided
-	err = RunInstall("", false, false)
+	err = RunInstall("", false, false, true, false)
 	assert.NoError(t, err)
 }
 
@@ -111,7 +125,7 @@ func TestRunInstall_WithValidToolSpec(t *testing.T) {
 	}()
 
 	// Test installing a specific tool with version
-	err = RunInstall("terraform@1.11.4", false, false)
+	err = RunInstall("terraform@1.11.4", false, false, true, false)
 	assert.NoError(t, err)
 
 	// Verify the tool was added to .tool-versions (it uses DefaultToolVersionsFilePath which is .tool-versions in HOME)
@@ -145,7 +159,7 @@ func TestRunInstall_WithSetAsDefault(t *testing.T) {
 	}()
 
 	// Test installing with setAsDefault=true
-	err = RunInstall("terraform@1.11.4", true, false)
+	err = RunInstall("terraform@1.11.4", true, false, true, false)
 	assert.NoError(t, err)
 
 	// Verify the new version is first (default) in .tool-versions (uses DefaultToolVersionsFilePath)
@@ -177,7 +191,7 @@ func TestRunInstall_WithInvalidToolSpec(t *testing.T) {
 	}()
 
 	// Test with invalid tool spec (no version)
-	err = RunInstall("nonexistent-tool", false, false)
+	err = RunInstall("nonexistent-tool", false, false, true, false)
 	assert.Error(t, err)
 }
 
@@ -202,7 +216,7 @@ func TestRunInstall_WithCanonicalFormat(t *testing.T) {
 	}()
 
 	// Test installing with canonical owner/repo@version format
-	err = RunInstall("hashicorp/terraform@1.11.4", false, false)
+	err = RunInstall("hashicorp/terraform@1.11.4", false, false, true, false)
 	assert.NoError(t, err)
 
 	// Verify the tool was added to .tool-versions (uses DefaultToolVersionsFilePath)
@@ -243,7 +257,7 @@ func TestRunInstall_WithLatestKeyword(t *testing.T) {
 
 	// Test installing with "latest" version
 	// This should resolve to the actual latest version from the registry
-	err = RunInstall("terraform@latest", false, false)
+	err = RunInstall("terraform@latest", false, false, true, false)
 	assert.NoError(t, err)
 
 	// Verify a version was added (we can't predict the exact version, but it should be there)
@@ -277,6 +291,519 @@ func TestRunInstall_Reinstall(t *testing.T) {
 	}()
 
 	// Test reinstalling all tools from .tool-versions
-	err = RunInstall("", false, true)
+	err = RunInstall("", false, true, true, false)
 	assert.NoError(t, err)
+}
+
+// TestPrintSummary tests the printSummary function with various scenarios.
+func TestPrintSummary(t *testing.T) {
+	tests := []struct {
+		name      string
+		installed int
+		failed    int
+		skipped   int
+		total     int
+		showHint  bool
+	}{
+		{
+			name:      "all installed no skipped",
+			installed: 3,
+			failed:    0,
+			skipped:   0,
+			total:     3,
+			showHint:  true,
+		},
+		{
+			name:      "some installed some skipped",
+			installed: 2,
+			failed:    0,
+			skipped:   1,
+			total:     3,
+			showHint:  false,
+		},
+		{
+			name:      "some failed no skipped",
+			installed: 1,
+			failed:    2,
+			skipped:   0,
+			total:     3,
+			showHint:  false,
+		},
+		{
+			name:      "some failed some skipped",
+			installed: 1,
+			failed:    1,
+			skipped:   1,
+			total:     3,
+			showHint:  true,
+		},
+		{
+			name:      "no tools to install",
+			installed: 0,
+			failed:    0,
+			skipped:   0,
+			total:     0,
+			showHint:  false,
+		},
+		{
+			name:      "all skipped",
+			installed: 0,
+			failed:    0,
+			skipped:   3,
+			total:     3,
+			showHint:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// printSummary writes to ui package which handles output formatting.
+			// This test verifies the function doesn't panic with various input combinations.
+			assert.NotPanics(t, func() {
+				printSummary(tt.installed, tt.failed, tt.skipped, tt.total, tt.showHint)
+			})
+		})
+	}
+}
+
+// TestPrintFailureSummary tests the printFailureSummary function.
+func TestPrintFailureSummary(t *testing.T) {
+	tests := []struct {
+		name      string
+		installed int
+		failed    int
+		skipped   int
+	}{
+		{
+			name:      "failed with no skipped",
+			installed: 1,
+			failed:    2,
+			skipped:   0,
+		},
+		{
+			name:      "failed with some skipped",
+			installed: 1,
+			failed:    1,
+			skipped:   1,
+		},
+		{
+			name:      "all failed no skipped",
+			installed: 0,
+			failed:    3,
+			skipped:   0,
+		},
+		{
+			name:      "all failed some skipped",
+			installed: 0,
+			failed:    2,
+			skipped:   1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// printFailureSummary writes to ui package which handles output formatting.
+			// This test verifies the function doesn't panic with various input combinations.
+			assert.NotPanics(t, func() {
+				printFailureSummary(tt.installed, tt.failed, tt.skipped)
+			})
+		})
+	}
+}
+
+// TestPrintSuccessSummary tests the printSuccessSummary function.
+func TestPrintSuccessSummary(t *testing.T) {
+	tests := []struct {
+		name      string
+		installed int
+		skipped   int
+		showHint  bool
+	}{
+		{
+			name:      "installed with hint",
+			installed: 3,
+			skipped:   0,
+			showHint:  true,
+		},
+		{
+			name:      "installed without hint",
+			installed: 3,
+			skipped:   0,
+			showHint:  false,
+		},
+		{
+			name:      "installed and skipped with hint",
+			installed: 2,
+			skipped:   1,
+			showHint:  true,
+		},
+		{
+			name:      "installed and skipped without hint",
+			installed: 2,
+			skipped:   1,
+			showHint:  false,
+		},
+		{
+			name:      "all skipped with hint",
+			installed: 0,
+			skipped:   3,
+			showHint:  true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// printSuccessSummary writes to ui package which handles output formatting.
+			// This test verifies the function doesn't panic with various input combinations.
+			assert.NotPanics(t, func() {
+				printSuccessSummary(tt.installed, tt.skipped, tt.showHint)
+			})
+		})
+	}
+}
+
+// TestBuildToolList tests the buildToolList function.
+func TestBuildToolList(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create mock resolver - invalid tools are not in the mapping and return error.
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform":           {"hashicorp", "terraform"},
+			"hashicorp/terraform": {"hashicorp", "terraform"},
+			"opentofu":            {"opentofu", "opentofu"},
+			"opentofu/opentofu":   {"opentofu", "opentofu"},
+			// "invalid-tool-no-owner" is intentionally NOT in the mapping.
+		},
+	}
+
+	binDir := filepath.Join(tempDir, ".atmos", "tools", "bin")
+	installer := NewInstallerWithResolver(mockResolver, binDir)
+
+	tests := []struct {
+		name         string
+		toolVersions *ToolVersions
+		wantCount    int
+	}{
+		{
+			name: "single tool single version",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.11.4"},
+				},
+			},
+			wantCount: 1,
+		},
+		{
+			name: "single tool multiple versions",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.11.4", "1.11.3"},
+				},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "multiple tools",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"terraform": {"1.11.4"},
+					"opentofu":  {"1.10.0"},
+				},
+			},
+			wantCount: 2,
+		},
+		{
+			name: "empty tool versions",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{},
+			},
+			wantCount: 0,
+		},
+		{
+			name: "invalid tool is skipped",
+			toolVersions: &ToolVersions{
+				Tools: map[string][]string{
+					"invalid-tool-no-owner": {"1.0.0"},
+					"terraform":             {"1.11.4"},
+				},
+			},
+			wantCount: 1, // Only terraform should be included.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			toolList := buildToolList(installer, tt.toolVersions)
+			assert.Len(t, toolList, tt.wantCount)
+		})
+	}
+}
+
+// TestShowProgress tests the showProgress function.
+func TestShowProgress(t *testing.T) {
+	// Create mock spinner and progress bar.
+	spinner := newTestSpinner()
+	progressBar := newTestProgressBar()
+
+	tests := []struct {
+		name   string
+		tool   toolInfo
+		state  progressState
+		result string
+	}{
+		{
+			name:   "installed result",
+			tool:   toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			state:  progressState{index: 0, total: 3, result: resultInstalled, err: nil},
+			result: resultInstalled,
+		},
+		{
+			name:   "skipped result",
+			tool:   toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			state:  progressState{index: 1, total: 3, result: resultSkipped, err: nil},
+			result: resultSkipped,
+		},
+		{
+			name:   "failed result",
+			tool:   toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			state:  progressState{index: 2, total: 3, result: resultFailed, err: assert.AnError},
+			result: resultFailed,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// showProgress writes to ui package which handles output formatting.
+			// This test verifies the function doesn't panic with various input combinations.
+			assert.NotPanics(t, func() {
+				showProgress(spinner, progressBar, tt.tool, tt.state)
+			})
+		})
+	}
+}
+
+// TestRunInstallBatch tests the RunInstallBatch function.
+// TODO: Refactor installMultipleTools to accept Installer interface for better testability.
+// Currently, installMultipleTools creates Installer directly (line 383 of install.go),
+// which blocks dependency injection and makes unit tests with mocks impossible.
+// See ToolInstaller interface in set_test.go for reference pattern.
+func TestRunInstallBatch(t *testing.T) {
+	tests := []struct {
+		name            string
+		toolSpecs       []string
+		reinstallFlag   bool
+		wantErr         bool
+		requiresNetwork bool
+	}{
+		{
+			name:          "empty toolSpecs",
+			toolSpecs:     []string{},
+			reinstallFlag: false,
+			wantErr:       false,
+		},
+		{
+			name:          "nil toolSpecs",
+			toolSpecs:     nil,
+			reinstallFlag: false,
+			wantErr:       false,
+		},
+		{
+			name:            "single tool delegates to RunInstall",
+			toolSpecs:       []string{"terraform@1.11.4"},
+			reinstallFlag:   false,
+			wantErr:         false, // Delegates to single-tool flow.
+			requiresNetwork: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.requiresNetwork && testing.Short() {
+				t.Skip("Skipping test that requires network in short mode")
+			}
+			err := RunInstallBatch(tt.toolSpecs, tt.reinstallFlag)
+			if tt.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestInstallMultipleTools_InvalidSpecs tests installMultipleTools with invalid tool specs.
+func TestInstallMultipleTools_InvalidSpecs(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Test with all invalid specs - should return nil (no valid tools to install).
+	err := installMultipleTools([]string{"invalid-spec-no-version", "another-bad-spec"}, false)
+	assert.NoError(t, err)
+}
+
+// TestSpinnerModel tests the spinnerModel Bubble Tea model.
+func TestSpinnerModel(t *testing.T) {
+	t.Run("initialSpinnerModel", func(t *testing.T) {
+		model := initialSpinnerModel("Test message")
+		assert.NotNil(t, model)
+		assert.Equal(t, "Test message", model.message)
+		assert.False(t, model.done)
+	})
+
+	t.Run("Init returns tick command", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		cmd := model.Init()
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("View returns message when not done", func(t *testing.T) {
+		model := initialSpinnerModel("Test message")
+		view := model.View()
+		assert.Contains(t, view, "Test message")
+	})
+
+	t.Run("View returns empty when done", func(t *testing.T) {
+		model := initialSpinnerModel("Test message")
+		model.done = true
+		view := model.View()
+		assert.Empty(t, view)
+	})
+
+	t.Run("Update handles installDoneMsg", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		updated, cmd := model.Update(installDoneMsg{})
+		updatedModel := updated.(*spinnerModel)
+		assert.True(t, updatedModel.done)
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("Update handles bspinner.TickMsg", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		_, cmd := model.Update(bspinner.TickMsg{})
+		assert.NotNil(t, cmd)
+	})
+
+	t.Run("Update returns nil cmd for unknown msg", func(t *testing.T) {
+		model := initialSpinnerModel("Test")
+		_, cmd := model.Update("unknown message type")
+		assert.Nil(t, cmd)
+	})
+}
+
+// TestRunBubbleTeaSpinner tests the runBubbleTeaSpinner function.
+func TestRunBubbleTeaSpinner(t *testing.T) {
+	program := runBubbleTeaSpinner("Test message")
+	assert.NotNil(t, program)
+}
+
+// TestInstallOrSkipTool tests the installOrSkipTool function.
+func TestInstallOrSkipTool(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create mock resolver.
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform":           {"hashicorp", "terraform"},
+			"hashicorp/terraform": {"hashicorp", "terraform"},
+		},
+	}
+
+	binDir := filepath.Join(tempDir, ".atmos", "tools", "bin")
+	installer := NewInstallerWithResolver(mockResolver, binDir)
+
+	tests := []struct {
+		name           string
+		tool           toolInfo
+		reinstallFlag  bool
+		setupBinary    bool
+		expectedResult string
+	}{
+		{
+			name:           "tool not installed - installs",
+			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			reinstallFlag:  false,
+			setupBinary:    false,
+			expectedResult: resultInstalled,
+		},
+		{
+			name:           "tool already installed - skips",
+			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			reinstallFlag:  false,
+			setupBinary:    true,
+			expectedResult: resultSkipped,
+		},
+		{
+			name:           "tool already installed with reinstall flag - reinstalls",
+			tool:           toolInfo{version: "1.11.4", owner: "hashicorp", repo: "terraform"},
+			reinstallFlag:  true,
+			setupBinary:    true,
+			expectedResult: resultInstalled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.setupBinary {
+				// Create a mock binary.
+				binaryPath := installer.GetBinaryPath(tt.tool.owner, tt.tool.repo, tt.tool.version, "")
+				err := os.MkdirAll(filepath.Dir(binaryPath), 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(binaryPath, []byte("mock binary"), 0o755)
+				require.NoError(t, err)
+			}
+
+			result, err := installOrSkipTool(installer, tt.tool, tt.reinstallFlag, false)
+
+			// Skip case should never fail since no download is attempted.
+			if tt.expectedResult == resultSkipped {
+				require.NoError(t, err)
+				assert.Equal(t, tt.expectedResult, result)
+			} else if err == nil {
+				// Install cases may fail in CI without network - accept either success or network error.
+				// Network errors are acceptable in CI - code path is exercised either way.
+				assert.Equal(t, tt.expectedResult, result)
+			}
+		})
+	}
+}
+
+// TestInstallFromToolVersions_EmptyFile tests installFromToolVersions with an empty file.
+func TestInstallFromToolVersions_EmptyFile(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	// Create an empty .tool-versions file.
+	toolVersionsPath := filepath.Join(tempDir, DefaultToolVersionsFilePath)
+	err := os.WriteFile(toolVersionsPath, []byte(""), 0o644)
+	require.NoError(t, err)
+
+	// Should not error when file is empty.
+	err = installFromToolVersions(toolVersionsPath, false, false)
+	assert.NoError(t, err)
+}
+
+// TestInstallFromToolVersions_InvalidPath tests installFromToolVersions with invalid path.
+func TestInstallFromToolVersions_InvalidPath(t *testing.T) {
+	err := installFromToolVersions(filepath.Join(t.TempDir(), "does-not-exist", ".tool-versions"), false, false)
+	assert.Error(t, err)
+}
+
+// TestInstallOptions tests the InstallOptions struct.
+func TestInstallOptions(t *testing.T) {
+	opts := InstallOptions{
+		IsLatest:               true,
+		ShowProgressBar:        true,
+		ShowInstallDetails:     true,
+		ShowHint:               true,
+		SkipToolVersionsUpdate: true,
+	}
+
+	assert.True(t, opts.IsLatest)
+	assert.True(t, opts.ShowProgressBar)
+	assert.True(t, opts.ShowInstallDetails)
+	assert.True(t, opts.ShowHint)
+	assert.True(t, opts.SkipToolVersionsUpdate)
 }

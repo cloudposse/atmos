@@ -105,3 +105,115 @@ workflows:
       Test multi-component with double-quoted query expression.
     steps:
       - command: terraform plan --query ".metadata.component == \"mock\"" -s nonprod
+
+  # Test cases for -var flag with quoted values
+  # This reproduces the issue reported by users where -var="key=value" is incorrectly parsed
+  # Fixed in PR #1961
+
+  # Test -var with double quotes (the exact pattern from user report)
+  terraform-var-double-quotes:
+    description: |
+      Test terraform -var flag with double-quoted value.
+      This reproduces the issue where strings.Fields() keeps quotes as literal characters,
+      causing Terraform to see the variable name as "enabled instead of enabled.
+    steps:
+      # The command should pass -var=enabled=false to terraform
+      # But with strings.Fields(), it passes -var="enabled=false" (with literal quotes)
+      - command: terraform plan mock -var="enabled=false" -s nonprod
+
+  # Test -var with single quotes
+  terraform-var-single-quotes:
+    description: |
+      Test terraform -var flag with single-quoted value.
+    steps:
+      - command: terraform plan mock -var='enabled=false' -s nonprod
+
+  # Test multiple -var flags with different quote styles
+  terraform-var-multiple:
+    description: |
+      Test multiple -var flags with various quote styles.
+    steps:
+      - command: terraform plan mock -var="enabled=false" -var='foo=bar' -s nonprod
+
+  # Test -var with value containing spaces (must be quoted)
+  terraform-var-with-spaces:
+    description: |
+      Test terraform -var flag with value containing spaces.
+    steps:
+      - command: terraform plan mock -var="message=hello world" -s nonprod
+
+  # Test -var with equals sign in value
+  terraform-var-equals-in-value:
+    description: |
+      Test terraform -var flag with equals sign in the value.
+    steps:
+      - command: terraform plan mock -var="message=key=value" -s nonprod
+
+  # Test shell command to verify quote parsing
+  shell-var-echo:
+    description: |
+      Shell command to verify quote parsing produces correct arguments.
+    steps:
+      - command: echo -var="enabled=false" -var='foo=bar'
+        type: shell
+
+  # Test cases for double-hyphen (--) separator parsing
+  # This reproduces GitHub issue #1967 where commands with -- separator
+  # were incorrectly parsed, causing stack value corruption.
+  #
+  # The POSIX convention is that -- separates command options from positional arguments.
+  # Everything after -- should be passed through to terraform without being parsed by atmos.
+
+  # Test double-hyphen with stack in command
+  # This is the exact pattern from the bug report
+  double-hyphen-with-stack:
+    description: |
+      Test command with -- separator and --stack flag.
+      Reproduces issue #1967 where stack value gets corrupted.
+    steps:
+      # The command includes --stack and then -- followed by terraform flags
+      - command: terraform plan mock --stack nonprod -- -consolidate-warnings=false
+
+  # Test double-hyphen with workflow-level stack override
+  double-hyphen-workflow-stack:
+    description: |
+      Test double-hyphen with workflow-level stack.
+      Stack from workflow should be inserted before --.
+    stack: nonprod
+    steps:
+      - command: terraform plan mock -- -consolidate-warnings=false
+
+  # Test double-hyphen with step-level stack override
+  double-hyphen-step-stack:
+    description: |
+      Test double-hyphen with step-level stack.
+      Stack from step should be inserted before --.
+    steps:
+      - command: terraform plan mock -- -consolidate-warnings=false
+        stack: nonprod
+
+  # Test double-hyphen with both command stack and workflow stack
+  # Workflow stack should override command stack
+  double-hyphen-stack-precedence:
+    description: |
+      Test stack precedence with double-hyphen.
+      Workflow stack should override inline stack.
+    stack: nonprod
+    steps:
+      # This has --stack wrongstack but workflow says nonprod
+      - command: terraform plan mock --stack wrongstack -- -consolidate-warnings=false
+
+  # Test double-hyphen with multiple terraform flags after separator
+  double-hyphen-multiple-flags:
+    description: |
+      Test multiple terraform flags after -- separator.
+    steps:
+      - command: terraform plan mock -s nonprod -- -var="foo=bar" -var="baz=qux"
+
+  # Test shell command to verify parsing of -- separator
+  shell-double-hyphen-echo:
+    description: |
+      Shell command to verify -- separator parsing.
+    steps:
+      - command: echo "before --" -- "after --"
+        type: shell

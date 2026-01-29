@@ -182,6 +182,7 @@ func (e *Executor) GetAllOutputs(
 	component string,
 	stack string,
 	skipInit bool,
+	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.GetAllOutputs")()
 
@@ -199,7 +200,7 @@ func (e *Executor) GetAllOutputs(
 
 	// Use quiet mode to suppress terraform init/workspace output.
 	opts := &OutputOptions{QuietMode: true}
-	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts)
+	outputs, err := e.fetchAndCacheOutputs(atmosConfig, component, stack, stackSlug, nil, opts, authManager)
 	if err != nil {
 		u.PrintfMessageToTUI(terminal.EscResetLine+"%s %s\n", theme.Styles.XMark, message)
 		return nil, err
@@ -318,6 +319,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	component, stack, stackSlug string,
 	authContext *schema.AuthContext,
 	opts *OutputOptions,
+	authManager any,
 ) (map[string]any, error) {
 	defer perf.Track(atmosConfig, "output.Executor.fetchAndCacheOutputs")()
 
@@ -326,6 +328,7 @@ func (e *Executor) fetchAndCacheOutputs(
 		Stack:                stack,
 		ProcessTemplates:     true,
 		ProcessYamlFunctions: true,
+		AuthManager:          authManager,
 	})
 	if err != nil {
 		return nil, wrapDescribeError(component, stack, err)
@@ -372,13 +375,10 @@ func (e *Executor) execute(
 	}
 
 	// Step 2: Extract and validate component configuration.
-	config, err := ExtractComponentConfig(
-		sections,
-		component,
-		stack,
-		atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		atmosConfig.Components.Terraform.InitRunReconfigure,
-	)
+	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
+	// proper path resolution that works correctly with --chdir and when running
+	// from non-project-root directories.
+	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
 	if err != nil {
 		return nil, err
 	}

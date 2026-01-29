@@ -42,7 +42,7 @@ func handleToolVersionsLoadError(err error, toolVersionsFile string) error {
 			"```shell\n" +
 			"atmos toolchain list\n" +
 			"```\n"
-		_ = ui.MarkdownMessage(message)
+		ui.MarkdownMessage(message)
 		return nil
 	}
 	return fmt.Errorf("failed to load .tool-versions: %w", err)
@@ -60,7 +60,7 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 		// Resolve tool information.
 		id, err := resolveToolInfo(toolName, toolVersions, installer)
 		if err != nil {
-			_ = ui.Warningf("Could not resolve tool '%s': %v", toolName, err)
+			ui.Warningf("Could not resolve tool '%s': %v", toolName, err)
 			continue
 		}
 
@@ -93,21 +93,24 @@ func buildToolRows(toolVersions *ToolVersions, installer *Installer) []toolRow {
 // resolveToolInfo resolves owner, repo, and alias for a tool name.
 func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Installer) (toolIdentity, error) {
 	// Use existing infrastructure to resolve tool.
-	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.resolver)
+	resolvedKey, _, found := LookupToolVersion(toolName, toolVersions, installer.GetResolver())
 	if !found {
 		return toolIdentity{}, fmt.Errorf("%w: %s", ErrToolNotFound, toolName)
 	}
 
 	// Get owner/repo from resolved key.
-	owner, repo, err := installer.resolver.Resolve(resolvedKey)
+	owner, repo, err := installer.GetResolver().Resolve(resolvedKey)
 	if err != nil {
 		return toolIdentity{}, err
 	}
 
-	// Determine alias (if resolved key differs from tool name).
+	// Determine alias - first check if entry differs from resolved key.
 	alias := ""
 	if resolvedKey != toolName {
 		alias = toolName
+	} else {
+		// Reverse lookup: find any alias configured in atmos.yaml.
+		alias = findAliasForTool(owner, repo)
 	}
 
 	return toolIdentity{
@@ -115,6 +118,26 @@ func resolveToolInfo(toolName string, toolVersions *ToolVersions, installer *Ins
 		repo:  repo,
 		alias: alias,
 	}, nil
+}
+
+// findAliasForTool finds a configured alias that maps to the given owner/repo.
+// Returns the shortest matching alias (prefers "tofu" over "opentofu").
+func findAliasForTool(owner, repo string) string {
+	atmosConfig := GetAtmosConfig()
+	if atmosConfig == nil || len(atmosConfig.Toolchain.Aliases) == 0 {
+		return ""
+	}
+
+	target := owner + "/" + repo
+	var shortestAlias string
+	for alias, fullName := range atmosConfig.Toolchain.Aliases {
+		if fullName == target {
+			if shortestAlias == "" || len(alias) < len(shortestAlias) {
+				shortestAlias = alias
+			}
+		}
+	}
+	return shortestAlias
 }
 
 // buildToolRow creates a single toolRow for a specific tool version.

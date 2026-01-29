@@ -1,0 +1,25 @@
+# Provenance Legend:                           
+#   ● [1] Defined in parent stack              
+#   ○ [N] Inherited/imported (N=2+ levels deep)
+#   ∴ Computed/templated                       
+                                               
+# Stack: orgs/acme/dev/us-east-1
+                                
+import:                                           # ○ [3] mixins/stage/dev.yaml:3
+  - catalog/mock/defaults                         # ○ [3] mixins/stage/dev.yaml:3
+  - mixins/stage/dev                              # ○ [2] orgs/acme/_defaults.yaml:3
+  - orgs/acme/_defaults                           # ● [1] orgs/acme/dev/us-east-1.yaml:3
+vars:                                             # ○ [4] catalog/mock/defaults.yaml:8
+  enabled: true                                   # ○ [4] catalog/mock/defaults.yaml:8
+  environment: development                        # ○ [3] mixins/stage/dev.yaml:13
+  name: mock                                      # ○ [4] catalog/mock/defaults.yaml:9
+  namespace: acme                                 # ○ [2] orgs/acme/_defaults.yaml:7
+  region: us-east-1                               # ● [1] orgs/acme/dev/us-east-1.yaml:12
+  stage: dev                                      # ○ [3] mixins/stage/dev.yaml:6
+  tags:                                           # ○ [4] catalog/mock/defaults.yaml:11
+    managed_by: atmos                             # ○ [4] catalog/mock/defaults.yaml:11
+    region: us-east-1                             # ● [1] orgs/acme/dev/us-east-1.yaml:14
+    stage: dev                                    # ○ [3] mixins/stage/dev.yaml:15
+    tenant: acme                                  # ○ [2] orgs/acme/_defaults.yaml:14
+  tenant: acme                                    # ○ [2] orgs/acme/_defaults.yaml:6
+

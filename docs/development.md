@@ -23,7 +23,7 @@ This guide covers the development workflow for contributing to Atmos.
 
 ## Development Workflow
 
-We use Atmos custom commands for development (dogfooding our own tool). This ensures we experience the same workflows our users do. See [Atmos Custom Commands](https://atmos.tools/core-concepts/custom-commands/) for more details.
+We use Atmos custom commands for development (dogfooding our own tool). This ensures we experience the same workflows our users do. See [Atmos Custom Commands](https://atmos.tools/cli/configuration/commands) for more details.
 
 ### Available Commands
 
@@ -140,6 +140,32 @@ pre-commit run --all-files
 # Update hooks to latest versions
 pre-commit autoupdate
 ```
+
+## Developer Tools
+
+### Testing Atmos in Geodesic
+
+The `scripts/test-geodesic-prebuilt.sh` script allows you to quickly test Atmos changes inside a Geodesic container without rebuilding the entire Geodesic image.
+
+**Usage:**
+```bash
+./scripts/test-geodesic-prebuilt.sh <path-to-infrastructure>
+```
+
+**Example:**
+```bash
+./scripts/test-geodesic-prebuilt.sh ~/Dev/cloudposse/infra/infra-live
+```
+
+**What it does:**
+1. Builds Atmos for Linux (cross-compiles if needed for your architecture)
+2. Launches a Geodesic container with:
+   - The pre-built Atmos binary mounted to `/usr/local/bin/atmos`
+   - Your infrastructure directory mounted to `/workspace`
+   - Atmos-managed AWS credentials from `$XDG_CONFIG_HOME/atmos` (defaults to `~/.config/atmos`)
+   - Standard XDG environment variables configured
+
+This workflow is much faster than rebuilding Geodesic images during development and allows you to iterate quickly on Atmos changes while testing in a realistic containerized environment.
 
 ## Configuration Files
 

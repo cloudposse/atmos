@@ -350,14 +350,15 @@ func TestAquaRegistry_BuildAssetURL_GitHubRelease(t *testing.T) {
 	ar := NewAquaRegistry()
 
 	// Use .SemVer for version without prefix in asset filename.
-	// .Version = v1.0.0 (full tag for URL), .SemVer = 1.0.0 (for filename).
+	// With VersionPrefix: "v", .Version = v1.0.0 (full tag for URL), .SemVer = 1.0.0 (for filename).
 	tool := &registry.Tool{
-		Name:      "test-tool",
-		Type:      "github_release",
-		RepoOwner: "test",
-		RepoName:  "tool",
-		Asset:     "tool-{{.SemVer}}-{{.OS}}-{{.Arch}}.zip",
-		Format:    "zip",
+		Name:          "test-tool",
+		Type:          "github_release",
+		RepoOwner:     "test",
+		RepoName:      "tool",
+		Asset:         "tool-{{.SemVer}}-{{.OS}}-{{.Arch}}.zip",
+		Format:        "zip",
+		VersionPrefix: "v", // Explicitly set so .SemVer strips it.
 	}
 
 	url, err := ar.BuildAssetURL(tool, "1.0.0")
@@ -839,4 +840,526 @@ func TestAquaRegistry_SearchRelevanceScoring(t *testing.T) {
 	// The first result should be an exact or close match.
 	firstResult := results[0]
 	assert.Contains(t, firstResult.RepoName, "kubectl")
+}
+
+// TestResolveVersionOverrides_PreservesBaseFields verifies that resolveVersionOverrides
+// copies ALL base fields from the registry package to the Tool struct, not just a subset.
+// REGRESSION TEST: This test would have caught the bug where VersionPrefix, Replacements,
+// Overrides, and Files were not being copied from registryPackage to Tool.
+func TestResolveVersionOverrides_PreservesBaseFields(t *testing.T) {
+	// Registry YAML with all fields populated - similar to real jq/gum registries.
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    asset: "tool_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    format: tar.gz
+    binary_name: tool-bin
+    version_prefix: "v"
+    replacements:
+      darwin: macos
+      amd64: x86_64
+    overrides:
+      - goos: darwin
+        asset: "tool_{{trimV .Version}}_macos_universal.tar.gz"
+    files:
+      - name: tool-bin
+        src: tool/bin/tool
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Call resolveVersionOverrides with a version that doesn't match any version_override.
+	// This tests the base field copying path.
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.0.0")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: Verify ALL base fields are preserved.
+	assert.Equal(t, "tool-bin", tool.Name, "Name should come from binary_name")
+	assert.Equal(t, "test", tool.RepoOwner)
+	assert.Equal(t, "tool", tool.RepoName)
+	assert.Equal(t, "github_release", tool.Type)
+	assert.Equal(t, "tar.gz", tool.Format)
+	assert.Equal(t, "v", tool.VersionPrefix, "VersionPrefix must be preserved (was missing in bug)")
+
+	// CRITICAL: Replacements must be preserved - this was the jq bug.
+	require.NotNil(t, tool.Replacements, "Replacements must be preserved (was missing in bug)")
+	assert.Equal(t, "macos", tool.Replacements["darwin"], "darwin->macos replacement must be preserved")
+	assert.Equal(t, "x86_64", tool.Replacements["amd64"], "amd64->x86_64 replacement must be preserved")
+
+	// CRITICAL: Overrides must be preserved.
+	require.Len(t, tool.Overrides, 1, "Overrides must be preserved (was missing in bug)")
+	assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+	assert.Contains(t, tool.Overrides[0].Asset, "macos_universal")
+
+	// CRITICAL: Files must be preserved.
+	require.Len(t, tool.Files, 1, "Files must be preserved (was missing in bug)")
+	assert.Equal(t, "tool-bin", tool.Files[0].Name)
+	assert.Equal(t, "tool/bin/tool", tool.Files[0].Src)
+}
+
+// TestApplyVersionOverride_Replacements verifies that version overrides with replacements
+// are correctly applied to the tool.
+// REGRESSION TEST: This test would have caught the bug where versionOverride struct
+// was missing the Replacements field, so version-specific replacements weren't applied.
+func TestApplyVersionOverride_Replacements(t *testing.T) {
+	// Registry YAML with version_overrides that include replacements.
+	// This pattern matches jq which has different replacements for older versions.
+	// Note: Aqua uses semver("constraint") format for version constraints.
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: jqlang
+    repo_name: jq
+    asset: "jq-{{.OS}}-{{.Arch}}"
+    version_prefix: "jq-"
+    replacements:
+      darwin: macos
+      arm64: arm64
+    version_overrides:
+      - version_constraint: semver("< 1.8.0")
+        asset: "jq-{{.OS}}-{{.Arch}}"
+        replacements:
+          darwin: macos
+          amd64: amd64
+          arm64: arm64
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Request version 1.7.1 which matches the version_constraint "< 1.8.0".
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.7.1")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: Version override replacements must be applied.
+	require.NotNil(t, tool.Replacements, "Version override replacements must be applied")
+	assert.Equal(t, "macos", tool.Replacements["darwin"], "darwin->macos from version override")
+	assert.Equal(t, "amd64", tool.Replacements["amd64"], "amd64->amd64 from version override")
+	assert.Equal(t, "arm64", tool.Replacements["arm64"], "arm64->arm64 from version override")
+}
+
+// TestApplyVersionOverride_OverridesField verifies that version overrides with platform
+// overrides are correctly applied.
+// REGRESSION TEST: This test would have caught the bug where versionOverride struct
+// was missing the Overrides field.
+func TestApplyVersionOverride_OverridesField(t *testing.T) {
+	// Note: Aqua uses semver("constraint") format for version constraints.
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    asset: "tool_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    version_overrides:
+      - version_constraint: semver(">= 2.0.0")
+        asset: "tool_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
+        format: zip
+        overrides:
+          - goos: darwin
+            goarch: arm64
+            asset: "tool_{{.Version}}_darwin_universal.zip"
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Request version 2.1.0 which matches ">= 2.0.0".
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "2.1.0")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: Version override's nested overrides must be applied.
+	require.Len(t, tool.Overrides, 1, "Version override's nested overrides must be applied")
+	assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+	assert.Equal(t, "arm64", tool.Overrides[0].GOARCH)
+	assert.Contains(t, tool.Overrides[0].Asset, "darwin_universal")
+}
+
+// TestResolveVersionOverrides_JQPattern tests the exact jq registry pattern that was failing.
+// REGRESSION TEST: jq 1.7.1 on darwin should use "macos" not "darwin" due to version_overrides.
+func TestResolveVersionOverrides_JQPattern(t *testing.T) {
+	// This is a simplified version of the actual jq registry.yaml.
+	// The key pattern: base has darwin:macos, but version_overrides for < 1.8.0
+	// specifies its own replacements that must override the base.
+	// Note: Aqua uses semver("constraint") format for version constraints.
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: jqlang
+    repo_name: jq
+    asset: "jq-{{.OS}}-{{.Arch}}"
+    format: raw
+    version_prefix: "jq-"
+    replacements:
+      darwin: macos
+      windows: windows
+      amd64: amd64
+      arm64: arm64
+    version_overrides:
+      - version_constraint: semver("< 1.8.0")
+        asset: "jq-{{.OS}}-{{.Arch}}"
+        replacements:
+          darwin: macos
+          linux: linux
+          windows: windows
+          amd64: amd64
+          arm64: arm64
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Test version 1.7.1 (matches < 1.8.0).
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.7.1")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// This is the critical assertion - darwin must map to macos.
+	assert.Equal(t, "jqlang", tool.RepoOwner)
+	assert.Equal(t, "jq", tool.RepoName)
+	assert.Equal(t, "jq-", tool.VersionPrefix)
+	require.NotNil(t, tool.Replacements, "Replacements must be set for jq 1.7.1")
+	assert.Equal(t, "macos", tool.Replacements["darwin"],
+		"jq 1.7.1 on darwin should map to 'macos' (this was the bug - returned 'darwin' instead)")
+	assert.Equal(t, "amd64", tool.Replacements["amd64"])
+	assert.Equal(t, "arm64", tool.Replacements["arm64"])
+}
+
+// TestResolveVersionOverrides_GumPattern tests the gum pattern with version_prefix.
+// REGRESSION TEST: gum uses version_prefix: "v" which must be preserved.
+func TestResolveVersionOverrides_GumPattern(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: charmbracelet
+    repo_name: gum
+    asset: "gum_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    format: tar.gz
+    version_prefix: "v"
+    replacements:
+      darwin: Darwin
+      linux: Linux
+      amd64: x86_64
+      arm64: arm64
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "0.17.0")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: VersionPrefix must be "v" for GitHub release URL construction.
+	assert.Equal(t, "v", tool.VersionPrefix,
+		"gum version_prefix 'v' must be preserved (this was the bug - was empty)")
+
+	// Replacements must be preserved for correct asset filename.
+	require.NotNil(t, tool.Replacements)
+	assert.Equal(t, "Darwin", tool.Replacements["darwin"])
+	assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+}
+
+// TestResolveVersionOverrides_OpenTofuPattern tests the opentofu pattern.
+// REGRESSION TEST: opentofu uses version_prefix: "v" which must be preserved.
+func TestResolveVersionOverrides_OpenTofuPattern(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: opentofu
+    repo_name: opentofu
+    asset: "tofu_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip"
+    format: zip
+    version_prefix: "v"
+    files:
+      - name: tofu
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.9.0")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: VersionPrefix and Files must be preserved.
+	assert.Equal(t, "v", tool.VersionPrefix,
+		"opentofu version_prefix 'v' must be preserved")
+	require.Len(t, tool.Files, 1)
+	assert.Equal(t, "tofu", tool.Files[0].Name)
+}
+
+func TestAquaRegistry_parseRegistryFile_Scenarios(t *testing.T) {
+	// Table-driven test for parseRegistryFile with various configuration patterns.
+	tests := []struct {
+		name         string
+		testdataFile string                                  // If set, load from testdata/
+		inlineData   string                                  // If set, use inline YAML
+		verify       func(t *testing.T, tool *registry.Tool) // Custom verification
+	}{
+		{
+			name:         "with files configuration",
+			testdataFile: "testdata/aws-cli-files.yaml",
+			verify: func(t *testing.T, tool *registry.Tool) {
+				assert.Equal(t, "aws-cli", tool.Name)
+				assert.Equal(t, "aws", tool.RepoOwner)
+				assert.Equal(t, "aws-cli", tool.RepoName)
+
+				// Verify files config.
+				require.Len(t, tool.Files, 2)
+				assert.Equal(t, "aws", tool.Files[0].Name)
+				assert.Equal(t, "aws/dist/aws", tool.Files[0].Src)
+				assert.Equal(t, "aws_completer", tool.Files[1].Name)
+				assert.Equal(t, "aws/dist/aws_completer", tool.Files[1].Src)
+			},
+		},
+		{
+			name:         "with replacements",
+			testdataFile: "testdata/aws-cli-replacements.yaml",
+			verify: func(t *testing.T, tool *registry.Tool) {
+				require.NotNil(t, tool.Replacements)
+				assert.Len(t, tool.Replacements, 2)
+				assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+				assert.Equal(t, "aarch64", tool.Replacements["arm64"])
+			},
+		},
+		{
+			name: "with overrides",
+			inlineData: `
+packages:
+  - type: http
+    repo_owner: aws
+    repo_name: aws-cli
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{trimV .Version}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        url: https://awscli.amazonaws.com/AWSCLIV2-{{trimV .Version}}.{{.Format}}
+        format: pkg
+        files:
+          - name: aws
+            src: aws-cli.pkg/Payload/aws-cli/aws
+          - name: aws_completer
+            src: aws-cli.pkg/Payload/aws-cli/aws_completer
+`,
+			verify: func(t *testing.T, tool *registry.Tool) {
+				require.Len(t, tool.Overrides, 1)
+				override := tool.Overrides[0]
+				assert.Equal(t, "darwin", override.GOOS)
+				assert.Empty(t, override.GOARCH) // Not specified, so empty (wildcard).
+				assert.Equal(t, "https://awscli.amazonaws.com/AWSCLIV2-{{trimV .Version}}.{{.Format}}", override.Asset)
+				assert.Equal(t, "pkg", override.Format)
+
+				// Verify override files.
+				require.Len(t, override.Files, 2)
+				assert.Equal(t, "aws", override.Files[0].Name)
+				assert.Equal(t, "aws-cli.pkg/Payload/aws-cli/aws", override.Files[0].Src)
+			},
+		},
+		{
+			name: "full AWS CLI pattern",
+			inlineData: `
+packages:
+  - type: http
+    repo_owner: aws
+    repo_name: aws-cli
+    url: https://awscli.amazonaws.com/awscli-exe-{{.OS}}-{{.Arch}}-{{trimV .Version}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        url: https://awscli.amazonaws.com/AWSCLIV2-{{trimV .Version}}.{{.Format}}
+        format: pkg
+        files:
+          - name: aws
+            src: aws-cli.pkg/Payload/aws-cli/aws
+          - name: aws_completer
+            src: aws-cli.pkg/Payload/aws-cli/aws_completer
+    files:
+      - name: aws
+        src: aws/dist/aws
+      - name: aws_completer
+        src: aws/dist/aws_completer
+    replacements:
+      amd64: x86_64
+      arm64: aarch64
+`,
+			verify: func(t *testing.T, tool *registry.Tool) {
+				assert.Equal(t, "aws-cli", tool.Name)
+				assert.Equal(t, "aws", tool.RepoOwner)
+				assert.Equal(t, "aws-cli", tool.RepoName)
+				assert.Equal(t, "http", tool.Type)
+
+				// Verify all fields parsed correctly (uses trimV for bare version).
+				assert.Contains(t, tool.Asset, "awscli-exe-{{.OS}}-{{.Arch}}-{{trimV .Version}}")
+				assert.Equal(t, "zip", tool.Format)
+
+				// Files.
+				require.Len(t, tool.Files, 2)
+				assert.Equal(t, "aws", tool.Files[0].Name)
+				assert.Equal(t, "aws/dist/aws", tool.Files[0].Src)
+
+				// Replacements.
+				require.Len(t, tool.Replacements, 2)
+				assert.Equal(t, "x86_64", tool.Replacements["amd64"])
+				assert.Equal(t, "aarch64", tool.Replacements["arm64"])
+
+				// Overrides.
+				require.Len(t, tool.Overrides, 1)
+				assert.Equal(t, "darwin", tool.Overrides[0].GOOS)
+				assert.Equal(t, "pkg", tool.Overrides[0].Format)
+				assert.Len(t, tool.Overrides[0].Files, 2)
+			},
+		},
+		{
+			name: "override with replacements",
+			inlineData: `
+packages:
+  - type: http
+    repo_owner: test
+    repo_name: tool
+    url: https://example.com/tool-{{.OS}}-{{.Arch}}.zip
+    format: zip
+    overrides:
+      - goos: darwin
+        goarch: arm64
+        url: https://example.com/tool-macos-silicon.zip
+        replacements:
+          arm64: silicon
+`,
+			verify: func(t *testing.T, tool *registry.Tool) {
+				require.Len(t, tool.Overrides, 1)
+				override := tool.Overrides[0]
+				assert.Equal(t, "darwin", override.GOOS)
+				assert.Equal(t, "arm64", override.GOARCH)
+
+				// Verify override-specific replacements.
+				require.NotNil(t, override.Replacements)
+				assert.Equal(t, "silicon", override.Replacements["arm64"])
+			},
+		},
+		{
+			name:         "replicated darwin_all pattern",
+			testdataFile: "testdata/replicated.yaml",
+			verify: func(t *testing.T, tool *registry.Tool) {
+				assert.Equal(t, "replicated", tool.Name)
+				assert.Equal(t, "replicatedhq", tool.RepoOwner)
+				assert.Equal(t, "replicated", tool.RepoName)
+				assert.Equal(t, "github_release", tool.Type)
+
+				// Verify base asset pattern.
+				assert.Contains(t, tool.Asset, "replicated_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz")
+
+				// Verify darwin override uses "all" instead of arch.
+				require.Len(t, tool.Overrides, 1)
+				override := tool.Overrides[0]
+				assert.Equal(t, "darwin", override.GOOS)
+				assert.Empty(t, override.GOARCH) // Applies to all darwin architectures.
+				assert.Contains(t, override.Asset, "{{.OS}}_all.tar.gz")
+			},
+		},
+	}
+
+	ar := NewAquaRegistry()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var data []byte
+			var err error
+
+			if tt.testdataFile != "" {
+				data, err = os.ReadFile(tt.testdataFile)
+				require.NoError(t, err, "Should read testdata file")
+			} else {
+				data = []byte(tt.inlineData)
+			}
+
+			tool, err := ar.parseRegistryFile(data)
+			require.NoError(t, err)
+			require.NotNil(t, tool)
+
+			tt.verify(t, tool)
+		})
+	}
+}
+
+func TestExtractBinaryNameFromPackageName(t *testing.T) {
+	tests := []struct {
+		name        string
+		packageName string
+		expected    string
+	}{
+		{
+			name:        "three_segment_package_name",
+			packageName: "kubernetes/kubernetes/kubectl",
+			expected:    "kubectl",
+		},
+		{
+			name:        "two_segment_package_name_returns_empty",
+			packageName: "hashicorp/terraform",
+			expected:    "",
+		},
+		{
+			name:        "four_segment_package_name",
+			packageName: "owner/repo/subdir/binary",
+			expected:    "binary",
+		},
+		{
+			name:        "empty_package_name",
+			packageName: "",
+			expected:    "",
+		},
+		{
+			name:        "single_segment_returns_empty",
+			packageName: "terraform",
+			expected:    "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractBinaryNameFromPackageName(tt.packageName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }

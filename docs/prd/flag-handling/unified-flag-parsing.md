@@ -18,7 +18,7 @@ This document contains historical design that has been partially superseded:
 - Precedence order (flags > env > config > defaults)
 
 **FOR CURRENT IMPLEMENTATION**:
-- See `../unified-flag-parsing-refactoring.md` for up-to-date architecture
+- See `./unified-flag-parsing.md` for up-to-date architecture
 - Below content kept for historical context and design rationale
 
 ---
@@ -2612,7 +2612,7 @@ func NewTerraformCmd(
 - [Functional Options Pattern](https://www.codingexplorations.com/blog/functional-options-pattern-go)
 - Atmos existing PRDs:
   - `docs/prd/command-registry-pattern.md` - Command registration system
-  - `docs/prd/testing-strategy.md` - Testing approach and coverage
+  - `docs/prd/testability-refactoring-strategy.md` - Testing approach and coverage
   - `docs/prd/flag-handling/` - Strongly-typed interpreter system (NEW)
     - `global-flags-pattern.md` - Global flags handling via embedding
     - `global-flags-examples.md` - Real-world examples with --logs-level and --identity

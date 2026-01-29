@@ -22,6 +22,7 @@ var (
 	GreenLight  = "#68D391"
 	YellowLight = "#F6E05E"
 	RedLight    = "#FC8181"
+	MutedGray   = "#808080" // Gray for muted/subtle text (strikethrough restyle)
 )
 
 // Colors defines the color scheme for markdown rendering.

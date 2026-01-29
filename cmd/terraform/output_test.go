@@ -1,6 +1,8 @@
 package terraform
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -330,4 +332,101 @@ func TestOutputFlagShortcuts(t *testing.T) {
 			assert.Equal(t, tt.shortcut, flag.Shorthand, "%s flag should have shortcut %s", tt.flagName, tt.shortcut)
 		})
 	}
+}
+
+// TestExecuteGitHubOutput tests the GitHub output execution function.
+func TestExecuteGitHubOutput(t *testing.T) {
+	t.Run("output name not found", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{}
+
+		// Request a non-existent output name.
+		err := executeGitHubOutput(outputs, "", "non_existent", opts)
+		require.Error(t, err)
+		// Error is wrapped: "failed to retrieve terraform outputs" contains the specific error.
+		assert.Contains(t, err.Error(), "terraform outputs")
+	})
+
+	t.Run("format outputs to temp file", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file contents.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "vpc_id=vpc-12345")
+	})
+
+	t.Run("format single output to file", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345", "subnet_id": "subnet-67890"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		// Request a specific output name.
+		err := executeGitHubOutput(outputs, outputFile, "vpc_id", opts)
+		require.NoError(t, err)
+
+		// Verify file contains only the requested output.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "vpc_id=vpc-12345")
+		assert.NotContains(t, string(content), "subnet_id")
+	})
+
+	t.Run("format with uppercase option to file", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{Uppercase: true}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file contains uppercase key.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "VPC_ID=vpc-12345")
+	})
+
+	t.Run("format multiline value uses heredoc", func(t *testing.T) {
+		outputs := map[string]any{"config": "line1\nline2\nline3"}
+		opts := tfoutput.FormatOptions{}
+
+		// Create temp dir and file path.
+		tmpDir := t.TempDir()
+		outputFile := filepath.Join(tmpDir, "github_output")
+
+		err := executeGitHubOutput(outputs, outputFile, "", opts)
+		require.NoError(t, err)
+
+		// Verify file uses heredoc syntax for multiline values.
+		content, err := os.ReadFile(outputFile)
+		require.NoError(t, err)
+		assert.Contains(t, string(content), "config<<ATMOS_EOF")
+		assert.Contains(t, string(content), "line1\nline2\nline3")
+	})
+
+	t.Run("write to file error", func(t *testing.T) {
+		outputs := map[string]any{"vpc_id": "vpc-12345"}
+		opts := tfoutput.FormatOptions{}
+
+		// Use an invalid path that can't be written to (nonexistent subdirectory).
+		tmpDir := t.TempDir()
+		err := executeGitHubOutput(outputs, filepath.Join(tmpDir, "nonexistent", "file.txt"), "", opts)
+		require.Error(t, err)
+		// Error is wrapped: contains "failed to open file".
+		assert.Contains(t, err.Error(), "failed to open file")
+	})
 }
