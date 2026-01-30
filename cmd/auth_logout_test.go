@@ -8,6 +8,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -36,6 +37,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
@@ -79,6 +81,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(errUtils.ErrPartialLogout)
 			},
 			expectedError: nil, // Partial logout is treated as success.
@@ -94,6 +97,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
@@ -159,6 +163,7 @@ func TestPerformProviderLogout(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
@@ -273,6 +278,7 @@ func TestPerformLogoutAll(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 					"identity2": {Kind: "aws/user"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -437,6 +443,7 @@ func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 					"identity2": {Kind: "aws/user"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -515,6 +522,7 @@ func TestPerformIdentityLogout_WithKeychainFlag(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
@@ -529,6 +537,7 @@ func TestPerformIdentityLogout_WithKeychainFlag(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", true).Return(nil)
 			},
 			expectedError: nil,
@@ -578,6 +587,7 @@ func TestPerformProviderLogout_WithKeychainFlag(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
@@ -595,6 +605,7 @@ func TestPerformProviderLogout_WithKeychainFlag(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", true).Return(nil)
 			},
 			expectedError: nil,
@@ -639,6 +650,7 @@ func TestPerformLogoutAll_WithKeychainFlag(t *testing.T) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {Kind: "aws/permission-set"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -651,6 +663,7 @@ func TestPerformLogoutAll_WithKeychainFlag(t *testing.T) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {Kind: "aws/permission-set"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -1119,6 +1132,7 @@ func TestExecuteLogoutOption(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
@@ -1137,6 +1151,7 @@ func TestExecuteLogoutOption(t *testing.T) {
 					"identity1": {},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
@@ -1152,6 +1167,7 @@ func TestExecuteLogoutOption(t *testing.T) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},

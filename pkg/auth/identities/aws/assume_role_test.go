@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/tests"
@@ -1332,6 +1333,10 @@ func (m *mockResolveAuthManager) ExecuteIdentityIntegrations(_ context.Context, 
 func (m *mockResolveAuthManager) ExecuteIntegration(_ context.Context, _ string) error { return nil }
 func (m *mockResolveAuthManager) GetIntegration(_ string) (*schema.Integration, error) {
 	return nil, nil
+}
+
+func (m *mockResolveAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialHandling(t *testing.T) {

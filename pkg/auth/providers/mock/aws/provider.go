@@ -30,6 +30,7 @@ const (
 type Provider struct {
 	name   string
 	config *schema.Provider
+	realm  string // Credential isolation realm set by auth manager
 }
 
 // NewProvider creates a new mock provider.
@@ -58,6 +59,11 @@ func (p *Provider) Name() string {
 	defer perf.Track(nil, "mock.Provider.Name")()
 
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *Provider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for the mock provider.

@@ -234,6 +234,7 @@ func TestCreateAndAuthenticateManager_ManagerCreation(t *testing.T) {
 		credStore,
 		validator,
 		stackInfo,
+		"",
 	)
 
 	require.NoError(t, err, "NewAuthManager should succeed with valid config")

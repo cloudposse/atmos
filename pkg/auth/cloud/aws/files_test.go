@@ -89,8 +89,9 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	m := &AWSFileManager{baseDir: tmp}
 	credsPath := m.GetCredentialsPath("prov")
 	cfgPath := m.GetConfigPath("prov")
-	assert.Equal(t, filepath.Join(tmp, "prov", "credentials"), credsPath)
-	assert.Equal(t, filepath.Join(tmp, "prov", "config"), cfgPath)
+	// New path structure: baseDir/aws/providerName/credentials
+	assert.Equal(t, filepath.Join(tmp, "aws", "prov", "credentials"), credsPath)
+	assert.Equal(t, filepath.Join(tmp, "aws", "prov", "config"), cfgPath)
 
 	// Ensure env variables are produced.
 	env := m.GetEnvironmentVariables("prov", "dev")
@@ -103,7 +104,8 @@ func TestAWSFileManager_PathsEnvCleanup(t *testing.T) {
 	assert.NoError(t, f.Close())
 	err = m.Cleanup("prov")
 	assert.NoError(t, err)
-	_, statErr := os.Stat(filepath.Join(tmp, "prov"))
+	// New path structure verification
+	_, statErr := os.Stat(filepath.Join(tmp, "aws", "prov"))
 	assert.True(t, os.IsNotExist(statErr))
 }
 
@@ -405,12 +407,13 @@ func TestNewAWSFileManager_LegacyPathWarning(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
 
 	// Create file manager (should trigger warning about legacy path).
-	fm, err := NewAWSFileManager("")
+	fm, err := NewAWSFileManager("", "")
 	require.NoError(t, err)
 	require.NotNil(t, fm)
 
 	// Verify that new base directory is XDG-compliant, not legacy.
-	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos", "aws"),
+	// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
+	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos"),
 		"New file manager should use XDG config directory")
 	assert.NotContains(t, fm.baseDir, filepath.Join(".aws", "atmos"),
 		"New file manager should not use legacy path")
@@ -435,12 +438,13 @@ func TestNewAWSFileManager_NoLegacyPath(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", xdgConfigDir)
 
 	// Create file manager without legacy path (should not trigger warning).
-	fm, err := NewAWSFileManager("")
+	fm, err := NewAWSFileManager("", "")
 	require.NoError(t, err)
 	require.NotNil(t, fm)
 
 	// Verify XDG-compliant path.
-	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos", "aws"))
+	// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
+	assert.Contains(t, fm.baseDir, filepath.Join(xdgConfigDir, "atmos"))
 
 	t.Logf("New base directory: %s", fm.baseDir)
 }
@@ -474,7 +478,9 @@ func TestAWSFileManager_CustomBasePath(t *testing.T) {
 		{
 			name:             "empty base_path uses XDG default",
 			basePath:         "",
-			expectedBasePath: filepath.Join(".config", "atmos", "aws"),
+			// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
+			// The /aws is added by GetCredentialsPath/GetConfigPath
+			expectedBasePath: filepath.Join(".config", "atmos"),
 			setupEnv: func(t *testing.T) {
 				homeDir, err := homedir.Dir()
 				require.NoError(t, err)
@@ -494,7 +500,7 @@ func TestAWSFileManager_CustomBasePath(t *testing.T) {
 
 			tt.setupEnv(t)
 
-			fm, err := NewAWSFileManager(tt.basePath)
+			fm, err := NewAWSFileManager(tt.basePath, "")
 			require.NoError(t, err)
 			require.NotNil(t, fm)
 
@@ -518,10 +524,10 @@ func TestAWSFileManager_BasePathCredentialIsolation(t *testing.T) {
 	basePath1 := t.TempDir()
 	basePath2 := t.TempDir()
 
-	fm1, err := NewAWSFileManager(basePath1)
+	fm1, err := NewAWSFileManager(basePath1, "")
 	require.NoError(t, err)
 
-	fm2, err := NewAWSFileManager(basePath2)
+	fm2, err := NewAWSFileManager(basePath2, "")
 	require.NoError(t, err)
 
 	// Write credentials to both managers with same provider/identity.
@@ -569,7 +575,7 @@ func TestAWSFileManager_BasePathCredentialIsolation(t *testing.T) {
 // variables point to the correct base_path location.
 func TestAWSFileManager_BasePathEnvironmentVariables(t *testing.T) {
 	customBasePath := t.TempDir()
-	fm, err := NewAWSFileManager(customBasePath)
+	fm, err := NewAWSFileManager(customBasePath, "")
 	require.NoError(t, err)
 
 	providerName := "custom-sso"
@@ -577,9 +583,10 @@ func TestAWSFileManager_BasePathEnvironmentVariables(t *testing.T) {
 
 	envVars := fm.GetEnvironmentVariables(providerName, identityName)
 
-	// Verify environment variables point to custom base path.
-	expectedCredsPath := filepath.Join(customBasePath, providerName, "credentials")
-	expectedConfigPath := filepath.Join(customBasePath, providerName, "config")
+	// Verify environment variables point to custom base path with new path structure.
+	// New path structure: basePath/aws/providerName/credentials
+	expectedCredsPath := filepath.Join(customBasePath, "aws", providerName, "credentials")
+	expectedConfigPath := filepath.Join(customBasePath, "aws", providerName, "config")
 
 	assert.Equal(t, expectedCredsPath, envVars[0].Value, "AWS_SHARED_CREDENTIALS_FILE should use custom base_path")
 	assert.Equal(t, expectedConfigPath, envVars[1].Value, "AWS_CONFIG_FILE should use custom base_path")
@@ -605,7 +612,7 @@ func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
 	legacyBasePath := filepath.Join(fakeHome, ".aws", "atmos")
 
 	// Create file manager with legacy base path.
-	fm, err := NewAWSFileManager(legacyBasePath)
+	fm, err := NewAWSFileManager(legacyBasePath, "")
 	require.NoError(t, err)
 
 	// Write credentials.
@@ -620,8 +627,9 @@ func TestAWSFileManager_BasePathLegacyCompatibility(t *testing.T) {
 	err = fm.WriteCredentials(providerName, identityName, creds)
 	require.NoError(t, err)
 
-	// Verify credentials are written to legacy path.
-	expectedPath := filepath.Join(legacyBasePath, providerName, "credentials")
+	// Verify credentials are written to path with aws subdirectory.
+	// New path structure: basePath/aws/providerName/credentials
+	expectedPath := filepath.Join(legacyBasePath, "aws", providerName, "credentials")
 	assert.Equal(t, expectedPath, fm.GetCredentialsPath(providerName))
 
 	// Verify credentials file exists and contains correct data.
@@ -640,7 +648,7 @@ func TestAWSFileManager_BasePathInvalidPath(t *testing.T) {
 	// Test with path that cannot be expanded.
 	invalidPath := "~nonexistentuser/path"
 
-	_, err := NewAWSFileManager(invalidPath)
+	_, err := NewAWSFileManager(invalidPath, "")
 	assert.Error(t, err, "Should fail with invalid home directory expansion")
 	assert.Contains(t, err.Error(), "invalid base_path")
 }

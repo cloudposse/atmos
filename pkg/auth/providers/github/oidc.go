@@ -23,6 +23,7 @@ const OidcTimeout = 10
 type oidcProvider struct {
 	name   string
 	config *schema.Provider
+	realm  string // Credential isolation realm set by auth manager
 }
 
 // NewOIDCProvider creates a new GitHub OIDC provider.
@@ -44,6 +45,11 @@ func NewOIDCProvider(name string, config *schema.Provider) (types.Provider, erro
 // Name returns the provider name.
 func (p *oidcProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *oidcProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for GitHub OIDC provider.
