@@ -284,9 +284,9 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 
 // findOrInstallPRVersion finds the binary for a PR version, installing if needed.
 // Uses TTL caching to minimize GitHub API calls:
-//   - If binary exists and cache is within TTL (1 min) -> use cached binary, no API call
-//   - If binary exists but TTL expired -> check API for new commits
-//   - If no binary exists -> fresh install
+//   - If binary exists and cache is within TTL (1 min) -> use cached binary, no API call.
+//   - If binary exists but TTL expired -> check API for new commits.
+//   - If no binary exists -> fresh install.
 func findOrInstallPRVersion(prNumber int, _ *ReexecConfig) (string, error) {
 	defer perf.Track(nil, "version.findOrInstallPRVersion")()
 

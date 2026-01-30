@@ -201,6 +201,43 @@ func TestParseVersionSpec(t *testing.T) {
 			wantValue: "",
 			wantErr:   true,
 		},
+
+		// Invalid PR formats.
+		{
+			name:      "pr:abc - non-numeric PR value",
+			input:     "pr:abc",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "pr:0 - zero PR number",
+			input:     "pr:0",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "pr:-1 - negative PR number",
+			input:     "pr:-1",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "pr: - empty PR value",
+			input:     "pr:",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "0 - zero as PR number",
+			input:     "0",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
 	}
 
 	for _, tt := range tests {

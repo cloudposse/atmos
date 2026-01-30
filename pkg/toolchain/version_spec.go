@@ -32,14 +32,17 @@ const (
 	minSHALength = 7
 	// Maximum length for a full SHA.
 	maxSHALength = 40
+
+	// Format string for invalid version errors.
+	versionErrorFormat = "%w: '%s'"
 )
 
 // ParseVersionSpec detects the version type from an input string.
-// Supports explicit prefixes (pr:, sha:) and auto-detection:
-//   - All digits -> PR number
-//   - Hex string 7-40 chars with at least one letter a-f -> SHA
-//   - Valid semver pattern (X.Y.Z or vX.Y.Z) -> semver
-//   - Everything else -> error
+// Supports explicit prefixes (pr:, sha:) and auto-detection.
+//   - All digits -> PR number.
+//   - Hex string 7-40 chars with at least one letter a-f -> SHA.
+//   - Valid semver pattern (X.Y.Z or vX.Y.Z) -> semver.
+//   - Everything else -> error.
 //
 // Returns the version type, normalized value (prefix stripped), and any error.
 func ParseVersionSpec(version string) (VersionType, string, error) {
@@ -52,7 +55,15 @@ func ParseVersionSpec(version string) (VersionType, string, error) {
 
 	// 1. Explicit PR prefix takes precedence.
 	if strings.HasPrefix(version, prPrefix) {
-		return VersionTypePR, strings.TrimPrefix(version, prPrefix), nil
+		prValue := strings.TrimPrefix(version, prPrefix)
+		if !isAllDigits(prValue) {
+			return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
+		}
+		prNum, _ := strconv.Atoi(prValue)
+		if prNum <= 0 {
+			return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
+		}
+		return VersionTypePR, prValue, nil
 	}
 
 	// 2. Explicit SHA prefix.
@@ -62,6 +73,10 @@ func ParseVersionSpec(version string) (VersionType, string, error) {
 
 	// 3. All digits -> PR number.
 	if isAllDigits(version) {
+		prNum, _ := strconv.Atoi(version)
+		if prNum <= 0 {
+			return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
+		}
 		return VersionTypePR, version, nil
 	}
 
@@ -76,7 +91,7 @@ func ParseVersionSpec(version string) (VersionType, string, error) {
 	}
 
 	// 6. Invalid format.
-	return VersionTypeInvalid, "", fmt.Errorf("%w: '%s'", errUtils.ErrVersionFormatInvalid, version)
+	return VersionTypeInvalid, "", fmt.Errorf(versionErrorFormat, errUtils.ErrVersionFormatInvalid, version)
 }
 
 // IsPRVersion checks if the version resolves to a PR.

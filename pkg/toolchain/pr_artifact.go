@@ -49,6 +49,9 @@ const (
 
 	// CacheFilePermissions is the file permission mode for cache metadata files.
 	cacheFilePermissions = 0o600
+
+	// PRArtifactDownloadTimeout is the maximum time allowed for downloading an artifact.
+	prArtifactDownloadTimeout = 5 * time.Minute
 )
 
 // PR artifact errors.
@@ -304,6 +307,7 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	client := &http.Client{
+		Timeout: prArtifactDownloadTimeout,
 		// Follow redirects but preserve auth header for GitHub domain only.
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			// Don't add auth header when redirected to S3 (pre-signed URL).
