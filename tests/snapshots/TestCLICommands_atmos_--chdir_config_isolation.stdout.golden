@@ -38,6 +38,15 @@ stacks:
 logs:
   file: /dev/stderr
   level: Info
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      timeout: 0
+      datasources: {}
 settings:
   list_merge_strategy: ""
   terminal:
