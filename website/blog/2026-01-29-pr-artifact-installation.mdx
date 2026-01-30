@@ -1,0 +1,66 @@
+---
+slug: pr-artifact-installation
+title: "Test PR Features with --use-version pr:NNNN"
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2026-01-29T00:00:00.000Z
+---
+
+Test features from any Atmos pull request without compiling from source or manually downloading artifacts.
+
+<!--truncate-->
+
+## What's New
+
+The `--use-version` flag now accepts PR numbers, making it trivial to test features from any open pull request:
+
+```bash
+# Test a feature from PR #2040
+atmos --use-version pr:2040 terraform plan
+
+# Numbers are auto-detected as PRs
+atmos --use-version 2040 describe stacks
+```
+
+## How It Works
+
+When you specify a PR number, Atmos:
+
+1. **Fetches the artifact** - Downloads the correct platform binary (Linux, macOS, Windows) from GitHub Actions
+2. **Caches locally** - Stores the binary in `~/.atmos/bin/` with metadata for fast subsequent runs
+3. **Re-executes** - Runs your command using the PR's version of Atmos
+
+The cache uses a 1-minute TTL before checking for new commits, so repeated runs within that window are instant.
+
+## Clear Error Messages
+
+When things go wrong, you get actionable guidance:
+
+- **Invalid version format**: Clear message showing valid formats (PR number, pr:NNNN, or semver)
+- **Missing GitHub token**: Instructions for authenticating via `gh` CLI or environment variable
+- **PR not found**: Direct link to the PR page
+- **CI workflow failing**: Explanation of why artifacts might be missing
+- **Unsupported platform**: Suggests alternatives
+
+## Requirements
+
+PR artifact installation requires GitHub authentication. The feature checks for tokens in this order:
+
+1. `ATMOS_GITHUB_TOKEN` environment variable
+2. `GITHUB_TOKEN` environment variable
+3. GitHub CLI (`gh`) authentication
+
+## Getting Started
+
+```bash
+# Authenticate with GitHub CLI (if not already)
+gh auth login
+
+# Test a PR
+atmos --use-version pr:2040 version
+```
+
+This feature complements our existing PR feature releases infrastructure, making it even easier to validate changes before they merge.

@@ -261,3 +261,13 @@ func SupportedPRPlatforms() []string {
 		"windows/amd64",
 	}
 }
+
+// GetPRHeadSHA retrieves the current head commit SHA for a pull request.
+// This is used for cache validation to check if the PR has new commits.
+// The token parameter is required for API authentication.
+func GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int, token string) (string, error) {
+	defer perf.Track(nil, "github.GetPRHeadSHA")()
+
+	client := newGitHubClientWithToken(ctx, token)
+	return getPRHeadSHA(ctx, client, owner, repo, prNumber)
+}

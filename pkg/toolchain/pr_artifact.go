@@ -3,6 +3,7 @@ package toolchain
 import (
 	"archive/zip"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -10,8 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/github"
@@ -26,9 +27,6 @@ const (
 	atmosOwner = "cloudposse"
 	atmosRepo  = "atmos"
 
-	// PrVersionPrefix is the prefix used to identify PR version specifiers.
-	prVersionPrefix = "pr:"
-
 	// Binary names.
 	atmosBinaryName    = "atmos"
 	atmosBinaryNameExe = "atmos.exe"
@@ -38,6 +36,19 @@ const (
 
 	// ShortSHALength is the number of characters to display for short SHA.
 	shortSHALength = 7
+
+	// PRCacheTTL is how long before checking API for updates.
+	// Within this TTL, we use the cached binary without API calls.
+	PRCacheTTL = 1 * time.Minute
+
+	// CacheMetadataFile is the filename for cache metadata.
+	cacheMetadataFile = ".cache.json"
+
+	// PRVersionDirFormat is the format for PR version directory names.
+	prVersionDirFormat = "pr-%d"
+
+	// CacheFilePermissions is the file permission mode for cache metadata files.
+	cacheFilePermissions = 0o600
 )
 
 // PR artifact errors.
@@ -49,22 +60,160 @@ var (
 	ErrPRArtifactExtractFailed = errors.New("failed to extract PR artifact")
 )
 
-// IsPRVersion checks if the version specifier is a PR reference (e.g., "pr:2038").
-// Returns the PR number and true if it's a PR reference, otherwise 0 and false.
-func IsPRVersion(version string) (int, bool) {
-	defer perf.Track(nil, "toolchain.IsPRVersion")()
+// PRCacheMetadata stores info about a cached PR binary.
+type PRCacheMetadata struct {
+	HeadSHA   string    `json:"head_sha"`   // SHA of the commit when installed.
+	CheckedAt time.Time `json:"checked_at"` // Last time we checked GitHub API.
+	RunID     int64     `json:"run_id"`     // Workflow run ID.
+}
 
-	if !strings.HasPrefix(version, prVersionPrefix) {
-		return 0, false
+// PRCacheStatus indicates what action to take for a cached PR binary.
+type PRCacheStatus int
+
+const (
+	// PRCacheNeedsInstall means no binary exists, needs fresh install.
+	PRCacheNeedsInstall PRCacheStatus = iota
+	// PRCacheValid means binary exists and is within TTL, use as-is.
+	PRCacheValid
+	// PRCacheNeedsCheck means binary exists but TTL expired, check API for updates.
+	PRCacheNeedsCheck
+)
+
+// CheckPRCacheStatus determines if a PR binary needs installation or API check.
+// Returns the status and the binary path if it exists.
+func CheckPRCacheStatus(prNumber int) (PRCacheStatus, string) {
+	defer perf.Track(nil, "toolchain.CheckPRCacheStatus")()
+
+	prVersionDir := fmt.Sprintf(prVersionDirFormat, prNumber)
+	installDir := filepath.Join(GetInstallPath(), "bin", atmosOwner, atmosRepo, prVersionDir)
+
+	// Check if binary exists.
+	binaryName := atmosBinaryName
+	if runtime.GOOS == "windows" {
+		binaryName = atmosBinaryNameExe
+	}
+	binaryPath := filepath.Join(installDir, binaryName)
+
+	if _, err := os.Stat(binaryPath); os.IsNotExist(err) {
+		return PRCacheNeedsInstall, ""
 	}
 
-	prNumStr := strings.TrimPrefix(version, prVersionPrefix)
-	prNum, err := strconv.Atoi(prNumStr)
-	if err != nil || prNum <= 0 {
-		return 0, false
+	// Binary exists - check cache metadata.
+	meta, err := loadPRCacheMetadata(prNumber)
+	if err != nil {
+		// No metadata or invalid - needs check.
+		log.Debug("No valid cache metadata, needs API check", "pr", prNumber, "error", err)
+		return PRCacheNeedsCheck, binaryPath
 	}
 
-	return prNum, true
+	// Check if within TTL.
+	if time.Since(meta.CheckedAt) < PRCacheTTL {
+		log.Debug("Cache valid within TTL", "pr", prNumber, "age", time.Since(meta.CheckedAt))
+		return PRCacheValid, binaryPath
+	}
+
+	log.Debug("Cache TTL expired, needs API check", "pr", prNumber, "age", time.Since(meta.CheckedAt))
+	return PRCacheNeedsCheck, binaryPath
+}
+
+// CheckPRCacheAndUpdate checks if the cached PR binary is up to date with GitHub.
+// If the SHA has changed, it returns true to indicate a re-download is needed.
+// If the SHA is the same, it updates the timestamp and returns false.
+func CheckPRCacheAndUpdate(ctx context.Context, prNumber int, showProgress bool) (needsReinstall bool, err error) {
+	defer perf.Track(nil, "toolchain.CheckPRCacheAndUpdate")()
+
+	// Load existing metadata.
+	meta, err := loadPRCacheMetadata(prNumber)
+	if err != nil {
+		// No metadata - need to reinstall to get fresh metadata.
+		return true, nil
+	}
+
+	// Check for GitHub token.
+	token, err := github.GetGitHubTokenOrError()
+	if err != nil {
+		return false, buildTokenRequiredError()
+	}
+
+	// Get current PR head SHA.
+	currentSHA, err := github.GetPRHeadSHA(ctx, atmosOwner, atmosRepo, prNumber, token)
+	if err != nil {
+		return false, handlePRArtifactError(err, prNumber)
+	}
+
+	// Update checked timestamp regardless.
+	meta.CheckedAt = time.Now()
+
+	shortOld := meta.HeadSHA
+	if len(shortOld) > shortSHALength {
+		shortOld = shortOld[:shortSHALength]
+	}
+	shortNew := currentSHA
+	if len(shortNew) > shortSHALength {
+		shortNew = shortNew[:shortSHALength]
+	}
+
+	if currentSHA == meta.HeadSHA {
+		// SHA unchanged - just update timestamp, no re-download.
+		if showProgress {
+			ui.Successf("PR #%d is up to date (sha: `%s`)", prNumber, shortNew)
+		}
+		if saveErr := savePRCacheMetadata(prNumber, meta); saveErr != nil {
+			log.Debug("Failed to save cache metadata", "error", saveErr)
+		}
+		return false, nil
+	}
+
+	// SHA changed - need to re-download.
+	if showProgress {
+		ui.Infof("New commit on PR #%d (sha: `%s` → `%s`)", prNumber, shortOld, shortNew)
+	}
+	return true, nil
+}
+
+// loadPRCacheMetadata loads cache metadata for a PR.
+func loadPRCacheMetadata(prNumber int) (*PRCacheMetadata, error) {
+	prVersionDir := fmt.Sprintf(prVersionDirFormat, prNumber)
+	metaPath := filepath.Join(GetInstallPath(), "bin", atmosOwner, atmosRepo, prVersionDir, cacheMetadataFile)
+
+	data, err := os.ReadFile(metaPath)
+	if err != nil {
+		return nil, err
+	}
+
+	var meta PRCacheMetadata
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, err
+	}
+
+	return &meta, nil
+}
+
+// savePRCacheMetadata saves cache metadata for a PR.
+func savePRCacheMetadata(prNumber int, meta *PRCacheMetadata) error {
+	prVersionDir := fmt.Sprintf(prVersionDirFormat, prNumber)
+	metaPath := filepath.Join(GetInstallPath(), "bin", atmosOwner, atmosRepo, prVersionDir, cacheMetadataFile)
+
+	data, err := json.MarshalIndent(meta, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	return os.WriteFile(metaPath, data, cacheFilePermissions)
+}
+
+// SavePRCacheMetadataAfterInstall saves cache metadata after a successful installation.
+func SavePRCacheMetadataAfterInstall(prNumber int, info *github.PRArtifactInfo) {
+	defer perf.Track(nil, "toolchain.SavePRCacheMetadataAfterInstall")()
+
+	meta := &PRCacheMetadata{
+		HeadSHA:   info.HeadSHA,
+		CheckedAt: time.Now(),
+		RunID:     info.RunID,
+	}
+	if err := savePRCacheMetadata(prNumber, meta); err != nil {
+		log.Debug("Failed to save cache metadata after install", "error", err)
+	}
 }
 
 // InstallFromPR downloads and installs Atmos from a PR's build artifact.
@@ -99,10 +248,19 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 	}
 
 	// Download and install the artifact.
-	return downloadAndInstallArtifact(ctx, token, prNumber, artifactInfo, showProgress)
+	binaryPath, err := downloadAndInstallArtifact(ctx, token, prNumber, artifactInfo, showProgress)
+	if err != nil {
+		return "", err
+	}
+
+	// Save cache metadata for future TTL checks.
+	SavePRCacheMetadataAfterInstall(prNumber, artifactInfo)
+
+	return binaryPath, nil
 }
 
 // downloadAndInstallArtifact handles the download and installation with optional progress display.
+// Delegates to downloadAndInstallArtifactToDir with the PR-specific directory format.
 func downloadAndInstallArtifact(
 	ctx context.Context,
 	token string,
@@ -112,42 +270,8 @@ func downloadAndInstallArtifact(
 ) (string, error) {
 	defer perf.Track(nil, "toolchain.downloadAndInstallArtifact")()
 
-	var binaryPath string
-
-	if showProgress {
-		progressMsg := fmt.Sprintf("Downloading %s (%s)", info.ArtifactName, formatBytes(info.SizeInBytes))
-		err := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
-			artifactPath, downloadErr := downloadPRArtifact(ctx, token, info)
-			if downloadErr != nil {
-				return "", downloadErr
-			}
-			defer os.Remove(artifactPath)
-
-			var installErr error
-			binaryPath, installErr = installPRArtifactBinary(prNumber, artifactPath)
-			if installErr != nil {
-				return "", installErr
-			}
-			return fmt.Sprintf("Installed to %s", binaryPath), nil
-		})
-		if err != nil {
-			return "", err
-		}
-		return binaryPath, nil
-	}
-
-	// Silent mode - no progress output.
-	artifactPath, err := downloadPRArtifact(ctx, token, info)
-	if err != nil {
-		return "", err
-	}
-	defer os.Remove(artifactPath)
-
-	binaryPath, err = installPRArtifactBinary(prNumber, artifactPath)
-	if err != nil {
-		return "", err
-	}
-	return binaryPath, nil
+	versionDir := fmt.Sprintf(prVersionDirFormat, prNumber)
+	return downloadAndInstallArtifactToDir(ctx, token, versionDir, info, showProgress)
 }
 
 // downloadPRArtifact downloads the artifact ZIP to a temporary file.
@@ -206,14 +330,15 @@ func downloadPRArtifact(ctx context.Context, token string, info *github.PRArtifa
 	return tempPath, nil
 }
 
-// installPRArtifactBinary extracts the binary from the artifact and installs it.
+// installArtifactBinaryToDir extracts the binary from the artifact and installs it to the specified version directory.
+// VersionDir is the directory name under ~/.atmos/bin/cloudposse/atmos/ (e.g., "pr-2040" or "sha-ceb7526").
 //
 //nolint:revive // Function length is acceptable for this self-contained installation logic.
-func installPRArtifactBinary(prNumber int, artifactPath string) (string, error) {
-	defer perf.Track(nil, "toolchain.installPRArtifactBinary")()
+func installArtifactBinaryToDir(versionDir, artifactPath string) (string, error) {
+	defer perf.Track(nil, "toolchain.installArtifactBinaryToDir")()
 
 	// Create extraction directory.
-	extractDir, err := os.MkdirTemp("", "atmos-pr-extract-")
+	extractDir, err := os.MkdirTemp("", "atmos-artifact-extract-")
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to create extract dir: %w", ErrPRArtifactExtractFailed, err)
 	}
@@ -252,8 +377,8 @@ func installPRArtifactBinary(prNumber int, artifactPath string) (string, error) 
 		return "", fmt.Errorf("%w: binary '%s' not found in artifact", ErrPRArtifactExtractFailed, binaryName)
 	}
 
-	// Determine install path: ~/.atmos/bin/cloudposse/atmos/pr-{number}/atmos
-	installDir := filepath.Join(GetInstallPath(), "bin", atmosOwner, atmosRepo, fmt.Sprintf("pr-%d", prNumber))
+	// Determine install path: ~/.atmos/bin/cloudposse/atmos/{versionDir}/atmos
+	installDir := filepath.Join(GetInstallPath(), "bin", atmosOwner, atmosRepo, versionDir)
 	if err := os.MkdirAll(installDir, dirPermissions); err != nil {
 		return "", fmt.Errorf("%w: failed to create install dir: %w", ErrPRArtifactExtractFailed, err)
 	}
@@ -273,6 +398,55 @@ func installPRArtifactBinary(prNumber int, artifactPath string) (string, error) 
 	}
 
 	return destBinary, nil
+}
+
+// downloadAndInstallArtifactToDir handles the download and installation to a specific version directory.
+// VersionDir is the directory name under ~/.atmos/bin/cloudposse/atmos/ (e.g., "pr-2040" or "sha-ceb7526").
+func downloadAndInstallArtifactToDir(
+	ctx context.Context,
+	token string,
+	versionDir string,
+	info *github.PRArtifactInfo,
+	showProgress bool,
+) (string, error) {
+	defer perf.Track(nil, "toolchain.downloadAndInstallArtifactToDir")()
+
+	var binaryPath string
+
+	if showProgress {
+		progressMsg := fmt.Sprintf("Downloading %s (%s)", info.ArtifactName, formatBytes(info.SizeInBytes))
+		err := spinner.ExecWithSpinnerDynamic(progressMsg, func() (string, error) {
+			artifactPath, downloadErr := downloadPRArtifact(ctx, token, info)
+			if downloadErr != nil {
+				return "", downloadErr
+			}
+			defer os.Remove(artifactPath)
+
+			var installErr error
+			binaryPath, installErr = installArtifactBinaryToDir(versionDir, artifactPath)
+			if installErr != nil {
+				return "", installErr
+			}
+			return fmt.Sprintf("Installed to %s", binaryPath), nil
+		})
+		if err != nil {
+			return "", err
+		}
+		return binaryPath, nil
+	}
+
+	// Silent mode - no progress output.
+	artifactPath, err := downloadPRArtifact(ctx, token, info)
+	if err != nil {
+		return "", err
+	}
+	defer os.Remove(artifactPath)
+
+	binaryPath, err = installArtifactBinaryToDir(versionDir, artifactPath)
+	if err != nil {
+		return "", err
+	}
+	return binaryPath, nil
 }
 
 // extractZipFile extracts a ZIP file to the destination directory.
