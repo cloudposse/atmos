@@ -3,6 +3,7 @@ package toolchain
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -11,6 +12,14 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// testBinaryName returns the correct binary name for the current platform.
+func testBinaryName() string {
+	if runtime.GOOS == "windows" {
+		return "atmos.exe"
+	}
+	return "atmos"
+}
 
 // setupTestInstallPath configures the toolchain to use a temporary directory.
 // Returns a cleanup function that restores the original config.
@@ -38,7 +47,7 @@ func TestPRCacheMetadata_SaveAndLoad(t *testing.T) {
 	require.NoError(t, os.MkdirAll(prDir, 0o755))
 
 	// Create a fake binary so CheckPRCacheStatus finds something.
-	binaryPath := filepath.Join(prDir, "atmos")
+	binaryPath := filepath.Join(prDir, testBinaryName())
 	require.NoError(t, os.WriteFile(binaryPath, []byte("fake"), 0o755))
 
 	// Save cache metadata.
@@ -81,7 +90,7 @@ func TestCheckPRCacheStatus_BinaryWithValidCache(t *testing.T) {
 	// Create the PR directory structure with binary.
 	prDir := filepath.Join(tempDir, "bin", "cloudposse", "atmos", "pr-888")
 	require.NoError(t, os.MkdirAll(prDir, 0o755))
-	binaryPath := filepath.Join(prDir, "atmos")
+	binaryPath := filepath.Join(prDir, testBinaryName())
 	require.NoError(t, os.WriteFile(binaryPath, []byte("fake"), 0o755))
 
 	// Save recent cache metadata (within TTL).
@@ -105,7 +114,7 @@ func TestCheckPRCacheStatus_BinaryWithExpiredCache(t *testing.T) {
 	// Create the PR directory structure with binary.
 	prDir := filepath.Join(tempDir, "bin", "cloudposse", "atmos", "pr-777")
 	require.NoError(t, os.MkdirAll(prDir, 0o755))
-	binaryPath := filepath.Join(prDir, "atmos")
+	binaryPath := filepath.Join(prDir, testBinaryName())
 	require.NoError(t, os.WriteFile(binaryPath, []byte("fake"), 0o755))
 
 	// Save old cache metadata (outside TTL).
@@ -129,7 +138,7 @@ func TestCheckPRCacheStatus_BinaryWithNoCache(t *testing.T) {
 	// Create the PR directory structure with binary only.
 	prDir := filepath.Join(tempDir, "bin", "cloudposse", "atmos", "pr-666")
 	require.NoError(t, os.MkdirAll(prDir, 0o755))
-	binaryPath := filepath.Join(prDir, "atmos")
+	binaryPath := filepath.Join(prDir, testBinaryName())
 	require.NoError(t, os.WriteFile(binaryPath, []byte("fake"), 0o755))
 
 	// No cache metadata saved.

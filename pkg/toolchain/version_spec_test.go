@@ -91,6 +91,59 @@ func TestParseVersionSpec(t *testing.T) {
 			wantErr:   false,
 		},
 
+		// Explicit SHA prefix.
+		{
+			name:      "explicit sha prefix short",
+			input:     "sha:ceb7526",
+			wantType:  VersionTypeSHA,
+			wantValue: "ceb7526",
+			wantErr:   false,
+		},
+		{
+			name:      "explicit sha prefix full",
+			input:     "sha:ceb7526be123456789abcdef0123456789abcdef",
+			wantType:  VersionTypeSHA,
+			wantValue: "ceb7526be123456789abcdef0123456789abcdef",
+			wantErr:   false,
+		},
+
+		// Auto-detect SHA (7-40 hex chars with at least one letter a-f).
+		{
+			name:      "auto-detect SHA 7 chars",
+			input:     "ceb7526",
+			wantType:  VersionTypeSHA,
+			wantValue: "ceb7526",
+			wantErr:   false,
+		},
+		{
+			name:      "auto-detect SHA 8 chars",
+			input:     "ceb75261",
+			wantType:  VersionTypeSHA,
+			wantValue: "ceb75261",
+			wantErr:   false,
+		},
+		{
+			name:      "auto-detect SHA full 40 chars",
+			input:     "ceb752612345678901234567890123456789abcd",
+			wantType:  VersionTypeSHA,
+			wantValue: "ceb752612345678901234567890123456789abcd",
+			wantErr:   false,
+		},
+		{
+			name:      "auto-detect SHA with all hex digits",
+			input:     "a1b2c3d",
+			wantType:  VersionTypeSHA,
+			wantValue: "a1b2c3d",
+			wantErr:   false,
+		},
+		{
+			name:      "auto-detect SHA only letters a-f",
+			input:     "abcdefab",
+			wantType:  VersionTypeSHA,
+			wantValue: "abcdefab",
+			wantErr:   false,
+		},
+
 		// Invalid formats (should error).
 		{
 			name:      "empty string",
@@ -100,49 +153,28 @@ func TestParseVersionSpec(t *testing.T) {
 			wantErr:   true,
 		},
 		{
-			name:      "short hex string (abc)",
+			name:      "short hex string (abc) - too short for SHA",
 			input:     "abc",
 			wantType:  VersionTypeInvalid,
 			wantValue: "",
 			wantErr:   true,
 		},
 		{
-			name:      "hex string 6 chars (abc123)",
+			name:      "hex string 6 chars (abc123) - too short for SHA",
 			input:     "abc123",
 			wantType:  VersionTypeInvalid,
 			wantValue: "",
 			wantErr:   true,
 		},
 		{
-			name:      "hex string 7 chars (looks like SHA)",
-			input:     "ceb7526",
-			wantType:  VersionTypeInvalid,
-			wantValue: "",
-			wantErr:   true,
-		},
-		{
-			name:      "hex string 8 chars",
-			input:     "ceb75261",
-			wantType:  VersionTypeInvalid,
-			wantValue: "",
-			wantErr:   true,
-		},
-		{
-			name:      "long hex string (40 chars)",
-			input:     "ceb752612345678901234567890123456789abcd",
-			wantType:  VersionTypeInvalid,
-			wantValue: "",
-			wantErr:   true,
-		},
-		{
-			name:      "uppercase letters",
+			name:      "uppercase letters (invalid SHA)",
 			input:     "ABCDEFG",
 			wantType:  VersionTypeInvalid,
 			wantValue: "",
 			wantErr:   true,
 		},
 		{
-			name:      "mixed case",
+			name:      "mixed case (invalid SHA)",
 			input:     "AbCdEfG",
 			wantType:  VersionTypeInvalid,
 			wantValue: "",
@@ -158,6 +190,13 @@ func TestParseVersionSpec(t *testing.T) {
 		{
 			name:      "random word",
 			input:     "foobar",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "hex string over 40 chars",
+			input:     "ceb752612345678901234567890123456789abcde1",
 			wantType:  VersionTypeInvalid,
 			wantValue: "",
 			wantErr:   true,
@@ -244,14 +283,26 @@ func TestIsPRVersion(t *testing.T) {
 			wantIsPR: false,
 		},
 		{
-			name:     "invalid format (abc)",
+			name:     "invalid format (abc) - too short for SHA",
 			version:  "abc",
 			wantPR:   0,
 			wantIsPR: false,
 		},
 		{
-			name:     "invalid format (abc123)",
+			name:     "invalid format (abc123) - too short for SHA",
 			version:  "abc123",
+			wantPR:   0,
+			wantIsPR: false,
+		},
+		{
+			name:     "SHA version (not PR)",
+			version:  "ceb7526",
+			wantPR:   0,
+			wantIsPR: false,
+		},
+		{
+			name:     "explicit SHA prefix (not PR)",
+			version:  "sha:ceb7526",
 			wantPR:   0,
 			wantIsPR: false,
 		},
@@ -262,6 +313,87 @@ func TestIsPRVersion(t *testing.T) {
 			gotPR, gotIsPR := IsPRVersion(tt.version)
 			assert.Equal(t, tt.wantPR, gotPR, "PR number mismatch")
 			assert.Equal(t, tt.wantIsPR, gotIsPR, "isPR mismatch")
+		})
+	}
+}
+
+func TestIsSHAVersion(t *testing.T) {
+	tests := []struct {
+		name      string
+		version   string
+		wantSHA   string
+		wantIsSHA bool
+	}{
+		// Valid SHA versions.
+		{
+			name:      "explicit sha prefix",
+			version:   "sha:ceb7526",
+			wantSHA:   "ceb7526",
+			wantIsSHA: true,
+		},
+		{
+			name:      "auto-detect SHA",
+			version:   "ceb7526",
+			wantSHA:   "ceb7526",
+			wantIsSHA: true,
+		},
+		{
+			name:      "auto-detect SHA 8 chars",
+			version:   "ceb75261",
+			wantSHA:   "ceb75261",
+			wantIsSHA: true,
+		},
+		{
+			name:      "full 40 char SHA",
+			version:   "ceb752612345678901234567890123456789abcd",
+			wantSHA:   "ceb752612345678901234567890123456789abcd",
+			wantIsSHA: true,
+		},
+
+		// Invalid SHA versions.
+		{
+			name:      "semver",
+			version:   "1.2.3",
+			wantSHA:   "",
+			wantIsSHA: false,
+		},
+		{
+			name:      "PR number",
+			version:   "2040",
+			wantSHA:   "",
+			wantIsSHA: false,
+		},
+		{
+			name:      "explicit PR prefix",
+			version:   "pr:2040",
+			wantSHA:   "",
+			wantIsSHA: false,
+		},
+		{
+			name:      "empty string",
+			version:   "",
+			wantSHA:   "",
+			wantIsSHA: false,
+		},
+		{
+			name:      "too short (abc)",
+			version:   "abc",
+			wantSHA:   "",
+			wantIsSHA: false,
+		},
+		{
+			name:      "uppercase letters",
+			version:   "ABCDEFG",
+			wantSHA:   "",
+			wantIsSHA: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotSHA, gotIsSHA := IsSHAVersion(tt.version)
+			assert.Equal(t, tt.wantSHA, gotSHA, "SHA mismatch")
+			assert.Equal(t, tt.wantIsSHA, gotIsSHA, "isSHA mismatch")
 		})
 	}
 }
@@ -326,6 +458,41 @@ func TestIsValidSemver(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.input, func(t *testing.T) {
 			got := isValidSemver(tt.input)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestIsValidSHA(t *testing.T) {
+	tests := []struct {
+		input string
+		want  bool
+	}{
+		// Valid SHAs (7-40 hex chars with at least one letter a-f).
+		{"ceb7526", true},              // 7 chars with letter.
+		{"ceb75261", true},             // 8 chars with letter.
+		{"a1b2c3d", true},              // 7 chars mixed.
+		{"abcdefab", true},             // 8 chars only letters a-f.
+		{"1234567a", true},             // 8 chars, one letter at end.
+		{"a1234567", true},             // 8 chars, one letter at start.
+		{"1a2b3c4d5e6f7a8b9c0d", true}, // 20 chars.
+		{"ceb752612345678901234567890123456789abcd", true}, // Full 40 chars.
+
+		// Invalid SHAs.
+		{"abc", false},      // Too short (3 chars).
+		{"abc123", false},   // Too short (6 chars).
+		{"1234567", false},  // 7 chars but no letter a-f (all digits -> PR).
+		{"12345678", false}, // 8 chars but no letter a-f (all digits -> PR).
+		{"ABCDEFG", false},  // Uppercase not allowed.
+		{"AbCdEfG", false},  // Mixed case not allowed.
+		{"ghijklm", false},  // Non-hex letters.
+		{"ceb752612345678901234567890123456789abcde1", false}, // 41 chars, too long.
+		{"", false}, // Empty string.
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.input, func(t *testing.T) {
+			got := isValidSHA(tt.input)
 			assert.Equal(t, tt.want, got)
 		})
 	}

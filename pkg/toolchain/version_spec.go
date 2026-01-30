@@ -17,18 +17,27 @@ const (
 	VersionTypeSemver VersionType = iota
 	// VersionTypePR represents a PR number (e.g., "2040", "pr:2040").
 	VersionTypePR
+	// VersionTypeSHA represents a commit SHA (e.g., "sha:ceb7526", "ceb7526be").
+	VersionTypeSHA
 	// VersionTypeInvalid represents an invalid version format.
 	VersionTypeInvalid
 )
 
 const (
 	// Prefixes for explicit version specifiers.
-	prPrefix = "pr:"
+	prPrefix  = "pr:"
+	shaPrefix = "sha:"
+
+	// Minimum length for auto-detected SHAs (short SHA).
+	minSHALength = 7
+	// Maximum length for a full SHA.
+	maxSHALength = 40
 )
 
 // ParseVersionSpec detects the version type from an input string.
-// Supports explicit prefix (pr:) and auto-detection:
+// Supports explicit prefixes (pr:, sha:) and auto-detection:
 //   - All digits -> PR number
+//   - Hex string 7-40 chars with at least one letter a-f -> SHA
 //   - Valid semver pattern (X.Y.Z or vX.Y.Z) -> semver
 //   - Everything else -> error
 //
@@ -46,17 +55,27 @@ func ParseVersionSpec(version string) (VersionType, string, error) {
 		return VersionTypePR, strings.TrimPrefix(version, prPrefix), nil
 	}
 
-	// 2. All digits -> PR number.
+	// 2. Explicit SHA prefix.
+	if strings.HasPrefix(version, shaPrefix) {
+		return VersionTypeSHA, strings.TrimPrefix(version, shaPrefix), nil
+	}
+
+	// 3. All digits -> PR number.
 	if isAllDigits(version) {
 		return VersionTypePR, version, nil
 	}
 
-	// 3. Valid semver pattern -> semver.
+	// 4. Valid semver pattern -> semver.
 	if isValidSemver(version) {
 		return VersionTypeSemver, version, nil
 	}
 
-	// 4. Invalid format.
+	// 5. Auto-detect SHA (hex string 7-40 chars with at least one letter a-f).
+	if isValidSHA(version) {
+		return VersionTypeSHA, version, nil
+	}
+
+	// 6. Invalid format.
 	return VersionTypeInvalid, "", fmt.Errorf("%w: '%s'", errUtils.ErrVersionFormatInvalid, version)
 }
 
@@ -76,6 +95,24 @@ func IsPRVersion(version string) (int, bool) {
 	}
 
 	return prNum, true
+}
+
+// IsSHAVersion checks if the version resolves to a SHA.
+// Returns the SHA string and true if it's a SHA version, otherwise "" and false.
+func IsSHAVersion(version string) (string, bool) {
+	defer perf.Track(nil, "toolchain.IsSHAVersion")()
+
+	vType, value, err := ParseVersionSpec(version)
+	if err != nil || vType != VersionTypeSHA {
+		return "", false
+	}
+
+	// Validate SHA format.
+	if !isValidSHA(value) {
+		return "", false
+	}
+
+	return value, true
 }
 
 // isAllDigits returns true if the string contains only digit characters.
@@ -125,4 +162,29 @@ func isValidSemver(s string) bool {
 		}
 	}
 	return true
+}
+
+// isValidSHA checks if a string looks like a git commit SHA.
+// A valid SHA is:
+//   - 7-40 characters long (short or full SHA)
+//   - Contains only lowercase hex characters (0-9, a-f)
+//   - Contains at least one letter a-f (to distinguish from PR numbers)
+func isValidSHA(s string) bool {
+	// Check length bounds.
+	if len(s) < minSHALength || len(s) > maxSHALength {
+		return false
+	}
+
+	hasLetter := false
+	for _, r := range s {
+		if r >= 'a' && r <= 'f' {
+			hasLetter = true
+		} else if r < '0' || r > '9' {
+			// Not a hex character.
+			return false
+		}
+	}
+
+	// Must have at least one letter to distinguish from PR numbers.
+	return hasLetter
 }

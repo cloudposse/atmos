@@ -30,6 +30,9 @@ const (
 
 	// LogFieldPR is the log field name for PR numbers.
 	logFieldPR = "pr"
+
+	// LogFieldSHA is the log field name for commit SHAs.
+	logFieldSHA = "sha"
 )
 
 // VersionFinder is an interface for finding and installing atmos versions.
@@ -145,6 +148,12 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 		return false
 	}
 
+	// SHA versions (sha:ceb7526 or hex strings) always need re-exec - never skip.
+	if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
+		log.Debug("SHA version requested, will re-exec", "requested", requestedVersion)
+		return false
+	}
+
 	// Normalize versions for comparison (strip 'v' prefix).
 	currentVersion := strings.TrimPrefix(Version, "v")
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
@@ -165,7 +174,7 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 
 // executeVersionSwitch performs the actual version switch.
 //
-//nolint:revive // os.Exit is intentional for hard failures on PR version errors.
+//nolint:revive // os.Exit is intentional for hard failures on PR/SHA version errors.
 func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
 
@@ -174,6 +183,13 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	if err != nil {
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
+			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
+			ui.Errorf("%s", formatted)
+			os.Exit(1)
+		}
+
+		// For SHA versions, fail hard - don't continue with wrong version.
+		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
 			ui.Errorf("%s", formatted)
 			os.Exit(1)
@@ -225,7 +241,7 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrVersionFormatInvalid).
 			WithExplanationf("Version '%s' is not a valid format", version).
-			WithHint("Version must be a PR number, pr:NNNN, or semver (e.g., 1.2.3)").
+			WithHint("Version must be a PR number, pr:NNNN, sha:XXXXXXX, or semver (e.g., 1.2.3)").
 			WithCause(err).
 			WithExitCode(1).
 			Err()
@@ -235,6 +251,11 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	if vType == toolchain.VersionTypePR {
 		prNumber, _ := toolchain.IsPRVersion(version)
 		return findOrInstallPRVersion(prNumber, cfg)
+	}
+
+	// Handle SHA versions (sha:XXXXXXX or auto-detected hex strings) - install from SHA artifact.
+	if vType == toolchain.VersionTypeSHA {
+		return findOrInstallSHAVersion(normalizedVersion, cfg)
 	}
 
 	// For semver versions, try to find existing installation.
@@ -303,6 +324,30 @@ func findOrInstallPRVersion(prNumber int, _ *ReexecConfig) (string, error) {
 	binaryPath, err := toolchain.InstallFromPR(prNumber, true)
 	if err != nil {
 		return "", fmt.Errorf("failed to install Atmos from PR #%d: %w", prNumber, err)
+	}
+
+	return binaryPath, nil
+}
+
+// findOrInstallSHAVersion finds the binary for a SHA version, installing if needed.
+// SHAs are immutable, so if a binary exists, it's always valid.
+func findOrInstallSHAVersion(sha string, _ *ReexecConfig) (string, error) {
+	defer perf.Track(nil, "version.findOrInstallSHAVersion")()
+
+	// Check if binary already exists (SHAs are immutable, no TTL check needed).
+	exists, binaryPath := toolchain.CheckSHACacheStatus(sha)
+	if exists {
+		log.Debug("Using cached SHA binary", logFieldSHA, sha, "path", binaryPath)
+		return binaryPath, nil
+	}
+
+	// Binary doesn't exist - need to install.
+	log.Debug("SHA version not installed, installing from artifact", logFieldSHA, sha)
+
+	// Install from SHA artifact.
+	binaryPath, err := toolchain.InstallFromSHA(sha, true)
+	if err != nil {
+		return "", fmt.Errorf("failed to install Atmos from SHA %s: %w", sha, err)
 	}
 
 	return binaryPath, nil

@@ -62,6 +62,24 @@ type PRArtifactInfo struct {
 	RunStartedAt time.Time
 }
 
+// SHAArtifactInfo contains information about a SHA's build artifact.
+type SHAArtifactInfo struct {
+	// Head SHA of the commit.
+	HeadSHA string
+	// Workflow run ID that produced the artifact.
+	RunID int64
+	// Artifact ID.
+	ArtifactID int64
+	// Artifact name (e.g., "build-artifacts-macos").
+	ArtifactName string
+	// Size in bytes.
+	SizeInBytes int64
+	// Download URL (requires authentication).
+	DownloadURL string
+	// RunStartedAt is when the workflow run started.
+	RunStartedAt time.Time
+}
+
 // workflowRunInfo contains metadata about a successful workflow run.
 type workflowRunInfo struct {
 	ID           int64
@@ -270,4 +288,77 @@ func GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int, token s
 
 	client := newGitHubClientWithToken(ctx, token)
 	return getPRHeadSHA(ctx, client, owner, repo, prNumber)
+}
+
+// GetSHAArtifactInfo retrieves build artifact information for a commit SHA.
+// This finds the latest successful workflow run for the SHA and locates
+// the artifact matching the current platform.
+//
+// Requires authentication - use GetGitHubTokenOrError() first.
+func GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
+	defer perf.Track(nil, "github.GetSHAArtifactInfo")()
+
+	log.Debug("Fetching SHA artifact info", logFieldOwner, owner, logFieldRepo, repo, "sha", sha)
+
+	// Determine artifact name for current platform.
+	artifactName, err := getArtifactNameForPlatform()
+	if err != nil {
+		return nil, err
+	}
+
+	client := newGitHubClient(ctx)
+
+	// Find the latest successful workflow run for this SHA.
+	runInfo, err := findSuccessfulWorkflowRun(ctx, client, owner, repo, sha)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Found successful workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
+
+	// Find the artifact for the current platform.
+	artifact, err := findArtifactByName(ctx, client, owner, repo, runInfo.ID, artifactName)
+	if err != nil {
+		return nil, err
+	}
+
+	log.Debug("Found artifact", "name", artifact.GetName(), "size", artifact.GetSizeInBytes())
+
+	return &SHAArtifactInfo{
+		HeadSHA:      sha,
+		RunID:        runInfo.ID,
+		ArtifactID:   artifact.GetID(),
+		ArtifactName: artifact.GetName(),
+		SizeInBytes:  artifact.GetSizeInBytes(),
+		DownloadURL:  artifact.GetArchiveDownloadURL(),
+		RunStartedAt: runInfo.RunStartedAt,
+	}, nil
+}
+
+// IsNotFoundError checks if the error is a "not found" type error.
+func IsNotFoundError(err error) bool {
+	defer perf.Track(nil, "github.IsNotFoundError")()
+
+	return errors.Is(err, ErrPRNotFound)
+}
+
+// IsNoWorkflowError checks if the error is a "no workflow run" error.
+func IsNoWorkflowError(err error) bool {
+	defer perf.Track(nil, "github.IsNoWorkflowError")()
+
+	return errors.Is(err, ErrNoWorkflowRunFound)
+}
+
+// IsNoArtifactError checks if the error is a "no artifact" error.
+func IsNoArtifactError(err error) bool {
+	defer perf.Track(nil, "github.IsNoArtifactError")()
+
+	return errors.Is(err, ErrNoArtifactFound)
+}
+
+// IsPlatformError checks if the error is a platform-related error.
+func IsPlatformError(err error) bool {
+	defer perf.Track(nil, "github.IsPlatformError")()
+
+	return errors.Is(err, ErrNoArtifactForPlatform) || errors.Is(err, ErrUnsupportedPlatform)
 }
