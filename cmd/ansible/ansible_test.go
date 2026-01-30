@@ -236,3 +236,157 @@ func TestAnsibleGlobalFlagsHandler(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+func TestRegisterAnsibleCompletions(t *testing.T) {
+	t.Run("registers completions on playbook subcommand", func(t *testing.T) {
+		// Create a test command structure.
+		testCmd := &cobra.Command{Use: "ansible"}
+		playbookSubCmd := &cobra.Command{Use: "playbook"}
+		versionSubCmd := &cobra.Command{Use: "version"}
+		testCmd.AddCommand(playbookSubCmd)
+		testCmd.AddCommand(versionSubCmd)
+
+		// Before registration, ValidArgsFunction should be nil.
+		assert.Nil(t, playbookSubCmd.ValidArgsFunction)
+		assert.Nil(t, versionSubCmd.ValidArgsFunction)
+
+		// Register completions.
+		RegisterAnsibleCompletions(testCmd)
+
+		// After registration, playbook should have a completion function.
+		assert.NotNil(t, playbookSubCmd.ValidArgsFunction)
+		// Version should still be nil (doesn't need component completion).
+		assert.Nil(t, versionSubCmd.ValidArgsFunction)
+	})
+
+	t.Run("handles command with no subcommands", func(t *testing.T) {
+		testCmd := &cobra.Command{Use: "ansible"}
+		// Should not panic.
+		RegisterAnsibleCompletions(testCmd)
+	})
+}
+
+func TestComponentArgCompletion(t *testing.T) {
+	t.Run("returns no completions when component already provided", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "playbook"}
+		args := []string{"existing-component"}
+
+		completions, directive := componentArgCompletion(cmd, args, "")
+
+		assert.Nil(t, completions)
+		assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	})
+}
+
+func TestPlaybookCmdArgsValidation(t *testing.T) {
+	t.Run("requires exactly one argument", func(t *testing.T) {
+		assert.NotNil(t, playbookCmd.Args)
+		// Test with no arguments.
+		err := playbookCmd.Args(playbookCmd, []string{})
+		assert.Error(t, err)
+
+		// Test with one argument.
+		err = playbookCmd.Args(playbookCmd, []string{"component"})
+		assert.NoError(t, err)
+
+		// Test with two arguments.
+		err = playbookCmd.Args(playbookCmd, []string{"comp1", "comp2"})
+		assert.Error(t, err)
+	})
+}
+
+func TestProcessArgsEdgeCases(t *testing.T) {
+	t.Run("handles args with double dash separator", func(t *testing.T) {
+		args := []string{"my-component", "--", "--verbose"}
+		component, additionalArgs := processArgs(args)
+		assert.Equal(t, "my-component", component)
+		assert.Equal(t, []string{"--", "--verbose"}, additionalArgs)
+	})
+
+	t.Run("handles args with equals sign", func(t *testing.T) {
+		args := []string{"my-component", "--limit=webservers"}
+		component, additionalArgs := processArgs(args)
+		assert.Equal(t, "my-component", component)
+		assert.Equal(t, []string{"--limit=webservers"}, additionalArgs)
+	})
+
+	t.Run("handles args with special characters", func(t *testing.T) {
+		args := []string{"my-component", "-e", "var=value with spaces"}
+		component, additionalArgs := processArgs(args)
+		assert.Equal(t, "my-component", component)
+		assert.Equal(t, []string{"-e", "var=value with spaces"}, additionalArgs)
+	})
+}
+
+func TestBuildConfigAndStacksInfoEdgeCases(t *testing.T) {
+	t.Run("handles command with no flags defined", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		// No flags defined, should return empty info without panic.
+		info := buildConfigAndStacksInfo(cmd)
+		assert.Equal(t, schema.ConfigAndStacksInfo{}, info)
+	})
+
+	t.Run("handles stack flag with empty value", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("stack", "", "stack name")
+		// Flag is defined but not set - should return empty stack.
+		info := buildConfigAndStacksInfo(cmd)
+		assert.Empty(t, info.Stack)
+	})
+}
+
+func TestInitConfigAndStacksInfoEdgeCases(t *testing.T) {
+	t.Run("sets component type correctly for different subcommands", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+
+		// Test playbook subcommand.
+		info := initConfigAndStacksInfo(cmd, "playbook", []string{})
+		assert.Equal(t, "ansible", info.ComponentType)
+		assert.Equal(t, "playbook", info.SubCommand)
+		assert.Equal(t, []string{"ansible", "playbook"}, info.CliArgs)
+
+		// Test version subcommand.
+		info = initConfigAndStacksInfo(cmd, "version", []string{})
+		assert.Equal(t, "ansible", info.ComponentType)
+		assert.Equal(t, "version", info.SubCommand)
+		assert.Equal(t, []string{"ansible", "version"}, info.CliArgs)
+	})
+
+	t.Run("preserves all additional args and flags", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		args := []string{"webserver", "-v", "--check", "--diff", "-e", "env=prod"}
+
+		info := initConfigAndStacksInfo(cmd, "playbook", args)
+
+		assert.Equal(t, "webserver", info.ComponentFromArg)
+		assert.Equal(t, []string{"-v", "--check", "--diff", "-e", "env=prod"}, info.AdditionalArgsAndFlags)
+	})
+}
+
+func TestGetAnsibleFlagsEdgeCases(t *testing.T) {
+	t.Run("handles flags with whitespace values", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("playbook", "", "playbook")
+		cmd.Flags().String("inventory", "", "inventory")
+		err := cmd.Flags().Set("playbook", "  site.yml  ")
+		require.NoError(t, err)
+
+		flags := getAnsibleFlags(cmd)
+		// Note: flag values are not trimmed by default.
+		assert.Equal(t, "  site.yml  ", flags.Playbook)
+	})
+
+	t.Run("handles flags with path values", func(t *testing.T) {
+		cmd := &cobra.Command{Use: "test"}
+		cmd.Flags().String("playbook", "", "playbook")
+		cmd.Flags().String("inventory", "", "inventory")
+		err := cmd.Flags().Set("playbook", "/opt/playbooks/deploy.yml")
+		require.NoError(t, err)
+		err = cmd.Flags().Set("inventory", "/etc/ansible/hosts")
+		require.NoError(t, err)
+
+		flags := getAnsibleFlags(cmd)
+		assert.Equal(t, "/opt/playbooks/deploy.yml", flags.Playbook)
+		assert.Equal(t, "/etc/ansible/hosts", flags.Inventory)
+	})
+}

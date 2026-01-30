@@ -443,3 +443,244 @@ func TestGetGenerateSectionFromComponent(t *testing.T) {
 		assert.Equal(t, generateSection, result)
 	})
 }
+
+func TestConstructVarfileNameEdgeCases(t *testing.T) {
+	t.Run("handles multiple path separators", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ContextPrefix: "staging",
+			Component:     "apps/web/frontend",
+		}
+		result := constructVarfileName(info)
+		assert.Equal(t, "staging-apps-web-frontend.ansible.vars.yaml", result)
+	})
+
+	t.Run("handles special characters in component name", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ContextPrefix: "prod",
+			Component:     "my-component_v2",
+		}
+		result := constructVarfileName(info)
+		assert.Equal(t, "prod-my-component_v2.ansible.vars.yaml", result)
+	})
+
+	t.Run("handles long context prefix", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ContextPrefix: "organization-account-region-environment",
+			Component:     "service",
+		}
+		result := constructVarfileName(info)
+		assert.Equal(t, "organization-account-region-environment-service.ansible.vars.yaml", result)
+	})
+}
+
+func TestCheckConfigEdgeCases(t *testing.T) {
+	t.Run("returns nil for whitespace-only base path", func(t *testing.T) {
+		// Note: This tests current behavior - whitespace is treated as non-empty.
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					BasePath: "   ",
+				},
+			},
+		}
+
+		err := checkConfig(atmosConfig)
+		// Current behavior: whitespace-only path is considered valid.
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil for relative path", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					BasePath: "./components/ansible",
+				},
+			},
+		}
+
+		err := checkConfig(atmosConfig)
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil for absolute path", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					BasePath: "/opt/ansible/components",
+				},
+			},
+		}
+
+		err := checkConfig(atmosConfig)
+		assert.NoError(t, err)
+	})
+}
+
+func TestConstructWorkingDirEdgeCases(t *testing.T) {
+	t.Run("handles empty ansible dir path", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			AnsibleDirAbsolutePath: "",
+		}
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFolderPrefix: "",
+			FinalComponent:        "webserver",
+		}
+
+		result := constructWorkingDir(atmosConfig, info)
+		assert.Equal(t, "webserver", result)
+	})
+
+	t.Run("handles empty final component", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			AnsibleDirAbsolutePath: filepath.Join("/project", "ansible"),
+		}
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFolderPrefix: "services",
+			FinalComponent:        "",
+		}
+
+		result := constructWorkingDir(atmosConfig, info)
+		assert.Equal(t, filepath.Join("/project", "ansible", "services"), result)
+	})
+}
+
+func TestConstructVarfilePathEdgeCases(t *testing.T) {
+	t.Run("handles all empty fields", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			AnsibleDirAbsolutePath: "",
+		}
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFolderPrefix: "",
+			FinalComponent:        "",
+			ContextPrefix:         "",
+			Component:             "",
+		}
+
+		result := constructVarfilePath(atmosConfig, info)
+		assert.Equal(t, "-.ansible.vars.yaml", result)
+	})
+
+	t.Run("handles deeply nested component folder prefix", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			AnsibleDirAbsolutePath: filepath.Join("/project", "ansible"),
+		}
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFolderPrefix: filepath.Join("level1", "level2", "level3"),
+			FinalComponent:        "component",
+			ContextPrefix:         "env",
+			Component:             "component",
+		}
+
+		result := constructVarfilePath(atmosConfig, info)
+		expectedPath := filepath.Join("/project", "ansible", "level1", "level2", "level3", "component", "env-component.ansible.vars.yaml")
+		assert.Equal(t, expectedPath, result)
+	})
+}
+
+func TestGetPlaybookFromSettingsEdgeCases(t *testing.T) {
+	t.Run("handles empty ansible section map", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{},
+		}
+
+		playbook, err := GetPlaybookFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Empty(t, playbook)
+	})
+
+	t.Run("handles nil playbook value", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"playbook": nil,
+			},
+		}
+
+		playbook, err := GetPlaybookFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Empty(t, playbook)
+	})
+
+	t.Run("handles empty string playbook", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"playbook": "",
+			},
+		}
+
+		playbook, err := GetPlaybookFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Empty(t, playbook)
+	})
+
+	t.Run("handles playbook with special characters", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"playbook": "playbooks/deploy-v2.1_final.yml",
+			},
+		}
+
+		playbook, err := GetPlaybookFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Equal(t, "playbooks/deploy-v2.1_final.yml", playbook)
+	})
+}
+
+func TestGetInventoryFromSettingsEdgeCases(t *testing.T) {
+	t.Run("handles empty ansible section map", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{},
+		}
+
+		inventory, err := GetInventoryFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Empty(t, inventory)
+	})
+
+	t.Run("handles nil inventory value", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"inventory": nil,
+			},
+		}
+
+		inventory, err := GetInventoryFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Empty(t, inventory)
+	})
+
+	t.Run("handles empty string inventory", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"inventory": "",
+			},
+		}
+
+		inventory, err := GetInventoryFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Empty(t, inventory)
+	})
+
+	t.Run("handles inventory with absolute path", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"inventory": "/etc/ansible/hosts",
+			},
+		}
+
+		inventory, err := GetInventoryFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Equal(t, "/etc/ansible/hosts", inventory)
+	})
+
+	t.Run("handles inventory with dynamic script", func(t *testing.T) {
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"inventory": "./inventory/ec2.py",
+			},
+		}
+
+		inventory, err := GetInventoryFromSettings(&settings)
+		assert.NoError(t, err)
+		assert.Equal(t, "./inventory/ec2.py", inventory)
+	})
+}
