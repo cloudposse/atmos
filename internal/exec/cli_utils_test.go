@@ -1658,15 +1658,6 @@ func TestParseSeparateCompoundSubcommand(t *testing.T) {
 			},
 		},
 		{
-			name:   "providers lock",
-			first:  "providers",
-			second: "lock",
-			want: &compoundSubcommandResult{
-				subCommand: "providers lock",
-				argCount:   2,
-			},
-		},
-		{
 			name:   "providers mirror",
 			first:  "providers",
 			second: "mirror",

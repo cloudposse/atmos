@@ -88,7 +88,7 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 
 // writeBackendConfigFile writes the backend config to a file.
 func writeBackendConfigFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, config map[string]any) error {
-	// Use constructTerraformComponentWorkingDir to properly handle JIT vendored components.
+	// Use constructTerraformComponentWorkingDir to properly handle JIT vendored components
 	// that may have a workdir path set by the source provisioner.
 	backendFilePath := filepath.Join(
 		constructTerraformComponentWorkingDir(atmosConfig, info),

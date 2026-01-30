@@ -370,6 +370,7 @@ func TestFilterComponentLocals(t *testing.T) {
 		originalComponentLocals schema.AtmosSectionMapType
 		componentSection        map[string]any
 		expectedLocals          map[string]any // nil means locals key should be deleted.
+		expectLocalsUnchanged   bool           // When true, locals should remain as-is (e.g. non-map locals).
 	}{
 		{
 			name:                    "no original component locals - deletes merged locals",
@@ -448,7 +449,8 @@ func TestFilterComponentLocals(t *testing.T) {
 				cfg.LocalsSectionName: "not_a_map",
 			},
 			// Non-map locals should remain unchanged.
-			expectedLocals: nil, // special case: not a map, function returns early.
+			expectedLocals:        nil, // special case: not a map, function returns early.
+			expectLocalsUnchanged: true,
 		},
 		{
 			name: "no locals key in component section",
@@ -474,7 +476,7 @@ func TestFilterComponentLocals(t *testing.T) {
 			if tt.expectedLocals == nil {
 				// Locals should either be deleted or not present.
 				_, hasLocals := info.ComponentSection[cfg.LocalsSectionName]
-				if tt.name == "locals not a map - returns early" {
+				if tt.expectLocalsUnchanged {
 					// Non-map locals: function returns early without modifying.
 					assert.True(t, hasLocals, "non-map locals should remain")
 				} else {
@@ -742,6 +744,7 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 				localsSection, ok := configAndStacksInfo.ComponentSection[cfg.LocalsSectionName].(map[string]any)
 				if len(tt.expectedLocalsKeys) > 0 {
 					assert.True(t, ok, "locals should be present in component section")
+					assert.Len(t, localsSection, len(tt.expectedLocalsKeys), "locals should have exactly the expected keys")
 					for _, key := range tt.expectedLocalsKeys {
 						_, exists := localsSection[key]
 						assert.True(t, exists, "expected local key %q to be present", key)
