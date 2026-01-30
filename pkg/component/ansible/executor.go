@@ -83,91 +83,32 @@ func ExecutePlaybook(
 	}
 
 	// Check if the component exists as an Ansible component.
-	componentPath, err := u.GetComponentPath(&atmosConfig, "ansible", info.ComponentFolderPrefix, info.FinalComponent)
+	initialPath, err := u.GetComponentPath(&atmosConfig, "ansible", info.ComponentFolderPrefix, info.FinalComponent)
 	if err != nil {
 		return errors.Join(errUtils.ErrPathResolution, fmt.Errorf("component path: %w", err))
 	}
 
 	// Auto-generate files BEFORE path validation.
 	// This allows generating entire components from stack configuration.
-	if err := maybeAutoGenerateFiles(&atmosConfig, info, componentPath); err != nil {
+	if err := maybeAutoGenerateFiles(&atmosConfig, info, initialPath); err != nil {
 		return err
 	}
 
-	componentPathExists, err := u.IsDirectory(componentPath)
-	if err != nil || !componentPathExists {
-		// Check if component has source configured for JIT provisioning.
-		if provSource.HasSource(info.ComponentSection) {
-			// Run JIT source provisioning before path validation.
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.AnsibleComponentType, info.ComponentSection, info.AuthContext); err != nil {
-				return errors.Join(errUtils.ErrProvisionerFailed, fmt.Errorf("auto-provision source: %w", err))
-			}
-
-			// Check if source provisioner set a workdir path (source + workdir case).
-			// If so, use that path instead of the component path.
-			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
-				componentPath = workdirPath
-				componentPathExists = true
-				err = nil // Clear any previous error since we have a valid workdir path.
-			} else {
-				// Re-check if component path now exists after provisioning (source only case).
-				componentPathExists, err = u.IsDirectory(componentPath)
-			}
-		}
-
-		// If still doesn't exist, return the error.
-		if err != nil || !componentPathExists {
-			// Get the base path for the error message, respecting the user's actual config.
-			basePath, _ := u.GetComponentBasePath(&atmosConfig, "ansible")
-			return fmt.Errorf("%w: '%s' points to the Ansible component '%s', but it does not exist in '%s'",
-				errUtils.ErrInvalidComponent,
-				info.ComponentFromArg,
-				info.FinalComponent,
-				basePath,
-			)
-		}
+	// Resolve component path with JIT provisioning support.
+	componentPath, err := resolveComponentPath(&atmosConfig, info, initialPath)
+	if err != nil {
+		return err
 	}
 
-	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
-	// For Ansible, only `playbook` runs automation that changes infrastructure.
-	if info.ComponentIsAbstract && info.SubCommand == "playbook" {
-		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
-			errUtils.ErrAbstractComponentCantBeProvisioned,
-			filepath.Join(info.ComponentFolderPrefix, info.Component))
-	}
-
-	// Check if the component is locked (`metadata.locked` is set to true).
-	if info.ComponentIsLocked && info.SubCommand == "playbook" {
-		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
-			errUtils.ErrLockedComponentCantBeProvisioned,
-			filepath.Join(info.ComponentFolderPrefix, info.Component))
+	// Validate component metadata (abstract/locked checks).
+	if err := validateComponentMetadata(info); err != nil {
+		return err
 	}
 
 	// Resolve and install component dependencies.
-	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)
+	info.ComponentEnvList, err = ensureDependencies(&atmosConfig, info)
 	if err != nil {
-		return errors.Join(errUtils.ErrDependencyResolution, err)
-	}
-
-	if len(deps) > 0 {
-		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
-		installer := dependencies.NewInstaller(&atmosConfig)
-		if err := installer.EnsureTools(deps); err != nil {
-			return errors.Join(errUtils.ErrDependencyResolution, fmt.Errorf("install dependencies: %w", err))
-		}
-
-		// Build PATH with toolchain binaries and add to component environment.
-		// This does NOT modify the global process environment - only the subprocess environment.
-		toolchainPATH, err := dependencies.BuildToolchainPATH(&atmosConfig, deps)
-		if err != nil {
-			return errors.Join(errUtils.ErrPathResolution, fmt.Errorf("toolchain PATH: %w", err))
-		}
-
-		// Propagate toolchain PATH into environment for subprocess.
-		info.ComponentEnvList = append(info.ComponentEnvList, fmt.Sprintf("PATH=%s", toolchainPATH))
+		return err
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
@@ -190,34 +131,10 @@ func ExecutePlaybook(
 		)
 	}
 
-	// Find Ansible playbook.
-	// It can be specified in the `settings.ansible.playbook` section in the Atmos component manifest,
-	// or on the command line via the flag `--playbook <playbook>` (shorthand `-p`).
-	playbook := flags.Playbook
-	if playbook == "" {
-		playbookSetting, err := GetPlaybookFromSettings(&info.ComponentSettingsSection)
-		if err != nil {
-			return err
-		}
-
-		if playbookSetting != "" {
-			playbook = playbookSetting
-		}
-	}
-
-	// Find Ansible inventory.
-	// It can be specified in the `settings.ansible.inventory` section in the Atmos component manifest,
-	// or on the command line via the flag `--inventory <inventory>` (shorthand `-i`).
-	inventory := flags.Inventory
-	if inventory == "" {
-		inventorySetting, err := GetInventoryFromSettings(&info.ComponentSettingsSection)
-		if err != nil {
-			return err
-		}
-
-		if inventorySetting != "" {
-			inventory = inventorySetting
-		}
+	// Resolve playbook and inventory configuration.
+	playbookConfig, err := resolvePlaybookConfig(flags, &info.ComponentSettingsSection)
+	if err != nil {
+		return err
 	}
 
 	// Print component variables.
@@ -243,12 +160,11 @@ func ExecutePlaybook(
 		}()
 	}
 
+	// Log context for debugging.
 	var inheritance string
 	if len(info.ComponentInheritanceChain) > 0 {
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
-
-	workingDir := constructWorkingDir(&atmosConfig, info)
 
 	log.Debug("Ansible context",
 		"executable", info.Command,
@@ -256,61 +172,33 @@ func ExecutePlaybook(
 		"atmos component", info.ComponentFromArg,
 		"atmos stack", info.StackFromArg,
 		"ansible component", info.BaseComponentPath,
-		"ansible playbook", playbook,
-		"ansible inventory", inventory,
-		"working directory", workingDir,
+		"ansible playbook", playbookConfig.Playbook,
+		"ansible inventory", playbookConfig.Inventory,
+		"working directory", constructWorkingDir(&atmosConfig, info),
 		"inheritance", inheritance,
 		"arguments and flags", info.AdditionalArgsAndFlags,
 	)
 
-	// Prepare arguments and flags.
-	allArgsAndFlags := []string{}
-
-	// For playbook subcommand, use ansible-playbook.
-	if info.SubCommand == "playbook" {
-		// If playbook is not specified, return error.
-		if playbook == "" {
-			return errUtils.ErrAnsiblePlaybookMissing
-		}
-
-		// Add extra-vars file using full path for workdir/source provisioning scenarios.
-		allArgsAndFlags = append(allArgsAndFlags, []string{"--extra-vars", "@" + varFilePath}...)
-
-		// Add inventory if specified.
-		if inventory != "" {
-			allArgsAndFlags = append(allArgsAndFlags, []string{"-i", inventory}...)
-		}
-
-		// Add any additional args and flags.
-		allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
-
-		// Add the playbook as the last argument.
-		allArgsAndFlags = append(allArgsAndFlags, playbook)
-
-		// Override command to ansible-playbook for playbook subcommand.
-		info.Command = "ansible-playbook"
-	} else {
-		// For other subcommands, use the base ansible command with the subcommand.
-		allArgsAndFlags = append(allArgsAndFlags, info.SubCommand)
-		allArgsAndFlags = append(allArgsAndFlags, info.AdditionalArgsAndFlags...)
+	// Build command arguments.
+	cmdArgs, err := buildCommandArgs(info, playbookConfig, varFilePath)
+	if err != nil {
+		return err
 	}
 
 	// Convert ComponentEnvSection to ComponentEnvList.
 	e.ConvertComponentEnvSectionToList(info)
 
 	// Prepare ENV vars.
-	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
-	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	envVars, err := prepareEnvVars(&atmosConfig, info.ComponentEnvList)
 	if err != nil {
 		return err
 	}
-	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	log.Debug("Using ENV", "variables", envVars)
 
 	return e.ExecuteShellCommand(
 		atmosConfig,
-		info.Command,
-		allArgsAndFlags,
+		cmdArgs.Command,
+		cmdArgs.Args,
 		componentPath,
 		envVars,
 		info.DryRun,

@@ -2,6 +2,8 @@ package ansible
 
 import (
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -828,5 +830,333 @@ func TestMaybeAutoGenerateFiles(t *testing.T) {
 		err := maybeAutoGenerateFiles(atmosConfig, info, "/dev/null/invalid")
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrCreateDirectory)
+	})
+}
+
+func TestValidateComponentMetadata(t *testing.T) {
+	t.Run("returns nil for non-abstract non-locked component", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: false,
+			ComponentIsLocked:   false,
+			SubCommand:          "playbook",
+			Component:           "webserver",
+			ComponentFolderPrefix: "",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil for abstract component with non-playbook subcommand", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: true,
+			ComponentIsLocked:   false,
+			SubCommand:          "version",
+			Component:           "webserver",
+			ComponentFolderPrefix: "",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil for locked component with non-playbook subcommand", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: false,
+			ComponentIsLocked:   true,
+			SubCommand:          "version",
+			Component:           "webserver",
+			ComponentFolderPrefix: "",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error for abstract component with playbook subcommand", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: true,
+			ComponentIsLocked:   false,
+			SubCommand:          "playbook",
+			Component:           "webserver",
+			ComponentFolderPrefix: "",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAbstractComponentCantBeProvisioned)
+	})
+
+	t.Run("returns error for locked component with playbook subcommand", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: false,
+			ComponentIsLocked:   true,
+			SubCommand:          "playbook",
+			Component:           "webserver",
+			ComponentFolderPrefix: "",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrLockedComponentCantBeProvisioned)
+	})
+
+	t.Run("abstract check takes precedence over locked check", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: true,
+			ComponentIsLocked:   true,
+			SubCommand:          "playbook",
+			Component:           "webserver",
+			ComponentFolderPrefix: "",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.Error(t, err)
+		// Abstract error should be returned first.
+		assert.ErrorIs(t, err, errUtils.ErrAbstractComponentCantBeProvisioned)
+	})
+
+	t.Run("includes component path in error message", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentIsAbstract: true,
+			ComponentIsLocked:   false,
+			SubCommand:          "playbook",
+			Component:           "myapp",
+			ComponentFolderPrefix: "services",
+		}
+
+		err := validateComponentMetadata(info)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), filepath.Join("services", "myapp"))
+	})
+}
+
+func TestResolvePlaybookConfig(t *testing.T) {
+	t.Run("uses flag values when provided", func(t *testing.T) {
+		flags := &Flags{
+			Playbook:  "flag-playbook.yml",
+			Inventory: "flag-inventory",
+		}
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"playbook":  "settings-playbook.yml",
+				"inventory": "settings-inventory",
+			},
+		}
+
+		config, err := resolvePlaybookConfig(flags, &settings)
+		require.NoError(t, err)
+		assert.Equal(t, "flag-playbook.yml", config.Playbook)
+		assert.Equal(t, "flag-inventory", config.Inventory)
+	})
+
+	t.Run("uses settings values when flags are empty", func(t *testing.T) {
+		flags := &Flags{
+			Playbook:  "",
+			Inventory: "",
+		}
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"playbook":  "settings-playbook.yml",
+				"inventory": "settings-inventory",
+			},
+		}
+
+		config, err := resolvePlaybookConfig(flags, &settings)
+		require.NoError(t, err)
+		assert.Equal(t, "settings-playbook.yml", config.Playbook)
+		assert.Equal(t, "settings-inventory", config.Inventory)
+	})
+
+	t.Run("mixes flag and settings values", func(t *testing.T) {
+		flags := &Flags{
+			Playbook:  "flag-playbook.yml",
+			Inventory: "",
+		}
+		settings := schema.AtmosSectionMapType{
+			"ansible": map[string]any{
+				"playbook":  "settings-playbook.yml",
+				"inventory": "settings-inventory",
+			},
+		}
+
+		config, err := resolvePlaybookConfig(flags, &settings)
+		require.NoError(t, err)
+		assert.Equal(t, "flag-playbook.yml", config.Playbook)
+		assert.Equal(t, "settings-inventory", config.Inventory)
+	})
+
+	t.Run("returns empty config when nothing is specified", func(t *testing.T) {
+		flags := &Flags{
+			Playbook:  "",
+			Inventory: "",
+		}
+		settings := schema.AtmosSectionMapType{}
+
+		config, err := resolvePlaybookConfig(flags, &settings)
+		require.NoError(t, err)
+		assert.Empty(t, config.Playbook)
+		assert.Empty(t, config.Inventory)
+	})
+
+	t.Run("handles nil settings section", func(t *testing.T) {
+		flags := &Flags{
+			Playbook:  "playbook.yml",
+			Inventory: "",
+		}
+
+		config, err := resolvePlaybookConfig(flags, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "playbook.yml", config.Playbook)
+		assert.Empty(t, config.Inventory)
+	})
+}
+
+func TestBuildCommandArgs(t *testing.T) {
+	t.Run("builds playbook command with all options", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:               "ansible",
+			SubCommand:            "playbook",
+			AdditionalArgsAndFlags: []string{"--check", "-v"},
+		}
+		playbookConfig := &PlaybookConfig{
+			Playbook:  "site.yml",
+			Inventory: "hosts.ini",
+		}
+		varFilePath := "/tmp/vars.yaml"
+
+		cmdArgs, err := buildCommandArgs(info, playbookConfig, varFilePath)
+		require.NoError(t, err)
+		assert.Equal(t, "ansible-playbook", cmdArgs.Command)
+		assert.Contains(t, cmdArgs.Args, "--extra-vars")
+		assert.Contains(t, cmdArgs.Args, "@/tmp/vars.yaml")
+		assert.Contains(t, cmdArgs.Args, "-i")
+		assert.Contains(t, cmdArgs.Args, "hosts.ini")
+		assert.Contains(t, cmdArgs.Args, "--check")
+		assert.Contains(t, cmdArgs.Args, "-v")
+		// Playbook should be last argument.
+		assert.Equal(t, "site.yml", cmdArgs.Args[len(cmdArgs.Args)-1])
+	})
+
+	t.Run("builds playbook command without inventory", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:               "ansible",
+			SubCommand:            "playbook",
+			AdditionalArgsAndFlags: []string{},
+		}
+		playbookConfig := &PlaybookConfig{
+			Playbook:  "site.yml",
+			Inventory: "",
+		}
+		varFilePath := "/tmp/vars.yaml"
+
+		cmdArgs, err := buildCommandArgs(info, playbookConfig, varFilePath)
+		require.NoError(t, err)
+		assert.Equal(t, "ansible-playbook", cmdArgs.Command)
+		assert.NotContains(t, cmdArgs.Args, "-i")
+		assert.Equal(t, "site.yml", cmdArgs.Args[len(cmdArgs.Args)-1])
+	})
+
+	t.Run("returns error when playbook is missing for playbook subcommand", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:               "ansible",
+			SubCommand:            "playbook",
+			AdditionalArgsAndFlags: []string{},
+		}
+		playbookConfig := &PlaybookConfig{
+			Playbook:  "",
+			Inventory: "hosts.ini",
+		}
+		varFilePath := "/tmp/vars.yaml"
+
+		cmdArgs, err := buildCommandArgs(info, playbookConfig, varFilePath)
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrAnsiblePlaybookMissing)
+		assert.Nil(t, cmdArgs)
+	})
+
+	t.Run("builds non-playbook command", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:               "ansible",
+			SubCommand:            "galaxy",
+			AdditionalArgsAndFlags: []string{"install", "-r", "requirements.yml"},
+		}
+		playbookConfig := &PlaybookConfig{
+			Playbook:  "",
+			Inventory: "",
+		}
+		varFilePath := "/tmp/vars.yaml"
+
+		cmdArgs, err := buildCommandArgs(info, playbookConfig, varFilePath)
+		require.NoError(t, err)
+		assert.Equal(t, "ansible", cmdArgs.Command)
+		assert.Equal(t, []string{"galaxy", "install", "-r", "requirements.yml"}, cmdArgs.Args)
+	})
+
+	t.Run("builds version subcommand", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			Command:               "ansible",
+			SubCommand:            "--version",
+			AdditionalArgsAndFlags: []string{},
+		}
+		playbookConfig := &PlaybookConfig{}
+		varFilePath := "/tmp/vars.yaml"
+
+		cmdArgs, err := buildCommandArgs(info, playbookConfig, varFilePath)
+		require.NoError(t, err)
+		assert.Equal(t, "ansible", cmdArgs.Command)
+		assert.Equal(t, []string{"--version"}, cmdArgs.Args)
+	})
+}
+
+func TestPrepareEnvVars(t *testing.T) {
+	t.Run("adds atmos environment variables", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			CliConfigPath: "/etc/atmos/atmos.yaml",
+			BasePath:      "/project",
+		}
+		envList := []string{"EXISTING=value"}
+
+		envVars, err := prepareEnvVars(atmosConfig, envList)
+		require.NoError(t, err)
+
+		assert.Contains(t, envVars, "EXISTING=value")
+
+		// Check for ATMOS_CLI_CONFIG_PATH.
+		assert.True(t, slices.Contains(envVars, "ATMOS_CLI_CONFIG_PATH=/etc/atmos/atmos.yaml"), "ATMOS_CLI_CONFIG_PATH should be set")
+
+		// Check for ATMOS_BASE_PATH (should be absolute).
+		hasBasePath := slices.ContainsFunc(envVars, func(v string) bool {
+			return strings.HasPrefix(v, "ATMOS_BASE_PATH=")
+		})
+		assert.True(t, hasBasePath, "ATMOS_BASE_PATH should be set")
+	})
+
+	t.Run("preserves existing environment variables", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			CliConfigPath: "/etc/atmos.yaml",
+			BasePath:      "/project",
+		}
+		envList := []string{"PATH=/usr/bin", "HOME=/home/user", "ANSIBLE_HOST_KEY_CHECKING=False"}
+
+		envVars, err := prepareEnvVars(atmosConfig, envList)
+		require.NoError(t, err)
+
+		assert.Contains(t, envVars, "PATH=/usr/bin")
+		assert.Contains(t, envVars, "HOME=/home/user")
+		assert.Contains(t, envVars, "ANSIBLE_HOST_KEY_CHECKING=False")
+	})
+
+	t.Run("handles empty environment list", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			CliConfigPath: "/etc/atmos.yaml",
+			BasePath:      "/project",
+		}
+
+		envVars, err := prepareEnvVars(atmosConfig, nil)
+		require.NoError(t, err)
+		assert.NotEmpty(t, envVars)
+		// Should have at least ATMOS_CLI_CONFIG_PATH and ATMOS_BASE_PATH.
+		assert.GreaterOrEqual(t, len(envVars), 2)
 	})
 }
