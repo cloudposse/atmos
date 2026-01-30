@@ -48,19 +48,19 @@ AVAILABLE COMMANDS
       output                            Show output values from your root module
       plan                              Show changes required by the current configuration
       plan-diff                         Compare two Terraform plans and show the differences
-      providers [command]               Show the providers required for this configuration
+      providers                         Show the providers required for this configuration
       refresh                           Update the state to match remote systems
       shell                             Configure an environment for an Atmos component and start a new shell
       show                              Show the current state or a saved plan
       source [command]                  Manage Terraform component sources (JIT vendoring)
-      state [command]                   Advanced state management
+      state                             Advanced state management
       taint                             Mark a resource instance as not fully functional
       test                              Execute integration tests for Terraform modules
       untaint                           Remove the 'tainted' state from a resource instance
       validate                          Check whether the configuration is valid
       version                           Show the current Terraform version
       workdir [command] [EXPERIMENTAL]  Manage component working directories
-      workspace [command]               Manage Terraform workspaces
+      workspace                         Manage Terraform workspaces
 
 FLAGS
 

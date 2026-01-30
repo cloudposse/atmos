@@ -157,27 +157,6 @@ func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
 	return nil
 }
 
-// newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
-// terraform subcommand's execution flow. This enables proper Cobra command tree routing for
-// compound terraform subcommands like "state list", "providers lock", etc.
-//
-// When invoked, the sub-subcommand prepends its name to the argument list and delegates
-// to terraformRun with the parent command, which then follows the standard terraform
-// execution pipeline (ProcessCommandLineArgs → ExecuteTerraform).
-func newTerraformPassthroughSubcommand(parent *cobra.Command, name, short string) *cobra.Command {
-	cmd := &cobra.Command{
-		Use:                name + " [component] -s [stack]",
-		Short:              short,
-		FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: true},
-		RunE: func(_ *cobra.Command, args []string) error {
-			argsForParent := append([]string{name}, args...)
-			return terraformRun(terraformCmd, parent, argsForParent)
-		},
-	}
-	RegisterTerraformCompletions(cmd)
-	return cmd
-}
-
 // terraformRun is for simple subcommands without their own parsers.
 // It binds terraformParser and delegates to terraformRunWithOptions.
 func terraformRun(parentCmd *cobra.Command, actualCmd *cobra.Command, args []string) error {

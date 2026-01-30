@@ -1,8 +1,0 @@
-{
-  "label": "state",
-  "className": "command",
-  "link": {
-    "type": "doc",
-    "id": "cli/commands/terraform/state/state"
-  }
-}

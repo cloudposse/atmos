@@ -90,21 +90,20 @@ Before using the `store` function, you must define stores in your `atmos.yaml`:
 stores:
   # AWS SSM Parameter Store
   prod/ssm:
-    type: aws-ssm-parameter-store
-    options:
+    backend: aws/ssm
+    config:
       region: us-east-1
 
   dev/ssm:
-    type: aws-ssm-parameter-store
-    options:
+    backend: aws/ssm
+    config:
       region: us-west-2
 
-  # Artifactory
-  artifacts:
-    type: artifactory
-    options:
-      url: https://artifactory.example.com
-      repo_name: infra-state
+  # HashiCorp Vault
+  vault/secrets:
+    backend: vault
+    config:
+      address: https://vault.example.com
 ```
 </File>
 
@@ -113,20 +112,20 @@ The store `name` in your hook configuration (e.g., `prod/ssm`) must match one of
 #### Supported Store Backends
 
 <dl>
-  <dt>`aws-ssm-parameter-store`</dt>
+  <dt>`aws/ssm`</dt>
   <dd>AWS Systems Manager Parameter Store.</dd>
 
-  <dt>`azure-key-vault`</dt>
-  <dd>Azure Key Vault for secrets management.</dd>
+  <dt>`aws/secretsmanager`</dt>
+  <dd>AWS Secrets Manager.</dd>
 
-  <dt>`google-secret-manager` (or `gsm`)</dt>
-  <dd>Google Cloud Secret Manager.</dd>
+  <dt>`vault`</dt>
+  <dd>HashiCorp Vault.</dd>
 
   <dt>`redis`</dt>
   <dd>Redis key-value store.</dd>
 
   <dt>`artifactory`</dt>
-  <dd>JFrog Artifactory. Use a Generic repository type.</dd>
+  <dd>JFrog Artifactory.</dd>
 </dl>
 
 #### Store Function Reference
@@ -163,8 +162,8 @@ This example shows the full workflow: configuring stores, setting up hooks, and 
 ```yaml
 stores:
   prod/ssm:
-    type: aws-ssm-parameter-store
-    options:
+    backend: aws/ssm
+    config:
       region: us-east-1
 ```
 </File>

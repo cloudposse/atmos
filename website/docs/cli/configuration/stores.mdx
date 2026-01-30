@@ -81,7 +81,7 @@ vars:
   <dd>Redis key-value store. Useful for caching and temporary data.</dd>
 
   <dt>`artifactory`</dt>
-  <dd>JFrog Artifactory. Stores and retrieves data as JSON files. Use a Generic repository type.</dd>
+  <dd>JFrog Artifactory. Stores and retrieves artifacts and metadata.</dd>
 </dl>
 
 ## Store Type Configuration
@@ -169,19 +169,13 @@ stores:
     options:
       url: https://artifactory.example.com
       repo_name: my-repo
-      # Access token from environment variable (recommended)
-      access_token: !env ARTIFACTORY_ACCESS_TOKEN
+      # Optional: access token (or use ARTIFACTORY_ACCESS_TOKEN env var)
+      access_token: "..."
       # Optional
       prefix: myapp
       stack_delimiter: "/"
 ```
 </File>
-
-The `access_token` can be provided directly, via the `!env` function, or through the `ARTIFACTORY_ACCESS_TOKEN` environment variable.
-
-:::tip JFrog Artifactory Repository Type
-When setting up Artifactory as a store backend, create a **Generic** repository type in JFrog Artifactory. Atmos stores data as JSON files, so no specific package type (Maven, npm, Docker, etc.) is required. The repository can be local, remote, or virtual.
-:::
 
 ## Using Stores in Hooks
 
@@ -198,11 +192,11 @@ components:
           command: store
           name: prod/ssm
           outputs:
-            vpc_id: .vpc_id
-            subnet_ids: .private_subnet_ids
+            - vpc_id
+            - subnet_ids
 ```
 
-This writes Terraform outputs to the configured store after apply completes. The output values starting with `.` reference Terraform output names.
+This writes Terraform outputs to the configured store after apply completes.
 
 ## Related
 

@@ -1,4 +1,3 @@
-# fish completion for atmos                                -*- shell-script -*-
 
 function __atmos_debug
     set -l file &quot;$BASH_COMP_DEBUG_FILE&quot;
@@ -232,4 +231,3 @@ complete -c atmos -n '__atmos_clear_perform_completion_once_result'
 # If this doesn't require order preservation, we don't use the -k flag
 complete -c atmos -n 'not __atmos_requires_order_preservation &amp;&amp; __atmos_prepare_completions' -f -a '$__atmos_comp_results'
 # otherwise we use the -k flag
-complete -k -c atmos -n '__atmos_requires_order_preservation &amp;&amp; __atmos_prepare_completions' -f -a '$__atmos_comp_results'

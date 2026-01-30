@@ -1,8 +1,0 @@
-{
-  "label": "workspace",
-  "className": "command",
-  "link": {
-    "type": "doc",
-    "id": "cli/commands/terraform/workspace/workspace"
-  }
-}
