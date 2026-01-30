@@ -1,16 +1,13 @@
 package ansible
 
-import (
-	"path/filepath"
-
-	"github.com/cloudposse/atmos/pkg/perf"
-)
+import "github.com/cloudposse/atmos/pkg/perf"
 
 // Config represents the configuration structure for ansible components.
 // This configuration mirrors the schema.Ansible struct from pkg/schema/schema.go.
 // and is used for type-safe configuration access within the provider.
 type Config struct {
-	// BasePath is the filesystem path to ansible components.
+	// BasePath is the logical path to ansible components (uses forward slashes on all platforms).
+	// Filesystem path conversion happens during actual file operations.
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 
 	// Command is the ansible binary to use (default: ansible).
@@ -26,8 +23,10 @@ type Config struct {
 func DefaultConfig() Config {
 	defer perf.Track(nil, "ansible.DefaultConfig")()
 
+	// Use forward slashes for configuration paths (consistent with terraform/helmfile/packer).
+	// Filesystem path conversion happens during actual file operations.
 	return Config{
-		BasePath:          filepath.Join("components", "ansible"),
+		BasePath:          "components/ansible",
 		Command:           "ansible",
 		AutoGenerateFiles: false,
 	}
