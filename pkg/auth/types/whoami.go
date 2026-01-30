@@ -11,8 +11,8 @@ type WhoamiInfo struct {
 	// RealmSource indicates how the realm was determined: "env", "config", or "auto".
 	RealmSource string `json:"realm_source,omitempty"`
 
-	Provider string `json:"provider"`
-	Identity string `json:"identity"`
+	Provider    string            `json:"provider"`
+	Identity    string            `json:"identity"`
 	Principal   string            `json:"principal"`
 	Account     string            `json:"account,omitempty"`
 	Region      string            `json:"region,omitempty"`

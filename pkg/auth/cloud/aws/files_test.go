@@ -476,8 +476,8 @@ func TestAWSFileManager_CustomBasePath(t *testing.T) {
 			setupEnv:         func(t *testing.T) {},
 		},
 		{
-			name:             "empty base_path uses XDG default",
-			basePath:         "",
+			name:     "empty base_path uses XDG default",
+			basePath: "",
 			// New path structure: baseDir is ~/.config/atmos (without /aws suffix)
 			// The /aws is added by GetCredentialsPath/GetConfigPath
 			expectedBasePath: filepath.Join(".config", "atmos"),
