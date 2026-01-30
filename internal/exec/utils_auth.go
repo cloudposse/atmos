@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	auth "github.com/cloudposse/atmos/pkg/auth"
@@ -22,7 +23,12 @@ func createAndAuthenticateAuthManager(atmosConfig *schema.AtmosConfiguration, in
 	// Get merged auth config (global + component-specific if available).
 	mergedAuthConfig, err := getMergedAuthConfig(atmosConfig, info)
 	if err != nil {
-		return nil, err
+		// Propagate known sentinel errors directly (e.g., ErrInvalidComponent) to preserve
+		// their error message format. Only wrap unexpected errors with ErrInvalidAuthConfig.
+		if errors.Is(err, errUtils.ErrInvalidComponent) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	// Create and authenticate AuthManager from --identity flag if specified.
@@ -30,7 +36,7 @@ func createAndAuthenticateAuthManager(atmosConfig *schema.AtmosConfiguration, in
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
 	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
 
 	// If AuthManager was created and identity was auto-detected (info.Identity was empty),
@@ -70,6 +76,8 @@ func getMergedAuthConfig(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 			return nil, err
 		}
 		// For other errors (e.g., permission issues), continue with global auth config.
+		log.Debug("Falling back to global auth config after component auth lookup error",
+			"error", err, "stack", info.Stack, "component", info.ComponentFromArg)
 		return mergedAuthConfig, nil
 	}
 

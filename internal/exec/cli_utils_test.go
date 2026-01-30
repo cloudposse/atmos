@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"reflect"
 	"runtime"
 	"testing"
@@ -19,9 +20,9 @@ import (
 // while on Unix systems a leading "/" is sufficient.
 func absTestPath(name string) string {
 	if runtime.GOOS == "windows" {
-		return `C:\` + name
+		return filepath.Join("C:", filepath.FromSlash(name))
 	}
-	return "/" + name
+	return filepath.Join(string(filepath.Separator), filepath.FromSlash(name))
 }
 
 // newTestCommandWithGlobalFlags creates a test command with all global flags registered
@@ -1300,6 +1301,8 @@ func TestProcessArgsAndFlags_CompoundSubcommands(t *testing.T) {
 			assert.Equal(t, tt.wantComponent, got.ComponentFromArg, "ComponentFromArg mismatch")
 			if tt.wantAdditional != nil {
 				assert.Equal(t, tt.wantAdditional, got.AdditionalArgsAndFlags, "AdditionalArgsAndFlags mismatch")
+			} else {
+				assert.Empty(t, got.AdditionalArgsAndFlags, "AdditionalArgsAndFlags should be empty")
 			}
 		})
 	}
@@ -1958,6 +1961,8 @@ func TestProcessTerraformCompoundSubcommand(t *testing.T) {
 				assert.Equal(t, tt.wantPathResolution, info.NeedsPathResolution)
 				if tt.wantAdditional != nil {
 					assert.Equal(t, tt.wantAdditional, info.AdditionalArgsAndFlags)
+				} else {
+					assert.Empty(t, info.AdditionalArgsAndFlags, "AdditionalArgsAndFlags should be empty")
 				}
 			}
 		})
@@ -2078,6 +2083,8 @@ func TestProcessSingleCommand(t *testing.T) {
 			assert.Equal(t, tt.wantPathResolution, info.NeedsPathResolution, "NeedsPathResolution mismatch")
 			if tt.wantAdditional != nil {
 				assert.Equal(t, tt.wantAdditional, info.AdditionalArgsAndFlags)
+			} else {
+				assert.Empty(t, info.AdditionalArgsAndFlags, "AdditionalArgsAndFlags should be empty")
 			}
 		})
 	}

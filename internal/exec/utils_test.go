@@ -595,6 +595,7 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 		component               string
 		originalComponentLocals schema.AtmosSectionMapType
 		expectedLocalsKeys      []string
+		expectedLocals          map[string]any // When set, assert exact locals values.
 	}{
 		{
 			name: "component with locals and stack locals merged",
@@ -693,6 +694,7 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 			stack:              "dev",
 			component:          "vpc",
 			expectedLocalsKeys: []string{"stage"},
+			expectedLocals:     map[string]any{"stage": "component_dev"},
 		},
 		{
 			name: "preserves OriginalComponentLocals across calls",
@@ -748,6 +750,9 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 					for _, key := range tt.expectedLocalsKeys {
 						_, exists := localsSection[key]
 						assert.True(t, exists, "expected local key %q to be present", key)
+					}
+					if tt.expectedLocals != nil {
+						assert.Equal(t, tt.expectedLocals, localsSection)
 					}
 				}
 			}
