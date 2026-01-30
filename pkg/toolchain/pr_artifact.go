@@ -246,7 +246,10 @@ func InstallFromPR(prNumber int, showProgress bool) (string, error) {
 	if showProgress {
 		// Format timestamp and short SHA for enriched message.
 		timeStr := artifactInfo.RunStartedAt.Local().Format("Jan 2, 2006 at 3:04 PM")
-		shortSHA := artifactInfo.HeadSHA[:shortSHALength]
+		shortSHA := artifactInfo.HeadSHA
+		if len(shortSHA) > shortSHALength {
+			shortSHA = shortSHA[:shortSHALength]
+		}
 		ui.Successf("Found workflow run #%d (sha: `%s`) from %s", artifactInfo.RunID, shortSHA, timeStr)
 	}
 
