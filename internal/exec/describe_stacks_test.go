@@ -180,6 +180,82 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 	assert.Equal(t, "aws/bastion", val)
 }
 
+// TestExecuteDescribeStacks_LocalsComponentLevel tests locals extraction and merging in describe stacks.
+func TestExecuteDescribeStacks_LocalsComponentLevel(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Define the working directory.
+	workDir := "../../tests/fixtures/scenarios/locals-component-level"
+	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	stacksMap, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		true,
+		true,
+		false,
+		nil,
+		nil, // authManager
+	)
+	assert.Nil(t, err)
+	assert.NotNil(t, stacksMap, "stacksMap should not be nil")
+
+	// Verify the stacks map contains the expected stack.
+	assert.NotEmpty(t, stacksMap, "should have at least one stack")
+
+	// Verify locals are present in the terraform components.
+	// The fixture defines stack-level locals (namespace, environment, name_prefix)
+	// and component-level locals (vpc_type, cidr_prefix, etc.).
+	// After merging, component locals should be present in each component section.
+	for stackName, stackData := range stacksMap {
+		stackMap, ok := stackData.(map[string]any)
+		if !ok {
+			continue
+		}
+		components, ok := stackMap["components"].(map[string]any)
+		if !ok {
+			continue
+		}
+		tfComponents, ok := components["terraform"].(map[string]any)
+		if !ok {
+			continue
+		}
+		for compName, compData := range tfComponents {
+			compMap, ok := compData.(map[string]any)
+			if !ok {
+				continue
+			}
+			// Each terraform component with locals should have a "locals" section.
+			if compName == "standalone" || compName == "vpc/dev" || compName == "vpc/custom" {
+				locals, hasLocals := compMap["locals"].(map[string]any)
+				assert.True(t, hasLocals, "component %s in stack %s should have locals", compName, stackName)
+				assert.NotEmpty(t, locals, "component %s in stack %s should have non-empty locals", compName, stackName)
+			}
+		}
+	}
+}
+
 // TestGetComponentBasePath tests the getComponentBasePath function.
 func TestGetComponentBasePath(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{

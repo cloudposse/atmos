@@ -1,12 +1,17 @@
 package exec
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestValidateBackendConfig(t *testing.T) {
@@ -170,6 +175,93 @@ func TestWriteBackendConfigFile_DryRun(t *testing.T) {
 
 	err := writeBackendConfigFile(atmosConfig, info, config)
 	assert.NoError(t, err, "dry-run should not return error")
+}
+
+// TestWriteBackendConfigFile_WritesToFile tests that writeBackendConfigFile actually writes to disk.
+func TestWriteBackendConfigFile_WritesToFile(t *testing.T) {
+	tempDir := t.TempDir()
+	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:        "vpc",
+		ComponentFolderPrefix: "",
+		DryRun:                false,
+		ComponentSection:      map[string]any{},
+	}
+
+	config := map[string]any{
+		"terraform": map[string]any{
+			"backend": map[string]any{
+				"s3": map[string]any{
+					"bucket": "my-state-bucket",
+					"key":    "vpc/terraform.tfstate",
+					"region": "us-east-1",
+				},
+			},
+		},
+	}
+
+	err := writeBackendConfigFile(atmosConfig, info, config)
+	assert.NoError(t, err, "writeBackendConfigFile should not error")
+
+	// Verify the file was created.
+	backendFilePath := filepath.Join(componentDir, "backend.tf.json")
+	assert.FileExists(t, backendFilePath, "backend.tf.json should exist")
+
+	// Read and verify content.
+	content, err := os.ReadFile(backendFilePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "my-state-bucket")
+}
+
+// TestWriteBackendConfigFile_WithWorkdirPath tests writeBackendConfigFile using workdir path.
+func TestWriteBackendConfigFile_WithWorkdirPath(t *testing.T) {
+	tempDir := t.TempDir()
+	workDir := filepath.Join(tempDir, "workdir", "vpc")
+	require.NoError(t, os.MkdirAll(workDir, 0o755))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		FinalComponent:        "vpc",
+		ComponentFolderPrefix: "",
+		DryRun:                false,
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: workDir,
+		},
+	}
+
+	config := map[string]any{
+		"terraform": map[string]any{
+			"backend": map[string]any{
+				"s3": map[string]any{"bucket": "test"},
+			},
+		},
+	}
+
+	err := writeBackendConfigFile(atmosConfig, info, config)
+	assert.NoError(t, err)
+
+	// File should be written to the workdir path.
+	backendFilePath := filepath.Join(workDir, "backend.tf.json")
+	assert.FileExists(t, backendFilePath, "backend.tf.json should exist in workdir path")
 }
 
 func TestValidateBackendTypeRequirementsTypeAssertions(t *testing.T) {

@@ -458,6 +458,139 @@ func TestLogBackend(t *testing.T) {
 	})
 }
 
+// TestKeyMatchesOriginalWithColon tests the keyMatchesOriginalWithColon helper function.
+func TestKeyMatchesOriginalWithColon(t *testing.T) {
+	tests := []struct {
+		name     string
+		key      string
+		original string
+		expected bool
+	}{
+		{
+			name:     "key with single colon match",
+			key:      "password",
+			original: "password:",
+			expected: true,
+		},
+		{
+			name:     "key with double colon match",
+			key:      "password",
+			original: "password::",
+			expected: true,
+		},
+		{
+			name:     "key does not match - no trailing colon",
+			key:      "password",
+			original: "password",
+			expected: false,
+		},
+		{
+			name:     "key does not match - different key",
+			key:      "user",
+			original: "password:",
+			expected: false,
+		},
+		{
+			name:     "key does not match - triple colon",
+			key:      "password",
+			original: "password:::",
+			expected: false,
+		},
+		{
+			name:     "empty key with single colon",
+			key:      "",
+			original: ":",
+			expected: true,
+		},
+		{
+			name:     "empty key with double colon",
+			key:      "",
+			original: "::",
+			expected: true,
+		},
+		{
+			name:     "ARN key with trailing colon",
+			key:      "arn:aws:iam::123456789012:role/MyRole",
+			original: "arn:aws:iam::123456789012:role/MyRole:",
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := keyMatchesOriginalWithColon(tt.key, tt.original)
+			assert.Equal(t, tt.expected, result, "keyMatchesOriginalWithColon(%q, %q) = %v, want %v",
+				tt.key, tt.original, result, tt.expected)
+		})
+	}
+}
+
+// TestIsYAMLNullValue tests the isYAMLNullValue helper function.
+func TestIsYAMLNullValue(t *testing.T) {
+	tests := []struct {
+		name     string
+		node     *yaml.Node
+		expected bool
+	}{
+		{
+			name: "null tag scalar",
+			node: &yaml.Node{
+				Kind: yaml.ScalarNode,
+				Tag:  "!!null",
+			},
+			expected: true,
+		},
+		{
+			name: "empty value scalar",
+			node: &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: "",
+				Tag:   "!!str",
+			},
+			expected: true,
+		},
+		{
+			name: "non-empty scalar",
+			node: &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: "hello",
+				Tag:   "!!str",
+			},
+			expected: false,
+		},
+		{
+			name: "mapping node",
+			node: &yaml.Node{
+				Kind: yaml.MappingNode,
+			},
+			expected: false,
+		},
+		{
+			name: "sequence node",
+			node: &yaml.Node{
+				Kind: yaml.SequenceNode,
+			},
+			expected: false,
+		},
+		{
+			name: "scalar with null tag and non-empty value",
+			node: &yaml.Node{
+				Kind:  yaml.ScalarNode,
+				Value: "null",
+				Tag:   "!!null",
+			},
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isYAMLNullValue(tt.node)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 // TestEvaluateYqExpression_StringEndingWithColon verifies that strings ending
 // with colons are correctly returned as strings, not misinterpreted as maps.
 //

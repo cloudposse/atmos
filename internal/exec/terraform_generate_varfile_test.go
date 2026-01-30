@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -269,6 +270,59 @@ func TestTryJITProvision_WithNonSourceKeys(t *testing.T) {
 
 	err := tryJITProvision(atmosConfig, info)
 	assert.NoError(t, err, "section without source should return nil without error")
+}
+
+// TestTryJITProvision_WithSourceURI tests that tryJITProvision exercises AutoProvisionSource
+// when a valid source URI is configured (but fails because the URI is unreachable).
+func TestTryJITProvision_WithSourceURI(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: t.TempDir(),
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentSection: map[string]any{
+			"source": map[string]any{
+				"uri": "file:///nonexistent/path/to/source",
+			},
+		},
+	}
+
+	err := tryJITProvision(atmosConfig, info)
+	// Should return an error because the source URI is unreachable.
+	assert.Error(t, err, "should fail when source URI is unreachable")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+}
+
+// TestCheckDirectoryExists tests all branches of the checkDirectoryExists function.
+func TestCheckDirectoryExists(t *testing.T) {
+	t.Run("existing directory returns true", func(t *testing.T) {
+		tempDir := t.TempDir()
+		exists, err := checkDirectoryExists(tempDir)
+		assert.NoError(t, err)
+		assert.True(t, exists)
+	})
+
+	t.Run("non-existing directory returns false", func(t *testing.T) {
+		exists, err := checkDirectoryExists(filepath.Join(t.TempDir(), "nonexistent"))
+		assert.NoError(t, err)
+		assert.False(t, exists)
+	})
+
+	t.Run("file path returns false", func(t *testing.T) {
+		tempDir := t.TempDir()
+		filePath := filepath.Join(tempDir, "file.txt")
+		require.NoError(t, os.WriteFile(filePath, []byte("test"), 0o644))
+		exists, err := checkDirectoryExists(filePath)
+		assert.NoError(t, err)
+		assert.False(t, exists)
+	})
+}
+
+// TestExecuteTerraformGenerateVarfileCmd_Deprecated tests the deprecated command returns an error.
+func TestExecuteTerraformGenerateVarfileCmd_Deprecated(t *testing.T) {
+	err := ExecuteTerraformGenerateVarfileCmd(nil, nil)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrDeprecatedCmdNotCallable)
 }
 
 // TestVarfileOptions_ProcessingOptions tests that ProcessingOptions are correctly carried.
