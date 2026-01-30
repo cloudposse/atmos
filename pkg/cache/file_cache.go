@@ -235,6 +235,12 @@ func (c *FileCache) GetOrFetch(key string, fetch func() ([]byte, error)) ([]byte
 func (c *FileCache) Clear() error {
 	defer perf.Track(nil, "cache.FileCache.Clear")()
 
+	// Check if the directory exists first. If not, there's nothing to clear
+	// and we avoid errors from trying to acquire a lock on a non-existent path.
+	if _, err := os.Stat(c.baseDir); os.IsNotExist(err) {
+		return nil
+	}
+
 	return c.lock.WithLock(func() error {
 		// Remove all files in the cache directory.
 		entries, err := os.ReadDir(c.baseDir)
