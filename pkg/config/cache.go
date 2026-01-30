@@ -127,9 +127,10 @@ func SaveCache(cfg CacheConfig) error {
 	return lock.WithLock(func() error {
 		// Prepare the config data.
 		data := map[string]interface{}{
-			"last_checked":               cfg.LastChecked,
-			"installation_id":            cfg.InstallationId,
-			"telemetry_disclosure_shown": cfg.TelemetryDisclosureShown,
+			"last_checked":                  cfg.LastChecked,
+			"installation_id":               cfg.InstallationId,
+			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
+			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
 		}
 
 		// Marshal to YAML.
@@ -191,9 +192,10 @@ func UpdateCache(update func(*CacheConfig)) error {
 
 		// Prepare the updated configuration data.
 		data := map[string]interface{}{
-			"last_checked":               cfg.LastChecked,
-			"installation_id":            cfg.InstallationId,
-			"telemetry_disclosure_shown": cfg.TelemetryDisclosureShown,
+			"last_checked":                  cfg.LastChecked,
+			"installation_id":               cfg.InstallationId,
+			"telemetry_disclosure_shown":    cfg.TelemetryDisclosureShown,
+			"browser_session_warning_shown": cfg.BrowserSessionWarningShown,
 		}
 
 		// Marshal to YAML.
