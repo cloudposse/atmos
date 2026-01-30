@@ -32,7 +32,7 @@ import (
 	// Import generate package for early file generation.
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (

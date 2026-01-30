@@ -294,7 +294,7 @@ func validateConstraint(version string, constraint string) error {
 package dependencies
 
 import (
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Installer handles automatic tool installation.
