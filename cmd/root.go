@@ -72,7 +72,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (
