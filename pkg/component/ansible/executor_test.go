@@ -684,3 +684,149 @@ func TestGetInventoryFromSettingsEdgeCases(t *testing.T) {
 		assert.Equal(t, "./inventory/ec2.py", inventory)
 	})
 }
+
+func TestMaybeAutoGenerateFiles(t *testing.T) {
+	t.Run("returns nil when auto_generate_files is disabled", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: false,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun: false,
+			ComponentSection: map[string]any{
+				"generate": map[string]any{
+					"files": []string{"test.yml"},
+				},
+			},
+		}
+
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/some/path")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil when in dry-run mode", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: true,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun: true,
+			ComponentSection: map[string]any{
+				"generate": map[string]any{
+					"files": []string{"test.yml"},
+				},
+			},
+		}
+
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/some/path")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil when component has no generate section", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: true,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun: false,
+			ComponentSection: map[string]any{
+				"vars": map[string]any{
+					"foo": "bar",
+				},
+			},
+		}
+
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/some/path")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil when generate section is nil", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: true,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun:           false,
+			ComponentSection: nil,
+		}
+
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/some/path")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil when generate section is not a map", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: true,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun: false,
+			ComponentSection: map[string]any{
+				"generate": "not a map",
+			},
+		}
+
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/some/path")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns nil when both auto_generate_files disabled and dry-run", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: false,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun: true,
+			ComponentSection: map[string]any{
+				"generate": map[string]any{
+					"files": []string{"test.yml"},
+				},
+			},
+		}
+
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/some/path")
+		assert.NoError(t, err)
+	})
+
+	t.Run("returns error when directory creation fails", func(t *testing.T) {
+		atmosConfig := &schema.AtmosConfiguration{
+			Components: schema.Components{
+				Ansible: schema.Ansible{
+					AutoGenerateFiles: true,
+				},
+			},
+		}
+		info := &schema.ConfigAndStacksInfo{
+			DryRun: false,
+			ComponentSection: map[string]any{
+				"generate": map[string]any{
+					"files": []string{"test.yml"},
+				},
+			},
+		}
+
+		// Use an invalid path that should fail on MkdirAll.
+		// On Unix, a path starting with null byte is invalid.
+		err := maybeAutoGenerateFiles(atmosConfig, info, "/dev/null/invalid")
+		assert.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrCreateDirectory)
+	})
+}

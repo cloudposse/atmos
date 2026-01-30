@@ -88,24 +88,10 @@ func ExecutePlaybook(
 		return errors.Join(errUtils.ErrPathResolution, fmt.Errorf("component path: %w", err))
 	}
 
-	// Auto-generate files BEFORE path validation when the following conditions hold.
-	// 1. auto_generate_files is enabled.
-	// 2. Component has a generate section.
-	// 3. Not in dry-run mode (to avoid filesystem modifications).
+	// Auto-generate files BEFORE path validation.
 	// This allows generating entire components from stack configuration.
-	if atmosConfig.Components.Ansible.AutoGenerateFiles && !info.DryRun { //nolint:nestif
-		generateSection := getGenerateSectionFromComponent(info.ComponentSection)
-		if generateSection != nil {
-			// Ensure component directory exists for file generation.
-			if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
-				return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
-			}
-
-			// Generate files before path validation.
-			if genErr := e.GenerateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
-				return errors.Join(errUtils.ErrFileOperation, genErr)
-			}
-		}
+	if err := maybeAutoGenerateFiles(&atmosConfig, info, componentPath); err != nil {
+		return err
 	}
 
 	componentPathExists, err := u.IsDirectory(componentPath)
@@ -449,4 +435,258 @@ func getGenerateSectionFromComponent(componentSection map[string]any) map[string
 	}
 
 	return generateSection
+}
+
+// maybeAutoGenerateFiles conditionally generates files for a component before path validation.
+// It generates files when:
+//   - auto_generate_files is enabled in the Ansible configuration
+//   - the component has a generate section
+//   - not in dry-run mode (to avoid filesystem modifications)
+//
+// Returns nil if generation is skipped or succeeds, error otherwise.
+func maybeAutoGenerateFiles(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	componentPath string,
+) error {
+	defer perf.Track(atmosConfig, "ansible.maybeAutoGenerateFiles")()
+
+	// Skip if auto-generation is disabled or in dry-run mode.
+	if !atmosConfig.Components.Ansible.AutoGenerateFiles || info.DryRun {
+		return nil
+	}
+
+	// Skip if component has no generate section.
+	generateSection := getGenerateSectionFromComponent(info.ComponentSection)
+	if generateSection == nil {
+		return nil
+	}
+
+	// Ensure component directory exists for file generation.
+	if mkdirErr := os.MkdirAll(componentPath, 0o755); mkdirErr != nil { //nolint:revive
+		return errors.Join(errUtils.ErrCreateDirectory, fmt.Errorf("auto-generation: %w", mkdirErr))
+	}
+
+	// Generate files before path validation.
+	if genErr := e.GenerateFilesForComponent(atmosConfig, info, componentPath); genErr != nil {
+		return errors.Join(errUtils.ErrFileOperation, genErr)
+	}
+
+	return nil
+}
+
+// resolveComponentPath resolves the component path, handling JIT source provisioning if needed.
+// It returns the resolved component path or an error if the component cannot be found.
+func resolveComponentPath(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	initialPath string,
+) (string, error) {
+	defer perf.Track(atmosConfig, "ansible.resolveComponentPath")()
+
+	componentPath := initialPath
+	componentPathExists, err := u.IsDirectory(componentPath)
+
+	// If path exists, return it directly.
+	if err == nil && componentPathExists {
+		return componentPath, nil
+	}
+
+	// Check if component has source configured for JIT provisioning.
+	if provSource.HasSource(info.ComponentSection) {
+		// Run JIT source provisioning before path validation.
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+
+		if provErr := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.AnsibleComponentType, info.ComponentSection, info.AuthContext); provErr != nil {
+			return "", errors.Join(errUtils.ErrProvisionerFailed, fmt.Errorf("auto-provision source: %w", provErr))
+		}
+
+		// Check if source provisioner set a workdir path (source + workdir case).
+		// If so, use that path instead of the component path.
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+			return workdirPath, nil
+		}
+
+		// Re-check if component path now exists after provisioning (source only case).
+		componentPathExists, err = u.IsDirectory(componentPath)
+		if err == nil && componentPathExists {
+			return componentPath, nil
+		}
+	}
+
+	// If still doesn't exist, return the error.
+	basePath, _ := u.GetComponentBasePath(atmosConfig, "ansible")
+	return "", fmt.Errorf("%w: '%s' points to the Ansible component '%s', but it does not exist in '%s'",
+		errUtils.ErrInvalidComponent,
+		info.ComponentFromArg,
+		info.FinalComponent,
+		basePath,
+	)
+}
+
+// validateComponentMetadata checks if the component can be provisioned based on metadata.
+// Returns an error if the component is abstract or locked and the subcommand is "playbook".
+func validateComponentMetadata(info *schema.ConfigAndStacksInfo) error {
+	// Check if the component is allowed to be provisioned (`metadata.type` attribute).
+	// For Ansible, only `playbook` runs automation that changes infrastructure.
+	if info.ComponentIsAbstract && info.SubCommand == "playbook" {
+		return fmt.Errorf("%w: the component '%s' cannot be provisioned because it's marked as abstract (metadata.type: abstract)",
+			errUtils.ErrAbstractComponentCantBeProvisioned,
+			filepath.Join(info.ComponentFolderPrefix, info.Component))
+	}
+
+	// Check if the component is locked (`metadata.locked` is set to true).
+	if info.ComponentIsLocked && info.SubCommand == "playbook" {
+		return fmt.Errorf("%w: component '%s' cannot be modified (metadata.locked: true)",
+			errUtils.ErrLockedComponentCantBeProvisioned,
+			filepath.Join(info.ComponentFolderPrefix, info.Component))
+	}
+
+	return nil
+}
+
+// ensureDependencies resolves and installs component dependencies, returning the updated environment list.
+// If dependencies are found, it installs them and adds the toolchain PATH to the environment.
+func ensureDependencies(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+) ([]string, error) {
+	defer perf.Track(atmosConfig, "ansible.ensureDependencies")()
+
+	resolver := dependencies.NewResolver(atmosConfig)
+	deps, err := resolver.ResolveComponentDependencies("ansible", info.StackSection, info.ComponentSection)
+	if err != nil {
+		return nil, errors.Join(errUtils.ErrDependencyResolution, err)
+	}
+
+	envList := info.ComponentEnvList
+
+	if len(deps) > 0 {
+		log.Debug("Installing component dependencies", "component", info.ComponentFromArg, "stack", info.Stack, "tools", deps)
+		installer := dependencies.NewInstaller(atmosConfig)
+		if err := installer.EnsureTools(deps); err != nil {
+			return nil, errors.Join(errUtils.ErrDependencyResolution, fmt.Errorf("install dependencies: %w", err))
+		}
+
+		// Build PATH with toolchain binaries and add to component environment.
+		// This does NOT modify the global process environment - only the subprocess environment.
+		toolchainPATH, err := dependencies.BuildToolchainPATH(atmosConfig, deps)
+		if err != nil {
+			return nil, errors.Join(errUtils.ErrPathResolution, fmt.Errorf("toolchain PATH: %w", err))
+		}
+
+		// Propagate toolchain PATH into environment for subprocess.
+		envList = append(envList, fmt.Sprintf("PATH=%s", toolchainPATH))
+	}
+
+	return envList, nil
+}
+
+// PlaybookConfig holds the resolved playbook and inventory configuration.
+type PlaybookConfig struct {
+	Playbook  string
+	Inventory string
+}
+
+// resolvePlaybookConfig resolves the playbook and inventory from flags and settings.
+// Flag values take precedence over settings values.
+func resolvePlaybookConfig(
+	flags *Flags,
+	settingsSection *schema.AtmosSectionMapType,
+) (*PlaybookConfig, error) {
+	defer perf.Track(nil, "ansible.resolvePlaybookConfig")()
+
+	config := &PlaybookConfig{}
+
+	// Resolve playbook: flag takes precedence over settings.
+	if flags.Playbook != "" {
+		config.Playbook = flags.Playbook
+	} else {
+		playbookSetting, err := GetPlaybookFromSettings(settingsSection)
+		if err != nil {
+			return nil, err
+		}
+		config.Playbook = playbookSetting
+	}
+
+	// Resolve inventory: flag takes precedence over settings.
+	if flags.Inventory != "" {
+		config.Inventory = flags.Inventory
+	} else {
+		inventorySetting, err := GetInventoryFromSettings(settingsSection)
+		if err != nil {
+			return nil, err
+		}
+		config.Inventory = inventorySetting
+	}
+
+	return config, nil
+}
+
+// CommandArgs holds the command and arguments for execution.
+type CommandArgs struct {
+	Command string
+	Args    []string
+}
+
+// buildCommandArgs builds the command and arguments based on subcommand type.
+// For "playbook" subcommand, it uses ansible-playbook with appropriate flags.
+// For other subcommands, it uses the base ansible command.
+func buildCommandArgs(
+	info *schema.ConfigAndStacksInfo,
+	playbookConfig *PlaybookConfig,
+	varFilePath string,
+) (*CommandArgs, error) {
+	defer perf.Track(nil, "ansible.buildCommandArgs")()
+
+	result := &CommandArgs{
+		Command: info.Command,
+		Args:    []string{},
+	}
+
+	if info.SubCommand == "playbook" {
+		// If playbook is not specified, return error.
+		if playbookConfig.Playbook == "" {
+			return nil, errUtils.ErrAnsiblePlaybookMissing
+		}
+
+		// Add extra-vars file using full path for workdir/source provisioning scenarios.
+		result.Args = append(result.Args, "--extra-vars", "@"+varFilePath)
+
+		// Add inventory if specified.
+		if playbookConfig.Inventory != "" {
+			result.Args = append(result.Args, "-i", playbookConfig.Inventory)
+		}
+
+		// Add any additional args and flags.
+		result.Args = append(result.Args, info.AdditionalArgsAndFlags...)
+
+		// Add the playbook as the last argument.
+		result.Args = append(result.Args, playbookConfig.Playbook)
+
+		// Override command to ansible-playbook for playbook subcommand.
+		result.Command = "ansible-playbook"
+	} else {
+		// For other subcommands, use the base ansible command with the subcommand.
+		result.Args = append(result.Args, info.SubCommand)
+		result.Args = append(result.Args, info.AdditionalArgsAndFlags...)
+	}
+
+	return result, nil
+}
+
+// prepareEnvVars prepares the environment variables for command execution.
+func prepareEnvVars(atmosConfig *schema.AtmosConfiguration, envList []string) ([]string, error) {
+	defer perf.Track(atmosConfig, "ansible.prepareEnvVars")()
+
+	envVars := append(envList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
+
+	basePath, err := filepath.Abs(atmosConfig.BasePath)
+	if err != nil {
+		return nil, err
+	}
+
+	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
+	return envVars, nil
 }
