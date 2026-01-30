@@ -241,7 +241,7 @@ func TestAnsibleComponentProvider_ValidateComponent(t *testing.T) {
 			name: "complex valid config",
 			config: map[string]any{
 				"vars": map[string]any{
-					"package_name": "nginx",
+					"package_name":  "nginx",
 					"package_state": "present",
 				},
 				"settings": map[string]any{
