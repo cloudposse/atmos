@@ -1,4 +1,4 @@
-package exec
+package ansible
 
 import (
 	"path/filepath"
@@ -11,7 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestCheckAnsibleConfig(t *testing.T) {
+func TestCheckConfig(t *testing.T) {
 	t.Run("returns error when base path is empty", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			Components: schema.Components{
@@ -21,7 +21,7 @@ func TestCheckAnsibleConfig(t *testing.T) {
 			},
 		}
 
-		err := checkAnsibleConfig(atmosConfig)
+		err := checkConfig(atmosConfig)
 		assert.ErrorIs(t, err, errUtils.ErrMissingAnsibleBasePath)
 	})
 
@@ -34,14 +34,14 @@ func TestCheckAnsibleConfig(t *testing.T) {
 			},
 		}
 
-		err := checkAnsibleConfig(atmosConfig)
+		err := checkConfig(atmosConfig)
 		assert.NoError(t, err)
 	})
 }
 
-func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
+func TestGetPlaybookFromSettings(t *testing.T) {
 	t.Run("returns empty string when settings is nil", func(t *testing.T) {
-		playbook, err := GetAnsiblePlaybookFromSettings(nil)
+		playbook, err := GetPlaybookFromSettings(nil)
 		assert.NoError(t, err)
 		assert.Empty(t, playbook)
 	})
@@ -53,7 +53,7 @@ func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, playbook)
 	})
@@ -63,7 +63,7 @@ func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
 			"ansible": "not a map",
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, playbook)
 	})
@@ -75,7 +75,7 @@ func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, playbook)
 	})
@@ -87,7 +87,7 @@ func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, playbook)
 	})
@@ -99,7 +99,7 @@ func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Equal(t, "site.yml", playbook)
 	})
@@ -111,15 +111,15 @@ func TestGetAnsiblePlaybookFromSettings(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Equal(t, "playbooks/deploy.yml", playbook)
 	})
 }
 
-func TestGetAnsibleInventoryFromSettings(t *testing.T) {
+func TestGetInventoryFromSettings(t *testing.T) {
 	t.Run("returns empty string when settings is nil", func(t *testing.T) {
-		inventory, err := GetAnsibleInventoryFromSettings(nil)
+		inventory, err := GetInventoryFromSettings(nil)
 		assert.NoError(t, err)
 		assert.Empty(t, inventory)
 	})
@@ -131,7 +131,7 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 			},
 		}
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, inventory)
 	})
@@ -141,7 +141,7 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 			"ansible": "not a map",
 		}
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, inventory)
 	})
@@ -153,7 +153,7 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 			},
 		}
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, inventory)
 	})
@@ -165,7 +165,7 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 			},
 		}
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Empty(t, inventory)
 	})
@@ -177,7 +177,7 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 			},
 		}
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Equal(t, "hosts.ini", inventory)
 	})
@@ -189,13 +189,13 @@ func TestGetAnsibleInventoryFromSettings(t *testing.T) {
 			},
 		}
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		assert.NoError(t, err)
 		assert.Equal(t, "inventories/production", inventory)
 	})
 }
 
-func TestConstructAnsibleComponentVarfileName(t *testing.T) {
+func TestConstructVarfileName(t *testing.T) {
 	tests := []struct {
 		name         string
 		info         *schema.ConfigAndStacksInfo
@@ -229,13 +229,13 @@ func TestConstructAnsibleComponentVarfileName(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := constructAnsibleComponentVarfileName(tc.info)
+			result := constructVarfileName(tc.info)
 			assert.Equal(t, tc.expectedName, result)
 		})
 	}
 }
 
-func TestConstructAnsibleComponentVarfilePath(t *testing.T) {
+func TestConstructVarfilePath(t *testing.T) {
 	tests := []struct {
 		name         string
 		atmosConfig  *schema.AtmosConfiguration
@@ -245,7 +245,7 @@ func TestConstructAnsibleComponentVarfilePath(t *testing.T) {
 		{
 			name: "basic path construction",
 			atmosConfig: &schema.AtmosConfiguration{
-				AnsibleDirAbsolutePath: "/project/components/ansible",
+				AnsibleDirAbsolutePath: filepath.Join("/project", "components", "ansible"),
 			},
 			info: &schema.ConfigAndStacksInfo{
 				ComponentFolderPrefix: "",
@@ -253,12 +253,12 @@ func TestConstructAnsibleComponentVarfilePath(t *testing.T) {
 				ContextPrefix:         "dev-us-east-1",
 				Component:             "webserver",
 			},
-			expectedPath: filepath.Join("/project/components/ansible", "webserver", "dev-us-east-1-webserver.ansible.vars.yaml"),
+			expectedPath: filepath.Join("/project", "components", "ansible", "webserver", "dev-us-east-1-webserver.ansible.vars.yaml"),
 		},
 		{
 			name: "with component folder prefix",
 			atmosConfig: &schema.AtmosConfiguration{
-				AnsibleDirAbsolutePath: "/project/components/ansible",
+				AnsibleDirAbsolutePath: filepath.Join("/project", "components", "ansible"),
 			},
 			info: &schema.ConfigAndStacksInfo{
 				ComponentFolderPrefix: "network",
@@ -266,19 +266,19 @@ func TestConstructAnsibleComponentVarfilePath(t *testing.T) {
 				ContextPrefix:         "prod-eu-west-1",
 				Component:             "vpc",
 			},
-			expectedPath: filepath.Join("/project/components/ansible", "network", "vpc", "prod-eu-west-1-vpc.ansible.vars.yaml"),
+			expectedPath: filepath.Join("/project", "components", "ansible", "network", "vpc", "prod-eu-west-1-vpc.ansible.vars.yaml"),
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := constructAnsibleComponentVarfilePath(tc.atmosConfig, tc.info)
+			result := constructVarfilePath(tc.atmosConfig, tc.info)
 			assert.Equal(t, tc.expectedPath, result)
 		})
 	}
 }
 
-func TestConstructAnsibleComponentWorkingDir(t *testing.T) {
+func TestConstructWorkingDir(t *testing.T) {
 	tests := []struct {
 		name         string
 		atmosConfig  *schema.AtmosConfiguration
@@ -288,55 +288,55 @@ func TestConstructAnsibleComponentWorkingDir(t *testing.T) {
 		{
 			name: "basic working directory",
 			atmosConfig: &schema.AtmosConfiguration{
-				AnsibleDirAbsolutePath: "/project/components/ansible",
+				AnsibleDirAbsolutePath: filepath.Join("/project", "components", "ansible"),
 			},
 			info: &schema.ConfigAndStacksInfo{
 				ComponentFolderPrefix: "",
 				FinalComponent:        "webserver",
 			},
-			expectedPath: filepath.Join("/project/components/ansible", "webserver"),
+			expectedPath: filepath.Join("/project", "components", "ansible", "webserver"),
 		},
 		{
 			name: "with component folder prefix",
 			atmosConfig: &schema.AtmosConfiguration{
-				AnsibleDirAbsolutePath: "/project/components/ansible",
+				AnsibleDirAbsolutePath: filepath.Join("/project", "components", "ansible"),
 			},
 			info: &schema.ConfigAndStacksInfo{
 				ComponentFolderPrefix: "database",
 				FinalComponent:        "postgres",
 			},
-			expectedPath: filepath.Join("/project/components/ansible", "database", "postgres"),
+			expectedPath: filepath.Join("/project", "components", "ansible", "database", "postgres"),
 		},
 		{
 			name: "nested folder prefix",
 			atmosConfig: &schema.AtmosConfiguration{
-				AnsibleDirAbsolutePath: "/opt/atmos/ansible",
+				AnsibleDirAbsolutePath: filepath.Join("/opt", "atmos", "ansible"),
 			},
 			info: &schema.ConfigAndStacksInfo{
-				ComponentFolderPrefix: "infra/core",
+				ComponentFolderPrefix: filepath.Join("infra", "core"),
 				FinalComponent:        "networking",
 			},
-			expectedPath: filepath.Join("/opt/atmos/ansible", "infra/core", "networking"),
+			expectedPath: filepath.Join("/opt", "atmos", "ansible", "infra", "core", "networking"),
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result := constructAnsibleComponentWorkingDir(tc.atmosConfig, tc.info)
+			result := constructWorkingDir(tc.atmosConfig, tc.info)
 			assert.Equal(t, tc.expectedPath, result)
 		})
 	}
 }
 
-func TestAnsibleFlagsStruct(t *testing.T) {
+func TestFlagsStruct(t *testing.T) {
 	t.Run("can be created with zero values", func(t *testing.T) {
-		flags := AnsibleFlags{}
+		flags := Flags{}
 		assert.Empty(t, flags.Playbook)
 		assert.Empty(t, flags.Inventory)
 	})
 
 	t.Run("can be created with values", func(t *testing.T) {
-		flags := AnsibleFlags{
+		flags := Flags{
 			Playbook:  "site.yml",
 			Inventory: "hosts.ini",
 		}
@@ -345,7 +345,7 @@ func TestAnsibleFlagsStruct(t *testing.T) {
 	})
 }
 
-func TestGetAnsibleSettingsIntegration(t *testing.T) {
+func TestGetSettingsIntegration(t *testing.T) {
 	t.Run("extracts both playbook and inventory from same settings", func(t *testing.T) {
 		settings := schema.AtmosSectionMapType{
 			"ansible": map[string]any{
@@ -354,11 +354,11 @@ func TestGetAnsibleSettingsIntegration(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		require.NoError(t, err)
 		assert.Equal(t, "deploy.yml", playbook)
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		require.NoError(t, err)
 		assert.Equal(t, "production", inventory)
 	})
@@ -372,20 +372,20 @@ func TestGetAnsibleSettingsIntegration(t *testing.T) {
 			},
 		}
 
-		playbook, err := GetAnsiblePlaybookFromSettings(&settings)
+		playbook, err := GetPlaybookFromSettings(&settings)
 		require.NoError(t, err)
 		assert.Equal(t, "site.yml", playbook)
 
-		inventory, err := GetAnsibleInventoryFromSettings(&settings)
+		inventory, err := GetInventoryFromSettings(&settings)
 		require.NoError(t, err)
 		assert.Empty(t, inventory) // Should return empty due to type mismatch.
 	})
 }
 
-func TestAnsiblePathConstructionConsistency(t *testing.T) {
+func TestPathConstructionConsistency(t *testing.T) {
 	t.Run("working dir and varfile path share base directory", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
-			AnsibleDirAbsolutePath: "/project/components/ansible",
+			AnsibleDirAbsolutePath: filepath.Join("/project", "components", "ansible"),
 		}
 		info := &schema.ConfigAndStacksInfo{
 			ComponentFolderPrefix: "services",
@@ -394,12 +394,12 @@ func TestAnsiblePathConstructionConsistency(t *testing.T) {
 			Component:             "api",
 		}
 
-		workingDir := constructAnsibleComponentWorkingDir(atmosConfig, info)
-		varfilePath := constructAnsibleComponentVarfilePath(atmosConfig, info)
+		workingDir := constructWorkingDir(atmosConfig, info)
+		varfilePath := constructVarfilePath(atmosConfig, info)
 
 		// The varfile should be inside the working directory.
 		assert.True(t, len(varfilePath) > len(workingDir))
-		// Note: filepath.HasPrefix is deprecated, using manual check.
+		// The varfile's parent directory should be the working directory.
 		assert.Equal(t, workingDir, filepath.Dir(varfilePath))
 	})
 }

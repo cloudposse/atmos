@@ -1,4 +1,4 @@
-package exec
+package ansible
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/dependencies"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -20,8 +21,8 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
-// AnsibleFlags represents Ansible command-line flags passed to ExecuteAnsible.
-type AnsibleFlags struct {
+// Flags represents Ansible command-line flags.
+type Flags struct {
 	// Playbook specifies the Ansible playbook file to run.
 	// Can be set via --playbook/-p flag or settings.ansible.playbook in stack manifest.
 	Playbook string
@@ -31,9 +32,9 @@ type AnsibleFlags struct {
 	Inventory string
 }
 
-// checkAnsibleConfig validates that the necessary Ansible configuration is present.
-func checkAnsibleConfig(atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(atmosConfig, "exec.checkAnsibleConfig")()
+// checkConfig validates that the necessary Ansible configuration is present.
+func checkConfig(atmosConfig *schema.AtmosConfiguration) error {
+	defer perf.Track(atmosConfig, "ansible.checkConfig")()
 
 	if atmosConfig.Components.Ansible.BasePath == "" {
 		return errUtils.ErrMissingAnsibleBasePath
@@ -41,12 +42,12 @@ func checkAnsibleConfig(atmosConfig *schema.AtmosConfiguration) error {
 	return nil
 }
 
-// ExecuteAnsible executes Ansible commands.
-func ExecuteAnsible(
+// ExecutePlaybook executes an Ansible playbook command.
+func ExecutePlaybook(
 	info *schema.ConfigAndStacksInfo,
-	ansibleFlags *AnsibleFlags,
+	flags *Flags,
 ) error {
-	defer perf.Track(nil, "exec.ExecuteAnsible")()
+	defer perf.Track(nil, "ansible.ExecutePlaybook")()
 
 	atmosConfig, err := cfg.InitCliConfig(*info, true)
 	if err != nil {
@@ -54,7 +55,7 @@ func ExecuteAnsible(
 	}
 
 	// Validate ansible configuration.
-	if err := checkAnsibleConfig(&atmosConfig); err != nil {
+	if err := checkConfig(&atmosConfig); err != nil {
 		return err
 	}
 
@@ -67,19 +68,7 @@ func ExecuteAnsible(
 		}
 	}
 
-	if info.SubCommand == "version" {
-		return ExecuteShellCommand(
-			atmosConfig,
-			info.Command,
-			[]string{"--version"},
-			"",
-			nil,
-			false,
-			info.RedirectStdErr,
-		)
-	}
-
-	*info, err = ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
+	*info, err = e.ProcessStacks(&atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -113,7 +102,7 @@ func ExecuteAnsible(
 			}
 
 			// Generate files before path validation.
-			if genErr := generateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
+			if genErr := e.GenerateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
 				return errors.Join(errUtils.ErrFileOperation, genErr)
 			}
 		}
@@ -196,7 +185,7 @@ func ExecuteAnsible(
 	}
 
 	// Check if the component 'settings.validation' section is specified and validate the component.
-	valid, err := ValidateComponent(
+	valid, err := e.ValidateComponent(
 		&atmosConfig,
 		info.ComponentFromArg,
 		info.ComponentSection,
@@ -218,9 +207,9 @@ func ExecuteAnsible(
 	// Find Ansible playbook.
 	// It can be specified in the `settings.ansible.playbook` section in the Atmos component manifest,
 	// or on the command line via the flag `--playbook <playbook>` (shorthand `-p`).
-	playbook := ansibleFlags.Playbook
+	playbook := flags.Playbook
 	if playbook == "" {
-		playbookSetting, err := GetAnsiblePlaybookFromSettings(&info.ComponentSettingsSection)
+		playbookSetting, err := GetPlaybookFromSettings(&info.ComponentSettingsSection)
 		if err != nil {
 			return err
 		}
@@ -233,9 +222,9 @@ func ExecuteAnsible(
 	// Find Ansible inventory.
 	// It can be specified in the `settings.ansible.inventory` section in the Atmos component manifest,
 	// or on the command line via the flag `--inventory <inventory>` (shorthand `-i`).
-	inventory := ansibleFlags.Inventory
+	inventory := flags.Inventory
 	if inventory == "" {
-		inventorySetting, err := GetAnsibleInventoryFromSettings(&info.ComponentSettingsSection)
+		inventorySetting, err := GetInventoryFromSettings(&info.ComponentSettingsSection)
 		if err != nil {
 			return err
 		}
@@ -249,7 +238,7 @@ func ExecuteAnsible(
 	log.Debug("Variables for component in stack", "component", info.ComponentFromArg, "stack", info.Stack, "variables", info.ComponentVarsSection)
 
 	// Write variables to a file.
-	varFilePath := constructAnsibleComponentVarfilePath(&atmosConfig, info)
+	varFilePath := constructVarfilePath(&atmosConfig, info)
 
 	log.Debug("Writing the variables to file", "file", varFilePath)
 
@@ -273,7 +262,7 @@ func ExecuteAnsible(
 		inheritance = info.ComponentFromArg + " -> " + strings.Join(info.ComponentInheritanceChain, " -> ")
 	}
 
-	workingDir := constructAnsibleComponentWorkingDir(&atmosConfig, info)
+	workingDir := constructWorkingDir(&atmosConfig, info)
 
 	log.Debug("Ansible context",
 		"executable", info.Command,
@@ -291,7 +280,7 @@ func ExecuteAnsible(
 	// Prepare arguments and flags.
 	allArgsAndFlags := []string{}
 
-	// For playbook subcommand, use ansible-playbook
+	// For playbook subcommand, use ansible-playbook.
 	if info.SubCommand == "playbook" {
 		// If playbook is not specified, return error.
 		if playbook == "" {
@@ -321,7 +310,7 @@ func ExecuteAnsible(
 	}
 
 	// Convert ComponentEnvSection to ComponentEnvList.
-	ConvertComponentEnvSectionToList(info)
+	e.ConvertComponentEnvSectionToList(info)
 
 	// Prepare ENV vars.
 	envVars := append(info.ComponentEnvList, fmt.Sprintf("ATMOS_CLI_CONFIG_PATH=%s", atmosConfig.CliConfigPath))
@@ -332,7 +321,7 @@ func ExecuteAnsible(
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
 	log.Debug("Using ENV", "variables", envVars)
 
-	return ExecuteShellCommand(
+	return e.ExecuteShellCommand(
 		atmosConfig,
 		info.Command,
 		allArgsAndFlags,
@@ -343,9 +332,36 @@ func ExecuteAnsible(
 	)
 }
 
-// GetAnsiblePlaybookFromSettings extracts the playbook from settings.ansible.playbook.
-func GetAnsiblePlaybookFromSettings(settingsSection *schema.AtmosSectionMapType) (string, error) {
-	defer perf.Track(nil, "exec.GetAnsiblePlaybookFromSettings")()
+// ExecuteVersion executes the ansible version command.
+func ExecuteVersion(info *schema.ConfigAndStacksInfo) error {
+	defer perf.Track(nil, "ansible.ExecuteVersion")()
+
+	atmosConfig, err := cfg.InitCliConfig(*info, false)
+	if err != nil {
+		return err
+	}
+
+	// Get ansible command from config, defaulting to "ansible".
+	command := atmosConfig.Components.Ansible.Command
+	if command == "" {
+		command = "ansible"
+	}
+
+	// Execute ansible --version directly.
+	return e.ExecuteShellCommand(
+		atmosConfig,
+		command,
+		[]string{"--version"},
+		"",    // dir
+		nil,   // env
+		false, // dryRun
+		"",    // redirectStdError
+	)
+}
+
+// GetPlaybookFromSettings extracts the playbook from settings.ansible.playbook.
+func GetPlaybookFromSettings(settingsSection *schema.AtmosSectionMapType) (string, error) {
+	defer perf.Track(nil, "ansible.GetPlaybookFromSettings")()
 
 	if settingsSection == nil {
 		return "", nil
@@ -364,9 +380,9 @@ func GetAnsiblePlaybookFromSettings(settingsSection *schema.AtmosSectionMapType)
 	return playbook, nil
 }
 
-// GetAnsibleInventoryFromSettings extracts the inventory from settings.ansible.inventory.
-func GetAnsibleInventoryFromSettings(settingsSection *schema.AtmosSectionMapType) (string, error) {
-	defer perf.Track(nil, "exec.GetAnsibleInventoryFromSettings")()
+// GetInventoryFromSettings extracts the inventory from settings.ansible.inventory.
+func GetInventoryFromSettings(settingsSection *schema.AtmosSectionMapType) (string, error) {
+	defer perf.Track(nil, "ansible.GetInventoryFromSettings")()
 
 	if settingsSection == nil {
 		return "", nil
@@ -385,9 +401,11 @@ func GetAnsibleInventoryFromSettings(settingsSection *schema.AtmosSectionMapType
 	return inventory, nil
 }
 
-// constructAnsibleComponentVarfileName constructs the variable file name for an Ansible component.
+// constructVarfileName constructs the variable file name for an Ansible component.
 // Component names containing path separators are sanitized to avoid creating nested directories.
-func constructAnsibleComponentVarfileName(info *schema.ConfigAndStacksInfo) string {
+func constructVarfileName(info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(nil, "ansible.constructVarfileName")()
+
 	// Sanitize component name by replacing path separators with dashes.
 	// This ensures the varfile name is a flat filename, not a nested path.
 	sanitizedComponent := strings.ReplaceAll(info.Component, "/", "-")
@@ -395,18 +413,22 @@ func constructAnsibleComponentVarfileName(info *schema.ConfigAndStacksInfo) stri
 	return fmt.Sprintf("%s-%s.ansible.vars.yaml", info.ContextPrefix, sanitizedComponent)
 }
 
-// constructAnsibleComponentVarfilePath constructs the full path to the variable file.
-func constructAnsibleComponentVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+// constructVarfilePath constructs the full path to the variable file.
+func constructVarfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(atmosConfig, "ansible.constructVarfilePath")()
+
 	return filepath.Join(
 		atmosConfig.AnsibleDirAbsolutePath,
 		info.ComponentFolderPrefix,
 		info.FinalComponent,
-		constructAnsibleComponentVarfileName(info),
+		constructVarfileName(info),
 	)
 }
 
-// constructAnsibleComponentWorkingDir constructs the working directory for an Ansible component.
-func constructAnsibleComponentWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+// constructWorkingDir constructs the working directory for an Ansible component.
+func constructWorkingDir(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) string {
+	defer perf.Track(atmosConfig, "ansible.constructWorkingDir")()
+
 	return filepath.Join(
 		atmosConfig.AnsibleDirAbsolutePath,
 		info.ComponentFolderPrefix,

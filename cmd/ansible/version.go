@@ -6,8 +6,8 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	e "github.com/cloudposse/atmos/internal/exec"
-	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/component"
+	ansibleComp "github.com/cloudposse/atmos/pkg/component/ansible"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -38,27 +38,21 @@ func runVersion(cmd *cobra.Command, _ []string) error {
 		ProfilesFromArg:         globalFlags.Profile,
 	}
 
-	// For version command, we just need to execute ansible --version directly.
-	// No need for full Atmos config or stack processing.
-	atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, false)
-	if err != nil {
-		return err
+	// Get the ansible component provider from the registry.
+	provider, ok := component.GetProvider("ansible")
+	if !ok {
+		// Fallback to direct execution if provider not found.
+		return ansibleComp.ExecuteVersion(&configAndStacksInfo)
 	}
 
-	// Get ansible command from config, defaulting to "ansible".
-	command := atmosConfig.Components.Ansible.Command
-	if command == "" {
-		command = "ansible"
+	// Build execution context for the component provider.
+	ctx := &component.ExecutionContext{
+		ComponentType:       "ansible",
+		Command:             "ansible",
+		SubCommand:          "version",
+		ConfigAndStacksInfo: configAndStacksInfo,
 	}
 
-	// Execute ansible --version directly.
-	return e.ExecuteShellCommand(
-		atmosConfig,
-		command,
-		[]string{"--version"},
-		"",    // dir
-		nil,   // env
-		false, // dryRun
-		"",    // redirectStdError
-	)
+	// Execute via component registry.
+	return provider.Execute(ctx)
 }

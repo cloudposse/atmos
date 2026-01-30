@@ -5,7 +5,6 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/cloudposse/atmos/cmd/internal"
-	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
@@ -131,19 +130,25 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 	return info
 }
 
+// ansibleCLIFlags holds ansible-specific CLI flags extracted from the command.
+type ansibleCLIFlags struct {
+	Playbook  string
+	Inventory string
+}
+
 // getAnsibleFlags extracts ansible-specific flags from the command.
-func getAnsibleFlags(cmd *cobra.Command) e.AnsibleFlags {
-	ansibleFlags := e.AnsibleFlags{}
+func getAnsibleFlags(cmd *cobra.Command) ansibleCLIFlags {
+	flags := ansibleCLIFlags{}
 
 	if playbookFlag := cmd.Flag("playbook"); playbookFlag != nil {
-		ansibleFlags.Playbook = playbookFlag.Value.String()
+		flags.Playbook = playbookFlag.Value.String()
 	}
 
 	if inventoryFlag := cmd.Flag("inventory"); inventoryFlag != nil {
-		ansibleFlags.Inventory = inventoryFlag.Value.String()
+		flags.Inventory = inventoryFlag.Value.String()
 	}
 
-	return ansibleFlags
+	return flags
 }
 
 // processArgs processes command arguments to extract component and additional args.

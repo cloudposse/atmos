@@ -5,7 +5,8 @@ package ansible
 import (
 	"github.com/spf13/cobra"
 
-	e "github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/component"
+	ansibleComp "github.com/cloudposse/atmos/pkg/component/ansible"
 )
 
 // playbookCmd represents the `atmos ansible playbook` command.
@@ -33,8 +34,34 @@ func runPlaybook(cmd *cobra.Command, args []string) error {
 	info := initConfigAndStacksInfo(cmd, "playbook", args)
 
 	// Get ansible-specific flags.
-	ansibleFlags := getAnsibleFlags(cmd)
+	cliFlags := getAnsibleFlags(cmd)
 
-	// Execute ansible playbook.
-	return e.ExecuteAnsible(&info, &ansibleFlags)
+	// Get the ansible component provider from the registry.
+	provider, ok := component.GetProvider("ansible")
+	if !ok {
+		// Fallback to direct execution if provider not found.
+		flags := &ansibleComp.Flags{
+			Playbook:  cliFlags.Playbook,
+			Inventory: cliFlags.Inventory,
+		}
+		return ansibleComp.ExecutePlaybook(&info, flags)
+	}
+
+	// Build execution context for the component provider.
+	ctx := &component.ExecutionContext{
+		ComponentType:       "ansible",
+		Component:           info.ComponentFromArg,
+		Stack:               info.Stack,
+		Command:             "ansible",
+		SubCommand:          "playbook",
+		ConfigAndStacksInfo: info,
+		Args:                args,
+		Flags: map[string]any{
+			"playbook":  cliFlags.Playbook,
+			"inventory": cliFlags.Inventory,
+		},
+	}
+
+	// Execute via component registry.
+	return provider.Execute(ctx)
 }
