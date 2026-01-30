@@ -14,7 +14,7 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain/installer"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 )
 
 // Tool version constants for maintainability.
