@@ -836,10 +836,10 @@ func TestMaybeAutoGenerateFiles(t *testing.T) {
 func TestValidateComponentMetadata(t *testing.T) {
 	t.Run("returns nil for non-abstract non-locked component", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: false,
-			ComponentIsLocked:   false,
-			SubCommand:          "playbook",
-			Component:           "webserver",
+			ComponentIsAbstract:   false,
+			ComponentIsLocked:     false,
+			SubCommand:            "playbook",
+			Component:             "webserver",
 			ComponentFolderPrefix: "",
 		}
 
@@ -849,10 +849,10 @@ func TestValidateComponentMetadata(t *testing.T) {
 
 	t.Run("returns nil for abstract component with non-playbook subcommand", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: true,
-			ComponentIsLocked:   false,
-			SubCommand:          "version",
-			Component:           "webserver",
+			ComponentIsAbstract:   true,
+			ComponentIsLocked:     false,
+			SubCommand:            "version",
+			Component:             "webserver",
 			ComponentFolderPrefix: "",
 		}
 
@@ -862,10 +862,10 @@ func TestValidateComponentMetadata(t *testing.T) {
 
 	t.Run("returns nil for locked component with non-playbook subcommand", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: false,
-			ComponentIsLocked:   true,
-			SubCommand:          "version",
-			Component:           "webserver",
+			ComponentIsAbstract:   false,
+			ComponentIsLocked:     true,
+			SubCommand:            "version",
+			Component:             "webserver",
 			ComponentFolderPrefix: "",
 		}
 
@@ -875,10 +875,10 @@ func TestValidateComponentMetadata(t *testing.T) {
 
 	t.Run("returns error for abstract component with playbook subcommand", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: true,
-			ComponentIsLocked:   false,
-			SubCommand:          "playbook",
-			Component:           "webserver",
+			ComponentIsAbstract:   true,
+			ComponentIsLocked:     false,
+			SubCommand:            "playbook",
+			Component:             "webserver",
 			ComponentFolderPrefix: "",
 		}
 
@@ -889,10 +889,10 @@ func TestValidateComponentMetadata(t *testing.T) {
 
 	t.Run("returns error for locked component with playbook subcommand", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: false,
-			ComponentIsLocked:   true,
-			SubCommand:          "playbook",
-			Component:           "webserver",
+			ComponentIsAbstract:   false,
+			ComponentIsLocked:     true,
+			SubCommand:            "playbook",
+			Component:             "webserver",
 			ComponentFolderPrefix: "",
 		}
 
@@ -903,10 +903,10 @@ func TestValidateComponentMetadata(t *testing.T) {
 
 	t.Run("abstract check takes precedence over locked check", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: true,
-			ComponentIsLocked:   true,
-			SubCommand:          "playbook",
-			Component:           "webserver",
+			ComponentIsAbstract:   true,
+			ComponentIsLocked:     true,
+			SubCommand:            "playbook",
+			Component:             "webserver",
 			ComponentFolderPrefix: "",
 		}
 
@@ -918,10 +918,10 @@ func TestValidateComponentMetadata(t *testing.T) {
 
 	t.Run("includes component path in error message", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentIsAbstract: true,
-			ComponentIsLocked:   false,
-			SubCommand:          "playbook",
-			Component:           "myapp",
+			ComponentIsAbstract:   true,
+			ComponentIsLocked:     false,
+			SubCommand:            "playbook",
+			Component:             "myapp",
 			ComponentFolderPrefix: "services",
 		}
 
@@ -1015,8 +1015,8 @@ func TestResolvePlaybookConfig(t *testing.T) {
 func TestBuildCommandArgs(t *testing.T) {
 	t.Run("builds playbook command with all options", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			Command:               "ansible",
-			SubCommand:            "playbook",
+			Command:                "ansible",
+			SubCommand:             "playbook",
 			AdditionalArgsAndFlags: []string{"--check", "-v"},
 		}
 		playbookConfig := &PlaybookConfig{
@@ -1040,8 +1040,8 @@ func TestBuildCommandArgs(t *testing.T) {
 
 	t.Run("builds playbook command without inventory", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			Command:               "ansible",
-			SubCommand:            "playbook",
+			Command:                "ansible",
+			SubCommand:             "playbook",
 			AdditionalArgsAndFlags: []string{},
 		}
 		playbookConfig := &PlaybookConfig{
@@ -1059,8 +1059,8 @@ func TestBuildCommandArgs(t *testing.T) {
 
 	t.Run("returns error when playbook is missing for playbook subcommand", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			Command:               "ansible",
-			SubCommand:            "playbook",
+			Command:                "ansible",
+			SubCommand:             "playbook",
 			AdditionalArgsAndFlags: []string{},
 		}
 		playbookConfig := &PlaybookConfig{
@@ -1077,8 +1077,8 @@ func TestBuildCommandArgs(t *testing.T) {
 
 	t.Run("builds non-playbook command", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			Command:               "ansible",
-			SubCommand:            "galaxy",
+			Command:                "ansible",
+			SubCommand:             "galaxy",
 			AdditionalArgsAndFlags: []string{"install", "-r", "requirements.yml"},
 		}
 		playbookConfig := &PlaybookConfig{
@@ -1095,8 +1095,8 @@ func TestBuildCommandArgs(t *testing.T) {
 
 	t.Run("builds version subcommand", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			Command:               "ansible",
-			SubCommand:            "--version",
+			Command:                "ansible",
+			SubCommand:             "--version",
 			AdditionalArgsAndFlags: []string{},
 		}
 		playbookConfig := &PlaybookConfig{}
