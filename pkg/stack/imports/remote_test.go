@@ -178,3 +178,102 @@ func TestProcessImportPath_Remote(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, content, string(data))
 }
+
+func TestResolveImportPaths_LocalPaths(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	basePath := "/stacks"
+
+	importPaths := []string{
+		"catalog/vpc",
+		"catalog/eks",
+		"mixins/region/us-east-1",
+	}
+
+	resolved, err := ResolveImportPaths(atmosConfig, basePath, importPaths)
+	require.NoError(t, err)
+	require.Len(t, resolved, 3)
+
+	assert.Equal(t, filepath.Join(basePath, "catalog", "vpc"), resolved[0])
+	assert.Equal(t, filepath.Join(basePath, "catalog", "eks"), resolved[1])
+	assert.Equal(t, filepath.Join(basePath, "mixins", "region", "us-east-1"), resolved[2])
+}
+
+func TestResolveImportPaths_EmptySlice(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	basePath := "/stacks"
+
+	resolved, err := ResolveImportPaths(atmosConfig, basePath, []string{})
+	require.NoError(t, err)
+	assert.Empty(t, resolved)
+	assert.NotNil(t, resolved, "should return empty slice, not nil")
+}
+
+func TestResolveImportPaths_MixedPaths(t *testing.T) {
+	// Create a mock HTTP server.
+	content := "remote: content"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(content))
+	}))
+	defer server.Close()
+
+	// Reset the global importer for this test.
+	globalImporterOnce = sync.Once{}
+	globalImporter = nil
+	globalImporterErr = nil
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	basePath := "/stacks"
+
+	importPaths := []string{
+		"catalog/vpc",
+		server.URL + "/remote.yaml",
+		"catalog/eks",
+	}
+
+	resolved, err := ResolveImportPaths(atmosConfig, basePath, importPaths)
+	require.NoError(t, err)
+	require.Len(t, resolved, 3)
+
+	// First and third should be local paths.
+	assert.Equal(t, filepath.Join(basePath, "catalog", "vpc"), resolved[0])
+	assert.Equal(t, filepath.Join(basePath, "catalog", "eks"), resolved[2])
+
+	// Second should be a downloaded path (not the original URL).
+	assert.NotEqual(t, server.URL+"/remote.yaml", resolved[1])
+	assert.NotEmpty(t, resolved[1])
+
+	// Verify the downloaded file exists and has correct content.
+	data, err := os.ReadFile(resolved[1])
+	require.NoError(t, err)
+	assert.Equal(t, content, string(data))
+}
+
+func TestResolveImportPaths_ErrorPropagation(t *testing.T) {
+	// Create a mock HTTP server that returns 404.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("Not Found"))
+	}))
+	defer server.Close()
+
+	// Reset the global importer for this test.
+	globalImporterOnce = sync.Once{}
+	globalImporter = nil
+	globalImporterErr = nil
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	basePath := "/stacks"
+
+	importPaths := []string{
+		"catalog/vpc",
+		server.URL + "/nonexistent.yaml", // This will fail.
+		"catalog/eks",
+	}
+
+	// Should return error when one path fails.
+	resolved, err := ResolveImportPaths(atmosConfig, basePath, importPaths)
+	require.Error(t, err)
+	assert.Nil(t, resolved)
+	assert.ErrorIs(t, err, errUtils.ErrDownloadRemoteImport)
+}

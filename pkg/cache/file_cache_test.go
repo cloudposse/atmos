@@ -224,3 +224,98 @@ func TestKeyToFilename_PreservesExtension(t *testing.T) {
 		})
 	}
 }
+
+func TestNewFileCache_WithCustomBaseDir(t *testing.T) {
+	tempDir := t.TempDir()
+	customDir := filepath.Join(tempDir, "custom-cache")
+
+	cache, err := NewFileCache("test-subpath", WithBaseDir(customDir))
+	require.NoError(t, err)
+	require.NotNil(t, cache)
+
+	// Verify the custom directory was used and created.
+	assert.DirExists(t, customDir)
+	assert.Equal(t, customDir, cache.BaseDir())
+}
+
+func TestNewFileCache_WithCustomFileSystem(t *testing.T) {
+	tempDir := t.TempDir()
+	customFS := filesystem.NewOSFileSystem()
+
+	cache, err := NewFileCache("test-subpath", WithBaseDir(tempDir), WithFileSystem(customFS))
+	require.NoError(t, err)
+	require.NotNil(t, cache)
+
+	// Test that the custom filesystem is used by setting and getting a value.
+	err = cache.Set("test-key", []byte("test-content"))
+	require.NoError(t, err)
+
+	content, exists, err := cache.Get("test-key")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, []byte("test-content"), content)
+}
+
+func TestFileCache_BaseDir(t *testing.T) {
+	tempDir := t.TempDir()
+	cache, err := NewFileCache("test-subpath", WithBaseDir(tempDir))
+	require.NoError(t, err)
+
+	assert.Equal(t, tempDir, cache.BaseDir())
+}
+
+func TestExtractExtension_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected string
+	}{
+		{"empty string", "", ""},
+		{"no extension", "https://example.com/config", ""},
+		{"invalid extension", "https://example.com/config.txt", ""},
+		{"fragment stripped", "https://example.com/config.yaml#section", ".yaml"},
+		{"query and fragment", "https://example.com/config.yaml?ref=v1#section", ".yaml"},
+		{"multiple dots", "https://example.com/config.backup.yaml", ".yaml"},
+		{"uppercase extension", "https://example.com/config.YAML", ".YAML"},
+		{"only dots", "...", ""},
+		{"hidden file", ".gitignore", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractExtension(tt.uri)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestFileCache_Clear_EmptyDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	cache, err := NewFileCache("test-subpath", WithBaseDir(tempDir))
+	require.NoError(t, err)
+
+	// Clear an empty cache should not error.
+	err = cache.Clear()
+	require.NoError(t, err)
+}
+
+func TestFileCache_Clear_DirectoryDeletedAfterCreation(t *testing.T) {
+	tempDir := t.TempDir()
+	cacheDir := filepath.Join(tempDir, "cache-to-delete")
+
+	// Create a cache with a custom directory.
+	cache, err := NewFileCache("test", WithBaseDir(cacheDir))
+	require.NoError(t, err)
+
+	// Add a file to the cache.
+	err = cache.Set("test-key", []byte("test-content"))
+	require.NoError(t, err)
+
+	// Delete the directory.
+	err = os.RemoveAll(cacheDir)
+	require.NoError(t, err)
+
+	// Clear should handle the missing directory gracefully.
+	err = cache.Clear()
+	require.NoError(t, err)
+}

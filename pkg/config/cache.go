@@ -98,7 +98,7 @@ func LoadCache() (CacheConfig, error) {
 			log.Trace("Cache read error ignored on Windows", "error", readErr, "file", cacheFile)
 			return CacheConfig{}, nil
 		}
-		return cfg, readErr
+		return CacheConfig{}, readErr
 	}
 
 	return cfg, nil

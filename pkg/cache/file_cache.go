@@ -68,7 +68,6 @@ func NewFileCache(subpath string, opts ...FileCacheOption) (*FileCache, error) {
 
 	c := &FileCache{
 		baseDir: baseDir,
-		lock:    NewFileLock(filepath.Join(baseDir, "cache")),
 		fs:      filesystem.NewOSFileSystem(),
 	}
 
@@ -76,6 +75,9 @@ func NewFileCache(subpath string, opts ...FileCacheOption) (*FileCache, error) {
 	for _, opt := range opts {
 		opt(c)
 	}
+
+	// Create lock after options are applied so it uses the final baseDir.
+	c.lock = NewFileLock(filepath.Join(c.baseDir, "cache"))
 
 	// Ensure the cache directory exists after options are applied.
 	// This handles the case where WithBaseDir specifies a custom path.
