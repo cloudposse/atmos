@@ -328,23 +328,6 @@ func TestConstructWorkingDir(t *testing.T) {
 	}
 }
 
-func TestFlagsStruct(t *testing.T) {
-	t.Run("can be created with zero values", func(t *testing.T) {
-		flags := Flags{}
-		assert.Empty(t, flags.Playbook)
-		assert.Empty(t, flags.Inventory)
-	})
-
-	t.Run("can be created with values", func(t *testing.T) {
-		flags := Flags{
-			Playbook:  "site.yml",
-			Inventory: "hosts.ini",
-		}
-		assert.Equal(t, "site.yml", flags.Playbook)
-		assert.Equal(t, "hosts.ini", flags.Inventory)
-	})
-}
-
 func TestGetSettingsIntegration(t *testing.T) {
 	t.Run("extracts both playbook and inventory from same settings", func(t *testing.T) {
 		settings := schema.AtmosSectionMapType{

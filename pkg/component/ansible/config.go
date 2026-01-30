@@ -1,9 +1,13 @@
 package ansible
 
-import "github.com/cloudposse/atmos/pkg/perf"
+import (
+	"path/filepath"
+
+	"github.com/cloudposse/atmos/pkg/perf"
+)
 
 // Config represents the configuration structure for ansible components.
-// This configuration mirrors the schema.Ansible struct from pkg/schema/schema.go
+// This configuration mirrors the schema.Ansible struct from pkg/schema/schema.go.
 // and is used for type-safe configuration access within the provider.
 type Config struct {
 	// BasePath is the filesystem path to ansible components.
@@ -23,7 +27,7 @@ func DefaultConfig() Config {
 	defer perf.Track(nil, "ansible.DefaultConfig")()
 
 	return Config{
-		BasePath:          "components/ansible",
+		BasePath:          filepath.Join("components", "ansible"),
 		Command:           "ansible",
 		AutoGenerateFiles: false,
 	}

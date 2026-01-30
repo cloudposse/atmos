@@ -13,6 +13,7 @@ import (
 var playbookCmd = &cobra.Command{
 	Use:     "playbook",
 	Aliases: []string{"pb"},
+	Args:    cobra.ExactArgs(1),
 	Short:   "Run Ansible playbooks for configuration management.",
 	Long: `This command runs an Ansible playbook, applying configuration changes to target hosts.
 

@@ -33,7 +33,7 @@ func FindStacksMapForGenerate(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	return FindStacksMap(atmosConfig, ignoreMissingFiles)
 }
 
-// GenerateFilesForComponent generates files from the generate section during terraform execution.
+// GenerateFilesForComponent generates files from the generate section during component execution.
 // This is called automatically when auto_generate_files is enabled.
 func GenerateFilesForComponent(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, workingDir string) error {
 	defer perf.Track(atmosConfig, "exec.GenerateFilesForComponent")()
