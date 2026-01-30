@@ -596,6 +596,7 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 		originalComponentLocals schema.AtmosSectionMapType
 		expectedLocalsKeys      []string
 		expectedLocals          map[string]any // When set, assert exact locals values.
+		expectedOriginalLocals  map[string]any // When set, assert original locals preserved.
 	}{
 		{
 			name: "component with locals and stack locals merged",
@@ -723,6 +724,9 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 			originalComponentLocals: map[string]any{
 				"component_local": true,
 			},
+			expectedOriginalLocals: map[string]any{
+				"component_local": true,
+			},
 			expectedLocalsKeys: []string{"component_local", "stack_local"},
 		},
 	}
@@ -760,6 +764,9 @@ func TestProcessComponentConfig_LocalsMerging(t *testing.T) {
 			// Verify OriginalComponentLocals is set.
 			assert.NotNil(t, configAndStacksInfo.OriginalComponentLocals,
 				"OriginalComponentLocals should be initialized after ProcessComponentConfig")
+			if tt.expectedOriginalLocals != nil {
+				assert.Equal(t, tt.expectedOriginalLocals, configAndStacksInfo.OriginalComponentLocals)
+			}
 		})
 	}
 }

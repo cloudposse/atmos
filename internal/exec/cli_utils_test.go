@@ -19,10 +19,13 @@ import (
 // On Windows, filepath.IsAbs requires a drive letter prefix (e.g., C:\),
 // while on Unix systems a leading "/" is sufficient.
 func absTestPath(name string) string {
+	// Build an OS-appropriate absolute path root.
+	// On Windows, "C:" alone is relative to CWD on drive C; "C:\" is absolute.
+	root := string(filepath.Separator)
 	if runtime.GOOS == "windows" {
-		return filepath.Join("C:", filepath.FromSlash(name))
+		root = "C:" + root
 	}
-	return filepath.Join(string(filepath.Separator), filepath.FromSlash(name))
+	return filepath.Join(root, filepath.FromSlash(name))
 }
 
 // newTestCommandWithGlobalFlags creates a test command with all global flags registered
@@ -2050,6 +2053,24 @@ func TestProcessSingleCommand(t *testing.T) {
 			wantPathResolution: true,
 		},
 		{
+			// Windows-style relative path with backslash.
+			name:               "component with backslash relative path sets NeedsPathResolution",
+			args:               []string{"plan", `.\\vpc`},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      `.\\vpc`,
+			wantPathResolution: true,
+		},
+		{
+			// Windows-style parent path with backslash.
+			name:               "component with backslash parent path sets NeedsPathResolution",
+			args:               []string{"plan", `..\\vpc`},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      `..\\vpc`,
+			wantPathResolution: true,
+		},
+		{
 			name:               "component with absolute path sets NeedsPathResolution",
 			args:               []string{"plan", absTestPath("absolute/path/component")},
 			wantErr:            false,
@@ -2058,6 +2079,7 @@ func TestProcessSingleCommand(t *testing.T) {
 			wantPathResolution: true,
 		},
 		{
+			// Forward slashes in component names are namespace separators, not path indicators.
 			name:               "component with slash but no path prefix does not set NeedsPathResolution",
 			args:               []string{"plan", "infra/vpc"},
 			wantErr:            false,
