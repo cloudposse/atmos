@@ -493,4 +493,5 @@ func TestUpdateCache_MultipleFields(t *testing.T) {
 	assert.Equal(t, int64(12345), loadedCache.LastChecked)
 	assert.Equal(t, "multi-update-test", loadedCache.InstallationId)
 	assert.True(t, loadedCache.TelemetryDisclosureShown)
+	assert.True(t, loadedCache.BrowserSessionWarningShown)
 }

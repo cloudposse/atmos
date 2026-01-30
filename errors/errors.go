@@ -554,6 +554,7 @@ var (
 	ErrCacheLocked    = errors.New("cache file is locked")
 	ErrCacheRead      = errors.New("cache read failed")
 	ErrCacheWrite     = errors.New("cache write failed")
+	ErrCacheFetch     = errors.New("failed to fetch content for cache")
 	ErrCacheUnmarshal = errors.New("cache unmarshal failed")
 	ErrCacheMarshal   = errors.New("cache marshal failed")
 	ErrCacheDir       = errors.New("cache directory creation failed")

@@ -128,7 +128,7 @@ func TestRemoteImporter_ClearCache(t *testing.T) {
 
 func TestProcessImportPath_Local(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
-	basePath := "/stacks"
+	basePath := string(os.PathSeparator) + "stacks"
 
 	tests := []struct {
 		name       string
@@ -165,7 +165,7 @@ func TestProcessImportPath_Remote(t *testing.T) {
 	globalImporterErr = nil
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	basePath := "/stacks"
+	basePath := string(os.PathSeparator) + "stacks"
 
 	// Process a remote import path.
 	result, err := ProcessImportPath(atmosConfig, basePath, server.URL+"/config.yaml")
@@ -181,7 +181,7 @@ func TestProcessImportPath_Remote(t *testing.T) {
 
 func TestResolveImportPaths_LocalPaths(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
-	basePath := "/stacks"
+	basePath := string(os.PathSeparator) + "stacks"
 
 	importPaths := []string{
 		"catalog/vpc",
@@ -200,7 +200,7 @@ func TestResolveImportPaths_LocalPaths(t *testing.T) {
 
 func TestResolveImportPaths_EmptySlice(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
-	basePath := "/stacks"
+	basePath := string(os.PathSeparator) + "stacks"
 
 	resolved, err := ResolveImportPaths(atmosConfig, basePath, []string{})
 	require.NoError(t, err)
@@ -223,7 +223,7 @@ func TestResolveImportPaths_MixedPaths(t *testing.T) {
 	globalImporterErr = nil
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	basePath := "/stacks"
+	basePath := string(os.PathSeparator) + "stacks"
 
 	importPaths := []string{
 		"catalog/vpc",
@@ -263,7 +263,7 @@ func TestResolveImportPaths_ErrorPropagation(t *testing.T) {
 	globalImporterErr = nil
 
 	atmosConfig := &schema.AtmosConfiguration{}
-	basePath := "/stacks"
+	basePath := string(os.PathSeparator) + "stacks"
 
 	importPaths := []string{
 		"catalog/vpc",

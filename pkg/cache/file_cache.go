@@ -147,7 +147,7 @@ func (c *FileCache) Get(key string) ([]byte, bool, error) {
 	var exists bool
 
 	err := c.lock.WithRLock(func() error {
-		data, readErr := os.ReadFile(path)
+		data, readErr := c.fs.ReadFile(path)
 		if readErr != nil {
 			if os.IsNotExist(readErr) {
 				exists = false
@@ -196,7 +196,7 @@ func (c *FileCache) GetPath(key string) (string, bool) {
 	filename := keyToFilename(key)
 	path := filepath.Join(c.baseDir, filename)
 
-	if _, err := os.Stat(path); err == nil {
+	if _, err := c.fs.Stat(path); err == nil {
 		return path, true
 	}
 	return path, false
@@ -219,12 +219,14 @@ func (c *FileCache) GetOrFetch(key string, fetch func() ([]byte, error)) ([]byte
 	// Fetch and cache.
 	content, err = fetch()
 	if err != nil {
-		return nil, err
+		return nil, errUtils.Build(errUtils.ErrCacheFetch).
+			WithCause(err).
+			WithContext("key", key).
+			Err()
 	}
 
 	if err := c.Set(key, content); err != nil {
-		// Log but don't fail - cache write errors are non-critical.
-		// The content was fetched successfully.
+		// Cache write errors are non-critical; return fetched content.
 		return content, nil
 	}
 
@@ -237,37 +239,38 @@ func (c *FileCache) Clear() error {
 
 	// Check if the directory exists first. If not, there's nothing to clear
 	// and we avoid errors from trying to acquire a lock on a non-existent path.
-	if _, err := os.Stat(c.baseDir); os.IsNotExist(err) {
+	if _, err := c.fs.Stat(c.baseDir); os.IsNotExist(err) {
 		return nil
 	}
 
 	return c.lock.WithLock(func() error {
-		// Remove all files in the cache directory.
-		entries, err := os.ReadDir(c.baseDir)
-		if err != nil {
-			if os.IsNotExist(err) {
+		// Remove all files in the cache directory using Walk.
+		return c.fs.Walk(c.baseDir, func(path string, info os.FileInfo, walkErr error) error {
+			if walkErr != nil {
+				if os.IsNotExist(walkErr) {
+					return nil
+				}
+				return errUtils.Build(errUtils.ErrClearCache).
+					WithCause(walkErr).
+					WithContext("path", path).
+					Err()
+			}
+
+			// Skip directories (including the base directory itself).
+			if info.IsDir() {
 				return nil
 			}
-			return errUtils.Build(errUtils.ErrClearCache).
-				WithCause(err).
-				WithContext("path", c.baseDir).
-				Err()
-		}
 
-		for _, entry := range entries {
-			if entry.IsDir() {
-				continue // Skip subdirectories.
-			}
-			path := filepath.Join(c.baseDir, entry.Name())
-			if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			// Remove files only.
+			if err := c.fs.Remove(path); err != nil && !os.IsNotExist(err) {
 				return errUtils.Build(errUtils.ErrClearCache).
 					WithCause(err).
 					WithContext("path", path).
 					Err()
 			}
-		}
 
-		return nil
+			return nil
+		})
 	})
 }
 
