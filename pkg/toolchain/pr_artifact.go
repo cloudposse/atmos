@@ -60,6 +60,9 @@ var (
 	ErrPRArtifactExtractFailed = errors.New("failed to extract PR artifact")
 )
 
+// Error message format for Zip Slip attacks.
+const errZipSlipFormat = "%w: illegal file path in archive (potential Zip Slip): %s"
+
 // PRCacheMetadata stores info about a cached PR binary.
 type PRCacheMetadata struct {
 	HeadSHA   string    `json:"head_sha"`   // SHA of the commit when installed.
@@ -459,8 +462,15 @@ func extractZipFile(zipPath, destDir string) error {
 	}
 	defer r.Close()
 
+	// Clean destDir for consistent comparison (Zip Slip protection).
+	cleanDestDir := filepath.Clean(destDir) + string(os.PathSeparator)
+
 	for _, f := range r.File {
-		destPath := filepath.Join(destDir, f.Name) //nolint:gosec // Paths are controlled, not user input.
+		// Sanitize path to prevent Zip Slip attacks.
+		destPath, err := sanitizeZipPath(f.Name, cleanDestDir)
+		if err != nil {
+			return err
+		}
 
 		// Create parent directories.
 		if f.FileInfo().IsDir() {
@@ -481,6 +491,39 @@ func extractZipFile(zipPath, destDir string) error {
 	}
 
 	return nil
+}
+
+// sanitizeZipPath validates that a zip entry path is safe and returns the full destination path.
+// This prevents Zip Slip attacks where malicious zip files contain paths like "../../../etc/passwd".
+func sanitizeZipPath(entryName, cleanDestDir string) (string, error) {
+	// Reject absolute paths (Unix and Windows style).
+	if filepath.IsAbs(entryName) || strings.HasPrefix(entryName, "/") || strings.HasPrefix(entryName, "\\") {
+		return "", fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, entryName)
+	}
+
+	// Reject paths containing backslash (potential Windows-style traversal on Unix).
+	if strings.Contains(entryName, "\\") {
+		return "", fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, entryName)
+	}
+
+	// Reject paths that start with or contain ".." traversal components.
+	for _, part := range strings.Split(entryName, "/") {
+		if part == ".." {
+			return "", fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, entryName)
+		}
+	}
+
+	// Join and clean the path.
+	destPath := filepath.Join(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), entryName)
+	cleanedPath := filepath.Clean(destPath)
+
+	// Final verification: ensure the cleaned path is still within the destination directory.
+	if !strings.HasPrefix(cleanedPath+string(os.PathSeparator), cleanDestDir) &&
+		cleanedPath != strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)) {
+		return "", fmt.Errorf(errZipSlipFormat, ErrPRArtifactExtractFailed, entryName)
+	}
+
+	return cleanedPath, nil
 }
 
 // extractZipEntry extracts a single ZIP entry to the destination path.
