@@ -231,6 +231,7 @@ var (
 	ErrNoAssetTemplate              = errors.New("no asset template defined")
 	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
 	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
+	ErrNoToolsConfigured            = errors.New("no tools configured")
 	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
 
 	// Flag validation errors.

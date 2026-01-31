@@ -102,6 +102,9 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 // The reinstallFlag parameter forces reinstallation even if already installed.
 // The showHint parameter controls whether to show the PATH export hint message.
 // The showProgressBar parameter controls whether to show spinner and success messages.
+//
+// Special format: pr:NNNN - installs Atmos from a PR's build artifact.
+// Example: atmos version install pr:2038.
 func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
@@ -109,8 +112,20 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
 	}
 
+	// Check if this is a PR version specifier (e.g., "pr:2038").
+	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
+		_, err := InstallFromPR(prNumber, showProgressBar)
+		return err
+	}
+
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
+		return err
+	}
+
+	// Also check if the version is a PR specifier (e.g., "atmos@pr:2038").
+	if prNumber, isPR := IsPRVersion(version); isPR {
+		_, err := InstallFromPR(prNumber, showProgressBar)
 		return err
 	}
 

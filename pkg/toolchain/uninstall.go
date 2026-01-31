@@ -259,6 +259,13 @@ func uninstallFromToolVersions(toolVersionsPath string, installer *Installer) er
 	// Load tool versions.
 	toolVersions, err := LoadToolVersions(toolVersionsPath)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return errUtils.Build(errUtils.ErrNoToolsConfigured).
+				WithExplanation("No tools are configured to uninstall").
+				WithHint("Add tools with `atmos toolchain add <tool>@<version>`").
+				WithHint("Or install directly with `atmos toolchain install <tool>@<version>`").
+				Err()
+		}
 		return fmt.Errorf("%w: failed to load %s: %w", ErrFileOperation, toolVersionsPath, err)
 	}
 
