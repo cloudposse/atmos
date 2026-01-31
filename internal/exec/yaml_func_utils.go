@@ -160,7 +160,8 @@ func processSimpleTags(
 	stackInfo *schema.ConfigAndStacksInfo,
 ) (any, bool, error) {
 	if matchesPrefix(input, u.AtmosYamlFuncTemplate, skip) {
-		return processTagTemplate(input), true, nil
+		result, err := processTagTemplate(input)
+		return result, true, err
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncExec, skip) {
 		res, err := u.ProcessTagExec(input)
@@ -170,10 +171,12 @@ func processSimpleTags(
 		return res, true, nil
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStoreGet, skip) {
-		return processTagStoreGet(atmosConfig, input, currentStack), true, nil
+		result, err := processTagStoreGet(atmosConfig, input, currentStack)
+		return result, true, err
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncStore, skip) {
-		return processTagStore(atmosConfig, input, currentStack), true, nil
+		result, err := processTagStore(atmosConfig, input, currentStack)
+		return result, true, err
 	}
 	if matchesPrefix(input, u.AtmosYamlFuncEnv, skip) {
 		res, err := u.ProcessTagEnv(input, stackInfo)
@@ -184,16 +187,20 @@ func processSimpleTags(
 	}
 	// AWS YAML functions - note these check for exact match since they take no arguments.
 	if input == u.AtmosYamlFuncAwsAccountID && !skipFunc(skip, u.AtmosYamlFuncAwsAccountID) {
-		return processTagAwsAccountID(atmosConfig, input, stackInfo), true, nil
+		result, err := processTagAwsAccountID(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityArn && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityArn) {
-		return processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo), true, nil
+		result, err := processTagAwsCallerIdentityArn(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	if input == u.AtmosYamlFuncAwsCallerIdentityUserID && !skipFunc(skip, u.AtmosYamlFuncAwsCallerIdentityUserID) {
-		return processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo), true, nil
+		result, err := processTagAwsCallerIdentityUserID(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	if input == u.AtmosYamlFuncAwsRegion && !skipFunc(skip, u.AtmosYamlFuncAwsRegion) {
-		return processTagAwsRegion(atmosConfig, input, stackInfo), true, nil
+		result, err := processTagAwsRegion(atmosConfig, input, stackInfo)
+		return result, true, err
 	}
 	return nil, false, nil
 }
