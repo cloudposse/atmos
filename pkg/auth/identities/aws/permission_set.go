@@ -33,6 +33,7 @@ type permissionSetIdentity struct {
 	config           *schema.Identity
 	manager          types.AuthManager // Auth manager for resolving root provider
 	rootProviderName string            // Cached root provider name from PostAuthenticate
+	realm            string            // Credential isolation realm set by auth manager
 }
 
 // NewPermissionSetIdentity creates a new AWS permission set identity.
@@ -50,6 +51,11 @@ func NewPermissionSetIdentity(name string, config *schema.Identity) (types.Ident
 // Kind returns the identity kind.
 func (i *permissionSetIdentity) Kind() string {
 	return "aws/permission-set"
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *permissionSetIdentity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // Authenticate performs authentication using permission set.
@@ -174,7 +180,8 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	providerName, err := i.resolveRootProviderName()
 	if err == nil {
 		// Get AWS file environment variables.
-		awsFileManager, err := awsCloud.NewAWSFileManager("")
+		// Environment() is called before authentication, so we use empty realm for path resolution.
+		awsFileManager, err := awsCloud.NewAWSFileManager("", "")
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 		}
@@ -219,7 +226,8 @@ func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ 
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// PrepareEnvironment is called before authentication, so we use empty realm for path resolution.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", "")
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -320,7 +328,8 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 	i.rootProviderName = params.ProviderName
 
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+	// Use realm from params for credential isolation.
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
 		return fmt.Errorf("%w: failed to setup AWS files: %w", errUtils.ErrAwsAuth, err)
 	}
 
@@ -332,6 +341,7 @@ func (i *permissionSetIdentity) PostAuthenticate(ctx context.Context, params *ty
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Realm:        params.Realm,
 	}); err != nil {
 		return fmt.Errorf("%w: failed to set auth context: %w", errUtils.ErrAwsAuth, err)
 	}
@@ -446,7 +456,8 @@ func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
 		return false, nil
 	}
 
-	mgr, err := awsCloud.NewAWSFileManager("")
+	// CredentialsExist checks storage before authentication, so we use empty realm.
+	mgr, err := awsCloud.NewAWSFileManager("", "")
 	if err != nil {
 		return false, err
 	}
@@ -505,9 +516,10 @@ func (i *permissionSetIdentity) Logout(ctx context.Context) error {
 
 	// Get base_path from provider spec if configured (requires manager to lookup provider config).
 	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	// Logout removes credentials regardless of realm, so we use empty realm.
 	basePath := ""
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, "")
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)

@@ -25,6 +25,7 @@ type cliProvider struct {
 	tenantID       string
 	subscriptionID string
 	location       string
+	realm          string // Credential isolation realm set by auth manager
 }
 
 // azureCliTokenResponse represents the response from `az account get-access-token`.
@@ -84,6 +85,11 @@ func (p *cliProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *cliProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *cliProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for Azure CLI provider.

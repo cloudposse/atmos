@@ -139,10 +139,15 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 
 // createECRAuthManager creates a new auth manager for ECR operations.
 func createECRAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-
-	return auth.NewAuthManager(authConfig, credStore, validator, nil)
+	// Note: Empty cliConfigPath results in auto-generated realm from empty path.
+	// This is acceptable for ECR login commands.
+	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, "")
 }
 
 func init() {

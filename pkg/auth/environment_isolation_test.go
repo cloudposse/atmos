@@ -65,6 +65,7 @@ func TestAuthenticationIgnoresExternalAWSEnvVars(t *testing.T) {
 		credStore,
 		validator,
 		nil,
+		"",
 	)
 	require.NoError(t, err)
 	require.NotNil(t, authManager)
@@ -134,6 +135,7 @@ func TestAuthManagerCreationWithConflictingEnvVars(t *testing.T) {
 		credStore,
 		validator,
 		nil,
+		"",
 	)
 
 	require.NoError(t, err, "Auth manager creation should succeed despite conflicting env vars")

@@ -14,6 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
+	realm "github.com/cloudposse/atmos/pkg/auth/realm"
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -170,6 +171,18 @@ func (m *MockProvider) PrepareEnvironment(ctx context.Context, environ map[strin
 func (mr *MockProviderMockRecorder) PrepareEnvironment(ctx, environ any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareEnvironment", reflect.TypeOf((*MockProvider)(nil).PrepareEnvironment), ctx, environ)
+}
+
+// SetRealm mocks base method.
+func (m *MockProvider) SetRealm(arg0 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRealm", arg0)
+}
+
+// SetRealm indicates an expected call of SetRealm.
+func (mr *MockProviderMockRecorder) SetRealm(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRealm", reflect.TypeOf((*MockProvider)(nil).SetRealm), arg0)
 }
 
 // Validate mocks base method.
@@ -394,6 +407,18 @@ func (m *MockIdentity) PrepareEnvironment(ctx context.Context, environ map[strin
 func (mr *MockIdentityMockRecorder) PrepareEnvironment(ctx, environ any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareEnvironment", reflect.TypeOf((*MockIdentity)(nil).PrepareEnvironment), ctx, environ)
+}
+
+// SetRealm mocks base method.
+func (m *MockIdentity) SetRealm(arg0 string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetRealm", arg0)
+}
+
+// SetRealm indicates an expected call of SetRealm.
+func (mr *MockIdentityMockRecorder) SetRealm(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRealm", reflect.TypeOf((*MockIdentity)(nil).SetRealm), arg0)
 }
 
 // Validate mocks base method.
@@ -637,6 +662,20 @@ func (mr *MockAuthManagerMockRecorder) GetProviders() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetProviders", reflect.TypeOf((*MockAuthManager)(nil).GetProviders))
 }
 
+// GetRealm mocks base method.
+func (m *MockAuthManager) GetRealm() realm.RealmInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRealm")
+	ret0, _ := ret[0].(realm.RealmInfo)
+	return ret0
+}
+
+// GetRealm indicates an expected call of GetRealm.
+func (mr *MockAuthManagerMockRecorder) GetRealm() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRealm", reflect.TypeOf((*MockAuthManager)(nil).GetRealm))
+}
+
 // GetStackInfo mocks base method.
 func (m *MockAuthManager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	m.ctrl.T.Helper()
@@ -820,76 +859,76 @@ func (m *MockCredentialStore) EXPECT() *MockCredentialStoreMockRecorder {
 }
 
 // Delete mocks base method.
-func (m *MockCredentialStore) Delete(alias string) error {
+func (m *MockCredentialStore) Delete(alias, arg1 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Delete", alias)
+	ret := m.ctrl.Call(m, "Delete", alias, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Delete indicates an expected call of Delete.
-func (mr *MockCredentialStoreMockRecorder) Delete(alias any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) Delete(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCredentialStore)(nil).Delete), alias)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Delete", reflect.TypeOf((*MockCredentialStore)(nil).Delete), alias, arg1)
 }
 
 // IsExpired mocks base method.
-func (m *MockCredentialStore) IsExpired(alias string) (bool, error) {
+func (m *MockCredentialStore) IsExpired(alias, arg1 string) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsExpired", alias)
+	ret := m.ctrl.Call(m, "IsExpired", alias, arg1)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // IsExpired indicates an expected call of IsExpired.
-func (mr *MockCredentialStoreMockRecorder) IsExpired(alias any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) IsExpired(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockCredentialStore)(nil).IsExpired), alias)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsExpired", reflect.TypeOf((*MockCredentialStore)(nil).IsExpired), alias, arg1)
 }
 
 // List mocks base method.
-func (m *MockCredentialStore) List() ([]string, error) {
+func (m *MockCredentialStore) List(arg0 string) ([]string, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "List")
+	ret := m.ctrl.Call(m, "List", arg0)
 	ret0, _ := ret[0].([]string)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // List indicates an expected call of List.
-func (mr *MockCredentialStoreMockRecorder) List() *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) List(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockCredentialStore)(nil).List))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "List", reflect.TypeOf((*MockCredentialStore)(nil).List), arg0)
 }
 
 // Retrieve mocks base method.
-func (m *MockCredentialStore) Retrieve(alias string) (ICredentials, error) {
+func (m *MockCredentialStore) Retrieve(alias, arg1 string) (ICredentials, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Retrieve", alias)
+	ret := m.ctrl.Call(m, "Retrieve", alias, arg1)
 	ret0, _ := ret[0].(ICredentials)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // Retrieve indicates an expected call of Retrieve.
-func (mr *MockCredentialStoreMockRecorder) Retrieve(alias any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) Retrieve(alias, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockCredentialStore)(nil).Retrieve), alias)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Retrieve", reflect.TypeOf((*MockCredentialStore)(nil).Retrieve), alias, arg1)
 }
 
 // Store mocks base method.
-func (m *MockCredentialStore) Store(alias string, creds ICredentials) error {
+func (m *MockCredentialStore) Store(alias string, creds ICredentials, arg2 string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Store", alias, creds)
+	ret := m.ctrl.Call(m, "Store", alias, creds, arg2)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Store indicates an expected call of Store.
-func (mr *MockCredentialStoreMockRecorder) Store(alias, creds any) *gomock.Call {
+func (mr *MockCredentialStoreMockRecorder) Store(alias, creds, arg2 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCredentialStore)(nil).Store), alias, creds)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Store", reflect.TypeOf((*MockCredentialStore)(nil).Store), alias, creds, arg2)
 }
 
 // Type mocks base method.

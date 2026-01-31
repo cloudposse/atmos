@@ -115,6 +115,7 @@ func (s stubUser) LoadCredentials(_ context.Context) (types.ICredentials, error)
 func (s stubUser) PrepareEnvironment(_ context.Context, environ map[string]string) (map[string]string, error) {
 	return environ, nil
 }
+func (s stubUser) SetRealm(_ string) {}
 
 func TestAuthenticateStandaloneAWSUser(t *testing.T) {
 	// Not found -> error.
@@ -275,7 +276,7 @@ func TestUser_credentialsFromConfig(t *testing.T) {
 func TestUser_credentialsFromStore(t *testing.T) {
 	// Prime the store for alias "dev".
 	store := atmosCreds.NewCredentialStore()
-	_ = store.Store("dev", &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET", Region: "us-east-1"})
+	_ = store.Store("dev", &types.AWSCredentials{AccessKeyID: "AKIA", SecretAccessKey: "SECRET", Region: "us-east-1"}, "")
 
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user"})
 	require.NoError(t, err)
@@ -289,14 +290,14 @@ func TestUser_credentialsFromStore(t *testing.T) {
 	assert.Equal(t, "us-east-1", creds.Region)
 
 	// Wrong type stored.
-	_ = store.Store("other", &types.OIDCCredentials{Token: "hdr.payload."})
+	_ = store.Store("other", &types.OIDCCredentials{Token: "hdr.payload."}, "")
 	id, _ = NewUserIdentity("other", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
 	assert.Error(t, err)
 
 	// Incomplete stored.
-	_ = store.Store("incomplete", &types.AWSCredentials{AccessKeyID: "AKIA"})
+	_ = store.Store("incomplete", &types.AWSCredentials{AccessKeyID: "AKIA"}, "")
 	id, _ = NewUserIdentity("incomplete", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	_, err = ui.credentialsFromStore()
@@ -326,7 +327,7 @@ func TestUser_resolveLongLivedCredentials_Order(t *testing.T) {
 	// If config has no access key, fallback to store.
 	// Prime the store.
 	store := atmosCreds.NewCredentialStore()
-	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"})
+	_ = store.Store("dev2", &types.AWSCredentials{AccessKeyID: "AK2", SecretAccessKey: "SEC2"}, "")
 	id, _ = NewUserIdentity("dev2", &schema.Identity{Kind: "aws/user"})
 	ui = id.(*userIdentity)
 	creds, err = ui.resolveLongLivedCredentials(ctx)
@@ -450,7 +451,7 @@ func TestUser_resolveLongLivedCredentials_DeepMerge(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Prime keyring if test provides keystore credentials.
 			if tt.keystoreCreds != nil {
-				err := store.Store(tt.identityName, tt.keystoreCreds)
+				err := store.Store(tt.identityName, tt.keystoreCreds, "")
 				require.NoError(t, err)
 			}
 
@@ -1137,11 +1138,11 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 		AccessKeyID:     "AKIA_STALE",
 		SecretAccessKey: "SECRET_STALE",
 		Region:          "us-east-1",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Verify credentials exist before the test.
-	_, err = store.Retrieve("test-invalid-creds")
+	_, err = store.Retrieve("test-invalid-creds", "")
 	require.NoError(t, err, "Credentials should exist before test")
 
 	// Create identity.
@@ -1172,7 +1173,7 @@ func TestUserIdentity_HandleSTSError_InvalidClientTokenId(t *testing.T) {
 	assert.Contains(t, resultErr.Error(), "credentials are invalid or have been revoked")
 
 	// Verify: Stale credentials should be cleared from keyring.
-	_, err = store.Retrieve("test-invalid-creds")
+	_, err = store.Retrieve("test-invalid-creds", "")
 	assert.Error(t, err, "Stale credentials should be cleared from keyring")
 }
 
@@ -1256,11 +1257,11 @@ func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
 		AccessKeyID:     "AKIA_STALE",
 		SecretAccessKey: "SECRET_STALE",
 		Region:          "us-east-1",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Verify credentials exist before the test.
-	_, err = store.Retrieve("test-prompt-creds")
+	_, err = store.Retrieve("test-prompt-creds", "")
 	require.NoError(t, err, "Credentials should exist before test")
 
 	// Create identity with MFA ARN in YAML config.
@@ -1317,7 +1318,7 @@ func TestUserIdentity_HandleSTSError_WithPromptFunc(t *testing.T) {
 	assert.Equal(t, "36h", resultCreds.SessionDuration)
 
 	// Verify: Stale credentials should still be cleared from keyring.
-	_, err = store.Retrieve("test-prompt-creds")
+	_, err = store.Retrieve("test-prompt-creds", "")
 	assert.Error(t, err, "Stale credentials should be cleared from keyring")
 }
 
@@ -1366,7 +1367,7 @@ func TestUser_resolveLongLivedCredentials_SessionDurationPreserved(t *testing.T)
 		SecretAccessKey: "KEYRING_SECRET",
 		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
 		SessionDuration: "36h",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Create identity with no YAML credentials (uses keyring).
@@ -1406,7 +1407,7 @@ func TestUser_resolveLongLivedCredentials_DetectsSessionCredentials(t *testing.T
 		SecretAccessKey: "SESSION_SECRET",
 		SessionToken:    "SESSION_TOKEN_SHOULD_NOT_BE_HERE",
 		MfaArn:          "arn:aws:iam::123456789012:mfa/user",
-	})
+	}, "")
 	require.NoError(t, err)
 
 	// Create identity with no YAML credentials (uses keyring).
@@ -1540,7 +1541,7 @@ func TestUserIdentity_ClearStaleCredentials(t *testing.T) {
 		err := store.Store("test-clear-creds", &types.AWSCredentials{
 			AccessKeyID:     "AKIATEST",
 			SecretAccessKey: "SECRET",
-		})
+		}, "")
 		require.NoError(t, err)
 
 		// Create identity.
@@ -1555,7 +1556,7 @@ func TestUserIdentity_ClearStaleCredentials(t *testing.T) {
 		userIdent.clearStaleCredentials()
 
 		// Verify credentials are gone.
-		_, err = store.Retrieve("test-clear-creds")
+		_, err = store.Retrieve("test-clear-creds", "")
 		assert.Error(t, err, "Credentials should be deleted")
 	})
 

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 	testutil "github.com/cloudposse/atmos/tests"
@@ -1475,6 +1476,10 @@ func (m *mockAuthManager) ResolvePrincipalSetting(_ string, _ string) (interface
 
 func (m *mockAuthManager) ResolveProviderConfig(_ string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (m *mockAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestAssumeRootIdentity_CredentialsExist_ProviderResolutionError(t *testing.T) {

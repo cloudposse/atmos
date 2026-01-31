@@ -24,17 +24,17 @@ func TestMemoryKeyring_List(t *testing.T) {
 	store := newMemoryKeyringStore()
 
 	// Initially empty.
-	aliases, err := store.List()
+	aliases, err := store.List("test-realm")
 	require.NoError(t, err)
 	assert.Empty(t, aliases)
 
 	// Store multiple credentials.
-	require.NoError(t, store.Store("alias1", &types.OIDCCredentials{Token: "token1"}))
-	require.NoError(t, store.Store("alias2", &types.OIDCCredentials{Token: "token2"}))
-	require.NoError(t, store.Store("alias3", &types.OIDCCredentials{Token: "token3"}))
+	require.NoError(t, store.Store("alias1", &types.OIDCCredentials{Token: "token1"}, "test-realm"))
+	require.NoError(t, store.Store("alias2", &types.OIDCCredentials{Token: "token2"}, "test-realm"))
+	require.NoError(t, store.Store("alias3", &types.OIDCCredentials{Token: "token3"}, "test-realm"))
 
 	// List should return all aliases.
-	aliases, err = store.List()
+	aliases, err = store.List("test-realm")
 	require.NoError(t, err)
 	assert.Len(t, aliases, 3)
 	assert.Contains(t, aliases, "alias1")
@@ -42,10 +42,10 @@ func TestMemoryKeyring_List(t *testing.T) {
 	assert.Contains(t, aliases, "alias3")
 
 	// Delete one.
-	require.NoError(t, store.Delete("alias2"))
+	require.NoError(t, store.Delete("alias2", "test-realm"))
 
 	// List should reflect deletion.
-	aliases, err = store.List()
+	aliases, err = store.List("test-realm")
 	require.NoError(t, err)
 	assert.Len(t, aliases, 2)
 	assert.NotContains(t, aliases, "alias2")
@@ -94,7 +94,7 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 			for j := 0; j < numOperations; j++ {
 				alias := fmt.Sprintf("alias-%d-%d", id, j)
 				creds := &types.OIDCCredentials{Token: alias}
-				if err := store.Store(alias, creds); err != nil {
+				if err := store.Store(alias, creds, "test-realm"); err != nil {
 					errChan <- fmt.Errorf("store error (id=%d, j=%d): %w", id, j, err)
 				}
 			}
@@ -104,7 +104,7 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 	wg.Wait()
 
 	// Verify all credentials stored.
-	aliases, err := store.List()
+	aliases, err := store.List("test-realm")
 	require.NoError(t, err)
 	assert.Equal(t, numGoroutines*numOperations, len(aliases))
 
@@ -115,7 +115,7 @@ func TestMemoryKeyring_ConcurrentAccess(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < numOperations; j++ {
 				alias := fmt.Sprintf("alias-%d-%d", id, j)
-				if _, err := store.Retrieve(alias); err != nil {
+				if _, err := store.Retrieve(alias, "test-realm"); err != nil {
 					errChan <- fmt.Errorf("retrieve error (id=%d, j=%d): %w", id, j, err)
 				}
 			}
@@ -143,22 +143,22 @@ func TestMemoryKeyring_Isolation(t *testing.T) {
 
 	// Store in store1.
 	creds := &types.OIDCCredentials{Token: "test-token"}
-	require.NoError(t, store1.Store("test-alias", creds))
+	require.NoError(t, store1.Store("test-alias", creds, "test-realm"))
 
 	// Should exist in store1.
-	_, err := store1.Retrieve("test-alias")
+	_, err := store1.Retrieve("test-alias", "test-realm")
 	require.NoError(t, err)
 
 	// Should NOT exist in store2 (isolated).
-	_, err = store2.Retrieve("test-alias")
+	_, err = store2.Retrieve("test-alias", "test-realm")
 	assert.Error(t, err)
 
 	// Lists should be independent.
-	list1, err := store1.List()
+	list1, err := store1.List("test-realm")
 	require.NoError(t, err)
 	assert.Len(t, list1, 1)
 
-	list2, err := store2.List()
+	list2, err := store2.List("test-realm")
 	require.NoError(t, err)
 	assert.Empty(t, list2)
 }

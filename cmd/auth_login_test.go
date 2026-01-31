@@ -262,7 +262,7 @@ func TestCreateAuthManager(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = NewTestKit(t) // Isolate RootCmd state per subtest.
 
-			manager, err := createAuthManager(tt.config)
+			manager, err := createAuthManager(tt.config, "")
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -749,7 +749,7 @@ func TestCreateAuthManagerExported(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, err := CreateAuthManager(tt.config)
+			manager, err := CreateAuthManager(tt.config, "")
 
 			if tt.expectError {
 				assert.Error(t, err)

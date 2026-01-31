@@ -28,7 +28,9 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 	}
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo)
+	// Note: Empty cliConfigPath results in auto-generated realm from empty path.
+	// This is acceptable for temporary managers used only for identity resolution.
+	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo, "")
 	if err != nil {
 		return "", errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -110,7 +112,9 @@ func createAuthManagerInstance(authConfig *schema.AuthConfig) (AuthManager, erro
 
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	// Note: Empty cliConfigPath results in auto-generated realm from empty path.
+	// This is acceptable for helper managers used in CLI commands.
+	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo, "")
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}

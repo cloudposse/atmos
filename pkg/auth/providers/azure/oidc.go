@@ -62,6 +62,7 @@ type oidcProvider struct {
 	httpClient httpClient.Client
 	// tokenEndpoint can be overridden for testing. If empty, uses Azure AD endpoint.
 	tokenEndpoint string
+	realm         string // Credential isolation realm set by auth manager
 }
 
 // oidcConfig holds extracted Azure OIDC configuration from provider spec.
@@ -154,6 +155,11 @@ func (p *oidcProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *oidcProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *oidcProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for Azure OIDC provider.

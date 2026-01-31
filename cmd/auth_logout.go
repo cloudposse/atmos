@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/charmbracelet/huh"
 	"github.com/spf13/cobra"
@@ -14,12 +15,14 @@ import (
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth"
+	"github.com/cloudposse/atmos/pkg/auth/credentials"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/xdg"
 )
 
 //go:embed markdown/atmos_auth_logout_usage.md
@@ -57,7 +60,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	defer perf.Track(&atmosConfig, "cmd.executeAuthLogoutCommand")()
 
 	// Create auth manager.
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAuthManager, err)
 	}
@@ -65,6 +68,7 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	// Get flags.
 	providerFlag, _ := cmd.Flags().GetString("provider")
 	allFlag, _ := cmd.Flags().GetBool("all")
+	allRealmsFlag, _ := cmd.Flags().GetBool("all-realms")
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	deleteKeychain, _ := cmd.Flags().GetBool("keychain")
 	force, _ := cmd.Flags().GetBool("force")
@@ -77,6 +81,11 @@ func executeAuthLogoutCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	ctx := context.Background()
+
+	// Handle --all-realms flag - logout from all realms across all repositories.
+	if allRealmsFlag {
+		return performLogoutAllRealms(ctx, &atmosConfig, dryRun, deleteKeychain, force)
+	}
 
 	// Determine what to logout.
 	if allFlag {
@@ -257,10 +266,11 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	}
 
 	// Perform logout.
+	realmInfo := authManager.GetRealm()
 	if err := authManager.Logout(ctx, identityName, deleteKeychain); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMessageToTUI("\n%s Logged out %s with warnings\n\n", theme.Styles.Checkmark, identityName)
+			u.PrintfMessageToTUI("\n%s Logged out %s with warnings (realm: %s)\n\n", theme.Styles.Checkmark, identityName, realmInfo.Value)
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
@@ -269,7 +279,7 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 			return err
 		}
 	} else {
-		u.PrintfMessageToTUI("\n%s Logged out %s\n\n", theme.Styles.Checkmark, identityName)
+		u.PrintfMessageToTUI("\n%s Logged out %s (realm: %s)\n\n", theme.Styles.Checkmark, identityName, realmInfo.Value)
 	}
 
 	// Display browser session warning.
@@ -345,7 +355,8 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 		return err
 	}
 
-	u.PrintfMessageToTUI("\n%s Logged out provider %s (%d identities)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider))
+	realmInfo := authManager.GetRealm()
+	u.PrintfMessageToTUI("\n%s Logged out provider %s (%d identities) (realm: %s)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider), realmInfo.Value)
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -498,7 +509,8 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	}
 
 	identities := authManager.GetIdentities()
-	u.PrintfMessageToTUI("\n%s Logged out all %d identities\n\n", theme.Styles.Checkmark, len(identities))
+	realmInfo := authManager.GetRealm()
+	u.PrintfMessageToTUI("\n%s Logged out all %d identities (realm: %s)\n\n", theme.Styles.Checkmark, len(identities), realmInfo.Value)
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -507,6 +519,137 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 	displayExternalCredentialWarnings()
 
 	return nil
+}
+
+// performLogoutAllRealms logs out from all realms across all repositories.
+// This removes all Atmos credentials from the system, not just the current realm.
+func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfiguration, dryRun bool, deleteKeychain bool, force bool) error { //nolint:funlen
+	defer perf.Track(atmosConfig, "cmd.performLogoutAllRealms")()
+
+	// Get the base XDG config directory.
+	baseDir, err := xdg.GetXDGConfigDir("", 0o700)
+	if err != nil {
+		return fmt.Errorf("failed to get config directory: %w", err)
+	}
+
+	// Discover all realms by scanning the config directory.
+	realms, err := discoverRealms(baseDir)
+	if err != nil {
+		return fmt.Errorf("failed to discover realms: %w", err)
+	}
+
+	if len(realms) == 0 {
+		u.PrintfMessageToTUI("\n%s No realms found - nothing to logout\n\n", theme.Styles.Checkmark)
+		return nil
+	}
+
+	if dryRun {
+		u.PrintfMarkdownToTUI("**Dry run mode:** No credentials will be removed\n\n")
+		u.PrintfMarkdownToTUI("**Would remove credentials from %d realm(s):**\n", len(realms))
+		for _, realm := range realms {
+			u.PrintfMessageToTUI("  • %s\n", realm)
+		}
+		if deleteKeychain {
+			u.PrintfMarkdownToTUI("\n**Would also remove keychain entries for all realms**\n")
+		}
+		u.PrintfMessageToTUI("\n")
+		return nil
+	}
+
+	// If deleteKeychain is requested, confirm with user.
+	if deleteKeychain {
+		isTTY := term.IsTTYSupportForStdout()
+		confirmed, err := confirmKeychainDeletion(fmt.Sprintf("all %d realms", len(realms)), force, isTTY)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			return nil // User cancelled, exit cleanly.
+		}
+	}
+
+	// Track results.
+	var successCount int
+	var errs []error
+
+	// Process each realm.
+	for _, realmName := range realms {
+		realmDir := filepath.Join(baseDir, realmName)
+
+		log.Debug("Logging out realm", "realm", realmName, "directory", realmDir)
+
+		// Remove the realm directory (all file-based credentials).
+		if err := os.RemoveAll(realmDir); err != nil && !os.IsNotExist(err) {
+			errs = append(errs, fmt.Errorf("failed to remove realm %s: %w", realmName, err))
+			continue
+		}
+
+		// If keychain deletion is requested, we need to delete keyring entries for this realm.
+		// Note: This requires knowing the aliases, which we can get from the current config.
+		// For a full cleanup, users should run this from each repository or use a keyring manager.
+		if deleteKeychain {
+			// Delete keyring entries for identities in the current auth config using this realm.
+			if atmosConfig.Auth.Identities != nil {
+				store := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
+				for alias := range atmosConfig.Auth.Identities {
+					if err := store.Delete(alias, realmName); err != nil {
+						// Log but don't fail - keyring entries may not exist.
+						log.Debug("Failed to delete keyring entry", "alias", alias, "realm", realmName, "error", err)
+					}
+				}
+			}
+		}
+
+		successCount++
+		u.PrintfMessageToTUI("  %s Realm: %s\n", theme.Styles.Checkmark, realmName)
+	}
+
+	u.PrintfMessageToTUI("\n")
+
+	if len(errs) > 0 {
+		u.PrintfMarkdownToTUI("⚠ **Logout completed with %d error(s):**\n\n", len(errs))
+		for _, err := range errs {
+			u.PrintfMessageToTUI("  • %v\n", err)
+		}
+		u.PrintfMessageToTUI("\n")
+	}
+
+	u.PrintfMessageToTUI("%s Logged out from %d realm(s)\n\n", theme.Styles.Checkmark, successCount)
+
+	// Display browser session warning.
+	displayBrowserWarning()
+
+	return nil
+}
+
+// discoverRealms scans the Atmos config directory to find all realm subdirectories.
+// Realms are identified as directories that contain an "aws" subdirectory.
+func discoverRealms(baseDir string) ([]string, error) {
+	defer perf.Track(nil, "cmd.discoverRealms")()
+
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil // No config directory means no realms.
+		}
+		return nil, err
+	}
+
+	var realms []string
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+
+		// Check if this directory looks like a realm (contains aws/ subdirectory).
+		realmPath := filepath.Join(baseDir, entry.Name())
+		awsPath := filepath.Join(realmPath, "aws")
+		if info, err := os.Stat(awsPath); err == nil && info.IsDir() {
+			realms = append(realms, entry.Name())
+		}
+	}
+
+	return realms, nil
 }
 
 // displayBrowserWarning shows a warning about browser sessions.
@@ -531,6 +674,7 @@ func displayBrowserWarning() {
 func init() {
 	authLogoutCmd.Flags().String("provider", "", "Logout from specific provider")
 	authLogoutCmd.Flags().Bool("all", false, "Logout from all identities and providers")
+	authLogoutCmd.Flags().Bool("all-realms", false, "Logout from all realms across all repositories (clears all Atmos credentials)")
 	authLogoutCmd.Flags().Bool("dry-run", false, "Preview what would be removed without deleting")
 	authLogoutCmd.Flags().Bool("keychain", false, "Also remove credentials from system keychain (destructive, requires confirmation)")
 	authLogoutCmd.Flags().Bool("force", false, "Skip confirmation prompts (useful for CI/CD)")

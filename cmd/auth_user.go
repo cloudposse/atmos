@@ -9,6 +9,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	uiutils "github.com/cloudposse/atmos/internal/tui/utils"
 	"github.com/cloudposse/atmos/pkg/auth/credentials"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -130,8 +131,14 @@ var authUserConfigureCmd = &cobra.Command{
 			SessionDuration: sessionDuration,
 		}
 
-		// Store the credentials
-		if err := store.Store(alias, creds); err != nil {
+		// Compute realm for credential isolation between different repositories.
+		realmInfo, err := realm.GetRealm(atmosConfig.Auth.Realm, atmosConfig.CliConfigPath)
+		if err != nil {
+			return fmt.Errorf("failed to compute realm: %w", err)
+		}
+
+		// Store the credentials with realm for isolation.
+		if err := store.Store(alias, creds, realmInfo.Value); err != nil {
 			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsAuth, err)
 		}
 		fmt.Fprintf(cmd.ErrOrStderr(), "✓ Saved credentials to keyring: %s\n", alias)

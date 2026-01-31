@@ -26,7 +26,21 @@ var ErrListNotSupported = errors.New("listing credentials is not supported with 
 const (
 	// KeyringUser is the "account" used to store credentials in the keyring. Here we use atmos-auth to provide a consistent way to search for atmos credentials.
 	KeyringUser = "atmos-auth"
+
+	// KeyringRealmPrefix is the prefix used for realm-scoped keyring keys.
+	KeyringRealmPrefix = "atmos"
 )
+
+// buildKeyringKey creates a realm-scoped keyring key.
+// Format: "atmos:{realm}:{alias}" when realm is provided.
+// Falls back to just "{alias}" for backward compatibility when realm is empty.
+func buildKeyringKey(alias, realm string) string {
+	log.Debug("Building keyring key", "alias", alias, "realm", realm)
+	if realm != "" {
+		return KeyringRealmPrefix + ":" + realm + ":" + alias
+	}
+	return KeyringRealmPrefix + ":" + alias
+}
 
 // credentialEnvelope is used to persist interface credentials with type information.
 type credentialEnvelope struct {

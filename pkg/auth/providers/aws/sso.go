@@ -48,6 +48,7 @@ type ssoProvider struct {
 	region       string
 	cacheStorage CacheStorage
 	ssoClient    ssoClient // For dependency injection in tests.
+	realm        string    // Credential isolation realm set by auth manager
 }
 
 // NewSSOProvider creates a new AWS SSO provider.
@@ -84,6 +85,11 @@ func (p *ssoProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *ssoProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *ssoProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for SSO provider.
@@ -366,8 +372,8 @@ func (p *ssoProvider) Environment() (map[string]string, error) {
 func (p *ssoProvider) Paths() ([]authTypes.Path, error) {
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	// Use AWSFileManager to get correct provider-namespaced paths.
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use AWSFileManager to get correct provider-namespaced paths with realm isolation.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return nil, err
 	}
@@ -663,7 +669,8 @@ func (p *ssoProvider) Logout(ctx context.Context) error {
 	// Get base_path from provider spec if configured.
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrProviderLogout, errUtils.ErrLogoutFailed, err)
 	}
@@ -683,7 +690,8 @@ func (p *ssoProvider) GetFilesDisplayPath() string {
 
 	basePath := awsCloud.GetFilesBasePath(p.config)
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, p.realm)
 	if err != nil {
 		return "~/.aws/atmos"
 	}

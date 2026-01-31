@@ -20,6 +20,7 @@ type subscriptionIdentity struct {
 	subscriptionID string
 	resourceGroup  string
 	location       string
+	realm          string // Credential isolation realm set by auth manager
 }
 
 // NewSubscriptionIdentity creates a new Azure subscription identity.
@@ -65,6 +66,11 @@ func NewSubscriptionIdentity(name string, config *schema.Identity) (*subscriptio
 // Kind returns the identity kind.
 func (i *subscriptionIdentity) Kind() string {
 	return "azure/subscription"
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *subscriptionIdentity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // GetProviderName returns the provider name for this identity.

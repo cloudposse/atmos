@@ -16,7 +16,8 @@ func TestAWSFileManager_Cleanup(t *testing.T) {
 		{
 			name: "cleanup existing provider directory",
 			setupFunc: func(t *testing.T, baseDir string) string {
-				providerDir := filepath.Join(baseDir, "test-provider")
+				// New path structure: baseDir/aws/providerName
+				providerDir := filepath.Join(baseDir, "aws", "test-provider")
 				if err := os.MkdirAll(providerDir, 0o700); err != nil {
 					t.Fatalf("failed to create provider directory: %v", err)
 				}
@@ -41,7 +42,8 @@ func TestAWSFileManager_Cleanup(t *testing.T) {
 		{
 			name: "cleanup with nested directories",
 			setupFunc: func(t *testing.T, baseDir string) string {
-				providerDir := filepath.Join(baseDir, "test-provider")
+				// New path structure: baseDir/aws/providerName
+				providerDir := filepath.Join(baseDir, "aws", "test-provider")
 				nestedDir := filepath.Join(providerDir, "nested", "deep")
 				if err := os.MkdirAll(nestedDir, 0o700); err != nil {
 					t.Fatalf("failed to create nested directory: %v", err)
@@ -79,8 +81,9 @@ func TestAWSFileManager_Cleanup(t *testing.T) {
 			}
 
 			// Verify directory was removed.
+			// New path structure: baseDir/aws/providerName
 			if !tt.wantErr {
-				providerDir := filepath.Join(baseDir, tt.providerName)
+				providerDir := filepath.Join(baseDir, "aws", tt.providerName)
 				if _, err := os.Stat(providerDir); !os.IsNotExist(err) {
 					t.Errorf("provider directory still exists after cleanup: %s", providerDir)
 				}
@@ -193,7 +196,8 @@ func TestAWSFileManager_CleanupAll(t *testing.T) {
 func TestAWSFileManager_Cleanup_Idempotency(t *testing.T) {
 	// Create temp directory for test.
 	tempDir := t.TempDir()
-	providerDir := filepath.Join(tempDir, "test-provider")
+	// New path structure: baseDir/aws/providerName
+	providerDir := filepath.Join(tempDir, "aws", "test-provider")
 
 	// Create provider directory with files.
 	if err := os.MkdirAll(providerDir, 0o700); err != nil {

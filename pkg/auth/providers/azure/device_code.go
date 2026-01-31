@@ -39,6 +39,7 @@ type deviceCodeProvider struct {
 	location       string
 	clientID       string
 	cacheStorage   CacheStorage
+	realm          string // Credential isolation realm set by auth manager
 }
 
 // deviceCodeConfig holds extracted Azure configuration from provider spec.
@@ -111,6 +112,11 @@ func (p *deviceCodeProvider) Kind() string {
 // Name returns the configured provider name.
 func (p *deviceCodeProvider) Name() string {
 	return p.name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *deviceCodeProvider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // PreAuthenticate is a no-op for device code provider.
