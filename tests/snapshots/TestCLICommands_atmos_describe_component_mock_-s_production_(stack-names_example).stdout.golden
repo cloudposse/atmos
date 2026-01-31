@@ -36,6 +36,11 @@
         "command": "",
         "auto_generate_files": false
       },
+      "ansible": {
+        "base_path": "",
+        "command": "",
+        "auto_generate_files": false
+      },
       "list": {
         "format": "",
         "columns": null

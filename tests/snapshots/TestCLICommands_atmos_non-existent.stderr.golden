@@ -5,6 +5,7 @@
 Valid subcommands are:
 
   • about
+  • ansible
   • atlantis
   • auth
   • aws

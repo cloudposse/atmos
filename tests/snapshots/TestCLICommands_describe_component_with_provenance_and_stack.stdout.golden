@@ -38,7 +38,7 @@ vars:                                             # ○ [3] catalog/vpc-flow-log
       Vpc-Flow-Logs-Bucket component "vpc-flow-logs" provisioned in the stack "plat-ue2-dev"
     atmos_manifest: orgs/acme/plat/dev/us-east-2  # ○ [4] orgs/acme/_defaults.yaml:22
     atmos_stack: plat-ue2-dev                     # ○ [4] orgs/acme/_defaults.yaml:21
-    provisioned_by_user: user              # ○ [4] orgs/acme/_defaults.yaml:27
+    provisioned_by_user: user             # ○ [4] orgs/acme/_defaults.yaml:27
     terraform_component: vpc-flow-logs-bucket     # ○ [4] orgs/acme/_defaults.yaml:24
     terraform_workspace: plat-ue2-dev             # ○ [4] orgs/acme/_defaults.yaml:23
   tenant: plat                                    # ○ [4] mixins/tenant/plat.yaml:2
