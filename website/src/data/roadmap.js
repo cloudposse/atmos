@@ -309,7 +309,7 @@ export const roadmapConfig = {
       tagline: 'Purpose-built engine with retry and resilience',
       description:
         'Terraform users expect to declare module sources inline. The source provisioner brings this pattern to stack configuration—declare where components come from and let vendoring handle the rest with retries, concurrency, and graceful failure recovery.',
-      progress: 86,
+      progress: 95,
       status: 'in-progress',
       milestones: [
         { label: 'Retry with exponential backoff', status: 'shipped', quarter: 'q3-2025', docs: '/cli/commands/vendor/vendor-pull', description: 'Automatic retries with increasing delays for transient network failures and rate limits.', category: 'featured', priority: 'high', benefits: 'Vendoring succeeds despite flaky networks or GitHub rate limits. CI doesn\'t fail on transient errors.' },
@@ -319,6 +319,8 @@ export const roadmapConfig = {
         { label: 'Component workdir provisioning', status: 'shipped', quarter: 'q4-2025', pr: 1876, changelog: 'component-workdir-isolation', description: 'Isolated working directories for each component instance with `atmos terraform workdir` commands to manage them—eliminating conflicts when multiple instances share the same component source.', benefits: 'Enables concurrent component execution and just-in-time vendoring. Multiple component instances no longer conflict by overwriting each other in the same directory. Use list, describe, show, and clean subcommands to inspect and manage workdirs.', experimental: true },
         { label: 'Source provisioner UX improvements', status: 'shipped', quarter: 'q1-2026', changelog: 'source-provisioner-ux', description: 'Spinner feedback during auto-provisioning and interactive confirmation prompts for delete operations.', benefits: 'Better visual feedback during vendoring operations. Interactive delete confirmation improves safety without requiring --force in TTY environments.' },
         { label: 'Source list command', status: 'shipped', quarter: 'q1-2026', changelog: 'source-list-command', docs: '/cli/commands/terraform/source', description: 'List all components with source configuration in a stack. Available as `atmos terraform source list` and `atmos list sources`.', benefits: 'Quickly discover which components are configured for JIT vendoring. Useful for auditing and debugging source configurations.' },
+        { label: 'JIT source provisioning precedence for all terraform commands', status: 'shipped', quarter: 'q1-2026', changelog: 'jit-source-provisioning-precedence', description: 'JIT source provisioning now correctly takes precedence over existing local components for all terraform subcommands when source and workdir are both enabled.', benefits: 'Consistent behavior across all terraform commands. Source configuration is always respected regardless of whether a local component directory already exists.' },
+        { label: 'Automatic component refresh on version changes', status: 'shipped', quarter: 'q1-2026', pr: 2010, changelog: 'version-aware-jit-provisioning', description: 'Workdirs automatically refresh when component version or source URI changes. Includes TTL-based cleanup for stale workdirs.', benefits: 'Change a component version and Atmos automatically re-provisions. Clean up old workdirs with --ttl=7d. No manual cleanup required.' },
       ],
       issues: [],
       prs: [

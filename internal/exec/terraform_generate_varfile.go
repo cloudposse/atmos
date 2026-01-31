@@ -1,9 +1,14 @@
 package exec
 
 import (
+	"context"
+	"time"
+
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -33,6 +38,15 @@ func ExecuteGenerateVarfile(opts *VarfileOptions, atmosConfig *schema.AtmosConfi
 	info, err := ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, nil)
 	if err != nil {
 		return err
+	}
+
+	// JIT source provisioning: vendor remote component if source is configured.
+	if provSource.HasSource(info.ComponentSection) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
+			return err
+		}
 	}
 
 	// Determine varfile path.
