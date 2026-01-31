@@ -396,40 +396,41 @@ func TestIsMisinterpretedScalar(t *testing.T) {
 
 // TestConfigureYqLogger tests the configureYqLogger function.
 func TestConfigureYqLogger(t *testing.T) {
-	t.Run("nil atmosConfig uses no-op logger", func(t *testing.T) {
-		// Should not panic with nil atmosConfig.
-		configureYqLogger(nil)
-	})
-
-	t.Run("non-trace level uses no-op logger", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: LogLevelDebug,
+	tests := []struct {
+		name string
+		cfg  *schema.AtmosConfiguration
+	}{
+		{
+			name: "nil atmosConfig uses no-op logger",
+			cfg:  nil,
+		},
+		{
+			name: "non-trace level uses no-op logger",
+			cfg: &schema.AtmosConfiguration{
+				Logs: schema.Logs{Level: LogLevelDebug},
 			},
-		}
-		// Should not panic.
-		configureYqLogger(atmosConfig)
-	})
-
-	t.Run("trace level uses default logger", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: LogLevelTrace,
+		},
+		{
+			name: "trace level uses default logger",
+			cfg: &schema.AtmosConfiguration{
+				Logs: schema.Logs{Level: LogLevelTrace},
 			},
-		}
-		// Should not panic.
-		configureYqLogger(atmosConfig)
-	})
-
-	t.Run("empty log level uses no-op logger", func(t *testing.T) {
-		atmosConfig := &schema.AtmosConfiguration{
-			Logs: schema.Logs{
-				Level: "",
+		},
+		{
+			name: "empty log level uses no-op logger",
+			cfg: &schema.AtmosConfiguration{
+				Logs: schema.Logs{Level: ""},
 			},
-		}
-		// Should not panic.
-		configureYqLogger(atmosConfig)
-	})
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.NotPanics(t, func() {
+				configureYqLogger(tt.cfg)
+			})
+		})
+	}
 }
 
 // TestLogBackend tests the logBackend struct methods.

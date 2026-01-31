@@ -145,89 +145,12 @@ func TestExecuteTerraformGenerateBackendCmd_Deprecated(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrDeprecatedCmdNotCallable)
 }
 
-// TestWriteBackendConfigFile_DryRun tests that writeBackendConfigFile skips writing in dry-run mode.
-func TestWriteBackendConfigFile_DryRun(t *testing.T) {
-	tempDir := t.TempDir()
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "",
-		DryRun:                true,
-	}
-
-	config := map[string]any{
-		"terraform": map[string]any{
-			"backend": map[string]any{
-				"s3": map[string]any{
-					"bucket": "test-bucket",
-				},
-			},
-		},
-	}
-
-	err := writeBackendConfigFile(atmosConfig, info, config)
-	assert.NoError(t, err, "dry-run should not return error")
-}
-
-// TestWriteBackendConfigFile_WritesToFile tests that writeBackendConfigFile actually writes to disk.
-func TestWriteBackendConfigFile_WritesToFile(t *testing.T) {
+// TestWriteBackendConfigFile tests the writeBackendConfigFile function across dry-run, normal write, and workdir cases.
+func TestWriteBackendConfigFile(t *testing.T) {
 	tempDir := t.TempDir()
 	componentDir := filepath.Join(tempDir, "components", "terraform", "vpc")
-	require.NoError(t, os.MkdirAll(componentDir, 0o755))
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "",
-		DryRun:                false,
-		ComponentSection:      map[string]any{},
-	}
-
-	config := map[string]any{
-		"terraform": map[string]any{
-			"backend": map[string]any{
-				"s3": map[string]any{
-					"bucket": "my-state-bucket",
-					"key":    "vpc/terraform.tfstate",
-					"region": "us-east-1",
-				},
-			},
-		},
-	}
-
-	err := writeBackendConfigFile(atmosConfig, info, config)
-	assert.NoError(t, err, "writeBackendConfigFile should not error")
-
-	// Verify the file was created.
-	backendFilePath := filepath.Join(componentDir, "backend.tf.json")
-	assert.FileExists(t, backendFilePath, "backend.tf.json should exist")
-
-	// Read and verify content.
-	content, err := os.ReadFile(backendFilePath)
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "my-state-bucket")
-}
-
-// TestWriteBackendConfigFile_WithWorkdirPath tests writeBackendConfigFile using workdir path.
-func TestWriteBackendConfigFile_WithWorkdirPath(t *testing.T) {
-	tempDir := t.TempDir()
 	workDir := filepath.Join(tempDir, "workdir", "vpc")
+	require.NoError(t, os.MkdirAll(componentDir, 0o755))
 	require.NoError(t, os.MkdirAll(workDir, 0o755))
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -239,29 +162,51 @@ func TestWriteBackendConfigFile_WithWorkdirPath(t *testing.T) {
 		},
 	}
 
-	info := &schema.ConfigAndStacksInfo{
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "",
-		DryRun:                false,
-		ComponentSection: map[string]any{
-			provWorkdir.WorkdirPathKey: workDir,
+	tests := []struct {
+		name         string
+		info         *schema.ConfigAndStacksInfo
+		config       map[string]any
+		wantPath     string
+		wantContains string
+	}{
+		{
+			name:   "dry-run skips writing",
+			info:   &schema.ConfigAndStacksInfo{FinalComponent: "vpc", DryRun: true},
+			config: map[string]any{"terraform": map[string]any{"backend": map[string]any{"s3": map[string]any{"bucket": "test-bucket"}}}},
 		},
-	}
-
-	config := map[string]any{
-		"terraform": map[string]any{
-			"backend": map[string]any{
-				"s3": map[string]any{"bucket": "test"},
+		{
+			name:         "writes to component dir",
+			info:         &schema.ConfigAndStacksInfo{FinalComponent: "vpc", ComponentSection: map[string]any{}},
+			config:       map[string]any{"terraform": map[string]any{"backend": map[string]any{"s3": map[string]any{"bucket": "my-state-bucket", "key": "vpc/terraform.tfstate", "region": "us-east-1"}}}},
+			wantPath:     filepath.Join(componentDir, "backend.tf.json"),
+			wantContains: "my-state-bucket",
+		},
+		{
+			name: "writes to workdir path",
+			info: &schema.ConfigAndStacksInfo{
+				FinalComponent:   "vpc",
+				ComponentSection: map[string]any{provWorkdir.WorkdirPathKey: workDir},
 			},
+			config:   map[string]any{"terraform": map[string]any{"backend": map[string]any{"s3": map[string]any{"bucket": "test"}}}},
+			wantPath: filepath.Join(workDir, "backend.tf.json"),
 		},
 	}
 
-	err := writeBackendConfigFile(atmosConfig, info, config)
-	assert.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := writeBackendConfigFile(atmosConfig, tt.info, tt.config)
+			assert.NoError(t, err)
 
-	// File should be written to the workdir path.
-	backendFilePath := filepath.Join(workDir, "backend.tf.json")
-	assert.FileExists(t, backendFilePath, "backend.tf.json should exist in workdir path")
+			if tt.wantPath != "" {
+				assert.FileExists(t, tt.wantPath)
+				if tt.wantContains != "" {
+					content, readErr := os.ReadFile(tt.wantPath)
+					require.NoError(t, readErr)
+					assert.Contains(t, string(content), tt.wantContains)
+				}
+			}
+		})
+	}
 }
 
 func TestValidateBackendTypeRequirementsTypeAssertions(t *testing.T) {

@@ -3,6 +3,7 @@ package exec
 import (
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -132,15 +133,8 @@ func TestDescribeStacksExec(t *testing.T) {
 }
 
 func TestExecuteDescribeStacks_Packer(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
@@ -182,15 +176,8 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 
 // TestExecuteDescribeStacks_LocalsComponentLevel tests locals extraction and merging in describe stacks.
 func TestExecuteDescribeStacks_LocalsComponentLevel(t *testing.T) {
-	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
-	}
-
-	err = os.Unsetenv("ATMOS_BASE_PATH")
-	if err != nil {
-		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
-	}
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", "")
+	t.Setenv("ATMOS_BASE_PATH", "")
 
 	log.SetLevel(log.InfoLevel)
 	log.SetOutput(os.Stdout)
@@ -228,6 +215,11 @@ func TestExecuteDescribeStacks_LocalsComponentLevel(t *testing.T) {
 	// The fixture defines stack-level locals (namespace, environment, name_prefix)
 	// and component-level locals (vpc_type, cidr_prefix, etc.).
 	// After merging, component locals should be present in each component section.
+	expectedComponents := map[string]bool{
+		"standalone": false,
+		"vpc/dev":    false,
+		"vpc/custom": false,
+	}
 	for stackName, stackData := range stacksMap {
 		stackMap, ok := stackData.(map[string]any)
 		if !ok {
@@ -248,11 +240,15 @@ func TestExecuteDescribeStacks_LocalsComponentLevel(t *testing.T) {
 			}
 			// Each terraform component with locals should have a "locals" section.
 			if compName == "standalone" || compName == "vpc/dev" || compName == "vpc/custom" {
+				expectedComponents[compName] = true
 				locals, hasLocals := compMap["locals"].(map[string]any)
 				assert.True(t, hasLocals, "component %s in stack %s should have locals", compName, stackName)
 				assert.NotEmpty(t, locals, "component %s in stack %s should have non-empty locals", compName, stackName)
 			}
 		}
+	}
+	for compName, found := range expectedComponents {
+		assert.True(t, found, "expected component %s to be present in stacks output", compName)
 	}
 }
 
@@ -343,7 +339,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.TerraformSectionName,
 			expectedType:  config.TerraformSectionName,
-			expectedPath:  "components/terraform/vpc",
+			expectedPath:  filepath.Join("components", "terraform", "vpc"),
 			hasPath:       true,
 		},
 		{
@@ -353,7 +349,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.HelmfileSectionName,
 			expectedType:  config.HelmfileSectionName,
-			expectedPath:  "components/helmfile/nginx-ingress",
+			expectedPath:  filepath.Join("components", "helmfile", "nginx-ingress"),
 			hasPath:       true,
 		},
 		{
@@ -363,7 +359,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.PackerSectionName,
 			expectedType:  config.PackerSectionName,
-			expectedPath:  "components/packer/aws/bastion",
+			expectedPath:  filepath.Join("components", "packer", "aws", "bastion"),
 			hasPath:       true,
 		},
 		{
@@ -376,7 +372,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.TerraformSectionName,
 			expectedType:  config.TerraformSectionName,
-			expectedPath:  "components/terraform/myprefix/vpc",
+			expectedPath:  filepath.Join("components", "terraform", "myprefix", "vpc"),
 			hasPath:       true,
 		},
 		{
@@ -414,7 +410,6 @@ func TestBuildComponentInfo(t *testing.T) {
 			if tt.hasPath {
 				path, ok := result[config.ComponentPathSectionName].(string)
 				assert.True(t, ok, "component_path should be present")
-				// Normalize for cross-platform comparison.
 				assert.Equal(t, tt.expectedPath, path)
 			} else {
 				_, ok := result[config.ComponentPathSectionName]
