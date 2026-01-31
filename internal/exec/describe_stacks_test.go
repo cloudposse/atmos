@@ -3,7 +3,6 @@ package exec
 import (
 	"errors"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -339,7 +338,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.TerraformSectionName,
 			expectedType:  config.TerraformSectionName,
-			expectedPath:  filepath.Join("components", "terraform", "vpc"),
+			expectedPath:  "components/terraform/vpc",
 			hasPath:       true,
 		},
 		{
@@ -349,7 +348,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.HelmfileSectionName,
 			expectedType:  config.HelmfileSectionName,
-			expectedPath:  filepath.Join("components", "helmfile", "nginx-ingress"),
+			expectedPath:  "components/helmfile/nginx-ingress",
 			hasPath:       true,
 		},
 		{
@@ -359,7 +358,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.PackerSectionName,
 			expectedType:  config.PackerSectionName,
-			expectedPath:  filepath.Join("components", "packer", "aws", "bastion"),
+			expectedPath:  "components/packer/aws/bastion",
 			hasPath:       true,
 		},
 		{
@@ -372,7 +371,7 @@ func TestBuildComponentInfo(t *testing.T) {
 			},
 			componentKind: config.TerraformSectionName,
 			expectedType:  config.TerraformSectionName,
-			expectedPath:  filepath.Join("components", "terraform", "myprefix", "vpc"),
+			expectedPath:  "components/terraform/myprefix/vpc",
 			hasPath:       true,
 		},
 		{
