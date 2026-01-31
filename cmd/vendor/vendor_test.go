@@ -14,7 +14,7 @@ func TestVendorPullCmd_ExecutorError(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err := vendorPullCmd.RunE(vendorPullCmd, []string{"unexpected-arg"})
+	err := pullCmd.RunE(pullCmd, []string{"unexpected-arg"})
 	assert.Error(t, err, "vendor pull command should return an error with unexpected arguments")
 }
 
@@ -32,8 +32,8 @@ func TestVendorCommandProvider(t *testing.T) {
 		assert.Equal(t, "vendor", provider.GetName())
 	})
 
-	t.Run("GetGroup returns Component Lifecycle", func(t *testing.T) {
-		assert.Equal(t, "Component Lifecycle", provider.GetGroup())
+	t.Run("GetGroup returns Configuration Management", func(t *testing.T) {
+		assert.Equal(t, "Configuration Management", provider.GetGroup())
 	})
 
 	t.Run("GetFlagsBuilder returns nil", func(t *testing.T) {
