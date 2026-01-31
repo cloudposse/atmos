@@ -1,0 +1,320 @@
+name: 'Atmos AI'
+description: 'Execute Atmos AI commands for infrastructure analysis, PR reviews, and automation'
+author: 'Cloud Posse'
+
+branding:
+  icon: 'cpu'
+  color: 'blue'
+
+inputs:
+  prompt:
+    description: 'The prompt or command to send to the AI'
+    required: true
+  provider:
+    description: 'AI provider to use (anthropic, openai, gemini, grok, bedrock, azureopenai, ollama). Uses default from atmos.yaml if not specified.'
+    required: false
+  model:
+    description: 'AI model to use. Uses default from atmos.yaml if not specified.'
+    required: false
+  api-key:
+    description: 'API key for the AI provider. Should be passed from GitHub secrets.'
+    required: false
+  format:
+    description: 'Output format: json, text, markdown'
+    required: false
+    default: 'json'
+  post-comment:
+    description: 'Post the AI response as a PR comment'
+    required: false
+    default: 'false'
+  fail-on-error:
+    description: 'Fail the workflow if AI execution fails'
+    required: false
+    default: 'true'
+  atmos-version:
+    description: 'Atmos version to install. Uses latest if not specified.'
+    required: false
+    default: 'latest'
+  working-directory:
+    description: 'Working directory where atmos.yaml is located'
+    required: false
+    default: '.'
+  session:
+    description: 'Session name for multi-turn conversations'
+    required: false
+  token:
+    description: 'GitHub token for PR comments'
+    required: false
+    default: ${{ github.token }}
+  comment-header:
+    description: 'Header text for PR comments'
+    required: false
+    default: '🤖 Atmos AI Analysis'
+
+outputs:
+  response:
+    description: 'AI response text'
+    value: ${{ steps.execute.outputs.response }}
+  success:
+    description: 'Whether the execution succeeded (true/false)'
+    value: ${{ steps.execute.outputs.success }}
+  tool-calls:
+    description: 'Number of tool calls executed'
+    value: ${{ steps.execute.outputs.tool-calls }}
+  tokens-used:
+    description: 'Total tokens used'
+    value: ${{ steps.execute.outputs.tokens-used }}
+  cached-tokens:
+    description: 'Number of cached tokens used'
+    value: ${{ steps.execute.outputs.cached-tokens }}
+  exit-code:
+    description: 'Exit code from atmos ai exec (0=success, 1=AI error, 2=tool error)'
+    value: ${{ steps.execute.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - name: Check if Atmos is installed
+      id: check-atmos
+      shell: bash
+      run: |
+        if command -v atmos &> /dev/null; then
+          INSTALLED_VERSION=$(atmos version | head -1 | awk '{print $2}')
+          echo "installed=true" >> $GITHUB_OUTPUT
+          echo "version=$INSTALLED_VERSION" >> $GITHUB_OUTPUT
+          echo "✅ Atmos is already installed: $INSTALLED_VERSION"
+        else
+          echo "installed=false" >> $GITHUB_OUTPUT
+          echo "⚠️ Atmos is not installed"
+        fi
+
+    - name: Install Atmos
+      if: steps.check-atmos.outputs.installed != 'true' || (inputs.atmos-version != 'latest' && steps.check-atmos.outputs.version != inputs.atmos-version)
+      shell: bash
+      run: |
+        echo "📦 Installing Atmos ${{ inputs.atmos-version }}..."
+
+        # Determine OS and architecture
+        OS=$(uname -s | tr '[:upper:]' '[:lower:]')
+        ARCH=$(uname -m)
+
+        case $ARCH in
+          x86_64) ARCH="amd64" ;;
+          aarch64|arm64) ARCH="arm64" ;;
+          *) echo "Unsupported architecture: $ARCH" && exit 1 ;;
+        esac
+
+        # Get latest version or use specified version
+        if [ "${{ inputs.atmos-version }}" = "latest" ]; then
+          VERSION=$(curl -s https://api.github.com/repos/cloudposse/atmos/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+        else
+          VERSION="${{ inputs.atmos-version }}"
+          VERSION="${VERSION#v}" # Remove 'v' prefix if present
+        fi
+
+        echo "Installing Atmos version: $VERSION"
+
+        # Download and install
+        DOWNLOAD_URL="https://github.com/cloudposse/atmos/releases/download/v${VERSION}/atmos_${VERSION}_${OS}_${ARCH}"
+        echo "Downloading from: $DOWNLOAD_URL"
+
+        curl -fsSL "$DOWNLOAD_URL" -o /tmp/atmos
+        chmod +x /tmp/atmos
+        sudo mv /tmp/atmos /usr/local/bin/atmos
+
+        # Verify installation
+        atmos version
+        echo "✅ Atmos $VERSION installed successfully"
+
+    - name: Execute Atmos AI
+      id: execute
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        ANTHROPIC_API_KEY: ${{ inputs.api-key }}
+        OPENAI_API_KEY: ${{ inputs.api-key }}
+        GEMINI_API_KEY: ${{ inputs.api-key }}
+        XAI_API_KEY: ${{ inputs.api-key }}
+        AWS_ACCESS_KEY_ID: ${{ env.AWS_ACCESS_KEY_ID }}
+        AWS_SECRET_ACCESS_KEY: ${{ env.AWS_SECRET_ACCESS_KEY }}
+        AZURE_OPENAI_API_KEY: ${{ inputs.api-key }}
+      run: |
+        set +e  # Don't exit on error, we want to capture exit code
+
+        echo "🤖 Executing Atmos AI..."
+        echo "Provider: ${{ inputs.provider || 'default' }}"
+        echo "Model: ${{ inputs.model || 'default' }}"
+        echo "Format: ${{ inputs.format }}"
+
+        # Build command
+        CMD="atmos ai exec"
+
+        if [ -n "${{ inputs.provider }}" ]; then
+          CMD="$CMD --provider ${{ inputs.provider }}"
+        fi
+
+        if [ -n "${{ inputs.model }}" ]; then
+          CMD="$CMD --model ${{ inputs.model }}"
+        fi
+
+        if [ -n "${{ inputs.session }}" ]; then
+          CMD="$CMD --session ${{ inputs.session }}"
+        fi
+
+        CMD="$CMD --format ${{ inputs.format }}"
+
+        # Execute command
+        OUTPUT=$(echo "${{ inputs.prompt }}" | $CMD 2>&1)
+        EXIT_CODE=$?
+
+        echo "exit-code=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+        # Parse output based on format
+        if [ "${{ inputs.format }}" = "json" ]; then
+          # Parse JSON output
+          echo "📊 Parsing JSON output..."
+
+          SUCCESS=$(echo "$OUTPUT" | jq -r '.success // false' 2>/dev/null || echo "false")
+          RESPONSE=$(echo "$OUTPUT" | jq -r '.response // ""' 2>/dev/null || echo "$OUTPUT")
+          TOOL_CALLS=$(echo "$OUTPUT" | jq -r '.tool_calls | length // 0' 2>/dev/null || echo "0")
+          TOKENS_USED=$(echo "$OUTPUT" | jq -r '.tokens.total // 0' 2>/dev/null || echo "0")
+          CACHED_TOKENS=$(echo "$OUTPUT" | jq -r '.tokens.cached // 0' 2>/dev/null || echo "0")
+
+          echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+          echo "tool-calls=$TOOL_CALLS" >> $GITHUB_OUTPUT
+          echo "tokens-used=$TOKENS_USED" >> $GITHUB_OUTPUT
+          echo "cached-tokens=$CACHED_TOKENS" >> $GITHUB_OUTPUT
+
+          # Use delimiter for multiline output
+          echo "response<<ATMOS_AI_EOF" >> $GITHUB_OUTPUT
+          echo "$RESPONSE" >> $GITHUB_OUTPUT
+          echo "ATMOS_AI_EOF" >> $GITHUB_OUTPUT
+
+        else
+          # Text/Markdown format
+          SUCCESS="true"
+          if [ $EXIT_CODE -ne 0 ]; then
+            SUCCESS="false"
+          fi
+
+          echo "success=$SUCCESS" >> $GITHUB_OUTPUT
+          echo "tool-calls=0" >> $GITHUB_OUTPUT
+          echo "tokens-used=0" >> $GITHUB_OUTPUT
+          echo "cached-tokens=0" >> $GITHUB_OUTPUT
+
+          # Use delimiter for multiline output
+          echo "response<<ATMOS_AI_EOF" >> $GITHUB_OUTPUT
+          echo "$OUTPUT" >> $GITHUB_OUTPUT
+          echo "ATMOS_AI_EOF" >> $GITHUB_OUTPUT
+        fi
+
+        # Print summary
+        echo ""
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "📊 Execution Summary:"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Exit Code: $EXIT_CODE"
+        echo "Success: $SUCCESS"
+        if [ "${{ inputs.format }}" = "json" ]; then
+          echo "Tool Calls: $TOOL_CALLS"
+          echo "Tokens Used: $TOKENS_USED"
+          echo "Cached Tokens: $CACHED_TOKENS"
+        fi
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+        # Fail if requested and execution failed
+        if [ "${{ inputs.fail-on-error }}" = "true" ] && [ "$SUCCESS" = "false" ]; then
+          echo "❌ Execution failed and fail-on-error is enabled"
+          exit $EXIT_CODE
+        fi
+
+        exit 0  # Always succeed if fail-on-error is false
+
+    - name: Post PR Comment
+      if: inputs.post-comment == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const success = '${{ steps.execute.outputs.success }}' === 'true';
+          const response = `${{ steps.execute.outputs.response }}`;
+          const toolCalls = '${{ steps.execute.outputs.tool-calls }}';
+          const tokensUsed = '${{ steps.execute.outputs.tokens-used }}';
+          const cachedTokens = '${{ steps.execute.outputs.cached-tokens }}';
+          const exitCode = '${{ steps.execute.outputs.exit-code }}';
+          const provider = '${{ inputs.provider }}' || 'default';
+          const model = '${{ inputs.model }}' || 'default';
+
+          const emoji = success ? '✅' : '❌';
+          const statusText = success ? 'Success' : 'Failed';
+
+          // Build the comment
+          let comment = `${emoji} **${{ inputs.comment-header }}**\n\n`;
+
+          if (!success) {
+            comment += '> [!WARNING]\n';
+            comment += '> **Execution Failed**\n';
+            comment += `> Exit code: ${exitCode}\n`;
+            comment += '>\n';
+          }
+
+          comment += '### AI Response\n\n';
+          comment += '```\n' + response + '\n```\n\n';
+
+          comment += '<details>\n';
+          comment += '<summary>📊 Execution Details</summary>\n\n';
+          comment += '| Metric | Value |\n';
+          comment += '|--------|-------|\n';
+          comment += `| Status | ${emoji} ${statusText} |\n`;
+          comment += `| Provider | \`${provider}\` |\n`;
+          comment += `| Model | \`${model}\` |\n`;
+
+          if (toolCalls !== '0') {
+            comment += `| Tool Calls | ${toolCalls} |\n`;
+          }
+
+          if (tokensUsed !== '0') {
+            comment += `| Tokens Used | ${tokensUsed} |\n`;
+            if (cachedTokens !== '0') {
+              const cachePercent = Math.round((cachedTokens / tokensUsed) * 100);
+              comment += `| Cached Tokens | ${cachedTokens} (${cachePercent}%) |\n`;
+            }
+          }
+
+          comment += `| Exit Code | ${exitCode} |\n`;
+          comment += '\n</details>\n\n';
+
+          comment += '---\n';
+          comment += '<sub>🤖 Generated by [Atmos AI Action](https://github.com/cloudposse/atmos/tree/main/.github/actions/atmos-ai)</sub>';
+
+          // Check if we already commented
+          const { data: comments } = await github.rest.issues.listComments({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+          });
+
+          const botComment = comments.find(comment =>
+            comment.user.type === 'Bot' &&
+            comment.body.includes('${{ inputs.comment-header }}')
+          );
+
+          if (botComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: botComment.id,
+              body: comment
+            });
+            console.log('✅ Updated existing Atmos AI comment');
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+            console.log('✅ Created new Atmos AI comment');
+          }

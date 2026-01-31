@@ -52,10 +52,14 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/ai"
+	_ "github.com/cloudposse/atmos/cmd/ai/skill"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
+	_ "github.com/cloudposse/atmos/cmd/lsp"
+	_ "github.com/cloudposse/atmos/cmd/mcp"
 	_ "github.com/cloudposse/atmos/cmd/profile"
 	_ "github.com/cloudposse/atmos/cmd/terraform"
 	"github.com/cloudposse/atmos/cmd/terraform/backend"

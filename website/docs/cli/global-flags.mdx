@@ -521,6 +521,48 @@ All global flags can be set using environment variables. The precedence order is
     <dd>Set the profile type for file-based profiling (cpu, heap, allocs, goroutine, block, mutex, threadcreate, trace)</dd>
 </dl>
 
+### AI Assistant Environment Variables
+
+<dl>
+    <dt>`ANTHROPIC_API_KEY` / `ATMOS_ANTHROPIC_API_KEY`</dt>
+    <dd>
+        API key for Anthropic Claude AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `provider: "anthropic"` is configured
+    </dd>
+
+    <dt>`OPENAI_API_KEY` / `ATMOS_OPENAI_API_KEY`</dt>
+    <dd>
+        API key for OpenAI GPT AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `provider: "openai"` is configured
+    </dd>
+
+    <dt>`GEMINI_API_KEY` / `ATMOS_GEMINI_API_KEY`</dt>
+    <dd>
+        API key for Google Gemini AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `provider: "gemini"` is configured
+    </dd>
+
+    <dt>`XAI_API_KEY` / `ATMOS_XAI_API_KEY`</dt>
+    <dd>
+        API key for xAI Grok AI provider.
+        - Both standard and Atmos-prefixed versions are supported
+        - Used when `provider: "grok"` is configured
+    </dd>
+
+    <dt>`ATMOS_AI_SEND_CONTEXT`</dt>
+    <dd>
+        Control whether stack configurations are sent to AI provider for context-aware answers.
+        - Options: `true` or `false`
+        - Default: `false` (context not sent)
+        - When `true`, stack YAML files are read and included in AI prompts
+        - **Privacy Note**: Enables sending repository configuration to external AI services
+        - Takes precedence over `send_context` setting in `atmos.yaml`
+    </dd>
+</dl>
+
 ### XDG Base Directory Environment Variables
 
 <dl>
