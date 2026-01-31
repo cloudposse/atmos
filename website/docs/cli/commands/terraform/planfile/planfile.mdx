@@ -1,0 +1,77 @@
+---
+title: atmos terraform planfile
+sidebar_label: planfile
+sidebar_class_name: command
+sidebar_position: 1
+id: planfile
+description: Commands for managing Terraform planfiles across multiple storage backends.
+---
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+The `atmos terraform planfile` command group provides tools for managing Terraform planfiles. Store, retrieve, and share planfiles across CI/CD pipelines using local filesystem, S3, or GitHub Artifacts storage.
+</Intro>
+
+## Subcommands
+
+<DocCardList />
+
+## Storage Backends
+
+Atmos supports multiple storage backends for planfiles:
+
+<dl>
+  <dt>`local`</dt>
+  <dd>
+    Store planfiles on the local filesystem. Useful for development and single-machine workflows.
+
+    Default path: `.atmos/planfiles/`
+  </dd>
+
+  <dt>`s3`</dt>
+  <dd>
+    Store planfiles in Amazon S3. Ideal for team workflows and cross-region access.
+
+    Configure via `ATMOS_PLANFILE_BUCKET` and `ATMOS_PLANFILE_PREFIX` environment variables.
+  </dd>
+
+  <dt>`github-artifacts`</dt>
+  <dd>
+    Store planfiles as GitHub Actions artifacts. Perfect for GitHub-native CI/CD workflows.
+
+    Automatically detected when running in GitHub Actions.
+  </dd>
+</dl>
+
+## Key Format
+
+Planfiles are stored with keys in the format:
+
+```
+{stack}/{component}/{sha}.tfplan
+```
+
+For example: `dev-us-east-1/vpc/abc123def.tfplan`
+
+## Environment Variables
+
+<dl>
+  <dt>`ATMOS_PLANFILE_BUCKET`</dt>
+  <dd>S3 bucket name for storing planfiles. When set, automatically uses S3 backend.</dd>
+
+  <dt>`ATMOS_PLANFILE_PREFIX`</dt>
+  <dd>Optional prefix for S3 keys (e.g., `planfiles/production`).</dd>
+
+  <dt>`AWS_REGION`</dt>
+  <dd>AWS region for S3 operations.</dd>
+
+  <dt>`GITHUB_TOKEN`</dt>
+  <dd>GitHub token for GitHub Artifacts backend. Automatically available in GitHub Actions.</dd>
+</dl>
+
+## Related
+
+- [CI Configuration](/cli/configuration/ci) - Configure CI integration in `atmos.yaml`
+- [`atmos terraform plan`](/cli/commands/terraform/plan) - Generate plans that can be uploaded
+- [`atmos ci status`](/cli/commands/ci/status) - View CI status for the current branch
