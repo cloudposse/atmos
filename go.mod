@@ -5,7 +5,7 @@ go 1.25.2
 require (
 	al.essio.dev/pkg/shellescape v1.5.1
 	cloud.google.com/go/secretmanager v1.16.0
-	cloud.google.com/go/storage v1.58.0
+	cloud.google.com/go/storage v1.59.0
 	dario.cat/mergo v1.0.2
 	github.com/99designs/keyring v1.2.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
