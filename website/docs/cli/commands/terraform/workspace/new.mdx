@@ -79,7 +79,38 @@ atmos terraform workspace new vpc -s dev my-workspace
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-state` and `-lock` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform workspace new` command supports native `terraform workspace new` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev -lock=false my-workspace
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev -lock-timeout=30s my-workspace
+        ```
+    </dd>
+
+    <dt>`-state=FILE`</dt>
+    <dd>
+        Path to a local state file to use for the new workspace's initial state.
+
+        ```shell
+        atmos terraform workspace new vpc -s dev -state=initial.tfstate my-workspace
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

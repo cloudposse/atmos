@@ -74,7 +74,20 @@ atmos terraform providers schema vpc -s dev -json
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-json` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform providers schema` command supports native `terraform providers schema` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-json`</dt>
+    <dd>
+        Output the provider schemas in a machine-readable JSON format.
+
+        ```shell
+        atmos terraform providers schema vpc -s dev -json
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

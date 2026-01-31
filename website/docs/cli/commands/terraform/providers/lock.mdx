@@ -77,7 +77,47 @@ atmos terraform providers lock vpc -s prod -platform=linux_amd64 -platform=linux
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-platform` and `-fs-mirror` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform providers lock` command supports native `terraform providers lock` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-platform=OS_ARCH`</dt>
+    <dd>
+        Target platform for provider packages. Can be specified multiple times to lock for multiple platforms.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -platform=linux_amd64 -platform=darwin_amd64
+        ```
+    </dd>
+
+    <dt>`-fs-mirror=DIR`</dt>
+    <dd>
+        Consult the given filesystem mirror directory for provider packages instead of the origin registry.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -fs-mirror=/path/to/mirror
+        ```
+    </dd>
+
+    <dt>`-net-mirror=URL`</dt>
+    <dd>
+        Consult the given network mirror for provider packages instead of the origin registry.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -net-mirror=https://mirror.example.com/
+        ```
+    </dd>
+
+    <dt>`-enable-plugin-cache`</dt>
+    <dd>
+        Enable the global plugin cache during lock file creation.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -enable-plugin-cache
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

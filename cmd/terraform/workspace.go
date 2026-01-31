@@ -6,6 +6,7 @@ import (
 
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // workspaceParser handles flag parsing for workspace command.
@@ -52,15 +53,17 @@ For complete Terraform/OpenTofu documentation, see:
 // workspaceSubcmds defines the terraform workspace sub-subcommands.
 // Each entry is registered as a Cobra child command of workspaceCmd,
 // enabling proper command tree routing instead of hardcoded argument parsing.
+// The compatFunc provides per-subcommand compat flags for the command registry.
 var workspaceSubcmds = []struct {
-	name  string
-	short string
+	name       string
+	short      string
+	compatFunc func() map[string]compat.CompatibilityFlag
 }{
-	{"list", "List Terraform workspaces"},
-	{"select", "Select a Terraform workspace"},
-	{"new", "Create a new Terraform workspace"},
-	{"delete", "Delete a Terraform workspace"},
-	{"show", "Show the name of the current Terraform workspace"},
+	{"list", "List Terraform workspaces", WorkspaceListCompatFlags},
+	{"select", "Select a Terraform workspace", WorkspaceSelectCompatFlags},
+	{"new", "Create a new Terraform workspace", WorkspaceNewCompatFlags},
+	{"delete", "Delete a Terraform workspace", WorkspaceDeleteCompatFlags},
+	{"show", "Show the name of the current Terraform workspace", WorkspaceShowCompatFlags},
 }
 
 // newWorkspacePassthroughSubcommand creates a workspace sub-subcommand that binds
@@ -108,6 +111,7 @@ func init() {
 	// Register sub-subcommands for workspace (e.g., "workspace list", "workspace select").
 	for _, sub := range workspaceSubcmds {
 		workspaceCmd.AddCommand(newWorkspacePassthroughSubcommand(sub.name, sub.short))
+		internal.RegisterCommandCompatFlags("terraform", "workspace-"+sub.name, sub.compatFunc())
 	}
 
 	// Register completions for workspaceCmd.

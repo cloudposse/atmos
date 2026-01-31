@@ -79,6 +79,21 @@ atmos terraform workspace select vpc -s dev my-workspace
     </dd>
 </dl>
 
+## Native Terraform Flags
+
+The `atmos terraform workspace select` command supports native `terraform workspace select` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-or-create`</dt>
+    <dd>
+        Create the workspace if it doesn't already exist, then select it.
+
+        ```shell
+        atmos terraform workspace select vpc -s dev -or-create my-workspace
+        ```
+    </dd>
+</dl>
+
 ## See Also
 
 - [`atmos terraform workspace`](/cli/commands/terraform/workspace) - Workspace management overview

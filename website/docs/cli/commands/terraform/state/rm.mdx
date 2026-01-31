@@ -86,7 +86,38 @@ atmos terraform state rm vpc -s dev module.web.aws_instance.main
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-state`, `-lock`, and `-backup` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform state rm` command supports native `terraform state rm` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform state rm vpc -s dev -lock=false aws_instance.web
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform state rm vpc -s dev -lock-timeout=30s aws_instance.web
+        ```
+    </dd>
+
+    <dt>`-ignore-remote-version`</dt>
+    <dd>
+        Ignore remote state version constraints when performing the operation.
+
+        ```shell
+        atmos terraform state rm vpc -s dev -ignore-remote-version aws_instance.web
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

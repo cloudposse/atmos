@@ -92,7 +92,47 @@ atmos terraform state replace-provider vpc -s dev \
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-auto-approve` and `-lock` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform state replace-provider` command supports native `terraform state replace-provider` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-auto-approve`</dt>
+    <dd>
+        Skip interactive approval of the provider replacement.
+
+        ```shell
+        atmos terraform state replace-provider vpc -s dev -auto-approve old-provider new-provider
+        ```
+    </dd>
+
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform state replace-provider vpc -s dev -lock=false old-provider new-provider
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform state replace-provider vpc -s dev -lock-timeout=30s old-provider new-provider
+        ```
+    </dd>
+
+    <dt>`-ignore-remote-version`</dt>
+    <dd>
+        Ignore remote state version constraints when performing the operation.
+
+        ```shell
+        atmos terraform state replace-provider vpc -s dev -ignore-remote-version old-provider new-provider
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

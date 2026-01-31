@@ -74,7 +74,29 @@ atmos terraform state list vpc -s dev aws_subnet.public
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-state` and `-id` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform state list` command supports native `terraform state list` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-state=FILE`</dt>
+    <dd>
+        Path to a local state file to list resources from, instead of the configured backend.
+
+        ```shell
+        atmos terraform state list vpc -s dev -state=terraform.tfstate
+        ```
+    </dd>
+
+    <dt>`-id=ID`</dt>
+    <dd>
+        Filter the results to include only resources whose ID attribute matches the given string.
+
+        ```shell
+        atmos terraform state list vpc -s dev -id=i-abc123
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

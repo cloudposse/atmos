@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/cmd/internal"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // providersCmd represents the terraform providers command.
@@ -24,19 +25,22 @@ For complete Terraform/OpenTofu documentation, see:
 // providersSubcmds defines the terraform providers sub-subcommands.
 // Each entry is registered as a Cobra child command of providersCmd,
 // enabling proper command tree routing instead of hardcoded argument parsing.
+// The compatFunc provides per-subcommand compat flags for the command registry.
 var providersSubcmds = []struct {
-	name  string
-	short string
+	name       string
+	short      string
+	compatFunc func() map[string]compat.CompatibilityFlag
 }{
-	{"lock", "Write out dependency locks for the configured providers"},
-	{"mirror", "Save local copies of all required provider plugins"},
-	{"schema", "Show schemas for the providers used in the configuration"},
+	{"lock", "Write out dependency locks for the configured providers", ProvidersLockCompatFlags},
+	{"mirror", "Save local copies of all required provider plugins", ProvidersMirrorCompatFlags},
+	{"schema", "Show schemas for the providers used in the configuration", ProvidersSchemaCompatFlags},
 }
 
 func init() {
 	// Register sub-subcommands for providers (e.g., "providers lock", "providers mirror").
 	for _, sub := range providersSubcmds {
 		providersCmd.AddCommand(newTerraformPassthroughSubcommand(providersCmd, sub.name, sub.short))
+		internal.RegisterCommandCompatFlags("terraform", "providers-"+sub.name, sub.compatFunc())
 	}
 
 	// Register completions for providersCmd.

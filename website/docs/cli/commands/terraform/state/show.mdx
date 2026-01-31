@@ -82,7 +82,20 @@ atmos terraform state show vpc -s dev 'aws_subnet.public[0]'
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-state` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform state show` command supports native `terraform state show` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-state=FILE`</dt>
+    <dd>
+        Path to a local state file to read from, instead of the configured backend.
+
+        ```shell
+        atmos terraform state show vpc -s dev -state=terraform.tfstate aws_vpc.main
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

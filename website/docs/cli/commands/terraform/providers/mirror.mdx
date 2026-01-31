@@ -79,7 +79,20 @@ atmos terraform providers mirror vpc -s dev /path/to/mirror -platform=linux_amd6
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-platform` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform providers mirror` command supports native `terraform providers mirror` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-platform=OS_ARCH`</dt>
+    <dd>
+        Target platform for provider packages. Can be specified multiple times to mirror for multiple platforms.
+
+        ```shell
+        atmos terraform providers mirror vpc -s dev /path/to/mirror -platform=linux_amd64 -platform=darwin_amd64
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

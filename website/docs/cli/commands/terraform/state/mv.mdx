@@ -91,7 +91,38 @@ atmos terraform state mv vpc -s dev module.old_name module.new_name
     </dd>
 </dl>
 
-Additional native Terraform flags such as `-state`, `-state-out`, and `-lock` are passed through to Terraform.
+## Native Terraform Flags
+
+The `atmos terraform state mv` command supports native `terraform state mv` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform state mv vpc -s dev -lock=false aws_instance.web aws_instance.web_server
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform state mv vpc -s dev -lock-timeout=30s aws_instance.web aws_instance.web_server
+        ```
+    </dd>
+
+    <dt>`-ignore-remote-version`</dt>
+    <dd>
+        Ignore remote state version constraints when performing the operation.
+
+        ```shell
+        atmos terraform state mv vpc -s dev -ignore-remote-version aws_instance.web aws_instance.web_server
+        ```
+    </dd>
+</dl>
 
 ## See Also
 

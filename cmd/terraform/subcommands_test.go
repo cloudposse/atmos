@@ -9,7 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
+	"github.com/cloudposse/atmos/pkg/flags/compat"
 )
 
 // Note: These tests use viper.New() to create fresh, isolated viper instances
@@ -415,4 +417,165 @@ func TestNewWorkspacePassthroughSubcommand(t *testing.T) {
 	assert.NotNil(t, cmd.RunE, "workspace passthrough subcommand should have RunE")
 	assert.True(t, cmd.FParseErrWhitelist.UnknownFlags,
 		"workspace passthrough subcommand should whitelist unknown flags")
+}
+
+// TestCompoundSubcommandCompatFlags verifies that per-subcommand compat flags are
+// registered in the command registry and contain the expected flags.
+func TestCompoundSubcommandCompatFlags(t *testing.T) {
+	tests := []struct {
+		name          string
+		registryKey   string
+		compatFunc    func() map[string]compat.CompatibilityFlag
+		expectedFlags []string
+		emptyExpected bool
+	}{
+		// State sub-subcommands.
+		{
+			name:          "state-list",
+			registryKey:   "state-list",
+			compatFunc:    StateListCompatFlags,
+			expectedFlags: []string{"-state", "-id"},
+		},
+		{
+			name:          "state-mv",
+			registryKey:   "state-mv",
+			compatFunc:    StateMvCompatFlags,
+			expectedFlags: []string{"-lock", "-lock-timeout", "-ignore-remote-version"},
+		},
+		{
+			name:          "state-pull",
+			registryKey:   "state-pull",
+			compatFunc:    StatePullCompatFlags,
+			emptyExpected: true,
+		},
+		{
+			name:          "state-push",
+			registryKey:   "state-push",
+			compatFunc:    StatePushCompatFlags,
+			expectedFlags: []string{"-force", "-lock", "-lock-timeout", "-ignore-remote-version"},
+		},
+		{
+			name:          "state-replace-provider",
+			registryKey:   "state-replace-provider",
+			compatFunc:    StateReplaceProviderCompatFlags,
+			expectedFlags: []string{"-auto-approve", "-lock", "-lock-timeout", "-ignore-remote-version"},
+		},
+		{
+			name:          "state-rm",
+			registryKey:   "state-rm",
+			compatFunc:    StateRmCompatFlags,
+			expectedFlags: []string{"-lock", "-lock-timeout", "-ignore-remote-version"},
+		},
+		{
+			name:          "state-show",
+			registryKey:   "state-show",
+			compatFunc:    StateShowCompatFlags,
+			expectedFlags: []string{"-state"},
+		},
+		// Providers sub-subcommands.
+		{
+			name:          "providers-lock",
+			registryKey:   "providers-lock",
+			compatFunc:    ProvidersLockCompatFlags,
+			expectedFlags: []string{"-platform", "-fs-mirror", "-net-mirror", "-enable-plugin-cache"},
+		},
+		{
+			name:          "providers-mirror",
+			registryKey:   "providers-mirror",
+			compatFunc:    ProvidersMirrorCompatFlags,
+			expectedFlags: []string{"-platform"},
+		},
+		{
+			name:          "providers-schema",
+			registryKey:   "providers-schema",
+			compatFunc:    ProvidersSchemaCompatFlags,
+			expectedFlags: []string{"-json"},
+		},
+		// Workspace sub-subcommands.
+		{
+			name:          "workspace-list",
+			registryKey:   "workspace-list",
+			compatFunc:    WorkspaceListCompatFlags,
+			emptyExpected: true,
+		},
+		{
+			name:          "workspace-select",
+			registryKey:   "workspace-select",
+			compatFunc:    WorkspaceSelectCompatFlags,
+			expectedFlags: []string{"-or-create"},
+		},
+		{
+			name:          "workspace-new",
+			registryKey:   "workspace-new",
+			compatFunc:    WorkspaceNewCompatFlags,
+			expectedFlags: []string{"-lock", "-lock-timeout", "-state"},
+		},
+		{
+			name:          "workspace-delete",
+			registryKey:   "workspace-delete",
+			compatFunc:    WorkspaceDeleteCompatFlags,
+			expectedFlags: []string{"-force", "-lock", "-lock-timeout"},
+		},
+		{
+			name:          "workspace-show",
+			registryKey:   "workspace-show",
+			compatFunc:    WorkspaceShowCompatFlags,
+			emptyExpected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Verify the function returns expected flags.
+			flags := tt.compatFunc()
+			require.NotNil(t, flags, "%s compat flags should not be nil", tt.name)
+
+			if tt.emptyExpected {
+				assert.Empty(t, flags, "%s should have no compat flags", tt.name)
+			} else {
+				for _, expectedFlag := range tt.expectedFlags {
+					_, ok := flags[expectedFlag]
+					assert.True(t, ok, "%s should contain flag %s", tt.name, expectedFlag)
+				}
+				assert.Len(t, flags, len(tt.expectedFlags),
+					"%s should have exactly %d flags", tt.name, len(tt.expectedFlags))
+			}
+
+			// Verify all flags have AppendToSeparated behavior.
+			for flagName, flag := range flags {
+				assert.Equal(t, compat.AppendToSeparated, flag.Behavior,
+					"%s flag %s should have AppendToSeparated behavior", tt.name, flagName)
+				assert.NotEmpty(t, flag.Description,
+					"%s flag %s should have a description", tt.name, flagName)
+			}
+
+			// Verify the flags are registered in the command registry.
+			registeredFlags := internal.GetSubcommandCompatFlags("terraform", tt.registryKey)
+			require.NotNil(t, registeredFlags,
+				"%s should be registered in the command registry", tt.registryKey)
+			assert.Equal(t, len(flags), len(registeredFlags),
+				"%s registry flags should match function output", tt.registryKey)
+		})
+	}
+}
+
+// TestCompoundSubcommandCompatFlags_NoDryRunConflict verifies that terraform's -dry-run
+// is excluded from state mv and state rm compat flags to avoid conflict with Atmos --dry-run.
+func TestCompoundSubcommandCompatFlags_NoDryRunConflict(t *testing.T) {
+	conflictingSubcommands := []struct {
+		name       string
+		compatFunc func() map[string]compat.CompatibilityFlag
+	}{
+		{"state-mv", StateMvCompatFlags},
+		{"state-rm", StateRmCompatFlags},
+	}
+
+	for _, tt := range conflictingSubcommands {
+		t.Run(tt.name, func(t *testing.T) {
+			flags := tt.compatFunc()
+			_, hasDryRun := flags["-dry-run"]
+			assert.False(t, hasDryRun,
+				"%s should NOT include -dry-run to avoid conflict with Atmos --dry-run", tt.name)
+		})
+	}
 }
