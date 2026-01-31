@@ -171,6 +171,8 @@ func isYAMLNullValue(node *yaml.Node) bool {
 }
 
 // keyMatchesOriginalWithColon checks if the key plus trailing colon(s) matches the original string.
+// Only single (:) and double (::) colon suffixes are handled, as real-world values like AWS ARNs
+// use at most :: as a separator. Triple or more colons are not matched intentionally.
 func keyMatchesOriginalWithColon(key, original string) bool {
 	return key+":" == original || key+"::" == original
 }

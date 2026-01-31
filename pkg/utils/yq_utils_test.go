@@ -510,6 +510,12 @@ func TestKeyMatchesOriginalWithColon(t *testing.T) {
 			expected: true,
 		},
 		{
+			name:     "key is prefix but not full match",
+			key:      "pass",
+			original: "password:",
+			expected: false,
+		},
+		{
 			name:     "ARN key with trailing colon",
 			key:      "arn:aws:iam::123456789012:role/MyRole",
 			original: "arn:aws:iam::123456789012:role/MyRole:",

@@ -1,6 +1,6 @@
 # Fix: terraform.state YAML Tag Incorrectly Parses String Values Ending with Colons
 
-**Date**: 2025-01-28
+**Date**: 2026-01-28
 
 **GitHub Issue**: [#2031](https://github.com/cloudposse/atmos/issues/2031)
 
