@@ -788,11 +788,11 @@ BSD LICENSED DEPENDENCIES
 
   - google.golang.org/api
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.263.0/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.264.0/LICENSE
 
   - google.golang.org/api/internal/third_party/uritemplates
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.263.0/internal/third_party/uritemplates/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.264.0/internal/third_party/uritemplates/LICENSE
 
   - google.golang.org/protobuf
     License: BSD-3-Clause
@@ -1078,7 +1078,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/bmatcuk/doublestar/v4
     License: MIT
-    URL: https://github.com/bmatcuk/doublestar/blob/v4.9.2/LICENSE
+    URL: https://github.com/bmatcuk/doublestar/blob/v4.10.0/LICENSE
 
   - github.com/catppuccin/go
     License: MIT
