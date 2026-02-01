@@ -80,12 +80,12 @@
   },
   "templates": {
     "settings": {
-      "enabled": false,
+      "enabled": true,
       "sprig": {
-        "enabled": false
+        "enabled": true
       },
       "gomplate": {
-        "enabled": false,
+        "enabled": true,
         "timeout": 0,
         "datasources": null
       }

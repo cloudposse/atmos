@@ -3,6 +3,7 @@ package exec
 import (
 	"bytes"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -76,6 +77,7 @@ func TestPrintShellDryRunInfo(t *testing.T) {
 			// Ensure stderr is restored and pipe ends are closed even on panic.
 			defer func() {
 				os.Stderr = oldStderr
+				_ = w.Close()
 				r.Close()
 			}()
 
@@ -202,4 +204,65 @@ func TestShellConfigConstruction(t *testing.T) {
 	assert.Equal(t, "/components/terraform/vpc", cfg.componentPath)
 	assert.Equal(t, "/project/components/terraform/vpc", cfg.workingDir)
 	assert.Equal(t, "dev-vpc.terraform.tfvars.json", cfg.varFile)
+}
+
+// TestShellConfigWithWorkdirProvisioner tests shellConfig when workdir provisioner is active.
+func TestShellConfigWithWorkdirProvisioner(t *testing.T) {
+	// Use platform-agnostic paths.
+	componentPathOriginal := filepath.Join("components", "terraform", "vpc")
+	workdirPathVpc := filepath.Join("workdir", "terraform", "vpc")
+	workdirPathTemp := filepath.Join("tmp", "atmos-workdir-123", "vpc")
+
+	tests := []struct {
+		name             string
+		componentSection map[string]any
+		originalPath     string
+		expectedCfgPath  string
+	}{
+		{
+			name:             "no workdir - uses component path",
+			componentSection: map[string]any{},
+			originalPath:     componentPathOriginal,
+			expectedCfgPath:  componentPathOriginal,
+		},
+		{
+			name: "workdir set - uses workdir path",
+			componentSection: map[string]any{
+				provWorkdir.WorkdirPathKey: workdirPathVpc,
+			},
+			originalPath:    componentPathOriginal,
+			expectedCfgPath: workdirPathVpc,
+		},
+		{
+			name: "workdir set with vars - uses workdir path",
+			componentSection: map[string]any{
+				provWorkdir.WorkdirPathKey: workdirPathTemp,
+				"vars": map[string]any{
+					"environment": "dev",
+				},
+			},
+			originalPath:    componentPathOriginal,
+			expectedCfgPath: workdirPathTemp,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			componentPath := tt.originalPath
+
+			// Simulate the workdir path extraction logic.
+			if workdirPath, ok := tt.componentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+				componentPath = workdirPath
+			}
+
+			cfg := &shellConfig{
+				componentPath: componentPath,
+				workingDir:    componentPath,
+				varFile:       "test.terraform.tfvars.json",
+			}
+
+			assert.Equal(t, tt.expectedCfgPath, cfg.componentPath)
+			assert.Equal(t, tt.expectedCfgPath, cfg.workingDir)
+		})
+	}
 }

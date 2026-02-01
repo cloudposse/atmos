@@ -438,6 +438,13 @@ func setDefaultConfiguration(v *viper.Viper) {
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
+	// Template processing defaults.
+	// These must be set here (not just in defaultCliConfig) so they apply even when
+	// a config file is found but doesn't explicitly configure templates.
+	v.SetDefault("templates.settings.enabled", true)
+	v.SetDefault("templates.settings.sprig.enabled", true)
+	v.SetDefault("templates.settings.gomplate.enabled", true)
+
 	// Atmos Pro defaults
 	v.SetDefault("settings.pro.base_url", AtmosProDefaultBaseUrl)
 	v.SetDefault("settings.pro.endpoint", AtmosProDefaultEndpoint)

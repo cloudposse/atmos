@@ -222,3 +222,112 @@ func TestConstructPackerComponentVarfilePath(t *testing.T) {
 	got2 := constructPackerComponentVarfilePath(&atmosConfig2, &info2)
 	assert.Equal(t, filepath.Join("root", "packer-templates", "platform", "base", "prod-plat-base.packer.vars.json"), got2)
 }
+
+// TestConstructTerraformComponentVarfilePath_WithWorkdirPath tests varfile path with JIT vendored components.
+// This test verifies that varfile paths correctly use workdir paths set by JIT provisioning.
+func TestConstructTerraformComponentVarfilePath_WithWorkdirPath(t *testing.T) {
+	// Test varfile path uses workdir path when set (JIT vendored component scenario).
+	workdirPath := filepath.Join("workdir", "terraform", "dev-vpc")
+	atmosConfig := schema.AtmosConfiguration{
+		BasePath: "base",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: filepath.Join("components", "terraform"),
+			},
+		},
+	}
+	info := schema.ConfigAndStacksInfo{
+		ContextPrefix:         "tenant1-ue2-dev",
+		ComponentFolderPrefix: "",
+		Component:             "vpc",
+		FinalComponent:        "vpc",
+		ComponentSection: map[string]any{
+			provWorkdir.WorkdirPathKey: workdirPath,
+		},
+	}
+	got := constructTerraformComponentVarfilePath(&atmosConfig, &info)
+	assert.Equal(t, filepath.Join(workdirPath, "tenant1-ue2-dev-vpc.terraform.tfvars.json"), got)
+
+	// Test varfile path uses standard path when no workdir.
+	info2 := schema.ConfigAndStacksInfo{
+		ContextPrefix:         "tenant1-ue2-dev",
+		ComponentFolderPrefix: "",
+		Component:             "vpc",
+		FinalComponent:        "vpc",
+		ComponentSection:      map[string]any{},
+	}
+	got2 := constructTerraformComponentVarfilePath(&atmosConfig, &info2)
+	assert.Equal(t, filepath.Join("base", "components", "terraform", "vpc", "tenant1-ue2-dev-vpc.terraform.tfvars.json"), got2)
+}
+
+// TestConstructTerraformComponentWorkingDir_JITVendoredComponent tests working dir for JIT vendored components.
+// This simulates the scenario where a component is downloaded via JIT provisioning
+// and the workdir path is set by the source provisioner.
+func TestConstructTerraformComponentWorkingDir_JITVendoredComponent(t *testing.T) {
+	tests := []struct {
+		name          string
+		workdirPath   string
+		expectedPath  string
+		componentName string
+		hasSource     bool
+		sourceConfig  map[string]any
+	}{
+		{
+			name:          "JIT vendored component with workdir path",
+			workdirPath:   filepath.Join("tmp", "atmos-vendor", "abc123", "modules", "vpc"),
+			expectedPath:  filepath.Join("tmp", "atmos-vendor", "abc123", "modules", "vpc"),
+			componentName: "vpc",
+			hasSource:     true,
+			sourceConfig: map[string]any{
+				"source": map[string]any{
+					"uri": "git::https://github.com/cloudposse/terraform-aws-vpc.git?ref=v1.0.0",
+				},
+			},
+		},
+		{
+			name:          "JIT vendored component with string source",
+			workdirPath:   filepath.Join("tmp", "vendor", "my-component"),
+			expectedPath:  filepath.Join("tmp", "vendor", "my-component"),
+			componentName: "my-component",
+			hasSource:     true,
+			sourceConfig: map[string]any{
+				"source": "git::https://github.com/org/repo.git?ref=main",
+			},
+		},
+		{
+			name:          "Regular component without source (no workdir)",
+			workdirPath:   "",
+			expectedPath:  filepath.Join("base", "components", "terraform", "vpc"),
+			componentName: "vpc",
+			hasSource:     false,
+			sourceConfig:  map[string]any{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			atmosConfig := schema.AtmosConfiguration{
+				BasePath: "base",
+				Components: schema.Components{
+					Terraform: schema.Terraform{
+						BasePath: filepath.Join("components", "terraform"),
+					},
+				},
+			}
+
+			componentSection := tt.sourceConfig
+			if tt.workdirPath != "" {
+				componentSection[provWorkdir.WorkdirPathKey] = tt.workdirPath
+			}
+
+			info := schema.ConfigAndStacksInfo{
+				ComponentFolderPrefix: "",
+				FinalComponent:        tt.componentName,
+				ComponentSection:      componentSection,
+			}
+
+			got := constructTerraformComponentWorkingDir(&atmosConfig, &info)
+			assert.Equal(t, tt.expectedPath, got)
+		})
+	}
+}

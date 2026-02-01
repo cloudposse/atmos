@@ -3,9 +3,9 @@ module github.com/cloudposse/atmos
 go 1.25.2
 
 require (
-	al.essio.dev/pkg/shellescape v1.5.1
+	al.essio.dev/pkg/shellescape v1.6.0
 	cloud.google.com/go/secretmanager v1.16.0
-	cloud.google.com/go/storage v1.58.0
+	cloud.google.com/go/storage v1.59.2
 	dario.cat/mergo v1.0.2
 	github.com/99designs/keyring v1.2.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
@@ -19,22 +19,22 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/adrg/xdg v0.5.3
 	github.com/agiledragon/gomonkey/v2 v2.14.0
-	github.com/alecthomas/chroma/v2 v2.23.0
-	github.com/alicebob/miniredis/v2 v2.35.0
+	github.com/alecthomas/chroma/v2 v2.23.1
+	github.com/alicebob/miniredis/v2 v2.36.1
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
 	github.com/aws/aws-sdk-go-v2 v1.41.1
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.20.19
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.21.1
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.1
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.95.1
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.8
 	github.com/aws/aws-sdk-go-v2/service/sso v1.30.9
 	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.13
 	github.com/aws/aws-sdk-go-v2/service/sts v1.41.6
 	github.com/aws/smithy-go v1.24.0
-	github.com/bmatcuk/doublestar/v4 v4.9.2
+	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v0.21.1-0.20250623103423-23b8fd6302d7
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/colorprofile v0.4.1
@@ -68,7 +68,7 @@ require (
 	github.com/hashicorp/go-version v1.8.0
 	github.com/hashicorp/hcl v1.0.1-vault-7
 	github.com/hashicorp/hcl/v2 v2.24.0
-	github.com/hashicorp/terraform-config-inspect v0.0.0-20250828155816-225c06ed5fd9
+	github.com/hashicorp/terraform-config-inspect v0.0.0-20260120201749-785479628bd7
 	github.com/hashicorp/terraform-exec v0.24.0
 	github.com/hexops/gotextdiff v1.0.3
 	github.com/jfrog/jfrog-client-go v1.55.0
@@ -85,12 +85,12 @@ require (
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
-	github.com/open-policy-agent/opa v1.12.2
+	github.com/open-policy-agent/opa v1.12.3
 	github.com/opencontainers/image-spec v1.1.1
 	github.com/otiai10/copy v1.14.1
 	github.com/pkg/errors v0.9.1
-	github.com/posthog/posthog-go v1.9.0
-	github.com/redis/go-redis/v9 v9.17.2
+	github.com/posthog/posthog-go v1.9.1
+	github.com/redis/go-redis/v9 v9.17.3
 	github.com/samber/lo v1.52.0
 	github.com/santhosh-tekuri/jsonschema/v5 v5.3.1
 	github.com/sergi/go-diff v1.4.0
@@ -101,7 +101,7 @@ require (
 	github.com/terraform-docs/terraform-docs v0.21.0
 	github.com/versent/saml2aws/v2 v2.36.19
 	github.com/xeipuuv/gojsonschema v1.2.0
-	github.com/yuin/goldmark v1.7.8
+	github.com/yuin/goldmark v1.7.16
 	github.com/zalando/go-keyring v0.2.6
 	github.com/zclconf/go-cty v1.17.0
 	go.uber.org/mock v0.6.0
@@ -109,7 +109,7 @@ require (
 	golang.org/x/oauth2 v0.34.0
 	golang.org/x/term v0.39.0
 	golang.org/x/text v0.33.0
-	google.golang.org/api v0.260.0
+	google.golang.org/api v0.264.0
 	google.golang.org/grpc v1.78.0
 	gopkg.in/ini.v1 v1.67.1
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
@@ -121,7 +121,7 @@ require (
 require (
 	cel.dev/expr v0.24.0 // indirect
 	cloud.google.com/go v0.123.0 // indirect
-	cloud.google.com/go/auth v0.18.0 // indirect
+	cloud.google.com/go/auth v0.18.1 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	cloud.google.com/go/iam v1.5.3 // indirect
@@ -243,7 +243,7 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/wire v0.6.0 // indirect
-	github.com/googleapis/enterprise-certificate-proxy v0.3.9 // indirect
+	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
 	github.com/gookit/color v1.5.4 // indirect
 	github.com/gorilla/css v1.0.1 // indirect
 	github.com/gosimple/slug v1.15.0 // indirect
@@ -407,7 +407,7 @@ require (
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 	google.golang.org/genproto v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20251202230838-ff82c1b0f217 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20251222181119-0a764e51fe1b // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260122232226-8e98ce8d340d // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
 	inet.af/netaddr v0.0.0-20230525184311-b8eac61e914a // indirect
