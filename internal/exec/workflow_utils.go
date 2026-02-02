@@ -182,7 +182,7 @@ func prepareStepEnvironment(
 	// Pass stepEnv (system + global + toolchain + workflow + step) to let auth configure credentials.
 	authEnv, authErr := authManager.PrepareShellEnvironment(ctx, stepIdentity, stepEnv)
 	if authErr != nil {
-		return nil, fmt.Errorf("failed to prepare shell environment for identity %q in step %q: %w", stepIdentity, stepName, authErr)
+		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, stepIdentity, stepName, authErr)
 	}
 	stepEnv = authEnv
 
