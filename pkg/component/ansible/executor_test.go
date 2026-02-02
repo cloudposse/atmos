@@ -825,9 +825,9 @@ func TestMaybeAutoGenerateFiles(t *testing.T) {
 			},
 		}
 
-		// Use an invalid path that should fail on MkdirAll.
-		// On Unix, a path starting with null byte is invalid.
-		err := maybeAutoGenerateFiles(atmosConfig, info, "/dev/null/invalid")
+		// Use a path with null byte which is universally invalid across all operating systems.
+		invalidPath := "/path" + string([]byte{0}) + "/invalid"
+		err := maybeAutoGenerateFiles(atmosConfig, info, invalidPath)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrCreateDirectory)
 	})

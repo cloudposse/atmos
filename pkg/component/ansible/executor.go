@@ -327,9 +327,9 @@ func getGenerateSectionFromComponent(componentSection map[string]any) map[string
 
 // maybeAutoGenerateFiles conditionally generates files for a component before path validation.
 // It generates files when:
-//   - auto_generate_files is enabled in the Ansible configuration
-//   - the component has a generate section
-//   - not in dry-run mode (to avoid filesystem modifications)
+//   - auto_generate_files is enabled in the Ansible configuration.
+//   - the component has a generate section.
+//   - not in dry-run mode (to avoid filesystem modifications).
 //
 // Returns nil if generation is skipped or succeeds, error otherwise.
 func maybeAutoGenerateFiles(
@@ -406,7 +406,12 @@ func resolveComponentPath(
 	// If still doesn't exist, return the error.
 	basePath, basePathErr := u.GetComponentBasePath(atmosConfig, "ansible")
 	if basePathErr != nil {
-		basePath = "<unknown>"
+		return "", fmt.Errorf("%w: '%s' points to the Ansible component '%s', but failed to resolve base path: %v",
+			errUtils.ErrInvalidComponent,
+			info.ComponentFromArg,
+			info.FinalComponent,
+			basePathErr,
+		)
 	}
 	return "", fmt.Errorf("%w: '%s' points to the Ansible component '%s', but it does not exist in '%s'",
 		errUtils.ErrInvalidComponent,

@@ -138,17 +138,17 @@ type ansibleCLIFlags struct {
 
 // getAnsibleFlags extracts ansible-specific flags from the command.
 func getAnsibleFlags(cmd *cobra.Command) ansibleCLIFlags {
-	flags := ansibleCLIFlags{}
+	cliFlags := ansibleCLIFlags{}
 
 	if playbookFlag := cmd.Flag("playbook"); playbookFlag != nil {
-		flags.Playbook = playbookFlag.Value.String()
+		cliFlags.Playbook = playbookFlag.Value.String()
 	}
 
 	if inventoryFlag := cmd.Flag("inventory"); inventoryFlag != nil {
-		flags.Inventory = inventoryFlag.Value.String()
+		cliFlags.Inventory = inventoryFlag.Value.String()
 	}
 
-	return flags
+	return cliFlags
 }
 
 // processArgs processes command arguments to extract component and additional args.
