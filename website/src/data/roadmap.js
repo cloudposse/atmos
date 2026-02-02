@@ -258,11 +258,13 @@ export const roadmapConfig = {
         { label: 'Workflows can now change directories before executing commands', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', changelog: 'working-directory-support', description: 'Execute workflow steps in specific directories, enabling multi-repo orchestration.', category: 'featured', priority: 'high', benefits: 'Orchestrate across multiple repositories in a single workflow.' },
         { label: 'Integration with `atmos auth` identities for per-step authentication', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/identities', changelog: 'authentication-for-workflows-and-custom-commands', version: 'v1.197.0', description: 'Each workflow step can use different credentials for cross-account deployments.', category: 'featured', priority: 'high', benefits: 'Deploy to multiple accounts in sequence without credential juggling.' },
         { label: 'Unified task execution (`pkg/runner`)', status: 'shipped', quarter: 'q4-2025', pr: 1901, changelog: 'unified-task-runner', description: 'A single execution engine for all task types—Terraform, Helmfile, shell, and custom commands.', benefits: 'Consistent behavior across all command types. Same output handling, error reporting, and logging.' },
+        { label: 'Workflow environment variables', status: 'shipped', quarter: 'q1-2026', pr: 2050, changelog: 'workflow-environment-variables', description: 'Define environment variables at workflow and step levels with hierarchical merging. Step-level env vars override workflow-level for the same keys.', benefits: 'Set common environment variables once at workflow level. Override for specific steps without duplication.' },
       ],
       issues: [],
       prs: [
         { number: 1899, title: 'Implement workflow step types with registry pattern' },
         { number: 1901, title: 'Create pkg/runner with unified task execution' },
+        { number: 2050, title: 'Add workflow environment variables with hierarchical merging' },
       ],
     },
     {
