@@ -404,7 +404,10 @@ func resolveComponentPath(
 	}
 
 	// If still doesn't exist, return the error.
-	basePath, _ := u.GetComponentBasePath(atmosConfig, "ansible")
+	basePath, basePathErr := u.GetComponentBasePath(atmosConfig, "ansible")
+	if basePathErr != nil {
+		basePath = "<unknown>"
+	}
 	return "", fmt.Errorf("%w: '%s' points to the Ansible component '%s', but it does not exist in '%s'",
 		errUtils.ErrInvalidComponent,
 		info.ComponentFromArg,
