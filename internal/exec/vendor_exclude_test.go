@@ -103,8 +103,8 @@ func TestCreateComponentSkipFunc_ExcludeAndIncludeCombined(t *testing.T) {
 	// Create a vendor spec with both excludes and includes
 	vendorSpec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{
-			IncludedPaths: []string{"**/*.tf"},        // Only include .tf files
-			ExcludedPaths: []string{"providers.tf"},   // But exclude providers.tf
+			IncludedPaths: []string{"**/*.tf"},      // Only include .tf files
+			ExcludedPaths: []string{"providers.tf"}, // But exclude providers.tf
 		},
 	}
 
