@@ -2,7 +2,7 @@
 title: Configure Dependencies
 sidebar_label: dependencies
 sidebar_class_name: command
-description: Use the dependencies section to declare tool version requirements and component dependencies.
+description: Use the dependencies section to declare tool version requirements.
 id: dependencies
 ---
 import File from '@site/src/components/File'
@@ -10,14 +10,13 @@ import Intro from '@site/src/components/Intro'
 import Note from '@site/src/components/Note'
 
 <Intro>
-The `dependencies` section defines both tool version requirements and component dependencies. Tool dependencies ensure your components use the correct versions of CLI tools like Terraform, kubectl, or helm. Component dependencies control execution order.
+The `dependencies` section defines tool version requirements. Tool dependencies ensure your components use the correct versions of CLI tools like Terraform, kubectl, or helm.
 </Intro>
 
 ## Use Cases
 
 - **Tool Version Requirements:** Ensure components use specific Terraform, kubectl, or helm versions
 - **Team Consistency:** Version-control tool requirements for reproducible deployments
-- **Component Execution Order:** Define which components must run before others
 - **CI/CD Reliability:** Guarantee correct tool versions in automated pipelines
 
 ## Tool Dependencies
@@ -212,66 +211,11 @@ components:
 
 ## Component Dependencies
 
-The `dependencies` section also supports component dependencies to control execution order. This ensures components run in the correct sequence.
-
-<Note>
-This page focuses primarily on tool dependencies. For cross-component data dependencies, see the [!terraform.output](/functions/yaml/terraform.output) YAML function.
-</Note>
-
-### Basic Component Dependency
-
-<File title="stacks/catalog/vpc.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        name: vpc
-
-    subnet:
-      dependencies:
-        - vpc              # subnet depends on vpc
-      vars:
-        vpc_id: !terraform.output vpc.vpc_id
-```
-</File>
-
-When you run `atmos terraform apply subnet -s prod`, Atmos automatically:
-1. Applies `vpc` first (dependency)
-2. Applies `subnet` second (dependent)
-
-### Combining Tool and Component Dependencies
-
-You can use both tool dependencies and component dependencies together:
-
-<File title="stacks/orgs/acme/plat/prod/us-east-1.yaml">
-```yaml
-components:
-  terraform:
-    vpc:
-      dependencies:
-        tools:
-          terraform: "1.9.8"
-          aws-cli: "2.13.0"
-      vars:
-        name: vpc
-
-    subnet:
-      dependencies:
-        # Component dependencies (execution order)
-        - vpc
-        # Tool dependencies (CLI versions)
-        tools:
-          terraform: "1.9.8"
-          aws-cli: "2.13.0"
-      vars:
-        vpc_id: !terraform.output vpc.vpc_id
-```
-</File>
+:::tip Looking for Component Dependencies?
+The `dependencies` section currently supports **tool dependencies only**. For component execution order and cross-component dependencies, use [`settings.depends_on`](/stacks/settings/depends_on). We plan to consolidate these features in a future release.
+:::
 
 ## Best Practices
-
-### Tool Dependencies
 
 1. **Pin Versions Explicitly** - Use exact versions (`"1.9.8"`) instead of `"latest"` for production
 2. **Consistent Team Standards** - Define global defaults in `_defaults.yaml` files
@@ -279,14 +223,9 @@ components:
 4. **Document Reasons** - Add comments explaining why a component uses a different version
 5. **Test Before Upgrading** - Test tool version changes in dev/staging before production
 
-### Component Dependencies
-
-1. **Explicit Dependencies** - Declare all dependencies, even if execution order seems obvious
-2. **Avoid Circular Dependencies** - Component A can't depend on B if B depends on A
-3. **Use YAML Functions** - Combine with `!terraform.output` for data flow between components
-
 ## Related Documentation
 
 - [Toolchain Management](/cli/commands/toolchain/usage) - Installing and managing CLI tools
 - [Toolchain Configuration](/cli/configuration/toolchain/) - Configuring toolchain behavior
+- [Component Dependencies](/stacks/settings/depends_on) - Configure dependencies between components
 - [YAML Functions](/functions/yaml) - Using `!terraform.output` and other functions for cross-component dependencies
