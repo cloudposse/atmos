@@ -1,0 +1,48 @@
+---
+slug: vendor-stack-flag
+title: "Vendor All Components in a Stack with --stack Flag"
+authors: [osterman]
+tags: [feature]
+---
+
+The `vendor pull` command now supports a `--stack` flag to vendor all components defined in a specific stack at once.
+
+<!--truncate-->
+
+## What Changed
+
+The `atmos vendor pull` command now accepts a `--stack` flag that vendors all components with vendor configurations in the specified stack. This eliminates the need to vendor components individually when working with a specific stack.
+
+```shell
+# Vendor all components in a stack
+atmos vendor pull --stack plat-ue2-dev
+
+# Combine with dry-run to preview
+atmos vendor pull --stack plat-ue2-dev --dry-run
+```
+
+## Why This Matters
+
+Previously, vendoring components required either:
+- Running `vendor pull --component <name>` for each component individually
+- Using `vendor pull --everything` to vendor all components globally
+
+The new `--stack` flag provides a middle ground, allowing you to vendor only the components relevant to a specific stack deployment.
+
+## How to Use It
+
+Simply add the `--stack` flag with your stack name:
+
+```shell
+# Vendor components for production stack
+atmos vendor pull --stack prod-us-east-1
+
+# Preview what would be vendored
+atmos vendor pull --stack staging-eu-west-1 --dry-run
+```
+
+The command will identify all components in the stack that have vendor configurations (via `vendor.yaml`) and vendor them together.
+
+## Get Involved
+
+Have feedback or ideas for vendor improvements? Join our [Slack community](https://slack.cloudposse.com) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).

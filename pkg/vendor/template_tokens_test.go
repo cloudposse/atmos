@@ -1,4 +1,4 @@
-package exec
+package vendor
 
 import (
 	"os"
@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -38,12 +39,12 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 
 	// Load vendor config.
 	vendorConfigFile := filepath.Join(configPath, "vendor.yaml")
-	vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, true)
+	vendorResult, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorConfigFile, true)
 	require.NoError(t, err, "Failed to read vendor config")
 
 	// Verify vendor config was loaded.
-	require.NotNil(t, vendorConfig, "Vendor config should not be nil")
-	require.NotEmpty(t, vendorConfig.Spec.Sources, "Vendor config should have sources")
+	require.True(t, vendorResult.Found, "Vendor config should be found")
+	require.NotEmpty(t, vendorResult.Config.Spec.Sources, "Vendor config should have sources")
 
 	// Test each documented format.
 	tests := []struct {
@@ -101,9 +102,9 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 		t.Run(tt.componentName, func(t *testing.T) {
 			// Find the source config for this component.
 			var sourceConfig *schema.AtmosVendorSource
-			for i := range vendorConfig.Spec.Sources {
-				if vendorConfig.Spec.Sources[i].Component == tt.componentName {
-					sourceConfig = &vendorConfig.Spec.Sources[i]
+			for i := range vendorResult.Config.Spec.Sources {
+				if vendorResult.Config.Spec.Sources[i].Component == tt.componentName {
+					sourceConfig = &vendorResult.Config.Spec.Sources[i]
 					break
 				}
 			}
@@ -117,7 +118,7 @@ func TestVendorPull_TemplateTokenInjection(t *testing.T) {
 				Version   string
 			}{sourceConfig.Component, sourceConfig.Version}
 
-			processedURL, err := ProcessTmpl(&atmosConfig, "test-source", sourceConfig.Source, tmplData, false)
+			processedURL, err := exec.ProcessTmpl(&atmosConfig, "test-source", sourceConfig.Source, tmplData, false)
 			require.NoError(t, err, "Template processing should succeed for %s", tt.componentName)
 
 			t.Logf("Testing: %s - %s", tt.componentName, tt.description)
@@ -226,22 +227,22 @@ base_path: "./"
 			}
 
 			// Read vendor config.
-			vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
+			vendorResult, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
 			require.NoError(t, err, "Vendor config should parse successfully")
 
 			// Process template (this is where errors should occur).
-			if len(vendorConfig.Spec.Sources) == 0 {
+			if len(vendorResult.Config.Spec.Sources) == 0 {
 				require.Fail(t, "No sources found in vendor config")
 				return
 			}
 
-			source := vendorConfig.Spec.Sources[0]
+			source := vendorResult.Config.Spec.Sources[0]
 			tmplData := struct {
 				Component string
 				Version   string
 			}{source.Component, source.Version}
 
-			processedURL, err := ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
+			processedURL, err := exec.ProcessTmpl(&atmosConfig, "test-source", source.Source, tmplData, false)
 
 			if tt.expectError {
 				require.Error(t, err, "Should get error for: %s", tt.name)
@@ -311,17 +312,17 @@ settings:
 		BasePath: tempDir,
 	}
 
-	vendorConfig, _, _, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
+	vendorResult, err := ReadAndProcessVendorConfigFile(&atmosConfig, vendorFile, true)
 	require.NoError(t, err)
 
 	// Verify template-based credentials are in the URL.
 	var templateSource, nativeSource *schema.AtmosVendorSource
-	for i := range vendorConfig.Spec.Sources {
-		if vendorConfig.Spec.Sources[i].Component == "template-creds" {
-			templateSource = &vendorConfig.Spec.Sources[i]
+	for i := range vendorResult.Config.Spec.Sources {
+		if vendorResult.Config.Spec.Sources[i].Component == "template-creds" {
+			templateSource = &vendorResult.Config.Spec.Sources[i]
 		}
-		if vendorConfig.Spec.Sources[i].Component == "native-creds" {
-			nativeSource = &vendorConfig.Spec.Sources[i]
+		if vendorResult.Config.Spec.Sources[i].Component == "native-creds" {
+			nativeSource = &vendorResult.Config.Spec.Sources[i]
 		}
 	}
 
@@ -339,10 +340,10 @@ settings:
 		Version   string
 	}{nativeSource.Component, nativeSource.Version}
 
-	templateProcessedURL, err := ProcessTmpl(&atmosConfig, "template-source", templateSource.Source, templateTmplData, false)
+	templateProcessedURL, err := exec.ProcessTmpl(&atmosConfig, "template-source", templateSource.Source, templateTmplData, false)
 	require.NoError(t, err, "Template processing should succeed for template-creds")
 
-	nativeProcessedURL, err := ProcessTmpl(&atmosConfig, "native-source", nativeSource.Source, nativeTmplData, false)
+	nativeProcessedURL, err := exec.ProcessTmpl(&atmosConfig, "native-source", nativeSource.Source, nativeTmplData, false)
 	require.NoError(t, err, "Template processing should succeed for native-creds")
 
 	// Template source should have credentials from template processing.

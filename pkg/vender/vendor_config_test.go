@@ -9,14 +9,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 func TestVendorConfigScenarios(t *testing.T) {
 	testDir := t.TempDir()
 
-	// Initialize CLI config with required paths
+	// Initialize CLI config with required paths.
 	atmosConfig := schema.AtmosConfiguration{
 		BasePath: testDir,
 		Components: schema.Components{
@@ -27,14 +27,14 @@ func TestVendorConfigScenarios(t *testing.T) {
 	}
 	atmosConfig.Logs.Level = "Trace"
 
-	// Setup test component directory
+	// Setup test component directory.
 	componentPath := filepath.Join(testDir, "components", "terraform", "mock")
 	err := os.MkdirAll(componentPath, 0o755)
 	assert.Nil(t, err)
 
-	// Test Case 1: vendor.yaml exists and component is defined in it
+	// Test Case 1: vendor.yaml exists and component is defined in it.
 	t.Run("vendor.yaml exists with defined component", func(t *testing.T) {
-		// Create vendor.yaml
+		// Create vendor.yaml.
 		vendorYaml := `apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -51,15 +51,15 @@ spec:
 		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0o644)
 		assert.Nil(t, err)
 
-		// Test vendoring with component flag
-		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
+		// Test vendoring with component flag.
+		vendorResult, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
-		assert.True(t, exists)
-		assert.NotEmpty(t, configFile)
+		assert.True(t, vendorResult.Found)
+		assert.NotEmpty(t, vendorResult.FilePath)
 
-		// Verify the component exists in vendor config
+		// Verify the component exists in vendor config.
 		var found bool
-		for _, source := range vendorConfig.Spec.Sources {
+		for _, source := range vendorResult.Config.Spec.Sources {
 			if source.Component == "mock" {
 				found = true
 				break
@@ -67,14 +67,14 @@ spec:
 		}
 		assert.True(t, found, "Component 'mock' should be defined in vendor.yaml")
 
-		// Clean up
+		// Clean up.
 		err = os.Remove(vendorYamlPath)
 		assert.Nil(t, err)
 	})
 
-	// Test Case 2: No vendor.yaml but component.yaml exists
+	// Test Case 2: No vendor.yaml but component.yaml exists.
 	t.Run("component.yaml exists without vendor.yaml", func(t *testing.T) {
-		// Create component.yaml
+		// Create component.yaml.
 		componentYaml := `apiVersion: atmos/v1
 kind: ComponentVendorConfig
 metadata:
@@ -88,34 +88,34 @@ spec:
 		err := os.WriteFile(componentYamlPath, []byte(componentYaml), 0o644)
 		assert.Nil(t, err)
 
-		// Test component vendoring
-		componentConfig, compPath, err := e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
+		// Test component vendoring.
+		componentConfig, compPath, err := vendor.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
 		assert.Nil(t, err)
 		assert.NotNil(t, componentConfig)
 		assert.Equal(t, componentPath, compPath)
 
-		// Clean up
+		// Clean up.
 		err = os.Remove(componentYamlPath)
 		assert.Nil(t, err)
 	})
 
-	// Test Case 3: Neither vendor.yaml nor component.yaml exists
+	// Test Case 3: Neither vendor.yaml nor component.yaml exists.
 	t.Run("no vendor.yaml or component.yaml", func(t *testing.T) {
-		// Test vendoring with component flag
+		// Test vendoring with component flag.
 		vendorYamlPath := filepath.Join(testDir, "vendor.yaml")
-		_, exists, _, err := e.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
+		vendorResult, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
-		assert.False(t, exists)
+		assert.False(t, vendorResult.Found)
 
-		// Test component vendoring
-		_, _, err = e.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
+		// Test component vendoring.
+		_, _, err = vendor.ReadAndProcessComponentVendorConfigFile(&atmosConfig, "mock", "terraform")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "does not exist")
 	})
 
-	// Test Case 4: No component specified with vendor.yaml
+	// Test Case 4: No component specified with vendor.yaml.
 	t.Run("no component specified with vendor.yaml", func(t *testing.T) {
-		// Create vendor.yaml
+		// Create vendor.yaml.
 		vendorYaml := `apiVersion: atmos/v1
 kind: AtmosVendorConfig
 metadata:
@@ -130,14 +130,14 @@ spec:
 		err := os.WriteFile(vendorYamlPath, []byte(vendorYaml), 0o644)
 		assert.Nil(t, err)
 
-		// Test vendoring without component flag
-		vendorConfig, exists, configFile, err := e.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
+		// Test vendoring without component flag.
+		vendorResult, err := vendor.ReadAndProcessVendorConfigFile(&atmosConfig, vendorYamlPath, true)
 		assert.Nil(t, err)
-		assert.True(t, exists)
-		assert.NotEmpty(t, configFile)
-		assert.NotNil(t, vendorConfig.Spec.Sources)
+		assert.True(t, vendorResult.Found)
+		assert.NotEmpty(t, vendorResult.FilePath)
+		assert.NotNil(t, vendorResult.Config.Spec.Sources)
 
-		// Clean up
+		// Clean up.
 		err = os.Remove(vendorYamlPath)
 		assert.Nil(t, err)
 	})
