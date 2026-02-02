@@ -148,7 +148,7 @@ func ExecutePlaybook(
 	if !info.DryRun {
 		err = u.WriteToFileAsYAML(varFilePath, info.ComponentVarsSection, 0o644)
 		if err != nil {
-			return err
+			return errors.Join(errUtils.ErrFileOperation, fmt.Errorf("failed to write varfile %s: %w", varFilePath, err))
 		}
 
 		// Defer cleanup of the variable file.
@@ -572,7 +572,7 @@ func prepareEnvVars(atmosConfig *schema.AtmosConfiguration, envList []string) ([
 
 	basePath, err := filepath.Abs(atmosConfig.BasePath)
 	if err != nil {
-		return nil, err
+		return nil, errors.Join(errUtils.ErrPathResolution, fmt.Errorf("failed to resolve base path: %w", err))
 	}
 
 	envVars = append(envVars, fmt.Sprintf("ATMOS_BASE_PATH=%s", basePath))
