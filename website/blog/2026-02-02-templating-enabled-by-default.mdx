@@ -1,0 +1,75 @@
+---
+slug: templating-enabled-by-default
+title: 'Templating Is Now Enabled by Default'
+authors:
+  - aknysh
+tags:
+  - bugfix
+  - dx
+date: 2026-02-02T00:00:00.000Z
+---
+
+Go templates, Sprig functions, and Gomplate datasources are now enabled by default in Atmos. You no longer need to explicitly configure `templates.settings.enabled: true` in your `atmos.yaml`.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos now registers Viper-level defaults for all three template processing settings:
+
+- `templates.settings.enabled` defaults to `true`
+- `templates.settings.sprig.enabled` defaults to `true`
+- `templates.settings.gomplate.enabled` defaults to `true`
+
+This means template expressions like `{{ .vars.stage }}`, Sprig functions like `{{ upper .vars.stage }}`, and Gomplate datasources all work out of the box without any configuration.
+
+## Why This Changed
+
+The [config isolation feature](/changelog/introducing-chdir-flag) (PR #1941) changed how Atmos discovers configuration files. When you use `--chdir` or have a local `atmos.yaml`, Atmos now respects that config in isolation rather than merging it with the repository root's `atmos.yaml`.
+
+This created an unintended side effect: if your local `atmos.yaml` didn't explicitly set `templates.settings.enabled: true`, the value defaulted to `false` (Go's zero value for booleans). Previously, the repository root's `atmos.yaml` would have been merged in as a fallback, providing the `true` value.
+
+The result was that templates silently stopped being processed in projects that relied on the root-level configuration.
+
+## What This Means for You
+
+### If you already have `templates.settings.enabled: true`
+
+Nothing changes. Your explicit configuration still takes precedence.
+
+### If you relied on the root config for template settings
+
+Templates now work correctly everywhere, even in subdirectories with their own `atmos.yaml` that don't explicitly configure template settings.
+
+### If you want to disable templates
+
+You can still explicitly disable template processing:
+
+```yaml
+# atmos.yaml
+templates:
+  settings:
+    enabled: false
+```
+
+Or disable individual template engines:
+
+```yaml
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: false
+    gomplate:
+      enabled: false
+```
+
+## Upgrade
+
+Upgrade Atmos to get this fix. No configuration changes are required.
+
+## References
+
+- [PR #2035](https://github.com/cloudposse/atmos/pull/2035)
+- [Templates Configuration](/cli/configuration/templates)
+- [Go Templates Documentation](/templates)
