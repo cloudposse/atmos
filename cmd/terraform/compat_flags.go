@@ -7,25 +7,27 @@ import (
 
 // Terraform flag name constants.
 const (
-	tfFlagJSON        = "-json"
-	tfFlagNoColor     = "-no-color"
-	tfFlagState       = "-state"
-	tfFlagStateOut    = "-state-out"
-	tfFlagBackup      = "-backup"
-	tfFlagLock        = "-lock"
-	tfFlagLockTimeout = "-lock-timeout"
+	tfFlagJSON                = "-json"
+	tfFlagNoColor             = "-no-color"
+	tfFlagState               = "-state"
+	tfFlagStateOut            = "-state-out"
+	tfFlagBackup              = "-backup"
+	tfFlagLock                = "-lock"
+	tfFlagLockTimeout         = "-lock-timeout"
+	tfFlagIgnoreRemoteVersion = "-ignore-remote-version"
 )
 
 // Terraform flag description constants.
 const (
-	descDisableColorOutput  = "Disable color output"
-	descPathToStateFile     = "Path to the state file"
-	descPathToReadSaveState = "Path to read and save state"
-	descPathToWriteState    = "Path to write updated state"
-	descPathToBackupState   = "Path to backup the existing state file"
-	descLockStateFile       = "Lock the state file"
-	descDurationRetryLock   = "Duration to retry state lock"
-	descOutputJSONFormat    = "Output in JSON format"
+	descDisableColorOutput        = "Disable color output"
+	descPathToStateFile           = "Path to the state file"
+	descPathToReadSaveState       = "Path to read and save state"
+	descPathToWriteState          = "Path to write updated state"
+	descPathToBackupState         = "Path to backup the existing state file"
+	descLockStateFile             = "Lock the state file"
+	descDurationRetryLock         = "Duration to retry state lock"
+	descOutputJSONFormat          = "Output in JSON format"
+	descIgnoreRemoteVersionChecks = "Ignore remote state version constraints"
 )
 
 // TerraformGlobalCompatFlags returns TRUE global terraform flags.
@@ -189,6 +191,81 @@ func StateCompatFlags() map[string]compat.CompatibilityFlag {
 	}
 }
 
+// StateListCompatFlags returns compatibility flags specific to terraform state list.
+func StateListCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StateListCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		tfFlagState: {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
+		"-id":       {Behavior: compat.AppendToSeparated, Description: "Filter results by resource ID"},
+	}
+}
+
+// StateMvCompatFlags returns compatibility flags specific to terraform state mv.
+// Note: terraform's -dry-run is intentionally excluded to avoid conflict with Atmos --dry-run.
+func StateMvCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StateMvCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		tfFlagLock:                {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout:         {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagIgnoreRemoteVersion: {Behavior: compat.AppendToSeparated, Description: descIgnoreRemoteVersionChecks},
+	}
+}
+
+// StatePullCompatFlags returns compatibility flags specific to terraform state pull.
+// State pull has no native flags beyond standard terraform flags.
+func StatePullCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StatePullCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{}
+}
+
+// StatePushCompatFlags returns compatibility flags specific to terraform state push.
+func StatePushCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StatePushCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		"-force":                  {Behavior: compat.AppendToSeparated, Description: "Write the state even if lineages don't match or serial is lower"},
+		tfFlagLock:                {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout:         {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagIgnoreRemoteVersion: {Behavior: compat.AppendToSeparated, Description: descIgnoreRemoteVersionChecks},
+	}
+}
+
+// StateReplaceProviderCompatFlags returns compatibility flags specific to terraform state replace-provider.
+func StateReplaceProviderCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StateReplaceProviderCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		"-auto-approve":           {Behavior: compat.AppendToSeparated, Description: "Skip interactive approval"},
+		tfFlagLock:                {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout:         {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagIgnoreRemoteVersion: {Behavior: compat.AppendToSeparated, Description: descIgnoreRemoteVersionChecks},
+	}
+}
+
+// StateRmCompatFlags returns compatibility flags specific to terraform state rm.
+// Note: terraform's -dry-run is intentionally excluded to avoid conflict with Atmos --dry-run.
+func StateRmCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StateRmCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		tfFlagLock:                {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout:         {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagIgnoreRemoteVersion: {Behavior: compat.AppendToSeparated, Description: descIgnoreRemoteVersionChecks},
+	}
+}
+
+// StateShowCompatFlags returns compatibility flags specific to terraform state show.
+func StateShowCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.StateShowCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		tfFlagState: {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
+	}
+}
+
 // ImportCompatFlags returns compatibility flags specific to terraform import.
 func ImportCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ImportCompatFlags")()
@@ -305,12 +382,89 @@ func WorkspaceCompatFlags() map[string]compat.CompatibilityFlag {
 	}
 }
 
+// WorkspaceListCompatFlags returns compatibility flags specific to terraform workspace list.
+// Workspace list has no native flags beyond standard terraform flags.
+func WorkspaceListCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.WorkspaceListCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{}
+}
+
+// WorkspaceSelectCompatFlags returns compatibility flags specific to terraform workspace select.
+func WorkspaceSelectCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.WorkspaceSelectCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		"-or-create": {Behavior: compat.AppendToSeparated, Description: "Create the workspace if it doesn't exist"},
+	}
+}
+
+// WorkspaceNewCompatFlags returns compatibility flags specific to terraform workspace new.
+func WorkspaceNewCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.WorkspaceNewCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		tfFlagLock:        {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout: {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+		tfFlagState:       {Behavior: compat.AppendToSeparated, Description: descPathToStateFile},
+	}
+}
+
+// WorkspaceDeleteCompatFlags returns compatibility flags specific to terraform workspace delete.
+func WorkspaceDeleteCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.WorkspaceDeleteCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		"-force":          {Behavior: compat.AppendToSeparated, Description: "Force deletion even if the workspace has resources"},
+		tfFlagLock:        {Behavior: compat.AppendToSeparated, Description: descLockStateFile},
+		tfFlagLockTimeout: {Behavior: compat.AppendToSeparated, Description: descDurationRetryLock},
+	}
+}
+
+// WorkspaceShowCompatFlags returns compatibility flags specific to terraform workspace show.
+// Workspace show has no native flags beyond standard terraform flags.
+func WorkspaceShowCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.WorkspaceShowCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{}
+}
+
 // ProvidersCompatFlags returns compatibility flags specific to terraform providers.
 // Note: terraform providers has no special flags beyond standard terraform flags.
 func ProvidersCompatFlags() map[string]compat.CompatibilityFlag {
 	defer perf.Track(nil, "terraform.ProvidersCompatFlags")()
 
 	return map[string]compat.CompatibilityFlag{}
+}
+
+// ProvidersLockCompatFlags returns compatibility flags specific to terraform providers lock.
+func ProvidersLockCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ProvidersLockCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		"-platform":            {Behavior: compat.AppendToSeparated, Description: "Target platform for provider packages (can be specified multiple times)"},
+		"-fs-mirror":           {Behavior: compat.AppendToSeparated, Description: "Consult the given filesystem mirror directory for provider packages"},
+		"-net-mirror":          {Behavior: compat.AppendToSeparated, Description: "Consult the given network mirror for provider packages"},
+		"-enable-plugin-cache": {Behavior: compat.AppendToSeparated, Description: "Enable the global plugin cache during lock file creation"},
+	}
+}
+
+// ProvidersMirrorCompatFlags returns compatibility flags specific to terraform providers mirror.
+func ProvidersMirrorCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ProvidersMirrorCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		"-platform": {Behavior: compat.AppendToSeparated, Description: "Target platform for provider packages (can be specified multiple times)"},
+	}
+}
+
+// ProvidersSchemaCompatFlags returns compatibility flags specific to terraform providers schema.
+func ProvidersSchemaCompatFlags() map[string]compat.CompatibilityFlag {
+	defer perf.Track(nil, "terraform.ProvidersSchemaCompatFlags")()
+
+	return map[string]compat.CompatibilityFlag{
+		tfFlagJSON: {Behavior: compat.AppendToSeparated, Description: "Output provider schemas in JSON format"},
+	}
 }
 
 // AllTerraformCompatFlags returns a combined set of all terraform compatibility flags.
@@ -352,6 +506,28 @@ func AllTerraformCompatFlags() map[string]compat.CompatibilityFlag {
 	mergeFlags(ConsoleCompatFlags())
 	mergeFlags(WorkspaceCompatFlags())
 	mergeFlags(ProvidersCompatFlags())
+
+	// Per-subcommand compat flags for compound subcommands.
+	// State sub-subcommands.
+	mergeFlags(StateListCompatFlags())
+	mergeFlags(StateMvCompatFlags())
+	mergeFlags(StatePullCompatFlags())
+	mergeFlags(StatePushCompatFlags())
+	mergeFlags(StateReplaceProviderCompatFlags())
+	mergeFlags(StateRmCompatFlags())
+	mergeFlags(StateShowCompatFlags())
+
+	// Providers sub-subcommands.
+	mergeFlags(ProvidersLockCompatFlags())
+	mergeFlags(ProvidersMirrorCompatFlags())
+	mergeFlags(ProvidersSchemaCompatFlags())
+
+	// Workspace sub-subcommands.
+	mergeFlags(WorkspaceListCompatFlags())
+	mergeFlags(WorkspaceSelectCompatFlags())
+	mergeFlags(WorkspaceNewCompatFlags())
+	mergeFlags(WorkspaceDeleteCompatFlags())
+	mergeFlags(WorkspaceShowCompatFlags())
 
 	return flags
 }
