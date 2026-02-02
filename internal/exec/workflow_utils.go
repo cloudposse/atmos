@@ -121,7 +121,7 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 }
 
 // prepareStepEnvironment prepares environment variables for a workflow step.
-// Starts with system env + global env from atmos.yaml.
+// Starts with system env + global env from atmos.yaml, then merges workflow and step env.
 // If identity is specified, it authenticates and adds credentials to the environment.
 // Returns the environment variables to use for the step.
 func prepareStepEnvironment(
@@ -129,12 +129,27 @@ func prepareStepEnvironment(
 	stepName string,
 	authManager auth.AuthManager,
 	globalEnv map[string]string,
+	workflowEnvMap map[string]string,
+	stepEnvMap map[string]string,
 ) ([]string, error) {
 	// Prepare base environment: system env + global env from atmos.yaml.
-	// Global env has lowest priority and can be overridden by identity auth env vars.
+	// Global env has lowest priority and can be overridden by workflow/step env vars.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), globalEnv)
 
-	// No identity specified, use base environment (system + global env).
+	// Merge workflow and step env vars into a single map (step overrides workflow for same key).
+	// This ensures duplicate keys are resolved before adding to the environment.
+	mergedEnv := make(map[string]string, len(workflowEnvMap)+len(stepEnvMap))
+	for k, v := range workflowEnvMap {
+		mergedEnv[k] = v
+	}
+	for k, v := range stepEnvMap {
+		mergedEnv[k] = v
+	}
+	if len(mergedEnv) > 0 {
+		baseEnv = append(baseEnv, envpkg.ConvertMapToSlice(mergedEnv)...)
+	}
+
+	// No identity specified, use base environment (system + global + workflow + step env).
 	if stepIdentity == "" {
 		return baseEnv, nil
 	}
@@ -330,8 +345,9 @@ func ExecuteWorkflow(
 		}
 
 		// Prepare environment variables: start with system env + global env from atmos.yaml.
+		// Then merge workflow-level and step-level env vars.
 		// If identity is specified, also authenticate and add credentials.
-		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.Env)
+		stepEnv, err := prepareStepEnvironment(stepIdentity, step.Name, authManager, atmosConfig.Env, workflowDefinition.Env, step.Env)
 		if err != nil {
 			return err
 		}

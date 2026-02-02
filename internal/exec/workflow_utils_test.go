@@ -832,7 +832,7 @@ func TestCheckAndGenerateWorkflowStepNames_Coverage(t *testing.T) {
 // TestPrepareStepEnvironment tests the prepareStepEnvironment function.
 func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
 	// When no identity is specified, should return base environment (system + global env).
-	env, err := prepareStepEnvironment("", "step1", nil, nil)
+	env, err := prepareStepEnvironment("", "step1", nil, nil, nil, nil)
 
 	assert.NoError(t, err)
 	// Should return at least the system environment variables.
@@ -841,7 +841,7 @@ func TestPrepareStepEnvironment_NoIdentity(t *testing.T) {
 
 // TestPrepareStepEnvironment_NilAuthManager tests prepareStepEnvironment with nil auth manager.
 func TestPrepareStepEnvironment_NilAuthManager(t *testing.T) {
-	env, err := prepareStepEnvironment("some-identity", "step1", nil, nil)
+	env, err := prepareStepEnvironment("some-identity", "step1", nil, nil, nil, nil)
 
 	assert.ErrorIs(t, err, errUtils.ErrAuthManager)
 	assert.Nil(t, env)
@@ -944,7 +944,7 @@ func TestPrepareStepEnvironment_WithGlobalEnv(t *testing.T) {
 	}
 
 	// When no identity is specified, should return base environment including global env.
-	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
+	env, err := prepareStepEnvironment("", "step1", nil, globalEnv, nil, nil)
 
 	assert.NoError(t, err)
 	assert.NotEmpty(t, env)
@@ -968,11 +968,106 @@ func TestPrepareStepEnvironment_WithGlobalEnv(t *testing.T) {
 func TestPrepareStepEnvironment_EmptyGlobalEnv(t *testing.T) {
 	globalEnv := map[string]string{}
 
-	env, err := prepareStepEnvironment("", "step1", nil, globalEnv)
+	env, err := prepareStepEnvironment("", "step1", nil, globalEnv, nil, nil)
 
 	assert.NoError(t, err)
 	// Should return system environment at minimum.
 	assert.NotEmpty(t, env)
+}
+
+// TestPrepareStepEnvironment_WithWorkflowEnv tests prepareStepEnvironment with workflow-level env.
+func TestPrepareStepEnvironment_WithWorkflowEnv(t *testing.T) {
+	workflowEnv := map[string]string{
+		"WORKFLOW_VAR": "workflow-value",
+	}
+
+	env, err := prepareStepEnvironment("", "step1", nil, nil, workflowEnv, nil)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, env)
+
+	// Check that workflow env vars are included.
+	foundVar := false
+	for _, e := range env {
+		if e == "WORKFLOW_VAR=workflow-value" {
+			foundVar = true
+		}
+	}
+	assert.True(t, foundVar, "WORKFLOW_VAR should be in environment")
+}
+
+// TestPrepareStepEnvironment_WithStepEnv tests prepareStepEnvironment with step-level env.
+func TestPrepareStepEnvironment_WithStepEnv(t *testing.T) {
+	stepEnv := map[string]string{
+		"STEP_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment("", "step1", nil, nil, nil, stepEnv)
+
+	assert.NoError(t, err)
+	assert.NotEmpty(t, env)
+
+	// Check that step env vars are included.
+	foundVar := false
+	for _, e := range env {
+		if e == "STEP_VAR=step-value" {
+			foundVar = true
+		}
+	}
+	assert.True(t, foundVar, "STEP_VAR should be in environment")
+}
+
+// TestPrepareStepEnvironment_StepOverridesWorkflow tests that step env overrides workflow env.
+func TestPrepareStepEnvironment_StepOverridesWorkflow(t *testing.T) {
+	workflowEnv := map[string]string{
+		"MY_VAR": "workflow-value",
+	}
+	stepEnv := map[string]string{
+		"MY_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment("", "step1", nil, nil, workflowEnv, stepEnv)
+
+	assert.NoError(t, err)
+
+	// Check that step value is present (not workflow value).
+	foundStepValue := false
+	for _, e := range env {
+		if e == "MY_VAR=step-value" {
+			foundStepValue = true
+		}
+		// Should NOT have workflow value.
+		assert.NotEqual(t, "MY_VAR=workflow-value", e, "Workflow value should be overridden by step value")
+	}
+	assert.True(t, foundStepValue, "Step env var should override workflow env var")
+}
+
+// TestPrepareStepEnvironment_MergesWorkflowAndStep tests that different keys are merged.
+func TestPrepareStepEnvironment_MergesWorkflowAndStep(t *testing.T) {
+	workflowEnv := map[string]string{
+		"WORKFLOW_VAR": "workflow-value",
+	}
+	stepEnv := map[string]string{
+		"STEP_VAR": "step-value",
+	}
+
+	env, err := prepareStepEnvironment("", "step1", nil, nil, workflowEnv, stepEnv)
+
+	assert.NoError(t, err)
+
+	// Check that both vars are present.
+	foundWorkflowVar := false
+	foundStepVar := false
+	for _, e := range env {
+		if e == "WORKFLOW_VAR=workflow-value" {
+			foundWorkflowVar = true
+		}
+		if e == "STEP_VAR=step-value" {
+			foundStepVar = true
+		}
+	}
+	assert.True(t, foundWorkflowVar, "WORKFLOW_VAR should be in environment")
+	assert.True(t, foundStepVar, "STEP_VAR should be in environment")
 }
 
 // TestShellFieldsParsing tests that shell.Fields correctly parses various command patterns.
