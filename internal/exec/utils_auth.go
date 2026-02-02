@@ -1,3 +1,13 @@
+// utils_auth.go contains exec-layer orchestration for authentication.
+//
+// These functions live in internal/exec (not pkg/auth) because they depend on
+// ExecuteDescribeComponent to fetch component-specific auth config from stack
+// manifests before delegating to pkg/auth primitives. Moving them to pkg/auth
+// would create a circular import (pkg/auth → internal/exec → pkg/auth).
+//
+// The actual auth logic (manager creation, identity resolution, credential
+// storage) is implemented in pkg/auth. This file only orchestrates the
+// component config discovery and merging that must happen in the exec layer.
 package exec
 
 import (
