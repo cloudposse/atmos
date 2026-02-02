@@ -180,8 +180,8 @@ func (i *permissionSetIdentity) Environment() (map[string]string, error) {
 	providerName, err := i.resolveRootProviderName()
 	if err == nil {
 		// Get AWS file environment variables.
-		// Environment() is called before authentication, so we use empty realm for path resolution.
-		awsFileManager, err := awsCloud.NewAWSFileManager("", "")
+		// Uses realm for credential isolation between different repositories.
+		awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 		if err != nil {
 			return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 		}
@@ -226,8 +226,8 @@ func (i *permissionSetIdentity) PrepareEnvironment(ctx context.Context, environ 
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	// PrepareEnvironment is called before authentication, so we use empty realm for path resolution.
-	awsFileManager, err := awsCloud.NewAWSFileManager("", "")
+	// Uses realm for credential isolation between different repositories.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -456,8 +456,8 @@ func (i *permissionSetIdentity) CredentialsExist() (bool, error) {
 		return false, nil
 	}
 
-	// CredentialsExist checks storage before authentication, so we use empty realm.
-	mgr, err := awsCloud.NewAWSFileManager("", "")
+	// Uses realm for credential isolation between different repositories.
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -516,10 +516,10 @@ func (i *permissionSetIdentity) Logout(ctx context.Context) error {
 
 	// Get base_path from provider spec if configured (requires manager to lookup provider config).
 	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
-	// Logout removes credentials regardless of realm, so we use empty realm.
+	// Uses realm for credential isolation between different repositories.
 	basePath := ""
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath, "")
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)

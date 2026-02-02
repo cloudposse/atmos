@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"strings"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -56,7 +57,7 @@ func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 	// Priority 1: Environment variable.
 	if envRealm := os.Getenv(EnvVarName); envRealm != "" {
 		if err := Validate(envRealm); err != nil {
-			return RealmInfo{}, fmt.Errorf("invalid %s environment variable: %w", EnvVarName, err)
+			return RealmInfo{}, fmt.Errorf("%w: %s environment variable: %w", errUtils.ErrInvalidRealm, EnvVarName, err)
 		}
 		return RealmInfo{
 			Value:  envRealm,
@@ -67,7 +68,7 @@ func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 	// Priority 2: Configuration file.
 	if configRealm != "" {
 		if err := Validate(configRealm); err != nil {
-			return RealmInfo{}, fmt.Errorf("invalid auth.realm configuration: %w", err)
+			return RealmInfo{}, fmt.Errorf("%w: auth.realm configuration: %w", errUtils.ErrInvalidRealm, err)
 		}
 		return RealmInfo{
 			Value:  configRealm,

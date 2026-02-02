@@ -688,6 +688,10 @@ var (
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
 
+	// Realm errors.
+	ErrFailedToComputeRealm = errors.New("failed to compute realm")
+	ErrInvalidRealm         = errors.New("invalid realm value")
+
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")

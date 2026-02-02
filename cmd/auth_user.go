@@ -134,7 +134,7 @@ var authUserConfigureCmd = &cobra.Command{
 		// Compute realm for credential isolation between different repositories.
 		realmInfo, err := realm.GetRealm(atmosConfig.Auth.Realm, atmosConfig.CliConfigPath)
 		if err != nil {
-			return fmt.Errorf("failed to compute realm: %w", err)
+			return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToComputeRealm, err)
 		}
 
 		// Store the credentials with realm for isolation.

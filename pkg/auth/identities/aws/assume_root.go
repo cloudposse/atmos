@@ -553,8 +553,9 @@ func (i *assumeRootIdentity) Logout(ctx context.Context) error {
 
 	log.Debug("Logout assume-root identity", logKeyIdentity, i.name, "provider", providerName)
 
-	// Logout removes credentials regardless of realm, so we use empty realm.
-	fileManager, err := awsCloud.NewAWSFileManager("", "")
+	// Uses realm for credential isolation between different repositories.
+	basePath := ""
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", logKeyIdentity, i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)

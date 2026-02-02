@@ -671,10 +671,10 @@ func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
 
 	// Get base_path from provider spec if configured (requires manager to lookup provider config).
 	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
-	// Logout removes credentials regardless of realm, so we use empty realm.
+	// Uses realm for credential isolation between different repositories.
 	basePath := ""
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath, "")
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)
