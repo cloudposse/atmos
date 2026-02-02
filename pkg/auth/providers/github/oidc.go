@@ -23,7 +23,7 @@ const OidcTimeout = 10
 type oidcProvider struct {
 	name   string
 	config *schema.Provider
-	realm  string // Credential isolation realm set by auth manager
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewOIDCProvider creates a new GitHub OIDC provider.

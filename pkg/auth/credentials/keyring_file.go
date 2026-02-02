@@ -286,7 +286,8 @@ func (s *fileKeyringStore) Delete(alias string, realm string) error {
 	key := buildKeyringKey(alias, realm)
 	if err := s.ring.Remove(key); err != nil {
 		// Treat "not found" as success - credential already removed (idempotent).
-		if errors.Is(err, keyring.ErrKeyNotFound) {
+		// Check both keyring.ErrKeyNotFound and os.ErrNotExist for filesystem errors.
+		if errors.Is(err, keyring.ErrKeyNotFound) || os.IsNotExist(err) {
 			return nil
 		}
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to delete credentials from file keyring: %w", err))

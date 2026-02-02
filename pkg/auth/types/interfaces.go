@@ -120,8 +120,8 @@ type PostAuthenticateParams struct {
 	ProviderName string
 	IdentityName string
 	Credentials  ICredentials
-	Manager      AuthManager // Auth manager for resolving provider chains
-	Realm        string      // Credential isolation realm for file storage
+	Manager      AuthManager // Auth manager for resolving provider chains.
+	Realm        string      // Credential isolation realm for file storage.
 }
 
 // Identity defines the interface that all authentication identities must implement.

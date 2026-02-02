@@ -39,7 +39,7 @@ type deviceCodeProvider struct {
 	location       string
 	clientID       string
 	cacheStorage   CacheStorage
-	realm          string // Credential isolation realm set by auth manager
+	realm          string // Credential isolation realm set by auth manager.
 }
 
 // deviceCodeConfig holds extracted Azure configuration from provider spec.
@@ -125,10 +125,10 @@ func (p *deviceCodeProvider) PreAuthenticate(_ authTypes.AuthManager) error {
 }
 
 // createMSALClient creates a MSAL public client with persistent token cache.
-// The cache is stored in ~/.azure/msal_token_cache.json for Azure CLI compatibility.
+// The cache is stored in ~/.azure/atmos/{realm}/msal_token_cache.json for Azure CLI compatibility.
 func (p *deviceCodeProvider) createMSALClient() (public.Client, error) {
 	// Create MSAL cache for token persistence.
-	msalCache, err := azureCloud.NewMSALCache("")
+	msalCache, err := azureCloud.NewMSALCache("", p.realm)
 	if err != nil {
 		return public.Client{}, fmt.Errorf("failed to create MSAL cache: %w", err)
 	}
@@ -496,7 +496,7 @@ func (p *deviceCodeProvider) Logout(ctx context.Context) error {
 // Paths returns credential files/directories used by this provider.
 func (p *deviceCodeProvider) Paths() ([]authTypes.Path, error) {
 	// Create file manager to get provider-namespaced paths.
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", p.realm)
 	if err != nil {
 		return nil, err
 	}

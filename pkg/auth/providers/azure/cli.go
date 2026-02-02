@@ -25,7 +25,7 @@ type cliProvider struct {
 	tenantID       string
 	subscriptionID string
 	location       string
-	realm          string // Credential isolation realm set by auth manager
+	realm          string // Credential isolation realm set by auth manager.
 }
 
 // azureCliTokenResponse represents the response from `az account get-access-token`.

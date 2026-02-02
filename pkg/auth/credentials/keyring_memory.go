@@ -127,8 +127,12 @@ func (s *memoryKeyringStore) List(realm string) ([]string, error) {
 			}
 		}
 	} else {
-		for alias := range s.items {
-			aliases = append(aliases, alias)
+		// When realm is empty, return all keys but strip the "atmos:" prefix.
+		prefix := KeyringRealmPrefix + ":"
+		for key := range s.items {
+			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+				aliases = append(aliases, key[len(prefix):])
+			}
 		}
 	}
 	return aliases, nil

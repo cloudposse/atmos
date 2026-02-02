@@ -33,7 +33,7 @@ const (
 
 // buildKeyringKey creates a realm-scoped keyring key.
 // Format: "atmos:{realm}:{alias}" when realm is provided.
-// Falls back to just "{alias}" for backward compatibility when realm is empty.
+// Falls back to "atmos:{alias}" for backward compatibility when realm is empty.
 func buildKeyringKey(alias, realm string) string {
 	log.Debug("Building keyring key", "alias", alias, "realm", realm)
 	if realm != "" {

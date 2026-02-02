@@ -41,7 +41,7 @@ const (
 type userIdentity struct {
 	name   string
 	config *schema.Identity
-	realm  string // Credential isolation realm set by auth manager
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewUserIdentity creates a new AWS user identity.

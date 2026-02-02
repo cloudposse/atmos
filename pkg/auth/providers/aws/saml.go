@@ -48,7 +48,7 @@ type samlProvider struct {
 	region string
 	// RoleToAssumeFromAssertion is set by PreAuthenticate based on the next identity in the chain.
 	RoleToAssumeFromAssertion string
-	realm                     string // Credential isolation realm set by auth manager
+	realm                     string // Credential isolation realm set by auth manager.
 }
 
 // NewSAMLProvider creates a new AWS SAML provider.

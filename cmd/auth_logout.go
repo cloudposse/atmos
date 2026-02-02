@@ -589,6 +589,8 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 		// For a full cleanup, users should run this from each repository or use a keyring manager.
 		if deleteKeychain {
 			// Delete keyring entries for identities in the current auth config using this realm.
+			// Note: This only clears identities defined in the current atmos.yaml.
+			// To clear all keyring entries across all realms, use List() to enumerate.
 			if atmosConfig.Auth.Identities != nil {
 				store := credentials.NewCredentialStoreWithConfig(&atmosConfig.Auth)
 				for alias := range atmosConfig.Auth.Identities {
@@ -632,7 +634,7 @@ func discoverRealms(baseDir string) ([]string, error) {
 		if os.IsNotExist(err) {
 			return nil, nil // No config directory means no realms.
 		}
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrReadDirectory, err)
 	}
 
 	var realms []string

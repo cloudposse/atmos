@@ -504,9 +504,9 @@ func TestFileKeyring_ErrorHandling(t *testing.T) {
 	_, err = store.Retrieve("non-existent", "test-realm")
 	assert.Error(t, err)
 
-	// Delete non-existent alias.
+	// Delete non-existent alias (should be idempotent - no error).
 	err = store.Delete("non-existent", "test-realm")
-	assert.Error(t, err)
+	assert.NoError(t, err)
 }
 
 func TestCreatePasswordPrompt_EnvironmentVariable(t *testing.T) {

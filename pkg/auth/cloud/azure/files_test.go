@@ -44,7 +44,7 @@ func TestNewAzureFileManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr, err := NewAzureFileManager(tt.basePath)
+			mgr, err := NewAzureFileManager(tt.basePath, "")
 
 			if tt.expectError {
 				require.Error(t, err)

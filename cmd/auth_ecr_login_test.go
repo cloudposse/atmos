@@ -19,14 +19,14 @@ func TestCreateECRAuthManager_Success(t *testing.T) {
 		Integrations: map[string]schema.Integration{},
 	}
 
-	manager, err := createECRAuthManager(authConfig)
+	manager, err := createECRAuthManager(authConfig, "")
 	require.NoError(t, err)
 	assert.NotNil(t, manager)
 }
 
 func TestCreateECRAuthManager_NilConfig(t *testing.T) {
 	// Test that createECRAuthManager fails with nil config.
-	_, err := createECRAuthManager(nil)
+	_, err := createECRAuthManager(nil, "")
 	require.Error(t, err)
 }
 
@@ -84,7 +84,7 @@ func TestCreateECRAuthManager_EmptyConfig(t *testing.T) {
 		Integrations: map[string]schema.Integration{},
 	}
 
-	manager, err := createECRAuthManager(authConfig)
+	manager, err := createECRAuthManager(authConfig, "")
 	require.NoError(t, err)
 	assert.NotNil(t, manager)
 }
@@ -102,7 +102,7 @@ func TestCreateECRAuthManager_WithProviders(t *testing.T) {
 		Integrations: map[string]schema.Integration{},
 	}
 
-	manager, err := createECRAuthManager(authConfig)
+	manager, err := createECRAuthManager(authConfig, "")
 	require.NoError(t, err)
 	assert.NotNil(t, manager)
 }
@@ -126,7 +126,7 @@ func TestCreateECRAuthManager_WithIntegrations(t *testing.T) {
 		},
 	}
 
-	manager, err := createECRAuthManager(authConfig)
+	manager, err := createECRAuthManager(authConfig, "")
 	require.NoError(t, err)
 	assert.NotNil(t, manager)
 }

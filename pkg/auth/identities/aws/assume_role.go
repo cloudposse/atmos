@@ -38,7 +38,7 @@ type assumeRoleIdentity struct {
 	roleArn          string
 	manager          types.AuthManager // Auth manager for resolving root provider
 	rootProviderName string            // Cached root provider name from PostAuthenticate
-	realm            string            // Credential isolation realm set by auth manager
+	realm            string            // Credential isolation realm set by auth manager.
 }
 
 // newSTSClient creates an STS client using the base credentials and configured region.

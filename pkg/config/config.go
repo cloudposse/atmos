@@ -82,14 +82,14 @@ func setLogConfig(atmosConfig *schema.AtmosConfiguration) {
 	if v, ok := flagKeyValue["logs-file"]; ok {
 		atmosConfig.Logs.File = v
 	}
-	// Handle verbose flag //currently not working TODO remove this change (separate PR?)
-	if v, ok := flagKeyValue["verbose"]; ok && v == "true" {
-		atmosConfig.Logs.Level = "Debug"
-	}
+	// Handle ATMOS_VERBOSE environment variable (lower precedence than --logs-level flag).
 	if os.Getenv("ATMOS_VERBOSE") == "true" {
 		atmosConfig.Logs.Level = "Debug"
 	}
-	// END TODO
+	// Handle verbose flag (higher precedence than environment).
+	if v, ok := flagKeyValue["verbose"]; ok && v == "true" {
+		atmosConfig.Logs.Level = "Debug"
+	}
 	if val, ok := flagKeyValue["no-color"]; ok {
 		valLower := strings.ToLower(val)
 		switch valLower {

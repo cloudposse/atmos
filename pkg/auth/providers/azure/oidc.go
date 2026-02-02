@@ -62,7 +62,7 @@ type oidcProvider struct {
 	httpClient httpClient.Client
 	// tokenEndpoint can be overridden for testing. If empty, uses Azure AD endpoint.
 	tokenEndpoint string
-	realm         string // Credential isolation realm set by auth manager
+	realm         string // Credential isolation realm set by auth manager.
 }
 
 // oidcConfig holds extracted Azure OIDC configuration from provider spec.

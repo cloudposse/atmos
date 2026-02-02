@@ -48,7 +48,7 @@ type ssoProvider struct {
 	region       string
 	cacheStorage CacheStorage
 	ssoClient    ssoClient // For dependency injection in tests.
-	realm        string    // Credential isolation realm set by auth manager
+	realm        string    // Credential isolation realm set by auth manager.
 }
 
 // NewSSOProvider creates a new AWS SSO provider.

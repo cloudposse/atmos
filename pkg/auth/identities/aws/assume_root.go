@@ -49,7 +49,7 @@ type assumeRootIdentity struct {
 	taskPolicyArn    string // AWS-managed task policy ARN.
 	manager          types.AuthManager
 	rootProviderName string
-	realm            string // Credential isolation realm set by auth manager
+	realm            string // Credential isolation realm set by auth manager.
 }
 
 // NewAssumeRootIdentity creates a new AWS assume root identity.

@@ -30,7 +30,7 @@ const (
 type Provider struct {
 	name   string
 	config *schema.Provider
-	realm  string // Credential isolation realm set by auth manager
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewProvider creates a new mock provider.

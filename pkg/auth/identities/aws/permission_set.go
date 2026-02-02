@@ -33,7 +33,7 @@ type permissionSetIdentity struct {
 	config           *schema.Identity
 	manager          types.AuthManager // Auth manager for resolving root provider
 	rootProviderName string            // Cached root provider name from PostAuthenticate
-	realm            string            // Credential isolation realm set by auth manager
+	realm            string            // Credential isolation realm set by auth manager.
 }
 
 // NewPermissionSetIdentity creates a new AWS permission set identity.

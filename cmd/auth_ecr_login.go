@@ -73,7 +73,7 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cases 2 & 3 require auth manager.
-	authManager, err := createECRAuthManager(&atmosConfig.Auth)
+	authManager, err := createECRAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -138,16 +138,14 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 }
 
 // createECRAuthManager creates a new auth manager for ECR operations.
-func createECRAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+func createECRAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
 
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	// Note: Empty cliConfigPath results in auto-generated realm from empty path.
-	// This is acceptable for ECR login commands.
-	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, "")
+	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 }
 
 func init() {
