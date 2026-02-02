@@ -2,6 +2,7 @@
 
 ✓ Authentication successful!
 
+  Realm     7056b9eb (auto)
   Provider  mock-provider
   Identity  mock-identity-2
   Region    us-east-1
