@@ -81,9 +81,9 @@ func TestCheckComponentExcludes_SimpleFilename(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create a mock absolute path (this simulates what the actual code does)
-			// The src parameter in the real code is a full path like /tmp/atmos-vendor-xyz/providers.tf
-			// We need to test that the pattern matches against trimmedSrc, not src
+			// Create a mock absolute path (this simulates what the actual code does).
+			// The src parameter in the real code is a full path like /tmp/atmos-vendor-xyz/providers.tf.
+			// We need to test that the pattern matches against trimmedSrc, not src.
 			tempDir := "/var/folders/abc/atmos-vendor-12345"
 			src := filepath.Join(tempDir, tt.trimmedSrc)
 
@@ -100,7 +100,7 @@ func TestCheckComponentExcludes_SimpleFilename(t *testing.T) {
 func TestCreateComponentSkipFunc_ExcludeAndIncludeCombined(t *testing.T) {
 	tempDir := t.TempDir()
 
-	// Create a vendor spec with both excludes and includes
+	// Create a vendor spec with both excludes and includes.
 	vendorSpec := &schema.VendorComponentSpec{
 		Source: schema.VendorComponentSource{
 			IncludedPaths: []string{"**/*.tf"},      // Only include .tf files
@@ -144,10 +144,10 @@ func TestCreateComponentSkipFunc_ExcludeAndIncludeCombined(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create the file path as it would be during vendoring
+			// Create the file path as it would be during vendoring.
 			srcPath := filepath.Join(tempDir, tt.filename)
 
-			// Create a mock FileInfo (we only need the path for the skip function)
+			// Create a mock FileInfo (we only need the path for the skip function).
 			info := &mockFileInfo{name: filepath.Base(tt.filename), isDir: false}
 
 			skip, err := skipFunc(info, srcPath, "")
