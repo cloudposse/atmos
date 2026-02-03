@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -93,6 +94,11 @@ func validateCredentials(ctx context.Context, whoami *authTypes.WhoamiInfo) bool
 
 	validationInfo, err := v.Validate(ctx)
 	if err != nil {
+		if errors.Is(err, errUtils.ErrNotImplemented) {
+			expired := whoami.Credentials.IsExpired()
+			log.Debug("Credential validation not implemented; using expiration check", logKeyIdentity, whoami.Identity, "expired", expired)
+			return !expired
+		}
 		log.Debug("Credential validation failed", logKeyIdentity, whoami.Identity, "error", err)
 		return false
 	}
