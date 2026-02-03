@@ -16,6 +16,7 @@
   • env-inheritance-example
   • env-merge
   • env-precedence
+  • env-scoping
   • env-step-level
   • env-workflow-level
   • fail
