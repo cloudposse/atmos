@@ -218,6 +218,62 @@ workflows:
 Use workflow-level `env` for common settings like logging levels, and step-level `env` for step-specific configuration.
 :::
 
+### Environment Variable Scoping
+
+Environment variables in workflows are **scoped to individual steps**. This means:
+
+- **Workflow-level `env`** applies to all steps in the workflow
+- **Step-level `env`** only applies to that specific step and does **not** persist to subsequent steps
+- **Shell exports** (`export VAR=value`) within a step do **not** persist to subsequent steps
+
+Each step runs as a separate subprocess, so variables set or modified within a step are isolated to that step.
+
+<File title="stacks/workflows/scoping-example.yaml">
+```yaml
+workflows:
+  env-scoping-demo:
+    description: Demonstrates environment variable scoping
+    env:
+      FOO: workflow
+    steps:
+      # Step 1: FOO = "workflow" (from workflow-level env)
+      - command: echo "Workflow FOO - $FOO"
+        type: shell
+
+      # Step 2: FOO = "stepEnv" (step-level override)
+      - command: echo "Step Env FOO - $FOO"
+        type: shell
+        env:
+          FOO: stepEnv
+
+      # Step 3: FOO = "workflow" (step env does NOT persist)
+      - command: echo "Step Env not persisted - $FOO"
+        type: shell
+
+      # Step 4: FOO = "exported" (only within this step's process)
+      - command: export FOO=exported && echo "Local export FOO - $FOO"
+        type: shell
+
+      # Step 5: FOO = "workflow" (shell export does NOT persist)
+      - command: echo "Local export not persisted - $FOO"
+        type: shell
+```
+</File>
+
+Running this workflow produces:
+
+```
+Workflow FOO - workflow
+Step Env FOO - stepEnv
+Step Env not persisted - workflow
+Local export FOO - exported
+Local export not persisted - workflow
+```
+
+:::caution
+If you need to pass values between steps, consider writing to a file in a shared directory, or use workflow-level environment variables that are set before the workflow runs.
+:::
+
 ## CLI Environment Variables
 
 <dl>

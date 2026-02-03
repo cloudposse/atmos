@@ -280,3 +280,38 @@ workflows:
         type: shell
         env:
           BAZ: baz
+
+  # Test environment variable scoping
+  # Demonstrates that:
+  # - Workflow env applies to all steps
+  # - Step env only applies to that specific step
+  # - Step env does NOT persist to subsequent steps
+  # - Shell exports do NOT persist to subsequent steps (each step runs in isolation)
+  env-scoping:
+    description: |
+      Test environment variable scoping behavior.
+      Demonstrates that step-level env and shell exports are scoped to individual steps.
+    env:
+      FOO: workflow
+    steps:
+      # Step 1: Should see workflow-level FOO
+      - command: test "$FOO" = "workflow"
+        type: shell
+
+      # Step 2: Override FOO at step level
+      - command: test "$FOO" = "stepEnv"
+        type: shell
+        env:
+          FOO: stepEnv
+
+      # Step 3: Step env should NOT persist - back to workflow value
+      - command: test "$FOO" = "workflow"
+        type: shell
+
+      # Step 4: Export FOO in shell (this only affects the current step's process)
+      - command: export FOO=exported && test "$FOO" = "exported"
+        type: shell
+
+      # Step 5: Shell export should NOT persist - back to workflow value
+      - command: test "$FOO" = "workflow"
+        type: shell
