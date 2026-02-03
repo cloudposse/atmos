@@ -621,11 +621,15 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 	// Display browser session warning.
 	displayBrowserWarning()
 
+	// Display external credential warnings.
+	displayExternalCredentialWarnings()
+
 	return nil
 }
 
 // discoverRealms scans the Atmos config directory to find all realm subdirectories.
-// Realms are identified as directories that contain an "aws" subdirectory.
+// Realms are identified as directories that contain any known provider subdirectory
+// (aws, azure) to support multi-cloud credential storage.
 func discoverRealms(baseDir string) ([]string, error) {
 	defer perf.Track(nil, "cmd.discoverRealms")()
 
@@ -637,17 +641,23 @@ func discoverRealms(baseDir string) ([]string, error) {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrReadDirectory, err)
 	}
 
+	// Known provider subdirectories that indicate a realm.
+	knownProviders := []string{"aws", "azure"}
+
 	var realms []string
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
 
-		// Check if this directory looks like a realm (contains aws/ subdirectory).
+		// Check if this directory looks like a realm (contains any known provider subdirectory).
 		realmPath := filepath.Join(baseDir, entry.Name())
-		awsPath := filepath.Join(realmPath, "aws")
-		if info, err := os.Stat(awsPath); err == nil && info.IsDir() {
-			realms = append(realms, entry.Name())
+		for _, provider := range knownProviders {
+			providerPath := filepath.Join(realmPath, provider)
+			if info, err := os.Stat(providerPath); err == nil && info.IsDir() {
+				realms = append(realms, entry.Name())
+				break // Found a provider, no need to check others.
+			}
 		}
 	}
 
