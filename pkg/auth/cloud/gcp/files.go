@@ -71,7 +71,7 @@ type CredentialFormat struct {
 }
 
 // GetGCPBaseDir returns the base directory for GCP credentials.
-// Returns: ~/.config/atmos/gcp/
+// Returns: ~/.config/atmos/gcp/.
 func GetGCPBaseDir() (string, error) {
 	defer perf.Track(nil, "gcp.GetGCPBaseDir")()
 
@@ -79,7 +79,7 @@ func GetGCPBaseDir() (string, error) {
 }
 
 // GetProviderDir returns the directory for a specific GCP provider.
-// Returns: ~/.config/atmos/gcp/<provider-name>/
+// Returns: ~/.config/atmos/gcp/<provider-name>/.
 func GetProviderDir(providerName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetProviderDir")()
 
@@ -92,13 +92,13 @@ func GetProviderDir(providerName string) (string, error) {
 	}
 	dir := filepath.Join(base, providerName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
-		return "", fmt.Errorf("failed to create provider directory: %w", err)
+		return "", fmt.Errorf("%w: failed to create provider directory: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return dir, nil
 }
 
 // GetADCDir returns the directory for ADC credentials for a specific identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/
+// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/.
 func GetADCDir(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCDir")()
 
@@ -108,13 +108,13 @@ func GetADCDir(providerName, identityName string) (string, error) {
 	}
 	dir := filepath.Join(providerDir, ADCSubdir, identityName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
-		return "", fmt.Errorf("failed to create ADC directory: %w", err)
+		return "", fmt.Errorf("%w: failed to create ADC directory: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return dir, nil
 }
 
 // GetADCFilePath returns the path to the ADC JSON file for a specific identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/application_default_credentials.json
+// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/application_default_credentials.json.
 func GetADCFilePath(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCFilePath")()
 
@@ -126,7 +126,7 @@ func GetADCFilePath(providerName, identityName string) (string, error) {
 }
 
 // GetConfigDir returns the gcloud-style config directory for a specific identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/
+// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/.
 func GetConfigDir(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetConfigDir")()
 
@@ -136,7 +136,7 @@ func GetConfigDir(providerName, identityName string) (string, error) {
 	}
 	dir := filepath.Join(providerDir, ConfigSubdir, identityName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
-		return "", fmt.Errorf("failed to create config directory: %w", err)
+		return "", fmt.Errorf("%w: failed to create config directory: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return dir, nil
 }
@@ -170,18 +170,18 @@ func WriteADCFile(providerName, identityName string, content *ADCFileContent) (s
 	defer perf.Track(nil, "gcp.WriteADCFile")()
 
 	if content == nil {
-		return "", fmt.Errorf("ADC file content cannot be nil")
+		return "", fmt.Errorf("%w: ADC file content cannot be nil", errUtils.ErrInvalidADCContent)
 	}
 	path, err := GetADCFilePath(providerName, identityName)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: resolve ADC file path: %w", errUtils.ErrWriteADCFile, err)
 	}
 	data, err := json.MarshalIndent(content, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal ADC content: %w", err)
+		return "", fmt.Errorf("%w: marshal ADC content: %w", errUtils.ErrWriteADCFile, err)
 	}
 	if err := os.WriteFile(path, data, permFile); err != nil {
-		return "", fmt.Errorf("failed to write ADC file: %w", err)
+		return "", fmt.Errorf("%w: write ADC file: %w", errUtils.ErrWriteADCFile, err)
 	}
 	return path, nil
 }
@@ -192,7 +192,7 @@ func WritePropertiesFile(providerName, identityName string, projectID string, re
 
 	path, err := GetPropertiesFilePath(providerName, identityName)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: resolve properties file path: %w", errUtils.ErrWritePropertiesFile, err)
 	}
 	b := []byte("[core]\n")
 	if projectID != "" {
@@ -203,7 +203,7 @@ func WritePropertiesFile(providerName, identityName string, projectID string, re
 		b = append(b, []byte("region = "+region+"\n")...)
 	}
 	if err := os.WriteFile(path, b, permFile); err != nil {
-		return "", fmt.Errorf("failed to write properties file: %w", err)
+		return "", fmt.Errorf("%w: write properties file: %w", errUtils.ErrWritePropertiesFile, err)
 	}
 	return path, nil
 }
@@ -214,14 +214,14 @@ func WriteAccessTokenFile(providerName, identityName string, accessToken string,
 
 	path, err := GetAccessTokenFilePath(providerName, identityName)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("%w: resolve access token file path: %w", errUtils.ErrWriteAccessTokenFile, err)
 	}
 	content := accessToken + "\n"
 	if !expiry.IsZero() {
 		content += expiry.Format(time.RFC3339) + "\n"
 	}
 	if err := os.WriteFile(path, []byte(content), permFile); err != nil {
-		return "", fmt.Errorf("failed to write access token file: %w", err)
+		return "", fmt.Errorf("%w: write access token file: %w", errUtils.ErrWriteAccessTokenFile, err)
 	}
 	return path, nil
 }

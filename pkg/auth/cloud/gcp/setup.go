@@ -48,16 +48,24 @@ func SetupFiles(
 	// We use "authorized_user" type which requires client_id and client_secret.
 	// These are the public gcloud CLI credentials (publicly documented, used by gcloud itself).
 	// Without these, the Google Cloud SDK's threelegged.go throws "auth: client ID must be provided".
+	clientID := os.Getenv("ATMOS_GCP_ADC_CLIENT_ID")
+	if clientID == "" {
+		clientID = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
+	}
+	clientSecret := os.Getenv("ATMOS_GCP_ADC_CLIENT_SECRET")
+	if clientSecret == "" {
+		return nil, fmt.Errorf("%w: ATMOS_GCP_ADC_CLIENT_SECRET is required", errUtils.ErrInvalidAuthConfig)
+	}
 	adcContent := &ADCFileContent{
 		Type:         "authorized_user",
 		AccessToken:  creds.AccessToken,
 		TokenExpiry:  formatTokenExpiry(creds.TokenExpiry),
-		ClientID:     "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com",
-		ClientSecret: "d-FL95Q19q7MQmFpd7hHD0Ty",
+		ClientID:     clientID,
+		ClientSecret: clientSecret,
 	}
 	adcPath, err := WriteADCFile(providerName, identityName, adcContent)
 	if err != nil {
-		return nil, fmt.Errorf("write ADC file: %w", err)
+		return nil, fmt.Errorf("%w: write ADC file: %w", errUtils.ErrWriteADCFile, err)
 	}
 	paths = append(paths, adcPath)
 
@@ -66,14 +74,14 @@ func SetupFiles(
 	region := ""
 	propsPath, err := WritePropertiesFile(providerName, identityName, projectID, region)
 	if err != nil {
-		return nil, fmt.Errorf("write properties file: %w", err)
+		return nil, fmt.Errorf("%w: write properties file: %w", errUtils.ErrWritePropertiesFile, err)
 	}
 	paths = append(paths, propsPath)
 
 	// Access token file.
 	tokenPath, err := WriteAccessTokenFile(providerName, identityName, creds.AccessToken, creds.TokenExpiry)
 	if err != nil {
-		return nil, fmt.Errorf("write access token file: %w", err)
+		return nil, fmt.Errorf("%w: write access token file: %w", errUtils.ErrWriteAccessTokenFile, err)
 	}
 	paths = append(paths, tokenPath)
 
@@ -200,11 +208,11 @@ func LoadCredentialsFromFiles(
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("%w: read ADC file: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: read ADC file: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	var adc ADCFileContent
 	if err := json.Unmarshal(data, &adc); err != nil {
-		return nil, fmt.Errorf("%w: parse ADC file: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: parse ADC file: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	if adc.AccessToken == "" {
 		return nil, nil

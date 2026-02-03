@@ -17,6 +17,7 @@ import (
 func TestSetupFiles(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-secret")
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
@@ -95,11 +96,11 @@ func TestSetAuthContext_NilCreds(t *testing.T) {
 func TestSetup(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-secret")
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	os.Setenv("GOOGLE_CLOUD_PROJECT", "old-project")
-	defer os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "old-project")
 
 	creds := &types.GCPCredentials{
 		AccessToken: "ya29.setup-token",
@@ -122,13 +123,14 @@ func TestSetup(t *testing.T) {
 	require.NoError(t, err)
 
 	for _, key := range GCPEnvironmentVariables {
-		os.Unsetenv(key)
+		t.Setenv(key, "")
 	}
 }
 
 func TestCleanup(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-secret")
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
