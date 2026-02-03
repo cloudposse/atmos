@@ -1,0 +1,132 @@
+---
+title: atmos terraform state push
+sidebar_label: state push
+sidebar_class_name: command
+id: push
+description: Update remote state from a local state file.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to update the remote Terraform state from a local state file for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform state push --help" slug="atmos-terraform-state-push--help" />
+
+## Usage
+
+Execute the `terraform state push` command like this:
+
+```shell
+atmos terraform state push <component> -s <stack> <path-to-state-file> [options]
+```
+
+This command uploads a local state file to the remote backend. This is primarily used for disaster recovery or migrating state between backends.
+
+:::caution
+This is a dangerous operation. The remote state will be overwritten with the contents of the local file. Always create a backup using `terraform state pull` before pushing.
+:::
+
+:::tip
+Run `atmos terraform state push --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Push a local state file to remote
+atmos terraform state push vpc -s dev vpc-state-backup.json
+
+# Force push (override lineage check)
+atmos terraform state push vpc -s dev -force vpc-state-backup.json
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+
+    <dt>`path-to-state-file` <em>(required)</em></dt>
+    <dd>
+        Path to the local state file to push to the remote backend.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform state push vpc -s dev --dry-run vpc-state-backup.json
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform state push vpc -s dev --skip-init vpc-state-backup.json
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform state push` command supports native `terraform state push` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-force`</dt>
+    <dd>
+        Write the state even if lineages don't match or the remote serial is higher.
+
+        ```shell
+        atmos terraform state push vpc -s dev -force vpc-state-backup.json
+        ```
+    </dd>
+
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform state push vpc -s dev -lock=false vpc-state-backup.json
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform state push vpc -s dev -lock-timeout=30s vpc-state-backup.json
+        ```
+    </dd>
+
+    <dt>`-ignore-remote-version`</dt>
+    <dd>
+        Ignore remote state version constraints when performing the operation.
+
+        ```shell
+        atmos terraform state push vpc -s dev -ignore-remote-version vpc-state-backup.json
+        ```
+    </dd>
+</dl>
+
+## See Also
+
+- [`atmos terraform state`](/cli/commands/terraform/state) - State management overview
+- [`atmos terraform state pull`](/cli/commands/terraform/state/pull) - Pull current state to stdout
+- [`atmos terraform state list`](/cli/commands/terraform/state/list) - List resources in the state

@@ -1,0 +1,126 @@
+---
+title: atmos terraform state rm
+sidebar_label: state rm
+sidebar_class_name: command
+id: rm
+description: Remove instances from the Terraform state.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to remove instances from the Terraform state for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform state rm --help" slug="atmos-terraform-state-rm--help" />
+
+## Usage
+
+Execute the `terraform state rm` command like this:
+
+```shell
+atmos terraform state rm <component> -s <stack> <address> [options]
+```
+
+This command removes a resource instance from the Terraform state. The actual infrastructure resource is **not** destroyed — it is simply no longer managed by Terraform. This is useful for importing resources into a different state or removing resources that were created outside of Terraform.
+
+:::caution
+After removing a resource from state, Terraform will no longer manage it. Use this command carefully.
+:::
+
+:::tip
+Run `atmos terraform state rm --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Remove a single resource
+atmos terraform state rm vpc -s dev aws_instance.web
+
+# Remove a module
+atmos terraform state rm vpc -s dev module.web
+
+# Remove a resource from a module
+atmos terraform state rm vpc -s dev module.web.aws_instance.main
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+
+    <dt>`address` <em>(required)</em></dt>
+    <dd>
+        The address of the resource instance to remove from the state.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform state rm vpc -s dev --dry-run aws_instance.web
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform state rm vpc -s dev --skip-init aws_instance.web
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform state rm` command supports native `terraform state rm` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-lock=true`</dt>
+    <dd>
+        Lock the state file when locking is supported. Defaults to `true`.
+
+        ```shell
+        atmos terraform state rm vpc -s dev -lock=false aws_instance.web
+        ```
+    </dd>
+
+    <dt>`-lock-timeout=DURATION`</dt>
+    <dd>
+        Duration to retry a state lock. Defaults to `0s`.
+
+        ```shell
+        atmos terraform state rm vpc -s dev -lock-timeout=30s aws_instance.web
+        ```
+    </dd>
+
+    <dt>`-ignore-remote-version`</dt>
+    <dd>
+        Ignore remote state version constraints when performing the operation.
+
+        ```shell
+        atmos terraform state rm vpc -s dev -ignore-remote-version aws_instance.web
+        ```
+    </dd>
+</dl>
+
+## See Also
+
+- [`atmos terraform state`](/cli/commands/terraform/state) - State management overview
+- [`atmos terraform state list`](/cli/commands/terraform/state/list) - List resources in the state
+- [`atmos terraform state mv`](/cli/commands/terraform/state/mv) - Move an item in the state
