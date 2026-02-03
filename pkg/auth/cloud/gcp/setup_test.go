@@ -113,6 +113,7 @@ func TestSetup(t *testing.T) {
 	assert.Equal(t, "new-project", os.Getenv("GOOGLE_CLOUD_PROJECT"))
 	// When we have an access token, we use GOOGLE_OAUTH_ACCESS_TOKEN instead of
 	// GOOGLE_APPLICATION_CREDENTIALS (to avoid refresh token requirement in ADC file).
+	// GOOGLE_APPLICATION_CREDENTIALS (to avoid refresh token requirement in ADC file).
 	assert.Equal(t, "ya29.setup-token", os.Getenv("GOOGLE_OAUTH_ACCESS_TOKEN"))
 	// GOOGLE_APPLICATION_CREDENTIALS should NOT be set when we have an access token.
 	assert.Empty(t, os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"))

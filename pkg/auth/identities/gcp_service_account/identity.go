@@ -277,7 +277,7 @@ func (i *Identity) Paths() ([]types.Path, error) {
 func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "gcp_service_account.PrepareEnvironment")()
 
-	out := make(map[string]string, len(environ)+10)
+	out := make(map[string]string, len(environ))
 	for k, v := range environ {
 		out[k] = v
 	}

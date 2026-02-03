@@ -142,7 +142,7 @@ func GetConfigDir(providerName, identityName string) (string, error) {
 }
 
 // GetPropertiesFilePath returns the path to the gcloud properties file.
-// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/properties
+// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/properties.
 func GetPropertiesFilePath(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetPropertiesFilePath")()
 
@@ -154,7 +154,7 @@ func GetPropertiesFilePath(providerName, identityName string) (string, error) {
 }
 
 // GetAccessTokenFilePath returns the path to the access token file for an identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/access_token
+// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/access_token.
 func GetAccessTokenFilePath(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetAccessTokenFilePath")()
 
