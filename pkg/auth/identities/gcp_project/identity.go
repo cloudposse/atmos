@@ -22,6 +22,7 @@ const (
 type Identity struct {
 	name      string
 	principal *types.GCPProjectIdentityPrincipal
+	config    *schema.Identity
 }
 
 // New creates a new project identity.
@@ -52,8 +53,17 @@ func (i *Identity) Name() string {
 	return i.Kind()
 }
 
-// GetProviderName returns empty string (no provider required).
+// SetConfig sets the identity configuration (for Via.Provider resolution).
+func (i *Identity) SetConfig(config *schema.Identity) {
+	i.config = config
+}
+
+// GetProviderName returns the provider name from config, or empty string.
+// GCP project identities may or may not have a provider (via.provider is optional).
 func (i *Identity) GetProviderName() (string, error) {
+	if i.config != nil && i.config.Via != nil && i.config.Via.Provider != "" {
+		return i.config.Via.Provider, nil
+	}
 	return "", nil
 }
 

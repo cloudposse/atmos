@@ -33,6 +33,7 @@ type Identity struct {
 	name      string
 	principal *types.GCPServiceAccountIdentityPrincipal
 	provider  types.Provider
+	config    *schema.Identity
 }
 
 // New creates a new service account identity.
@@ -68,10 +69,21 @@ func (i *Identity) SetProvider(provider types.Provider) {
 	i.provider = provider
 }
 
+// SetConfig sets the identity configuration (for Via.Provider resolution).
+func (i *Identity) SetConfig(config *schema.Identity) {
+	i.config = config
+}
+
 // GetProviderName returns the provider name for this identity.
+// Returns Via.Provider from config, falling back to provider.Name() or empty string.
 func (i *Identity) GetProviderName() (string, error) {
 	defer perf.Track(nil, "gcp_service_account.GetProviderName")()
 
+	// First, try to get provider from config (preferred for whoami/reporting).
+	if i.config != nil && i.config.Via != nil && i.config.Via.Provider != "" {
+		return i.config.Via.Provider, nil
+	}
+	// Fall back to provider instance if set.
 	if i.provider != nil {
 		return i.provider.Name(), nil
 	}

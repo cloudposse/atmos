@@ -248,6 +248,9 @@ auth:
   <dt>`token_source.url`</dt>
   <dd>For `type: url`. URL to fetch OIDC token. Defaults to GitHub Actions OIDC endpoint.</dd>
 
+  <dt>`token_source.request_token`</dt>
+  <dd>For `type: url`. Bearer token for authenticating to the OIDC token endpoint. For GitHub Actions, this is automatically populated from `ACTIONS_ID_TOKEN_REQUEST_TOKEN`. Required for non-GitHub OIDC providers.</dd>
+
   <dt>`token_source.audience`</dt>
   <dd>Optional. Audience for the OIDC token request.</dd>
 

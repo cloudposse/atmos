@@ -51,6 +51,30 @@ func TestGetProviderName(t *testing.T) {
 	assert.Equal(t, "", name)
 }
 
+func TestGetProviderName_WithConfig(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPProjectIdentityPrincipal{
+			ProjectID: "test-project",
+		},
+	}
+
+	// Without config, returns empty string.
+	name, err := id.GetProviderName()
+	require.NoError(t, err)
+	assert.Equal(t, "", name)
+
+	// With config containing Via.Provider, returns the provider name.
+	id.SetConfig(&schema.Identity{
+		Kind: "gcp/project",
+		Via: &schema.IdentityVia{
+			Provider: "my-gcp-provider",
+		},
+	})
+	name, err = id.GetProviderName()
+	require.NoError(t, err)
+	assert.Equal(t, "my-gcp-provider", name)
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name      string

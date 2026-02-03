@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestNew(t *testing.T) {
@@ -257,4 +258,71 @@ func TestDefaultScope(t *testing.T) {
 
 func TestDefaultLifetime(t *testing.T) {
 	assert.Equal(t, "3600s", DefaultLifetime)
+}
+
+func TestGetProviderName_WithConfig(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+
+	// Without config, returns empty string.
+	name, err := id.GetProviderName()
+	require.NoError(t, err)
+	assert.Equal(t, "", name)
+
+	// With config containing Via.Provider, returns the provider name.
+	id.SetConfig(&schema.Identity{
+		Kind: "gcp/service-account",
+		Via: &schema.IdentityVia{
+			Provider: "my-gcp-adc",
+		},
+	})
+	name, err = id.GetProviderName()
+	require.NoError(t, err)
+	assert.Equal(t, "my-gcp-adc", name)
+}
+
+func TestGetProviderName_WithProvider(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+
+	// Set provider instance (fallback when config is not set).
+	id.SetProvider(&MockProvider{})
+	name, err := id.GetProviderName()
+	require.NoError(t, err)
+	assert.Equal(t, "mock", name)
+
+	// Config takes precedence over provider instance.
+	id.SetConfig(&schema.Identity{
+		Via: &schema.IdentityVia{
+			Provider: "config-provider",
+		},
+	})
+	name, err = id.GetProviderName()
+	require.NoError(t, err)
+	assert.Equal(t, "config-provider", name)
+}
+
+func TestPrepareEnvironment_NoCredentials(t *testing.T) {
+	id := &Identity{
+		name: "test-identity-no-creds",
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+
+	ctx := context.Background()
+	env, err := id.PrepareEnvironment(ctx, map[string]string{"PATH": "/usr/bin"})
+
+	// Should error because no credentials exist.
+	require.Error(t, err)
+	assert.Nil(t, env)
+	assert.Contains(t, err.Error(), "no credentials found")
+	assert.Contains(t, err.Error(), "test-identity-no-creds")
+	assert.Contains(t, err.Error(), "atmos auth login")
 }

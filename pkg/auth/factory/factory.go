@@ -119,6 +119,12 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 	}
 }
 
+// ConfigSetter is an optional interface for identities that need access to the full config.
+// Used by GCP identities to access Via.Provider for whoami reporting.
+type ConfigSetter interface {
+	SetConfig(config *schema.Identity)
+}
+
 // NewIdentity creates a new identity instance based on the identity configuration.
 func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	defer perf.Track(nil, "factory.NewIdentity")()
@@ -126,7 +132,15 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidAuthConfig)
 	}
 	if defaultFactory != nil && defaultFactory.HasIdentity(config.Kind) {
-		return defaultFactory.CreateIdentity(config.Kind, name, config.Principal)
+		identity, err := defaultFactory.CreateIdentity(config.Kind, name, config.Principal)
+		if err != nil {
+			return nil, err
+		}
+		// Set config if identity supports it (for Via.Provider resolution in whoami).
+		if setter, ok := identity.(ConfigSetter); ok {
+			setter.SetConfig(config)
+		}
+		return identity, nil
 	}
 	switch config.Kind {
 	case "aws/permission-set":
