@@ -66,6 +66,19 @@ func (s *systemKeyringStore) Store(alias string, creds types.ICredentials) error
 				logKeyAlias, alias,
 				logKeyHasSessionTok, c.SessionToken != "")
 		}
+	case *types.GCPCredentials:
+		typ = "gcp"
+		raw, err = json.Marshal(c)
+		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
+			log.Debug("Storing GCP credentials in keyring",
+				logKeyAlias, alias,
+				"expiration", *expTime,
+				"project_id", c.ProjectID)
+		} else {
+			log.Debug("Storing GCP credentials in keyring (no expiration)",
+				logKeyAlias, alias,
+				"project_id", c.ProjectID)
+		}
 	case *types.OIDCCredentials:
 		typ = "oidc"
 		raw, err = json.Marshal(c)
@@ -124,6 +137,23 @@ func (s *systemKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 			log.Debug("Retrieved AWS credentials from keyring (no expiration)",
 				logKeyAlias, alias,
 				logKeyHasSessionTok, c.SessionToken != "")
+		}
+		return &c, nil
+	case "gcp":
+		var c types.GCPCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal GCP credentials: %w", err))
+		}
+		if expTime, expErr := c.GetExpiration(); expErr == nil && expTime != nil {
+			log.Debug("Retrieved GCP credentials from keyring",
+				logKeyAlias, alias,
+				"expiration", *expTime,
+				"time_until_expiry", time.Until(*expTime),
+				"project_id", c.ProjectID)
+		} else {
+			log.Debug("Retrieved GCP credentials from keyring (no expiration)",
+				logKeyAlias, alias,
+				"project_id", c.ProjectID)
 		}
 		return &c, nil
 	case "oidc":
