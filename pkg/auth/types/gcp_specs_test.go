@@ -64,7 +64,7 @@ func TestParseGCPWorkloadIdentityFederationProviderSpec_ValidWithPoolIDProviderI
 		"workload_identity_provider_id": "github-provider",
 		"service_account_email":         "deploy@my-project.iam.gserviceaccount.com",
 		"token_source": map[string]any{
-			"type":                "environment",
+			"type":                 "environment",
 			"environment_variable": "ACTIONS_ID_TOKEN_REQUEST_TOKEN",
 		},
 		"scopes": []any{"https://www.googleapis.com/auth/cloud-platform"},
@@ -87,7 +87,7 @@ func TestParseGCPWorkloadIdentityFederationProviderSpec_OptionalServiceAccount(t
 	// Parser allows optional service_account_email; provider validates required WIF fields.
 	spec := map[string]any{
 		"project_number":                "123",
-		"workload_identity_pool_id":      "p",
+		"workload_identity_pool_id":     "p",
 		"workload_identity_provider_id": "pr",
 	}
 
@@ -110,9 +110,9 @@ func TestParseGCPWorkloadIdentityFederationProviderSpec_NilSpec(t *testing.T) {
 func TestParseGCPServiceAccountIdentityPrincipal_Valid(t *testing.T) {
 	principal := map[string]any{
 		"service_account_email": "sa@my-project.iam.gserviceaccount.com",
-		"scopes":                 []any{"https://www.googleapis.com/auth/cloud-platform"},
-		"lifetime":               "3600s",
-		"delegates":              []any{"delegate@project.iam.gserviceaccount.com"},
+		"scopes":                []any{"https://www.googleapis.com/auth/cloud-platform"},
+		"lifetime":              "3600s",
+		"delegates":             []any{"delegate@project.iam.gserviceaccount.com"},
 	}
 
 	out, err := ParseGCPServiceAccountIdentityPrincipal(principal)

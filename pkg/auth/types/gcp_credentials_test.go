@@ -15,8 +15,8 @@ func TestGCPCredentials_IsExpired(t *testing.T) {
 	now := time.Now().UTC()
 
 	cases := []struct {
-		name      string
-		tokenExp  time.Time
+		name        string
+		tokenExp    time.Time
 		wantExpired bool
 	}{
 		{"zero-time", time.Time{}, false},
@@ -62,9 +62,9 @@ func TestGCPCredentials_GetExpirationTime(t *testing.T) {
 func TestGCPCredentials_BuildWhoamiInfo(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Second)
 	c := &GCPCredentials{
-		ProjectID:            "my-project",
-		ServiceAccountEmail:  "sa@my-project.iam.gserviceaccount.com",
-		TokenExpiry:          now.Add(15 * time.Minute),
+		ProjectID:           "my-project",
+		ServiceAccountEmail: "sa@my-project.iam.gserviceaccount.com",
+		TokenExpiry:         now.Add(15 * time.Minute),
 	}
 
 	var w WhoamiInfo

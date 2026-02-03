@@ -162,11 +162,13 @@ func (m *mockNonGCPCreds) IsExpired() bool { return false }
 func (m *mockNonGCPCreds) GetExpiration() (*time.Time, error) {
 	return nil, nil
 }
+
 func (m *mockNonGCPCreds) BuildWhoamiInfo(info *types.WhoamiInfo) {
 	if info != nil {
 		info.Principal = "mock"
 	}
 }
+
 func (m *mockNonGCPCreds) Validate(context.Context) (*types.ValidationInfo, error) {
 	return nil, nil
 }

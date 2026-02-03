@@ -170,7 +170,7 @@ func TestGetTokenFromEnv_RequiresExplicitEnvVar(t *testing.T) {
 func TestGetTokenFromFile(t *testing.T) {
 	tmp := t.TempDir()
 	tokenFile := filepath.Join(tmp, "token")
-	require.NoError(t, os.WriteFile(tokenFile, []byte("file-oidc-token\n"), 0600))
+	require.NoError(t, os.WriteFile(tokenFile, []byte("file-oidc-token\n"), 0o600))
 
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{

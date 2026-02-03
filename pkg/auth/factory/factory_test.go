@@ -92,7 +92,7 @@ func TestNewProvider_Factory(t *testing.T) {
 					"workload_identity_pool_id":     "my-pool",
 					"workload_identity_provider_id": "my-provider",
 					"token_source": map[string]interface{}{
-						"type":                  "environment",
+						"type":                 "environment",
 						"environment_variable": "OIDC_TOKEN",
 					},
 				},

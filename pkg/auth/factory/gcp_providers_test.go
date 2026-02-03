@@ -57,11 +57,11 @@ func TestCreateGCPWIFProvider(t *testing.T) {
 	spec := map[string]any{
 		"project_id":                    "wif-project",
 		"project_number":                "123456789",
-		"workload_identity_pool_id":      "my-pool",
-		"workload_identity_provider_id":  "my-provider",
+		"workload_identity_pool_id":     "my-pool",
+		"workload_identity_provider_id": "my-provider",
 		"token_source": map[string]any{
-			"type":                  "environment",
-			"environment_variable":  "OIDC_TOKEN",
+			"type":                 "environment",
+			"environment_variable": "OIDC_TOKEN",
 		},
 	}
 
