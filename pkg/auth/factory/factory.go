@@ -16,11 +16,86 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// ProviderConstructor creates a provider from name and spec.
+type ProviderConstructor func(name string, spec map[string]any) (types.Provider, error)
+
+// IdentityConstructor creates an identity from name and principal.
+type IdentityConstructor func(name string, principal map[string]any) (types.Identity, error)
+
+// Factory manages provider and identity registration.
+type Factory struct {
+	providers  map[string]ProviderConstructor
+	identities map[string]IdentityConstructor
+}
+
+// defaultFactory is the package-level factory with all constructors registered (e.g. GCP).
+var defaultFactory *Factory
+
+func init() {
+	defaultFactory = NewFactory()
+}
+
+// NewFactory creates a new auth factory with all providers and identities registered.
+func NewFactory() *Factory {
+	defer perf.Track(nil, "factory.NewFactory")()
+
+	f := &Factory{
+		providers:  make(map[string]ProviderConstructor),
+		identities: make(map[string]IdentityConstructor),
+	}
+	RegisterGCPProviders(f)
+	RegisterGCPIdentities(f)
+	return f
+}
+
+// RegisterProvider registers a provider constructor for a kind.
+func (f *Factory) RegisterProvider(kind string, constructor ProviderConstructor) {
+	f.providers[kind] = constructor
+}
+
+// RegisterIdentity registers an identity constructor for a kind.
+func (f *Factory) RegisterIdentity(kind string, constructor IdentityConstructor) {
+	f.identities[kind] = constructor
+}
+
+// HasProvider checks if a provider kind is registered.
+func (f *Factory) HasProvider(kind string) bool {
+	_, ok := f.providers[kind]
+	return ok
+}
+
+// HasIdentity checks if an identity kind is registered.
+func (f *Factory) HasIdentity(kind string) bool {
+	_, ok := f.identities[kind]
+	return ok
+}
+
+// CreateProvider creates a provider instance from kind, name, and spec.
+func (f *Factory) CreateProvider(kind, name string, spec map[string]any) (types.Provider, error) {
+	constructor, ok := f.providers[kind]
+	if !ok {
+		return nil, fmt.Errorf("%w: unknown provider kind: %s", errUtils.ErrInvalidProviderConfig, kind)
+	}
+	return constructor(name, spec)
+}
+
+// CreateIdentity creates an identity instance from kind, name, and principal.
+func (f *Factory) CreateIdentity(kind, name string, principal map[string]any) (types.Identity, error) {
+	constructor, ok := f.identities[kind]
+	if !ok {
+		return nil, fmt.Errorf("%w: unknown identity kind: %s", errUtils.ErrInvalidIdentityConfig, kind)
+	}
+	return constructor(name, principal)
+}
+
 // NewProvider creates a new provider instance based on the provider configuration.
 func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 	defer perf.Track(nil, "factory.NewProvider")()
 	if config == nil {
 		return nil, fmt.Errorf("%w: provider config is nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if defaultFactory != nil && defaultFactory.HasProvider(config.Kind) {
+		return defaultFactory.CreateProvider(config.Kind, name, config.Spec)
 	}
 	switch config.Kind {
 	case "aws/iam-identity-center":
@@ -49,6 +124,9 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 	defer perf.Track(nil, "factory.NewIdentity")()
 	if config == nil {
 		return nil, fmt.Errorf("%w: identity config is nil", errUtils.ErrInvalidAuthConfig)
+	}
+	if defaultFactory != nil && defaultFactory.HasIdentity(config.Kind) {
+		return defaultFactory.CreateIdentity(config.Kind, name, config.Principal)
 	}
 	switch config.Kind {
 	case "aws/permission-set":
