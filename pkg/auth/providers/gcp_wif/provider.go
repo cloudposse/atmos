@@ -35,7 +35,12 @@ const (
 	TokenSourceTypeEnvironment = "environment"
 	TokenSourceTypeFile        = "file"
 	TokenSourceTypeURL         = "url"
+
+	// Token request timeout in seconds.
+	TokenRequestTimeout = 10
 )
+
+var gcpWIFHTTPClient = &http.Client{Timeout: TokenRequestTimeout * time.Second}
 
 // Provider implements the gcp/workload-identity-federation provider.
 type Provider struct {
@@ -159,7 +164,7 @@ func (p *Provider) getOIDCToken(ctx context.Context) (string, error) {
 	defer perf.Track(nil, "gcp_wif.getOIDCToken")()
 
 	if p.spec.TokenSource == nil {
-		return "", fmt.Errorf("token_source not configured")
+		return "", fmt.Errorf("%w: token_source not configured", errUtils.ErrInvalidProviderConfig)
 	}
 
 	switch p.spec.TokenSource.Type {
@@ -170,7 +175,7 @@ func (p *Provider) getOIDCToken(ctx context.Context) (string, error) {
 	case TokenSourceTypeURL:
 		return p.getTokenFromURL(ctx)
 	default:
-		return "", fmt.Errorf("unknown token source type: %s", p.spec.TokenSource.Type)
+		return "", fmt.Errorf("%w: unknown token source type: %s", errUtils.ErrInvalidProviderConfig, p.spec.TokenSource.Type)
 	}
 }
 
@@ -180,24 +185,28 @@ func (p *Provider) getTokenFromEnv() (string, error) {
 		// No default - environment_variable must be explicitly configured.
 		// Note: For GitHub Actions, use token_source.type=url instead, which
 		// fetches the OIDC token from ACTIONS_ID_TOKEN_REQUEST_URL.
-		return "", fmt.Errorf("environment_variable must be specified for token_source.type=environment")
+		return "", fmt.Errorf("%w: environment_variable must be specified for token_source.type=environment", errUtils.ErrInvalidProviderConfig)
 	}
-	token := os.Getenv(envVar)
+	token := strings.TrimSpace(os.Getenv(envVar))
 	if token == "" {
-		return "", fmt.Errorf("environment variable %s is empty", envVar)
+		return "", fmt.Errorf("%w: environment variable %s is empty", errUtils.ErrAuthenticationFailed, envVar)
 	}
 	return token, nil
 }
 
 func (p *Provider) getTokenFromFile() (string, error) {
 	if p.spec.TokenSource.FilePath == "" {
-		return "", fmt.Errorf("file_path not configured")
+		return "", fmt.Errorf("%w: file_path not configured", errUtils.ErrInvalidProviderConfig)
 	}
 	data, err := os.ReadFile(p.spec.TokenSource.FilePath)
 	if err != nil {
-		return "", fmt.Errorf("read token file: %w", err)
+		return "", fmt.Errorf("%w: read token file: %v", errUtils.ErrAuthenticationFailed, err)
 	}
-	return strings.TrimSpace(string(data)), nil
+	token := strings.TrimSpace(string(data))
+	if token == "" {
+		return "", fmt.Errorf("%w: token is empty", errUtils.ErrAuthenticationFailed)
+	}
+	return token, nil
 }
 
 func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
@@ -209,14 +218,14 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 		tokenURL = os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 	}
 	if tokenURL == "" {
-		return "", fmt.Errorf("token URL not configured")
+		return "", fmt.Errorf("%w: token URL not configured", errUtils.ErrInvalidProviderConfig)
 	}
 
 	// Add audience parameter if specified.
 	if p.spec.TokenSource.Audience != "" {
 		u, err := url.Parse(tokenURL)
 		if err != nil {
-			return "", fmt.Errorf("parse token URL: %w", err)
+			return "", fmt.Errorf("%w: parse token URL: %v", errUtils.ErrInvalidProviderConfig, err)
 		}
 		q := u.Query()
 		q.Set("audience", p.spec.TokenSource.Audience)
@@ -226,7 +235,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("create request: %w", err)
+		return "", fmt.Errorf("%w: create request: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Add bearer token if provided.
@@ -238,24 +247,28 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 		req.Header.Set("Authorization", "Bearer "+bearerToken)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := gcpWIFHTTPClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("request token: %w", err)
+		return "", fmt.Errorf("%w: request token: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return "", fmt.Errorf("token request failed: %s: %s", resp.Status, string(body))
+		return "", fmt.Errorf("%w: token request failed: %s: %s", errUtils.ErrAuthenticationFailed, resp.Status, string(body))
 	}
 
 	var result struct {
 		Value string `json:"value"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("decode response: %w", err)
+		return "", fmt.Errorf("%w: decode response: %v", errUtils.ErrAuthenticationFailed, err)
 	}
-	return result.Value, nil
+	token := strings.TrimSpace(result.Value)
+	if token == "" {
+		return "", fmt.Errorf("%w: token is empty", errUtils.ErrAuthenticationFailed)
+	}
+	return token, nil
 }
 
 // exchangeToken exchanges an OIDC token for a Google federated token via STS.
@@ -287,7 +300,7 @@ func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := gcpWIFHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("STS request: %w", err)
 	}

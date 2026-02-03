@@ -1,6 +1,7 @@
 package factory
 
 import (
+	"errors"
 	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -20,7 +21,7 @@ func RegisterGCPProviders(f *Factory) {
 
 		parsed, err := types.ParseGCPADCProviderSpec(spec)
 		if err != nil {
-			return nil, fmt.Errorf("%w: parse gcp/adc spec: %v", errUtils.ErrInvalidProviderConfig, err)
+			return nil, fmt.Errorf("parse gcp/adc spec: %w", errors.Join(errUtils.ErrInvalidProviderConfig, err))
 		}
 		provider, err := gcp_adc.New(parsed)
 		if err != nil {
@@ -36,7 +37,7 @@ func RegisterGCPProviders(f *Factory) {
 
 		parsed, err := types.ParseGCPWorkloadIdentityFederationProviderSpec(spec)
 		if err != nil {
-			return nil, fmt.Errorf("%w: parse gcp/wif spec: %v", errUtils.ErrInvalidProviderConfig, err)
+			return nil, fmt.Errorf("parse gcp/wif spec: %w", errors.Join(errUtils.ErrInvalidProviderConfig, err))
 		}
 		provider, err := gcp_wif.New(parsed)
 		if err != nil {

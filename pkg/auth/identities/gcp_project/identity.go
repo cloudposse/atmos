@@ -158,7 +158,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	}
 	for k, v := range env {
 		if err := os.Setenv(k, v); err != nil {
-			return fmt.Errorf("set environment variable %s: %w", k, err)
+			return fmt.Errorf("%w: set environment variable %s: %v", errUtils.ErrAuthenticationFailed, k, err)
 		}
 	}
 
@@ -166,6 +166,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 		params.AuthContext.GCP = &schema.GCPAuthContext{
 			ProjectID: i.principal.ProjectID,
 			Region:    i.principal.Region,
+			Location:  i.principal.Location,
 		}
 		if params.Credentials != nil {
 			if gcpCreds, ok := params.Credentials.(*types.GCPCredentials); ok {

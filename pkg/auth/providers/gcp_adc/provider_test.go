@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -60,7 +61,7 @@ func TestAuthenticate_NoCredentials(t *testing.T) {
 	// Skip if gcloud application-default credentials exist.
 	home, _ := os.UserHomeDir()
 	if home != "" {
-		adcPath := home + "/.config/gcloud/application_default_credentials.json"
+		adcPath := filepath.Join(home, ".config", "gcloud", "application_default_credentials.json")
 		if _, err := os.Stat(adcPath); err == nil {
 			t.Skip("Skipping: gcloud application-default credentials exist at " + adcPath)
 		}

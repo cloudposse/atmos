@@ -25,15 +25,16 @@ const (
 	DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 
 	// DefaultLifetime is the default token lifetime.
-	DefaultLifetime = "3600s" // 1 hour
+	DefaultLifetime = "3600s" // 1 hour.
 )
 
 // Identity implements the gcp/service-account identity.
 type Identity struct {
-	name      string
-	principal *types.GCPServiceAccountIdentityPrincipal
-	provider  types.Provider
-	config    *schema.Identity
+	name              string
+	principal         *types.GCPServiceAccountIdentityPrincipal
+	provider          types.Provider
+	config            *schema.Identity
+	iamServiceFactory IAMCredentialsServiceFactory
 }
 
 // New creates a new service account identity.
@@ -43,7 +44,10 @@ func New(principal *types.GCPServiceAccountIdentityPrincipal) (*Identity, error)
 	if principal == nil {
 		return nil, fmt.Errorf("%w: service account principal cannot be nil", errUtils.ErrInvalidIdentityConfig)
 	}
-	return &Identity{principal: principal}, nil
+	return &Identity{
+		principal:         principal,
+		iamServiceFactory: newIAMCredentialsService,
+	}, nil
 }
 
 // SetName sets the identity name.
@@ -129,7 +133,7 @@ func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredential
 	// Impersonate the target service account.
 	accessToken, expiry, err := i.impersonateServiceAccount(ctx, gcpCreds.AccessToken)
 	if err != nil {
-		return nil, fmt.Errorf("%w: impersonation failed: %v", errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("%w: impersonation failed: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Determine project ID.
@@ -147,12 +151,40 @@ func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredential
 	}, nil
 }
 
+// IAMCredentialsService provides access to IAM Credentials API token generation.
+type IAMCredentialsService interface {
+	GenerateAccessToken(ctx context.Context, name string, req *iamcredentials.GenerateAccessTokenRequest) (*iamcredentials.GenerateAccessTokenResponse, error)
+}
+
+// IAMCredentialsServiceFactory creates IAM credentials service instances for a token.
+type IAMCredentialsServiceFactory func(ctx context.Context, accessToken string) (IAMCredentialsService, error)
+
+type iamCredentialsService struct {
+	svc *iamcredentials.Service
+}
+
+func (s *iamCredentialsService) GenerateAccessToken(ctx context.Context, name string, req *iamcredentials.GenerateAccessTokenRequest) (*iamcredentials.GenerateAccessTokenResponse, error) {
+	return s.svc.Projects.ServiceAccounts.GenerateAccessToken(name, req).Context(ctx).Do()
+}
+
+func newIAMCredentialsService(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
+	svc, err := iamcredentials.NewService(ctx, option.WithTokenSource(ts))
+	if err != nil {
+		return nil, err
+	}
+	return &iamCredentialsService{svc: svc}, nil
+}
+
 // impersonateServiceAccount uses IAM Credentials API to generate an access token.
 func (i *Identity) impersonateServiceAccount(ctx context.Context, upstreamToken string) (string, time.Time, error) {
 	defer perf.Track(nil, "gcp_service_account.impersonateServiceAccount")()
 
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: upstreamToken})
-	svc, err := iamcredentials.NewService(ctx, option.WithTokenSource(ts))
+	factory := i.iamServiceFactory
+	if factory == nil {
+		factory = newIAMCredentialsService
+	}
+	svc, err := factory(ctx, upstreamToken)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("create IAM credentials service: %w", err)
 	}
@@ -164,7 +196,7 @@ func (i *Identity) impersonateServiceAccount(ctx context.Context, upstreamToken 
 		Lifetime:  i.getLifetime(),
 	}
 
-	resp, err := svc.Projects.ServiceAccounts.GenerateAccessToken(name, req).Context(ctx).Do()
+	resp, err := svc.GenerateAccessToken(ctx, name, req)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("generate access token: %w", err)
 	}
@@ -192,7 +224,7 @@ func (i *Identity) getLifetime() string {
 }
 
 // formatDelegates formats delegate emails for the API.
-// The API expects the format: projects/-/serviceAccounts/{email}
+// The API expects the format: projects/-/serviceAccounts/{email}.
 func (i *Identity) formatDelegates() []string {
 	if len(i.principal.Delegates) == 0 {
 		return nil
@@ -205,7 +237,7 @@ func (i *Identity) formatDelegates() []string {
 }
 
 // extractProjectFromEmail extracts project ID from SA email.
-// Format: name@project-id.iam.gserviceaccount.com
+// Format: name@project-id.iam.gserviceaccount.com.
 func extractProjectFromEmail(email string) string {
 	parts := strings.Split(email, "@")
 	if len(parts) != 2 {
@@ -253,12 +285,12 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 	// Load credentials from files to get the access token.
 	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, i.Name())
 	if err != nil {
-		return nil, fmt.Errorf("load credentials: %w", err)
+		return nil, fmt.Errorf("%w: load credentials: %v", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	// Credentials must exist - if not, the user needs to run `atmos auth login` first.
-	if creds == nil || creds.AccessToken == "" {
-		return nil, fmt.Errorf("no credentials found for identity %q; run 'atmos auth login' first", i.Name())
+	// Credentials must exist and be valid - if not, the user needs to run `atmos auth login` first.
+	if creds == nil || creds.AccessToken == "" || creds.IsExpired() {
+		return nil, fmt.Errorf("%w: no valid credentials found for identity %q; run 'atmos auth login' first", errUtils.ErrAuthenticationFailed, i.Name())
 	}
 
 	// Build GCP auth context with credentials and project info.

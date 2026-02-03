@@ -2,6 +2,7 @@ package gcp_service_account
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"google.golang.org/api/iamcredentials/v1"
 )
 
 func TestNew(t *testing.T) {
@@ -122,10 +124,10 @@ type MockProvider struct {
 	err   error
 }
 
-func (m *MockProvider) Kind() string { return "mock" }
-func (m *MockProvider) Name() string { return "mock" }
-func (m *MockProvider) SetName(string) {}
-func (m *MockProvider) Validate() error                  { return nil }
+func (m *MockProvider) Kind() string                            { return "mock" }
+func (m *MockProvider) Name() string                            { return "mock" }
+func (m *MockProvider) SetName(string)                          {}
+func (m *MockProvider) Validate() error                         { return nil }
 func (m *MockProvider) PreAuthenticate(types.AuthManager) error { return nil }
 func (m *MockProvider) Authenticate(context.Context) (types.ICredentials, error) {
 	return m.creds, m.err
@@ -260,6 +262,82 @@ func TestDefaultLifetime(t *testing.T) {
 	assert.Equal(t, "3600s", DefaultLifetime)
 }
 
+type mockIAMService struct {
+	resp     *iamcredentials.GenerateAccessTokenResponse
+	err      error
+	lastName string
+	lastReq  *iamcredentials.GenerateAccessTokenRequest
+}
+
+func (m *mockIAMService) GenerateAccessToken(ctx context.Context, name string, req *iamcredentials.GenerateAccessTokenRequest) (*iamcredentials.GenerateAccessTokenResponse, error) {
+	m.lastName = name
+	m.lastReq = req
+	return m.resp, m.err
+}
+
+func TestImpersonateServiceAccount_Success(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+			Scopes:              []string{"scope1"},
+			Lifetime:            "1800s",
+		},
+	}
+
+	mockSvc := &mockIAMService{
+		resp: &iamcredentials.GenerateAccessTokenResponse{
+			AccessToken: "access-token",
+			ExpireTime:  time.Now().Add(30 * time.Minute).UTC().Format(time.RFC3339),
+		},
+	}
+
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+		assert.Equal(t, "upstream-token", accessToken)
+		return mockSvc, nil
+	}
+
+	token, expiry, err := id.impersonateServiceAccount(context.Background(), "upstream-token")
+	require.NoError(t, err)
+	assert.Equal(t, "access-token", token)
+	assert.False(t, expiry.IsZero())
+	assert.Equal(t, "projects/-/serviceAccounts/sa@proj.iam.gserviceaccount.com", mockSvc.lastName)
+	require.NotNil(t, mockSvc.lastReq)
+	assert.Equal(t, []string{"scope1"}, mockSvc.lastReq.Scope)
+	assert.Equal(t, "1800s", mockSvc.lastReq.Lifetime)
+}
+
+func TestImpersonateServiceAccount_FactoryError(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+		iamServiceFactory: func(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+			return nil, errors.New("factory error")
+		},
+	}
+
+	_, _, err := id.impersonateServiceAccount(context.Background(), "upstream-token")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "create IAM credentials service")
+}
+
+func TestImpersonateServiceAccount_ServiceError(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+
+	mockSvc := &mockIAMService{err: errors.New("svc error")}
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+		return mockSvc, nil
+	}
+
+	_, _, err := id.impersonateServiceAccount(context.Background(), "upstream-token")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "generate access token")
+}
+
 func TestGetProviderName_WithConfig(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
@@ -322,7 +400,7 @@ func TestPrepareEnvironment_NoCredentials(t *testing.T) {
 	// Should error because no credentials exist.
 	require.Error(t, err)
 	assert.Nil(t, env)
-	assert.Contains(t, err.Error(), "no credentials found")
+	assert.Contains(t, err.Error(), "no valid credentials found")
 	assert.Contains(t, err.Error(), "test-identity-no-creds")
 	assert.Contains(t, err.Error(), "atmos auth login")
 }

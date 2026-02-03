@@ -66,6 +66,10 @@ func (p *Provider) PreAuthenticate(_ types.AuthManager) error {
 func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "gcp_adc.Authenticate")()
 
+	if err := p.Validate(); err != nil {
+		return nil, err
+	}
+
 	scopes := p.spec.Scopes
 	if len(scopes) == 0 {
 		scopes = []string{DefaultScope}

@@ -2,6 +2,7 @@ package gcp_wif
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -100,8 +101,8 @@ func TestValidate(t *testing.T) {
 		{
 			name: "valid spec with legacy pool/provider fields",
 			spec: &types.GCPWorkloadIdentityFederationProviderSpec{
-				ProjectNumber:          "123",
-				WorkloadIdentityPool:   "pool",
+				ProjectNumber:            "123",
+				WorkloadIdentityPool:     "pool",
 				WorkloadIdentityProvider: "provider",
 			},
 			wantErr: false,
@@ -202,12 +203,18 @@ func TestGetTokenFromFile_NotFound(t *testing.T) {
 // TestGetTokenFromURL tests URL token source (e.g. GitHub Actions OIDC).
 // Requires ability to bind a local port; may be skipped in restricted environments.
 func TestGetTokenFromURL(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("Skipping: unable to bind local listener: %v", err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		assert.Equal(t, "Bearer test-request-token", r.Header.Get("Authorization"))
 		assert.Equal(t, "test-audience", r.URL.Query().Get("audience"))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"value": "url-oidc-token"}`))
 	}))
+	server.Listener = ln
+	server.Start()
 	defer server.Close()
 
 	p := &Provider{
@@ -272,7 +279,7 @@ func TestPoolIDAndProviderID_PreferIDFields(t *testing.T) {
 			WorkloadIdentityPoolID:     "pool-id",
 			WorkloadIdentityProviderID: "provider-id",
 			WorkloadIdentityPool:       "legacy-pool",
-			WorkloadIdentityProvider:  "legacy-provider",
+			WorkloadIdentityProvider:   "legacy-provider",
 		},
 	}
 	assert.Equal(t, "pool-id", p.poolID())
@@ -282,8 +289,8 @@ func TestPoolIDAndProviderID_PreferIDFields(t *testing.T) {
 func TestPoolIDAndProviderID_FallbackToLegacy(t *testing.T) {
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
-			ProjectNumber:          "123",
-			WorkloadIdentityPool:   "legacy-pool",
+			ProjectNumber:            "123",
+			WorkloadIdentityPool:     "legacy-pool",
 			WorkloadIdentityProvider: "legacy-provider",
 		},
 	}

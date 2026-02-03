@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -14,15 +15,15 @@ import (
 
 // SetupFiles writes all necessary credential files for a GCP identity.
 // This includes:
-//   - ADC JSON file (application_default_credentials.json)
-//   - gcloud properties file (for project/region defaults)
-//   - Access token file (for tools that read tokens directly)
+//   - ADC JSON file (application_default_credentials.json).
+//   - gcloud properties file (for project/region defaults).
+//   - Access token file (for tools that read tokens directly).
 //
 // Parameters:
-//   - ctx: Context for cancellation
-//   - atmosConfig: Atmos configuration
-//   - identityName: Name of the identity being set up
-//   - creds: The GCP credentials to write
+//   - ctx: Context for cancellation.
+//   - atmosConfig: Atmos configuration.
+//   - identityName: Name of the identity being set up.
+//   - creds: The GCP credentials to write.
 //
 // Returns the paths of all written files and any error.
 func SetupFiles(
@@ -36,7 +37,7 @@ func SetupFiles(
 	_ = ctx
 	_ = atmosConfig
 	if creds == nil {
-		return nil, fmt.Errorf("GCP credentials cannot be nil")
+		return nil, fmt.Errorf("%w: GCP credentials cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
 	var paths []string
@@ -94,7 +95,7 @@ func SetAuthContext(authContext *schema.AuthContext, identityName string, creds 
 		return nil
 	}
 	if creds == nil {
-		return fmt.Errorf("GCP credentials cannot be nil")
+		return fmt.Errorf("%w: GCP credentials cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
 	adcPath, err := GetADCFilePath(identityName)
@@ -107,13 +108,13 @@ func SetAuthContext(authContext *schema.AuthContext, identityName string, creds 
 	}
 
 	authContext.GCP = &schema.GCPAuthContext{
-		ProjectID:          creds.ProjectID,
+		ProjectID:           creds.ProjectID,
 		ServiceAccountEmail: creds.ServiceAccountEmail,
-		AccessToken:        creds.AccessToken,
-		TokenExpiry:        creds.TokenExpiry,
-		Region:             "",
-		ConfigDir:          configDir,
-		CredentialsFile:   adcPath,
+		AccessToken:         creds.AccessToken,
+		TokenExpiry:         creds.TokenExpiry,
+		Region:              "",
+		ConfigDir:           configDir,
+		CredentialsFile:     adcPath,
 	}
 	return nil
 }
@@ -145,8 +146,14 @@ func Setup(
 		Region:      "",
 		AccessToken: creds.AccessToken,
 	}
-	adcPath, _ := GetADCFilePath(identityName)
-	configDir, _ := GetConfigDir(identityName)
+	adcPath, err := GetADCFilePath(identityName)
+	if err != nil {
+		return err
+	}
+	configDir, err := GetConfigDir(identityName)
+	if err != nil {
+		return err
+	}
 	gcpAuth.CredentialsFile = adcPath
 	gcpAuth.ConfigDir = configDir
 	return setEnvironmentVariablesFromAuth(ctx, identityName, gcpAuth)
@@ -189,11 +196,11 @@ func LoadCredentialsFromFiles(
 		if os.IsNotExist(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read ADC file: %w", err)
+		return nil, fmt.Errorf("%w: read ADC file: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 	var adc ADCFileContent
 	if err := json.Unmarshal(data, &adc); err != nil {
-		return nil, fmt.Errorf("parse ADC file: %w", err)
+		return nil, fmt.Errorf("%w: parse ADC file: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
 	if adc.AccessToken == "" {
 		return nil, nil
@@ -230,4 +237,3 @@ func CredentialsExist(
 	}
 	return true, nil
 }
-

@@ -113,10 +113,10 @@ func ParseGCPWorkloadIdentityFederationProviderSpec(spec map[string]any) (*GCPWo
 		TagName:          "mapstructure",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: create decoder: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: create decoder: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	if err := decoder.Decode(spec); err != nil {
-		return nil, fmt.Errorf("%w: decode spec: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: decode spec: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return &out, nil
 }
@@ -136,10 +136,10 @@ func ParseGCPServiceAccountIdentityPrincipal(principal map[string]any) (*GCPServ
 		TagName:          "mapstructure",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: create decoder: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: create decoder: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	if err := decoder.Decode(principal); err != nil {
-		return nil, fmt.Errorf("%w: decode principal: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: decode principal: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	if out.ServiceAccountEmail == "" {
@@ -164,10 +164,10 @@ func ParseGCPProjectIdentityPrincipal(principal map[string]any) (*GCPProjectIden
 		TagName:          "mapstructure",
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: create decoder: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: create decoder: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	if err := decoder.Decode(principal); err != nil {
-		return nil, fmt.Errorf("%w: decode principal: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: decode principal: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 
 	if out.ProjectID == "" {
