@@ -283,7 +283,14 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 	}
 
 	// Load credentials from files to get the access token.
-	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, i.Name())
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return nil, fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+	}
+	if providerName == "" {
+		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
+	}
+	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, providerName, i.Name())
 	if err != nil {
 		return nil, fmt.Errorf("%w: load credentials: %v", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -308,7 +315,7 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 
 	// Get all GCP environment variables using the centralized function.
 	// This ensures GOOGLE_OAUTH_ACCESS_TOKEN is set when we have an access token.
-	gcpEnv, err := gcp.GetEnvironmentVariablesForIdentity(i.Name(), gcpAuth)
+	gcpEnv, err := gcp.GetEnvironmentVariablesForIdentity(providerName, i.Name(), gcpAuth)
 	if err != nil {
 		return nil, fmt.Errorf("get GCP environment variables: %w", err)
 	}
@@ -335,11 +342,11 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 
 	// ConfigAndStacksInfo does not embed AtmosConfiguration; pass nil and rely on gcp.Setup behavior.
 	var atmosConfig *schema.AtmosConfiguration
-	if err := gcp.Setup(ctx, atmosConfig, i.Name(), gcpCreds); err != nil {
+	if err := gcp.Setup(ctx, atmosConfig, params.ProviderName, i.Name(), gcpCreds); err != nil {
 		return err
 	}
 	if params.AuthContext != nil {
-		if err := gcp.SetAuthContext(params.AuthContext, i.Name(), gcpCreds); err != nil {
+		if err := gcp.SetAuthContext(params.AuthContext, params.ProviderName, i.Name(), gcpCreds); err != nil {
 			return err
 		}
 	}
@@ -350,21 +357,42 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 func (i *Identity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "gcp_service_account.Logout")()
 
-	return gcp.Cleanup(ctx, nil, i.Name())
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+	}
+	if providerName == "" {
+		return fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
+	}
+	return gcp.Cleanup(ctx, nil, providerName, i.Name())
 }
 
 // CredentialsExist checks if valid credentials exist for this identity.
 func (i *Identity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "gcp_service_account.CredentialsExist")()
 
-	return gcp.CredentialsExist(context.Background(), nil, i.Name())
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return false, fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+	}
+	if providerName == "" {
+		return false, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
+	}
+	return gcp.CredentialsExist(context.Background(), nil, providerName, i.Name())
 }
 
 // LoadCredentials loads credentials from identity-managed storage.
 func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, error) {
 	defer perf.Track(nil, "gcp_service_account.LoadCredentials")()
 
-	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, i.Name())
+	providerName, err := i.GetProviderName()
+	if err != nil {
+		return nil, fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+	}
+	if providerName == "" {
+		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
+	}
+	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, providerName, i.Name())
 	if err != nil || creds == nil {
 		return nil, err
 	}

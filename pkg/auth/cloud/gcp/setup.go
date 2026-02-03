@@ -22,6 +22,7 @@ import (
 // Parameters:
 //   - ctx: Context for cancellation.
 //   - atmosConfig: Atmos configuration.
+//   - providerName: Name of the provider being set up.
 //   - identityName: Name of the identity being set up.
 //   - creds: The GCP credentials to write.
 //
@@ -29,6 +30,7 @@ import (
 func SetupFiles(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
+	providerName string,
 	identityName string,
 	creds *types.GCPCredentials,
 ) ([]string, error) {
@@ -53,7 +55,7 @@ func SetupFiles(
 		ClientID:     "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com",
 		ClientSecret: "d-FL95Q19q7MQmFpd7hHD0Ty",
 	}
-	adcPath, err := WriteADCFile(identityName, adcContent)
+	adcPath, err := WriteADCFile(providerName, identityName, adcContent)
 	if err != nil {
 		return nil, fmt.Errorf("write ADC file: %w", err)
 	}
@@ -62,14 +64,14 @@ func SetupFiles(
 	// Properties file (project/region).
 	projectID := creds.ProjectID
 	region := ""
-	propsPath, err := WritePropertiesFile(identityName, projectID, region)
+	propsPath, err := WritePropertiesFile(providerName, identityName, projectID, region)
 	if err != nil {
 		return nil, fmt.Errorf("write properties file: %w", err)
 	}
 	paths = append(paths, propsPath)
 
 	// Access token file.
-	tokenPath, err := WriteAccessTokenFile(identityName, creds.AccessToken, creds.TokenExpiry)
+	tokenPath, err := WriteAccessTokenFile(providerName, identityName, creds.AccessToken, creds.TokenExpiry)
 	if err != nil {
 		return nil, fmt.Errorf("write access token file: %w", err)
 	}
@@ -88,7 +90,7 @@ func formatTokenExpiry(t time.Time) string {
 // SetAuthContext populates the GCPAuthContext in the given AuthContext
 // with the credential information and file paths.
 // Callers with ConfigAndStacksInfo should pass config.AuthContext.
-func SetAuthContext(authContext *schema.AuthContext, identityName string, creds *types.GCPCredentials) error {
+func SetAuthContext(authContext *schema.AuthContext, providerName, identityName string, creds *types.GCPCredentials) error {
 	defer perf.Track(nil, "gcp.SetAuthContext")()
 
 	if authContext == nil {
@@ -98,11 +100,11 @@ func SetAuthContext(authContext *schema.AuthContext, identityName string, creds 
 		return fmt.Errorf("%w: GCP credentials cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
 
-	adcPath, err := GetADCFilePath(identityName)
+	adcPath, err := GetADCFilePath(providerName, identityName)
 	if err != nil {
 		return err
 	}
-	configDir, err := GetConfigDir(identityName)
+	configDir, err := GetConfigDir(providerName, identityName)
 	if err != nil {
 		return err
 	}
@@ -129,6 +131,7 @@ func SetAuthContext(authContext *schema.AuthContext, identityName string, creds 
 func Setup(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
+	providerName string,
 	identityName string,
 	creds *types.GCPCredentials,
 ) error {
@@ -137,7 +140,7 @@ func Setup(
 	if err := PrepareEnvironment(ctx, atmosConfig); err != nil {
 		return err
 	}
-	if _, err := SetupFiles(ctx, atmosConfig, identityName, creds); err != nil {
+	if _, err := SetupFiles(ctx, atmosConfig, providerName, identityName, creds); err != nil {
 		return err
 	}
 	// Set env vars with project/region from creds.
@@ -146,27 +149,27 @@ func Setup(
 		Region:      "",
 		AccessToken: creds.AccessToken,
 	}
-	adcPath, err := GetADCFilePath(identityName)
+	adcPath, err := GetADCFilePath(providerName, identityName)
 	if err != nil {
 		return err
 	}
-	configDir, err := GetConfigDir(identityName)
+	configDir, err := GetConfigDir(providerName, identityName)
 	if err != nil {
 		return err
 	}
 	gcpAuth.CredentialsFile = adcPath
 	gcpAuth.ConfigDir = configDir
-	return setEnvironmentVariablesFromAuth(ctx, identityName, gcpAuth)
+	return setEnvironmentVariablesFromAuth(ctx, providerName, identityName, gcpAuth)
 }
 
 // Cleanup removes all credential files and clears environment variables
 // for a GCP identity.
-func Cleanup(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identityName string) error {
+func Cleanup(ctx context.Context, atmosConfig *schema.AtmosConfiguration, providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.Cleanup")()
 
 	_ = ctx
 	_ = atmosConfig
-	if err := CleanupIdentityFiles(identityName); err != nil {
+	if err := CleanupIdentityFiles(providerName, identityName); err != nil {
 		return err
 	}
 	// Clear GCP env vars for this process.
@@ -181,13 +184,14 @@ func Cleanup(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identi
 func LoadCredentialsFromFiles(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
+	providerName string,
 	identityName string,
 ) (*types.GCPCredentials, error) {
 	defer perf.Track(nil, "gcp.LoadCredentialsFromFiles")()
 
 	_ = ctx
 	_ = atmosConfig
-	adcPath, err := GetADCFilePath(identityName)
+	adcPath, err := GetADCFilePath(providerName, identityName)
 	if err != nil {
 		return nil, err
 	}
@@ -224,11 +228,12 @@ func LoadCredentialsFromFiles(
 func CredentialsExist(
 	ctx context.Context,
 	atmosConfig *schema.AtmosConfiguration,
+	providerName string,
 	identityName string,
 ) (bool, error) {
 	defer perf.Track(nil, "gcp.CredentialsExist")()
 
-	creds, err := LoadCredentialsFromFiles(ctx, atmosConfig, identityName)
+	creds, err := LoadCredentialsFromFiles(ctx, atmosConfig, providerName, identityName)
 	if err != nil || creds == nil {
 		return false, err
 	}

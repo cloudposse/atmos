@@ -49,28 +49,31 @@ func TestGetCurrentGCPEnvironment(t *testing.T) {
 func TestGetEnvironmentVariables(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	env, err := GetEnvironmentVariables(nil, "env-identity")
+	env, err := GetEnvironmentVariables(nil, providerName, "env-identity")
 	require.NoError(t, err)
 	require.NotNil(t, env)
 	assert.Equal(t, "config_atmos", env["CLOUDSDK_ACTIVE_CONFIG_NAME"])
 	assert.NotEmpty(t, env["GOOGLE_APPLICATION_CREDENTIALS"])
 	assert.NotEmpty(t, env["CLOUDSDK_CONFIG"])
 	assert.Contains(t, env["GOOGLE_APPLICATION_CREDENTIALS"], "application_default_credentials.json")
+	assert.Contains(t, env["GOOGLE_APPLICATION_CREDENTIALS"], providerName)
 	assert.Contains(t, env["GOOGLE_APPLICATION_CREDENTIALS"], "env-identity")
 }
 
 func TestGetEnvironmentVariablesForIdentity_WithGCPAuth(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
 	gcpAuth := &schema.GCPAuthContext{
-		ProjectID: "auth-project",
-		Region:    "us-central1",
-		ConfigDir: "/custom/config/dir",
+		ProjectID:       "auth-project",
+		Region:          "us-central1",
+		ConfigDir:       "/custom/config/dir",
 		CredentialsFile: "/custom/creds.json",
 	}
-	env, err := GetEnvironmentVariablesForIdentity("id", gcpAuth)
+	env, err := GetEnvironmentVariablesForIdentity(providerName, "id", gcpAuth)
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/creds.json", env["GOOGLE_APPLICATION_CREDENTIALS"])
 	assert.Equal(t, "/custom/config/dir", env["CLOUDSDK_CONFIG"])
@@ -99,12 +102,14 @@ func TestSetEnvironmentVariables(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	ctx := context.Background()
+	providerName := "gcp-adc"
 
-	err := SetEnvironmentVariables(ctx, nil, "setenv-identity")
+	err := SetEnvironmentVariables(ctx, nil, providerName, "setenv-identity")
 	require.NoError(t, err)
 
 	credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
 	assert.NotEmpty(t, credsPath)
+	assert.Contains(t, credsPath, providerName)
 	assert.Contains(t, credsPath, "setenv-identity")
 	assert.Contains(t, credsPath, "application_default_credentials.json")
 	assert.NotEmpty(t, os.Getenv("CLOUDSDK_CONFIG"))

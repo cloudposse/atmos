@@ -27,10 +27,11 @@ func TestGetGCPBaseDir(t *testing.T) {
 func TestGetADCDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	dir, err := GetADCDir("my-identity")
+	dir, err := GetADCDir(providerName, "my-identity")
 	require.NoError(t, err)
-	expected := filepath.Join(tmp, "atmos", GCPSubdir, ADCSubdir, "my-identity")
+	expected := filepath.Join(tmp, "atmos", GCPSubdir, providerName, ADCSubdir, "my-identity")
 	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(dir))
 	_, err = os.Stat(dir)
 	require.NoError(t, err)
@@ -39,20 +40,22 @@ func TestGetADCDir(t *testing.T) {
 func TestGetADCFilePath(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	path, err := GetADCFilePath("dev")
+	path, err := GetADCFilePath(providerName, "dev")
 	require.NoError(t, err)
-	expected := filepath.Join(tmp, "atmos", GCPSubdir, ADCSubdir, "dev", CredentialsFileName)
+	expected := filepath.Join(tmp, "atmos", GCPSubdir, providerName, ADCSubdir, "dev", CredentialsFileName)
 	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(path))
 }
 
 func TestGetConfigDir(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	dir, err := GetConfigDir("prod-identity")
+	dir, err := GetConfigDir(providerName, "prod-identity")
 	require.NoError(t, err)
-	expected := filepath.Join(tmp, "atmos", GCPSubdir, ConfigSubdir, "prod-identity")
+	expected := filepath.Join(tmp, "atmos", GCPSubdir, providerName, ConfigSubdir, "prod-identity")
 	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(dir))
 	_, err = os.Stat(dir)
 	require.NoError(t, err)
@@ -61,23 +64,25 @@ func TestGetConfigDir(t *testing.T) {
 func TestGetPropertiesFilePath(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	path, err := GetPropertiesFilePath("test-id")
+	path, err := GetPropertiesFilePath(providerName, "test-id")
 	require.NoError(t, err)
-	expected := filepath.Join(tmp, "atmos", GCPSubdir, ConfigSubdir, "test-id", PropertiesFileName)
+	expected := filepath.Join(tmp, "atmos", GCPSubdir, providerName, ConfigSubdir, "test-id", PropertiesFileName)
 	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(path))
 }
 
 func TestWriteADCFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
 	content := &ADCFileContent{
 		Type:        "authorized_user",
 		AccessToken: "ya29.test-token",
 		TokenExpiry: "2025-12-31T23:59:59Z",
 	}
-	path, err := WriteADCFile("adc-identity", content)
+	path, err := WriteADCFile(providerName, "adc-identity", content)
 	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 	assert.Contains(t, path, "application_default_credentials.json")
@@ -101,7 +106,7 @@ func TestWriteADCFile_NilContent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	_, err := WriteADCFile("id", nil)
+	_, err := WriteADCFile("gcp-adc", "id", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -109,8 +114,9 @@ func TestWriteADCFile_NilContent(t *testing.T) {
 func TestWritePropertiesFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	path, err := WritePropertiesFile("props-id", "my-project", "us-central1")
+	path, err := WritePropertiesFile(providerName, "props-id", "my-project", "us-central1")
 	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 
@@ -132,8 +138,9 @@ func TestWritePropertiesFile(t *testing.T) {
 func TestWritePropertiesFile_EmptyProjectRegion(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	path, err := WritePropertiesFile("empty-id", "", "")
+	path, err := WritePropertiesFile(providerName, "empty-id", "", "")
 	require.NoError(t, err)
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
@@ -145,9 +152,10 @@ func TestWritePropertiesFile_EmptyProjectRegion(t *testing.T) {
 func TestWriteAccessTokenFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
 	expiry := time.Date(2025, 6, 15, 12, 0, 0, 0, time.UTC)
-	path, err := WriteAccessTokenFile("token-id", "ya29.access-token", expiry)
+	path, err := WriteAccessTokenFile(providerName, "token-id", "ya29.access-token", expiry)
 	require.NoError(t, err)
 	assert.NotEmpty(t, path)
 
@@ -161,25 +169,26 @@ func TestWriteAccessTokenFile(t *testing.T) {
 func TestCleanupIdentityFiles(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
 
-	_, err := WriteADCFile("cleanup-id", &ADCFileContent{Type: "authorized_user", AccessToken: "x"})
+	_, err := WriteADCFile(providerName, "cleanup-id", &ADCFileContent{Type: "authorized_user", AccessToken: "x"})
 	require.NoError(t, err)
-	_, err = WritePropertiesFile("cleanup-id", "p", "r")
+	_, err = WritePropertiesFile(providerName, "cleanup-id", "p", "r")
 	require.NoError(t, err)
 
-	adcPath, _ := GetADCFilePath("cleanup-id")
+	adcPath, _ := GetADCFilePath(providerName, "cleanup-id")
 	_, err = os.Stat(adcPath)
 	require.NoError(t, err)
 
-	err = CleanupIdentityFiles("cleanup-id")
+	err = CleanupIdentityFiles(providerName, "cleanup-id")
 	require.NoError(t, err)
 
 	_, err = os.Stat(adcPath)
 	require.True(t, os.IsNotExist(err))
 
 	base, _ := GetGCPBaseDir()
-	adcDir := filepath.Join(base, ADCSubdir, "cleanup-id")
-	configDir := filepath.Join(base, ConfigSubdir, "cleanup-id")
+	adcDir := filepath.Join(base, providerName, ADCSubdir, "cleanup-id")
+	configDir := filepath.Join(base, providerName, ConfigSubdir, "cleanup-id")
 	_, err = os.Stat(adcDir)
 	require.True(t, os.IsNotExist(err))
 	_, err = os.Stat(configDir)
@@ -190,6 +199,6 @@ func TestCleanupIdentityFiles_Nonexistent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	err := CleanupIdentityFiles("nonexistent-identity")
+	err := CleanupIdentityFiles("gcp-adc", "nonexistent-identity")
 	require.NoError(t, err)
 }

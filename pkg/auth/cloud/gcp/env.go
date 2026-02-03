@@ -58,28 +58,28 @@ func GetCurrentGCPEnvironment() map[string]string {
 // SetEnvironmentVariables sets the GCP environment variables based on the
 // identity configuration and credential file paths.
 // When stackInfo is non-nil and stackInfo.AuthContext.GCP is set, project/region are applied.
-func SetEnvironmentVariables(ctx context.Context, atmosConfig *schema.AtmosConfiguration, identityName string) error {
+func SetEnvironmentVariables(ctx context.Context, atmosConfig *schema.AtmosConfiguration, providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.SetEnvironmentVariables")()
 
-	return setEnvironmentVariablesFromAuth(ctx, identityName, nil)
+	return setEnvironmentVariablesFromAuth(ctx, providerName, identityName, nil)
 }
 
 // SetEnvironmentVariablesFromStackInfo sets GCP environment variables using
 // paths for identityName and project/region from stackInfo.AuthContext.GCP when present.
 // Call this after SetAuthContext so project/region are applied.
-func SetEnvironmentVariablesFromStackInfo(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, identityName string) error {
+func SetEnvironmentVariablesFromStackInfo(ctx context.Context, stackInfo *schema.ConfigAndStacksInfo, providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.SetEnvironmentVariablesFromStackInfo")()
 
 	var gcpAuth *schema.GCPAuthContext
 	if stackInfo != nil && stackInfo.AuthContext != nil {
 		gcpAuth = stackInfo.AuthContext.GCP
 	}
-	return setEnvironmentVariablesFromAuth(ctx, identityName, gcpAuth)
+	return setEnvironmentVariablesFromAuth(ctx, providerName, identityName, gcpAuth)
 }
 
-func setEnvironmentVariablesFromAuth(ctx context.Context, identityName string, gcpAuth *schema.GCPAuthContext) error {
+func setEnvironmentVariablesFromAuth(ctx context.Context, providerName, identityName string, gcpAuth *schema.GCPAuthContext) error {
 	_ = ctx
-	env, err := GetEnvironmentVariablesForIdentity(identityName, gcpAuth)
+	env, err := GetEnvironmentVariablesForIdentity(providerName, identityName, gcpAuth)
 	if err != nil {
 		return err
 	}
@@ -92,12 +92,12 @@ func setEnvironmentVariablesFromAuth(ctx context.Context, identityName string, g
 // GetEnvironmentVariables returns a map of environment variables that should be set
 // for the given identity, without actually setting them.
 // authContext is optional; when authContext.GCP is set, project/region are included.
-func GetEnvironmentVariables(atmosConfig *schema.AtmosConfiguration, identityName string) (map[string]string, error) {
+func GetEnvironmentVariables(atmosConfig *schema.AtmosConfiguration, providerName, identityName string) (map[string]string, error) {
 	defer perf.Track(nil, "gcp.GetEnvironmentVariables")()
 
 	_ = atmosConfig
 	var gcpAuth *schema.GCPAuthContext
-	return GetEnvironmentVariablesForIdentity(identityName, gcpAuth)
+	return GetEnvironmentVariablesForIdentity(providerName, identityName, gcpAuth)
 }
 
 // GetEnvironmentVariablesForIdentity returns the env map for an identity.
@@ -107,10 +107,10 @@ func GetEnvironmentVariables(atmosConfig *schema.AtmosConfiguration, identityNam
 // GOOGLE_APPLICATION_CREDENTIALS. This is because our ADC files don't have refresh
 // tokens (we get access tokens via service account impersonation), and the Google
 // Cloud SDK's authorized_user credential type requires a refresh token.
-func GetEnvironmentVariablesForIdentity(identityName string, gcpAuth *schema.GCPAuthContext) (map[string]string, error) {
+func GetEnvironmentVariablesForIdentity(providerName, identityName string, gcpAuth *schema.GCPAuthContext) (map[string]string, error) {
 	env := make(map[string]string)
 
-	configDir, err := GetConfigDir(identityName)
+	configDir, err := GetConfigDir(providerName, identityName)
 	if err != nil {
 		return nil, err
 	}
@@ -133,7 +133,7 @@ func GetEnvironmentVariablesForIdentity(identityName string, gcpAuth *schema.GCP
 		if gcpAuth != nil && gcpAuth.CredentialsFile != "" {
 			env["GOOGLE_APPLICATION_CREDENTIALS"] = gcpAuth.CredentialsFile
 		} else {
-			adcPath, err := GetADCFilePath(identityName)
+			adcPath, err := GetADCFilePath(providerName, identityName)
 			if err != nil {
 				return nil, err
 			}

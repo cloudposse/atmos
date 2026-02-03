@@ -387,10 +387,18 @@ func TestGetProviderName_WithProvider(t *testing.T) {
 }
 
 func TestPrepareEnvironment_NoCredentials(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
 	id := &Identity{
 		name: "test-identity-no-creds",
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+		config: &schema.Identity{
+			Via: &schema.IdentityVia{
+				Provider: "gcp-adc",
+			},
 		},
 	}
 

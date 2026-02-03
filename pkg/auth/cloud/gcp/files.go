@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -48,10 +49,10 @@ type ADCFileContent struct {
 	ServiceAccountImpersonationURL string `json:"service_account_impersonation_url,omitempty"`
 
 	// For workload identity federation.
-	Audience          string             `json:"audience,omitempty"`
-	SubjectTokenType  string             `json:"subject_token_type,omitempty"`
-	TokenURL          string             `json:"token_url,omitempty"`
-	CredentialSource  *CredentialSource  `json:"credential_source,omitempty"`
+	Audience         string            `json:"audience,omitempty"`
+	SubjectTokenType string            `json:"subject_token_type,omitempty"`
+	TokenURL         string            `json:"token_url,omitempty"`
+	CredentialSource *CredentialSource `json:"credential_source,omitempty"`
 }
 
 // CredentialSource defines where to get the source credential for WIF.
@@ -77,16 +78,35 @@ func GetGCPBaseDir() (string, error) {
 	return xdg.GetXDGConfigDir(GCPSubdir, permDir)
 }
 
-// GetADCDir returns the directory for ADC credentials for a specific identity.
-// Returns: ~/.config/atmos/gcp/adc/<identity-name>/
-func GetADCDir(identityName string) (string, error) {
-	defer perf.Track(nil, "gcp.GetADCDir")()
+// GetProviderDir returns the directory for a specific GCP provider.
+// Returns: ~/.config/atmos/gcp/<provider-name>/
+func GetProviderDir(providerName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetProviderDir")()
 
+	if providerName == "" {
+		return "", fmt.Errorf("%w: provider name is required", errUtils.ErrInvalidAuthConfig)
+	}
 	base, err := GetGCPBaseDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, ADCSubdir, identityName)
+	dir := filepath.Join(base, providerName)
+	if err := os.MkdirAll(dir, permDir); err != nil {
+		return "", fmt.Errorf("failed to create provider directory: %w", err)
+	}
+	return dir, nil
+}
+
+// GetADCDir returns the directory for ADC credentials for a specific identity.
+// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/
+func GetADCDir(providerName, identityName string) (string, error) {
+	defer perf.Track(nil, "gcp.GetADCDir")()
+
+	providerDir, err := GetProviderDir(providerName)
+	if err != nil {
+		return "", err
+	}
+	dir := filepath.Join(providerDir, ADCSubdir, identityName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
 		return "", fmt.Errorf("failed to create ADC directory: %w", err)
 	}
@@ -94,11 +114,11 @@ func GetADCDir(identityName string) (string, error) {
 }
 
 // GetADCFilePath returns the path to the ADC JSON file for a specific identity.
-// Returns: ~/.config/atmos/gcp/adc/<identity-name>/application_default_credentials.json
-func GetADCFilePath(identityName string) (string, error) {
+// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/application_default_credentials.json
+func GetADCFilePath(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCFilePath")()
 
-	dir, err := GetADCDir(identityName)
+	dir, err := GetADCDir(providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -106,15 +126,15 @@ func GetADCFilePath(identityName string) (string, error) {
 }
 
 // GetConfigDir returns the gcloud-style config directory for a specific identity.
-// Returns: ~/.config/atmos/gcp/config/<identity-name>/
-func GetConfigDir(identityName string) (string, error) {
+// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/
+func GetConfigDir(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetConfigDir")()
 
-	base, err := GetGCPBaseDir()
+	providerDir, err := GetProviderDir(providerName)
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, ConfigSubdir, identityName)
+	dir := filepath.Join(providerDir, ConfigSubdir, identityName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
 		return "", fmt.Errorf("failed to create config directory: %w", err)
 	}
@@ -122,11 +142,11 @@ func GetConfigDir(identityName string) (string, error) {
 }
 
 // GetPropertiesFilePath returns the path to the gcloud properties file.
-// Returns: ~/.config/atmos/gcp/config/<identity-name>/properties
-func GetPropertiesFilePath(identityName string) (string, error) {
+// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/properties
+func GetPropertiesFilePath(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetPropertiesFilePath")()
 
-	dir, err := GetConfigDir(identityName)
+	dir, err := GetConfigDir(providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -134,10 +154,11 @@ func GetPropertiesFilePath(identityName string) (string, error) {
 }
 
 // GetAccessTokenFilePath returns the path to the access token file for an identity.
-func GetAccessTokenFilePath(identityName string) (string, error) {
+// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/access_token
+func GetAccessTokenFilePath(providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetAccessTokenFilePath")()
 
-	dir, err := GetADCDir(identityName)
+	dir, err := GetADCDir(providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -145,13 +166,13 @@ func GetAccessTokenFilePath(identityName string) (string, error) {
 }
 
 // WriteADCFile writes the Application Default Credentials JSON file.
-func WriteADCFile(identityName string, content *ADCFileContent) (string, error) {
+func WriteADCFile(providerName, identityName string, content *ADCFileContent) (string, error) {
 	defer perf.Track(nil, "gcp.WriteADCFile")()
 
 	if content == nil {
 		return "", fmt.Errorf("ADC file content cannot be nil")
 	}
-	path, err := GetADCFilePath(identityName)
+	path, err := GetADCFilePath(providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -166,10 +187,10 @@ func WriteADCFile(identityName string, content *ADCFileContent) (string, error) 
 }
 
 // WritePropertiesFile writes the gcloud-style properties file (INI format).
-func WritePropertiesFile(identityName string, projectID string, region string) (string, error) {
+func WritePropertiesFile(providerName, identityName string, projectID string, region string) (string, error) {
 	defer perf.Track(nil, "gcp.WritePropertiesFile")()
 
-	path, err := GetPropertiesFilePath(identityName)
+	path, err := GetPropertiesFilePath(providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -188,10 +209,10 @@ func WritePropertiesFile(identityName string, projectID string, region string) (
 }
 
 // WriteAccessTokenFile writes a simple access token file for tools that need it.
-func WriteAccessTokenFile(identityName string, accessToken string, expiry time.Time) (string, error) {
+func WriteAccessTokenFile(providerName, identityName string, accessToken string, expiry time.Time) (string, error) {
 	defer perf.Track(nil, "gcp.WriteAccessTokenFile")()
 
-	path, err := GetAccessTokenFilePath(identityName)
+	path, err := GetAccessTokenFilePath(providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -206,15 +227,15 @@ func WriteAccessTokenFile(identityName string, accessToken string, expiry time.T
 }
 
 // CleanupIdentityFiles removes all credential files for an identity.
-func CleanupIdentityFiles(identityName string) error {
+func CleanupIdentityFiles(providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.CleanupIdentityFiles")()
 
-	base, err := GetGCPBaseDir()
+	providerDir, err := GetProviderDir(providerName)
 	if err != nil {
 		return err
 	}
-	adcDir := filepath.Join(base, ADCSubdir, identityName)
-	configDir := filepath.Join(base, ConfigSubdir, identityName)
+	adcDir := filepath.Join(providerDir, ADCSubdir, identityName)
+	configDir := filepath.Join(providerDir, ConfigSubdir, identityName)
 	for _, dir := range []string{adcDir, configDir} {
 		if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove %s: %w", dir, err)
