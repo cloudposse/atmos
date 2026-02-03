@@ -692,6 +692,11 @@ var (
 	ErrFailedToComputeRealm = errors.New("failed to compute realm")
 	ErrInvalidRealm         = errors.New("invalid realm value")
 
+	// Logout errors.
+	ErrFailedGetConfigDir   = errors.New("failed to get config directory")
+	ErrFailedDiscoverRealms = errors.New("failed to discover realms")
+	ErrFailedRemoveRealm    = errors.New("failed to remove realm")
+
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
 	ErrNilStoreValue      = errors.New("cannot store nil value")

@@ -529,13 +529,13 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 	// Get the base XDG config directory.
 	baseDir, err := xdg.GetXDGConfigDir("", 0o700)
 	if err != nil {
-		return fmt.Errorf("failed to get config directory: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrFailedGetConfigDir, err)
 	}
 
 	// Discover all realms by scanning the config directory.
 	realms, err := discoverRealms(baseDir)
 	if err != nil {
-		return fmt.Errorf("failed to discover realms: %w", err)
+		return fmt.Errorf("%w: %w", errUtils.ErrFailedDiscoverRealms, err)
 	}
 
 	if len(realms) == 0 {
@@ -580,7 +580,7 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 
 		// Remove the realm directory (all file-based credentials).
 		if err := os.RemoveAll(realmDir); err != nil && !os.IsNotExist(err) {
-			errs = append(errs, fmt.Errorf("failed to remove realm %s: %w", realmName, err))
+			errs = append(errs, fmt.Errorf("%w %s: %w", errUtils.ErrFailedRemoveRealm, realmName, err))
 			continue
 		}
 

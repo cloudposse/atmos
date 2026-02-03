@@ -320,7 +320,15 @@ func (s *fileKeyringStore) List(realm string) ([]string, error) {
 		return filtered, nil
 	}
 
-	return keys, nil
+	// When realm is empty, return all keys but strip the "atmos:" prefix.
+	basePrefix := KeyringRealmPrefix + ":"
+	var aliases []string
+	for _, key := range keys {
+		if len(key) > len(basePrefix) && key[:len(basePrefix)] == basePrefix {
+			aliases = append(aliases, key[len(basePrefix):])
+		}
+	}
+	return aliases, nil
 }
 
 // IsExpired checks if credentials for the given alias are expired within the specified realm.
