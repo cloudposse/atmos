@@ -359,7 +359,7 @@ func (i *Identity) Logout(ctx context.Context) error {
 
 	providerName, err := i.GetProviderName()
 	if err != nil {
-		return fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return fmt.Errorf("%w: resolve provider name: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 	if providerName == "" {
 		return fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
@@ -373,7 +373,7 @@ func (i *Identity) CredentialsExist() (bool, error) {
 
 	providerName, err := i.GetProviderName()
 	if err != nil {
-		return false, fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return false, fmt.Errorf("%w: resolve provider name: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 	if providerName == "" {
 		return false, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
@@ -387,7 +387,7 @@ func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, err
 
 	providerName, err := i.GetProviderName()
 	if err != nil {
-		return nil, fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, fmt.Errorf("%w: resolve provider name: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 	if providerName == "" {
 		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
