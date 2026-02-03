@@ -29,17 +29,21 @@ const (
 
 	// KeyringRealmPrefix is the prefix used for realm-scoped keyring keys.
 	KeyringRealmPrefix = "atmos"
+
+	// KeyringSeparator is the separator used between key components.
+	// Uses underscore instead of colon for Windows compatibility (colons not allowed in filenames).
+	KeyringSeparator = "_"
 )
 
 // buildKeyringKey creates a realm-scoped keyring key.
-// Format: "atmos:{realm}:{alias}" when realm is provided.
-// Falls back to "atmos:{alias}" for backward compatibility when realm is empty.
+// Format: "atmos_realm_alias" when realm is provided.
+// Falls back to "atmos_alias" for backward compatibility when realm is empty.
 func buildKeyringKey(alias, realm string) string {
 	log.Debug("Building keyring key", "alias", alias, "realm", realm)
 	if realm != "" {
-		return KeyringRealmPrefix + ":" + realm + ":" + alias
+		return KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator + alias
 	}
-	return KeyringRealmPrefix + ":" + alias
+	return KeyringRealmPrefix + KeyringSeparator + alias
 }
 
 // credentialEnvelope is used to persist interface credentials with type information.

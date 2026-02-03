@@ -309,7 +309,7 @@ func (s *fileKeyringStore) List(realm string) ([]string, error) {
 
 	// Filter keys by realm prefix if realm is specified.
 	if realm != "" {
-		prefix := KeyringRealmPrefix + ":" + realm + ":"
+		prefix := KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator
 		var filtered []string
 		for _, key := range keys {
 			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
@@ -320,8 +320,8 @@ func (s *fileKeyringStore) List(realm string) ([]string, error) {
 		return filtered, nil
 	}
 
-	// When realm is empty, return all keys but strip the "atmos:" prefix.
-	basePrefix := KeyringRealmPrefix + ":"
+	// When realm is empty, return all keys but strip the "atmos_" prefix.
+	basePrefix := KeyringRealmPrefix + KeyringSeparator
 	var aliases []string
 	for _, key := range keys {
 		if len(key) > len(basePrefix) && key[:len(basePrefix)] == basePrefix {
