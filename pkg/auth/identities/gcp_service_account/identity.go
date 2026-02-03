@@ -393,8 +393,14 @@ func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, err
 		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
 	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, providerName, i.Name())
-	if err != nil || creds == nil {
-		return nil, err
+	if err != nil {
+		return nil, fmt.Errorf("%w: load credentials: %w", errUtils.ErrAuthenticationFailed, err)
+	}
+	if creds == nil {
+		return nil, fmt.Errorf("%w: missing credentials for %s", errUtils.ErrNoCredentialsFound, i.Name())
+	}
+	if creds.IsExpired() {
+		return nil, fmt.Errorf("%w: expired credentials for %s", errUtils.ErrExpiredCredentials, i.Name())
 	}
 	return creds, nil
 }
