@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -340,4 +341,266 @@ func TestVarfileOptions_ProcessingOptions(t *testing.T) {
 	assert.True(t, opts.ProcessTemplates)
 	assert.False(t, opts.ProcessFunctions)
 	assert.Equal(t, []string{"template"}, opts.Skip)
+}
+
+// TestEnsureTerraformComponentExists_JITProvisionFails tests the error wrapping when JIT provisioning fails.
+func TestEnsureTerraformComponentExists_JITProvisionFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Component doesn't exist and has a source with an unreachable URI — JIT provision will fail.
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:      "jit-fail",
+		FinalComponent:        "jit-fail",
+		ComponentFolderPrefix: "",
+		ComponentSection: map[string]any{
+			"source": map[string]any{
+				"uri": "file:///nonexistent/path/to/source",
+			},
+		},
+	}
+
+	err := ensureTerraformComponentExists(atmosConfig, info)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+	assert.Contains(t, err.Error(), "auto-provision")
+}
+
+// TestEnsureTerraformComponentExists_PostJITComponentAppears tests the path where JIT provisioning
+// succeeds (no source, returns nil) and the component directory appears at the standard path.
+func TestEnsureTerraformComponentExists_PostJITComponentAppears(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Do NOT create the component directory initially.
+	componentPath := filepath.Join(tempDir, "components", "terraform", "lazy-vpc")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:      "lazy-vpc",
+		FinalComponent:        "lazy-vpc",
+		ComponentFolderPrefix: "",
+		ComponentSection:      map[string]any{},
+	}
+
+	// First call: component doesn't exist, no source, no workdir → error.
+	err := ensureTerraformComponentExists(atmosConfig, info)
+	assert.Error(t, err, "should fail when component doesn't exist")
+
+	// Now create the directory to simulate JIT provisioning having put it there.
+	require.NoError(t, os.MkdirAll(componentPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentPath, "main.tf"), []byte("# lazy-vpc\n"), 0o644))
+
+	// Second call: component now exists at the standard path.
+	err = ensureTerraformComponentExists(atmosConfig, info)
+	assert.NoError(t, err, "should pass when component exists")
+}
+
+// TestEnsureTerraformComponentExists_DirectoryCheckError tests the error propagation
+// when checkDirectoryExists returns a real filesystem error (e.g., permission denied).
+func TestEnsureTerraformComponentExists_DirectoryCheckError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	tempDir := t.TempDir()
+
+	// Create the components/terraform directory but make it inaccessible.
+	componentBase := filepath.Join(tempDir, "components", "terraform")
+	require.NoError(t, os.MkdirAll(filepath.Join(componentBase, "vpc"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(componentBase, "vpc", "main.tf"), []byte("# vpc\n"), 0o644))
+
+	// Remove permissions on the component base directory to trigger a real filesystem error.
+	require.NoError(t, os.Chmod(componentBase, 0o000))
+	t.Cleanup(func() {
+		os.Chmod(componentBase, 0o755)
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg:      "vpc",
+		FinalComponent:        "vpc",
+		ComponentFolderPrefix: "",
+		ComponentSection:      map[string]any{},
+	}
+
+	err := ensureTerraformComponentExists(atmosConfig, info)
+	assert.Error(t, err, "should propagate filesystem error from checkDirectoryExists")
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+}
+
+// TestExecuteGenerateVarfile_ProcessStacksFails tests that ExecuteGenerateVarfile returns an error
+// when ProcessStacks fails (e.g., no stack config files configured).
+func TestExecuteGenerateVarfile_ProcessStacksFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: filepath.Join("components", "terraform"),
+			},
+		},
+	}
+
+	opts := &VarfileOptions{
+		Component: "vpc",
+		Stack:     "dev",
+	}
+
+	err := ExecuteGenerateVarfile(opts, atmosConfig)
+	assert.Error(t, err, "should fail when stack config is not set up")
+}
+
+// TestExecuteGenerateVarfile_ProcessStacksFailsWithFile tests the file option path is not reached on ProcessStacks failure.
+func TestExecuteGenerateVarfile_ProcessStacksFailsWithFile(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: filepath.Join("components", "terraform"),
+			},
+		},
+	}
+
+	opts := &VarfileOptions{
+		Component: "vpc",
+		Stack:     "dev",
+		File:      filepath.Join(tempDir, "output.tfvars.json"),
+		ProcessingOptions: ProcessingOptions{
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		},
+	}
+
+	err := ExecuteGenerateVarfile(opts, atmosConfig)
+	assert.Error(t, err, "should fail when stack config is not set up")
+}
+
+// TestCheckDirectoryExists_PermissionError tests the real filesystem error branch.
+func TestCheckDirectoryExists_PermissionError(t *testing.T) {
+	if os.Getuid() == 0 {
+		t.Skip("Skipping permission test when running as root")
+	}
+
+	tempDir := t.TempDir()
+	restrictedDir := filepath.Join(tempDir, "restricted")
+	require.NoError(t, os.MkdirAll(restrictedDir, 0o755))
+
+	targetDir := filepath.Join(restrictedDir, "inner")
+	require.NoError(t, os.MkdirAll(targetDir, 0o755))
+
+	// Remove read+execute permission on parent to cause a real filesystem error.
+	require.NoError(t, os.Chmod(restrictedDir, 0o000))
+	t.Cleanup(func() {
+		// Restore permissions so cleanup can succeed.
+		os.Chmod(restrictedDir, 0o755)
+	})
+
+	// Attempting to stat the inner directory should trigger a permission error.
+	exists, err := checkDirectoryExists(targetDir)
+	assert.Error(t, err, "should return error for permission denied")
+	assert.False(t, exists)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
+}
+
+// TestExecuteGenerateVarfile_Integration tests the full varfile generation flow
+// using the existing stack-templates test fixture.
+func TestExecuteGenerateVarfile_Integration(t *testing.T) {
+	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates"))
+	require.NoError(t, err)
+
+	// Skip if the fixture directory doesn't exist.
+	if _, statErr := os.Stat(fixtureDir); os.IsNotExist(statErr) {
+		t.Skip("Stack-templates fixture not found")
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		AtmosBasePath:          fixtureDir,
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+	}, true)
+	require.NoError(t, err, "config initialization should succeed")
+
+	// Write the varfile to a temp directory to avoid modifying the fixture.
+	varfilePath := filepath.Join(t.TempDir(), "test-output.tfvars.json")
+	opts := &VarfileOptions{
+		Component: "component-1",
+		Stack:     "nonprod",
+		File:      varfilePath,
+		ProcessingOptions: ProcessingOptions{
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		},
+	}
+
+	err = ExecuteGenerateVarfile(opts, &atmosConfig)
+	require.NoError(t, err, "varfile generation should succeed")
+
+	// Verify the varfile was written.
+	assert.FileExists(t, varfilePath)
+	content, err := os.ReadFile(varfilePath)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "component-1-a")
+}
+
+// TestExecuteGenerateBackend_Integration tests the full backend generation flow
+// using the existing stack-templates test fixture.
+func TestExecuteGenerateBackend_Integration(t *testing.T) {
+	fixtureDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "stack-templates"))
+	require.NoError(t, err)
+
+	// Skip if the fixture directory doesn't exist.
+	if _, statErr := os.Stat(fixtureDir); os.IsNotExist(statErr) {
+		t.Skip("Stack-templates fixture not found")
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{
+		AtmosBasePath:          fixtureDir,
+		AtmosConfigDirsFromArg: []string{fixtureDir},
+	}, true)
+	require.NoError(t, err, "config initialization should succeed")
+
+	opts := &GenerateBackendOptions{
+		Component: "component-1",
+		Stack:     "nonprod",
+		ProcessingOptions: ProcessingOptions{
+			ProcessTemplates: true,
+			ProcessFunctions: true,
+		},
+	}
+
+	err = ExecuteGenerateBackend(opts, &atmosConfig)
+	require.NoError(t, err, "backend generation should succeed")
+
+	// Verify backend was written to the component directory.
+	backendFile := filepath.Join(fixtureDir, "components", "terraform", "mock", "backend.tf.json")
+	assert.FileExists(t, backendFile)
+	content, err := os.ReadFile(backendFile)
+	require.NoError(t, err)
+	assert.Contains(t, string(content), "nonprod-tfstate")
 }

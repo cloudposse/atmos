@@ -209,6 +209,29 @@ func TestWriteBackendConfigFile(t *testing.T) {
 	}
 }
 
+// TestExecuteGenerateBackend_ProcessStacksFails tests that ExecuteGenerateBackend returns an error
+// when ProcessStacks fails (e.g., no stack config files configured).
+func TestExecuteGenerateBackend_ProcessStacksFails(t *testing.T) {
+	tempDir := t.TempDir()
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: filepath.Join("components", "terraform"),
+			},
+		},
+	}
+
+	opts := &GenerateBackendOptions{
+		Component: "vpc",
+		Stack:     "dev",
+	}
+
+	err := ExecuteGenerateBackend(opts, atmosConfig)
+	assert.Error(t, err, "should fail when stack config is not set up")
+}
+
 func TestValidateBackendTypeRequirementsTypeAssertions(t *testing.T) {
 	tests := []struct {
 		name        string
