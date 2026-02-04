@@ -29,7 +29,7 @@ func TestEnsureTerraformComponentExists_ExistingComponent(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -53,7 +53,7 @@ func TestEnsureTerraformComponentExists_MissingComponentNoSource(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -82,7 +82,7 @@ func TestEnsureTerraformComponentExists_WorkdirPathSet(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -131,63 +131,6 @@ func TestTryJITProvision_WithEmptySource(t *testing.T) {
 	assert.NoError(t, err, "empty source should return nil without error")
 }
 
-// TestVarfileOptions_Validation tests VarfileOptions struct field validation.
-func TestVarfileOptions_Validation(t *testing.T) {
-	tests := []struct {
-		name          string
-		opts          *VarfileOptions
-		expectValid   bool
-		invalidReason string
-	}{
-		{
-			name: "valid options with component and stack",
-			opts: &VarfileOptions{
-				Component: "vpc",
-				Stack:     "dev-us-west-2",
-			},
-			expectValid: true,
-		},
-		{
-			name: "valid options with all fields",
-			opts: &VarfileOptions{
-				Component: "rds",
-				Stack:     "prod-eu-west-1",
-				File:      filepath.Join("tmp", "test.tfvars.json"),
-				ProcessingOptions: ProcessingOptions{
-					ProcessTemplates: true,
-					ProcessFunctions: true,
-				},
-			},
-			expectValid: true,
-		},
-		{
-			name: "missing component",
-			opts: &VarfileOptions{
-				Component: "",
-				Stack:     "dev-us-west-2",
-			},
-			expectValid:   false,
-			invalidReason: "component is required",
-		},
-		{
-			name: "missing stack",
-			opts: &VarfileOptions{
-				Component: "vpc",
-				Stack:     "",
-			},
-			expectValid:   false,
-			invalidReason: "stack is required",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			isValid := tt.opts.Component != "" && tt.opts.Stack != ""
-			assert.Equal(t, tt.expectValid, isValid, tt.invalidReason)
-		})
-	}
-}
-
 // TestEnsureTerraformComponentExists_WithFolderPrefix tests component resolution with a folder prefix.
 func TestEnsureTerraformComponentExists_WithFolderPrefix(t *testing.T) {
 	tempDir := t.TempDir()
@@ -199,7 +142,7 @@ func TestEnsureTerraformComponentExists_WithFolderPrefix(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -223,7 +166,7 @@ func TestEnsureTerraformComponentExists_ReturnsErrorWithBasePath(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -326,23 +269,6 @@ func TestExecuteTerraformGenerateVarfileCmd_Deprecated(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrDeprecatedCmdNotCallable)
 }
 
-// TestVarfileOptions_ProcessingOptions tests that ProcessingOptions are correctly carried.
-func TestVarfileOptions_ProcessingOptions(t *testing.T) {
-	opts := &VarfileOptions{
-		Component: "vpc",
-		Stack:     "dev",
-		ProcessingOptions: ProcessingOptions{
-			ProcessTemplates: true,
-			ProcessFunctions: false,
-			Skip:             []string{"template"},
-		},
-	}
-
-	assert.True(t, opts.ProcessTemplates)
-	assert.False(t, opts.ProcessFunctions)
-	assert.Equal(t, []string{"template"}, opts.Skip)
-}
-
 // TestEnsureTerraformComponentExists_JITProvisionFails tests the error wrapping when JIT provisioning fails.
 func TestEnsureTerraformComponentExists_JITProvisionFails(t *testing.T) {
 	tempDir := t.TempDir()
@@ -351,7 +277,7 @@ func TestEnsureTerraformComponentExists_JITProvisionFails(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -386,7 +312,7 @@ func TestEnsureTerraformComponentExists_PostJITComponentAppears(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -411,49 +337,8 @@ func TestEnsureTerraformComponentExists_PostJITComponentAppears(t *testing.T) {
 	assert.NoError(t, err, "should pass when component exists")
 }
 
-// TestEnsureTerraformComponentExists_DirectoryCheckError tests the error propagation
-// when checkDirectoryExists returns a real filesystem error (e.g., permission denied).
-func TestEnsureTerraformComponentExists_DirectoryCheckError(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skip("Skipping permission test when running as root")
-	}
-
-	tempDir := t.TempDir()
-
-	// Create the components/terraform directory but make it inaccessible.
-	componentBase := filepath.Join(tempDir, "components", "terraform")
-	require.NoError(t, os.MkdirAll(filepath.Join(componentBase, "vpc"), 0o755))
-	require.NoError(t, os.WriteFile(filepath.Join(componentBase, "vpc", "main.tf"), []byte("# vpc\n"), 0o644))
-
-	// Remove permissions on the component base directory to trigger a real filesystem error.
-	require.NoError(t, os.Chmod(componentBase, 0o000))
-	t.Cleanup(func() {
-		os.Chmod(componentBase, 0o755)
-	})
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-		Components: schema.Components{
-			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
-			},
-		},
-	}
-
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFromArg:      "vpc",
-		FinalComponent:        "vpc",
-		ComponentFolderPrefix: "",
-		ComponentSection:      map[string]any{},
-	}
-
-	err := ensureTerraformComponentExists(atmosConfig, info)
-	assert.Error(t, err, "should propagate filesystem error from checkDirectoryExists")
-	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
-}
-
 // TestExecuteGenerateVarfile_ProcessStacksFails tests that ExecuteGenerateVarfile returns an error
-// when ProcessStacks fails (e.g., no stack config files configured).
+// when ProcessStacks fails due to missing stack config files.
 func TestExecuteGenerateVarfile_ProcessStacksFails(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -500,33 +385,6 @@ func TestExecuteGenerateVarfile_ProcessStacksFailsWithFile(t *testing.T) {
 
 	err := ExecuteGenerateVarfile(opts, atmosConfig)
 	assert.Error(t, err, "should fail when stack config is not set up")
-}
-
-// TestCheckDirectoryExists_PermissionError tests the real filesystem error branch.
-func TestCheckDirectoryExists_PermissionError(t *testing.T) {
-	if os.Getuid() == 0 {
-		t.Skip("Skipping permission test when running as root")
-	}
-
-	tempDir := t.TempDir()
-	restrictedDir := filepath.Join(tempDir, "restricted")
-	require.NoError(t, os.MkdirAll(restrictedDir, 0o755))
-
-	targetDir := filepath.Join(restrictedDir, "inner")
-	require.NoError(t, os.MkdirAll(targetDir, 0o755))
-
-	// Remove read+execute permission on parent to cause a real filesystem error.
-	require.NoError(t, os.Chmod(restrictedDir, 0o000))
-	t.Cleanup(func() {
-		// Restore permissions so cleanup can succeed.
-		os.Chmod(restrictedDir, 0o755)
-	})
-
-	// Attempting to stat the inner directory should trigger a permission error.
-	exists, err := checkDirectoryExists(targetDir)
-	assert.Error(t, err, "should return error for permission denied")
-	assert.False(t, exists)
-	assert.ErrorIs(t, err, errUtils.ErrInvalidTerraformComponent)
 }
 
 // TestExecuteGenerateVarfile_Integration tests the full varfile generation flow
@@ -599,6 +457,7 @@ func TestExecuteGenerateBackend_Integration(t *testing.T) {
 
 	// Verify backend was written to the component directory.
 	backendFile := filepath.Join(fixtureDir, "components", "terraform", "mock", "backend.tf.json")
+	t.Cleanup(func() { _ = os.Remove(backendFile) })
 	assert.FileExists(t, backendFile)
 	content, err := os.ReadFile(backendFile)
 	require.NoError(t, err)

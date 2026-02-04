@@ -157,7 +157,7 @@ func TestWriteBackendConfigFile(t *testing.T) {
 		BasePath: tempDir,
 		Components: schema.Components{
 			Terraform: schema.Terraform{
-				BasePath: "components/terraform",
+				BasePath: filepath.Join("components", "terraform"),
 			},
 		},
 	}
@@ -210,7 +210,7 @@ func TestWriteBackendConfigFile(t *testing.T) {
 }
 
 // TestExecuteGenerateBackend_ProcessStacksFails tests that ExecuteGenerateBackend returns an error
-// when ProcessStacks fails (e.g., no stack config files configured).
+// when ProcessStacks fails due to missing stack config files.
 func TestExecuteGenerateBackend_ProcessStacksFails(t *testing.T) {
 	tempDir := t.TempDir()
 
