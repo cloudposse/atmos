@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"sort"
 	"testing"
@@ -1972,6 +1973,548 @@ func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
 	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
 }
 
+// TestProcessTemplatesInSection tests the processTemplatesInSection helper function.
+func TestProcessTemplatesInSection(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	t.Run("empty section returns as-is", func(t *testing.T) {
+		result, err := processTemplatesInSection(atmosConfig, map[string]any{}, map[string]any{}, "test.yaml")
+		require.NoError(t, err)
+		assert.Empty(t, result)
+	})
+
+	t.Run("nil section returns as-is", func(t *testing.T) {
+		var section map[string]any
+		result, err := processTemplatesInSection(atmosConfig, section, map[string]any{}, "test.yaml")
+		require.NoError(t, err)
+		assert.Nil(t, result)
+	})
+
+	t.Run("section without templates returns as-is", func(t *testing.T) {
+		section := map[string]any{
+			"key": "plain-value",
+			"num": 42,
+		}
+		result, err := processTemplatesInSection(atmosConfig, section, map[string]any{}, "test.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "plain-value", result["key"])
+		assert.Equal(t, 42, result["num"])
+	})
+
+	t.Run("resolves templates with locals context", func(t *testing.T) {
+		section := map[string]any{
+			"stage_label": "{{ .locals.stage }}-app",
+		}
+		context := map[string]any{
+			"locals": map[string]any{"stage": "dev"},
+		}
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.NoError(t, err)
+		assert.Equal(t, "dev-app", result["stage_label"])
+	})
+
+	t.Run("returns error on missing template values", func(t *testing.T) {
+		section := map[string]any{
+			"value": "{{ .missing_key }}",
+		}
+		context := map[string]any{
+			"locals": map[string]any{"stage": "dev"},
+		}
+		_, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.Error(t, err, "Should fail when template references missing context value")
+		assert.True(t, errors.Is(err, errUtils.ErrInvalidStackManifest))
+	})
+
+	t.Run("resolves nested template values", func(t *testing.T) {
+		section := map[string]any{
+			"nested": map[string]any{
+				"name": "{{ .locals.namespace }}-{{ .locals.env }}",
+			},
+		}
+		context := map[string]any{
+			"locals": map[string]any{"namespace": "acme", "env": "prod"},
+		}
+		result, err := processTemplatesInSection(atmosConfig, section, context, "test.yaml")
+		require.NoError(t, err)
+		nested, ok := result["nested"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme-prod", nested["name"])
+	})
+}
+
+// TestExtractAndAddLocalsToContext_SectionProcessing tests the template processing pipeline
+// in extractAndAddLocalsToContext for settings, vars, and env sections.
+func TestExtractAndAddLocalsToContext_SectionProcessing(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	t.Run("settings templates resolved with locals", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+settings:
+  label: '{{ .locals.stage }}-config'
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		settings, ok := ctx["settings"].(map[string]any)
+		require.True(t, ok, "settings should exist in context")
+		assert.Equal(t, "dev-config", settings["label"])
+	})
+
+	t.Run("vars templates resolved with locals and settings", func(t *testing.T) {
+		yamlContent := `
+locals:
+  env: prod
+settings:
+  region: us-east-1
+vars:
+  deploy_env: '{{ .locals.env }}'
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		vars, ok := ctx["vars"].(map[string]any)
+		require.True(t, ok, "vars should exist in context")
+		assert.Equal(t, "prod", vars["deploy_env"])
+	})
+
+	t.Run("env templates resolved with locals settings and vars", func(t *testing.T) {
+		yamlContent := `
+locals:
+  app: myapp
+env:
+  APP_NAME: '{{ .locals.app }}'
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		env, ok := ctx["env"].(map[string]any)
+		require.True(t, ok, "env should exist in context")
+		assert.Equal(t, "myapp", env["APP_NAME"])
+	})
+
+	t.Run("settings fallback to raw on template error", func(t *testing.T) {
+		// Settings has a template referencing a value not in locals context.
+		// processTemplatesInSection should fail and fall back to raw settings.
+		yamlContent := `
+locals:
+  stage: dev
+settings:
+  component: '{{ .atmos_component }}'
+  static: plain-value
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		settings, ok := ctx["settings"].(map[string]any)
+		require.True(t, ok, "settings should exist in context (raw fallback)")
+		// Raw fallback means the template string is preserved.
+		assert.Equal(t, "{{ .atmos_component }}", settings["component"].(string))
+		assert.Equal(t, "plain-value", settings["static"])
+	})
+
+	t.Run("vars fallback to raw on template error", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+vars:
+  stack: '{{ .atmos_stack }}'
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		vars, ok := ctx["vars"].(map[string]any)
+		require.True(t, ok, "vars should exist in context (raw fallback)")
+		assert.Equal(t, "{{ .atmos_stack }}", vars["stack"].(string))
+	})
+
+	t.Run("env fallback to raw on template error", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+env:
+  COMPONENT: '{{ .atmos_component }}'
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+		env, ok := ctx["env"].(map[string]any)
+		require.True(t, ok, "env should exist in context (raw fallback)")
+		assert.Equal(t, "{{ .atmos_component }}", env["COMPONENT"].(string))
+	})
+
+	t.Run("clears inherited locals from parent context", func(t *testing.T) {
+		yamlContent := `
+locals:
+  own_local: mine
+`
+		parentContext := map[string]any{
+			"locals": map[string]any{"inherited": "should-be-cleared"},
+		}
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", parentContext)
+		require.NoError(t, err)
+		locals, ok := ctx["locals"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "mine", locals["own_local"])
+		_, hasInherited := locals["inherited"]
+		assert.False(t, hasInherited, "inherited locals should be cleared")
+	})
+
+	t.Run("full pipeline settings vars env with locals", func(t *testing.T) {
+		yamlContent := `
+locals:
+  ns: acme
+  stage: dev
+settings:
+  context:
+    namespace: '{{ .locals.ns }}'
+vars:
+  env_name: '{{ .locals.stage }}'
+env:
+  NAMESPACE: '{{ .locals.ns }}'
+`
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+		require.NoError(t, err)
+
+		settings, ok := ctx["settings"].(map[string]any)
+		require.True(t, ok)
+		settingsCtx, ok := settings["context"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", settingsCtx["namespace"])
+
+		vars, ok := ctx["vars"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "dev", vars["env_name"])
+
+		env, ok := ctx["env"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "acme", env["NAMESPACE"])
+	})
+}
+
+// TestExtractAndAddLocalsToContext_ExternalContext verifies that external import context
+// is included during section template processing, enabling settings/vars/env to reference
+// import-provided values alongside locals.
+func TestExtractAndAddLocalsToContext_ExternalContext(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	t.Run("settings resolves with external context", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+settings:
+  label: '{{ .locals.stage }}-{{ .tenant }}'
+`
+		externalCtx := map[string]any{"tenant": "acme"}
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		require.NoError(t, err)
+		settings, ok := ctx["settings"].(map[string]any)
+		require.True(t, ok, "settings should exist in context")
+		assert.Equal(t, "dev-acme", settings["label"],
+			"settings should resolve templates using both locals and external context")
+	})
+
+	t.Run("vars resolves with external context and processed settings", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+settings:
+  env_label: '{{ .locals.stage }}-{{ .region }}'
+vars:
+  full_label: '{{ .settings.env_label }}'
+`
+		externalCtx := map[string]any{"region": "us-east-1"}
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		require.NoError(t, err)
+		settings, ok := ctx["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "dev-us-east-1", settings["env_label"])
+
+		vars, ok := ctx["vars"].(map[string]any)
+		require.True(t, ok, "vars should exist in context")
+		assert.Equal(t, "dev-us-east-1", vars["full_label"],
+			"vars should resolve settings that were resolved with external context")
+	})
+
+	t.Run("settings falls back when external context is insufficient", func(t *testing.T) {
+		yamlContent := `
+locals:
+  stage: dev
+settings:
+  label: '{{ .locals.stage }}-{{ .missing_var }}'
+`
+		externalCtx := map[string]any{"tenant": "acme"}
+		ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", externalCtx)
+		require.NoError(t, err)
+		settings, ok := ctx["settings"].(map[string]any)
+		require.True(t, ok, "settings should exist (raw fallback)")
+		assert.Equal(t, "{{ .locals.stage }}-{{ .missing_var }}", settings["label"],
+			"settings should fall back to raw when template references unavailable values")
+	})
+}
+
+// TestProcessYAMLConfigFile_OriginalContextFallback tests the graceful fallback
+// when template processing fails and only file-extracted context is available.
+func TestProcessYAMLConfigFile_OriginalContextFallback(t *testing.T) {
+	// Create a temporary YAML file with locals and {{ .atmos_component }} templates.
+	// When a section mixes resolvable ({{ .locals.X }}) and unresolvable ({{ .atmos_component }})
+	// templates, the section-level processing fails and falls back to raw values.
+	// The whole-file template processing also fails and falls back to raw content.
+	tmpDir := t.TempDir()
+	yamlContent := `
+locals:
+  stage: dev
+settings:
+  component: "{{ .atmos_component }}"
+  stage_label: "{{ .locals.stage }}-label"
+vars:
+  stack: "{{ .atmos_stack }}"
+  env_name: "{{ .locals.stage }}"
+`
+	filePath := filepath.Join(tmpDir, "test.yaml")
+	err := os.WriteFile(filePath, []byte(yamlContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	// Process with no external context (nil) — file-extracted context only.
+	// Template processing will fail on {{ .atmos_component }} because it's not in context.
+	// The fallback should return raw content preserving ALL templates for later processing.
+	deepMergedConfig, importsConfig, stackConfigMap, tfInline, tfImports, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		tmpDir,
+		filePath,
+		map[string]map[string]any{},
+		nil,   // No external context.
+		false, // ignoreMissingFiles.
+		false, // skipTemplatesProcessingInImports.
+		false, // ignoreMissingTemplateValues.
+		false, // skipIfMissing.
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	require.NoError(t, err, "Should not fail — fallback to raw content when only file-extracted context")
+	require.NotNil(t, deepMergedConfig)
+	_, _, _ = importsConfig, stackConfigMap, tfInline // Unused return values.
+	_ = tfImports
+
+	// Verify resolved locals are persisted in the config.
+	locals, ok := deepMergedConfig["locals"].(map[string]any)
+	require.True(t, ok, "resolved locals should be persisted into stackConfigMap")
+	assert.Equal(t, "dev", locals["stage"])
+
+	// Settings section has both {{ .locals.stage }} and {{ .atmos_component }}.
+	// processTemplatesInSection fails on {{ .atmos_component }} so the entire section
+	// falls back to raw values — both templates are preserved for later resolution.
+	settings, ok := deepMergedConfig["settings"].(map[string]any)
+	require.True(t, ok, "settings should exist")
+	assert.Equal(t, "{{ .atmos_component }}", settings["component"].(string),
+		"{{ .atmos_component }} should be preserved in settings fallback")
+	assert.Equal(t, "{{ .locals.stage }}-label", settings["stage_label"].(string),
+		"{{ .locals.stage }}-label is preserved when section has unresolvable templates")
+
+	// Vars section similarly falls back because it contains {{ .atmos_stack }}.
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok, "vars should exist")
+	assert.Equal(t, "{{ .atmos_stack }}", vars["stack"].(string),
+		"{{ .atmos_stack }} should be preserved in vars fallback")
+}
+
+// TestProcessYAMLConfigFile_ExternalContextError tests that template errors
+// are returned as errors when external context is provided (not just file-extracted).
+func TestProcessYAMLConfigFile_ExternalContextError(t *testing.T) {
+	tmpDir := t.TempDir()
+	yamlContent := `
+settings:
+  value: "{{ .missing_key }}"
+`
+	filePath := filepath.Join(tmpDir, "test.yaml")
+	err := os.WriteFile(filePath, []byte(yamlContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{}
+
+	// Process WITH external context — template errors should be returned.
+	externalContext := map[string]any{
+		"some_key": "some_value",
+	}
+	result, importsConfig, stackCfg, tfInline, tfImports, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		tmpDir,
+		filePath,
+		map[string]map[string]any{},
+		externalContext, // External context provided.
+		false,           // ignoreMissingFiles.
+		false,           // skipTemplatesProcessingInImports.
+		false,           // ignoreMissingTemplateValues.
+		false,           // skipIfMissing.
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	_ = result
+	_ = importsConfig
+	_ = stackCfg
+	_ = tfInline
+	_ = tfImports
+
+	require.Error(t, err, "Should return error when external context is provided and template fails")
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidStackManifest))
+}
+
+// TestProcessYAMLConfigFile_ResolvedSectionsPersisted tests that resolved
+// sections (locals, vars, settings, env) are persisted into stackConfigMap.
+func TestProcessYAMLConfigFile_ResolvedSectionsPersisted(t *testing.T) {
+	tmpDir := t.TempDir()
+	yamlContent := `
+locals:
+  ns: acme
+  env: dev
+settings:
+  namespace: '{{ .locals.ns }}'
+vars:
+  environment: '{{ .locals.env }}'
+env:
+  NAMESPACE: '{{ .locals.ns }}'
+`
+	filePath := filepath.Join(tmpDir, "test.yaml")
+	err := os.WriteFile(filePath, []byte(yamlContent), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	deepMergedConfig, importsConfig, stackConfigMap, tfInline, tfImports, _, _, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		tmpDir,
+		filePath,
+		map[string]map[string]any{},
+		nil,   // No external context.
+		false, // ignoreMissingFiles.
+		false, // skipTemplatesProcessingInImports.
+		false, // ignoreMissingTemplateValues.
+		false, // skipIfMissing.
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+	_, _, _ = importsConfig, stackConfigMap, tfInline // Unused return values.
+	_ = tfImports
+
+	require.NoError(t, err)
+
+	// Resolved locals should be persisted.
+	locals, ok := deepMergedConfig["locals"].(map[string]any)
+	require.True(t, ok, "locals should be persisted")
+	assert.Equal(t, "acme", locals["ns"])
+	assert.Equal(t, "dev", locals["env"])
+
+	// Resolved settings should be persisted ({{ .locals.ns }} → "acme").
+	settings, ok := deepMergedConfig["settings"].(map[string]any)
+	require.True(t, ok, "settings should be persisted")
+	assert.Equal(t, "acme", settings["namespace"])
+
+	// Resolved vars should be persisted ({{ .locals.env }} → "dev").
+	vars, ok := deepMergedConfig["vars"].(map[string]any)
+	require.True(t, ok, "vars should be persisted")
+	assert.Equal(t, "dev", vars["environment"])
+
+	// Resolved env should be persisted ({{ .locals.ns }} → "acme").
+	env, ok := deepMergedConfig["env"].(map[string]any)
+	require.True(t, ok, "env should be persisted")
+	assert.Equal(t, "acme", env["NAMESPACE"])
+}
+
+// TestExtractAndAddLocalsToContext_VarsWithProcessedSettings tests that vars
+// can reference processed settings values through the template pipeline.
+func TestExtractAndAddLocalsToContext_VarsWithProcessedSettings(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	yamlContent := `
+locals:
+  stage: dev
+settings:
+  resolved_stage: '{{ .locals.stage }}'
+vars:
+  from_settings: '{{ .settings.resolved_stage }}'
+`
+	ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+	require.NoError(t, err)
+
+	// Settings should have resolved {{ .locals.stage }} → "dev".
+	settings, ok := ctx["settings"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "dev", settings["resolved_stage"])
+
+	// Vars should have resolved {{ .settings.resolved_stage }} → "dev".
+	vars, ok := ctx["vars"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "dev", vars["from_settings"])
+}
+
+// TestExtractAndAddLocalsToContext_EnvWithProcessedSettingsAndVars tests that env
+// can reference both processed settings and vars through the template pipeline.
+func TestExtractAndAddLocalsToContext_EnvWithProcessedSettingsAndVars(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	yamlContent := `
+locals:
+  ns: acme
+settings:
+  region: us-east-1
+vars:
+  app_name: '{{ .locals.ns }}-app'
+env:
+  APP: '{{ .locals.ns }}'
+  REGION: '{{ .settings.region }}'
+`
+	ctx, err := extractAndAddLocalsToContext(atmosConfig, yamlContent, "test.yaml", "test.yaml", nil)
+	require.NoError(t, err)
+
+	env, ok := ctx["env"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "acme", env["APP"])
+	assert.Equal(t, "us-east-1", env["REGION"])
+}
+
 // TestAtmosProTemplateRegression tests that {{ .atmos_component }} templates in non-.tmpl files
 // with settings sections don't fail during import processing.
 // This is a regression test for issue where 1.205 inadvertently triggers template processing
@@ -2056,6 +2599,6 @@ func TestAtmosProTemplateRegression(t *testing.T) {
 	// because templates should NOT be processed during import for non-.tmpl files without explicit context.
 	componentInput, ok := inputs["component"].(string)
 	require.True(t, ok, "component input should be a string")
-	assert.Contains(t, componentInput, "atmos_component",
+	assert.Equal(t, "{{ .atmos_component }}", componentInput,
 		"Template {{ .atmos_component }} should be preserved during import, not processed")
 }

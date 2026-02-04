@@ -244,7 +244,14 @@ func extractAndAddLocalsToContext(
 	//
 	// Note: We need to process these sections AFTER locals are resolved so they can reference .locals,
 	// but BEFORE adding them to the context so vars can reference the resolved settings values.
-	localsOnlyContext := map[string]any{cfg.LocalsSectionName: extractResult.locals}
+	// Seed section context with any external import context so that settings/vars/env
+	// templates referencing import-provided values can resolve during section processing.
+	// Locals are always overridden to ensure file-scoped locality.
+	localsOnlyContext := map[string]any{}
+	for k, v := range context {
+		localsOnlyContext[k] = v
+	}
+	localsOnlyContext[cfg.LocalsSectionName] = extractResult.locals
 
 	// Process templates in settings if it contains template expressions.
 	if extractResult.settings != nil {
@@ -258,8 +265,11 @@ func extractAndAddLocalsToContext(
 		}
 	}
 	if extractResult.vars != nil {
-		// For vars, we need both locals and processed settings available.
-		varsContext := map[string]any{cfg.LocalsSectionName: extractResult.locals}
+		// For vars, we need locals, external context, and processed settings available.
+		varsContext := map[string]any{}
+		for k, v := range localsOnlyContext {
+			varsContext[k] = v
+		}
 		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
 			varsContext[cfg.SettingsSectionName] = processedSettings
 		}
@@ -273,8 +283,11 @@ func extractAndAddLocalsToContext(
 		}
 	}
 	if extractResult.env != nil {
-		// For env, we need locals, processed settings, and processed vars available.
-		envContext := map[string]any{cfg.LocalsSectionName: extractResult.locals}
+		// For env, we need locals, external context, processed settings, and processed vars.
+		envContext := map[string]any{}
+		for k, v := range localsOnlyContext {
+			envContext[k] = v
+		}
 		if processedSettings, ok := context[cfg.SettingsSectionName].(map[string]any); ok {
 			envContext[cfg.SettingsSectionName] = processedSettings
 		}
