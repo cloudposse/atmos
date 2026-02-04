@@ -143,43 +143,11 @@ Use `working_directory` when your workflow includes shell commands that depend o
 
 ## Workflow Environment Variables
 
-Workflows support an `env` map for setting environment variables that are passed to step commands. This can be set at both the workflow level (applies to all steps) and individual step level (overrides workflow setting for the same keys).
+Workflows support an `env` map for setting environment variables. This can be set at both workflow level (applies to all steps) and step level (overrides workflow values).
 
-### Environment Variable Precedence
-
-Environment variables are merged in this order (later values override earlier):
-
-1. System environment (`os.Environ()`)
-2. Global env from `atmos.yaml`
-3. Workflow-level `env`
-4. Step-level `env`
-5. Auth identity environment (if `identity` specified)
-
-### Example: Workflow-Level Environment
-
-<File title="stacks/workflows/deploy.yaml">
-```yaml
-workflows:
-  deploy-with-env:
-    description: Deploy with common environment variables
-    env:
-      TF_LOG: DEBUG
-      AWS_REGION: us-east-2
-    steps:
-      - command: terraform apply vpc -s plat-ue2-dev --auto-approve
-      - command: terraform apply eks-cluster -s plat-ue2-dev --auto-approve
-```
-</File>
-
-All steps inherit the workflow's `env` settings.
-
-### Example: Step-Level Override
-
-<File title="stacks/workflows/mixed-env.yaml">
 ```yaml
 workflows:
   deploy-multi-region:
-    description: Deploy to multiple regions
     env:
       TF_LOG: INFO
     steps:
@@ -190,89 +158,20 @@ workflows:
         env:
           AWS_REGION: us-west-2
 ```
-</File>
 
-Each step overrides `AWS_REGION` while inheriting `TF_LOG` from the workflow level.
+### Precedence
 
-### Example: Shell Commands with Environment
+Environment variables merge in this order (later values win):
 
-<File title="stacks/workflows/script.yaml">
-```yaml
-workflows:
-  run-scripts:
-    description: Run shell scripts with custom environment
-    env:
-      LOG_LEVEL: debug
-      OUTPUT_DIR: /tmp/results
-    steps:
-      - command: ./scripts/setup.sh
-        type: shell
-      - command: ./scripts/validate.sh
-        type: shell
-        env:
-          STRICT_MODE: "true"
-```
-</File>
+1. System environment
+2. Global env from `atmos.yaml`
+3. Workflow-level `env`
+4. Step-level `env`
+5. Auth identity environment (if `identity` specified)
 
-:::tip
-Use workflow-level `env` for common settings like logging levels, and step-level `env` for step-specific configuration.
-:::
+### Scoping
 
-### Environment Variable Scoping
-
-Environment variables in workflows are **scoped to individual steps**. This means:
-
-- **Workflow-level `env`** applies to all steps in the workflow
-- **Step-level `env`** only applies to that specific step and does **not** persist to subsequent steps
-- **Shell exports** (`export VAR=value`) within a step do **not** persist to subsequent steps
-
-Each step runs as a separate subprocess, so variables set or modified within a step are isolated to that step.
-
-<File title="stacks/workflows/scoping-example.yaml">
-```yaml
-workflows:
-  env-scoping-demo:
-    description: Demonstrates environment variable scoping
-    env:
-      FOO: workflow
-    steps:
-      # Step 1: FOO = "workflow" (from workflow-level env)
-      - command: echo "Workflow FOO - $FOO"
-        type: shell
-
-      # Step 2: FOO = "stepEnv" (step-level override)
-      - command: echo "Step Env FOO - $FOO"
-        type: shell
-        env:
-          FOO: stepEnv
-
-      # Step 3: FOO = "workflow" (step env does NOT persist)
-      - command: echo "Step Env not persisted - $FOO"
-        type: shell
-
-      # Step 4: FOO = "exported" (only within this step's process)
-      - command: export FOO=exported && echo "Local export FOO - $FOO"
-        type: shell
-
-      # Step 5: FOO = "workflow" (shell export does NOT persist)
-      - command: echo "Local export not persisted - $FOO"
-        type: shell
-```
-</File>
-
-Running this workflow produces:
-
-```
-Workflow FOO - workflow
-Step Env FOO - stepEnv
-Step Env not persisted - workflow
-Local export FOO - exported
-Local export not persisted - workflow
-```
-
-:::caution
-If you need to pass values between steps, consider writing to a file in a shared directory, or use workflow-level environment variables that are set before the workflow runs.
-:::
+Each step runs as a separate subprocess. Step-level `env` and shell `export` commands only affect that step and do not persist to subsequent steps.
 
 ## CLI Environment Variables
 
