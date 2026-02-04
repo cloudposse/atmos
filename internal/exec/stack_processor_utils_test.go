@@ -1971,3 +1971,91 @@ func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
 	// locals should be initialized to empty map, not nil.
 	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
 }
+
+// TestAtmosProTemplateRegression tests that {{ .atmos_component }} templates in non-.tmpl files
+// with settings sections don't fail during import processing.
+// This is a regression test for issue where 1.205 inadvertently triggers template processing
+// for imports when the file has settings/vars/env sections (due to locals feature changes).
+func TestAtmosProTemplateRegression(t *testing.T) {
+	stacksBasePath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-pro-template-regression", "stacks")
+	filePath := filepath.Join(stacksBasePath, "deploy", "test.yaml")
+
+	atmosConfig := schema.AtmosConfiguration{
+		Logs: schema.Logs{
+			Level: "Info",
+		},
+		Templates: schema.Templates{
+			Settings: schema.TemplatesSettings{
+				Enabled: true,
+			},
+		},
+	}
+
+	// Process the stack manifest that imports the atmos-pro mixin.
+	// The mixin has a settings section and uses {{ .atmos_component }} templates.
+	// In 1.204, this worked because templates weren't processed during import for non-.tmpl files.
+	// In 1.205, the locals feature inadvertently triggers template processing because it adds
+	// settings/vars/env to the context, making len(context) > 0.
+	deepMergedConfig, importsConfig, stackConfigMap, tfInline, tfImports, hfInline, hfImports, err := ProcessYAMLConfigFile(
+		&atmosConfig,
+		stacksBasePath,
+		filePath,
+		map[string]map[string]any{},
+		nil,   // No external context - this is key to the test.
+		false, // ignoreMissingFiles.
+		false, // skipTemplatesProcessingInImports.
+		false, // ignoreMissingTemplateValues - set to false to catch the error.
+		false, // skipIfMissing.
+		nil,
+		nil,
+		nil,
+		nil,
+		"",
+	)
+
+	// The test should pass - templates like {{ .atmos_component }} should NOT be processed
+	// during import when no external context is provided.
+	require.NoError(t, err, "Processing should not fail - templates should be deferred until component processing")
+	require.NotNil(t, deepMergedConfig)
+
+	// Suppress unused variable warnings - these are returned by ProcessYAMLConfigFile but not needed for this test.
+	_ = importsConfig
+	_ = stackConfigMap
+	_ = tfInline
+	_ = tfImports
+	_ = hfInline
+	_ = hfImports
+
+	// Verify the settings.pro section exists and contains unprocessed template strings.
+	settings, ok := deepMergedConfig["settings"].(map[string]any)
+	require.True(t, ok, "settings section should exist")
+
+	pro, ok := settings["pro"].(map[string]any)
+	require.True(t, ok, "settings.pro section should exist")
+
+	assert.Equal(t, true, pro["enabled"], "pro.enabled should be true")
+
+	// The template strings should be preserved (not processed) at this stage.
+	// They will be processed later in describe_stacks when component context is available.
+	pr, ok := pro["pull_request"].(map[string]any)
+	require.True(t, ok, "settings.pro.pull_request should exist")
+
+	opened, ok := pr["opened"].(map[string]any)
+	require.True(t, ok, "settings.pro.pull_request.opened should exist")
+
+	workflows, ok := opened["workflows"].(map[string]any)
+	require.True(t, ok, "settings.pro.pull_request.opened.workflows should exist")
+
+	planWorkflow, ok := workflows["atmos-terraform-plan.yaml"].(map[string]any)
+	require.True(t, ok, "atmos-terraform-plan.yaml workflow should exist")
+
+	inputs, ok := planWorkflow["inputs"].(map[string]any)
+	require.True(t, ok, "workflow inputs should exist")
+
+	// The component input should still contain the template string {{ .atmos_component }}
+	// because templates should NOT be processed during import for non-.tmpl files without explicit context.
+	componentInput, ok := inputs["component"].(string)
+	require.True(t, ok, "component input should be a string")
+	assert.Contains(t, componentInput, "atmos_component",
+		"Template {{ .atmos_component }} should be preserved during import, not processed")
+}
