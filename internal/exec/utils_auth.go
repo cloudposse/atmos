@@ -23,15 +23,39 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// componentConfigFetcher is a function type for fetching component configuration.
+// This allows dependency injection for testing.
+type componentConfigFetcher func(params *ExecuteDescribeComponentParams) (map[string]any, error)
+
+// authManagerCreator is a function type for creating and authenticating an AuthManager.
+// This allows dependency injection for testing.
+type authManagerCreator func(identity string, authConfig *schema.AuthConfig, selectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error)
+
+// defaultComponentConfigFetcher is the default implementation that calls ExecuteDescribeComponent.
+var defaultComponentConfigFetcher componentConfigFetcher = ExecuteDescribeComponent
+
+// defaultAuthManagerCreator is the default implementation that calls auth.CreateAndAuthenticateManagerWithAtmosConfig.
+var defaultAuthManagerCreator authManagerCreator = auth.CreateAndAuthenticateManagerWithAtmosConfig
+
 // createAndAuthenticateAuthManager creates an AuthManager by merging global auth config with
 // component-specific auth config, then authenticating using the identity from info.Identity.
 // If authentication succeeds and identity was auto-detected, the resolved identity is stored
 // back into info.Identity so subsequent operations (hooks, nested calls) can reuse it.
 func createAndAuthenticateAuthManager(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	return createAndAuthenticateAuthManagerWithDeps(atmosConfig, info, defaultComponentConfigFetcher, defaultAuthManagerCreator)
+}
+
+// createAndAuthenticateAuthManagerWithDeps is the implementation with injectable dependencies for testing.
+func createAndAuthenticateAuthManagerWithDeps(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	configFetcher componentConfigFetcher,
+	authCreator authManagerCreator,
+) (auth.AuthManager, error) {
 	defer perf.Track(atmosConfig, "exec.createAndAuthenticateAuthManager")()
 
 	// Get merged auth config (global + component-specific if available).
-	mergedAuthConfig, err := getMergedAuthConfig(atmosConfig, info)
+	mergedAuthConfig, err := getMergedAuthConfigWithFetcher(atmosConfig, info, configFetcher)
 	if err != nil {
 		// Propagate known sentinel errors directly (e.g., ErrInvalidComponent) to preserve
 		// their error message format. Only wrap unexpected errors with ErrInvalidAuthConfig.
@@ -44,7 +68,7 @@ func createAndAuthenticateAuthManager(atmosConfig *schema.AtmosConfiguration, in
 	// Create and authenticate AuthManager from --identity flag if specified.
 	// Uses merged auth config that includes both global and component-specific identities/defaults.
 	// This enables YAML template functions like !terraform.state to use authenticated credentials.
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+	authManager, err := authCreator(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -61,6 +85,15 @@ func createAndAuthenticateAuthManager(atmosConfig *schema.AtmosConfiguration, in
 // If stack and component are specified, it fetches component config and merges its auth section.
 // Otherwise, returns a copy of the global auth config.
 func getMergedAuthConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+	return getMergedAuthConfigWithFetcher(atmosConfig, info, defaultComponentConfigFetcher)
+}
+
+// getMergedAuthConfigWithFetcher is the implementation with injectable component config fetcher for testing.
+func getMergedAuthConfigWithFetcher(
+	atmosConfig *schema.AtmosConfiguration,
+	info *schema.ConfigAndStacksInfo,
+	configFetcher componentConfigFetcher,
+) (*schema.AuthConfig, error) {
 	// Start with global auth config.
 	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
 
@@ -71,7 +104,7 @@ func getMergedAuthConfig(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 
 	// Get component configuration from stack.
 	// Use nil AuthManager and disable functions to avoid circular dependency.
-	componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+	componentConfig, err := configFetcher(&ExecuteDescribeComponentParams{
 		Component:            info.ComponentFromArg,
 		Stack:                info.Stack,
 		ProcessTemplates:     false,
@@ -98,6 +131,7 @@ func getMergedAuthConfig(atmosConfig *schema.AtmosConfiguration, info *schema.Co
 // storeAutoDetectedIdentity stores the authenticated identity from AuthManager back into
 // info.Identity when it was auto-detected (empty). This allows hooks and nested operations
 // to reuse the identity without re-prompting for credentials.
+// The chain is ordered from base to final identity, so we take the last element.
 func storeAutoDetectedIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) {
 	if authManager == nil || info.Identity != "" {
 		return

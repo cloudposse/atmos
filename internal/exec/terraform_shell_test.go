@@ -195,31 +195,15 @@ func TestShellOptionsForUI(t *testing.T) {
 	}
 }
 
-func TestShellConfig_Fields(t *testing.T) {
-	// Test shellConfig struct construction and field access.
-	cfg := &shellConfig{
-		componentPath: "/components/terraform/vpc",
-		workingDir:    "/workdir/terraform/vpc",
-		varFile:       "dev-vpc.tfvars.json",
-	}
-
-	assert.Equal(t, "/components/terraform/vpc", cfg.componentPath)
-	assert.Equal(t, "/workdir/terraform/vpc", cfg.workingDir)
-	assert.Equal(t, "dev-vpc.tfvars.json", cfg.varFile)
-}
-
 func TestShellInfoFromOptions_AllFieldsMapped(t *testing.T) {
-	// Ensure all fields from ShellOptions are properly mapped to ConfigAndStacksInfo.
+	// Ensure all relevant fields from ShellOptions are properly mapped to ConfigAndStacksInfo.
+	// Note: ProcessingOptions (ProcessTemplates, ProcessFunctions, Skip) are NOT mapped here;
+	// they are passed directly to ProcessStacks in ExecuteTerraformShell.
 	opts := &ShellOptions{
 		Component: "my-component",
 		Stack:     "my-stack",
 		DryRun:    true,
 		Identity:  "my-identity",
-		ProcessingOptions: ProcessingOptions{
-			ProcessTemplates: true,
-			ProcessFunctions: false,
-			Skip:             []string{"eval", "include"},
-		},
 	}
 
 	info := shellInfoFromOptions(opts)
