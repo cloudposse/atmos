@@ -1,10 +1,116 @@
+// utils_auth.go contains exec-layer orchestration for authentication.
+//
+// These functions live in internal/exec (not pkg/auth) because they depend on
+// ExecuteDescribeComponent to fetch component-specific auth config from stack
+// manifests before delegating to pkg/auth primitives. Moving them to pkg/auth
+// would create a circular import (pkg/auth → internal/exec → pkg/auth).
+//
+// The actual auth logic (manager creation, identity resolution, credential
+// storage) is implemented in pkg/auth. This file only orchestrates the
+// component config discovery and merging that must happen in the exec layer.
 package exec
 
 import (
+	"errors"
+	"fmt"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	auth "github.com/cloudposse/atmos/pkg/auth"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	m "github.com/cloudposse/atmos/pkg/merge"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// createAndAuthenticateAuthManager creates an AuthManager by merging global auth config with
+// component-specific auth config, then authenticating using the identity from info.Identity.
+// If authentication succeeds and identity was auto-detected, the resolved identity is stored
+// back into info.Identity so subsequent operations (hooks, nested calls) can reuse it.
+func createAndAuthenticateAuthManager(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (auth.AuthManager, error) {
+	defer perf.Track(atmosConfig, "exec.createAndAuthenticateAuthManager")()
+
+	// Get merged auth config (global + component-specific if available).
+	mergedAuthConfig, err := getMergedAuthConfig(atmosConfig, info)
+	if err != nil {
+		// Propagate known sentinel errors directly (e.g., ErrInvalidComponent) to preserve
+		// their error message format. Only wrap unexpected errors with ErrInvalidAuthConfig.
+		if errors.Is(err, errUtils.ErrInvalidComponent) {
+			return nil, err
+		}
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
+	}
+
+	// Create and authenticate AuthManager from --identity flag if specified.
+	// Uses merged auth config that includes both global and component-specific identities/defaults.
+	// This enables YAML template functions like !terraform.state to use authenticated credentials.
+	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
+	}
+
+	// If AuthManager was created and identity was auto-detected (info.Identity was empty),
+	// store the authenticated identity back into info.Identity so that hooks and nested
+	// operations can reuse it without re-prompting for credentials.
+	storeAutoDetectedIdentity(authManager, info)
+
+	return authManager, nil
+}
+
+// getMergedAuthConfig merges global auth config with component-specific auth config.
+// If stack and component are specified, it fetches component config and merges its auth section.
+// Otherwise, returns a copy of the global auth config.
+func getMergedAuthConfig(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (*schema.AuthConfig, error) {
+	// Start with global auth config.
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
+
+	// If stack or component are missing, use global auth config only.
+	if info.Stack == "" || info.ComponentFromArg == "" {
+		return mergedAuthConfig, nil
+	}
+
+	// Get component configuration from stack.
+	// Use nil AuthManager and disable functions to avoid circular dependency.
+	componentConfig, err := ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		Component:            info.ComponentFromArg,
+		Stack:                info.Stack,
+		ProcessTemplates:     false,
+		ProcessYamlFunctions: false, // Critical: avoid circular dependency with YAML functions that need auth.
+		Skip:                 nil,
+		AuthManager:          nil, // Critical: no AuthManager yet, we're determining which identity to use.
+	})
+	if err != nil {
+		// If component doesn't exist, exit immediately before attempting authentication.
+		// This prevents prompting for identity when the component is invalid.
+		if errors.Is(err, errUtils.ErrInvalidComponent) {
+			return nil, err
+		}
+		// For other errors (e.g., permission issues), continue with global auth config.
+		log.Debug("Falling back to global auth config after component auth lookup error",
+			"error", err, "stack", info.Stack, "component", info.ComponentFromArg)
+		return mergedAuthConfig, nil
+	}
+
+	// Merge component-specific auth with global auth.
+	return auth.MergeComponentAuthFromConfig(&atmosConfig.Auth, componentConfig, atmosConfig, cfg.AuthSectionName)
+}
+
+// storeAutoDetectedIdentity stores the authenticated identity from AuthManager back into
+// info.Identity when it was auto-detected (empty). This allows hooks and nested operations
+// to reuse the identity without re-prompting for credentials.
+func storeAutoDetectedIdentity(authManager auth.AuthManager, info *schema.ConfigAndStacksInfo) {
+	if authManager == nil || info.Identity != "" {
+		return
+	}
+
+	chain := authManager.GetChain()
+	if len(chain) > 0 {
+		info.Identity = chain[len(chain)-1]
+		log.Debug("Stored authenticated identity", "identity", info.Identity)
+	} else {
+		log.Debug("Auth chain empty, identity not updated")
+	}
+}
 
 // mergeGlobalAuthConfig deep-merges global auth config from atmosConfig into component section.
 // Returns the merged auth section map. Also updates componentSection["auth"] to prevent
