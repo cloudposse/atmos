@@ -200,13 +200,6 @@ atmos terraform plan-diff derived-component -s test-stack --orig=test.planfile
 
 ---
 
-## Related Issues
-
-- Reported via Slack by Daniel Miller (2026-02-05)
-- Affects `github-action-atmos-terraform-apply` CI tests (`test-atmos_pro.yml`)
-
----
-
 ## Files Modified
 
 | File                                         | Change                                                              |
