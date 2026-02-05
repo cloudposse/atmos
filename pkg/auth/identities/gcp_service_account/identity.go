@@ -2,6 +2,7 @@ package gcp_service_account
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -306,7 +307,8 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 	}
 	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, i.realmOrDefault(), providerName, i.Name())
 	if err != nil {
-		return nil, fmt.Errorf("%w: load credentials: %v", errUtils.ErrAuthenticationFailed, err)
+		joinedErr := errors.Join(errUtils.ErrAuthenticationFailed, err)
+		return nil, fmt.Errorf("load credentials: %w", joinedErr)
 	}
 
 	// Credentials must exist and be valid - if not, the user needs to run `atmos auth login` first.

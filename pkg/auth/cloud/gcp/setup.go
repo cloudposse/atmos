@@ -289,7 +289,7 @@ func LoadCredentialsFromFiles(
 	if adc.TokenExpiry != "" {
 		expiry, err = time.Parse(time.RFC3339, adc.TokenExpiry)
 		if err != nil {
-			expiry = time.Time{}
+			return nil, fmt.Errorf("%w: parse ADC token expiry: %w", errUtils.ErrInvalidAuthConfig, err)
 		}
 	}
 	creds := &types.GCPCredentials{

@@ -2,6 +2,7 @@ package gcp
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -254,12 +255,19 @@ func CleanupIdentityFiles(realm, providerName, identityName string) error {
 	if err != nil {
 		return err
 	}
+	if err := validatePathSegment("identity name", identityName); err != nil {
+		return err
+	}
 	adcDir := filepath.Join(providerDir, ADCSubdir, identityName)
 	configDir := filepath.Join(providerDir, ConfigSubdir, identityName)
+	var errs []error
 	for _, dir := range []string{adcDir, configDir} {
 		if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("failed to remove %s: %w", dir, err)
+			errs = append(errs, errors.Join(errUtils.ErrRemoveDirectory, fmt.Errorf("failed to remove %s: %w", dir, err)))
 		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	return nil
 }
