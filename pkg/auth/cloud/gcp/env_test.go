@@ -13,14 +13,9 @@ import (
 
 func TestPrepareEnvironment_ClearsGCPVars(t *testing.T) {
 	ctx := context.Background()
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/path/to/creds.json")
-	os.Setenv("GOOGLE_CLOUD_PROJECT", "my-project")
-	os.Setenv("CLOUDSDK_CONFIG", "/path/to/config")
-	defer func() {
-		os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
-		os.Unsetenv("GOOGLE_CLOUD_PROJECT")
-		os.Unsetenv("CLOUDSDK_CONFIG")
-	}()
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/path/to/creds.json")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "my-project")
+	t.Setenv("CLOUDSDK_CONFIG", "/path/to/config")
 
 	err := PrepareEnvironment(ctx, nil)
 	require.NoError(t, err)
@@ -34,12 +29,8 @@ func TestPrepareEnvironment_ClearsGCPVars(t *testing.T) {
 }
 
 func TestGetCurrentGCPEnvironment(t *testing.T) {
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/creds.json")
-	os.Setenv("GOOGLE_CLOUD_PROJECT", "test-project")
-	defer func() {
-		os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
-		os.Unsetenv("GOOGLE_CLOUD_PROJECT")
-	}()
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/tmp/creds.json")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "test-project")
 
 	env := GetCurrentGCPEnvironment()
 	assert.Equal(t, "/tmp/creds.json", env["GOOGLE_APPLICATION_CREDENTIALS"])
@@ -51,7 +42,7 @@ func TestGetEnvironmentVariables(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	providerName := "gcp-adc"
 
-	env, err := GetEnvironmentVariables(nil, providerName, "env-identity")
+	env, err := GetEnvironmentVariables(nil, testRealm, providerName, "env-identity")
 	require.NoError(t, err)
 	require.NotNil(t, env)
 	assert.Equal(t, "config_atmos", env["CLOUDSDK_ACTIVE_CONFIG_NAME"])
@@ -73,7 +64,7 @@ func TestGetEnvironmentVariablesForIdentity_WithGCPAuth(t *testing.T) {
 		ConfigDir:       "/custom/config/dir",
 		CredentialsFile: "/custom/creds.json",
 	}
-	env, err := GetEnvironmentVariablesForIdentity(providerName, "id", gcpAuth)
+	env, err := GetEnvironmentVariablesForIdentity(testRealm, providerName, "id", gcpAuth)
 	require.NoError(t, err)
 	assert.Equal(t, "/custom/creds.json", env["GOOGLE_APPLICATION_CREDENTIALS"])
 	assert.Equal(t, "/custom/config/dir", env["CLOUDSDK_CONFIG"])
@@ -86,16 +77,18 @@ func TestGetEnvironmentVariablesForIdentity_WithGCPAuth(t *testing.T) {
 
 func TestRestoreEnvironment(t *testing.T) {
 	ctx := context.Background()
-	os.Setenv("GOOGLE_CLOUD_PROJECT", "original-project")
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "original-project")
 	saved := GetCurrentGCPEnvironment()
 	require.NotEmpty(t, saved["GOOGLE_CLOUD_PROJECT"])
 
+	// Clear and restore - use os.Unsetenv in defer block for manual restoration test.
+	t.Cleanup(func() {
+		os.Unsetenv("GOOGLE_CLOUD_PROJECT")
+	})
 	os.Unsetenv("GOOGLE_CLOUD_PROJECT")
 	err := RestoreEnvironment(ctx, saved)
 	require.NoError(t, err)
 	assert.Equal(t, "original-project", os.Getenv("GOOGLE_CLOUD_PROJECT"))
-
-	os.Unsetenv("GOOGLE_CLOUD_PROJECT")
 }
 
 func TestSetEnvironmentVariables(t *testing.T) {
@@ -104,7 +97,7 @@ func TestSetEnvironmentVariables(t *testing.T) {
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	err := SetEnvironmentVariables(ctx, nil, providerName, "setenv-identity")
+	err := SetEnvironmentVariables(ctx, nil, testRealm, providerName, "setenv-identity")
 	require.NoError(t, err)
 
 	credsPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")

@@ -183,8 +183,7 @@ func (p *Provider) getTokenFromEnv() (string, error) {
 	envVar := p.spec.TokenSource.EnvironmentVariable
 	if envVar == "" {
 		// No default - environment_variable must be explicitly configured.
-		// Note: For GitHub Actions, use token_source.type=url instead, which
-		// fetches the OIDC token from ACTIONS_ID_TOKEN_REQUEST_URL.
+		// Note: For GitHub Actions, use token_source.type=url instead, which fetches the OIDC token from ACTIONS_ID_TOKEN_REQUEST_URL.
 		return "", fmt.Errorf("%w: environment_variable must be specified for token_source.type=environment", errUtils.ErrInvalidProviderConfig)
 	}
 	token := strings.TrimSpace(os.Getenv(envVar))
@@ -213,20 +212,36 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 	defer perf.Track(nil, "gcp_wif.getTokenFromURL")()
 
 	tokenURL := p.spec.TokenSource.URL
+	fromEnv := false
 	if tokenURL == "" {
 		// GitHub Actions default.
 		tokenURL = os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL")
+		fromEnv = true
 	}
 	if tokenURL == "" {
 		return "", fmt.Errorf("%w: token URL not configured", errUtils.ErrInvalidProviderConfig)
 	}
 
+	u, err := url.Parse(tokenURL)
+	if err != nil {
+		return "", fmt.Errorf("%w: parse token URL: %v", errUtils.ErrInvalidProviderConfig, err)
+	}
+	if u.Scheme != "https" {
+		return "", fmt.Errorf("%w: token URL must use https", errUtils.ErrInvalidProviderConfig)
+	}
+	if u.Hostname() == "" {
+		return "", fmt.Errorf("%w: token URL host is required", errUtils.ErrInvalidProviderConfig)
+	}
+	allowedHosts := p.spec.TokenSource.AllowedHosts
+	if fromEnv && len(allowedHosts) == 0 {
+		allowedHosts = []string{"token.actions.githubusercontent.com"}
+	}
+	if len(allowedHosts) > 0 && !hostAllowed(u, allowedHosts) {
+		return "", fmt.Errorf("%w: token URL host %q is not allowed; set token_source.allowed_hosts to override", errUtils.ErrInvalidProviderConfig, u.Hostname())
+	}
+
 	// Add audience parameter if specified.
 	if p.spec.TokenSource.Audience != "" {
-		u, err := url.Parse(tokenURL)
-		if err != nil {
-			return "", fmt.Errorf("%w: parse token URL: %v", errUtils.ErrInvalidProviderConfig, err)
-		}
 		q := u.Query()
 		q.Set("audience", p.spec.TokenSource.Audience)
 		u.RawQuery = q.Encode()
@@ -271,6 +286,23 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 	return token, nil
 }
 
+func hostAllowed(u *url.URL, allowedHosts []string) bool {
+	host := strings.ToLower(u.Hostname())
+	if host == "" {
+		return false
+	}
+	for _, allowed := range allowedHosts {
+		allowed = strings.ToLower(strings.TrimSpace(allowed))
+		if allowed == "" {
+			continue
+		}
+		if strings.EqualFold(allowed, u.Host) || strings.EqualFold(allowed, host) {
+			return true
+		}
+	}
+	return false
+}
+
 // exchangeToken exchanges an OIDC token for a Google federated token via STS.
 func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2.Token, error) {
 	defer perf.Track(nil, "gcp_wif.exchangeToken")()
@@ -296,19 +328,19 @@ func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, stsEndpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, fmt.Errorf("create STS request: %w", err)
+		return nil, fmt.Errorf("%w: create STS request: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := gcpWIFHTTPClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("STS request: %w", err)
+		return nil, fmt.Errorf("%w: STS request: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("STS error: %s: %s", resp.Status, string(body))
+		return nil, fmt.Errorf("%w: STS error: %s: %s", errUtils.ErrAuthenticationFailed, resp.Status, string(body))
 	}
 
 	var stsResp struct {
@@ -317,7 +349,7 @@ func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2
 		TokenType   string `json:"token_type"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&stsResp); err != nil {
-		return nil, fmt.Errorf("decode STS response: %w", err)
+		return nil, fmt.Errorf("%w: decode STS response: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	return &oauth2.Token{
@@ -336,7 +368,7 @@ func (p *Provider) impersonateServiceAccount(ctx context.Context, federatedToken
 		option.WithTokenSource(oauth2.StaticTokenSource(federatedToken)),
 	)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("create IAM credentials service: %w", err)
+		return "", time.Time{}, fmt.Errorf("%w: create IAM credentials service: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	name := fmt.Sprintf("projects/-/serviceAccounts/%s", p.spec.ServiceAccountEmail)
@@ -346,7 +378,7 @@ func (p *Provider) impersonateServiceAccount(ctx context.Context, federatedToken
 
 	resp, err := svc.Projects.ServiceAccounts.GenerateAccessToken(name, req).Context(ctx).Do()
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("generate access token: %w", err)
+		return "", time.Time{}, fmt.Errorf("%w: generate access token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	expiry, err := time.Parse(time.RFC3339, resp.ExpireTime)

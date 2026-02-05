@@ -2,12 +2,12 @@
 // setup for the Atmos authentication system.
 //
 // This package implements the XDG-compliant file isolation pattern, storing
-// GCP credentials in ~/.config/atmos/gcp/<provider-name>/ to avoid conflicts
+// GCP credentials in ~/.config/atmos/<realm>/gcp/<provider-name>/ to avoid conflicts
 // with the user's existing gcloud configuration.
 //
 // Directory Structure:
 //
-//	~/.config/atmos/gcp/<provider-name>/
+//	~/.config/atmos/<realm>/gcp/<provider-name>/
 //	├── adc/
 //	│   └── <identity-name>/
 //	│       └── application_default_credentials.json
@@ -30,11 +30,11 @@
 // Usage:
 //
 //	// Complete setup for an identity
-//	err := gcp.Setup(ctx, atmosConfig, "my-provider", "my-identity", creds)
+//	err := gcp.Setup(ctx, atmosConfig, "my-realm", "my-provider", "my-identity", creds)
 //
 //	// Or step by step:
 //	err := gcp.PrepareEnvironment(ctx, atmosConfig)
-//	paths, err := gcp.SetupFiles(ctx, atmosConfig, "my-provider", "my-identity", creds)
-//	err = gcp.SetAuthContext(authContext, "my-provider", "my-identity", creds)
-//	err = gcp.SetEnvironmentVariables(ctx, atmosConfig, "my-provider", "my-identity")
+//	paths, err := gcp.SetupFiles(ctx, atmosConfig, "my-realm", "my-provider", "my-identity", creds)
+//	err = gcp.SetAuthContext(authContext, "my-realm", "my-provider", "my-identity", creds)
+//	err = gcp.SetEnvironmentVariables(ctx, atmosConfig, "my-realm", "my-provider", "my-identity")
 package gcp

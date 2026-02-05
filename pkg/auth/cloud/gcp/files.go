@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -71,26 +72,30 @@ type CredentialFormat struct {
 }
 
 // GetGCPBaseDir returns the base directory for GCP credentials.
-// Returns: ~/.config/atmos/gcp/.
+// Returns: ~/.config/atmos/ (realm and gcp subdirs are added by callers).
 func GetGCPBaseDir() (string, error) {
 	defer perf.Track(nil, "gcp.GetGCPBaseDir")()
 
-	return xdg.GetXDGConfigDir(GCPSubdir, permDir)
+	return xdg.GetXDGConfigDir("", permDir)
 }
 
 // GetProviderDir returns the directory for a specific GCP provider.
-// Returns: ~/.config/atmos/gcp/<provider-name>/.
-func GetProviderDir(providerName string) (string, error) {
+// Path structure: {baseDir}/{realm}/gcp/{provider}/.
+// Realm is required for credential isolation between different Atmos configurations.
+func GetProviderDir(realm, providerName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetProviderDir")()
 
-	if providerName == "" {
-		return "", fmt.Errorf("%w: provider name is required", errUtils.ErrInvalidAuthConfig)
+	if err := validatePathSegment("provider name", providerName); err != nil {
+		return "", err
+	}
+	if realm == "" {
+		return "", fmt.Errorf("%w: realm is required for credential isolation", errUtils.ErrInvalidAuthConfig)
 	}
 	base, err := GetGCPBaseDir()
 	if err != nil {
 		return "", err
 	}
-	dir := filepath.Join(base, providerName)
+	dir := filepath.Join(base, realm, GCPSubdir, providerName)
 	if err := os.MkdirAll(dir, permDir); err != nil {
 		return "", fmt.Errorf("%w: failed to create provider directory: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -98,12 +103,16 @@ func GetProviderDir(providerName string) (string, error) {
 }
 
 // GetADCDir returns the directory for ADC credentials for a specific identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/.
-func GetADCDir(providerName, identityName string) (string, error) {
+// Path structure: {baseDir}/{realm}/gcp/{provider}/adc/{identity}/.
+// Realm is required for credential isolation.
+func GetADCDir(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCDir")()
 
-	providerDir, err := GetProviderDir(providerName)
+	providerDir, err := GetProviderDir(realm, providerName)
 	if err != nil {
+		return "", err
+	}
+	if err := validatePathSegment("identity name", identityName); err != nil {
 		return "", err
 	}
 	dir := filepath.Join(providerDir, ADCSubdir, identityName)
@@ -114,11 +123,12 @@ func GetADCDir(providerName, identityName string) (string, error) {
 }
 
 // GetADCFilePath returns the path to the ADC JSON file for a specific identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/application_default_credentials.json.
-func GetADCFilePath(providerName, identityName string) (string, error) {
+// Path structure: {baseDir}/{realm}/gcp/{provider}/adc/{identity}/application_default_credentials.json.
+// Realm is required for credential isolation.
+func GetADCFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCFilePath")()
 
-	dir, err := GetADCDir(providerName, identityName)
+	dir, err := GetADCDir(realm, providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -126,12 +136,16 @@ func GetADCFilePath(providerName, identityName string) (string, error) {
 }
 
 // GetConfigDir returns the gcloud-style config directory for a specific identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/.
-func GetConfigDir(providerName, identityName string) (string, error) {
+// Path structure: {baseDir}/{realm}/gcp/{provider}/config/{identity}/.
+// Realm is required for credential isolation.
+func GetConfigDir(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetConfigDir")()
 
-	providerDir, err := GetProviderDir(providerName)
+	providerDir, err := GetProviderDir(realm, providerName)
 	if err != nil {
+		return "", err
+	}
+	if err := validatePathSegment("identity name", identityName); err != nil {
 		return "", err
 	}
 	dir := filepath.Join(providerDir, ConfigSubdir, identityName)
@@ -142,11 +156,12 @@ func GetConfigDir(providerName, identityName string) (string, error) {
 }
 
 // GetPropertiesFilePath returns the path to the gcloud properties file.
-// Returns: ~/.config/atmos/gcp/<provider-name>/config/<identity-name>/properties.
-func GetPropertiesFilePath(providerName, identityName string) (string, error) {
+// Path structure: {baseDir}/{realm}/gcp/{provider}/config/{identity}/properties.
+// Realm is required for credential isolation.
+func GetPropertiesFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetPropertiesFilePath")()
 
-	dir, err := GetConfigDir(providerName, identityName)
+	dir, err := GetConfigDir(realm, providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -154,11 +169,12 @@ func GetPropertiesFilePath(providerName, identityName string) (string, error) {
 }
 
 // GetAccessTokenFilePath returns the path to the access token file for an identity.
-// Returns: ~/.config/atmos/gcp/<provider-name>/adc/<identity-name>/access_token.
-func GetAccessTokenFilePath(providerName, identityName string) (string, error) {
+// Path structure: {baseDir}/{realm}/gcp/{provider}/adc/{identity}/access_token.
+// Realm is required for credential isolation.
+func GetAccessTokenFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetAccessTokenFilePath")()
 
-	dir, err := GetADCDir(providerName, identityName)
+	dir, err := GetADCDir(realm, providerName, identityName)
 	if err != nil {
 		return "", err
 	}
@@ -166,13 +182,14 @@ func GetAccessTokenFilePath(providerName, identityName string) (string, error) {
 }
 
 // WriteADCFile writes the Application Default Credentials JSON file.
-func WriteADCFile(providerName, identityName string, content *ADCFileContent) (string, error) {
+// Realm is required for credential isolation.
+func WriteADCFile(realm, providerName, identityName string, content *ADCFileContent) (string, error) {
 	defer perf.Track(nil, "gcp.WriteADCFile")()
 
 	if content == nil {
 		return "", fmt.Errorf("%w: ADC file content cannot be nil", errUtils.ErrInvalidADCContent)
 	}
-	path, err := GetADCFilePath(providerName, identityName)
+	path, err := GetADCFilePath(realm, providerName, identityName)
 	if err != nil {
 		return "", fmt.Errorf("%w: resolve ADC file path: %w", errUtils.ErrWriteADCFile, err)
 	}
@@ -187,10 +204,11 @@ func WriteADCFile(providerName, identityName string, content *ADCFileContent) (s
 }
 
 // WritePropertiesFile writes the gcloud-style properties file (INI format).
-func WritePropertiesFile(providerName, identityName string, projectID string, region string) (string, error) {
+// Realm is required for credential isolation.
+func WritePropertiesFile(realm, providerName, identityName string, projectID string, region string) (string, error) {
 	defer perf.Track(nil, "gcp.WritePropertiesFile")()
 
-	path, err := GetPropertiesFilePath(providerName, identityName)
+	path, err := GetPropertiesFilePath(realm, providerName, identityName)
 	if err != nil {
 		return "", fmt.Errorf("%w: resolve properties file path: %w", errUtils.ErrWritePropertiesFile, err)
 	}
@@ -209,10 +227,11 @@ func WritePropertiesFile(providerName, identityName string, projectID string, re
 }
 
 // WriteAccessTokenFile writes a simple access token file for tools that need it.
-func WriteAccessTokenFile(providerName, identityName string, accessToken string, expiry time.Time) (string, error) {
+// Realm is required for credential isolation.
+func WriteAccessTokenFile(realm, providerName, identityName string, accessToken string, expiry time.Time) (string, error) {
 	defer perf.Track(nil, "gcp.WriteAccessTokenFile")()
 
-	path, err := GetAccessTokenFilePath(providerName, identityName)
+	path, err := GetAccessTokenFilePath(realm, providerName, identityName)
 	if err != nil {
 		return "", fmt.Errorf("%w: resolve access token file path: %w", errUtils.ErrWriteAccessTokenFile, err)
 	}
@@ -227,10 +246,11 @@ func WriteAccessTokenFile(providerName, identityName string, accessToken string,
 }
 
 // CleanupIdentityFiles removes all credential files for an identity.
-func CleanupIdentityFiles(providerName, identityName string) error {
+// Realm is required for credential isolation.
+func CleanupIdentityFiles(realm, providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.CleanupIdentityFiles")()
 
-	providerDir, err := GetProviderDir(providerName)
+	providerDir, err := GetProviderDir(realm, providerName)
 	if err != nil {
 		return err
 	}
@@ -240,6 +260,19 @@ func CleanupIdentityFiles(providerName, identityName string) error {
 		if err := os.RemoveAll(dir); err != nil && !os.IsNotExist(err) {
 			return fmt.Errorf("failed to remove %s: %w", dir, err)
 		}
+	}
+	return nil
+}
+
+func validatePathSegment(label, value string) error {
+	if value == "" {
+		return fmt.Errorf("%w: %s is required", errUtils.ErrInvalidAuthConfig, label)
+	}
+	if value == "." || value == ".." {
+		return fmt.Errorf("%w: %s must not be %q", errUtils.ErrInvalidAuthConfig, label, value)
+	}
+	if strings.ContainsAny(value, "/\\") {
+		return fmt.Errorf("%w: %s must not contain path separators", errUtils.ErrInvalidAuthConfig, label)
 	}
 	return nil
 }

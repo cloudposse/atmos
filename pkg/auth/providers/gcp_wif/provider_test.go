@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -134,15 +135,15 @@ func TestGetTokenFromEnv(t *testing.T) {
 		},
 	}
 
-	// Test missing env var.
+	// Test missing env var - ensure it's unset for this test.
+	t.Setenv("TEST_OIDC_TOKEN", "")
 	os.Unsetenv("TEST_OIDC_TOKEN")
 	_, err := p.getTokenFromEnv()
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 
 	// Test with env var set.
-	os.Setenv("TEST_OIDC_TOKEN", "my-oidc-token")
-	defer os.Unsetenv("TEST_OIDC_TOKEN")
+	t.Setenv("TEST_OIDC_TOKEN", "my-oidc-token")
 
 	token, err := p.getTokenFromEnv()
 	require.NoError(t, err)
@@ -151,13 +152,13 @@ func TestGetTokenFromEnv(t *testing.T) {
 
 func TestGetTokenFromEnv_RequiresExplicitEnvVar(t *testing.T) {
 	// Test that environment_variable must be explicitly specified.
-	// This prevents users from accidentally using ACTIONS_ID_TOKEN_REQUEST_TOKEN
-	// which is the request token, not the OIDC token itself.
+	// This prevents users from accidentally using ACTIONS_ID_TOKEN_REQUEST_TOKEN.
+	// It is the request token, not the OIDC token itself.
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
 			TokenSource: &types.WIFTokenSource{
 				Type: TokenSourceTypeEnvironment,
-				// No EnvironmentVariable specified
+				// No EnvironmentVariable specified.
 			},
 		},
 	}
@@ -214,8 +215,17 @@ func TestGetTokenFromURL(t *testing.T) {
 		_, _ = w.Write([]byte(`{"value": "url-oidc-token"}`))
 	}))
 	server.Listener = ln
-	server.Start()
+	server.StartTLS()
 	defer server.Close()
+
+	origClient := gcpWIFHTTPClient
+	gcpWIFHTTPClient = server.Client()
+	t.Cleanup(func() {
+		gcpWIFHTTPClient = origClient
+	})
+
+	serverURL, err := url.Parse(server.URL)
+	require.NoError(t, err)
 
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
@@ -224,6 +234,7 @@ func TestGetTokenFromURL(t *testing.T) {
 				URL:          server.URL,
 				RequestToken: "test-request-token",
 				Audience:     "test-audience",
+				AllowedHosts: []string{serverURL.Hostname()},
 			},
 		},
 	}
@@ -231,6 +242,21 @@ func TestGetTokenFromURL(t *testing.T) {
 	token, err := p.getTokenFromURL(context.Background())
 	require.NoError(t, err)
 	assert.Equal(t, "url-oidc-token", token)
+}
+
+func TestGetTokenFromURL_RejectsHTTP(t *testing.T) {
+	p := &Provider{
+		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
+			TokenSource: &types.WIFTokenSource{
+				Type: TokenSourceTypeURL,
+				URL:  "http://example.invalid",
+			},
+		},
+	}
+
+	_, err := p.getTokenFromURL(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "https")
 }
 
 func TestEnvironment(t *testing.T) {

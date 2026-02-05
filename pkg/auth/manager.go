@@ -74,6 +74,10 @@ type manager struct {
 	chain []string
 }
 
+type realmSetter interface {
+	SetRealm(realm string)
+}
+
 // resolveIdentityName performs case-insensitive identity name lookup.
 // If an exact match exists, it returns the exact match.
 // Otherwise, it looks up the lowercase version in the case map.
@@ -518,6 +522,11 @@ func (m *manager) initializeIdentities() error {
 		if err != nil {
 			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
+		}
+		if m.config.Realm != "" {
+			if setter, ok := identity.(realmSetter); ok {
+				setter.SetRealm(m.config.Realm)
+			}
 		}
 		m.identities[name] = identity
 	}

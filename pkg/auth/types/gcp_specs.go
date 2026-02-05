@@ -30,6 +30,8 @@ type WIFTokenSource struct {
 	RequestToken string `mapstructure:"request_token" json:"request_token,omitempty" yaml:"request_token,omitempty"`
 	// Audience for the OIDC token request.
 	Audience string `mapstructure:"audience" json:"audience,omitempty" yaml:"audience,omitempty"`
+	// AllowedHosts restricts URL token requests to specific hosts.
+	AllowedHosts []string `mapstructure:"allowed_hosts" json:"allowed_hosts,omitempty" yaml:"allowed_hosts,omitempty"`
 }
 
 // GCPWorkloadIdentityFederationProviderSpec defines the spec for gcp/workload-identity-federation provider.
