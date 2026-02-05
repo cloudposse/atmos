@@ -663,6 +663,48 @@ func TestWithPredicate_NilConfig_RunsOnce(t *testing.T) {
 }
 
 // =============================================================================
+// Validation error paths in Do and WithPredicate
+// =============================================================================
+
+func TestDo_InvalidConfig_ReturnsValidationError(t *testing.T) {
+	// Config with zero max_attempts should fail validation.
+	config := &schema.RetryConfig{
+		MaxAttempts: intPtr(0),
+	}
+
+	err := Do(context.Background(), config, func() error {
+		t.Error("Function should not be called with invalid config")
+		return nil
+	})
+
+	if err == nil {
+		t.Error("Expected validation error, got nil")
+	}
+	if !errors.Is(err, ErrMaxAttemptsMustBePositive) {
+		t.Errorf("Expected ErrMaxAttemptsMustBePositive, got: %v", err)
+	}
+}
+
+func TestWithPredicate_InvalidConfig_ReturnsValidationError(t *testing.T) {
+	// Config with negative multiplier should fail validation.
+	config := &schema.RetryConfig{
+		Multiplier: float64Ptr(-1.0),
+	}
+
+	err := WithPredicate(context.Background(), config, func() error {
+		t.Error("Function should not be called with invalid config")
+		return nil
+	}, func(error) bool { return true })
+
+	if err == nil {
+		t.Error("Expected validation error, got nil")
+	}
+	if !errors.Is(err, ErrMultiplierMustBePositive) {
+		t.Errorf("Expected ErrMultiplierMustBePositive, got: %v", err)
+	}
+}
+
+// =============================================================================
 // Coverage gap tests - default strategy, jitter subtraction, negative clamping
 // =============================================================================
 

@@ -462,4 +462,75 @@ func TestParseIntPtr(t *testing.T) {
 	}
 }
 
-func intPtr(i int) *int { return &i }
+func TestParseFloat64Ptr(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		key      string
+		expected *float64
+	}{
+		{
+			name:     "float64 value",
+			input:    map[string]any{"val": float64(3.14)},
+			key:      "val",
+			expected: float64Ptr(3.14),
+		},
+		{
+			name:     "float32 value",
+			input:    map[string]any{"val": float32(2.5)},
+			key:      "val",
+			expected: float64Ptr(2.5),
+		},
+		{
+			name:     "int value",
+			input:    map[string]any{"val": int(7)},
+			key:      "val",
+			expected: float64Ptr(7.0),
+		},
+		{
+			name:     "int64 value",
+			input:    map[string]any{"val": int64(42)},
+			key:      "val",
+			expected: float64Ptr(42.0),
+		},
+		{
+			name:     "uint value",
+			input:    map[string]any{"val": uint(10)},
+			key:      "val",
+			expected: float64Ptr(10.0),
+		},
+		{
+			name:     "uint64 value",
+			input:    map[string]any{"val": uint64(99)},
+			key:      "val",
+			expected: float64Ptr(99.0),
+		},
+		{
+			name:     "string value returns nil",
+			input:    map[string]any{"val": "not-a-number"},
+			key:      "val",
+			expected: nil,
+		},
+		{
+			name:     "key not found returns nil",
+			input:    map[string]any{"other": 5.0},
+			key:      "val",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseFloat64Ptr(tt.input, tt.key)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.InDelta(t, *tt.expected, *result, 0.001)
+			}
+		})
+	}
+}
+
+func intPtr(i int) *int             { return &i }
+func float64Ptr(f float64) *float64 { return &f }
