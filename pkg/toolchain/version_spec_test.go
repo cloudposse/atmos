@@ -3,6 +3,7 @@ package toolchain
 import (
 	"testing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -202,6 +203,43 @@ func TestParseVersionSpec(t *testing.T) {
 			wantErr:   true,
 		},
 
+		// Invalid explicit SHA formats.
+		{
+			name:      "sha: - empty SHA value",
+			input:     "sha:",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "sha:abc - too short",
+			input:     "sha:abc",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "sha:1234567 - digits only, no letter a-f",
+			input:     "sha:1234567",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "sha:ghijklm - non-hex characters",
+			input:     "sha:ghijklm",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+		{
+			name:      "sha:ABCDEFG - uppercase not allowed",
+			input:     "sha:ABCDEFG",
+			wantType:  VersionTypeInvalid,
+			wantValue: "",
+			wantErr:   true,
+		},
+
 		// Invalid PR formats.
 		{
 			name:      "pr:abc - non-numeric PR value",
@@ -245,6 +283,7 @@ func TestParseVersionSpec(t *testing.T) {
 			gotType, gotValue, err := ParseVersionSpec(tt.input)
 			if tt.wantErr {
 				require.Error(t, err, "expected error but got none")
+				assert.ErrorIs(t, err, errUtils.ErrVersionFormatInvalid, "expected ErrVersionFormatInvalid sentinel")
 				assert.Equal(t, VersionTypeInvalid, gotType, "type should be invalid on error")
 				return
 			}

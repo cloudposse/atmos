@@ -270,13 +270,21 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	toolSpec := fmt.Sprintf("atmos@%s", normalizedVersion)
 
 	if installErr := cfg.Installer.Install(toolSpec, false, false); installErr != nil {
-		return "", fmt.Errorf("failed to install Atmos %s: %w", normalizedVersion, installErr)
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(installErr).
+			WithExplanationf("Failed to install Atmos %s", normalizedVersion).
+			WithHint("Check network connectivity and tool registry availability").
+			Err()
 	}
 
 	// Find the newly installed binary.
 	binaryPath, err = cfg.Finder.FindBinaryPath("cloudposse", "atmos", normalizedVersion)
 	if err != nil {
-		return "", fmt.Errorf("installed Atmos %s but could not find binary: %w", normalizedVersion, err)
+		return "", errUtils.Build(errUtils.ErrToolNotFound).
+			WithCause(err).
+			WithExplanationf("Installed Atmos %s but could not find binary", normalizedVersion).
+			WithHint("Check installation directory permissions").
+			Err()
 	}
 
 	return binaryPath, nil
@@ -306,7 +314,11 @@ func findOrInstallPRVersion(prNumber int, _ *ReexecConfig) (string, error) {
 		log.Debug("Cache TTL expired, checking for updates", logFieldPR, prNumber)
 		needsReinstall, err := toolchain.CheckPRCacheAndUpdate(ctx, prNumber, true)
 		if err != nil {
-			return "", fmt.Errorf("failed to check PR #%d for updates: %w", prNumber, err)
+			return "", errUtils.Build(errUtils.ErrVersionCheckFailed).
+				WithCause(err).
+				WithExplanationf("Failed to check PR #%d for updates", prNumber).
+				WithHint("Check GitHub API connectivity and rate limits").
+				Err()
 		}
 		if !needsReinstall {
 			// SHA unchanged, timestamp updated - use existing binary.
@@ -323,7 +335,11 @@ func findOrInstallPRVersion(prNumber int, _ *ReexecConfig) (string, error) {
 	// Install from PR artifact.
 	binaryPath, err := toolchain.InstallFromPR(prNumber, true)
 	if err != nil {
-		return "", fmt.Errorf("failed to install Atmos from PR #%d: %w", prNumber, err)
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install Atmos from PR #%d", prNumber).
+			WithHint("Check GitHub Actions artifacts availability and authentication").
+			Err()
 	}
 
 	return binaryPath, nil
@@ -347,7 +363,11 @@ func findOrInstallSHAVersion(sha string, _ *ReexecConfig) (string, error) {
 	// Install from SHA artifact.
 	binaryPath, err := toolchain.InstallFromSHA(sha, true)
 	if err != nil {
-		return "", fmt.Errorf("failed to install Atmos from SHA %s: %w", sha, err)
+		return "", errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install Atmos from SHA %s", sha).
+			WithHint("Check GitHub Actions artifacts availability and authentication").
+			Err()
 	}
 
 	return binaryPath, nil

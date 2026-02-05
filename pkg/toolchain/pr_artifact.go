@@ -360,7 +360,7 @@ func installArtifactBinaryToDir(versionDir, artifactPath string) (string, error)
 	}
 
 	// Find the binary in the extracted files.
-	// The artifact structure is: build/atmos or build/atmos.exe
+	// The artifact structure is: build/atmos or build/atmos.exe.
 	binaryName := atmosBinaryName
 	if runtime.GOOS == "windows" {
 		binaryName = atmosBinaryNameExe
@@ -387,7 +387,7 @@ func installArtifactBinaryToDir(versionDir, artifactPath string) (string, error)
 		return "", fmt.Errorf("%w: binary '%s' not found in artifact", ErrPRArtifactExtractFailed, binaryName)
 	}
 
-	// Determine install path: ~/.atmos/bin/cloudposse/atmos/{versionDir}/atmos
+	// Determine install path: ~/.atmos/bin/cloudposse/atmos/{versionDir}/atmos.
 	installDir := filepath.Join(GetInstallPath(), "bin", atmosOwner, atmosRepo, versionDir)
 	if err := os.MkdirAll(installDir, dirPermissions); err != nil {
 		return "", fmt.Errorf("%w: failed to create install dir: %w", ErrPRArtifactExtractFailed, err)
@@ -477,6 +477,11 @@ func extractZipFile(zipPath, destDir string) error {
 		destPath, err := sanitizeZipPath(f.Name, cleanDestDir)
 		if err != nil {
 			return err
+		}
+
+		// Verify path stays within destination (redundant with sanitizeZipPath but satisfies CodeQL).
+		if rel, relErr := filepath.Rel(strings.TrimSuffix(cleanDestDir, string(os.PathSeparator)), destPath); relErr != nil || strings.HasPrefix(rel, "..") {
+			return fmt.Errorf("%w: path escapes destination: %s", ErrPRArtifactExtractFailed, f.Name)
 		}
 
 		// Create parent directories.
