@@ -840,3 +840,186 @@ func TestAWSFileManager_GetCachePath_CrossPlatform(t *testing.T) {
 	t.Logf("Cache path: %s", cachePath)
 	t.Logf("Path separator: %s", expectedSeparator)
 }
+
+func TestAWSFileManager_GetRealm(t *testing.T) {
+	tests := []struct {
+		name     string
+		realm    string
+		expected string
+	}{
+		{
+			name:     "returns realm when set",
+			realm:    "test-realm",
+			expected: "test-realm",
+		},
+		{
+			name:     "returns empty string when no realm",
+			realm:    "",
+			expected: "",
+		},
+		{
+			name:     "returns auto-generated realm hash",
+			realm:    "a1b2c3d4",
+			expected: "a1b2c3d4",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: "/tmp", realm: tt.realm}
+			assert.Equal(t, tt.expected, m.GetRealm())
+		})
+	}
+}
+
+func TestAWSFileManager_GetDisplayPath_WithRealm(t *testing.T) {
+	homeDir, err := homedir.Dir()
+	require.NoError(t, err)
+
+	tests := []struct {
+		name     string
+		baseDir  string
+		realm    string
+		expected string
+	}{
+		{
+			name:     "includes realm in path under home",
+			baseDir:  filepath.Join(homeDir, ".config", "atmos"),
+			realm:    "test-realm",
+			expected: filepath.ToSlash(filepath.Join("~", ".config", "atmos", "test-realm")),
+		},
+		{
+			name:     "includes realm in absolute path",
+			baseDir:  "/opt/atmos",
+			realm:    "my-realm",
+			expected: "/opt/atmos/my-realm",
+		},
+		{
+			name:     "handles empty realm",
+			baseDir:  filepath.Join(homeDir, ".config", "atmos"),
+			realm:    "",
+			expected: filepath.ToSlash(filepath.Join("~", ".config", "atmos")),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir, realm: tt.realm}
+			result := m.GetDisplayPath()
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+
+func TestAWSFileManager_GetCredentialsPath_WithRealm(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseDir      string
+		realm        string
+		providerName string
+		expected     string
+	}{
+		{
+			name:         "includes realm in credentials path",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "test-realm",
+			providerName: "my-provider",
+			expected:     "/home/user/.config/atmos/test-realm/aws/my-provider/credentials",
+		},
+		{
+			name:         "handles auto-generated realm hash",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "a1b2c3d4",
+			providerName: "provider",
+			expected:     "/home/user/.config/atmos/a1b2c3d4/aws/provider/credentials",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir, realm: tt.realm}
+			result := m.GetCredentialsPath(tt.providerName)
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+
+func TestAWSFileManager_GetConfigPath_WithRealm(t *testing.T) {
+	tests := []struct {
+		name         string
+		baseDir      string
+		realm        string
+		providerName string
+		expected     string
+	}{
+		{
+			name:         "includes realm in config path",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "test-realm",
+			providerName: "my-provider",
+			expected:     "/home/user/.config/atmos/test-realm/aws/my-provider/config",
+		},
+		{
+			name:         "handles different realm values",
+			baseDir:      "/opt/atmos",
+			realm:        "prod-realm",
+			providerName: "aws-prod",
+			expected:     "/opt/atmos/prod-realm/aws/aws-prod/config",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &AWSFileManager{baseDir: tt.baseDir, realm: tt.realm}
+			result := m.GetConfigPath(tt.providerName)
+			normalizedResult := filepath.ToSlash(result)
+			assert.Equal(t, tt.expected, normalizedResult)
+		})
+	}
+}
+
+func TestNewAWSFileManager_WithRealm(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	if runtime.GOOS == "windows" {
+		t.Setenv("USERPROFILE", tempHome)
+	}
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	tests := []struct {
+		name          string
+		basePath      string
+		realm         string
+		expectedRealm string
+	}{
+		{
+			name:          "creates manager with realm",
+			basePath:      "",
+			realm:         "test-realm",
+			expectedRealm: "test-realm",
+		},
+		{
+			name:          "creates manager without realm",
+			basePath:      "",
+			realm:         "",
+			expectedRealm: "",
+		},
+		{
+			name:          "creates manager with custom base path and realm",
+			basePath:      tempHome,
+			realm:         "custom-realm",
+			expectedRealm: "custom-realm",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fm, err := NewAWSFileManager(tt.basePath, tt.realm)
+			require.NoError(t, err)
+			require.NotNil(t, fm)
+			assert.Equal(t, tt.expectedRealm, fm.GetRealm())
+		})
+	}
+}

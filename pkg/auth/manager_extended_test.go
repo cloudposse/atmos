@@ -10,6 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -700,4 +701,57 @@ func TestManager_loadSessionCredsFromFiles_ReturnsNilOnLoadError(t *testing.T) {
 
 	creds := m.loadSessionCredsFromFiles(context.Background(), "identity1")
 	assert.Nil(t, creds, "Should return nil when LoadCredentials fails")
+}
+
+func TestManager_GetRealm(t *testing.T) {
+	tests := []struct {
+		name     string
+		realm    realm.RealmInfo
+		expected realm.RealmInfo
+	}{
+		{
+			name: "returns realm from config",
+			realm: realm.RealmInfo{
+				Value:  "config-realm",
+				Source: realm.SourceConfig,
+			},
+			expected: realm.RealmInfo{
+				Value:  "config-realm",
+				Source: realm.SourceConfig,
+			},
+		},
+		{
+			name: "returns auto-generated realm",
+			realm: realm.RealmInfo{
+				Value:  "a1b2c3d4",
+				Source: realm.SourceAuto,
+			},
+			expected: realm.RealmInfo{
+				Value:  "a1b2c3d4",
+				Source: realm.SourceAuto,
+			},
+		},
+		{
+			name: "returns env-sourced realm",
+			realm: realm.RealmInfo{
+				Value:  "env-realm",
+				Source: realm.SourceEnv,
+			},
+			expected: realm.RealmInfo{
+				Value:  "env-realm",
+				Source: realm.SourceEnv,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				config: &schema.AuthConfig{},
+				realm:  tt.realm,
+			}
+			result := m.GetRealm()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
