@@ -51,6 +51,31 @@ func TestMemoryKeyring_List(t *testing.T) {
 	assert.NotContains(t, aliases, "alias2")
 }
 
+func TestMemoryKeyring_ListEmptyRealm(t *testing.T) {
+	store := newMemoryKeyringStore()
+
+	// Store credentials in different realms.
+	require.NoError(t, store.Store("alias1", &types.OIDCCredentials{Token: "token1"}, "realm1"))
+	require.NoError(t, store.Store("alias2", &types.OIDCCredentials{Token: "token2"}, "realm2"))
+	require.NoError(t, store.Store("alias3", &types.OIDCCredentials{Token: "token3"}, "realm1"))
+
+	// List with empty realm should return all aliases with prefix stripped.
+	aliases, err := store.List("")
+	require.NoError(t, err)
+	assert.Len(t, aliases, 3)
+	// Verify prefix is stripped - should have format "realm_alias".
+	assert.Contains(t, aliases, "realm1_alias1")
+	assert.Contains(t, aliases, "realm2_alias2")
+	assert.Contains(t, aliases, "realm1_alias3")
+
+	// List with specific realm should only return that realm's aliases.
+	aliases, err = store.List("realm1")
+	require.NoError(t, err)
+	assert.Len(t, aliases, 2)
+	assert.Contains(t, aliases, "alias1")
+	assert.Contains(t, aliases, "alias3")
+}
+
 // TestMemoryKeyring_GetAnySetAny tests arbitrary data storage (memory-specific helper method).
 func TestMemoryKeyring_GetAnySetAny(t *testing.T) {
 	store := newMemoryKeyringStore()

@@ -1,11 +1,14 @@
 package realm
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestGetRealm_EnvVarPrecedence(t *testing.T) {
@@ -71,6 +74,7 @@ func TestGetRealm_InvalidEnvVar(t *testing.T) {
 
 	_, err := GetRealm("", "/path/to/config")
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidRealm), "error should wrap ErrInvalidRealm")
 	assert.Contains(t, err.Error(), EnvVarName)
 	assert.Contains(t, err.Error(), "path traversal")
 }
@@ -78,6 +82,7 @@ func TestGetRealm_InvalidEnvVar(t *testing.T) {
 func TestGetRealm_InvalidConfig(t *testing.T) {
 	_, err := GetRealm("My Realm", "/path/to/config")
 	require.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrInvalidRealm), "error should wrap ErrInvalidRealm")
 	assert.Contains(t, err.Error(), "auth.realm")
 	assert.Contains(t, err.Error(), "invalid characters")
 }

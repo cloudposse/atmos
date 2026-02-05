@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1194,6 +1196,117 @@ func TestExecuteLogoutOption(t *testing.T) {
 				assert.ErrorIs(t, err, tt.expectedError)
 			} else {
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestDiscoverRealms(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupDir       func(t *testing.T) string
+		expectedRealms []string
+		expectError    bool
+	}{
+		{
+			name: "empty directory returns no realms",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				return dir
+			},
+			expectedRealms: nil,
+			expectError:    false,
+		},
+		{
+			name: "non-existent directory returns no realms",
+			setupDir: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "nonexistent")
+			},
+			expectedRealms: nil,
+			expectError:    false,
+		},
+		{
+			name: "directory with aws realm",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				realmDir := filepath.Join(dir, "test-realm", "aws")
+				err := os.MkdirAll(realmDir, 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"test-realm"},
+			expectError:    false,
+		},
+		{
+			name: "directory with azure realm",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				realmDir := filepath.Join(dir, "azure-realm", "azure")
+				err := os.MkdirAll(realmDir, 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"azure-realm"},
+			expectError:    false,
+		},
+		{
+			name: "directory with multiple realms",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				// Create AWS realm.
+				err := os.MkdirAll(filepath.Join(dir, "realm1", "aws"), 0o755)
+				assert.NoError(t, err)
+				// Create Azure realm.
+				err = os.MkdirAll(filepath.Join(dir, "realm2", "azure"), 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"realm1", "realm2"},
+			expectError:    false,
+		},
+		{
+			name: "directory with non-realm subdirectories ignored",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				// Create a valid realm.
+				err := os.MkdirAll(filepath.Join(dir, "valid-realm", "aws"), 0o755)
+				assert.NoError(t, err)
+				// Create a directory without provider subdirs.
+				err = os.MkdirAll(filepath.Join(dir, "not-a-realm", "something-else"), 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"valid-realm"},
+			expectError:    false,
+		},
+		{
+			name: "files in directory are ignored",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				// Create a valid realm.
+				err := os.MkdirAll(filepath.Join(dir, "valid-realm", "aws"), 0o755)
+				assert.NoError(t, err)
+				// Create a file (not a directory).
+				err = os.WriteFile(filepath.Join(dir, "some-file.txt"), []byte("test"), 0o644)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"valid-realm"},
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			baseDir := tt.setupDir(t)
+			realms, err := discoverRealms(baseDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Sort both slices for comparison since order may vary.
+				assert.ElementsMatch(t, tt.expectedRealms, realms)
 			}
 		})
 	}
