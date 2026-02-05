@@ -239,39 +239,40 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 
 	// Check if the component (or base component) exists as a Terraform component.
 	componentPathExists, err := u.IsDirectory(componentPath)
+
+	// JIT source provisioning: run FIRST if source is configured (regardless of local existence).
+	// When source + workdir are both enabled, source takes precedence and vendors to workdir path.
+	// This ensures that even if a local component exists (e.g., from vendor.yaml), the source
+	// provisioner will vendor to workdir with the version specified in stack config.
+	if provSource.HasSource(info.ComponentSection) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
+			return fmt.Errorf("failed to auto-provision component source: %w", err)
+		}
+
+		// Check if source provisioner set a workdir path (source + workdir case).
+		// If so, use that path instead of the component path.
+		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
+			componentPath = workdirPath
+			componentPathExists = true
+			err = nil // Clear any previous error since we have a valid workdir path.
+		} else {
+			// Re-check if component path now exists after provisioning (source only case).
+			componentPathExists, err = u.IsDirectory(componentPath)
+		}
+	}
+
+	// If component path still doesn't exist, return the error.
 	if err != nil || !componentPathExists {
-		// Check if component has source configured for JIT provisioning.
-		if provSource.HasSource(info.ComponentSection) {
-			// Run JIT source provisioning before path validation.
-			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-			defer cancel()
-			if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
-				return fmt.Errorf("failed to auto-provision component source: %w", err)
-			}
-
-			// Check if source provisioner set a workdir path (source + workdir case).
-			// If so, use that path instead of the component path.
-			if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok {
-				componentPath = workdirPath
-				componentPathExists = true
-				err = nil // Clear any previous error since we have a valid workdir path.
-			} else {
-				// Re-check if component path now exists after provisioning (source only case).
-				componentPathExists, err = u.IsDirectory(componentPath)
-			}
-		}
-
-		// If still doesn't exist, return the error.
-		if err != nil || !componentPathExists {
-			// Get the base path for the error message, respecting the user's actual config.
-			basePath, _ := u.GetComponentBasePath(&atmosConfig, "terraform")
-			return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
-				errUtils.ErrInvalidTerraformComponent,
-				info.ComponentFromArg,
-				info.FinalComponent,
-				basePath,
-			)
-		}
+		// Get the base path for the error message, respecting the user's actual config.
+		basePath, _ := u.GetComponentBasePath(&atmosConfig, cfg.TerraformComponentType)
+		return fmt.Errorf("%w: '%s' points to the Terraform component '%s', but it does not exist in '%s'",
+			errUtils.ErrInvalidTerraformComponent,
+			info.ComponentFromArg,
+			info.FinalComponent,
+			basePath,
+		)
 	}
 
 	// Check if the component is allowed to be provisioned (the `metadata.type` attribute is not set to `abstract`).
