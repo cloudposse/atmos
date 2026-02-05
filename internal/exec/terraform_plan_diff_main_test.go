@@ -7,9 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestParsePlanDiffFlags(t *testing.T) {
@@ -229,36 +226,28 @@ Terraform show output
 }
 
 func TestTerraformPlanDiff_FlagParsing(t *testing.T) {
-	// Save the original OsExit function and restore it after the test
-	originalOsExit := errUtils.OsExit
-	defer func() { errUtils.OsExit = originalOsExit }()
-
-	// Mock OsExit to prevent the test from exiting
-	var exitCalled bool
-	var exitCode int
-	errUtils.OsExit = func(code int) {
-		exitCalled = true
-		exitCode = code
-		// Don't actually exit
-	}
-	_ = exitCalled // Ensure variable is used
-	_ = exitCode   // Ensure variable is used
-
-	// Create test atmosphere configuration
-	atmosConfig := &schema.AtmosConfiguration{
-		TerraformDirAbsolutePath: "terraform",
-	}
+	// Test parsePlanDiffFlags directly as a unit test
 
 	// Test missing required flags
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix:  "",
-		FinalComponent:         "test-component",
-		AdditionalArgsAndFlags: []string{
-			// Missing --orig flag
-		},
-	}
-
-	err := TerraformPlanDiff(atmosConfig, info)
+	_, _, err := parsePlanDiffFlags([]string{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
+
+	// Test with only --orig flag (--new is optional)
+	origFile, newFile, err := parsePlanDiffFlags([]string{"--orig=test.plan"})
+	assert.NoError(t, err)
+	assert.Equal(t, "test.plan", origFile)
+	assert.Empty(t, newFile)
+
+	// Test with both flags using = syntax
+	origFile, newFile, err = parsePlanDiffFlags([]string{"--orig=orig.plan", "--new=new.plan"})
+	assert.NoError(t, err)
+	assert.Equal(t, "orig.plan", origFile)
+	assert.Equal(t, "new.plan", newFile)
+
+	// Test with both flags using space syntax
+	origFile, newFile, err = parsePlanDiffFlags([]string{"--orig", "orig2.plan", "--new", "new2.plan"})
+	assert.NoError(t, err)
+	assert.Equal(t, "orig2.plan", origFile)
+	assert.Equal(t, "new2.plan", newFile)
 }
