@@ -126,10 +126,26 @@ func parseIntPtr(m map[string]any, key string) *int {
 	return nil
 }
 
-// parseFloat64Ptr parses a float64 from a map, returning nil if not found.
+// parseFloat64Ptr parses a float64 from a map (handles multiple numeric types), returning nil if not found.
 func parseFloat64Ptr(m map[string]any, key string) *float64 {
-	if v, ok := m[key].(float64); ok {
+	switch v := m[key].(type) {
+	case float64:
 		return &v
+	case float32:
+		f := float64(v)
+		return &f
+	case int:
+		f := float64(v)
+		return &f
+	case int64:
+		f := float64(v)
+		return &f
+	case uint:
+		f := float64(v)
+		return &f
+	case uint64:
+		f := float64(v)
+		return &f
 	}
 	return nil
 }

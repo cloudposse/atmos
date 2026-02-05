@@ -872,7 +872,7 @@ var (
 
 // RetryConfig represents the retry configuration.
 // Pointer types are used to distinguish between "not specified" (nil) and "explicitly set to zero".
-// - nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries)
+// - nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).
 // - Explicitly setting a value to zero is invalid and will cause a validation error.
 type RetryConfig struct {
 	MaxAttempts     *int            `yaml:"max_attempts,omitempty" json:"max_attempts,omitempty" mapstructure:"max_attempts"`

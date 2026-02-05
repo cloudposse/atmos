@@ -334,6 +334,19 @@ func TestParseRetryConfig(t *testing.T) {
 			},
 		},
 		{
+			name: "integer values parsed as float64",
+			input: map[string]any{
+				"random_jitter": int(1),
+				"multiplier":    int(2),
+			},
+			validate: func(t *testing.T, cfg *schema.RetryConfig) {
+				require.NotNil(t, cfg.RandomJitter, "RandomJitter should parse int to float64")
+				assert.Equal(t, 1.0, *cfg.RandomJitter)
+				require.NotNil(t, cfg.Multiplier, "Multiplier should parse int to float64")
+				assert.Equal(t, 2.0, *cfg.Multiplier)
+			},
+		},
+		{
 			name: "invalid types are ignored",
 			input: map[string]any{
 				"max_attempts":     "not-an-int",
