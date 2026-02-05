@@ -560,3 +560,204 @@ func TestCheckWorkdirExpiry_NotADirectory(t *testing.T) {
 	result := checkWorkdirExpiry(tmpDir, entries[0], time.Now())
 	assert.Nil(t, result, "should return nil for non-directory entries")
 }
+
+func TestCheckWorkdirExpiry_NotExpired(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "recent-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Write recent metadata.
+	recentTime := time.Now().Add(-1 * time.Hour)
+	metadata := &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		LastAccessed: recentTime,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	// Cutoff is 7 days ago, workdir is only 1 hour old.
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
+	result := checkWorkdirExpiry(tmpDir, entries[0], cutoff)
+	assert.Nil(t, result, "should return nil for non-expired workdirs")
+}
+
+func TestCheckWorkdirExpiry_Expired(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "old-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Write old metadata.
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	metadata := &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		LastAccessed: oldTime,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	// Cutoff is 7 days ago, workdir is 30 days old.
+	cutoff := time.Now().Add(-7 * 24 * time.Hour)
+	result := checkWorkdirExpiry(tmpDir, entries[0], cutoff)
+	require.NotNil(t, result, "should return info for expired workdirs")
+	assert.Equal(t, "old-workdir", result.Name)
+	assert.Equal(t, workdirPath, result.Path)
+}
+
+// Test getModTimeFromEntry.
+
+func TestGetModTimeFromEntry(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	entries, err := os.ReadDir(tmpDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+
+	result := getModTimeFromEntry(entries[0])
+	assert.False(t, result.IsZero(), "should return non-zero mod time")
+	// ModTime should be recent (within last minute).
+	assert.True(t, result.After(time.Now().Add(-1*time.Minute)))
+}
+
+// Test findExpiredWorkdirs.
+
+func TestFindExpiredWorkdirs_EmptyDir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// No workdir base exists.
+	result, err := findExpiredWorkdirs(tmpDir, 7*24*time.Hour)
+	require.NoError(t, err)
+	assert.Empty(t, result)
+}
+
+func TestFindExpiredWorkdirs_MixedWorkdirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create terraform workdirs base.
+	workdirBase := filepath.Join(tmpDir, WorkdirPath, "terraform")
+	require.NoError(t, os.MkdirAll(workdirBase, 0o755))
+
+	// Create an old workdir.
+	oldWorkdir := filepath.Join(workdirBase, "old-vpc")
+	require.NoError(t, os.MkdirAll(oldWorkdir, 0o755))
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	require.NoError(t, WriteMetadata(oldWorkdir, &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "old",
+		LastAccessed: oldTime,
+	}))
+
+	// Create a recent workdir.
+	recentWorkdir := filepath.Join(workdirBase, "recent-s3")
+	require.NoError(t, os.MkdirAll(recentWorkdir, 0o755))
+	recentTime := time.Now().Add(-1 * time.Hour)
+	require.NoError(t, WriteMetadata(recentWorkdir, &WorkdirMetadata{
+		Component:    "s3",
+		Stack:        "recent",
+		LastAccessed: recentTime,
+	}))
+
+	// Find expired with 7 day TTL.
+	result, err := findExpiredWorkdirs(tmpDir, 7*24*time.Hour)
+	require.NoError(t, err)
+
+	// Only the old workdir should be returned.
+	require.Len(t, result, 1)
+	assert.Equal(t, "old-vpc", result[0].Name)
+}
+
+// Test CleanExpiredWorkdirs with removal errors.
+
+func TestCleanExpiredWorkdirs_EmptyBasePath(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create workdir.
+	workdirBase := filepath.Join(tmpDir, WorkdirPath, "terraform", "old-vpc")
+	require.NoError(t, os.MkdirAll(workdirBase, 0o755))
+
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	require.NoError(t, WriteMetadata(workdirBase, &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "old",
+		LastAccessed: oldTime,
+	}))
+
+	// Change to tmpDir.
+	t.Chdir(tmpDir)
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: ""}
+
+	err := CleanExpiredWorkdirs(atmosConfig, "7d", false)
+	require.NoError(t, err)
+
+	// Workdir should be removed.
+	_, err = os.Stat(workdirBase)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// Test Clean with Expired option.
+
+func TestClean_ExpiredTakesPrecedence(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create an old workdir.
+	workdirPath := filepath.Join(tmpDir, WorkdirPath, "terraform", "old-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	require.NoError(t, WriteMetadata(workdirPath, &WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "old",
+		LastAccessed: oldTime,
+	}))
+
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// When Expired is true, it takes precedence over Component/Stack.
+	err := Clean(atmosConfig, CleanOptions{
+		Component: "different",
+		Stack:     "stack",
+		Expired:   true,
+		TTL:       "7d",
+	})
+	require.NoError(t, err)
+
+	// The old workdir should be removed (expired takes precedence).
+	_, err = os.Stat(workdirPath)
+	assert.True(t, os.IsNotExist(err))
+}
+
+// Test formatDuration edge cases.
+
+func TestFormatDuration_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name     string
+		duration time.Duration
+		expected string
+	}{
+		{"zero duration", 0, "< 1m"},
+		{"1 second", 1 * time.Second, "< 1m"},
+		{"59 seconds", 59 * time.Second, "< 1m"},
+		{"1 minute exactly", 1 * time.Minute, "1m"},
+		{"1 hour exactly", 1 * time.Hour, "1h"},
+		{"1 day exactly", 24 * time.Hour, "1d"},
+		{"1 day 1 hour", 25 * time.Hour, "1d 1h"},
+		{"negative duration", -1 * time.Hour, "< 1m"}, // Edge case.
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := formatDuration(tc.duration)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}

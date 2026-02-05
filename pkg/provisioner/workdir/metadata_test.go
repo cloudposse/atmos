@@ -267,3 +267,146 @@ func TestWriteMetadata_CreatesAtmosDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, info.IsDir())
 }
+
+// Test MetadataPath function.
+
+func TestMetadataPath(t *testing.T) {
+	tests := []struct {
+		name        string
+		workdirPath string
+		expected    string
+	}{
+		{
+			name:        "simple path",
+			workdirPath: filepath.Join("base", "workdir"),
+			expected:    filepath.Join("base", "workdir", AtmosDir, MetadataFile),
+		},
+		{
+			name:        "single directory",
+			workdirPath: "workdir",
+			expected:    filepath.Join("workdir", AtmosDir, MetadataFile),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			result := MetadataPath(tc.workdirPath)
+			assert.Equal(t, tc.expected, result)
+		})
+	}
+}
+
+// Test WriteMetadata with all fields populated.
+
+func TestWriteMetadata_AllFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	now := time.Now().Truncate(time.Second)
+	metadata := &WorkdirMetadata{
+		Component:     "vpc",
+		Stack:         "dev-us-east-1",
+		SourceType:    SourceTypeRemote,
+		Source:        "github.com/cloudposse/terraform-aws-vpc//src",
+		SourceURI:     "github.com/cloudposse/terraform-aws-vpc//src",
+		SourceVersion: "1.2.3",
+		ContentHash:   "abc123",
+		CreatedAt:     now.Add(-24 * time.Hour),
+		UpdatedAt:     now,
+		LastAccessed:  now,
+	}
+
+	err := WriteMetadata(workdirPath, metadata)
+	require.NoError(t, err)
+
+	// Read it back and verify all fields.
+	result, err := ReadMetadata(workdirPath)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, metadata.Component, result.Component)
+	assert.Equal(t, metadata.Stack, result.Stack)
+	assert.Equal(t, metadata.SourceType, result.SourceType)
+	assert.Equal(t, metadata.Source, result.Source)
+	assert.Equal(t, metadata.SourceURI, result.SourceURI)
+	assert.Equal(t, metadata.SourceVersion, result.SourceVersion)
+	assert.Equal(t, metadata.ContentHash, result.ContentHash)
+}
+
+// Test ReadMetadata with priority (new location over legacy).
+
+func TestReadMetadata_NewLocationPriority(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Create metadata in new location.
+	newMetadata := &WorkdirMetadata{
+		Component:  "new",
+		Stack:      "dev",
+		SourceType: SourceTypeLocal,
+	}
+	require.NoError(t, WriteMetadata(workdirPath, newMetadata))
+
+	// Also create metadata in legacy location.
+	legacyMetadata := &WorkdirMetadata{
+		Component:  "legacy",
+		Stack:      "prod",
+		SourceType: SourceTypeRemote,
+	}
+	data, err := json.MarshalIndent(legacyMetadata, "", "  ")
+	require.NoError(t, err)
+	legacyPath := filepath.Join(workdirPath, WorkdirMetadataFile)
+	require.NoError(t, os.WriteFile(legacyPath, data, 0o644))
+
+	// Should read from new location.
+	result, err := ReadMetadata(workdirPath)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "new", result.Component, "should read from new location, not legacy")
+}
+
+// Test UpdateLastAccessed preserves all other fields.
+
+func TestUpdateLastAccessed_PreservesAllFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "test-workdir")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	// Create initial metadata with all fields populated.
+	initialTime := time.Now().Add(-48 * time.Hour).Truncate(time.Second)
+	metadata := &WorkdirMetadata{
+		Component:     "vpc",
+		Stack:         "dev-us-east-1",
+		SourceType:    SourceTypeRemote,
+		Source:        "github.com/test/repo",
+		SourceURI:     "github.com/test/repo//src",
+		SourceVersion: "1.0.0",
+		ContentHash:   "abc123def456",
+		CreatedAt:     initialTime,
+		UpdatedAt:     initialTime.Add(12 * time.Hour),
+		LastAccessed:  initialTime.Add(24 * time.Hour),
+	}
+	require.NoError(t, WriteMetadata(workdirPath, metadata))
+
+	// Update last accessed.
+	err := UpdateLastAccessed(workdirPath)
+	require.NoError(t, err)
+
+	// Read and verify all other fields are preserved.
+	result, err := ReadMetadata(workdirPath)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, metadata.Component, result.Component)
+	assert.Equal(t, metadata.Stack, result.Stack)
+	assert.Equal(t, metadata.SourceType, result.SourceType)
+	assert.Equal(t, metadata.Source, result.Source)
+	assert.Equal(t, metadata.SourceURI, result.SourceURI)
+	assert.Equal(t, metadata.SourceVersion, result.SourceVersion)
+	assert.Equal(t, metadata.ContentHash, result.ContentHash)
+	assert.True(t, initialTime.Equal(result.CreatedAt))
+	// LastAccessed should be updated (more recent than original).
+	assert.True(t, result.LastAccessed.After(metadata.LastAccessed))
+}

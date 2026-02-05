@@ -320,3 +320,132 @@ func TestSyncDir_SkipsAtmosDir(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, `{"test": true}`, string(content))
 }
+
+// Tests for DefaultPathFilter.
+
+func TestDefaultPathFilter_Match_NoPatterns(t *testing.T) {
+	filter := NewDefaultPathFilter()
+
+	// With no include patterns, everything is included by default.
+	match, err := filter.Match("any/file.txt", nil, nil)
+	require.NoError(t, err)
+	assert.True(t, match)
+}
+
+func TestDefaultPathFilter_Match_IncludePattern(t *testing.T) {
+	filter := NewDefaultPathFilter()
+
+	// Only *.tf files are included.
+	includedPaths := []string{"*.tf"}
+
+	match, err := filter.Match("main.tf", includedPaths, nil)
+	require.NoError(t, err)
+	assert.True(t, match)
+
+	match, err = filter.Match("readme.md", includedPaths, nil)
+	require.NoError(t, err)
+	assert.False(t, match)
+}
+
+func TestDefaultPathFilter_Match_ExcludePattern(t *testing.T) {
+	filter := NewDefaultPathFilter()
+
+	// Include all, but exclude *.bak files.
+	excludedPaths := []string{"*.bak"}
+
+	match, err := filter.Match("main.tf", nil, excludedPaths)
+	require.NoError(t, err)
+	assert.True(t, match)
+
+	match, err = filter.Match("file.bak", nil, excludedPaths)
+	require.NoError(t, err)
+	assert.False(t, match)
+}
+
+func TestDefaultPathFilter_Match_IncludeAndExclude(t *testing.T) {
+	filter := NewDefaultPathFilter()
+
+	// Include *.tf, but exclude *_test.tf.
+	includedPaths := []string{"*.tf"}
+	excludedPaths := []string{"*_test.tf"}
+
+	match, err := filter.Match("main.tf", includedPaths, excludedPaths)
+	require.NoError(t, err)
+	assert.True(t, match)
+
+	match, err = filter.Match("main_test.tf", includedPaths, excludedPaths)
+	require.NoError(t, err)
+	assert.False(t, match)
+
+	match, err = filter.Match("readme.md", includedPaths, excludedPaths)
+	require.NoError(t, err)
+	assert.False(t, match)
+}
+
+func TestDefaultPathFilter_Match_InvalidPattern(t *testing.T) {
+	filter := NewDefaultPathFilter()
+
+	// Invalid pattern should return error.
+	invalidInclude := []string{"[invalid"}
+	_, err := filter.Match("file.txt", invalidInclude, nil)
+	assert.Error(t, err)
+
+	invalidExclude := []string{"[invalid"}
+	_, err = filter.Match("file.txt", nil, invalidExclude)
+	assert.Error(t, err)
+}
+
+// Test SyncDir with nested directories.
+
+func TestSyncDir_NestedDirectories(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+
+	// Create nested source structure.
+	require.NoError(t, os.MkdirAll(filepath.Join(srcDir, "a", "b", "c"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "root.txt"), []byte("root"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a", "a.txt"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a", "b", "b.txt"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "a", "b", "c", "c.txt"), []byte("c"), 0o644))
+
+	// Create empty dst.
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	changed, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	// Verify nested structure was copied.
+	content, err := os.ReadFile(filepath.Join(dstDir, "a", "b", "c", "c.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "c", string(content))
+}
+
+func TestSyncDir_UpdateChangedFile(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcDir := filepath.Join(tmpDir, "src")
+	dstDir := filepath.Join(tmpDir, "dst")
+
+	// Create source and dst with same file but different content.
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file.txt"), []byte("new content"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "file.txt"), []byte("old content"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	changed, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+	assert.True(t, changed)
+
+	// Verify file was updated.
+	content, err := os.ReadFile(filepath.Join(dstDir, "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "new content", string(content))
+}
