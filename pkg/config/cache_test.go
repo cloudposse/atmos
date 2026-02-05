@@ -9,9 +9,11 @@ import (
 	"time"
 
 	"github.com/adrg/xdg"
+	"github.com/stretchr/testify/assert"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/cache"
-	"github.com/stretchr/testify/assert"
+	"github.com/cloudposse/atmos/pkg/duration"
 )
 
 func TestGetCacheFilePathWithXDGCacheHome(t *testing.T) {
@@ -285,7 +287,7 @@ func TestParseFrequency(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			result, err := parseFrequency(tc.frequency)
+			result, err := duration.Parse(tc.frequency)
 			if tc.hasError {
 				assert.Error(t, err, "Expected error for frequency %q", tc.frequency)
 			} else {

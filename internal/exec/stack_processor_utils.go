@@ -967,8 +967,15 @@ func processYAMLConfigFileWithContextInternal(
 
 		var importMatches []string
 
+		// Capture remote status and original import key before resolution.
+		// For remote imports, the original URI must be preserved as the import key
+		// so that downstream lookups and imports output use the user-specified URI
+		// rather than the local cache path.
+		isRemote := stackimports.IsRemote(imp)
+		importKey := imp
+
 		// Check if the import is a remote URL.
-		if stackimports.IsRemote(imp) {
+		if isRemote {
 			// Download the remote import.
 			log.Debug("Downloading remote stack import", "uri", imp, "file", relativeFilePath)
 			localPath, err := stackimports.DownloadRemoteImport(atmosConfig, imp)
@@ -1019,10 +1026,8 @@ func processYAMLConfigFileWithContextInternal(
 			impWithExtPath := filepath.Join(basePath, impWithExt)
 
 			if impWithExtPath == filePath {
-				errorMessage := fmt.Sprintf("invalid import in the manifest '%s'\nThe file imports itself in '%s'",
-					relativeFilePath,
-					imp)
-				return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+				return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: manifest '%s' imports itself via '%s'",
+					errUtils.ErrStackImportSelf, relativeFilePath, imp)
 			}
 
 			// Find all import matches in the glob.
@@ -1043,18 +1048,11 @@ func processYAMLConfigFileWithContextInternal(
 					// If the import is not a Go template and SkipIfMissing is false, return the error.
 					if !isGolangTemplate && !importStruct.SkipIfMissing {
 						if err != nil {
-							errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'\nError: %s",
-								imp,
-								relativeFilePath,
-								err,
-							)
-							return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s': %w",
+								errUtils.ErrStackImportNotFound, imp, relativeFilePath, err)
 						} else if importMatches == nil {
-							errorMessage := fmt.Sprintf("no matches found for the import '%s' in the file '%s'",
-								imp,
-								relativeFilePath,
-							)
-							return nil, nil, nil, nil, nil, nil, nil, nil, errors.New(errorMessage)
+							return nil, nil, nil, nil, nil, nil, nil, nil, fmt.Errorf("%w: import '%s' in file '%s'",
+								errUtils.ErrStackImportNotFound, imp, relativeFilePath)
 						}
 					}
 				}
@@ -1086,7 +1084,7 @@ func processYAMLConfigFileWithContextInternal(
 
 		for i, importFile := range importMatches {
 			wg.Add(1)
-			go func(index int, file string) {
+			go func(index int, file string, isRemote bool, importKey string) {
 				defer wg.Done()
 
 				// Process the import file (expensive I/O + parsing + recursive imports).
@@ -1128,6 +1126,12 @@ func processYAMLConfigFileWithContextInternal(
 				}
 				importRelativePathWithoutExt := strings.TrimSuffix(importRelativePathWithExt, ext2)
 
+				// For remote imports, use the original URI as the import key
+				// instead of the cache-derived path.
+				if isRemote {
+					importRelativePathWithoutExt = importKey
+				}
+
 				// Store result with all necessary data for sequential merging.
 				results[index] = importFileResult{
 					index:                        index,
@@ -1142,7 +1146,7 @@ func processYAMLConfigFileWithContextInternal(
 					mergeContext:                 importMergeContext,
 					err:                          nil,
 				}
-			}(i, importFile)
+			}(i, importFile, isRemote, importKey)
 		}
 
 		// Wait for all parallel processing to complete.
