@@ -39,6 +39,29 @@ func TestNewUserIdentity_And_GetProviderName(t *testing.T) {
 	assert.Equal(t, "aws-user", name)
 }
 
+func TestUserIdentity_SetRealm(t *testing.T) {
+	id, err := NewUserIdentity("me", &schema.Identity{Kind: "aws/user"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*userIdentity)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
 func TestUserIdentity_Environment(t *testing.T) {
 	// Environment should include AWS files and pass through additional env from config.
 	id, err := NewUserIdentity("dev", &schema.Identity{Kind: "aws/user", Env: []schema.EnvironmentVariable{{Key: "FOO", Value: "BAR"}}})

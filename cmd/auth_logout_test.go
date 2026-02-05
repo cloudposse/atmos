@@ -1298,6 +1298,60 @@ func TestPerformLogoutAllRealms_DryRunWithKeychain(t *testing.T) {
 	assert.NoError(t, err, "realm1 should still exist after dry run")
 }
 
+func TestPerformLogoutAllRealms_ActualLogoutWithKeychain(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+
+	// Test actual logout with keychain deletion and force flag.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Force flag bypasses confirmation prompt.
+	err = performLogoutAllRealms(ctx, atmosConfig, false, true, true)
+	assert.NoError(t, err)
+
+	// Verify directory was deleted.
+	_, err = os.Stat(filepath.Join(tempDir, "atmos", "realm1"))
+	assert.True(t, os.IsNotExist(err), "realm1 should be deleted after logout")
+}
+
+func TestPerformLogoutAllRealms_MultipleRealms(t *testing.T) {
+	// Create a temp directory with multiple realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create multiple realm directories.
+	realms := []string{"realm1", "realm2", "realm3"}
+	for _, realm := range realms {
+		realmAWS := filepath.Join(tempDir, "atmos", realm, "aws")
+		err := os.MkdirAll(realmAWS, 0o755)
+		assert.NoError(t, err)
+	}
+
+	// Test actual logout of multiple realms.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err := performLogoutAllRealms(ctx, atmosConfig, false, false, false)
+	assert.NoError(t, err)
+
+	// Verify all directories were deleted.
+	for _, realm := range realms {
+		_, err = os.Stat(filepath.Join(tempDir, "atmos", realm))
+		assert.True(t, os.IsNotExist(err), "%s should be deleted after logout", realm)
+	}
+}
+
 func TestDiscoverRealms(t *testing.T) {
 	tests := []struct {
 		name           string

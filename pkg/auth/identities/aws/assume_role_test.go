@@ -124,6 +124,49 @@ func TestAssumeRoleIdentity_PrepareEnvironment(t *testing.T) {
 	assert.Equal(t, "us-west-2", result["AWS_DEFAULT_REGION"])
 }
 
+func TestAssumeRoleIdentity_getRootProviderFromVia_CachedValue(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+		// No Via config - this would normally fail.
+	})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Set cached root provider name (as PostAuthenticate would do).
+	identity.rootProviderName = "cached-provider"
+
+	// getRootProviderFromVia should return cached value.
+	provider, err := identity.getRootProviderFromVia()
+	assert.NoError(t, err)
+	assert.Equal(t, "cached-provider", provider)
+}
+
+func TestAssumeRoleIdentity_getRootProviderFromVia_NoConfig(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+		// No Via config.
+	})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Ensure no cached value.
+	identity.rootProviderName = ""
+
+	// getRootProviderFromVia should return error when no config and no cache.
+	_, err = identity.getRootProviderFromVia()
+	assert.Error(t, err)
+}
+
 func TestAssumeRoleIdentity_ValidateAndProviderName(t *testing.T) {
 	// Missing principal -> error.
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role"}}
