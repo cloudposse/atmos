@@ -1,15 +1,12 @@
 package exec
 
 import (
-	"context"
 	"path/filepath"
-	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
-	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -56,8 +53,8 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 		ComponentFromArg: opts.Component,
 		Stack:            opts.Stack,
 		StackFromArg:     opts.Stack,
-		ComponentType:    "terraform",
-		CliArgs:          []string{"terraform", "generate", "backend"},
+		ComponentType:    cfg.TerraformComponentType,
+		CliArgs:          []string{cfg.TerraformComponentType, "generate", "backend"},
 	}
 
 	// Process stacks to get component configuration.
@@ -66,13 +63,9 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 		return err
 	}
 
-	// JIT source provisioning: vendor remote component if source is configured.
-	if provSource.HasSource(info.ComponentSection) {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		if err := provSource.AutoProvisionSource(ctx, atmosConfig, cfg.TerraformComponentType, info.ComponentSection, info.AuthContext); err != nil {
-			return err
-		}
+	// Ensure component exists, provisioning via JIT if needed.
+	if err := ensureTerraformComponentExists(atmosConfig, &info); err != nil {
+		return err
 	}
 
 	if err := validateBackendConfig(&info); err != nil {
@@ -95,9 +88,12 @@ func ExecuteGenerateBackend(opts *GenerateBackendOptions, atmosConfig *schema.At
 
 // writeBackendConfigFile writes the backend config to a file.
 func writeBackendConfigFile(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, config map[string]any) error {
-	// Use workdir path if set by JIT provisioner, otherwise use standard component path.
-	componentPath := constructTerraformComponentWorkingDir(atmosConfig, info)
-	backendFilePath := filepath.Join(componentPath, "backend.tf.json")
+	// Use constructTerraformComponentWorkingDir to properly handle JIT vendored components
+	// that may have a workdir path set by the source provisioner.
+	backendFilePath := filepath.Join(
+		constructTerraformComponentWorkingDir(atmosConfig, info),
+		"backend.tf.json",
+	)
 
 	log.Debug("Writing the backend config to file", "file", backendFilePath)
 

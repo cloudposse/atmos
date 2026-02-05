@@ -223,6 +223,7 @@ var (
 	ErrLatestFileNotFound           = errors.New("latest version file not found")
 	ErrRegistryNotReachable         = errors.New("registry not reachable")
 	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
 	ErrAliasNotFound                = errors.New("alias not found")
 	ErrBinaryNotExecutable          = errors.New("binary not executable")
 	ErrBinaryNotFound               = errors.New("binary not found")
@@ -406,6 +407,11 @@ var (
 
 	// Validation errors.
 	ErrValidationFailed = errors.New("validation failed")
+
+	// EditorConfig validation errors.
+	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
+	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
+	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
 
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")

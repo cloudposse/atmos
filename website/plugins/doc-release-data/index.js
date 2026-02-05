@@ -200,6 +200,11 @@ module.exports = function docReleaseDataPlugin(context, options) {
               // Special case: id matches parent folder = becomes index of that folder.
               // e.g., devcontainer/devcontainer.mdx with id: devcontainer -> /devcontainer
               finalPath = parentDirPath;
+            } else if (fileName === 'index' && frontmatter.id === 'index') {
+              // Special case: index.mdx with id: index is the directory index.
+              // Keep urlPath which already handled index file -> directory path conversion.
+              // e.g., functions/index.mdx with id: index -> /functions
+              finalPath = urlPath;
             } else {
               // Normal case: id replaces filename.
               // e.g., list-affected.mdx with id: affected -> /list/affected

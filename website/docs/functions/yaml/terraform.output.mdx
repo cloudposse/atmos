@@ -138,7 +138,7 @@ To avoid conflicting quotes, wrap the entire YQ expression in single quotes whil
 
 ```yaml
 # Use single quotes around the expression to allow double quotes inside brackets
-access_key_id: !terraform.output security '.security.users["github-dependabot"].access.key.id'
+access_key_id: !terraform.output security '.users["github-dependabot"].access_key_id'
 ```
 
 Additional examples:

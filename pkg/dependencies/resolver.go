@@ -7,7 +7,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Resolver resolves tool dependencies with inheritance and validation.
