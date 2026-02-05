@@ -187,3 +187,13 @@ func TestMemoryKeyring_Isolation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list2)
 }
+
+func TestMemoryKeyring_Type(t *testing.T) {
+	store := newMemoryKeyringStore()
+
+	// Memory keyring has a custom type that's not a standard keyring backend.
+	// Just verify it returns something (implementation detail).
+	storeType := store.Type()
+	// Memory keyring returns "memory" as its type.
+	assert.NotEmpty(t, storeType)
+}

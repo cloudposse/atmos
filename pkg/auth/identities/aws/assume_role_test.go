@@ -31,6 +31,99 @@ func TestNewAssumeRoleIdentity(t *testing.T) {
 	assert.Equal(t, "aws/assume-role", id.Kind())
 }
 
+func TestAssumeRoleIdentity_SetRealm(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
+func TestAssumeRoleIdentity_Paths(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Paths should return empty slice for assume-role identities.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Empty(t, paths)
+}
+
+func TestAssumeRoleIdentity_SetManagerAndProvider(t *testing.T) {
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{Kind: "aws/assume-role"})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Initially manager and rootProviderName should be nil/empty.
+	assert.Nil(t, identity.manager)
+	assert.Empty(t, identity.rootProviderName)
+
+	// Set manager and provider.
+	identity.SetManagerAndProvider(nil, "test-provider")
+	assert.Nil(t, identity.manager)
+	assert.Equal(t, "test-provider", identity.rootProviderName)
+}
+
+func TestAssumeRoleIdentity_PrepareEnvironment(t *testing.T) {
+	// Create temp home for test.
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	// Create identity with valid config.
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+			"region":      "us-west-2",
+		},
+		Via: &schema.IdentityVia{Provider: "test-provider"},
+	})
+	require.NoError(t, err)
+
+	// Cast to access internal struct.
+	identity := id.(*assumeRoleIdentity)
+
+	// Validate to set up region.
+	err = identity.Validate()
+	require.NoError(t, err)
+
+	// Prepare environment.
+	environ := map[string]string{"EXISTING_VAR": "value"}
+	result, err := identity.PrepareEnvironment(context.Background(), environ)
+	assert.NoError(t, err)
+
+	// Should preserve existing vars.
+	assert.Equal(t, "value", result["EXISTING_VAR"])
+
+	// Should have AWS env vars set.
+	assert.NotEmpty(t, result["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.NotEmpty(t, result["AWS_CONFIG_FILE"])
+	assert.Equal(t, "role", result["AWS_PROFILE"])
+	assert.Equal(t, "us-west-2", result["AWS_REGION"])
+	assert.Equal(t, "us-west-2", result["AWS_DEFAULT_REGION"])
+}
+
 func TestAssumeRoleIdentity_ValidateAndProviderName(t *testing.T) {
 	// Missing principal -> error.
 	i := &assumeRoleIdentity{name: "role", config: &schema.Identity{Kind: "aws/assume-role"}}

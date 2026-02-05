@@ -1201,6 +1201,103 @@ func TestExecuteLogoutOption(t *testing.T) {
 	}
 }
 
+func TestPerformLogoutAllRealms_DryRun(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	realm2Azure := filepath.Join(tempDir, "atmos", "realm2", "azure")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+	err = os.MkdirAll(realm2Azure, 0o755)
+	assert.NoError(t, err)
+
+	// Test dry run mode - should not delete anything.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, true, false, false)
+	assert.NoError(t, err)
+
+	// Verify directories still exist (dry run should not delete).
+	_, err = os.Stat(realm1AWS)
+	assert.NoError(t, err, "realm1 should still exist after dry run")
+	_, err = os.Stat(realm2Azure)
+	assert.NoError(t, err, "realm2 should still exist after dry run")
+}
+
+func TestPerformLogoutAllRealms_ActualLogout(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+
+	// Test actual logout - should delete the realm.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, false, false, false)
+	assert.NoError(t, err)
+
+	// Verify directory was deleted.
+	_, err = os.Stat(filepath.Join(tempDir, "atmos", "realm1"))
+	assert.True(t, os.IsNotExist(err), "realm1 should be deleted after logout")
+}
+
+func TestPerformLogoutAllRealms_NoRealms(t *testing.T) {
+	// Create a temp directory with no realms.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create the atmos directory but no realm subdirectories.
+	atmosDir := filepath.Join(tempDir, "atmos")
+	err := os.MkdirAll(atmosDir, 0o755)
+	assert.NoError(t, err)
+
+	// Test with no realms.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, false, false, false)
+	assert.NoError(t, err)
+}
+
+func TestPerformLogoutAllRealms_DryRunWithKeychain(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+
+	// Test dry run mode with keychain flag - should not delete anything.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, true, true, false)
+	assert.NoError(t, err)
+
+	// Verify directory still exists (dry run should not delete).
+	_, err = os.Stat(realm1AWS)
+	assert.NoError(t, err, "realm1 should still exist after dry run")
+}
+
 func TestDiscoverRealms(t *testing.T) {
 	tests := []struct {
 		name           string

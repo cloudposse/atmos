@@ -840,3 +840,23 @@ func TestFileKeyring_IsExpiredNonexistent(t *testing.T) {
 	assert.Error(t, err)
 	assert.True(t, expired) // Should be considered expired if retrieval fails.
 }
+
+func TestFileKeyring_Type(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{
+			Type: "file",
+			Spec: map[string]interface{}{
+				"path": filepath.Join(tempDir, "test-keyring"),
+			},
+		},
+	}
+
+	store, err := newFileKeyringStore(authConfig)
+	require.NoError(t, err)
+
+	// Verify Type returns the correct store type constant.
+	assert.Equal(t, types.CredentialStoreTypeFile, store.Type())
+}
