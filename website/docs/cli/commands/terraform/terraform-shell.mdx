@@ -129,6 +129,7 @@ export ATMOS_COMPONENTS_TERRAFORM_WORKSPACES_ENABLED=true
 atmos terraform shell top-level-component1 -s tenant1-ue2-dev
 atmos terraform shell infra/vpc -s tenant1-ue2-staging
 atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
+atmos terraform shell infra/vpc -s tenant1-ue2-dev --identity dev-role
 ```
 
 ## Arguments
@@ -146,6 +147,15 @@ atmos terraform shell test/test-component-override-3 -s tenant2-ue2-prod
     <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
     <dd>
         Atmos stack.
+    </dd>
+
+    <dt>`--identity` <em>(alias `-i`)</em> <em>(optional)</em></dt>
+    <dd>
+        Identity to use for authentication. Overrides the component's default identity.
+
+        ```shell
+        atmos terraform shell <component> -s <stack> --identity dev-role
+        ```
     </dd>
 
     <dt>`--dry-run` <em>(optional)</em></dt>
