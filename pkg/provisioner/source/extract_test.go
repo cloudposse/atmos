@@ -402,3 +402,51 @@ func TestExtractSource_WithTypeField(t *testing.T) {
 	assert.Equal(t, "github.com/example/repo//module", result.Uri)
 	assert.Equal(t, "v1.0.0", result.Version)
 }
+
+func TestParseIntPtr(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    map[string]any
+		key      string
+		expected *int
+	}{
+		{
+			name:     "Go int value",
+			input:    map[string]any{"count": int(7)},
+			key:      "count",
+			expected: intPtr(7),
+		},
+		{
+			name:     "float64 value",
+			input:    map[string]any{"count": float64(5)},
+			key:      "count",
+			expected: intPtr(5),
+		},
+		{
+			name:     "string value returns nil",
+			input:    map[string]any{"count": "not-a-number"},
+			key:      "count",
+			expected: nil,
+		},
+		{
+			name:     "key not found returns nil",
+			input:    map[string]any{"other": 5},
+			key:      "count",
+			expected: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseIntPtr(tt.input, tt.key)
+			if tt.expected == nil {
+				assert.Nil(t, result)
+			} else {
+				require.NotNil(t, result)
+				assert.Equal(t, *tt.expected, *result)
+			}
+		})
+	}
+}
+
+func intPtr(i int) *int { return &i }

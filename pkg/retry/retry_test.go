@@ -663,6 +663,79 @@ func TestWithPredicate_NilConfig_RunsOnce(t *testing.T) {
 }
 
 // =============================================================================
+// Coverage gap tests - default strategy, jitter subtraction, negative clamping
+// =============================================================================
+
+func TestExecutor_CalculateDelay_UnknownStrategy(t *testing.T) {
+	// Unknown backoff strategy should fall back to initial delay.
+	config := schema.RetryConfig{
+		BackoffStrategy: schema.BackoffStrategy("unknown_strategy"),
+		InitialDelay:    durationPtr(100 * time.Millisecond),
+		RandomJitter:    float64Ptr(0.0),
+	}
+
+	executor := New(config)
+	delay := executor.calculateDelay(3)
+
+	if delay != 100*time.Millisecond {
+		t.Errorf("Expected initial delay for unknown strategy, got %v", delay)
+	}
+}
+
+func TestExecutor_CalculateDelay_JitterSubtraction(t *testing.T) {
+	// Use a seeded rand to force the subtraction branch (rand >= 0.5).
+	config := schema.RetryConfig{
+		BackoffStrategy: schema.BackoffConstant,
+		InitialDelay:    durationPtr(100 * time.Millisecond),
+		RandomJitter:    float64Ptr(0.5),
+	}
+
+	executor := New(config)
+
+	// Try many attempts to cover both addition and subtraction branches.
+	var sawBelow, sawAbove bool
+	for i := 0; i < 100; i++ {
+		delay := executor.calculateDelay(1)
+		if delay < 100*time.Millisecond {
+			sawBelow = true
+		}
+		if delay > 100*time.Millisecond {
+			sawAbove = true
+		}
+		if sawBelow && sawAbove {
+			break
+		}
+	}
+
+	if !sawBelow {
+		t.Error("Expected jitter to produce delays below initial delay (subtraction branch)")
+	}
+	if !sawAbove {
+		t.Error("Expected jitter to produce delays above initial delay (addition branch)")
+	}
+}
+
+func TestExecutor_CalculateDelay_NegativeDelayClamped(t *testing.T) {
+	// Use jitter factor > 1.0 (bypassing validation) to force negative delay clamping.
+	// With jitterFactor > 1.0 and the subtraction branch, delay can go negative.
+	config := schema.RetryConfig{
+		BackoffStrategy: schema.BackoffConstant,
+		InitialDelay:    durationPtr(1 * time.Millisecond),
+		RandomJitter:    float64Ptr(5.0), // Intentionally high to force negative.
+	}
+
+	executor := New(config)
+
+	// Run many times; at least some should hit the clamping path.
+	for i := 0; i < 100; i++ {
+		delay := executor.calculateDelay(1)
+		if delay < 0 {
+			t.Errorf("Delay should never be negative, got %v", delay)
+		}
+	}
+}
+
+// =============================================================================
 // Benchmark
 // =============================================================================
 
