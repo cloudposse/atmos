@@ -195,6 +195,74 @@ func TestShellOptionsForUI(t *testing.T) {
 	}
 }
 
+func TestShellConfig_Fields(t *testing.T) {
+	// Test shellConfig struct construction and field access.
+	cfg := &shellConfig{
+		componentPath: "/components/terraform/vpc",
+		workingDir:    "/workdir/terraform/vpc",
+		varFile:       "dev-vpc.tfvars.json",
+	}
+
+	assert.Equal(t, "/components/terraform/vpc", cfg.componentPath)
+	assert.Equal(t, "/workdir/terraform/vpc", cfg.workingDir)
+	assert.Equal(t, "dev-vpc.tfvars.json", cfg.varFile)
+}
+
+func TestShellInfoFromOptions_AllFieldsMapped(t *testing.T) {
+	// Ensure all fields from ShellOptions are properly mapped to ConfigAndStacksInfo.
+	opts := &ShellOptions{
+		Component: "my-component",
+		Stack:     "my-stack",
+		DryRun:    true,
+		Identity:  "my-identity",
+		ProcessingOptions: ProcessingOptions{
+			ProcessTemplates: true,
+			ProcessFunctions: false,
+			Skip:             []string{"eval", "include"},
+		},
+	}
+
+	info := shellInfoFromOptions(opts)
+
+	// Verify all mapped fields.
+	assert.Equal(t, "my-component", info.ComponentFromArg)
+	assert.Equal(t, "my-stack", info.Stack)
+	assert.Equal(t, "my-stack", info.StackFromArg)
+	assert.Equal(t, "terraform", info.ComponentType)
+	assert.Equal(t, "shell", info.SubCommand)
+	assert.True(t, info.DryRun)
+	assert.Equal(t, "my-identity", info.Identity)
+}
+
+func TestResolveWorkdirPath_ValidWorkdir(t *testing.T) {
+	// Test the valid workdir path branch explicitly.
+	workdirPath := "/custom/workdir/path"
+	componentSection := map[string]any{
+		provWorkdir.WorkdirPathKey: workdirPath,
+	}
+	originalPath := "/original/component/path"
+
+	result := resolveWorkdirPath(componentSection, originalPath)
+
+	assert.Equal(t, workdirPath, result)
+	assert.NotEqual(t, originalPath, result)
+}
+
+func TestResolveWorkdirPath_EmptyMap(t *testing.T) {
+	// Empty map should return original path.
+	result := resolveWorkdirPath(map[string]any{}, "/original/path")
+	assert.Equal(t, "/original/path", result)
+}
+
+func TestShellOptionsForUI_DefaultProcessingOptions(t *testing.T) {
+	// Verify that UI shell options have correct default processing options.
+	opts := shellOptionsForUI("vpc", "dev")
+
+	assert.True(t, opts.ProcessTemplates)
+	assert.True(t, opts.ProcessFunctions)
+	assert.Empty(t, opts.Skip)
+}
+
 func TestPrintShellDryRunInfo(t *testing.T) {
 	tests := []struct {
 		name           string

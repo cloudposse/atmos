@@ -396,3 +396,91 @@ func TestMergeGlobalAuthConfig_ComponentOverridesGlobal(t *testing.T) {
 	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
 	assert.Contains(t, result, "providers")
 }
+
+func TestGetMergedAuthConfig_EmptyComponent(t *testing.T) {
+	// When component is empty, should return global auth config without calling ExecuteDescribeComponent.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev-us-west-2",
+		ComponentFromArg: "",
+	}
+
+	result, err := getMergedAuthConfig(atmosConfig, info)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+	// Should contain the global providers.
+	assert.Len(t, result.Providers, 1)
+}
+
+func TestGetMergedAuthConfig_BothEmpty(t *testing.T) {
+	// When both stack and component are empty, should return global auth config.
+	atmosConfig := &schema.AtmosConfiguration{}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "",
+		ComponentFromArg: "",
+	}
+
+	result, err := getMergedAuthConfig(atmosConfig, info)
+	assert.NoError(t, err)
+	assert.NotNil(t, result)
+}
+
+func TestBuildGlobalAuthSection_LogsLevelOnly(t *testing.T) {
+	// Test with only logs level set (no file).
+	config := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Logs: schema.Logs{Level: "debug"},
+		},
+	}
+	result := buildGlobalAuthSection(config)
+	assert.Contains(t, result, "logs")
+	logs := result["logs"].(map[string]any)
+	assert.Equal(t, "debug", logs["level"])
+	assert.Equal(t, "", logs["file"])
+}
+
+func TestBuildGlobalAuthSection_LogsFileOnly(t *testing.T) {
+	// Test with only logs file set (no level).
+	config := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Logs: schema.Logs{File: "/var/log/atmos.log"},
+		},
+	}
+	result := buildGlobalAuthSection(config)
+	assert.Contains(t, result, "logs")
+	logs := result["logs"].(map[string]any)
+	assert.Equal(t, "", logs["level"])
+	assert.Equal(t, "/var/log/atmos.log", logs["file"])
+}
+
+func TestMergeGlobalAuthConfig_GlobalAndComponentMerged(t *testing.T) {
+	// Verify that global and component auth sections are properly merged.
+	atmosConfig := &schema.AtmosConfiguration{
+		Auth: schema.AuthConfig{
+			Providers: map[string]schema.Provider{
+				"aws": {Kind: "aws-iam"},
+			},
+			Identities: map[string]schema.Identity{
+				"global-identity": {Kind: "aws"},
+			},
+		},
+	}
+	componentSection := map[string]any{
+		cfg.AuthSectionName: map[string]any{
+			"identities": map[string]any{
+				"component-identity": map[string]any{"kind": "gcp"},
+			},
+		},
+	}
+
+	result := mergeGlobalAuthConfig(atmosConfig, componentSection)
+	// Should contain providers from global and identities from both.
+	assert.Contains(t, result, "providers")
+	assert.Contains(t, result, "identities")
+}
