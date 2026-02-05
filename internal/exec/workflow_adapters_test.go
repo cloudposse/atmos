@@ -548,7 +548,7 @@ func TestWorkflowAuthProvider_PrepareEnvironment_EmptyBaseEnv(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	// Adapter now always merges baseEnv with os.Environ(), so we use gomock.Any()
+	// Adapter now always merges baseEnv with os.Environ(), so we use gomock.Any().
 	// and verify the behavior rather than exact env slice.
 	mockManager.EXPECT().
 		PrepareShellEnvironment(gomock.Any(), "test-identity", gomock.Any()).

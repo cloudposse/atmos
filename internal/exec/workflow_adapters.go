@@ -100,7 +100,7 @@ func (p *WorkflowAuthProvider) GetCachedCredentials(ctx context.Context, identit
 func (p *WorkflowAuthProvider) PrepareEnvironment(ctx context.Context, identity string, baseEnv []string) ([]string, error) {
 	defer perf.Track(nil, "exec.WorkflowAuthProvider.PrepareEnvironment")()
 
-	// Always start with OS environment so auth can properly clear conflicting
+	// Always start with OS environment so auth can properly clear conflicting.
 	// credential variables (like AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY).
 	// Then merge any additional workflow/step env vars on top.
 	fullEnv := os.Environ()
