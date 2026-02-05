@@ -1,7 +1,9 @@
 package exec
 
 import (
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -12,6 +14,19 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// absTestPath returns a platform-appropriate absolute path for tests.
+// On Windows, filepath.IsAbs requires a drive letter prefix (e.g., C:\),
+// while on Unix systems a leading "/" is sufficient.
+func absTestPath(name string) string {
+	// Build an OS-appropriate absolute path root.
+	// On Windows, "C:" alone is relative to CWD on drive C; "C:\" is absolute.
+	root := string(filepath.Separator)
+	if runtime.GOOS == "windows" {
+		root = "C:" + root
+	}
+	return filepath.Join(root, filepath.FromSlash(name))
+}
 
 // newTestCommandWithGlobalFlags creates a test command with all global flags registered
 // using the flag registry pattern. This ensures test commands have the same flags as
@@ -838,4 +853,1261 @@ func TestProcessCommandLineArgs_FromPlanBeforeComponent(t *testing.T) {
 	// The function should return an error - this prevents silent misinterpretation
 	// where the component name could be mistakenly used as the plan file path.
 	require.Error(t, err, "ProcessCommandLineArgs should return error when --from-plan precedes component name")
+}
+
+// TestProcessArgsAndFlags_CompoundSubcommands tests terraform compound subcommands like "providers lock".
+// This includes both the standard form (separate words) and the quoted form (single argument).
+func TestProcessArgsAndFlags_CompoundSubcommands(t *testing.T) {
+	tests := []struct {
+		name              string
+		componentType     string
+		inputArgsAndFlags []string
+		wantSubCommand    string
+		wantSubCommand2   string
+		wantComponent     string
+		wantAdditional    []string
+		wantErr           bool
+	}{
+		// Providers commands - separate words.
+		{
+			name:              "providers lock - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "lock", "my-component"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    nil,
+			wantErr:           false,
+		},
+		{
+			name:              "providers lock - separate words with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "lock", "my-component", "-platform=linux_amd64"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-platform=linux_amd64"},
+			wantErr:           false,
+		},
+		{
+			name:              "providers mirror - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "mirror", "my-component"},
+			wantSubCommand:    "providers mirror",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "providers schema - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "schema", "my-component"},
+			wantSubCommand:    "providers schema",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Providers commands - quoted (single argument).
+		{
+			name:              "providers lock - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers lock", "my-component"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    nil,
+			wantErr:           false,
+		},
+		{
+			name:              "providers lock - quoted with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers lock", "my-component", "-platform=darwin_amd64"},
+			wantSubCommand:    "providers lock",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-platform=darwin_amd64"},
+			wantErr:           false,
+		},
+		{
+			name:              "providers mirror - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers mirror", "my-component"},
+			wantSubCommand:    "providers mirror",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// State commands - separate words.
+		{
+			name:              "state list - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "list", "my-component"},
+			wantSubCommand:    "state list",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state mv - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "mv", "my-component"},
+			wantSubCommand:    "state mv",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state pull - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "pull", "my-component"},
+			wantSubCommand:    "state pull",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state push - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "push", "my-component"},
+			wantSubCommand:    "state push",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state replace-provider - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "replace-provider", "my-component"},
+			wantSubCommand:    "state replace-provider",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state rm - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "rm", "my-component"},
+			wantSubCommand:    "state rm",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state show - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "show", "my-component"},
+			wantSubCommand:    "state show",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state list - separate words with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "list", "my-component", "-id=123"},
+			wantSubCommand:    "state list",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-id=123"},
+			wantErr:           false,
+		},
+		// State commands - quoted.
+		{
+			name:              "state list - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state list", "my-component"},
+			wantSubCommand:    "state list",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state mv - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state mv", "my-component"},
+			wantSubCommand:    "state mv",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state pull - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state pull", "my-component"},
+			wantSubCommand:    "state pull",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state push - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state push", "my-component"},
+			wantSubCommand:    "state push",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state replace-provider - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state replace-provider", "my-component"},
+			wantSubCommand:    "state replace-provider",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state rm - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state rm", "my-component"},
+			wantSubCommand:    "state rm",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state show - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state show", "my-component"},
+			wantSubCommand:    "state show",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "state list - quoted with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state list", "my-component", "-id=123"},
+			wantSubCommand:    "state list",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-id=123"},
+			wantErr:           false,
+		},
+		// Workspace commands - separate words.
+		{
+			name:              "workspace select - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "select", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "select",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace list - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "list", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "list",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace new - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "new", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "new",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace delete - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "delete", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "delete",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace show - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "show", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "show",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace select - separate words with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "select", "my-component", "-lock=false"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "select",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-lock=false"},
+			wantErr:           false,
+		},
+		// Workspace commands - quoted.
+		{
+			name:              "workspace select - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace select", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "select",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace list - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace list", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "list",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace new - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace new", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "new",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace delete - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace delete", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "delete",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace show - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace show", "my-component"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "show",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		{
+			name:              "workspace select - quoted with flags",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace select", "my-component", "-lock=false"},
+			wantSubCommand:    "workspace",
+			wantSubCommand2:   "select",
+			wantComponent:     "my-component",
+			wantAdditional:    []string{"-lock=false"},
+			wantErr:           false,
+		},
+		// Write varfile - separate words.
+		{
+			name:              "write varfile - separate words",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"write", "varfile", "my-component"},
+			wantSubCommand:    "write",
+			wantSubCommand2:   "varfile",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Write varfile - quoted.
+		{
+			name:              "write varfile - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"write varfile", "my-component"},
+			wantSubCommand:    "write",
+			wantSubCommand2:   "varfile",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Providers - quoted schema.
+		{
+			name:              "providers schema - quoted",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers schema", "my-component"},
+			wantSubCommand:    "providers schema",
+			wantSubCommand2:   "",
+			wantComponent:     "my-component",
+			wantErr:           false,
+		},
+		// Error cases.
+		{
+			name:              "providers lock - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers", "lock"},
+			wantErr:           true,
+		},
+		{
+			name:              "providers lock quoted - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"providers lock"},
+			wantErr:           true,
+		},
+		{
+			name:              "state list - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state", "list"},
+			wantErr:           true,
+		},
+		{
+			name:              "state list quoted - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"state list"},
+			wantErr:           true,
+		},
+		{
+			name:              "workspace select - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace", "select"},
+			wantErr:           true,
+		},
+		{
+			name:              "workspace select quoted - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"workspace select"},
+			wantErr:           true,
+		},
+		{
+			name:              "write varfile - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"write", "varfile"},
+			wantErr:           true,
+		},
+		{
+			name:              "write varfile quoted - missing component",
+			componentType:     "terraform",
+			inputArgsAndFlags: []string{"write varfile"},
+			wantErr:           true,
+		},
+		// Non-terraform component type should not match compound subcommands.
+		{
+			name:              "helmfile state list - treated as single command",
+			componentType:     "helmfile",
+			inputArgsAndFlags: []string{"state", "list", "my-component"},
+			wantSubCommand:    "state",
+			wantSubCommand2:   "",
+			wantComponent:     "list",
+			wantAdditional:    []string{"my-component"},
+			wantErr:           false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := processArgsAndFlags(tt.componentType, tt.inputArgsAndFlags)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantSubCommand, got.SubCommand, "SubCommand mismatch")
+			assert.Equal(t, tt.wantSubCommand2, got.SubCommand2, "SubCommand2 mismatch")
+			assert.Equal(t, tt.wantComponent, got.ComponentFromArg, "ComponentFromArg mismatch")
+			if tt.wantAdditional != nil {
+				assert.Equal(t, tt.wantAdditional, got.AdditionalArgsAndFlags, "AdditionalArgsAndFlags mismatch")
+			} else {
+				assert.Empty(t, got.AdditionalArgsAndFlags, "AdditionalArgsAndFlags should be empty")
+			}
+		})
+	}
+}
+
+// TestParseCompoundSubcommand tests the parseCompoundSubcommand helper function.
+func TestParseCompoundSubcommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		args    []string
+		want    *compoundSubcommandResult
+		wantNil bool
+	}{
+		{
+			name:    "empty args",
+			args:    []string{},
+			wantNil: true,
+		},
+		{
+			name:    "single word command",
+			args:    []string{"plan"},
+			wantNil: true,
+		},
+		{
+			name: "providers lock - quoted",
+			args: []string{"providers lock", "component"},
+			want: &compoundSubcommandResult{
+				subCommand: "providers lock",
+				argCount:   1,
+			},
+		},
+		{
+			name: "providers lock - separate",
+			args: []string{"providers", "lock", "component"},
+			want: &compoundSubcommandResult{
+				subCommand: "providers lock",
+				argCount:   2,
+			},
+		},
+		{
+			name: "state list - quoted",
+			args: []string{"state list", "component"},
+			want: &compoundSubcommandResult{
+				subCommand: "state list",
+				argCount:   1,
+			},
+		},
+		{
+			name: "workspace select - quoted",
+			args: []string{"workspace select", "component"},
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "select",
+				argCount:    1,
+			},
+		},
+		{
+			name: "write varfile - separate",
+			args: []string{"write", "varfile", "component"},
+			want: &compoundSubcommandResult{
+				subCommand:  "write",
+				subCommand2: "varfile",
+				argCount:    2,
+			},
+		},
+		{
+			name:    "unknown compound subcommand",
+			args:    []string{"unknown command", "component"},
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseCompoundSubcommand(tt.args)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want.subCommand, got.subCommand)
+			assert.Equal(t, tt.want.subCommand2, got.subCommand2)
+			assert.Equal(t, tt.want.argCount, got.argCount)
+		})
+	}
+}
+
+// TestParseQuotedCompoundSubcommand tests the parseQuotedCompoundSubcommand helper function.
+func TestParseQuotedCompoundSubcommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		arg     string
+		want    *compoundSubcommandResult
+		wantNil bool
+	}{
+		{
+			name:    "single word",
+			arg:     "plan",
+			wantNil: true,
+		},
+		{
+			name: "providers lock",
+			arg:  "providers lock",
+			want: &compoundSubcommandResult{
+				subCommand: "providers lock",
+				argCount:   1,
+			},
+		},
+		{
+			name: "providers mirror",
+			arg:  "providers mirror",
+			want: &compoundSubcommandResult{
+				subCommand: "providers mirror",
+				argCount:   1,
+			},
+		},
+		{
+			name: "providers schema",
+			arg:  "providers schema",
+			want: &compoundSubcommandResult{
+				subCommand: "providers schema",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state list",
+			arg:  "state list",
+			want: &compoundSubcommandResult{
+				subCommand: "state list",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state mv",
+			arg:  "state mv",
+			want: &compoundSubcommandResult{
+				subCommand: "state mv",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state pull",
+			arg:  "state pull",
+			want: &compoundSubcommandResult{
+				subCommand: "state pull",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state push",
+			arg:  "state push",
+			want: &compoundSubcommandResult{
+				subCommand: "state push",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state replace-provider",
+			arg:  "state replace-provider",
+			want: &compoundSubcommandResult{
+				subCommand: "state replace-provider",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state rm",
+			arg:  "state rm",
+			want: &compoundSubcommandResult{
+				subCommand: "state rm",
+				argCount:   1,
+			},
+		},
+		{
+			name: "state show",
+			arg:  "state show",
+			want: &compoundSubcommandResult{
+				subCommand: "state show",
+				argCount:   1,
+			},
+		},
+		{
+			name: "workspace select",
+			arg:  "workspace select",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "select",
+				argCount:    1,
+			},
+		},
+		{
+			name: "workspace list",
+			arg:  "workspace list",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "list",
+				argCount:    1,
+			},
+		},
+		{
+			name: "workspace new",
+			arg:  "workspace new",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "new",
+				argCount:    1,
+			},
+		},
+		{
+			name: "workspace delete",
+			arg:  "workspace delete",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "delete",
+				argCount:    1,
+			},
+		},
+		{
+			name: "workspace show",
+			arg:  "workspace show",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "show",
+				argCount:    1,
+			},
+		},
+		{
+			name: "write varfile",
+			arg:  "write varfile",
+			want: &compoundSubcommandResult{
+				subCommand:  "write",
+				subCommand2: "varfile",
+				argCount:    1,
+			},
+		},
+		{
+			name:    "unknown command",
+			arg:     "foo bar",
+			wantNil: true,
+		},
+		{
+			name:    "providers with unknown subcommand",
+			arg:     "providers unknown",
+			wantNil: true,
+		},
+		{
+			name:    "state with unknown subcommand",
+			arg:     "state unknown",
+			wantNil: true,
+		},
+		{
+			name:    "workspace with unknown subcommand",
+			arg:     "workspace unknown",
+			wantNil: true,
+		},
+		{
+			name:    "write with unknown subcommand",
+			arg:     "write unknown",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseQuotedCompoundSubcommand(tt.arg)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want.subCommand, got.subCommand)
+			assert.Equal(t, tt.want.subCommand2, got.subCommand2)
+			assert.Equal(t, tt.want.argCount, got.argCount)
+		})
+	}
+}
+
+// TestParseSeparateCompoundSubcommand tests the parseSeparateCompoundSubcommand helper function.
+func TestParseSeparateCompoundSubcommand(t *testing.T) {
+	tests := []struct {
+		name    string
+		first   string
+		second  string
+		want    *compoundSubcommandResult
+		wantNil bool
+	}{
+		{
+			name:   "providers lock",
+			first:  "providers",
+			second: "lock",
+			want: &compoundSubcommandResult{
+				subCommand: "providers lock",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state list",
+			first:  "state",
+			second: "list",
+			want: &compoundSubcommandResult{
+				subCommand: "state list",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state mv",
+			first:  "state",
+			second: "mv",
+			want: &compoundSubcommandResult{
+				subCommand: "state mv",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state pull",
+			first:  "state",
+			second: "pull",
+			want: &compoundSubcommandResult{
+				subCommand: "state pull",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state push",
+			first:  "state",
+			second: "push",
+			want: &compoundSubcommandResult{
+				subCommand: "state push",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state replace-provider",
+			first:  "state",
+			second: "replace-provider",
+			want: &compoundSubcommandResult{
+				subCommand: "state replace-provider",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state rm",
+			first:  "state",
+			second: "rm",
+			want: &compoundSubcommandResult{
+				subCommand: "state rm",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "state show",
+			first:  "state",
+			second: "show",
+			want: &compoundSubcommandResult{
+				subCommand: "state show",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "providers mirror",
+			first:  "providers",
+			second: "mirror",
+			want: &compoundSubcommandResult{
+				subCommand: "providers mirror",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "providers schema",
+			first:  "providers",
+			second: "schema",
+			want: &compoundSubcommandResult{
+				subCommand: "providers schema",
+				argCount:   2,
+			},
+		},
+		{
+			name:   "workspace new",
+			first:  "workspace",
+			second: "new",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "new",
+				argCount:    2,
+			},
+		},
+		{
+			name:   "workspace select",
+			first:  "workspace",
+			second: "select",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "select",
+				argCount:    2,
+			},
+		},
+		{
+			name:   "workspace list",
+			first:  "workspace",
+			second: "list",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "list",
+				argCount:    2,
+			},
+		},
+		{
+			name:   "workspace delete",
+			first:  "workspace",
+			second: "delete",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "delete",
+				argCount:    2,
+			},
+		},
+		{
+			name:   "workspace show",
+			first:  "workspace",
+			second: "show",
+			want: &compoundSubcommandResult{
+				subCommand:  "workspace",
+				subCommand2: "show",
+				argCount:    2,
+			},
+		},
+		{
+			name:   "write varfile",
+			first:  "write",
+			second: "varfile",
+			want: &compoundSubcommandResult{
+				subCommand:  "write",
+				subCommand2: "varfile",
+				argCount:    2,
+			},
+		},
+		{
+			name:    "unknown command",
+			first:   "foo",
+			second:  "bar",
+			wantNil: true,
+		},
+		{
+			name:    "state with unknown subcommand",
+			first:   "state",
+			second:  "unknown",
+			wantNil: true,
+		},
+		{
+			name:    "providers with unknown subcommand",
+			first:   "providers",
+			second:  "unknown",
+			wantNil: true,
+		},
+		{
+			name:    "workspace with unknown subcommand",
+			first:   "workspace",
+			second:  "unknown",
+			wantNil: true,
+		},
+		{
+			name:    "write with unknown subcommand",
+			first:   "write",
+			second:  "unknown",
+			wantNil: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := parseSeparateCompoundSubcommand(tt.first, tt.second)
+			if tt.wantNil {
+				assert.Nil(t, got)
+				return
+			}
+			require.NotNil(t, got)
+			assert.Equal(t, tt.want.subCommand, got.subCommand)
+			assert.Equal(t, tt.want.subCommand2, got.subCommand2)
+			assert.Equal(t, tt.want.argCount, got.argCount)
+		})
+	}
+}
+
+// TestProcessTerraformCompoundSubcommand tests the processTerraformCompoundSubcommand helper function.
+func TestProcessTerraformCompoundSubcommand(t *testing.T) {
+	tests := []struct {
+		name               string
+		args               []string
+		wantProcessed      bool
+		wantErr            bool
+		wantSubCommand     string
+		wantSubCommand2    string
+		wantComponent      string
+		wantAdditional     []string
+		wantPathResolution bool
+	}{
+		{
+			name:          "not a compound subcommand",
+			args:          []string{"plan", "component"},
+			wantProcessed: false,
+			wantErr:       false,
+		},
+		{
+			name:           "providers lock with component",
+			args:           []string{"providers", "lock", "my-component"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "providers lock",
+			wantComponent:  "my-component",
+		},
+		{
+			name:           "providers lock quoted with component",
+			args:           []string{"providers lock", "my-component"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "providers lock",
+			wantComponent:  "my-component",
+		},
+		{
+			name:          "providers lock without component",
+			args:          []string{"providers", "lock"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+		{
+			name:          "providers lock quoted without component",
+			args:          []string{"providers lock"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+		{
+			name:               "providers lock with path component sets NeedsPathResolution",
+			args:               []string{"providers", "lock", "./my-component"},
+			wantProcessed:      true,
+			wantErr:            false,
+			wantSubCommand:     "providers lock",
+			wantComponent:      "./my-component",
+			wantPathResolution: true,
+		},
+		{
+			name:           "providers lock with component and additional flags",
+			args:           []string{"providers", "lock", "my-component", "-platform=linux_amd64", "-platform=darwin_amd64"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "providers lock",
+			wantComponent:  "my-component",
+			wantAdditional: []string{"-platform=linux_amd64", "-platform=darwin_amd64"},
+		},
+		{
+			name:           "state list with component",
+			args:           []string{"state", "list", "my-component"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "state list",
+			wantComponent:  "my-component",
+		},
+		{
+			name:           "state list quoted with component",
+			args:           []string{"state list", "my-component"},
+			wantProcessed:  true,
+			wantErr:        false,
+			wantSubCommand: "state list",
+			wantComponent:  "my-component",
+		},
+		{
+			name:          "state mv without component",
+			args:          []string{"state", "mv"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+		{
+			name:               "state show with path component sets NeedsPathResolution",
+			args:               []string{"state", "show", "../my-component"},
+			wantProcessed:      true,
+			wantErr:            false,
+			wantSubCommand:     "state show",
+			wantComponent:      "../my-component",
+			wantPathResolution: true,
+		},
+		{
+			name:            "workspace select with component",
+			args:            []string{"workspace", "select", "my-component"},
+			wantProcessed:   true,
+			wantErr:         false,
+			wantSubCommand:  "workspace",
+			wantSubCommand2: "select",
+			wantComponent:   "my-component",
+		},
+		{
+			name:          "workspace select without component",
+			args:          []string{"workspace", "select"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+		{
+			name:               "workspace list with path component sets NeedsPathResolution",
+			args:               []string{"workspace", "list", absTestPath("abs/path/component")},
+			wantProcessed:      true,
+			wantErr:            false,
+			wantSubCommand:     "workspace",
+			wantSubCommand2:    "list",
+			wantComponent:      absTestPath("abs/path/component"),
+			wantPathResolution: true,
+		},
+		{
+			name:            "workspace quoted select with component",
+			args:            []string{"workspace select", "my-component"},
+			wantProcessed:   true,
+			wantErr:         false,
+			wantSubCommand:  "workspace",
+			wantSubCommand2: "select",
+			wantComponent:   "my-component",
+		},
+		{
+			name:            "write varfile with component",
+			args:            []string{"write", "varfile", "my-component"},
+			wantProcessed:   true,
+			wantErr:         false,
+			wantSubCommand:  "write",
+			wantSubCommand2: "varfile",
+			wantComponent:   "my-component",
+		},
+		{
+			name:            "write varfile quoted with component",
+			args:            []string{"write varfile", "my-component"},
+			wantProcessed:   true,
+			wantErr:         false,
+			wantSubCommand:  "write",
+			wantSubCommand2: "varfile",
+			wantComponent:   "my-component",
+		},
+		{
+			name:          "write varfile without component",
+			args:          []string{"write", "varfile"},
+			wantProcessed: true,
+			wantErr:       true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ArgsAndFlagsInfo{}
+			processed, err := processTerraformCompoundSubcommand(info, tt.args)
+
+			assert.Equal(t, tt.wantProcessed, processed)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			if tt.wantProcessed {
+				assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+				assert.Equal(t, tt.wantSubCommand2, info.SubCommand2)
+				assert.Equal(t, tt.wantComponent, info.ComponentFromArg)
+				assert.Equal(t, tt.wantPathResolution, info.NeedsPathResolution)
+				if tt.wantAdditional != nil {
+					assert.Equal(t, tt.wantAdditional, info.AdditionalArgsAndFlags)
+				} else {
+					assert.Empty(t, info.AdditionalArgsAndFlags, "AdditionalArgsAndFlags should be empty")
+				}
+			}
+		})
+	}
+}
+
+// TestProcessSingleCommand tests the processSingleCommand helper function.
+func TestProcessSingleCommand(t *testing.T) {
+	tests := []struct {
+		name               string
+		args               []string
+		wantErr            bool
+		wantSubCommand     string
+		wantComponent      string
+		wantAdditional     []string
+		wantPathResolution bool
+	}{
+		{
+			name:           "single arg - subcommand only",
+			args:           []string{"plan"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+		},
+		{
+			name:           "two args - subcommand and component",
+			args:           []string{"plan", "my-component"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantComponent:  "my-component",
+		},
+		{
+			name:           "three args - with additional",
+			args:           []string{"plan", "my-component", "-var=foo=bar"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantComponent:  "my-component",
+			wantAdditional: []string{"-var=foo=bar"},
+		},
+		{
+			name:           "subcommand with flag instead of component",
+			args:           []string{"plan", "--help"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantAdditional: []string{"--help"},
+		},
+		{
+			name:           "flag with additional args preserves all flags",
+			args:           []string{"plan", "--help", "-var=foo"},
+			wantErr:        false,
+			wantSubCommand: "plan",
+			wantAdditional: []string{"--help", "-var=foo"},
+		},
+		{
+			name:    "empty second argument",
+			args:    []string{"plan", ""},
+			wantErr: true,
+		},
+		{
+			name:    "invalid flag format",
+			args:    []string{"plan", "--"},
+			wantErr: true,
+		},
+		{
+			name:               "component with dot prefix sets NeedsPathResolution",
+			args:               []string{"plan", "."},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      ".",
+			wantPathResolution: true,
+		},
+		{
+			name:               "component with relative path prefix sets NeedsPathResolution",
+			args:               []string{"plan", "./vpc"},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      "./vpc",
+			wantPathResolution: true,
+		},
+		{
+			name:               "component with parent path prefix sets NeedsPathResolution",
+			args:               []string{"plan", "../vpc"},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      "../vpc",
+			wantPathResolution: true,
+		},
+		{
+			// Windows-style relative path with backslash.
+			name:               "component with backslash relative path sets NeedsPathResolution",
+			args:               []string{"plan", `.\\vpc`},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      `.\\vpc`,
+			wantPathResolution: true,
+		},
+		{
+			// Windows-style parent path with backslash.
+			name:               "component with backslash parent path sets NeedsPathResolution",
+			args:               []string{"plan", `..\\vpc`},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      `..\\vpc`,
+			wantPathResolution: true,
+		},
+		{
+			name:               "component with absolute path sets NeedsPathResolution",
+			args:               []string{"plan", absTestPath("absolute/path/component")},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      absTestPath("absolute/path/component"),
+			wantPathResolution: true,
+		},
+		{
+			// Forward slashes in component names are namespace separators, not path indicators.
+			name:               "component with slash but no path prefix does not set NeedsPathResolution",
+			args:               []string{"plan", "infra/vpc"},
+			wantErr:            false,
+			wantSubCommand:     "plan",
+			wantComponent:      "infra/vpc",
+			wantPathResolution: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &schema.ArgsAndFlagsInfo{}
+			err := processSingleCommand(info, tt.args)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				return
+			}
+
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantSubCommand, info.SubCommand)
+			assert.Equal(t, tt.wantComponent, info.ComponentFromArg)
+			assert.Equal(t, tt.wantPathResolution, info.NeedsPathResolution, "NeedsPathResolution mismatch")
+			if tt.wantAdditional != nil {
+				assert.Equal(t, tt.wantAdditional, info.AdditionalArgsAndFlags)
+			} else {
+				assert.Empty(t, info.AdditionalArgsAndFlags, "AdditionalArgsAndFlags should be empty")
+			}
+		})
+	}
 }

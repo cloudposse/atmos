@@ -189,7 +189,7 @@ func TestKeyToFilename(t *testing.T) {
 			assert.NotEqual(t, f1, f2)
 		}
 		// Verify filename is valid (hex hash with optional extension).
-		assert.Regexp(t, `^[a-f0-9]+(\.(yaml|yml|json|toml|hcl|tf))?$`, f1)
+		assert.Regexp(t, `^[a-f0-9]+(\.(yaml|yml|json|toml|hcl|tf)(\.tmpl)?|\.tmpl)?$`, f1)
 	}
 }
 
@@ -207,6 +207,12 @@ func TestKeyToFilename_PreservesExtension(t *testing.T) {
 		{"https://example.com/config.tf", ".tf"},
 		// Keys with query strings should extract extension from path.
 		{"github.com/org/repo//path/config.yaml?ref=v1.0", ".yaml"},
+		// Keys with compound template extensions should preserve them.
+		{"https://example.com/stack.yaml.tmpl", ".yaml.tmpl"},
+		{"https://example.com/stack.yml.tmpl", ".yml.tmpl"},
+		{"https://example.com/stack.json.tmpl", ".json.tmpl"},
+		// Keys with bare .tmpl extension should preserve it.
+		{"https://example.com/template.tmpl", ".tmpl"},
 		// Keys without valid extensions should not have extension.
 		{"https://example.com/config.txt", ""},
 		{"https://example.com/config", ""},
@@ -276,6 +282,10 @@ func TestExtractExtension_EdgeCases(t *testing.T) {
 		{"fragment stripped", "https://example.com/config.yaml#section", ".yaml"},
 		{"query and fragment", "https://example.com/config.yaml?ref=v1#section", ".yaml"},
 		{"multiple dots", "https://example.com/config.backup.yaml", ".yaml"},
+		{"compound yaml.tmpl", "https://example.com/stack.yaml.tmpl", ".yaml.tmpl"},
+		{"compound yml.tmpl", "https://example.com/stack.yml.tmpl", ".yml.tmpl"},
+		{"bare tmpl", "https://example.com/template.tmpl", ".tmpl"},
+		{"txt.tmpl not compound", "https://example.com/readme.txt.tmpl", ".tmpl"},
 		{"uppercase extension", "https://example.com/config.YAML", ".YAML"},
 		{"only dots", "...", ""},
 		{"hidden file", ".gitignore", ""},

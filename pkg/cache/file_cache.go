@@ -127,7 +127,19 @@ func extractExtension(uri string) string {
 	validExts := map[string]bool{
 		".yaml": true, ".yml": true, ".json": true,
 		".toml": true, ".hcl": true, ".tf": true,
+		".tmpl": true,
 	}
+
+	// Handle compound template extensions (e.g., .yaml.tmpl).
+	if strings.ToLower(ext) == ".tmpl" {
+		withoutTmpl := strings.TrimSuffix(base, ext)
+		innerExt := filepath.Ext(withoutTmpl)
+		if validExts[strings.ToLower(innerExt)] {
+			return innerExt + ext
+		}
+		return ext
+	}
+
 	if validExts[strings.ToLower(ext)] {
 		return ext
 	}
