@@ -53,7 +53,7 @@ With `!include` it's possible to import multiple different file formats into Atm
 <Note>
     File type detection is based on the file extension, not the content. For example, a `.txt` file containing JSON
     will be returned as a raw string. To force any file to be included as raw text regardless of extension,
-    use the [`!include.raw`](./include.raw) function.
+    use the [`!include.raw`](./include-raw) function.
 
     **Important for URLs:** URLs that lack a file extension (like `https://api.github.com/meta`) will be treated as
     plain text. If you need to parse such URLs as JSON or YAML, ensure the URL ends with the appropriate extension

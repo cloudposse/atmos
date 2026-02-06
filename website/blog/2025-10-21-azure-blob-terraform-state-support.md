@@ -295,7 +295,7 @@ atmos describe component vpc -s plat-ue2-dev
 
 ## Documentation
 
-- **[!terraform.state Function Reference](/functions/yaml/terraform.state)** - Complete usage documentation
+- **[!terraform.state Function Reference](/functions/yaml/terraform-state)** - Complete usage documentation
 - **[Terraform Backends](/components/terraform/backends)** - Backend configuration guide
 - **[Remote State](/stacks/remote-state)** - Data sharing patterns
 
