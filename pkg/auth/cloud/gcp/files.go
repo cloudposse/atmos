@@ -77,7 +77,11 @@ type CredentialFormat struct {
 func GetGCPBaseDir() (string, error) {
 	defer perf.Track(nil, "gcp.GetGCPBaseDir")()
 
-	return xdg.GetXDGConfigDir("", permDir)
+	dir, err := xdg.GetXDGConfigDir("", permDir)
+	if err != nil {
+		return "", fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
+	}
+	return dir, nil
 }
 
 // GetProviderDir returns the directory for a specific GCP provider.
