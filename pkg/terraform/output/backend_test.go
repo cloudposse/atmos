@@ -24,6 +24,7 @@ func TestGenerateBackendConfig(t *testing.T) {
 		expectError   bool
 		expectedErr   error
 		expectedType  string
+		verifyResult  func(t *testing.T, result map[string]any) // Custom verification function
 	}{
 		{
 			name:        "s3 backend",
@@ -97,6 +98,95 @@ func TestGenerateBackendConfig(t *testing.T) {
 			expectError:  false,
 			expectedType: "s3",
 		},
+		{
+			name:        "cloud backend with workspace token",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "my-workspace-{terraform_workspace}",
+				},
+			},
+			workspace:   "prod",
+			authContext: nil,
+			expectError: false,
+			verifyResult: func(t *testing.T, result map[string]any) {
+				terraform, ok := result["terraform"].(map[string]any)
+				require.True(t, ok, "expected terraform key in result")
+
+				// For cloud backend, should be terraform.cloud not terraform.backend.cloud
+				cloud, ok := terraform["cloud"].(map[string]any)
+				require.True(t, ok, "expected cloud key in terraform (not backend.cloud)")
+
+				assert.Equal(t, "my-org", cloud["organization"])
+
+				// Workspace name should have token replaced
+				workspaces, ok := cloud["workspaces"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "my-workspace-prod", workspaces["name"], "workspace token should be replaced")
+			},
+		},
+		{
+			name:        "cloud backend without workspace",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "my-workspace",
+				},
+			},
+			workspace:   "",
+			authContext: nil,
+			expectError: false,
+			verifyResult: func(t *testing.T, result map[string]any) {
+				terraform, ok := result["terraform"].(map[string]any)
+				require.True(t, ok)
+
+				cloud, ok := terraform["cloud"].(map[string]any)
+				require.True(t, ok, "expected cloud key in terraform")
+
+				workspaces, ok := cloud["workspaces"].(map[string]any)
+				require.True(t, ok)
+
+				// Should remain unchanged without workspace token
+				assert.Equal(t, "my-workspace", workspaces["name"])
+			},
+		},
+		{
+			name:        "cloud backend with multiple workspace tokens",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org-{terraform_workspace}",
+				"workspaces": map[string]any{
+					"name": "{terraform_workspace}-workspace",
+					"tags": []any{
+						"{terraform_workspace}",
+						"production",
+					},
+				},
+			},
+			workspace:   "staging",
+			authContext: nil,
+			expectError: false,
+			verifyResult: func(t *testing.T, result map[string]any) {
+				terraform, ok := result["terraform"].(map[string]any)
+				require.True(t, ok)
+
+				cloud, ok := terraform["cloud"].(map[string]any)
+				require.True(t, ok)
+
+				assert.Equal(t, "my-org-staging", cloud["organization"])
+
+				workspaces, ok := cloud["workspaces"].(map[string]any)
+				require.True(t, ok)
+				assert.Equal(t, "staging-workspace", workspaces["name"])
+
+				tags, ok := workspaces["tags"].([]any)
+				require.True(t, ok)
+				assert.Equal(t, "staging", tags[0])
+				assert.Equal(t, "production", tags[1])
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -114,7 +204,13 @@ func TestGenerateBackendConfig(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			// Verify structure.
+			// Use custom verification if provided
+			if tt.verifyResult != nil {
+				tt.verifyResult(t, result)
+				return
+			}
+
+			// Default verification for non-cloud backends
 			terraform, ok := result["terraform"].(map[string]any)
 			require.True(t, ok, "expected terraform key in result")
 
@@ -285,6 +381,26 @@ func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
 			expectError: true,
 			expectedErr: errUtils.ErrBackendFileGeneration,
 		},
+		{
+			name: "cloud backend generation with workspace token",
+			config: &ComponentConfig{
+				AutoGenerateBackend: true,
+				BackendType:         "cloud",
+				Backend: map[string]any{
+					"organization": "my-org",
+					"workspaces": map[string]any{
+						"name": "workspace-{terraform_workspace}",
+					},
+				},
+				Workspace: "prod",
+			},
+			component:           "app",
+			stack:               "prod-us-east-1",
+			authContext:         nil,
+			expectError:         false,
+			expectFileCreated:   true,
+			expectedBackendType: "cloud",
+		},
 	}
 
 	for _, tt := range tests {
@@ -320,11 +436,26 @@ func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
 				terraform, ok := backendConfig["terraform"].(map[string]any)
 				require.True(t, ok, "should have terraform key")
 
-				backend, ok := terraform["backend"].(map[string]any)
-				require.True(t, ok, "should have backend key")
+				// Cloud backend has different structure: terraform.cloud vs terraform.backend.s3
+				if tt.expectedBackendType == "cloud" {
+					cloud, ok := terraform["cloud"].(map[string]any)
+					require.True(t, ok, "should have cloud key in terraform (not backend.cloud)")
 
-				_, ok = backend[tt.expectedBackendType]
-				assert.True(t, ok, "should have backend type %s", tt.expectedBackendType)
+					// Verify workspace token replacement
+					if tt.config.Workspace != "" {
+						workspaces, ok := cloud["workspaces"].(map[string]any)
+						require.True(t, ok, "should have workspaces in cloud config")
+						name, ok := workspaces["name"].(string)
+						require.True(t, ok, "should have name in workspaces")
+						assert.Equal(t, "workspace-prod", name, "workspace token should be replaced")
+					}
+				} else {
+					backend, ok := terraform["backend"].(map[string]any)
+					require.True(t, ok, "should have backend key")
+
+					_, ok = backend[tt.expectedBackendType]
+					assert.True(t, ok, "should have backend type %s", tt.expectedBackendType)
+				}
 			} else {
 				_, err := os.Stat(backendFile)
 				assert.True(t, os.IsNotExist(err), "backend file should not exist")
