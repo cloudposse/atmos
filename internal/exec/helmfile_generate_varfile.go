@@ -1,14 +1,16 @@
 package exec
 
 import (
+	"context"
 	"errors"
+	"time"
 
-	"github.com/cloudposse/atmos/pkg/perf"
-
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/spf13/cobra"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/perf"
+	provSource "github.com/cloudposse/atmos/pkg/provisioner/source"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -47,6 +49,15 @@ func ExecuteHelmfileGenerateVarfileCmd(cmd *cobra.Command, args []string) error 
 	info, err = ProcessStacks(&atmosConfig, info, true, true, true, nil, nil)
 	if err != nil {
 		return err
+	}
+
+	// JIT source provisioning: vendor remote component if source is configured.
+	if provSource.HasSource(info.ComponentSection) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		if err := provSource.AutoProvisionSource(ctx, &atmosConfig, cfg.HelmfileComponentType, info.ComponentSection, info.AuthContext); err != nil {
+			return err
+		}
 	}
 
 	var varFileNameFromArg string

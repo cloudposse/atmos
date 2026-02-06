@@ -58,4 +58,6 @@ exclude = [
   "img\\.shields\\.io/github/release/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
+  # Kubernetes.io (frequent connection failures/timeouts)
+  "kubernetes\\.io",
 ]
