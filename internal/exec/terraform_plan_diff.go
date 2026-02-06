@@ -57,7 +57,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Get the component path using the resolved FinalComponent from ProcessStacks
+	// Get the component path using the resolved FinalComponent from ProcessStacks.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
 
 	// Ensure original plan file exists and is absolute
