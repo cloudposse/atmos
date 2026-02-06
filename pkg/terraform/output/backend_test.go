@@ -204,13 +204,11 @@ func TestGenerateBackendConfig(t *testing.T) {
 			require.NoError(t, err)
 			require.NotNil(t, result)
 
-			// Use custom verification if provided
 			if tt.verifyResult != nil {
 				tt.verifyResult(t, result)
 				return
 			}
 
-			// Default verification for non-cloud backends
 			terraform, ok := result["terraform"].(map[string]any)
 			require.True(t, ok, "expected terraform key in result")
 
@@ -436,12 +434,10 @@ func TestDefaultBackendGenerator_GenerateBackendIfNeeded(t *testing.T) {
 				terraform, ok := backendConfig["terraform"].(map[string]any)
 				require.True(t, ok, "should have terraform key")
 
-				// Cloud backend has different structure: terraform.cloud vs terraform.backend.s3
 				if tt.expectedBackendType == "cloud" {
 					cloud, ok := terraform["cloud"].(map[string]any)
 					require.True(t, ok, "should have cloud key in terraform (not backend.cloud)")
 
-					// Verify workspace token replacement
 					if tt.config.Workspace != "" {
 						workspaces, ok := cloud["workspaces"].(map[string]any)
 						require.True(t, ok, "should have workspaces in cloud config")
