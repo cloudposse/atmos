@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"maps"
+	"strings"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
@@ -84,7 +85,13 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 	// Get a token to verify credentials work and get expiry.
 	token, err := creds.TokenSource.Token()
 	if err != nil {
-		return nil, fmt.Errorf("%w: get token from ADC: %w", errUtils.ErrAuthenticationFailed, err)
+		authErr := fmt.Errorf("%w: get token from ADC: %w", errUtils.ErrAuthenticationFailed, err)
+		if isADCReauthError(err) {
+			return nil, errUtils.Build(authErr).
+				WithExplanation("Your Google application-default credentials have expired or require reauthentication. Run `gcloud auth application-default login` and try again.").
+				Err()
+		}
+		return nil, authErr
 	}
 
 	// Determine project ID (spec override > ADC project > empty).
@@ -106,6 +113,14 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 		ServiceAccountEmail: saEmail,
 		Scopes:              scopes,
 	}, nil
+}
+
+func isADCReauthError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "invalid_grant") && strings.Contains(msg, "invalid_rapt")
 }
 
 // Validate validates the provider configuration.
