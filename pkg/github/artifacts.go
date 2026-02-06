@@ -86,6 +86,55 @@ type workflowRunInfo struct {
 	RunStartedAt time.Time
 }
 
+// PullRequestService defines the interface for pull request operations.
+// This allows for mocking in tests.
+//
+//go:generate go run go.uber.org/mock/mockgen@latest -source=artifacts.go -destination=mock_artifacts_test.go -package=github
+type PullRequestService interface {
+	Get(ctx context.Context, owner string, repo string, number int) (*github.PullRequest, *github.Response, error)
+}
+
+// ActionsService defines the interface for GitHub Actions operations.
+// This allows for mocking in tests.
+type ActionsService interface {
+	ListRepositoryWorkflowRuns(ctx context.Context, owner, repo string, opts *github.ListWorkflowRunsOptions) (*github.WorkflowRuns, *github.Response, error)
+	ListWorkflowRunArtifacts(ctx context.Context, owner, repo string, runID int64, opts *github.ListOptions) (*github.ArtifactList, *github.Response, error)
+	GetArtifact(ctx context.Context, owner, repo string, artifactID int64) (*github.Artifact, *github.Response, error)
+}
+
+// ArtifactFetcher wraps the artifact fetching logic with injectable services.
+// Use NewArtifactFetcher to create an instance with custom services for testing.
+type ArtifactFetcher struct {
+	pullRequests PullRequestService
+	actions      ActionsService
+}
+
+// NewArtifactFetcher creates an ArtifactFetcher with custom services.
+// This is primarily used for testing with mock services.
+func NewArtifactFetcher(prs PullRequestService, actions ActionsService) *ArtifactFetcher {
+	defer perf.Track(nil, "github.NewArtifactFetcher")()
+
+	return &ArtifactFetcher{pullRequests: prs, actions: actions}
+}
+
+// defaultArtifactFetcher returns a fetcher using the real GitHub client.
+func defaultArtifactFetcher(ctx context.Context) *ArtifactFetcher {
+	client := newGitHubClient(ctx)
+	return &ArtifactFetcher{
+		pullRequests: client.PullRequests,
+		actions:      client.Actions,
+	}
+}
+
+// defaultArtifactFetcherWithToken returns a fetcher using a GitHub client with an explicit token.
+func defaultArtifactFetcherWithToken(ctx context.Context, token string) *ArtifactFetcher {
+	client := newGitHubClientWithToken(ctx, token)
+	return &ArtifactFetcher{
+		pullRequests: client.PullRequests,
+		actions:      client.Actions,
+	}
+}
+
 // GetPRArtifactInfo retrieves build artifact information for a PR.
 // This finds the latest successful workflow run for the PR and locates
 // the artifact matching the current platform.
@@ -94,6 +143,19 @@ type workflowRunInfo struct {
 func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
 	defer perf.Track(nil, "github.GetPRArtifactInfo")()
 
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getPRArtifactInfo(ctx, owner, repo, prNumber)
+}
+
+// GetPRArtifactInfo retrieves build artifact info for a PR using custom services.
+func (f *ArtifactFetcher) GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetPRArtifactInfo")()
+
+	return f.getPRArtifactInfo(ctx, owner, repo, prNumber)
+}
+
+// getPRArtifactInfo contains the core logic for retrieving PR artifact information.
+func (f *ArtifactFetcher) getPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*PRArtifactInfo, error) {
 	log.Debug("Fetching PR artifact info", logFieldOwner, owner, logFieldRepo, repo, "pr", prNumber)
 
 	// Determine artifact name for current platform.
@@ -102,10 +164,8 @@ func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*
 		return nil, err
 	}
 
-	client := newGitHubClient(ctx)
-
 	// Step 1: Get PR info to find the head SHA.
-	headSHA, err := getPRHeadSHA(ctx, client, owner, repo, prNumber)
+	headSHA, err := getPRHeadSHA(ctx, f.pullRequests, owner, repo, prNumber)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +173,7 @@ func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*
 	log.Debug("Found PR head SHA", "sha", headSHA)
 
 	// Step 2: Find the latest successful workflow run for this SHA.
-	runInfo, err := findSuccessfulWorkflowRun(ctx, client, owner, repo, headSHA)
+	runInfo, err := findSuccessfulWorkflowRun(ctx, f.actions, owner, repo, headSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +181,7 @@ func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*
 	log.Debug("Found successful workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
 
 	// Step 3: Find the artifact for the current platform.
-	artifact, err := findArtifactByName(ctx, client, owner, repo, runInfo.ID, artifactName)
+	artifact, err := findArtifactByName(ctx, f.actions, owner, repo, runInfo.ID, artifactName)
 	if err != nil {
 		return nil, err
 	}
@@ -145,10 +205,21 @@ func GetPRArtifactInfo(ctx context.Context, owner, repo string, prNumber int) (*
 func GetArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
 	defer perf.Track(nil, "github.GetArtifactDownloadURL")()
 
-	client := newGitHubClient(ctx)
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getArtifactDownloadURL(ctx, owner, repo, artifactID)
+}
 
+// GetArtifactDownloadURL returns the download URL using custom services.
+func (f *ArtifactFetcher) GetArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetArtifactDownloadURL")()
+
+	return f.getArtifactDownloadURL(ctx, owner, repo, artifactID)
+}
+
+// getArtifactDownloadURL contains the core logic for retrieving an artifact download URL.
+func (f *ArtifactFetcher) getArtifactDownloadURL(ctx context.Context, owner, repo string, artifactID int64) (string, error) {
 	// Get the artifact to retrieve its download URL.
-	artifact, resp, err := client.Actions.GetArtifact(ctx, owner, repo, artifactID)
+	artifact, resp, err := f.actions.GetArtifact(ctx, owner, repo, artifactID)
 	if err != nil {
 		return "", handleGitHubAPIError(err, resp)
 	}
@@ -189,10 +260,10 @@ func getArtifactNameForPlatform() (string, error) {
 }
 
 // getPRHeadSHA retrieves the head commit SHA for a pull request.
-func getPRHeadSHA(ctx context.Context, client *github.Client, owner, repo string, prNumber int) (string, error) {
+func getPRHeadSHA(ctx context.Context, prs PullRequestService, owner, repo string, prNumber int) (string, error) {
 	defer perf.Track(nil, "github.getPRHeadSHA")()
 
-	pr, resp, err := client.PullRequests.Get(ctx, owner, repo, prNumber)
+	pr, resp, err := prs.Get(ctx, owner, repo, prNumber)
 	if err != nil {
 		if resp != nil && resp.StatusCode == statusNotFound {
 			return "", fmt.Errorf("%w: #%d in %s/%s", ErrPRNotFound, prNumber, owner, repo)
@@ -208,7 +279,7 @@ func getPRHeadSHA(ctx context.Context, client *github.Client, owner, repo string
 }
 
 // findSuccessfulWorkflowRun finds the most recent successful workflow run for a commit SHA.
-func findSuccessfulWorkflowRun(ctx context.Context, client *github.Client, owner, repo, headSHA string) (*workflowRunInfo, error) {
+func findSuccessfulWorkflowRun(ctx context.Context, actions ActionsService, owner, repo, headSHA string) (*workflowRunInfo, error) {
 	defer perf.Track(nil, "github.findSuccessfulWorkflowRun")()
 
 	// List workflow runs for the commit SHA.
@@ -220,7 +291,7 @@ func findSuccessfulWorkflowRun(ctx context.Context, client *github.Client, owner
 		},
 	}
 
-	runs, resp, err := client.Actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
+	runs, resp, err := actions.ListRepositoryWorkflowRuns(ctx, owner, repo, opts)
 	if err != nil {
 		return nil, handleGitHubAPIError(err, resp)
 	}
@@ -241,14 +312,14 @@ func findSuccessfulWorkflowRun(ctx context.Context, client *github.Client, owner
 // findArtifactByName finds an artifact by name within a workflow run.
 //
 //nolint:revive // All parameters are necessary for this GitHub API function.
-func findArtifactByName(ctx context.Context, client *github.Client, owner, repo string, runID int64, artifactName string) (*github.Artifact, error) {
+func findArtifactByName(ctx context.Context, actions ActionsService, owner, repo string, runID int64, artifactName string) (*github.Artifact, error) {
 	defer perf.Track(nil, "github.findArtifactByName")()
 
 	opts := &github.ListOptions{
 		PerPage: perPage,
 	}
 
-	artifacts, resp, err := client.Actions.ListWorkflowRunArtifacts(ctx, owner, repo, runID, opts)
+	artifacts, resp, err := actions.ListWorkflowRunArtifacts(ctx, owner, repo, runID, opts)
 	if err != nil {
 		return nil, handleGitHubAPIError(err, resp)
 	}
@@ -286,8 +357,15 @@ func SupportedPRPlatforms() []string {
 func GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int, token string) (string, error) {
 	defer perf.Track(nil, "github.GetPRHeadSHA")()
 
-	client := newGitHubClientWithToken(ctx, token)
-	return getPRHeadSHA(ctx, client, owner, repo, prNumber)
+	fetcher := defaultArtifactFetcherWithToken(ctx, token)
+	return getPRHeadSHA(ctx, fetcher.pullRequests, owner, repo, prNumber)
+}
+
+// GetPRHeadSHA retrieves the head SHA for a PR using custom services.
+func (f *ArtifactFetcher) GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int) (string, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetPRHeadSHA")()
+
+	return getPRHeadSHA(ctx, f.pullRequests, owner, repo, prNumber)
 }
 
 // GetSHAArtifactInfo retrieves build artifact information for a commit SHA.
@@ -298,6 +376,19 @@ func GetPRHeadSHA(ctx context.Context, owner, repo string, prNumber int, token s
 func GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
 	defer perf.Track(nil, "github.GetSHAArtifactInfo")()
 
+	fetcher := defaultArtifactFetcher(ctx)
+	return fetcher.getSHAArtifactInfo(ctx, owner, repo, sha)
+}
+
+// GetSHAArtifactInfo retrieves build artifact info for a SHA using custom services.
+func (f *ArtifactFetcher) GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
+	defer perf.Track(nil, "github.ArtifactFetcher.GetSHAArtifactInfo")()
+
+	return f.getSHAArtifactInfo(ctx, owner, repo, sha)
+}
+
+// getSHAArtifactInfo contains the core logic for retrieving SHA artifact information.
+func (f *ArtifactFetcher) getSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtifactInfo, error) {
 	log.Debug("Fetching SHA artifact info", logFieldOwner, owner, logFieldRepo, repo, "sha", sha)
 
 	// Determine artifact name for current platform.
@@ -306,10 +397,8 @@ func GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtif
 		return nil, err
 	}
 
-	client := newGitHubClient(ctx)
-
 	// Find the latest successful workflow run for this SHA.
-	runInfo, err := findSuccessfulWorkflowRun(ctx, client, owner, repo, sha)
+	runInfo, err := findSuccessfulWorkflowRun(ctx, f.actions, owner, repo, sha)
 	if err != nil {
 		return nil, err
 	}
@@ -317,7 +406,7 @@ func GetSHAArtifactInfo(ctx context.Context, owner, repo, sha string) (*SHAArtif
 	log.Debug("Found successful workflow run", "runID", runInfo.ID, "startedAt", runInfo.RunStartedAt)
 
 	// Find the artifact for the current platform.
-	artifact, err := findArtifactByName(ctx, client, owner, repo, runInfo.ID, artifactName)
+	artifact, err := findArtifactByName(ctx, f.actions, owner, repo, runInfo.ID, artifactName)
 	if err != nil {
 		return nil, err
 	}
