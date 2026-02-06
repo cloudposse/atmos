@@ -68,6 +68,7 @@ website/pnpm-lock.yaml
 examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
+tests/fixtures/scenarios/vendor-simple-excludes/components/**
 internal/exec/output.*
 
 # Coverage files
