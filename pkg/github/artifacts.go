@@ -296,6 +296,11 @@ func findSuccessfulWorkflowRun(ctx context.Context, actions ActionsService, owne
 		return nil, handleGitHubAPIError(err, resp)
 	}
 
+	// Guard against nil response or empty workflow runs.
+	if runs == nil || len(runs.WorkflowRuns) == 0 {
+		return nil, fmt.Errorf("%w: no successful '%s' workflow run for SHA %s", ErrNoWorkflowRunFound, workflowName, headSHA)
+	}
+
 	// Find the workflow run with the correct name ("Tests").
 	for _, run := range runs.WorkflowRuns {
 		if run.GetName() == workflowName && run.GetConclusion() == "success" {
@@ -322,6 +327,12 @@ func findArtifactByName(ctx context.Context, actions ActionsService, owner, repo
 	artifacts, resp, err := actions.ListWorkflowRunArtifacts(ctx, owner, repo, runID, opts)
 	if err != nil {
 		return nil, handleGitHubAPIError(err, resp)
+	}
+
+	// Guard against nil response.
+	if artifacts == nil || artifacts.Artifacts == nil {
+		return nil, fmt.Errorf("%w: '%s' not found in workflow run %d (available: none)",
+			ErrNoArtifactFound, artifactName, runID)
 	}
 
 	for _, artifact := range artifacts.Artifacts {

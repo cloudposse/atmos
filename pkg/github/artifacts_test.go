@@ -210,7 +210,7 @@ func TestIsPlatformError(t *testing.T) {
 	}
 }
 
-// --- Mock-based unit tests for getPRHeadSHA ---
+// --- Mock-based unit tests for getPRHeadSHA ---.
 
 func TestArtifactFetcherGetPRHeadSHA_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -325,7 +325,7 @@ func TestArtifactFetcherGetPRHeadSHA_APIError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-// --- Mock-based unit tests for findSuccessfulWorkflowRun ---
+// --- Mock-based unit tests for findSuccessfulWorkflowRun ---.
 
 func TestFindSuccessfulWorkflowRun_MatchesCorrectWorkflow(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -438,7 +438,7 @@ func TestFindSuccessfulWorkflowRun_APIError(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-// --- Mock-based unit tests for findArtifactByName ---
+// --- Mock-based unit tests for findArtifactByName ---.
 
 func TestFindArtifactByName_MatchesCorrectArtifact(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -550,7 +550,7 @@ func TestFindArtifactByName_APIError(t *testing.T) {
 	assert.Nil(t, result)
 }
 
-// --- Mock-based unit tests for ArtifactFetcher.GetArtifactDownloadURL ---
+// --- Mock-based unit tests for ArtifactFetcher.GetArtifactDownloadURL ---.
 
 func TestArtifactFetcherGetArtifactDownloadURL_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -591,7 +591,7 @@ func TestArtifactFetcherGetArtifactDownloadURL_APIError(t *testing.T) {
 	assert.Empty(t, result)
 }
 
-// --- Mock-based unit tests for ArtifactFetcher.GetPRArtifactInfo ---
+// --- Mock-based unit tests for ArtifactFetcher.GetPRArtifactInfo ---.
 
 // skipIfUnsupportedPlatform skips the test if the current platform does not have
 // a valid artifact name mapping (e.g., darwin/amd64 is not built in CI).
@@ -787,7 +787,7 @@ func TestArtifactFetcherGetPRArtifactInfo_NoArtifactError(t *testing.T) {
 	assert.ErrorIs(t, err, ErrNoArtifactFound)
 }
 
-// --- Mock-based unit tests for ArtifactFetcher.GetSHAArtifactInfo ---
+// --- Mock-based unit tests for ArtifactFetcher.GetSHAArtifactInfo ---.
 
 func TestArtifactFetcherGetSHAArtifactInfo_Success(t *testing.T) {
 	artifactName := skipIfUnsupportedPlatform(t)
