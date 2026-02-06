@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -343,7 +345,7 @@ func TestServiceProvision_SourceNotExists(t *testing.T) {
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirProvision)
 }
 
-func TestServiceProvision_CopyDirFails(t *testing.T) {
+func TestServiceProvision_SyncDirFails(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -352,7 +354,7 @@ func TestServiceProvision_CopyDirFails(t *testing.T) {
 
 	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(errors.New("copy failed"))
+	mockFS.EXPECT().SyncDir(gomock.Any(), gomock.Any(), mockHasher).Return(false, errors.New("sync failed"))
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
@@ -373,21 +375,27 @@ func TestServiceProvision_CopyDirFails(t *testing.T) {
 }
 
 func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
+	// Create a temp dir so WriteMetadata can write the file.
+	tempDir := t.TempDir()
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
-	mockHasher.EXPECT().HashDir(gomock.Any()).Return("", errors.New("hash failed"))
-	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("", errors.New("hash failed"))
+	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
 		"component":   "vpc",
 		"atmos_stack": "dev",
@@ -399,28 +407,46 @@ func TestServiceProvision_HashDirFails_ContinuesSuccessfully(t *testing.T) {
 	}
 
 	// Hash failure is a warning, not an error.
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig)
 	require.NoError(t, err)
 	// Verify workdir path was set.
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 }
 
 func TestServiceProvision_WriteMetadataFails(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping read-only directory test on Windows - directory permissions work differently")
+	}
+	// Create a temp dir with a read-only .atmos subdirectory to force WriteMetadata to fail.
+	tempDir := t.TempDir()
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+	// Create .atmos directory as read-only to prevent writing metadata.
+	atmosDir := filepath.Join(workdirPath, AtmosDir)
+	err = os.MkdirAll(atmosDir, 0o555)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		// Restore permissions so cleanup can delete the directory.
+		_ = os.Chmod(atmosDir, 0o755)
+	})
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
-	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
-	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(errors.New("write failed"))
+	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123", nil)
+	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
+	// The read-only .atmos dir will cause the write to fail.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
 		"component":   "vpc",
 		"atmos_stack": "dev",
@@ -431,27 +457,33 @@ func TestServiceProvision_WriteMetadataFails(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrWorkdirMetadata)
 }
 
 func TestServiceProvision_Success(t *testing.T) {
+	// Create a temp dir so WriteMetadata can write the file.
+	tempDir := t.TempDir()
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
-	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123def456", nil)
-	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123def456", nil)
+	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
 		"component":   "vpc",
 		"atmos_stack": "dev",
@@ -462,27 +494,33 @@ func TestServiceProvision_Success(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig)
 	require.NoError(t, err)
 	assert.NotEmpty(t, componentConfig[WorkdirPathKey])
 }
 
 func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
+	// Create a temp dir so WriteMetadata can write the file.
+	tempDir := t.TempDir()
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists("/custom/path/to/component").Return(true)
-	mockFS.EXPECT().CopyDir("/custom/path/to/component", gomock.Any()).Return(nil)
-	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
-	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().SyncDir("/custom/path/to/component", workdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123", nil)
+	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	componentConfig := map[string]any{
 		"component":      "vpc",
 		"atmos_stack":    "dev",
@@ -494,23 +532,34 @@ func TestServiceProvision_ComponentPathFromConfig(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig)
 	require.NoError(t, err)
 }
 
 func TestServiceProvision_EmptyBasePath(t *testing.T) {
+	// Create a temp dir as current working directory for this test.
+	// When BasePath is empty, it defaults to ".".
+	tempDir := t.TempDir()
+	t.Chdir(tempDir)
+
+	// Create the workdir path since WriteMetadata needs it.
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	// When BasePath is empty, it defaults to ".".
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	// The workdir path will be relative since BasePath is empty (defaults to ".").
+	relativeWorkdirPath := filepath.Join(".workdir", "terraform", "dev-vpc")
+	mockFS.EXPECT().MkdirAll(relativeWorkdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
-	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
-	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().SyncDir(gomock.Any(), relativeWorkdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(relativeWorkdirPath).Return("abc123", nil)
+	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
@@ -525,7 +574,7 @@ func TestServiceProvision_EmptyBasePath(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig)
 	require.NoError(t, err)
 }
 
@@ -903,22 +952,28 @@ func TestServiceProvision_ComponentNameSources(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create a temp dir so WriteMetadata can write the file.
+			tempDir := t.TempDir()
+			workdirPath := filepath.Join(tempDir, ".workdir", "terraform", tt.expectedInPath)
+			err := os.MkdirAll(workdirPath, 0o755)
+			require.NoError(t, err)
+
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
 			mockFS := NewMockFileSystem(ctrl)
 			mockHasher := NewMockHasher(ctrl)
 
-			mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+			mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 			mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-			mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
-			mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
-			mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+			mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+			mockHasher.EXPECT().HashDir(workdirPath).Return("abc123", nil)
+			// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 			service := NewServiceWithDeps(mockFS, mockHasher)
-			atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+			atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 
-			err := service.Provision(context.Background(), atmosConfig, tt.componentConfig)
+			err = service.Provision(context.Background(), atmosConfig, tt.componentConfig)
 			require.NoError(t, err)
 			assert.Contains(t, tt.componentConfig[WorkdirPathKey], tt.expectedInPath)
 		})
@@ -953,21 +1008,27 @@ func TestServiceProvision_MissingStackName(t *testing.T) {
 
 // TestServiceProvision_ComponentKeyNotString tests when component key exists but is not a string.
 func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
+	// Create a temp dir so WriteMetadata can write the file.
+	tempDir := t.TempDir()
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc-fallback")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	mockFS := NewMockFileSystem(ctrl)
 	mockHasher := NewMockHasher(ctrl)
 
-	mockFS.EXPECT().MkdirAll(gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(gomock.Any()).Return(true)
-	mockFS.EXPECT().CopyDir(gomock.Any(), gomock.Any()).Return(nil)
-	mockHasher.EXPECT().HashDir(gomock.Any()).Return("abc123", nil)
-	mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	mockFS.EXPECT().SyncDir(gomock.Any(), workdirPath, mockHasher).Return(true, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("abc123", nil)
+	// Note: WriteMetadata uses real filesystem with atomic write, not mocked FileSystem.
 
 	service := NewServiceWithDeps(mockFS, mockHasher)
 
-	atmosConfig := &schema.AtmosConfiguration{BasePath: "/tmp"}
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tempDir}
 	// Component key is an int, not string - should fallback to metadata.
 	componentConfig := map[string]any{
 		"component": 123, // Not a string.
@@ -982,7 +1043,7 @@ func TestServiceProvision_ComponentKeyNotString(t *testing.T) {
 		},
 	}
 
-	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	err = service.Provision(context.Background(), atmosConfig, componentConfig)
 	require.NoError(t, err)
 	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-vpc-fallback")
 }
@@ -1128,4 +1189,90 @@ func TestDefaultFileSystem_Walk_Error(t *testing.T) {
 		return nil
 	})
 	assert.ErrorIs(t, err, expectedErr)
+}
+
+// TestBuildLocalMetadata tests the buildLocalMetadata function.
+func TestBuildLocalMetadata_NewWorkdir(t *testing.T) {
+	params := &localMetadataParams{
+		component:        "vpc",
+		stack:            "dev",
+		componentPath:    "components/terraform/vpc",
+		contentHash:      "abc123",
+		existingMetadata: nil,
+		changed:          false,
+	}
+
+	result := buildLocalMetadata(params)
+
+	assert.Equal(t, "vpc", result.Component)
+	assert.Equal(t, "dev", result.Stack)
+	assert.Equal(t, SourceTypeLocal, result.SourceType)
+	assert.Equal(t, "components/terraform/vpc", result.Source)
+	assert.Equal(t, "abc123", result.ContentHash)
+	assert.False(t, result.CreatedAt.IsZero())
+	assert.False(t, result.UpdatedAt.IsZero())
+	assert.False(t, result.LastAccessed.IsZero())
+}
+
+func TestBuildLocalMetadata_ExistingMetadata_ContentChanged(t *testing.T) {
+	// Simulate existing metadata from a previous sync.
+	oldCreatedAt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	oldUpdatedAt := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	params := &localMetadataParams{
+		component:     "vpc",
+		stack:         "dev",
+		componentPath: "components/terraform/vpc",
+		contentHash:   "newhash123",
+		existingMetadata: &WorkdirMetadata{
+			Component:   "vpc",
+			Stack:       "dev",
+			SourceType:  SourceTypeLocal,
+			Source:      "components/terraform/vpc",
+			ContentHash: "oldhash",
+			CreatedAt:   oldCreatedAt,
+			UpdatedAt:   oldUpdatedAt,
+		},
+		changed: true, // Content changed.
+	}
+
+	result := buildLocalMetadata(params)
+
+	// CreatedAt should be preserved from existing metadata.
+	assert.True(t, oldCreatedAt.Equal(result.CreatedAt), "CreatedAt should be preserved")
+	// UpdatedAt should be updated (not equal to old value) since content changed.
+	assert.False(t, oldUpdatedAt.Equal(result.UpdatedAt), "UpdatedAt should be updated when content changed")
+	// New values.
+	assert.Equal(t, "newhash123", result.ContentHash)
+}
+
+func TestBuildLocalMetadata_ExistingMetadata_ContentUnchanged(t *testing.T) {
+	// Simulate existing metadata from a previous sync.
+	oldCreatedAt := time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC)
+	oldUpdatedAt := time.Date(2024, 1, 2, 0, 0, 0, 0, time.UTC)
+
+	params := &localMetadataParams{
+		component:     "vpc",
+		stack:         "dev",
+		componentPath: "components/terraform/vpc",
+		contentHash:   "samehash",
+		existingMetadata: &WorkdirMetadata{
+			Component:   "vpc",
+			Stack:       "dev",
+			SourceType:  SourceTypeLocal,
+			Source:      "components/terraform/vpc",
+			ContentHash: "samehash",
+			CreatedAt:   oldCreatedAt,
+			UpdatedAt:   oldUpdatedAt,
+		},
+		changed: false, // Content unchanged.
+	}
+
+	result := buildLocalMetadata(params)
+
+	// Both CreatedAt and UpdatedAt should be preserved since content unchanged.
+	assert.True(t, oldCreatedAt.Equal(result.CreatedAt), "CreatedAt should be preserved")
+	assert.True(t, oldUpdatedAt.Equal(result.UpdatedAt), "UpdatedAt should be preserved when content unchanged")
+	// LastAccessed should still be updated.
+	assert.False(t, result.LastAccessed.IsZero())
 }
