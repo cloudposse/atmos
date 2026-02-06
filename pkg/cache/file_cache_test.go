@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -9,17 +10,40 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 )
+
+// mockFileLock is a simple mock for FileLock used in error path tests.
+type mockFileLock struct {
+	withLockErr  error
+	withRLockErr error
+}
+
+func (m *mockFileLock) WithLock(fn func() error) error {
+	if m.withLockErr != nil {
+		return m.withLockErr
+	}
+	return fn()
+}
+
+func (m *mockFileLock) WithRLock(fn func() error) error {
+	if m.withRLockErr != nil {
+		return m.withRLockErr
+	}
+	return fn()
+}
 
 // newTestCache creates a FileCache for testing with the given temp directory.
 func newTestCache(t *testing.T) *FileCache {
 	t.Helper()
 	tempDir := t.TempDir()
+	lockBasePath := filepath.Join(tempDir, "cache")
 	return &FileCache{
-		baseDir: tempDir,
-		lock:    NewFileLock(filepath.Join(tempDir, "cache")),
-		fs:      filesystem.NewOSFileSystem(),
+		baseDir:      tempDir,
+		lockFilePath: lockBasePath + ".lock",
+		lock:         NewFileLock(lockBasePath),
+		fs:           filesystem.NewOSFileSystem(),
 	}
 }
 
@@ -328,4 +352,82 @@ func TestFileCache_Clear_DirectoryDeletedAfterCreation(t *testing.T) {
 	// Clear should handle the missing directory gracefully.
 	err = cache.Clear()
 	require.NoError(t, err)
+}
+
+func TestFileCache_Clear_PreservesLockFile(t *testing.T) {
+	cache := newTestCache(t)
+
+	// Add some cache entries.
+	require.NoError(t, cache.Set("key1", []byte("content1")))
+	require.NoError(t, cache.Set("key2", []byte("content2")))
+
+	// Create the lock file explicitly so we can verify it persists.
+	err := os.WriteFile(cache.lockFilePath, []byte("lock"), DefaultFilePerm)
+	require.NoError(t, err)
+
+	// Clear the cache.
+	err = cache.Clear()
+	require.NoError(t, err)
+
+	// Verify cached entries are gone.
+	_, exists, err := cache.Get("key1")
+	require.NoError(t, err)
+	assert.False(t, exists)
+
+	// Verify the lock file was preserved.
+	_, err = os.Stat(cache.lockFilePath)
+	assert.NoError(t, err, "lock file should be preserved after Clear()")
+
+	// Verify cache is still functional after Clear().
+	require.NoError(t, cache.Set("key3", []byte("content3")))
+	content, exists, err := cache.Get("key3")
+	require.NoError(t, err)
+	assert.True(t, exists)
+	assert.Equal(t, []byte("content3"), content)
+}
+
+func TestFileCache_Get_LockError(t *testing.T) {
+	tempDir := t.TempDir()
+	lockErr := fmt.Errorf("lock acquisition failed")
+	cache := &FileCache{
+		baseDir:      tempDir,
+		lockFilePath: filepath.Join(tempDir, "cache.lock"),
+		lock:         &mockFileLock{withRLockErr: lockErr},
+		fs:           filesystem.NewOSFileSystem(),
+	}
+
+	_, _, err := cache.Get("test-key")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheRead)
+}
+
+func TestFileCache_GetOrFetch_FetchError(t *testing.T) {
+	cache := newTestCache(t)
+
+	fetchErr := fmt.Errorf("download failed")
+	_, err := cache.GetOrFetch("test-key", func() ([]byte, error) {
+		return nil, fetchErr
+	})
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheFetch)
+}
+
+func TestFileCache_GetOrFetch_SetFailsStillReturnsContent(t *testing.T) {
+	// Use a read-only directory so writes fail, but reads succeed.
+	tempDir := t.TempDir()
+	lockBasePath := filepath.Join(tempDir, "cache")
+	cache := &FileCache{
+		baseDir:      tempDir,
+		lockFilePath: lockBasePath + ".lock",
+		lock:         &mockFileLock{withLockErr: fmt.Errorf("lock error on write")},
+		fs:           filesystem.NewOSFileSystem(),
+	}
+
+	// GetOrFetch: the fetch succeeds but Set fails. Content should still be returned.
+	expectedContent := []byte("fetched content")
+	got, err := cache.GetOrFetch("test-key", func() ([]byte, error) {
+		return expectedContent, nil
+	})
+	require.NoError(t, err)
+	assert.Equal(t, expectedContent, got, "should return fetched content even when Set fails")
 }

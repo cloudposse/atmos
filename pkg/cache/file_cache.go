@@ -23,9 +23,10 @@ const (
 // FileCache provides atomic file-based caching with platform-specific locking.
 // It stores cached content in an XDG-compliant cache directory.
 type FileCache struct {
-	baseDir string
-	lock    FileLock
-	fs      filesystem.FileSystem
+	baseDir      string
+	lockFilePath string // Path to the lock file, excluded during Clear().
+	lock         FileLock
+	fs           filesystem.FileSystem
 }
 
 // FileCacheOption is a functional option for configuring FileCache.
@@ -77,7 +78,9 @@ func NewFileCache(subpath string, opts ...FileCacheOption) (*FileCache, error) {
 	}
 
 	// Create lock after options are applied so it uses the final baseDir.
-	c.lock = NewFileLock(filepath.Join(c.baseDir, "cache"))
+	lockBasePath := filepath.Join(c.baseDir, "cache")
+	c.lockFilePath = lockBasePath + ".lock"
+	c.lock = NewFileLock(lockBasePath)
 
 	// Ensure the cache directory exists after options are applied.
 	// This handles the case where WithBaseDir specifies a custom path.
@@ -270,6 +273,11 @@ func (c *FileCache) Clear() error {
 
 			// Skip directories (including the base directory itself).
 			if info.IsDir() {
+				return nil
+			}
+
+			// Skip the lock file to preserve mutual exclusion guarantees.
+			if path == c.lockFilePath {
 				return nil
 			}
 

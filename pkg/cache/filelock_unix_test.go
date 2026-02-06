@@ -7,8 +7,11 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/gofrs/flock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestNewFileLock_LockPathSuffix(t *testing.T) {
@@ -102,4 +105,76 @@ func TestWithLock_NestedCalls(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, innerExecuted)
+}
+
+func TestWithLock_RetryExhaustion(t *testing.T) {
+	tempDir := t.TempDir()
+	lockPath := filepath.Join(tempDir, "contended.lock")
+
+	// Hold an exclusive lock from another flock instance.
+	blocker := flock.New(lockPath)
+	locked, err := blocker.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "blocker should acquire lock")
+	defer func() { _ = blocker.Unlock() }()
+
+	// Now try to acquire the same lock through our FileLock.
+	// It should exhaust retries and return ErrCacheLocked.
+	lock := &flockFileLock{lockPath: lockPath}
+	err = lock.WithLock(func() error {
+		t.Fatal("function should not have been executed")
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheLocked)
+}
+
+func TestWithRLock_FallbackWithoutLock(t *testing.T) {
+	tempDir := t.TempDir()
+	lockPath := filepath.Join(tempDir, "contended.lock")
+
+	// Hold an exclusive lock so TryRLock fails.
+	blocker := flock.New(lockPath)
+	locked, err := blocker.TryLock()
+	require.NoError(t, err)
+	require.True(t, locked, "blocker should acquire lock")
+	defer func() { _ = blocker.Unlock() }()
+
+	// WithRLock should still execute the function without the lock (line 88 fallback).
+	lock := &flockFileLock{lockPath: lockPath}
+	executed := false
+	err = lock.WithRLock(func() error {
+		executed = true
+		return nil
+	})
+
+	require.NoError(t, err)
+	assert.True(t, executed, "function should be executed without lock as fallback")
+}
+
+func TestWithLock_InvalidLockPath(t *testing.T) {
+	// Use a path under a non-existent directory.
+	lock := &flockFileLock{lockPath: "/nonexistent/dir/test.lock"}
+
+	err := lock.WithLock(func() error {
+		t.Fatal("function should not have been executed")
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheLocked)
+}
+
+func TestWithRLock_InvalidLockPath(t *testing.T) {
+	// Use a path under a non-existent directory.
+	lock := &flockFileLock{lockPath: "/nonexistent/dir/test.lock"}
+
+	err := lock.WithRLock(func() error {
+		t.Fatal("function should not have been executed")
+		return nil
+	})
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheLocked)
 }

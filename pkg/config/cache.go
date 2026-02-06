@@ -24,6 +24,8 @@ const (
 	CacheDirPermissions = 0o755
 )
 
+// CacheConfig holds persistent application state for version checks,
+// telemetry preferences, and session-level warnings.
 type CacheConfig struct {
 	LastChecked                int64  `mapstructure:"last_checked" yaml:"last_checked"`
 	InstallationId             string `mapstructure:"installation_id" yaml:"installation_id"`

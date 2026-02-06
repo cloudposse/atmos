@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -247,6 +248,70 @@ func TestResolveImportPaths_MixedPaths(t *testing.T) {
 	data, err := os.ReadFile(resolved[1])
 	require.NoError(t, err)
 	assert.Equal(t, content, string(data))
+}
+
+func TestRemoteImporter_Download_MemoryCacheInvalidation(t *testing.T) {
+	// Create a mock HTTP server with a request counter.
+	downloadCount := 0
+	content := "remote content"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		downloadCount++
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(content))
+	}))
+	defer server.Close()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	importer := newTestRemoteImporter(t, atmosConfig)
+
+	// Download the file - should fetch from server.
+	localPath, err := importer.Download(server.URL + "/config.yaml")
+	require.NoError(t, err)
+	initialCount := downloadCount
+
+	// Download again - should hit memory cache (no new request).
+	localPath2, err := importer.Download(server.URL + "/config.yaml")
+	require.NoError(t, err)
+	assert.Equal(t, localPath, localPath2)
+	assert.Equal(t, initialCount, downloadCount, "should not re-download from memory cache")
+
+	// Delete the cached file from disk to simulate invalidation.
+	require.NoError(t, os.Remove(localPath))
+
+	// Download again - memory cache should detect missing file and re-download.
+	localPath3, err := importer.Download(server.URL + "/config.yaml")
+	require.NoError(t, err)
+	assert.NotEmpty(t, localPath3)
+	assert.Greater(t, downloadCount, initialCount, "should re-download after file was deleted")
+
+	// Verify the re-downloaded file has correct content.
+	data, err := os.ReadFile(localPath3)
+	require.NoError(t, err)
+	assert.Equal(t, content, string(data))
+}
+
+func TestDownloadRemoteImport_GlobalImporterError(t *testing.T) {
+	// Reset the global importer and inject an error.
+	globalImporterOnce = sync.Once{}
+	globalImporter = nil
+	globalImporterErr = nil
+
+	// Force the global importer to be initialized with an error.
+	expectedErr := fmt.Errorf("cache creation failed")
+	globalImporterOnce.Do(func() {
+		globalImporter = nil
+		globalImporterErr = expectedErr
+	})
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	_, err := DownloadRemoteImport(atmosConfig, "https://example.com/config.yaml")
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+
+	// Clean up: reset the global importer for other tests.
+	globalImporterOnce = sync.Once{}
+	globalImporter = nil
+	globalImporterErr = nil
 }
 
 func TestResolveImportPaths_ErrorPropagation(t *testing.T) {

@@ -474,6 +474,29 @@ func TestGetCacheFileLock(t *testing.T) {
 	assert.True(t, executed)
 }
 
+func TestUpdateCache_CorruptedFile(t *testing.T) {
+	// Test UpdateCache when the cache file contains corrupted YAML.
+	testDir := t.TempDir()
+	cleanup := withTestXDGHome(t, testDir)
+	defer cleanup()
+
+	// Create a corrupted cache file.
+	cacheDir := filepath.Join(testDir, "atmos")
+	err := os.MkdirAll(cacheDir, 0o755)
+	assert.NoError(t, err)
+
+	cacheFile := filepath.Join(cacheDir, "cache.yaml")
+	err = os.WriteFile(cacheFile, []byte("not valid yaml: {[}"), 0o644)
+	assert.NoError(t, err)
+
+	// UpdateCache should fail when reading corrupted file.
+	err = UpdateCache(func(cache *CacheConfig) {
+		cache.LastChecked = 9999
+	})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheRead)
+}
+
 func TestUpdateCache_MultipleFields(t *testing.T) {
 	// Test updating multiple fields in a single update call.
 	testDir := t.TempDir()

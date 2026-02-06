@@ -52,6 +52,18 @@ func TestIsLocalPath(t *testing.T) {
 		{"version path v2.1.3", "stacks/v2.1.3/deploy", true},
 		{"version path numeric", "releases/1.0/stable", true},
 		{"nested version path", "catalog/modules/v3.2/vpc", true},
+
+		// Additional edge cases for isDomainLikeURI coverage.
+		{"bare domain no path", "example.com", false},
+		{"domain with nested tld", "git.company.co.uk/repo", false},
+		{"version-only first segment", "v1.0/configs/base", true},
+		{"domain with internal suffix", "company.internal/configs", false},
+		{"single char after dot no path", "a.b", true},
+		{"no dot in first segment", "localdir/path", true},
+
+		// Additional edge cases for hasSubdirectoryDelimiter coverage.
+		{"scheme with subdir delimiter", "github.com/repo//path/to/file", false},
+		{"double slash at start", "//absolute/path", true},
 	}
 
 	for _, tt := range tests {
@@ -199,6 +211,82 @@ func TestIsGCSURI(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			result := IsGCSURI(tt.uri)
 			assert.Equal(t, tt.expected, result, "IsGCSURI(%q)", tt.uri)
+		})
+	}
+}
+
+func TestHasSubdirectoryDelimiter(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		{"subdir delimiter", "github.com/repo//path", true},
+		{"scheme with subdir after", "https://github.com/repo//path", true},
+		{"scheme only no subdir", "https://github.com/repo/path", false},
+		{"no double slash", "example.com/repo/path", false},
+		{"double slash at start", "//network/share", true},
+		{"empty string", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasSubdirectoryDelimiter(tt.uri)
+			assert.Equal(t, tt.expected, result, "hasSubdirectoryDelimiter(%q)", tt.uri)
+		})
+	}
+}
+
+func TestIsDomainLikeURI(t *testing.T) {
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		{"github.com with path", "git.company.com/repo/path", true},
+		{"bare domain known tld", "example.com", true},
+		{"domain with path", "company.internal/configs", true},
+		{"version-like first segment", "v1.0/path", false},
+		{"no dot", "localdir/path", false},
+		{"dot at start", ".hidden/path", false},
+		{"dot at end", "host./path", false},
+		{"known suffix com", "example.com/path", true},
+		{"known suffix org", "example.org/path", true},
+		{"known suffix io", "example.io/path", true},
+		{"nested known suffix", "sub.example.com/path", true},
+		{"unknown suffix with path", "host.xyz/path", true},
+		{"unknown suffix no path", "host.xy", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isDomainLikeURI(tt.uri)
+			assert.Equal(t, tt.expected, result, "isDomainLikeURI(%q)", tt.uri)
+		})
+	}
+}
+
+func TestIsVersionLike(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		expected bool
+	}{
+		{"v prefix major", "v1", true},
+		{"v prefix major.minor", "v1.0", true},
+		{"v prefix semver", "v1.2.3", true},
+		{"V prefix", "V2.0", true},
+		{"numeric only", "1.0", true},
+		{"numeric semver", "1.2.3", true},
+		{"not version word", "configs", false},
+		{"not version domain", "example.com", false},
+		{"empty", "", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isVersionLike(tt.s)
+			assert.Equal(t, tt.expected, result, "isVersionLike(%q)", tt.s)
 		})
 	}
 }
