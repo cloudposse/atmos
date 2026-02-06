@@ -214,40 +214,11 @@ Terraform show output
 
 			if tc.expectError {
 				assert.Error(t, err)
-				if err != nil {
-					assert.Equal(t, ErrNoJSONOutput, err)
-				}
+				assert.ErrorIs(t, err, ErrNoJSONOutput)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
 	}
-}
-
-func TestTerraformPlanDiff_FlagParsing(t *testing.T) {
-	// Test parsePlanDiffFlags directly as a unit test
-
-	// Test missing required flags
-	_, _, err := parsePlanDiffFlags([]string{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
-
-	// Test with only --orig flag (--new is optional)
-	origFile, newFile, err := parsePlanDiffFlags([]string{"--orig=test.plan"})
-	assert.NoError(t, err)
-	assert.Equal(t, "test.plan", origFile)
-	assert.Empty(t, newFile)
-
-	// Test with both flags using = syntax
-	origFile, newFile, err = parsePlanDiffFlags([]string{"--orig=orig.plan", "--new=new.plan"})
-	assert.NoError(t, err)
-	assert.Equal(t, "orig.plan", origFile)
-	assert.Equal(t, "new.plan", newFile)
-
-	// Test with both flags using space syntax
-	origFile, newFile, err = parsePlanDiffFlags([]string{"--orig", "orig2.plan", "--new", "new2.plan"})
-	assert.NoError(t, err)
-	assert.Equal(t, "orig2.plan", origFile)
-	assert.Equal(t, "new2.plan", newFile)
 }

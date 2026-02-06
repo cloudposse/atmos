@@ -8,7 +8,190 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// TestTerraformPlanDiffProcessStacksError tests the error path when ProcessStacks fails.
+func TestTerraformPlanDiffProcessStacksError(t *testing.T) {
+	// Create a minimal atmosConfig
+	atmosConfig := &schema.AtmosConfiguration{
+		TerraformDirAbsolutePath: t.TempDir(),
+	}
+
+	// Test case 1: Missing stack triggers ProcessStacks error
+	t.Run("missing_stack_returns_error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "", // Missing stack - will cause ProcessStacks to fail
+			ComponentType:    "terraform",
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "stack is required")
+	})
+
+	// Test case 2: Missing component triggers ProcessStacks error
+	t.Run("missing_component_returns_error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "", // Missing component - will cause ProcessStacks to fail
+			Stack:            "test-stack",
+			ComponentType:    "terraform",
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "component")
+	})
+
+	// Test case 3: Invalid stack configuration triggers ProcessStacks error
+	t.Run("invalid_stack_config_returns_error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "nonexistent-component",
+			Stack:            "nonexistent-stack",
+			ComponentType:    "terraform",
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		// ProcessStacks will fail because it can't find the stack configuration
+	})
+}
+
+// TestTerraformPlanDiffWithVariousInputs tests the TerraformPlanDiff function with various inputs.
+// These tests exercise the function entry point and error handling paths.
+func TestTerraformPlanDiffWithVariousInputs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create atmosConfig
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath:                 tmpDir,
+		TerraformDirAbsolutePath: filepath.Join(tmpDir, "components", "terraform"),
+	}
+
+	// Test with empty AdditionalArgsAndFlags - ensures function entry is covered
+	t.Run("empty_args_with_valid_stack_component", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "test-component",
+			Stack:                  "test-stack",
+			ComponentType:          "terraform",
+			AdditionalArgsAndFlags: []string{},
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		// Will fail at ProcessStacks because stack config doesn't exist
+	})
+
+	// Test with flags but invalid stack - ensures function processes input
+	t.Run("with_flags_invalid_stack", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "test-component",
+			Stack:            "nonexistent-stack",
+			ComponentType:    "terraform",
+			AdditionalArgsAndFlags: []string{
+				"--orig=test.planfile",
+				"--new=new.planfile",
+			},
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+		// Will fail at ProcessStacks
+	})
+
+	// Test with nil AdditionalArgsAndFlags
+	t.Run("nil_args", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "test-component",
+			Stack:                  "test-stack",
+			ComponentType:          "terraform",
+			AdditionalArgsAndFlags: nil,
+		}
+
+		err := TerraformPlanDiff(atmosConfig, info)
+		assert.Error(t, err)
+	})
+}
+
+// TestTerraformPlanDiffWithValidFixture tests the TerraformPlanDiff function with a valid fixture.
+// This test exercises the code path AFTER ProcessStacks succeeds (covers the "happy path" branch).
+func TestTerraformPlanDiffWithValidFixture(t *testing.T) {
+	// Change to the test fixture directory
+	testDir := "../../tests/fixtures/scenarios/atmos-terraform-plan-diff"
+	t.Chdir(testDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	// Test 1: ProcessStacks succeeds, but --orig flag is missing
+	t.Run("process_stacks_succeeds_missing_orig_flag", func(t *testing.T) {
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "base-component",
+			Stack:                  "test-stack",
+			ComponentType:          cfg.TerraformComponentType,
+			AdditionalArgsAndFlags: []string{}, // Missing --orig flag
+		}
+
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		require.NoError(t, err)
+
+		err = TerraformPlanDiff(&atmosConfig, &configAndStacksInfo)
+		assert.Error(t, err)
+		// Should fail with "original plan file (--orig) is required" AFTER ProcessStacks succeeds
+		assert.Contains(t, err.Error(), "original plan file (--orig) is required")
+	})
+
+	// Test 2: ProcessStacks succeeds, --orig flag provided, but file doesn't exist
+	t.Run("process_stacks_succeeds_nonexistent_planfile", func(t *testing.T) {
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg:       "base-component",
+			Stack:                  "test-stack",
+			ComponentType:          cfg.TerraformComponentType,
+			AdditionalArgsAndFlags: []string{"--orig=nonexistent.planfile"},
+		}
+
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		require.NoError(t, err)
+
+		err = TerraformPlanDiff(&atmosConfig, &configAndStacksInfo)
+		assert.Error(t, err)
+		// Should fail with "does not exist" after ProcessStacks and parsePlanDiffFlags succeed
+		assert.Contains(t, err.Error(), "does not exist")
+	})
+
+	// Test 3: ProcessStacks succeeds, planfile exists, but new planfile doesn't exist
+	// This exercises more of the code path including prepareNewPlanFile
+	t.Run("process_stacks_succeeds_with_existing_orig_planfile", func(t *testing.T) {
+		// Create a dummy planfile in the component directory
+		planfilePath := filepath.Join("components", "terraform", "base-component", "test.planfile")
+		err := os.WriteFile(planfilePath, []byte("dummy plan data"), 0o644)
+		require.NoError(t, err)
+		defer os.Remove(planfilePath)
+
+		configAndStacksInfo := schema.ConfigAndStacksInfo{
+			ComponentFromArg: "base-component",
+			Stack:            "test-stack",
+			ComponentType:    cfg.TerraformComponentType,
+			AdditionalArgsAndFlags: []string{
+				"--orig=test.planfile",
+				"--new=nonexistent-new.planfile", // New file doesn't exist
+			},
+			SkipInit: true, // Skip terraform init for this test
+		}
+
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		require.NoError(t, err)
+
+		err = TerraformPlanDiff(&atmosConfig, &configAndStacksInfo)
+		assert.Error(t, err)
+		// Should fail with "does not exist" for the new planfile
+		// This exercises validateOriginalPlanFile success and prepareNewPlanFile
+		assert.Contains(t, err.Error(), "does not exist")
+	})
+}
 
 func TestSortMapKeys(t *testing.T) {
 	// Test with a simple map
@@ -357,21 +540,6 @@ func TestGeneratePlanDiff(t *testing.T) {
 	assert.NotContains(t, diff, "api_key_67890")
 }
 
-func TestPlanDiffCommandFlags(t *testing.T) {
-	// Test parsePlanDiffFlags directly as a unit test
-
-	// Test with missing --orig flag (only --new provided)
-	_, _, err := parsePlanDiffFlags([]string{"--new=/tmp/new.plan"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
-
-	// Test with --orig flag but no --new flag (--new is optional)
-	origFile, newFile, err := parsePlanDiffFlags([]string{"--orig=/tmp/orig.plan"})
-	assert.NoError(t, err)
-	assert.Equal(t, "/tmp/orig.plan", origFile)
-	assert.Empty(t, newFile) // --new is optional
-}
-
 func TestTerraformPlanDiffWithNonExistentFile(t *testing.T) {
 	// Test validateOriginalPlanFile directly as a unit test
 	tmpDir := t.TempDir()
@@ -421,14 +589,14 @@ func TestTerraformPlanDiffErrorHandling(t *testing.T) {
 	t.Run("empty_output_returns_ErrNoJSONOutput", func(t *testing.T) {
 		_, err := extractJSONFromOutput("")
 		assert.Error(t, err)
-		assert.Equal(t, ErrNoJSONOutput, err)
+		assert.ErrorIs(t, err, ErrNoJSONOutput)
 	})
 
 	// Test extractJSONFromOutput with no JSON content
 	t.Run("no_json_content_returns_ErrNoJSONOutput", func(t *testing.T) {
 		_, err := extractJSONFromOutput("some random text without json")
 		assert.Error(t, err)
-		assert.Equal(t, ErrNoJSONOutput, err)
+		assert.ErrorIs(t, err, ErrNoJSONOutput)
 	})
 
 	// Test extractJSONFromOutput with valid JSON
