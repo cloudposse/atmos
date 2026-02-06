@@ -57,7 +57,7 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	ctx := context.Background()
 	whoami, err := authManager.Whoami(ctx, identityName)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		errUtils.CheckErrorPrintAndExit(addGCPReauthExplanation(err), "", "")
 	}
 
 	// Validate credentials if available.
@@ -69,6 +69,19 @@ func executeAuthWhoamiCommand(cmd *cobra.Command, args []string) error {
 	}
 	printWhoamiHuman(whoami, isValid)
 	return nil
+}
+
+func addGCPReauthExplanation(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "invalid_grant") && strings.Contains(msg, "invalid_rapt") {
+		return errUtils.Build(err).
+			WithExplanation("Your Google application-default credentials have expired or require reauthentication. Run `gcloud auth application-default login` and try again.").
+			Err()
+	}
+	return err
 }
 
 // validateCredentials attempts to validate the credentials and returns true if valid.
