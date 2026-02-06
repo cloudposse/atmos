@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -252,10 +253,10 @@ func TestResolveImportPaths_MixedPaths(t *testing.T) {
 
 func TestRemoteImporter_Download_MemoryCacheInvalidation(t *testing.T) {
 	// Create a mock HTTP server with a request counter.
-	downloadCount := 0
+	var downloadCount atomic.Int32
 	content := "remote content"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		downloadCount++
+		downloadCount.Add(1)
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(content))
 	}))
@@ -267,13 +268,13 @@ func TestRemoteImporter_Download_MemoryCacheInvalidation(t *testing.T) {
 	// Download the file - should fetch from server.
 	localPath, err := importer.Download(server.URL + "/config.yaml")
 	require.NoError(t, err)
-	initialCount := downloadCount
+	initialCount := downloadCount.Load()
 
 	// Download again - should hit memory cache (no new request).
 	localPath2, err := importer.Download(server.URL + "/config.yaml")
 	require.NoError(t, err)
 	assert.Equal(t, localPath, localPath2)
-	assert.Equal(t, initialCount, downloadCount, "should not re-download from memory cache")
+	assert.Equal(t, initialCount, downloadCount.Load(), "should not re-download from memory cache")
 
 	// Delete the cached file from disk to simulate invalidation.
 	require.NoError(t, os.Remove(localPath))
@@ -282,7 +283,7 @@ func TestRemoteImporter_Download_MemoryCacheInvalidation(t *testing.T) {
 	localPath3, err := importer.Download(server.URL + "/config.yaml")
 	require.NoError(t, err)
 	assert.NotEmpty(t, localPath3)
-	assert.Greater(t, downloadCount, initialCount, "should re-download after file was deleted")
+	assert.Greater(t, downloadCount.Load(), initialCount, "should re-download after file was deleted")
 
 	// Verify the re-downloaded file has correct content.
 	data, err := os.ReadFile(localPath3)

@@ -431,3 +431,70 @@ func TestFileCache_GetOrFetch_SetFailsStillReturnsContent(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, expectedContent, got, "should return fetched content even when Set fails")
 }
+
+func TestFileCache_Get_ReadError(t *testing.T) {
+	// Test that Get returns an error when ReadFile fails with a non-NotExist error.
+	// Creating a directory where a file is expected causes ReadFile to fail.
+	cache := newTestCache(t)
+
+	key := "read-error-key"
+	filename := keyToFilename(key)
+	dirPath := filepath.Join(cache.baseDir, filename)
+
+	// Create a directory at the expected file path so ReadFile fails.
+	err := os.MkdirAll(dirPath, DefaultCacheDirPerm)
+	require.NoError(t, err)
+
+	_, _, err = cache.Get(key)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheRead)
+}
+
+func TestFileCache_Set_WriteError(t *testing.T) {
+	// Test that Set returns an error when WriteFileAtomic fails.
+	// Use a mock lock that succeeds but point cache at a non-writable directory.
+	tempDir := t.TempDir()
+	readOnlyDir := filepath.Join(tempDir, "readonly")
+	err := os.MkdirAll(readOnlyDir, 0o555)
+	require.NoError(t, err)
+
+	cache := &FileCache{
+		baseDir:      readOnlyDir,
+		lockFilePath: filepath.Join(readOnlyDir, "cache.lock"),
+		lock:         &mockFileLock{},
+		fs:           filesystem.NewOSFileSystem(),
+	}
+
+	err = cache.Set("test-key", []byte("content"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrCacheWrite)
+}
+
+func TestFileCache_Clear_RemoveError(t *testing.T) {
+	// Test Clear when a cached file cannot be removed.
+	// Create a subdirectory inside the cache dir that contains a file,
+	// then make the subdirectory non-writable so file removal fails.
+	if os.Getuid() == 0 {
+		t.Skip("Skipping test when running as root")
+	}
+
+	cache := newTestCache(t)
+
+	// Create a file inside a read-only subdirectory.
+	subDir := filepath.Join(cache.baseDir, "protected")
+	err := os.MkdirAll(subDir, 0o755)
+	require.NoError(t, err)
+
+	filePath := filepath.Join(subDir, "locked-file")
+	err = os.WriteFile(filePath, []byte("content"), 0o644)
+	require.NoError(t, err)
+
+	// Make the subdirectory read-only so remove fails.
+	err = os.Chmod(subDir, 0o555)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.Chmod(subDir, 0o755) })
+
+	err = cache.Clear()
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrClearCache)
+}

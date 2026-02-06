@@ -143,6 +143,7 @@ func TestIsGitURI(t *testing.T) {
 		{"s3 url", "s3::https://bucket/key", false},
 		{"local path", "catalog/vpc.yaml", false},
 		{"tar.gz archive", "https://example.com/archive.tar.gz", false},
+		{"malformed URL with invalid escape", "https://host%zz/repo", false},
 	}
 
 	for _, tt := range tests {
