@@ -1,0 +1,12 @@
+[
+  {
+    "component": "comp1",
+    "component_type": "",
+    "component_path": "",
+    "stack": "stack1",
+    "stack_slug": "",
+    "dependents": null,
+    "included_in_dependents": false,
+    "settings": null
+  }
+]

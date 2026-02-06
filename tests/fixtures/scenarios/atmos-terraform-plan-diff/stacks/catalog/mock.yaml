@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    mycomponent:
+      metadata:
+        component: s3-bucket
+      command: "terraform"
+      vars:
+        name: test-demo-34
+        enabled: true
+        # Suggested configuration for all buckets
+        account_map_tenant_name: core
+        user_enabled: false
+        acl: "private"
+        grants: null
+        force_destroy: false
+        versioning_enabled: false
+        allow_encrypted_uploads_only: true
+        block_public_acls: true
+        block_public_policy: true
+        ignore_public_acls: true
+        restrict_public_buckets: true
+        allow_ssl_requests_only: true
+        lifecycle_configuration_rules:
+          - id: default
+            enabled: true
+            abort_incomplete_multipart_upload_days: 90
+            filter_and:
+              prefix: ""
+              tags: {}
+            # Move to Glacier after 2 years
+            transition:
+              - storage_class: GLACIER
+                days: 730
+            # Never expire
+            expiration: {}
+            # Versioning isnt enabled, but these default values are still required
+            noncurrent_version_transition:
+              - storage_class: GLACIER
+                days: 90
+            noncurrent_version_expiration: {}
