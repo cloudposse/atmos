@@ -178,7 +178,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		}
 		return nil, wrappedErr
 	}
 	// Persist the chain for later retrieval by providers or callers.
@@ -189,7 +191,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
+		}
 		return nil, wrappedErr
 	}
 
@@ -357,6 +361,7 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// and can be used to derive the identity credentials without interactive prompts.
 	// Use a non-interactive context to prevent credential prompts during whoami.
 	nonInteractiveCtx := types.WithAllowPrompts(ctx, false)
+	nonInteractiveCtx = types.WithSuppressAuthErrors(nonInteractiveCtx, true)
 	authInfo, authErr := m.Authenticate(nonInteractiveCtx, identityName)
 	if authErr == nil {
 		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
@@ -365,8 +370,8 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 	log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
 
-	// Return the original GetCachedCredentials error since chain auth also failed.
-	return nil, err
+	// Return the chain authentication error since it contains the most actionable context.
+	return nil, authErr
 }
 
 // Validate validates the entire auth configuration.

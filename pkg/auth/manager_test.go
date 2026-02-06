@@ -495,10 +495,9 @@ func TestManager_Whoami_FallbackAuthenticationFails(t *testing.T) {
 	info, err := m.Whoami(context.Background(), "dev")
 
 	// Should return error.
-	// Note: Returns the original GetCachedCredentials error, not the Authenticate error.
 	assert.Error(t, err)
 	assert.Nil(t, info)
-	assert.Contains(t, err.Error(), "no credentials found")
+	assert.Contains(t, err.Error(), "failed to authenticate via credential chain")
 }
 
 func TestManager_Whoami_FallbackAuthenticationSucceeds(t *testing.T) {
