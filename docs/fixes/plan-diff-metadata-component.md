@@ -11,6 +11,7 @@ This document describes an issue where `atmos terraform plan-diff` does not resp
 | `plan-diff` ignores `metadata.component`        | Fixed   | Command uses `ComponentFromArg` instead of resolved `FinalComponent`               |
 | Missing `ProcessStacks` call                    | Fixed   | `TerraformPlanDiff` doesn't call `ProcessStacks` to resolve component metadata     |
 | Planfile path resolution incorrect              | Fixed   | Looks in `components/terraform/` instead of `components/terraform/<component>/`    |
+| `plan-diff` ignores workdir path                | Fixed   | Command doesn't check `WorkdirPathKey` for source vendoring + workdir scenarios    |
 
 ---
 
@@ -210,11 +211,42 @@ atmos terraform plan-diff derived-component -s test-stack --orig=test.planfile
 
 ---
 
+## Workdir and Source Vendoring Support
+
+### Additional Fix: Workdir Path Resolution
+
+When source vendoring with workdir is enabled, the planfile is stored in the workdir path (e.g., `.workdir/terraform/<stack>-<component>/`), not the base component path.
+
+**File: `internal/exec/terraform_plan_diff.go`**
+
+```go
+// Get the component path using the resolved FinalComponent from ProcessStacks.
+componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
+
+// Check if workdir is enabled (source + workdir or workdir only).
+// When workdir is enabled, the planfile will be in the workdir path, not the base component path.
+if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+    componentPath = workdirPath
+}
+```
+
+### Test Cases Added
+
+| Test | Description |
+|------|-------------|
+| `TestTerraformPlanDiffWithWorkdir` | Verifies planfile lookup in workdir path |
+| `TestTerraformPlanDiffWithSourceVendoring` | Verifies source + workdir scenario |
+
+---
+
 ## Verification Commands
 
 ```bash
 # Run unit tests
 go test ./internal/exec/... -v -run "TestPlanDiff"
+
+# Run workdir-specific tests
+go test ./internal/exec/... -v -run "TestTerraformPlanDiffWithWorkdir|TestTerraformPlanDiffWithSourceVendoring"
 
 # Integration test with fixture
 cd tests/fixtures/scenarios/atmos-terraform-plan-diff

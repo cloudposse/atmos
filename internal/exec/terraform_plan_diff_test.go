@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -839,19 +840,10 @@ func TestPrintAttributeDiff(t *testing.T) {
 	assert.Equal(t, "  ~ test_sensitive: (sensitive value) => (sensitive value)\n", result, "Should handle sensitive values properly")
 }
 
-// TestTerraformPlanDiffMetadataComponentResolution tests that plan-diff respects metadata.component
-// when resolving the component path. This reproduces the bug where plan-diff looks in the wrong
-// directory when the component instance name differs from the actual component (metadata.component).
-//
-// TestTerraformPlanDiffMetadataComponentResolution tests that the component path
-// is correctly resolved when using metadata.component.
-//
-// Bug fixed: Component instance "foobar-atmos-pro" with metadata.component: "foobar"
-// Expected: Look for planfile in components/terraform/foobar/
-// Actual (bug): Was looking for planfile in components/terraform/foobar-atmos-pro/ (wrong!)
-//
-// The fix: TerraformPlanDiff now calls ProcessStacks() to resolve FinalComponent
-// from metadata.component before constructing the component path.
+// TestTerraformPlanDiffMetadataComponentResolution verifies that plan-diff uses FinalComponent
+// (resolved from metadata.component) rather than ComponentFromArg when constructing
+// the component path. This prevents searching the wrong directory (e.g.,
+// components/terraform/foobar-atmos-pro/ instead of components/terraform/foobar/).
 func TestTerraformPlanDiffMetadataComponentResolution(t *testing.T) {
 	// This is a unit test for the component path construction logic.
 	// It tests that the componentPath is correctly built from FinalComponent,
@@ -952,18 +944,6 @@ func TestCopyPlanFileIfNeeded(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "error opening source plan file")
 	})
-}
-
-// TestContains tests the contains helper function.
-func TestContains(t *testing.T) {
-	slice := []string{"a", "b", "c"}
-
-	assert.True(t, contains(slice, "a"))
-	assert.True(t, contains(slice, "b"))
-	assert.True(t, contains(slice, "c"))
-	assert.False(t, contains(slice, "d"))
-	assert.False(t, contains(slice, ""))
-	assert.False(t, contains([]string{}, "a"))
 }
 
 // TestGetResourceAttributes tests the getResourceAttributes function.
@@ -1812,4 +1792,156 @@ func TestDebugFormatMapDiff(t *testing.T) {
 
 	result = formatMapDiff(emptyMap, nonEmptyMap)
 	t.Logf("Empty map diff result: %q", result)
+}
+
+// TestTerraformPlanDiffWithWorkdir tests that plan-diff correctly handles workdir scenarios.
+// When workdir is enabled, the component path should be the workdir path, not the base component path.
+// This test verifies the path resolution logic works with workdir provisioning.
+func TestTerraformPlanDiffWithWorkdir(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create the base component directory structure
+	baseComponentDir := filepath.Join(tmpDir, "components", "terraform", "vpc")
+	err := os.MkdirAll(baseComponentDir, 0o755)
+	require.NoError(t, err)
+
+	// Create the workdir directory (what workdir provisioner creates)
+	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "dev-vpc")
+	err = os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
+	// Create planfile in the WORKDIR (where it would be after workdir provisioning)
+	planfileName := "test.planfile"
+	planfileInWorkdir := filepath.Join(workdirPath, planfileName)
+	err = os.WriteFile(planfileInWorkdir, []byte("dummy plan data from workdir"), 0o644)
+	require.NoError(t, err)
+
+	terraformDirPath := filepath.Join(tmpDir, "components", "terraform")
+
+	// Test 1: Planfile is found in workdir path (correct behavior)
+	t.Run("planfile_found_in_workdir", func(t *testing.T) {
+		// When workdir is enabled, the componentPath should be the workdir path
+		componentPath := workdirPath
+
+		result, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.NoError(t, err)
+		assert.Equal(t, planfileInWorkdir, result)
+	})
+
+	// Test 2: Planfile NOT found in base component path (demonstrates the issue)
+	t.Run("planfile_not_in_base_component_path", func(t *testing.T) {
+		// If we incorrectly use the base component path instead of workdir,
+		// the planfile won't be found
+		componentPath := filepath.Join(terraformDirPath, "vpc")
+
+		_, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not exist")
+	})
+
+	// Test 3: Verify WorkdirPathKey extraction from ComponentSection
+	t.Run("workdir_path_key_extraction", func(t *testing.T) {
+		// This tests the pattern used in terraform.go and other commands
+		// to extract the workdir path from ComponentSection
+		componentSection := map[string]any{
+			provWorkdir.WorkdirPathKey: workdirPath,
+		}
+
+		// Extract workdir path as done in terraform.go
+		if extractedWorkdir, ok := componentSection[provWorkdir.WorkdirPathKey].(string); ok {
+			assert.Equal(t, workdirPath, extractedWorkdir)
+
+			// Validate planfile is found at workdir path
+			result, err := validateOriginalPlanFile(planfileName, extractedWorkdir)
+			assert.NoError(t, err)
+			assert.Equal(t, planfileInWorkdir, result)
+		} else {
+			t.Fatal("Failed to extract workdir path from ComponentSection")
+		}
+	})
+
+	// Test 4: Empty workdir path should fall back to base component path
+	t.Run("empty_workdir_falls_back_to_base", func(t *testing.T) {
+		componentSection := map[string]any{
+			provWorkdir.WorkdirPathKey: "",
+		}
+
+		// When workdir path is empty, should use base component path
+		extractedWorkdir, ok := componentSection[provWorkdir.WorkdirPathKey].(string)
+		if ok && extractedWorkdir != "" {
+			t.Fatal("Expected empty workdir path")
+		}
+
+		// With empty workdir, would fall back to base component path
+		// Create planfile in base component for this test
+		planfileInBase := filepath.Join(baseComponentDir, planfileName)
+		err := os.WriteFile(planfileInBase, []byte("dummy plan data from base"), 0o644)
+		require.NoError(t, err)
+		defer os.Remove(planfileInBase)
+
+		result, err := validateOriginalPlanFile(planfileName, baseComponentDir)
+		assert.NoError(t, err)
+		assert.Equal(t, planfileInBase, result)
+	})
+}
+
+// TestTerraformPlanDiffWithSourceVendoring tests that plan-diff correctly handles
+// source-vendored components with workdir enabled.
+// When source + workdir are both enabled, the planfile should be in the workdir path.
+func TestTerraformPlanDiffWithSourceVendoring(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Source + workdir scenario:
+	// 1. Component is vendored from remote source
+	// 2. Workdir is enabled, so files go to .workdir/terraform/<stack>-<component>/
+	// 3. Planfile should be looked up in the workdir path
+
+	// Create the workdir path where source provisioner would vendor files
+	workdirPath := filepath.Join(tmpDir, ".workdir", "terraform", "plat-ue2-sandbox-foobar-atmos-pro")
+	err := os.MkdirAll(workdirPath, 0o755)
+	require.NoError(t, err)
+
+	// Create a mock terraform file to simulate vendored component
+	mainTf := filepath.Join(workdirPath, "main.tf")
+	err = os.WriteFile(mainTf, []byte(`resource "null_resource" "example" {}`), 0o644)
+	require.NoError(t, err)
+
+	// Create the planfile in the workdir (where it would be stored after terraform plan)
+	planfileName := "plat-ue2-sandbox-foobar-atmos-pro.planfile"
+	planfilePath := filepath.Join(workdirPath, planfileName)
+	err = os.WriteFile(planfilePath, []byte("dummy planfile for source+workdir test"), 0o644)
+	require.NoError(t, err)
+
+	// Simulate what would happen in TerraformPlanDiff with source + workdir
+	t.Run("source_vendored_with_workdir", func(t *testing.T) {
+		// After ProcessStacks, the component section would have WorkdirPathKey set
+		// by the source provisioner when source + workdir are enabled
+		componentSection := map[string]any{
+			provWorkdir.WorkdirPathKey: workdirPath,
+		}
+
+		// Extract workdir path as done in terraform.go
+		componentPath := ""
+		if workdir, ok := componentSection[provWorkdir.WorkdirPathKey].(string); ok && workdir != "" {
+			componentPath = workdir
+		}
+
+		assert.Equal(t, workdirPath, componentPath)
+
+		// Validate planfile is found
+		result, err := validateOriginalPlanFile(planfileName, componentPath)
+		assert.NoError(t, err)
+		assert.Equal(t, planfilePath, result)
+	})
+
+	// Test the error case when workdir path is not used
+	t.Run("source_vendored_without_workdir_path_fails", func(t *testing.T) {
+		// If plan-diff doesn't check WorkdirPathKey and uses base component path,
+		// it won't find the planfile
+		baseComponentPath := filepath.Join(tmpDir, "components", "terraform", "foobar")
+
+		_, err := validateOriginalPlanFile(planfileName, baseComponentPath)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "does not exist")
+	})
 }

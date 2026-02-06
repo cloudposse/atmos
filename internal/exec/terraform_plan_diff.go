@@ -14,6 +14,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/perf"
+	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -41,7 +42,7 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 	// name differs from the actual component (e.g., "foobar-atmos-pro" with metadata.component: "foobar").
 	processedInfo, err := ProcessStacks(atmosConfig, *info, true, true, true, nil, nil)
 	if err != nil {
-		return err
+		return fmt.Errorf("error processing stacks for plan-diff: %w", err)
 	}
 
 	// Extract flags and setup paths
@@ -59,6 +60,12 @@ func TerraformPlanDiff(atmosConfig *schema.AtmosConfiguration, info *schema.Conf
 
 	// Get the component path using the resolved FinalComponent from ProcessStacks.
 	componentPath := filepath.Join(atmosConfig.TerraformDirAbsolutePath, processedInfo.ComponentFolderPrefix, processedInfo.FinalComponent)
+
+	// Check if workdir is enabled (source + workdir or workdir only).
+	// When workdir is enabled, the planfile will be in the workdir path, not the base component path.
+	if workdirPath, ok := processedInfo.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
+		componentPath = workdirPath
+	}
 
 	// Ensure original plan file exists and is absolute
 	origPlanFile, err = validateOriginalPlanFile(origPlanFile, componentPath)
