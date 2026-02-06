@@ -25,7 +25,7 @@ The `!terraform.state` YAML function supports the following backend types:
 
 As support for new backend types is added, this document will be updated accordingly.
 
-For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform.output) to read remote state
+For other backends, use [__`!store`__](/functions/yaml/store) or [__`!terraform.output`__](/functions/yaml/terraform-output) to read remote state
 and [share data between components](/stacks/share-data).
 :::
 
@@ -100,7 +100,7 @@ While `!terraform.output` must initialize Terraform/OpenTofu, download and initi
 Use `!terraform.state` when you need the **fastest possible** access to Terraform outputs. The functions accept the same parameters and produce identical results.
 :::
 
-Compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the [!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow) to see the difference.
+Compare the [!terraform.output Execution Flow](/functions/yaml/terraform-output#terraformoutput-function-execution-flow) with the [!terraform.state Execution Flow](/functions/yaml/terraform-state#terraformstate-function-execution-flow) to see the difference.
 
 ## Using YQ Expressions to retrieve items from complex output types
 
@@ -160,7 +160,7 @@ app_name: !terraform.state config '.apps["app''s-name"].display_name'
 - If you need single quotes inside the expression, escape them by doubling: `''`.
 
 :::tip
-This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.output](/functions/yaml/terraform.output) and [!include](/functions/yaml/include).
+This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.output](/functions/yaml/terraform-output) and [!include](/functions/yaml/include).
 :::
 
 ## Using YQ Expressions to provide a default value

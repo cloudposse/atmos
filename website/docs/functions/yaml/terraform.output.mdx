@@ -99,12 +99,12 @@ YAML functions, it can significantly impact performance because it requires init
 which initializes all Terraform/OpenTofu modules and downloads all Terraform/OpenTofu providers (if they are not present in the cache).
 
 To improve performance, consider using the [__`!store`__](/functions/yaml/store)
-or [__`!terraform.state`__](/functions/yaml/terraform.state)
+or [__`!terraform.state`__](/functions/yaml/terraform-state)
 YAML function.
 
 To understand the performance implications of the `!terraform.output` and `!terraform.state` functions,
-compare the [!terraform.output Execution Flow](/functions/yaml/terraform.output#terraformoutput-function-execution-flow) with the
-[!terraform.state Execution Flow](/functions/yaml/terraform.state#terraformstate-function-execution-flow).
+compare the [!terraform.output Execution Flow](/functions/yaml/terraform-output#terraformoutput-function-execution-flow) with the
+[!terraform.state Execution Flow](/functions/yaml/terraform-state#terraformstate-function-execution-flow).
 :::
 
 ## Using YQ Expressions to retrieve items from complex output types
@@ -165,7 +165,7 @@ app_name: !terraform.output config '.apps["app''s-name"].display_name'
 - If you need single quotes inside the expression, escape them by doubling: `''`.
 
 :::tip
-This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.state](/functions/yaml/terraform.state) and [!include](/functions/yaml/include).
+This quoting pattern works for every Atmos YAML function that accepts YQ expressions, including [!terraform.state](/functions/yaml/terraform-state) and [!include](/functions/yaml/include).
 :::
 
 ## Using YQ Expressions to provide a default value
