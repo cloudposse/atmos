@@ -53,7 +53,7 @@ git rebase origin/main
 
 Add context to the error message explaining WHY the component wasn't found:
 
-```
+```text
 Error: failed to describe component `prometheus` in stack `plat-usw1-staging`
 in YAML function: !terraform.state prometheus workspace_endpoint
 
