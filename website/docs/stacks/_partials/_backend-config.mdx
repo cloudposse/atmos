@@ -87,6 +87,32 @@ For cross-account access, configure the backend to assume a role:
   </TabItem>
 </Tabs>
 
+#### S3 Backend with SSE-C Encryption
+
+For state files encrypted with [SSE-C (Server-Side Encryption with Customer-Provided Keys)](https://docs.aws.amazon.com/AmazonS3/latest/userguide/ServerSideEncryptionCustomerKeys.html),
+provide the customer key so that [`!terraform.state`](/functions/yaml/terraform.state) can decrypt state when reading directly from S3:
+
+```yaml
+terraform:
+  backend_type: s3
+  backend:
+    s3:
+      bucket: acme-ue1-root-tfstate
+      region: us-east-1
+      key: "{{ .environment }}/{{ .stage }}/{{ .component }}/terraform.tfstate"
+      encrypt: true
+      use_lockfile: true
+      sse_customer_key: "base64-encoded-32-byte-key"
+```
+
+The `sse_customer_key` must be a base64-encoded 256-bit (32-byte) key. It can also be provided via the `AWS_SSE_CUSTOMER_KEY`
+environment variable. The backend attribute takes precedence over the environment variable.
+
+:::note
+The `sse_customer_key` attribute is used by Atmos when reading state directly via [`!terraform.state`](/functions/yaml/terraform.state).
+Terraform/OpenTofu handles SSE-C independently through its own backend configuration.
+:::
+
 #### S3 Backend with DynamoDB Locking (Legacy)
 
 For Terraform versions before 1.10, use DynamoDB for state locking:
