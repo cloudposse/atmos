@@ -363,15 +363,15 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/open-policy-agent/opa
     License: Apache-2.0
-    URL: https://github.com/open-policy-agent/opa/blob/v1.12.2/LICENSE
+    URL: https://github.com/open-policy-agent/opa/blob/v1.12.3/LICENSE
 
   - github.com/open-policy-agent/opa/internal/gojsonschema
     License: Apache-2.0
-    URL: https://github.com/open-policy-agent/opa/blob/v1.12.2/internal/gojsonschema/LICENSE-APACHE-2.0.txt
+    URL: https://github.com/open-policy-agent/opa/blob/v1.12.3/internal/gojsonschema/LICENSE-APACHE-2.0.txt
 
   - github.com/open-policy-agent/opa/internal/semver
     License: Apache-2.0
-    URL: https://github.com/open-policy-agent/opa/blob/v1.12.2/internal/semver/LICENSE
+    URL: https://github.com/open-policy-agent/opa/blob/v1.12.3/internal/semver/LICENSE
 
   - github.com/opencontainers/go-digest
     License: Apache-2.0
@@ -688,7 +688,7 @@ BSD LICENSED DEPENDENCIES
 
   - github.com/open-policy-agent/opa/internal/edittree/bitvector
     License: BSD-3-Clause
-    URL: https://github.com/open-policy-agent/opa/blob/v1.12.2/internal/edittree/bitvector/license.txt
+    URL: https://github.com/open-policy-agent/opa/blob/v1.12.3/internal/edittree/bitvector/license.txt
 
   - github.com/pierrec/lz4/v4
     License: BSD-3-Clause
