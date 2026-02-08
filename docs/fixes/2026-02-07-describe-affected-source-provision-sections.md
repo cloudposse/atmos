@@ -188,3 +188,70 @@ Added checks for `source` and `provision` sections in all three component proces
     describe_affected_test.go:1390:   - component-workdir-only in ue1-staging (affected by: stack.provision)
 --- PASS: TestDescribeAffectedSourceVersionChange (6.84s)
 ```
+
+## Analysis: Why Vendored/Workdir Files Don't Need Detection
+
+### Question
+
+Should `describe affected` also detect changes to the actual vendored component files in the workdir folder
+(e.g., `.workdir/terraform/<stack>-<component>/`)?
+
+### Answer: No, and here's why
+
+#### How Component Path Detection Works
+
+The `isComponentFolderChangedIndexed()` function checks the **static base path**:
+
+```go
+componentPath = filepath.Join(atmosConfig.BasePath, atmosConfig.Components.Terraform.BasePath, component)
+// e.g., components/terraform/vpc/
+```
+
+This is intentional because the base component folder is the **source of truth** that's committed to git.
+
+#### Workdir Files Are Runtime Artifacts
+
+When workdir or source vendoring is enabled:
+
+1. Developer modifies `source.version` in stack YAML (e.g., `1.0.0` → `1.1.0`)
+2. At `atmos terraform plan` time, the provisioner downloads version `1.1.0` to `.workdir/`
+3. The workdir folder is typically in `.gitignore` - it's not committed to git
+
+The workdir path (`.workdir/terraform/<stack>-<component>/`) contains **generated files**, not source-controlled files.
+
+#### What Gets Detected
+
+| Change Type | Should Detect? | Status |
+|------------|----------------|--------|
+| Base component folder files (`.tf` files) | ✅ Yes | Already works via `isComponentFolderChangedIndexed` |
+| `source.version` config change | ✅ Yes | **Fixed in this commit** |
+| `source.uri` config change | ✅ Yes | **Fixed in this commit** |
+| `provision.workdir` config change | ✅ Yes | **Fixed in this commit** |
+| Vendored files in `.workdir/` | ❌ No | Not needed (runtime artifact, not in git) |
+
+#### The Detection Flow
+
+```text
+Developer changes source.version: 1.0.0 → 1.1.0
+         ↓
+Commits stack YAML change to git
+         ↓
+describe affected detects "stack.source" change  ← This is what we fixed
+         ↓
+Component marked as affected
+         ↓
+At terraform plan time, provisioner vendors new version to .workdir/
+```
+
+### Conclusion
+
+The fix is complete. Detecting vendored workdir files is not needed because:
+
+1. **Source of truth is configuration**: The `source` and `provision` sections define what gets vendored. These are now
+   detected.
+
+2. **Workdir is ephemeral**: Files in `.workdir/` are generated at runtime based on config. They're not in git, so
+   there's no git diff to detect.
+
+3. **Changing `source.version` triggers affected**: If `source.version` changes, the component is correctly marked as
+   affected with reason `stack.source`. The actual vendoring happens at execution time.
