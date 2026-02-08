@@ -1,4 +1,6 @@
-# Issue: describe affected fails when new component exists in BASE but not in HEAD
+# Issue: `describe affected` fails when new component exists in BASE but not in HEAD
+
+**Date**: 2026-02-07
 
 ## Problem Summary
 
@@ -6,8 +8,9 @@ When running `atmos describe affected` in a PR that hasn't been rebased against 
 component that doesn't exist in the PR branch (HEAD), the command fails with an error like:
 
 ```text
-Error: failed to describe component prometheus in stack plat-usw1-staging in
-YAML function: !terraform.state prometheus workspace_endpoint invalid component:
+Error: failed to describe component prometheus in stack plat-usw1-staging
+in YAML function: !terraform.state prometheus workspace_endpoint
+invalid component:
 Could not find the component prometheus in the stack plat-usw1-staging. Check
 that all the context variables are correctly defined in the stack manifests.
 Are the component and stack names correct? Did you forget an import?
@@ -20,7 +23,7 @@ Are the component and stack names correct? Did you forget an import?
 3. When PR2 runs `describe affected` against main, it fails because:
   - The new component exists in BASE (main) but not in HEAD (PR2 branch)
   - Stack files in BASE may reference the new component via `!terraform.state`
-  - When processing remoteStacks, YAML functions call `ExecuteDescribeComponent` which looks in HEAD (current working
+  - When processing remote stacks, YAML functions call `ExecuteDescribeComponent` which looks in HEAD (current working
     directory), not in BASE
 
 ## Root Cause
@@ -29,7 +32,7 @@ The issue is in `internal/exec/describe_affected_utils.go` in the `executeDescri
 
 1. `ExecuteDescribeStacks` is called for `currentStacks` (HEAD) - works fine
 2. `ExecuteDescribeStacks` is called for `remoteStacks` (BASE) with modified paths
-3. When processing `remoteStacks`, if a stack file contains `!terraform.state componentName ...`:
+3. When processing `remoteStacks`, if a stack file contains `!terraform.state <component> ...`:
   - The YAML function processor calls `GetTerraformState`
   - `GetTerraformState` calls `ExecuteDescribeComponent(component, stack)`
   - `ExecuteDescribeComponent` looks for the component in the **current working directory** (HEAD)
