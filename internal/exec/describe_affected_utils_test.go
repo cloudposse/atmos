@@ -1871,3 +1871,179 @@ func TestProcessComponentsIndexedVarsEnvChanges(t *testing.T) {
 		})
 	}
 }
+
+// TestProcessComponentsSourceAndProvisionChanges tests that source and provision section changes
+// are detected for terraform, helmfile, and packer components.
+func TestProcessComponentsSourceAndProvisionChanges(t *testing.T) {
+	tests := []struct {
+		name           string
+		componentType  string
+		componentName  string
+		stackName      string
+		sectionName    string
+		sectionKey     string
+		oldValue       string
+		newValue       string
+		componentBase  string
+		expectedReason string
+	}{
+		// Terraform source changes.
+		{
+			name:           "terraform source.version change",
+			componentType:  "terraform",
+			componentName:  "vpc",
+			stackName:      "dev",
+			sectionName:    "source",
+			sectionKey:     "version",
+			oldValue:       "1.0.0",
+			newValue:       "1.1.0",
+			componentBase:  "components/terraform",
+			expectedReason: "stack.source",
+		},
+		// Terraform provision changes.
+		{
+			name:           "terraform provision.workdir change",
+			componentType:  "terraform",
+			componentName:  "vpc",
+			stackName:      "dev",
+			sectionName:    "provision",
+			sectionKey:     "workdir",
+			oldValue:       "",
+			newValue:       "enabled",
+			componentBase:  "components/terraform",
+			expectedReason: "stack.provision",
+		},
+		// Helmfile source changes.
+		{
+			name:           "helmfile source.version change",
+			componentType:  "helmfile",
+			componentName:  "nginx",
+			stackName:      "staging",
+			sectionName:    "source",
+			sectionKey:     "version",
+			oldValue:       "2.0.0",
+			newValue:       "2.1.0",
+			componentBase:  "components/helmfile",
+			expectedReason: "stack.source",
+		},
+		// Helmfile provision changes.
+		{
+			name:           "helmfile provision.workdir change",
+			componentType:  "helmfile",
+			componentName:  "nginx",
+			stackName:      "staging",
+			sectionName:    "provision",
+			sectionKey:     "workdir",
+			oldValue:       "",
+			newValue:       "enabled",
+			componentBase:  "components/helmfile",
+			expectedReason: "stack.provision",
+		},
+		// Packer source changes.
+		{
+			name:           "packer source.version change",
+			componentType:  "packer",
+			componentName:  "ami-builder",
+			stackName:      "prod",
+			sectionName:    "source",
+			sectionKey:     "version",
+			oldValue:       "3.0.0",
+			newValue:       "3.1.0",
+			componentBase:  "components/packer",
+			expectedReason: "stack.source",
+		},
+		// Packer provision changes.
+		{
+			name:           "packer provision.workdir change",
+			componentType:  "packer",
+			componentName:  "ami-builder",
+			stackName:      "prod",
+			sectionName:    "provision",
+			sectionKey:     "workdir",
+			oldValue:       "",
+			newValue:       "enabled",
+			componentBase:  "components/packer",
+			expectedReason: "stack.provision",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Build component section with the changed section (source or provision).
+			newSection := map[string]any{tt.sectionKey: tt.newValue}
+			componentSection := map[string]any{
+				tt.componentName: map[string]any{
+					"component":    tt.componentName,
+					tt.sectionName: newSection,
+				},
+			}
+
+			// Build remote stacks with the old section value.
+			oldSection := map[string]any{tt.sectionKey: tt.oldValue}
+			remoteStacks := map[string]any{
+				tt.stackName: map[string]any{
+					"components": map[string]any{
+						tt.componentType: map[string]any{
+							tt.componentName: map[string]any{
+								"component":    tt.componentName,
+								tt.sectionName: oldSection,
+							},
+						},
+					},
+				},
+			}
+
+			currentStacks := map[string]any{
+				tt.stackName: map[string]any{
+					"components": map[string]any{
+						tt.componentType: componentSection,
+					},
+				},
+			}
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath: "/test",
+			}
+
+			// Set the appropriate base path based on component type.
+			switch tt.componentType {
+			case "terraform":
+				atmosConfig.Components.Terraform.BasePath = tt.componentBase
+			case "helmfile":
+				atmosConfig.Components.Helmfile.BasePath = tt.componentBase
+			case "packer":
+				atmosConfig.Components.Packer.BasePath = tt.componentBase
+			}
+
+			filesIndex := newChangedFilesIndex(atmosConfig, []string{}, "/test")
+			patternCache := newComponentPathPatternCache()
+
+			var affected []schema.Affected
+			var err error
+
+			switch tt.componentType {
+			case "terraform":
+				affected, err = processTerraformComponentsIndexed(
+					tt.stackName, componentSection, &remoteStacks, &currentStacks,
+					atmosConfig, filesIndex, patternCache, false, false, false,
+				)
+			case "helmfile":
+				affected, err = processHelmfileComponentsIndexed(
+					tt.stackName, componentSection, &remoteStacks, &currentStacks,
+					atmosConfig, filesIndex, patternCache, false, false, false,
+				)
+			case "packer":
+				affected, err = processPackerComponentsIndexed(
+					tt.stackName, componentSection, &remoteStacks, &currentStacks,
+					atmosConfig, filesIndex, patternCache, false, false, false,
+				)
+			}
+
+			require.NoError(t, err)
+			require.Len(t, affected, 1, "should detect exactly one affected component")
+			assert.Equal(t, tt.componentName, affected[0].Component)
+			assert.Equal(t, tt.stackName, affected[0].Stack)
+			assert.Equal(t, tt.expectedReason, affected[0].Affected)
+		})
+	}
+}

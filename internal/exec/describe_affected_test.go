@@ -1228,8 +1228,10 @@ func TestDescribeAffectedNewComponentInBase(t *testing.T) {
 		}
 	}
 
-	// The prometheus component exists only in BASE, so it should be detected.
-	// Currently, this might not work as expected because the code iterates over currentStacks (HEAD).
+	// NOTE: Components that exist only in BASE (not in HEAD) are currently NOT detected
+	// because describe affected iterates over currentStacks (HEAD). This is a known limitation.
+	// This test verifies that describe affected doesn't error when BASE has components that HEAD doesn't have.
+	// TODO: Consider detecting components that exist in BASE but not HEAD in a future enhancement.
 	t.Logf("Found prometheus in affected: %v, total affected: %d", foundPrometheus, len(affected))
 }
 
@@ -1332,9 +1334,7 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 		false,
 	)
 	// Check if there was an error.
-	if err != nil {
-		t.Fatalf("Unexpected error: %v", err)
-	}
+	require.NoError(t, err)
 
 	// Log what was found.
 	t.Logf("Found %d affected components", len(affected))
@@ -1363,27 +1363,15 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 	}
 
 	// Verify source.version changes are detected.
-	if foundVpcSource {
-		t.Logf("SUCCESS: vpc-source detected as affected (reason: %s)", vpcSourceReason)
-		assert.Equal(t, "stack.source", vpcSourceReason, "vpc-source should be affected due to source change")
-	} else {
-		t.Errorf("FAILED: vpc-source should be affected due to source.version change (1.0.0 -> 1.1.0)")
-	}
+	require.True(t, foundVpcSource, "vpc-source should be affected due to source.version change (1.0.0 -> 1.1.0)")
+	assert.Equal(t, "stack.source", vpcSourceReason, "vpc-source should be affected due to source change")
 
-	if foundVpcSourceWorkdir {
-		t.Logf("SUCCESS: vpc-source-workdir detected as affected (reason: %s)", vpcSourceWorkdirReason)
-		assert.Equal(t, "stack.source", vpcSourceWorkdirReason, "vpc-source-workdir should be affected due to source change")
-	} else {
-		t.Errorf("FAILED: vpc-source-workdir should be affected due to source.version change (1.0.0 -> 1.1.0)")
-	}
+	require.True(t, foundVpcSourceWorkdir, "vpc-source-workdir should be affected due to source.version change (1.0.0 -> 1.1.0)")
+	assert.Equal(t, "stack.source", vpcSourceWorkdirReason, "vpc-source-workdir should be affected due to source change")
 
 	// Verify provision.workdir changes are detected.
-	if foundWorkdirOnly {
-		t.Logf("SUCCESS: component-workdir-only detected as affected (reason: %s)", workdirOnlyReason)
-		assert.Equal(t, "stack.provision", workdirOnlyReason, "component-workdir-only should be affected due to provision change")
-	} else {
-		t.Errorf("FAILED: component-workdir-only should be affected due to provision.workdir change")
-	}
+	require.True(t, foundWorkdirOnly, "component-workdir-only should be affected due to provision.workdir change")
+	assert.Equal(t, "stack.provision", workdirOnlyReason, "component-workdir-only should be affected due to provision change")
 
 	// Ensure the regular component is NOT affected (no changes).
 	for _, a := range affected {

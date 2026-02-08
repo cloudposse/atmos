@@ -12,7 +12,7 @@ type componentDescriberAdapter struct{}
 
 // DescribeComponent implements tfoutput.ComponentDescriber.
 func (c *componentDescriberAdapter) DescribeComponent(params *tfoutput.DescribeComponentParams) (map[string]any, error) {
-	defer perf.Track(nil, "exec.componentDescriberAdapter.DescribeComponent")()
+	defer perf.Track(params.AtmosConfig, "exec.componentDescriberAdapter.DescribeComponent")()
 
 	// Convert AuthManager from any to auth.AuthManager if provided.
 	var authMgr auth.AuthManager
