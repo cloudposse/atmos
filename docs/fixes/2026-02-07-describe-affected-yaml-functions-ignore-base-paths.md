@@ -1,6 +1,7 @@
 # Issue: `describe affected` YAML functions ignore modified BASE paths
 
 **Date**: 2026-02-07
+**Status**: ✅ FIXED
 
 ## Problem Summary
 
