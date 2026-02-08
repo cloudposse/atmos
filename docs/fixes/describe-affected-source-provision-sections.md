@@ -1,6 +1,8 @@
-# Issue: `describe affected` does not check `source` and `provision` sections
+# Fix: `describe affected` now checks `source` and `provision` sections
 
 **Date**: 2026-02-07
+**Status**: ✅ FIXED
+**Commit**: `fbba6522f`
 
 ## Problem Summary
 
@@ -87,15 +89,14 @@ tests/fixtures/scenarios/atmos-describe-affected-source-vendoring/
 
 Tests:
 
-- `TestDescribeAffectedSourceVersionChange` - Tests that source.version changes are detected (currently skipped due to
-  bug)
+- `TestDescribeAffectedSourceVersionChange` - Tests that `source.version` and `provision.workdir` changes are detected
 
-## Proposed Fix
+## Applied Fix
 
-Add checks for `source` and `provision` sections in `processTerraformComponentsIndexed`,
+Added checks for `source` and `provision` sections in `processTerraformComponentsIndexed`,
 `processHelmfileComponentsIndexed`, and `processPackerComponentsIndexed`.
 
-### Option A: Add section checks (minimal change)
+### Implementation (Option A: Add section checks)
 
 ```go
 // In processTerraformComponentsIndexed:
@@ -123,9 +124,9 @@ if provisionSection, ok := componentSection["provision"].(map[string]any); ok {
 }
 ```
 
-### Option B: Generic section comparison (more maintainable)
+### Alternative (Option B: Generic section comparison)
 
-Create a list of sections to check and iterate over them:
+An alternative approach would be to create a list of sections and iterate over them:
 
 ```go
 sectionsToCheck := []struct {
