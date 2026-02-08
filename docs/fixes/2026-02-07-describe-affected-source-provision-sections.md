@@ -12,14 +12,6 @@ detected. This means:
 - If `provision.workdir.enabled` changes, the component is NOT marked as affected
 - Any other changes to `source` or `provision` configuration are silently ignored
 
-## Scenario
-
-1. **PR1** updates a component's `source.version` from `1.0.0` to `1.1.0` and merges into main
-2. **PR2** was created from main **before** PR1 was merged
-3. When PR2 runs `describe affected` against main:
-   - Expected: The component should be marked as affected due to `source.version` change
-   - Actual: The component is NOT marked as affected
-
 ## Root Cause
 
 The `describe affected` command only checks these sections for changes:
@@ -221,13 +213,13 @@ The workdir path (`.workdir/terraform/<stack>-<component>/`) contains **generate
 
 #### What Gets Detected
 
-| Change Type | Should Detect? | Status |
-|------------|----------------|--------|
-| Base component folder files (`.tf` files) | ✅ Yes | Already works via `isComponentFolderChangedIndexed` |
-| `source.version` config change | ✅ Yes | **Fixed in this commit** |
-| `source.uri` config change | ✅ Yes | **Fixed in this commit** |
-| `provision.workdir` config change | ✅ Yes | **Fixed in this commit** |
-| Vendored files in `.workdir/` | ❌ No | Not needed (runtime artifact, not in git) |
+| Change Type                               | Should Detect? | Status                                              |
+|-------------------------------------------|----------------|-----------------------------------------------------|
+| Base component folder files (`.tf` files) | ✅ Yes          | Already works via `isComponentFolderChangedIndexed` |
+| `source.version` config change            | ✅ Yes          | **Fixed in this commit**                            |
+| `source.uri` config change                | ✅ Yes          | **Fixed in this commit**                            |
+| `provision.workdir` config change         | ✅ Yes          | **Fixed in this commit**                            |
+| Vendored files in `.workdir/`             | ❌ No           | Not needed (runtime artifact, not in git)           |
 
 #### The Detection Flow
 
