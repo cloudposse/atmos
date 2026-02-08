@@ -10,7 +10,6 @@ component that doesn't exist in the PR branch (HEAD), the command fails with an 
 ```text
 Error: failed to describe component prometheus in stack plat-usw1-staging
 in YAML function: !terraform.state prometheus workspace_endpoint
-invalid component:
 Could not find the component prometheus in the stack plat-usw1-staging. Check
 that all the context variables are correctly defined in the stack manifests.
 Are the component and stack names correct? Did you forget an import?
@@ -60,18 +59,18 @@ Add context to the error message explaining WHY the component wasn't found:
 Error: failed to describe component `prometheus` in stack `plat-usw1-staging`
 in YAML function: !terraform.state prometheus workspace_endpoint
 
-The component `prometheus` exists in the base branch but not in the head branch.
-This typically happens when the base branch (main) has new components that haven't
+The component `prometheus` exists in the BASE branch but not in the HEAD branch.
+This typically happens when the BASE branch (main) has new components that haven't
 been rebased into your PR branch yet.
 
 Suggested actions:
-  1. Rebase your branch against the base branch: git rebase origin/main
+  1. Rebase your branch against the BASE branch: git rebase origin/main
   2. Or use --process-functions=false to skip YAML function evaluation
 ```
 
 ### Option 2: Skip YAML Functions for Non-Existent Components
 
-When processing YAML functions for remoteStacks, if a referenced component doesn't exist in HEAD:
+When processing YAML functions for remote stacks, if a referenced component doesn't exist in HEAD:
 
 - Log a warning
 - Return nil/null for the function result
@@ -82,8 +81,8 @@ resolved.
 
 ### Option 3: Context-Aware Component Resolution
 
-Pass the repository context (local vs remote) through the YAML function resolution chain so that when processing
-remoteStacks, component lookups are performed against the remote repo paths, not the current working directory.
+Pass the repository context (local vs. remote) through the YAML function resolution chain so that when processing
+remote stacks, component lookups are performed against the remote repo paths, not the current working directory.
 
 This is the most correct solution but requires significant refactoring.
 
