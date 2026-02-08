@@ -1126,19 +1126,15 @@ func TestDescribeAffectedWithDependentsStackFilterYamlFunctions(t *testing.T) {
 	// - Performance penalty and potential side effects
 }
 
-// setupDescribeAffectedNewComponentInBaseTest sets up the test environment for testing
-// the scenario where a new component exists in BASE (main) but not in HEAD (PR branch).
-// This reproduces the issue where:
-// 1. PR1 introduces a new component (e.g., prometheus) and merges to main
-// 2. PR2 (based on old main) runs `describe affected` against current main
-// 3. Atmos fails because the new component exists in BASE but not in HEAD.
-func setupDescribeAffectedNewComponentInBaseTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+// setupDescribeAffectedTestWithFixture is a generic helper that sets up a test environment for describe affected tests.
+// It handles the common setup of copying the fixture, replacing stacks, and initializing git repos.
+func setupDescribeAffectedTestWithFixture(t *testing.T, fixtureDir, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
 	t.Helper()
 
 	// Check for valid Git remote URL before running the test.
 	tests.RequireGitRemoteWithValidURL(t)
 
-	basePath := "tests/fixtures/scenarios/atmos-describe-affected-new-component-in-base"
+	basePath := filepath.Join("tests", "fixtures", "scenarios", fixtureDir)
 	pathPrefix := "../../"
 
 	stacksPath := filepath.Join(pathPrefix, basePath)
@@ -1173,8 +1169,8 @@ func setupDescribeAffectedNewComponentInBaseTest(t *testing.T, affectedStacksDir
 	err = cp.Copy(pathPrefix, tempDir, copyOptions)
 	require.NoError(t, err)
 
-	// Copy the affected stacks (with new component) into the `stacks` folder in the temp dir.
-	// This simulates BASE (main) having a new component that HEAD (PR branch) doesn't have.
+	// Copy the affected stacks into the `stacks` folder in the temp dir.
+	// This simulates BASE (main) having different content than HEAD (PR branch).
 	err = cp.Copy(filepath.Join(stacksPath, affectedStacksDir), filepath.Join(tempDir, basePath, "stacks"), copyOptions)
 	require.NoError(t, err)
 
@@ -1185,6 +1181,13 @@ func setupDescribeAffectedNewComponentInBaseTest(t *testing.T, affectedStacksDir
 	repoPath = tempDir
 
 	return config, repoPath
+}
+
+// setupDescribeAffectedNewComponentInBaseTest sets up the test environment for testing
+// the scenario where a new component exists in BASE (main) but not in HEAD (PR branch).
+func setupDescribeAffectedNewComponentInBaseTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+	return setupDescribeAffectedTestWithFixture(t, "atmos-describe-affected-new-component-in-base", affectedStacksDir)
 }
 
 // TestDescribeAffectedNewComponentInBase tests the scenario where a new component
@@ -1294,5 +1297,98 @@ func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 	t.Logf("Affected components: %d", len(affected))
 	for _, a := range affected {
 		t.Logf("  - %s in %s (affected by: %s)", a.Component, a.Stack, a.Affected)
+	}
+}
+
+// setupDescribeAffectedSourceVendoringTest sets up a test environment for source vendoring scenarios.
+// It returns the atmosConfig and the path to the BASE repo.
+func setupDescribeAffectedSourceVendoringTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+	return setupDescribeAffectedTestWithFixture(t, "atmos-describe-affected-source-vendoring", affectedStacksDir)
+}
+
+// TestDescribeAffectedSourceVersionChange tests that describe affected detects changes to source.version
+// and provision.workdir configuration.
+// This is a critical test for source vendoring because if source.version changes (e.g., upgrading a module),
+// the component should be marked as affected. Similarly, workdir configuration changes should be detected.
+//
+// Scenario:
+// - HEAD (PR branch): source.version = "1.0.0", component-workdir-only has no workdir
+// - BASE (main branch): source.version = "1.1.0", component-workdir-only has workdir enabled
+// Expected: vpc-source, vpc-source-workdir, and component-workdir-only should be marked as affected.
+func TestDescribeAffectedSourceVersionChange(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedSourceVendoringTest(t, "stacks-with-source-version-change")
+
+	// Run describe affected comparing HEAD (version 1.0.0) to BASE (version 1.1.0).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions - don't need YAML functions for this test
+		nil,
+		false,
+	)
+	// Check if there was an error.
+	if err != nil {
+		t.Fatalf("Unexpected error: %v", err)
+	}
+
+	// Log what was found.
+	t.Logf("Found %d affected components", len(affected))
+	for _, a := range affected {
+		t.Logf("  - %s in %s (affected by: %s)", a.Component, a.Stack, a.Affected)
+	}
+
+	// Check if source-vendored components are marked as affected.
+	foundVpcSource := false
+	foundVpcSourceWorkdir := false
+	foundWorkdirOnly := false
+	var vpcSourceReason, vpcSourceWorkdirReason, workdirOnlyReason string
+
+	for _, a := range affected {
+		switch a.Component {
+		case "vpc-source":
+			foundVpcSource = true
+			vpcSourceReason = a.Affected
+		case "vpc-source-workdir":
+			foundVpcSourceWorkdir = true
+			vpcSourceWorkdirReason = a.Affected
+		case "component-workdir-only":
+			foundWorkdirOnly = true
+			workdirOnlyReason = a.Affected
+		}
+	}
+
+	// Verify source.version changes are detected.
+	if foundVpcSource {
+		t.Logf("SUCCESS: vpc-source detected as affected (reason: %s)", vpcSourceReason)
+		assert.Equal(t, "stack.source", vpcSourceReason, "vpc-source should be affected due to source change")
+	} else {
+		t.Errorf("FAILED: vpc-source should be affected due to source.version change (1.0.0 -> 1.1.0)")
+	}
+
+	if foundVpcSourceWorkdir {
+		t.Logf("SUCCESS: vpc-source-workdir detected as affected (reason: %s)", vpcSourceWorkdirReason)
+		assert.Equal(t, "stack.source", vpcSourceWorkdirReason, "vpc-source-workdir should be affected due to source change")
+	} else {
+		t.Errorf("FAILED: vpc-source-workdir should be affected due to source.version change (1.0.0 -> 1.1.0)")
+	}
+
+	// Verify provision.workdir changes are detected.
+	if foundWorkdirOnly {
+		t.Logf("SUCCESS: component-workdir-only detected as affected (reason: %s)", workdirOnlyReason)
+		assert.Equal(t, "stack.provision", workdirOnlyReason, "component-workdir-only should be affected due to provision change")
+	} else {
+		t.Errorf("FAILED: component-workdir-only should be affected due to provision.workdir change")
+	}
+
+	// Ensure the regular component is NOT affected (no changes).
+	for _, a := range affected {
+		if a.Component == "regular-component" {
+			t.Errorf("FAILED: regular-component should NOT be affected (no changes)")
+		}
 	}
 }
