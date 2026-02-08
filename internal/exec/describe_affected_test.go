@@ -1238,18 +1238,20 @@ func TestDescribeAffectedNewComponentInBase(t *testing.T) {
 //	"YAML function: !terraform.state prometheus workspace_endpoint"
 //	"Could not find the component prometheus in the stack ue1-staging"
 //
-// The issue is that when processing remoteStacks (BASE), YAML functions like !terraform.state
-// call ExecuteDescribeComponent which looks in the current working directory (HEAD),
-// not in the remote repo (BASE).
+// Root cause: When processing remoteStacks (BASE), YAML functions like !terraform.state
+// call ExecuteDescribeComponent with nil AtmosConfig. This causes ExecuteDescribeComponentWithContext
+// to create a NEW AtmosConfig from the current working directory (HEAD), instead of using the
+// modified config that points to BASE. Since prometheus only exists in BASE, the lookup fails.
 func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 	atmosConfig, repoPath := setupDescribeAffectedNewComponentInBaseTest(t, "stacks-with-new-component-and-reference")
 
 	// Run describe affected comparing HEAD (without prometheus) to BASE (with prometheus + reference).
 	// This currently fails because:
-	// 1. BASE has eks component with: prometheus_endpoint: '!terraform.state prometheus .workspace_endpoint'
+	// 1. BASE has eks component with: prometheus_endpoint: '!terraform.state prometheus workspace_endpoint'
 	// 2. When processing remoteStacks, the !terraform.state function is evaluated
-	// 3. It calls ExecuteDescribeComponent("prometheus", "ue1-staging")
-	// 4. But prometheus doesn't exist in HEAD, so it fails
+	// 3. GetTerraformState calls ExecuteDescribeComponent with nil AtmosConfig
+	// 4. ExecuteDescribeComponentWithContext creates a NEW config from CWD (HEAD)
+	// 5. prometheus doesn't exist in HEAD, so the lookup fails
 	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
 		&atmosConfig,
 		repoPath,
@@ -1261,27 +1263,27 @@ func TestDescribeAffectedNewComponentInBaseWithYamlFunctions(t *testing.T) {
 		nil,
 		false,
 	)
-	// CURRENT BEHAVIOR (BUG): This will likely fail with an error like:
-	//   "failed to describe component prometheus in stack ue1-staging"
-	//   "YAML function: !terraform.state prometheus workspace_endpoint"
-	//   "Could not find the component prometheus"
+	// FIXED BEHAVIOR: The fix passes atmosConfig through the YAML function chain to
+	// ExecuteDescribeComponent, so component lookups use BASE paths correctly.
 	//
-	// EXPECTED BEHAVIOR (after fix):
-	// - When processing remoteStacks with YAML functions, if a component doesn't exist in HEAD,
-	//   the function should either:
-	//   a) Use the default value (// operator) if provided
-	//   b) Skip the component gracefully with a warning
-	//   c) Return null/nil for the missing reference
-	// - The error message should be improved to explain WHY the component wasn't found
-	//   (e.g., "component exists in base but not in head - consider rebasing")
+	// After the fix, we expect one of these outcomes:
+	// 1. "terraform state not provisioned" - Component IS found in BASE, but since prometheus
+	//    is a mock component with no actual Terraform state, getting the state fails.
+	//    This is expected and shows the fix is working - component lookup now uses BASE paths.
+	// 2. Success - If the error is handled gracefully (e.g., with YQ defaults).
 	if err != nil {
-		// Check if the error is the expected one about missing component.
 		errStr := err.Error()
+		// The fix is working if we see "not provisioned" instead of "Could not find".
+		// "not provisioned" means the component WAS found (using BASE paths), but has no state.
+		if strings.Contains(errStr, "prometheus") && strings.Contains(errStr, "not provisioned") {
+			t.Logf("Fix verified! Component found in BASE, but no Terraform state exists (expected for mock): %v", err)
+			// This is actually a success - the component lookup bug is fixed.
+			// The "not provisioned" error is expected for mock components without real Terraform state.
+			return
+		}
+		// OLD BUG: If we still see "Could not find", the fix didn't work.
 		if strings.Contains(errStr, "prometheus") && strings.Contains(errStr, "Could not find") {
-			t.Logf("Got expected error (BUG): %v", err)
-			t.Logf("This test documents the current behavior - the error should be handled more gracefully")
-			// For now, we skip rather than fail, since this documents the current (buggy) behavior.
-			t.Skip("Skipping: This test documents current buggy behavior where new components in BASE cause YAML function failures")
+			t.Fatalf("BUG NOT FIXED: Component lookup still failing with: %v", err)
 		}
 		// Unexpected error.
 		t.Fatalf("Unexpected error: %v", err)

@@ -25,6 +25,7 @@ func (c *componentDescriberAdapter) DescribeComponent(params *tfoutput.DescribeC
 	}
 
 	return ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
 		ProcessTemplates:     params.ProcessTemplates,
