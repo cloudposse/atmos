@@ -101,7 +101,7 @@ require (
 	github.com/terraform-docs/terraform-docs v0.21.0
 	github.com/versent/saml2aws/v2 v2.36.19
 	github.com/xeipuuv/gojsonschema v1.2.0
-	github.com/yuin/goldmark v1.7.8
+	github.com/yuin/goldmark v1.7.16
 	github.com/zalando/go-keyring v0.2.6
 	github.com/zclconf/go-cty v1.17.0
 	go.uber.org/mock v0.6.0
