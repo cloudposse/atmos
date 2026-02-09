@@ -51,7 +51,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - cloud.google.com/go/storage
     License: Apache-2.0
-    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.58.0/storage/LICENSE
+    URL: https://github.com/googleapis/google-cloud-go/blob/storage/v1.59.2/storage/LICENSE
 
   - cuelang.org/go
     License: Apache-2.0
@@ -119,7 +119,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/feature/s3/manager
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.20.19/feature/s3/manager/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/feature/s3/manager/v1.22.0/feature/s3/manager/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/internal/configsources
     License: Apache-2.0
@@ -159,7 +159,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/s3
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.95.1/service/s3/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/s3/v1.96.0/service/s3/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/secretsmanager
     License: Apache-2.0
@@ -950,7 +950,7 @@ MIT LICENSED DEPENDENCIES
 
   - al.essio.dev/pkg/shellescape
     License: MIT
-    URL: https://github.com/alessio/shellescape/blob/v1.5.1/LICENSE
+    URL: https://github.com/alessio/shellescape/blob/v1.6.0/LICENSE
 
   - github.com/99designs/keyring
     License: MIT
@@ -1034,7 +1034,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/alecthomas/chroma/v2
     License: MIT
-    URL: https://github.com/alecthomas/chroma/blob/v2.23.0/COPYING
+    URL: https://github.com/alecthomas/chroma/blob/v2.23.1/COPYING
 
   - github.com/alecthomas/participle/v2/lexer
     License: MIT
@@ -1078,7 +1078,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/bmatcuk/doublestar/v4
     License: MIT
-    URL: https://github.com/bmatcuk/doublestar/blob/v4.9.2/LICENSE
+    URL: https://github.com/bmatcuk/doublestar/blob/v4.10.0/LICENSE
 
   - github.com/catppuccin/go
     License: MIT
@@ -1098,7 +1098,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/bubbles
     License: MIT
-    URL: https://github.com/charmbracelet/bubbles/blob/23b8fd6302d7/LICENSE
+    URL: https://github.com/charmbracelet/bubbles/blob/v0.21.1/LICENSE
 
   - github.com/charmbracelet/bubbletea
     License: MIT
@@ -1130,11 +1130,11 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/x/ansi
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.4/ansi/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/ansi/v0.11.5/ansi/LICENSE
 
   - github.com/charmbracelet/x/cellbuf
     License: MIT
-    URL: https://github.com/charmbracelet/x/blob/cellbuf/v0.0.14/cellbuf/LICENSE
+    URL: https://github.com/charmbracelet/x/blob/cellbuf/v0.0.15/cellbuf/LICENSE
 
   - github.com/charmbracelet/x/exp/slice
     License: MIT
@@ -1150,15 +1150,15 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/clipperhouse/displaywidth
     License: MIT
-    URL: https://github.com/clipperhouse/displaywidth/blob/v0.7.0/LICENSE
+    URL: https://github.com/clipperhouse/displaywidth/blob/v0.9.0/LICENSE
 
   - github.com/clipperhouse/stringish
     License: MIT
     URL: https://github.com/clipperhouse/stringish/blob/v0.1.1/LICENSE
 
-  - github.com/clipperhouse/uax29/v2
+  - github.com/clipperhouse/uax29/v2/graphemes
     License: MIT
-    URL: https://github.com/clipperhouse/uax29/blob/v2.3.0/LICENSE
+    URL: https://github.com/clipperhouse/uax29/blob/v2.5.0/LICENSE
 
   - github.com/cloudposse/atmos/pkg/config/homedir
     License: MIT
