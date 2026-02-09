@@ -134,7 +134,7 @@ tests:
   - name: atmos greet with args
     enabled: true
     description: "Validate atmos custom command greet runs with argument provided."
-    workdir: "../examples/demo-custom-command/"
+    workdir: "../examples/custom-commands/"
     command: "atmos"
     args:
       - "greet"
@@ -149,7 +149,7 @@ tests:
   - name: atmos greet without args
     enabled: true
     description: "Validate atmos custom command greet runs without argument provided."
-    workdir: "../examples/demo-custom-command/"
+    workdir: "../examples/custom-commands/"
     command: "atmos"
     args:
       - "greet"

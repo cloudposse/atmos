@@ -38,6 +38,8 @@ const TAGS_MAP = {
   'demo-library': ['Components'],
   'demo-workflows': ['Automation'],
   'demo-atlantis': ['Automation'],
+  'custom-commands': ['Automation'],
+  'interactive-workflows': ['Automation'],
   'demo-custom-command': ['Automation'],
   'generate-files': ['Automation'],
   toolchain: ['DX'],
@@ -95,8 +97,12 @@ const DOCS_MAP = {
   'demo-atlantis': [
     { label: 'Atlantis Integration', url: '/cli/configuration/integrations/atlantis' },
   ],
-  'demo-custom-command': [
+  'custom-commands': [
     { label: 'Custom Commands', url: '/cli/configuration/commands' },
+  ],
+  'interactive-workflows': [
+    { label: 'Workflows', url: '/workflows' },
+    { label: 'CLI Configuration', url: '/cli/configuration/workflows' },
   ],
   'generate-files': [
     { label: 'Generate Files', url: '/cli/commands/terraform/generate/files' },

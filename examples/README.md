@@ -35,7 +35,7 @@ Think of each demo folder as representing an example of a standalone repository.
 4.  ├── demo-validation/          # Validate your configurations to ensure correctness and compliance.
 5.  ├── demo-localstack/          # Leverage LocalStack to provision an S3 bucket using Atmos and Terraform.
 6.  ├── demo-helmfile/            # Deploy NGINX on a local lightweight Kubernetes cluster (k3s) using Helm.
-7.  ├── demo-custom-command/      # Learn how to extend Atmos with your own custom CLI commands.
+7.  ├── custom-commands/          # Learn how to extend Atmos with your own custom CLI commands.
 8.  ├── demo-component-versions/  # Discover how to manage and use multiple versions of components effectively.
 9.  ├── demo-context/             # Simplify resource naming and tagging with our Terraform context provider.
 10. ├── demo-workflows/           # Automate repetitive tasks with streamlined workflows.

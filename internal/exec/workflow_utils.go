@@ -28,10 +28,12 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/retry"
+	stepPkg "github.com/cloudposse/atmos/pkg/runner/step"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/telemetry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	workflowPkg "github.com/cloudposse/atmos/pkg/workflow"
 )
 
 // Workflow error title for formatted output.
@@ -103,13 +105,13 @@ func buildWorkflowStepError(err error, ctx *workflowStepErrorContext) error {
 	// This preserves both the error sentinel for errors.Is() checks and the underlying error's exit code.
 	wrappedErr := fmt.Errorf("%w: %w", errUtils.ErrWorkflowStepFailed, err)
 
-	// Now build the error with hints using the wrapped error.
-	// This preserves the error chain while adding formatted hints.
+	// Now build the error with explanation and hints using the wrapped error.
+	// This preserves the error chain while adding formatted context.
 	// Commands are wrapped in code fences for proper formatting and copy-paste.
 	// Single quotes are used for shell safety (step names and stacks can contain spaces).
 	builder := errUtils.Build(wrappedErr).
 		WithTitle("Workflow Error").
-		WithHintf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
+		WithExplanationf("The following command failed to execute:\n\n```shell\n%s\n```", failedCmd).
 		WithHintf("To resume the workflow from this step, run:\n\n```shell\n%s\n```", resumeCommand)
 
 	// Extract exit code from the underlying error if available.
@@ -241,6 +243,12 @@ func ExecuteWorkflow(
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteWorkflow")()
 
+	// Reset step executor state at the start of each workflow to ensure clean variable scope.
+	ResetStepExecutorState()
+
+	// Initialize step executor with stage count for stage step type.
+	initStepExecutorWithStages(workflowDefinition)
+
 	steps := workflowDefinition.Steps
 
 	if len(steps) == 0 {
@@ -311,7 +319,31 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Initialize show renderer for header/flags display.
+	showRenderer := workflowPkg.NewShowRenderer()
+
+	// Build flags map for header display.
+	flags := buildWorkflowFlagsMap(commandLineStack, commandLineIdentity, dryRun, fromStep)
+
+	// Initialize progress renderer if enabled.
+	totalSteps := len(steps)
+	progressRenderer := workflowPkg.NewProgressRenderer(workflowDefinition, totalSteps)
+
+	// Render header before first step (if enabled).
+	showRenderer.RenderHeaderIfNeeded(workflowDefinition, workflow, flags)
+
 	for stepIdx, step := range steps {
+		// Render step label with optional count prefix and progress bar.
+		// When progress is enabled, combine label + progress on single line (no newline).
+		// When progress is disabled, just show the label with newline.
+		label := stepPkg.FormatStepLabel(&step, workflowDefinition, stepIdx, totalSteps)
+		if progressRenderer.IsEnabled() {
+			progressRenderer.Update(stepIdx+1, step.Name)
+			progressRenderer.RenderWithLabel(label) // No newline - will be cleared.
+		} else {
+			ui.Writeln(label)
+		}
+
 		command := strings.TrimSpace(step.Command)
 		commandType := strings.TrimSpace(step.Type)
 		stepIdentity := strings.TrimSpace(step.Identity)
@@ -341,8 +373,17 @@ func ExecuteWorkflow(
 			stepEnv = append(stepEnv, fmt.Sprintf("PATH=%s", toolchainPATH))
 		}
 
+		// Clear progress line and re-render as permanent record before step execution.
+		// This ensures progress line appears as header, then step output below it.
+		if progressRenderer.IsEnabled() {
+			ui.ClearLine()
+			progressRenderer.RenderPermanent(label)
+		}
+
 		switch commandType {
 		case "shell":
+			// Render command before execution if show.command is enabled.
+			stepPkg.RenderCommand(&step, workflowDefinition, command)
 			commandName := fmt.Sprintf("%s-step-%d", workflow, stepIdx)
 			err = ExecuteShell(command, commandName, ".", stepEnv, dryRun)
 		case "atmos":
@@ -384,20 +425,36 @@ func ExecuteWorkflow(
 				log.Debug("Using stack", "stack", finalStack)
 			}
 
+			// Build display command for RenderCommand.
+			displayCmd := "atmos " + command
+			if finalStack != "" {
+				displayCmd = fmt.Sprintf("atmos %s -s %s", command, finalStack)
+			}
+			// Render command before execution if show.command is enabled.
+			stepPkg.RenderCommand(&step, workflowDefinition, displayCmd)
+
 			ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.With7Params(context.Background(), step.Retry,
 				ExecuteShellCommand,
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		default:
-			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
-				WithTitle(WorkflowErrTitle).
-				WithHintf("Step type '%s' is not supported", commandType).
-				WithHint("Each step must specify a valid type: 'atmos' or 'shell'").
-				WithExitCode(1).
-				Err()
+			// Check if this is an extended step type (input, confirm, choose, etc.).
+			if !stepPkg.IsExtendedStepType(commandType) {
+				return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).
+					WithTitle(WorkflowErrTitle).
+					WithHintf("Step type '%s' is not supported", commandType).
+					WithHint("Each step must specify a valid type: 'atmos', 'shell', or an interactive type like 'input', 'confirm', 'choose'").
+					WithExitCode(1).
+					Err()
+			}
+			err = executeExtendedStep(context.Background(), &steps[stepIdx], workflowDefinition, stepEnv)
 		}
 
 		if err != nil {
+			// Clean up progress on error.
+			if progressRenderer.IsEnabled() {
+				progressRenderer.Done()
+			}
 			return buildWorkflowStepError(err, &workflowStepErrorContext{
 				WorkflowPath:     workflowPath,
 				WorkflowBasePath: atmosConfig.Workflows.BasePath,
@@ -410,7 +467,73 @@ func ExecuteWorkflow(
 		}
 	}
 
+	// Mark progress as done.
+	if progressRenderer.IsEnabled() {
+		progressRenderer.Done()
+	}
+
 	return nil
+}
+
+// stepExecutorState holds persistent state for extended step execution within a workflow.
+// This allows step results to be passed between steps for variable templating.
+var stepExecutorState *stepPkg.StepExecutor
+
+// executeExtendedStep runs an extended step type (input, confirm, choose, etc.).
+func executeExtendedStep(ctx context.Context, workflowStep *schema.WorkflowStep, workflow *schema.WorkflowDefinition, envVars []string) error {
+	// Initialize or reuse step executor.
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+
+	// Set workflow context for output mode inheritance.
+	stepExecutorState.SetWorkflow(workflow)
+
+	// Add environment variables to the executor.
+	for _, env := range envVars {
+		parts := strings.SplitN(env, "=", 2)
+		if len(parts) == 2 {
+			stepExecutorState.SetEnv(parts[0], parts[1])
+		}
+	}
+
+	// Execute the step.
+	_, err := stepExecutorState.Execute(ctx, workflowStep)
+	return err
+}
+
+// ResetStepExecutorState resets the step executor state.
+// This should be called at the start of a new workflow execution.
+func ResetStepExecutorState() {
+	stepExecutorState = nil
+}
+
+// initStepExecutorWithStages initializes the step executor with stage count.
+// This must be called before executing any steps so stage steps know the total.
+func initStepExecutorWithStages(workflow *schema.WorkflowDefinition) {
+	if stepExecutorState == nil {
+		stepExecutorState = stepPkg.NewStepExecutor()
+	}
+	totalStages := stepPkg.CountStages(workflow)
+	stepExecutorState.Variables().SetTotalStages(totalStages)
+}
+
+// buildWorkflowFlagsMap builds a map of workflow flags for display in the header.
+func buildWorkflowFlagsMap(stack, identity string, dryRun bool, fromStep string) map[string]string {
+	flags := make(map[string]string)
+	if stack != "" {
+		flags["stack"] = stack
+	}
+	if identity != "" {
+		flags["identity"] = identity
+	}
+	if dryRun {
+		flags["dry-run"] = "true"
+	}
+	if fromStep != "" {
+		flags["from-step"] = fromStep
+	}
+	return flags
 }
 
 // ExecuteDescribeWorkflows executes `atmos describe workflows` command.

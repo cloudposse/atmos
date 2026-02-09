@@ -230,7 +230,14 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	)
 
 	// Create a copy to avoid mutating the input.
-	result := make(map[string]string, len(environ)+6)
+	// Use safe capacity calculation to prevent integer overflow on 32-bit systems.
+	// We need room for environ entries plus 6 AWS-specific environment variables.
+	const maxMapCapacity = 1 << 20 // 1M entries is more than reasonable for env vars.
+	environLen := len(environ)
+	if environLen > maxMapCapacity {
+		environLen = maxMapCapacity
+	}
+	result := make(map[string]string, environLen)
 	for k, v := range environ {
 		result[k] = v
 	}
