@@ -1,0 +1,61 @@
+---
+slug: workflow-environment-variables
+title: "Workflow Environment Variables"
+authors: [Benbentwo]
+tags: [feature]
+---
+
+Workflows now support environment variables at both workflow and step levels with hierarchical merging.
+
+<!--truncate-->
+
+## What Changed
+
+You can now define environment variables in workflow YAML files at two levels:
+
+- **Workflow-level**: Applied to all steps in the workflow
+- **Step-level**: Applied to a specific step, overriding workflow-level variables with the same key
+
+Environment variables are merged hierarchically, with step-level values taking precedence over workflow-level values for the same keys.
+
+## Example
+
+```yaml
+workflows:
+  deploy:
+    description: Deploy with custom environment
+    env:
+      FOO: bar
+      BAZ: workflow-value
+    steps:
+      - command: echo "$FOO - $BAZ"
+        type: shell
+        env:
+          BAZ: step-value
+```
+
+Running this workflow outputs `bar - step-value` because:
+- `FOO` is inherited from the workflow level (`bar`)
+- `BAZ` is overridden by the step level (`step-value`)
+
+## Why This Matters
+
+This feature enables several use cases:
+
+- **Consistent environment setup**: Define common variables once at the workflow level
+- **Step-specific overrides**: Override variables for specific steps without duplicating configuration
+- **Integration with external tools**: Pass environment variables to shell commands and Terraform
+
+## Environment Variable Precedence
+
+The full precedence order (lowest to highest priority):
+
+1. System environment variables
+2. Global env from `atmos.yaml`
+3. Workflow-level `env`
+4. Step-level `env`
+5. Auth identity env vars (if `identity` is specified)
+
+## Get Involved
+
+Have questions or feedback? Join us on [Slack](https://cloudposse.com/slack) or open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
