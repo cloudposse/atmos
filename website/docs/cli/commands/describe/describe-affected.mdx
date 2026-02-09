@@ -687,6 +687,55 @@ where:
                 ```
             </dd>
 
+            <dt>`folder`</dt>
+            <dd>
+                Any file in an external folder that the Atmos component depends on was changed.
+
+                Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
+
+
+                For example:
+
+                ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
+                components:
+                  terraform:
+                    top-level-component3:
+                      metadata:
+                        component: "top-level-component1"
+                      settings:
+                        depends_on:
+                          1:
+                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
+                          2:
+                            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                ```
+
+                In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
+                `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
+                the component `top-level-component3` will be included in the `atmos describe affected` command output.
+
+
+                For example:
+
+                ```json
+                  [
+                    {
+                      "component": "top-level-component3",
+                      "component_type": "terraform",
+                      "component_path": "components/terraform/top-level-component1",
+                      "stack": "tenant1-ue2-test-1",
+                      "stack_slug": "tenant1-ue2-test-1-top-level-component3",
+                      "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
+                      "affected": "folder",
+                      "affected_all": [
+                        "folder"
+                      ],
+                      "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
+                    }
+                  ]
+                ```
+            </dd>
+
             <dt>`deleted`</dt>
             <dd>
                 The component was deleted (exists in BASE but not in HEAD). This happens when a component is removed from
@@ -748,55 +797,6 @@ where:
                       ],
                       "deleted": true,
                       "deletion_type": "stack"
-                    }
-                  ]
-                ```
-            </dd>
-
-            <dt>`folder`</dt>
-            <dd>
-                Any file in an external folder that the Atmos component depends on was changed.
-
-                Dependencies on external folders are defined using the `folder` attribute in the `settings.depends_on` map.
-
-
-                For example:
-
-                ```yaml title="stacks/catalog/terraform/top-level-component3.yaml"
-                components:
-                  terraform:
-                    top-level-component3:
-                      metadata:
-                        component: "top-level-component1"
-                      settings:
-                        depends_on:
-                          1:
-                            file: "tests/fixtures/scenarios/complete/components/terraform/mixins/introspection.mixin.tf"
-                          2:
-                            folder: "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
-                ```
-
-                In the configuration above, we specify that the Atmos component `top-level-component3` depends on the folder
-                `tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server`. If any file in the folder gets modified,
-                the component `top-level-component3` will be included in the `atmos describe affected` command output.
-
-
-                For example:
-
-                ```json
-                  [
-                    {
-                      "component": "top-level-component3",
-                      "component_type": "terraform",
-                      "component_path": "components/terraform/top-level-component1",
-                      "stack": "tenant1-ue2-test-1",
-                      "stack_slug": "tenant1-ue2-test-1-top-level-component3",
-                      "atlantis_project": "tenant1-ue2-test-1-top-level-component3",
-                      "affected": "folder",
-                      "affected_all": [
-                        "folder"
-                      ],
-                      "folder": "tests/fixtures/scenarios/complete/components/helmfile/infra/infra-server"
                     }
                   ]
                 ```
@@ -1151,6 +1151,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: cloudposse/github-action-setup-atmos@v2
 
       - name: Detect affected
         id: affected
@@ -1173,6 +1174,8 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
   destroy:
@@ -1183,6 +1186,8 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
 

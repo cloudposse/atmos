@@ -96,7 +96,7 @@ for each stack in BASE:
                 add as deleted (deletion_type: component)
 ```
 
-Users can filter the output using `--query` to separate modified vs deleted components.
+Users can filter the output using `--query` to separate modified vs. deleted components.
 
 ## Use Cases
 
@@ -195,6 +195,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: cloudposse/github-action-setup-atmos@v2
 
       - name: Detect affected
         id: affected
@@ -217,6 +218,8 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
   destroy:
@@ -227,6 +230,8 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
 
@@ -334,7 +339,7 @@ Users should handle this case in their pipelines (may need manual intervention t
 If a stack file is moved (but results in the same logical stack):
 
 - Need to compare by stack name, not file path
-- May require additional logic to detect moves vs deletes
+- May require additional logic to detect moves vs. deletes
 
 ### 5. Locked Components
 
@@ -380,7 +385,7 @@ When deleting components with dependents:
 
 ### 3. Soft Delete Detection
 
-Detect components marked as `metadata.enabled: false` (soft delete) vs completely removed (hard delete).
+Detect components marked as `metadata.enabled: false` (soft delete) vs. completely removed (hard delete).
 
 ### 4. State Orphan Detection
 

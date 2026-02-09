@@ -241,6 +241,8 @@ func TestDetectDeletedComponents_MultipleComponentTypes(t *testing.T) {
 }
 
 // TestDetectDeletedComponents_NoComponentsSection tests when HEAD stack has no components section.
+// When a stack exists but lacks a components section, all BASE components are deleted with
+// deletion_type: "component" (not "stack") since the stack itself still exists.
 func TestDetectDeletedComponents_NoComponentsSection(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}
 
@@ -268,7 +270,8 @@ func TestDetectDeletedComponents_NoComponentsSection(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, deleted, 1)
 	assert.Equal(t, "vpc", deleted[0].Component)
-	assert.Equal(t, deletionTypeStack, deleted[0].DeletionType)
+	// Stack exists but has no components - use deletion_type: "component" since stack itself still exists.
+	assert.Equal(t, deletionTypeComponent, deleted[0].DeletionType)
 }
 
 // TestDetectDeletedComponents_NoDeletions tests when nothing is deleted.

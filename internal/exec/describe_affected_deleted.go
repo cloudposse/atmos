@@ -134,7 +134,7 @@ func processAllComponentsAsDeleted(
 // processDeletedComponentsInStack handles the case where a stack exists but some components were deleted.
 // Components that exist in BASE but not in HEAD are marked as deleted with deletion_type: "component".
 //
-//nolint:funlen,revive // function-length: logic is straightforward, splitting would reduce readability
+//nolint:funlen,revive // function-length: logic is straightforward, splitting would reduce readability.
 func processDeletedComponentsInStack(
 	stackName string,
 	remoteComponentsSection map[string]any,
