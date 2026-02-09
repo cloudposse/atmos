@@ -6,8 +6,10 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 func executeDescribeAffected(
@@ -90,27 +92,35 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	// Compute relative paths for stack config files.
-	stackConfigFilesRelPaths := make([]string, len(currentStacksStackConfigFilesAbsolutePaths))
-	for i, absPath := range currentStacksStackConfigFilesAbsolutePaths {
-		relPath, err := filepath.Rel(localRepoFileSystemPathAbs, absPath)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		stackConfigFilesRelPaths[i] = relPath
-	}
-
 	// Update paths to point to the remote repo dir using the computed relative paths.
 	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, stacksRelPath)
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, terraformRelPath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, helmfileRelPath)
 	atmosConfig.PackerDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, packerRelPath)
 
-	// Convert relative stack config file paths to absolute paths in remote repo.
-	atmosConfig.StackConfigFilesAbsolutePaths = make([]string, len(stackConfigFilesRelPaths))
-	for i, relPath := range stackConfigFilesRelPaths {
-		atmosConfig.StackConfigFilesAbsolutePaths[i] = filepath.Join(remoteRepoFileSystemPath, relPath)
+	// Re-scan the BASE (remote) directory for stack config files.
+	// This is necessary to detect deleted stacks - files that exist in BASE but not in HEAD.
+	// We cannot simply convert HEAD's file paths to BASE paths, as that would miss files
+	// that only exist in BASE.
+	remoteIncludeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, atmosConfig.Stacks.IncludedPaths)
+	if err != nil {
+		return nil, nil, nil, err
 	}
+	remoteExcludeStackAbsPaths, err := u.JoinPaths(atmosConfig.StacksBaseAbsolutePath, atmosConfig.Stacks.ExcludedPaths)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	remoteStackConfigFilesAbsolutePaths, _, _, err := cfg.FindAllStackConfigsInPathsForStack(
+		*atmosConfig,
+		stack, // Apply the same stack filter if provided.
+		remoteIncludeStackAbsPaths,
+		remoteExcludeStackAbsPaths,
+	)
+	if err != nil {
+		// If no stack manifests found in BASE, use empty list (all stacks were deleted).
+		remoteStackConfigFilesAbsolutePaths = []string{}
+	}
+	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths
 
 	remoteStacks, err := ExecuteDescribeStacks(
 		atmosConfig,
