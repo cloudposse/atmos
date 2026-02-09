@@ -74,6 +74,10 @@ atmos describe affected --query '[.[] | select(.deleted != true)]'
 
 Here's how to separate apply and destroy workflows in GitHub Actions:
 
+:::warning
+**Review deletions carefully before destroying infrastructure.** The destroy job below uses `--auto-approve` for automation purposes. In production environments, consider adding a manual approval gate or requiring PR review before executing destroy operations to prevent accidental resource deletion.
+:::
+
 ```yaml
 jobs:
   detect-changes:

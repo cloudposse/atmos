@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-viper/mapstructure/v2"
+
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -226,5 +228,69 @@ func createDeletedAffectedItem(params *deletedItemParams) schema.Affected {
 	affected.ComponentPath = BuildComponentPath(params.atmosConfig, params.componentSection, params.componentType, params.componentName)
 	affected.StackSlug = fmt.Sprintf("%s-%s", params.stackName, strings.ReplaceAll(params.componentName, "/", "-"))
 
+	// Extract metadata from the component's vars section (same as non-deleted items).
+	if params.componentSection != nil {
+		populateDeletedItemMetadata(&affected, params)
+	}
+
 	return affected
+}
+
+// populateDeletedItemMetadata extracts and populates metadata fields from the component section.
+func populateDeletedItemMetadata(affected *schema.Affected, params *deletedItemParams) {
+	componentSection := *params.componentSection
+
+	// Extract vars section and decode to Context for metadata fields.
+	varsSection, ok := componentSection[cfg.VarsSectionName].(map[string]any)
+	if !ok {
+		return
+	}
+
+	var context schema.Context
+	if err := mapstructure.Decode(varsSection, &context); err != nil {
+		// If decoding fails, skip metadata population but continue.
+		return
+	}
+
+	// Populate context metadata fields.
+	affected.Namespace = context.Namespace
+	affected.Tenant = context.Tenant
+	affected.Environment = context.Environment
+	affected.Stage = context.Stage
+
+	// For Terraform components, also populate Spacelift stack and Atlantis project names.
+	if params.componentType == cfg.TerraformComponentType {
+		populateDeletedItemIntegrations(affected, params, varsSection, componentSection)
+	}
+}
+
+// populateDeletedItemIntegrations populates Spacelift and Atlantis names for deleted Terraform components.
+func populateDeletedItemIntegrations(
+	affected *schema.Affected,
+	params *deletedItemParams,
+	varsSection map[string]any,
+	componentSection map[string]any,
+) {
+	settingsSection, _ := componentSection[cfg.SettingsSectionName].(map[string]any)
+
+	configAndStacksInfo := schema.ConfigAndStacksInfo{
+		ComponentFromArg:         params.componentName,
+		Stack:                    params.stackName,
+		ComponentVarsSection:     varsSection,
+		ComponentSettingsSection: settingsSection,
+		ComponentSection: map[string]any{
+			cfg.VarsSectionName:     varsSection,
+			cfg.SettingsSectionName: settingsSection,
+		},
+	}
+
+	// Build Spacelift stack name (ignore errors - field is optional).
+	if spaceliftStackName, err := BuildSpaceliftStackNameFromComponentConfig(params.atmosConfig, configAndStacksInfo); err == nil {
+		affected.SpaceliftStack = spaceliftStackName
+	}
+
+	// Build Atlantis project name (ignore errors - field is optional).
+	if atlantisProjectName, err := BuildAtlantisProjectNameFromComponentConfig(params.atmosConfig, configAndStacksInfo); err == nil {
+		affected.AtlantisProject = atlantisProjectName
+	}
 }

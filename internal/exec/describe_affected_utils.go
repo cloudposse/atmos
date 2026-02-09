@@ -118,6 +118,8 @@ func executeDescribeAffected(
 	)
 	if err != nil {
 		// If no stack manifests found in BASE, use empty list (all stacks were deleted).
+		// Log at debug level to preserve observability for unexpected errors (e.g., permission issues).
+		log.Debug("No stack manifests found in BASE, using empty list", "error", err)
 		remoteStackConfigFilesAbsolutePaths = []string{}
 	}
 	atmosConfig.StackConfigFilesAbsolutePaths = remoteStackConfigFilesAbsolutePaths

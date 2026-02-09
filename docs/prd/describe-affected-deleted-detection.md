@@ -35,19 +35,17 @@ branch). This means:
 
 Extend `atmos describe affected` to detect and report:
 
-1. **Deleted components** - Components that exist in BASE but not in HEAD
-2. **Deleted stacks** - Entire stacks that exist in BASE but not in HEAD
-3. **Removed component instances** - Component removed from a specific stack (but may exist in other stacks)
+1. **Deleted components** - Components that exist in BASE but not in HEAD (within a stack that still exists)
+2. **Deleted stacks** - Entire stacks that exist in BASE but not in HEAD (all components marked as deleted)
 
 ### New Affected Reasons
 
 Add new affected reason values:
 
-| Reason              | Description                                               |
-|---------------------|-----------------------------------------------------------|
-| `deleted`           | Component/stack was deleted (exists in BASE, not in HEAD) |
-| `deleted.component` | The component definition was removed from the stack       |
-| `deleted.stack`     | The entire stack file/configuration was removed           |
+| Reason          | Description                                     |
+|-----------------|-------------------------------------------------|
+| `deleted`       | Component was removed from a stack              |
+| `deleted.stack` | Entire stack was deleted (all components in it) |
 
 ### New Output Fields
 
@@ -64,10 +62,10 @@ Add new fields to the affected output schema:
 }
 ```
 
-| Field           | Type    | Description                                                     |
-|-----------------|---------|-----------------------------------------------------------------|
-| `deleted`       | boolean | `true` if this component/stack was deleted                      |
-| `deletion_type` | string  | Type of deletion: `component`, `stack`, or `component_instance` |
+| Field           | Type    | Description                                        |
+|-----------------|---------|--------------------------------------------------- |
+| `deleted`       | boolean | `true` if this component/stack was deleted         |
+| `deletion_type` | string  | Type of deletion: `component` or `stack`           |
 
 ### Algorithm Changes
 
