@@ -103,40 +103,67 @@ func toStringSlice(items []any) []string {
 	return result
 }
 
-// parseDuration parses a duration string from a map, returning zero duration if not found or invalid.
-func parseDuration(m map[string]any, key string) time.Duration {
+// parseDurationPtr parses a duration string from a map, returning nil if not found or invalid.
+func parseDurationPtr(m map[string]any, key string) *time.Duration {
 	if v, ok := m[key].(string); ok {
 		if d, err := time.ParseDuration(v); err == nil {
-			return d
-		} else {
-			ui.Warningf("invalid duration for %s: %q", key, v)
+			return &d
 		}
+		ui.Warningf("invalid duration for %s: %q", key, v)
 	}
-	return 0
+	return nil
+}
+
+// parseIntPtr parses an int from a map (handles both int and float64), returning nil if not found.
+func parseIntPtr(m map[string]any, key string) *int {
+	switch v := m[key].(type) {
+	case int:
+		return &v
+	case float64:
+		i := int(v)
+		return &i
+	}
+	return nil
+}
+
+// parseFloat64Ptr parses a float64 from a map (handles multiple numeric types), returning nil if not found.
+func parseFloat64Ptr(m map[string]any, key string) *float64 {
+	switch v := m[key].(type) {
+	case float64:
+		return &v
+	case float32:
+		f := float64(v)
+		return &f
+	case int:
+		f := float64(v)
+		return &f
+	case int64:
+		f := float64(v)
+		return &f
+	case uint:
+		f := float64(v)
+		return &f
+	case uint64:
+		f := float64(v)
+		return &f
+	}
+	return nil
 }
 
 // parseRetryConfig parses a map into RetryConfig.
+// Fields that are not specified in the map will be nil (meaning "not set" / disabled / unlimited).
 func parseRetryConfig(m map[string]any) *schema.RetryConfig {
 	cfg := &schema.RetryConfig{
-		InitialDelay:   parseDuration(m, "initial_delay"),
-		MaxDelay:       parseDuration(m, "max_delay"),
-		MaxElapsedTime: parseDuration(m, "max_elapsed_time"),
+		MaxAttempts:    parseIntPtr(m, "max_attempts"),
+		InitialDelay:   parseDurationPtr(m, "initial_delay"),
+		MaxDelay:       parseDurationPtr(m, "max_delay"),
+		MaxElapsedTime: parseDurationPtr(m, "max_elapsed_time"),
+		RandomJitter:   parseFloat64Ptr(m, "random_jitter"),
+		Multiplier:     parseFloat64Ptr(m, "multiplier"),
 	}
 
-	switch v := m["max_attempts"].(type) {
-	case int:
-		cfg.MaxAttempts = v
-	case float64:
-		cfg.MaxAttempts = int(v)
-	}
 	if v, ok := m["backoff_strategy"].(string); ok {
 		cfg.BackoffStrategy = schema.BackoffStrategy(v)
-	}
-	if v, ok := m["random_jitter"].(float64); ok {
-		cfg.RandomJitter = v
-	}
-	if v, ok := m["multiplier"].(float64); ok {
-		cfg.Multiplier = v
 	}
 
 	return cfg

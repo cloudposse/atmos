@@ -122,9 +122,12 @@ func TestTasks_UnmarshalYAML_WithRetry(t *testing.T) {
 
 	assert.Len(t, tasks, 1)
 	require.NotNil(t, tasks[0].Retry)
-	assert.Equal(t, 3, tasks[0].Retry.MaxAttempts)
-	assert.Equal(t, time.Second, tasks[0].Retry.InitialDelay)
-	assert.Equal(t, 10*time.Second, tasks[0].Retry.MaxDelay)
+	require.NotNil(t, tasks[0].Retry.MaxAttempts)
+	assert.Equal(t, 3, *tasks[0].Retry.MaxAttempts)
+	require.NotNil(t, tasks[0].Retry.InitialDelay)
+	assert.Equal(t, time.Second, *tasks[0].Retry.InitialDelay)
+	require.NotNil(t, tasks[0].Retry.MaxDelay)
+	assert.Equal(t, 10*time.Second, *tasks[0].Retry.MaxDelay)
 }
 
 func TestTasks_UnmarshalYAML_WithWorkingDirectory(t *testing.T) {
@@ -197,6 +200,7 @@ func TestTasks_UnmarshalYAML_InvalidStructuredDecode(t *testing.T) {
 }
 
 func TestTask_ToWorkflowStep(t *testing.T) {
+	maxAttempts := 3
 	task := Task{
 		Name:             "test-task",
 		Command:          "echo hello",
@@ -205,7 +209,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 		WorkingDirectory: "/app",
 		Identity:         "test-identity",
 		Retry: &RetryConfig{
-			MaxAttempts: 3,
+			MaxAttempts: &maxAttempts,
 		},
 		Timeout: 30 * time.Second,
 	}
@@ -223,6 +227,7 @@ func TestTask_ToWorkflowStep(t *testing.T) {
 }
 
 func TestTaskFromWorkflowStep(t *testing.T) {
+	maxAttempts := 5
 	step := WorkflowStep{
 		Name:             "workflow-step",
 		Command:          "terraform apply",
@@ -231,7 +236,7 @@ func TestTaskFromWorkflowStep(t *testing.T) {
 		WorkingDirectory: "/infra",
 		Identity:         "prod-identity",
 		Retry: &RetryConfig{
-			MaxAttempts: 5,
+			MaxAttempts: &maxAttempts,
 		},
 	}
 
@@ -473,9 +478,12 @@ func TestDecodeTaskFromMap_WithRetry(t *testing.T) {
 	task, err := decodeTaskFromMap(m, 0)
 	require.NoError(t, err)
 	require.NotNil(t, task.Retry)
-	assert.Equal(t, 3, task.Retry.MaxAttempts)
-	assert.Equal(t, time.Second, task.Retry.InitialDelay)
-	assert.Equal(t, 10*time.Second, task.Retry.MaxDelay)
+	require.NotNil(t, task.Retry.MaxAttempts)
+	assert.Equal(t, 3, *task.Retry.MaxAttempts)
+	require.NotNil(t, task.Retry.InitialDelay)
+	assert.Equal(t, time.Second, *task.Retry.InitialDelay)
+	require.NotNil(t, task.Retry.MaxDelay)
+	assert.Equal(t, 10*time.Second, *task.Retry.MaxDelay)
 }
 
 func TestDecodeTaskFromMap_InvalidTimeout(t *testing.T) {
