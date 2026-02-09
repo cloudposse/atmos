@@ -69,6 +69,7 @@ func defaultRunnerFactory(workdir, executable string) (TerraformRunner, error) {
 
 // DescribeComponentParams contains parameters for describing a component.
 type DescribeComponentParams struct {
+	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
 	ProcessTemplates     bool
@@ -247,6 +248,7 @@ func (e *Executor) GetOutput(
 
 	// Describe the component to get its configuration.
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
@@ -324,6 +326,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	defer perf.Track(atmosConfig, "output.Executor.fetchAndCacheOutputs")()
 
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,

@@ -1,0 +1,28 @@
+# Test fixture for describe affected with source vendoring
+# Tests that changes to source.version are detected as affected
+#
+# Scenario:
+# - HEAD: component has source.version = "1.0.0"
+# - BASE: component has source.version = "1.1.0" (version changed)
+# - Expected: component should be marked as affected due to source change
+
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths: []
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+logs:
+  file: "/dev/stderr"
+  level: Info
