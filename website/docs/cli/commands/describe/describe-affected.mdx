@@ -1186,7 +1186,11 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
+      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
+      # The deleted component's configuration only exists in BASE.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
@@ -1196,6 +1200,10 @@ Destruction of cloud resources is irreversible. The example above uses `--auto-a
 includes `environment: production` to require manual approval via
 [GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules).
 Always review the list of deleted components before running `terraform destroy`.
+
+**Important:** The destroy job must check out the **BASE branch** (target branch, e.g., `main`) rather than HEAD.
+This is because `terraform destroy` needs access to the component's stack configuration and Terraform files,
+which only exist in BASE — they've been deleted in HEAD.
 :::
 
 :::note Abstract Components

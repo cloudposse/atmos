@@ -1,6 +1,7 @@
 package exec
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -325,6 +326,178 @@ func TestDetectDeletedComponents_StackSlug(t *testing.T) {
 	require.Len(t, deleted, 1)
 	// Component name with "/" should have it replaced with "-" in stack_slug.
 	assert.Equal(t, "dev-us-east-1-monitoring-prometheus", deleted[0].StackSlug)
+}
+
+// TestDetectDeletedComponents_MalformedData tests graceful handling of malformed stack data.
+// The function should skip invalid entries without returning errors.
+func TestDetectDeletedComponents_MalformedData(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	tests := []struct {
+		name          string
+		remoteStacks  map[string]any
+		currentStacks map[string]any
+		expectedCount int
+		description   string
+	}{
+		{
+			name: "components key is not a map",
+			remoteStacks: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": "invalid-string-instead-of-map",
+				},
+			},
+			currentStacks: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{},
+				},
+			},
+			expectedCount: 0,
+			description:   "should skip stack with invalid components section",
+		},
+		{
+			name: "component type section is not a map",
+			remoteStacks: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						cfg.TerraformComponentType: "invalid-string",
+					},
+				},
+			},
+			currentStacks: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						cfg.TerraformComponentType: map[string]any{},
+					},
+				},
+			},
+			expectedCount: 0,
+			description:   "should skip component type with invalid section",
+		},
+		{
+			name: "component section is not a map",
+			remoteStacks: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						cfg.TerraformComponentType: map[string]any{
+							"vpc": "invalid-string-instead-of-map",
+						},
+					},
+				},
+			},
+			currentStacks: map[string]any{
+				"dev-us-east-1": map[string]any{
+					"components": map[string]any{
+						cfg.TerraformComponentType: map[string]any{},
+					},
+				},
+			},
+			expectedCount: 0,
+			description:   "should skip component with invalid section",
+		},
+		{
+			name: "stack section is not a map",
+			remoteStacks: map[string]any{
+				"dev-us-east-1": "invalid-string-instead-of-map",
+			},
+			currentStacks: map[string]any{},
+			expectedCount: 0,
+			description:   "should skip stack with invalid section",
+		},
+		{
+			name: "mixed valid and invalid data",
+			remoteStacks: map[string]any{
+				"valid-stack": map[string]any{
+					"components": map[string]any{
+						cfg.TerraformComponentType: map[string]any{
+							"vpc": map[string]any{
+								"vars": map[string]any{"cidr": "10.0.0.0/16"},
+							},
+						},
+					},
+				},
+				"invalid-stack": "not-a-map",
+			},
+			currentStacks: map[string]any{
+				"valid-stack": map[string]any{
+					"components": map[string]any{
+						cfg.TerraformComponentType: map[string]any{},
+					},
+				},
+			},
+			expectedCount: 1,
+			description:   "should process valid stacks and skip invalid ones",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			deleted, err := detectDeletedComponents(&tt.remoteStacks, &tt.currentStacks, atmosConfig, "")
+			require.NoError(t, err, tt.description)
+			assert.Len(t, deleted, tt.expectedCount, tt.description)
+		})
+	}
+}
+
+// TestDetectDeletedComponents_ComponentPath tests that ComponentPath is correctly set for deleted components.
+func TestDetectDeletedComponents_ComponentPath(t *testing.T) {
+	// Use a minimal config with base paths set.
+	// Use filepath.Join for Windows compatibility.
+	basePath := "project"
+	terraformBasePath := filepath.Join("components", "terraform")
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: basePath,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: terraformBasePath,
+			},
+		},
+	}
+
+	remoteStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{
+					"vpc": map[string]any{
+						"vars": map[string]any{"cidr": "10.0.0.0/16"},
+					},
+					"eks": map[string]any{
+						// Component with explicit "component" field pointing to different folder.
+						"component": "eks-cluster",
+						"vars":      map[string]any{"name": "my-cluster"},
+					},
+				},
+			},
+		},
+	}
+
+	currentStacks := map[string]any{
+		"dev-us-east-1": map[string]any{
+			"components": map[string]any{
+				cfg.TerraformComponentType: map[string]any{},
+			},
+		},
+	}
+
+	deleted, err := detectDeletedComponents(&remoteStacks, &currentStacks, atmosConfig, "")
+	require.NoError(t, err)
+	require.Len(t, deleted, 2)
+
+	// Find each component and verify its ComponentPath.
+	componentPaths := make(map[string]string)
+	for _, d := range deleted {
+		componentPaths[d.Component] = d.ComponentPath
+	}
+
+	// Build expected paths using filepath.Join for Windows compatibility.
+	expectedVpcPath := filepath.Join(basePath, terraformBasePath, "vpc")
+	expectedEksPath := filepath.Join(basePath, terraformBasePath, "eks-cluster")
+
+	// vpc uses component name as folder (no explicit "component" field).
+	assert.Equal(t, expectedVpcPath, componentPaths["vpc"])
+	// eks uses explicit "component" field value as folder.
+	assert.Equal(t, expectedEksPath, componentPaths["eks"])
 }
 
 // TestIsAbstractComponent tests the isAbstractComponent helper.

@@ -230,7 +230,11 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
+      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
+      # The deleted component's configuration only exists in BASE.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
       - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```

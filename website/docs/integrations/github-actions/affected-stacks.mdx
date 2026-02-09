@@ -69,6 +69,8 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
   destroy:
@@ -79,6 +81,12 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
+      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
+      # The deleted component's configuration only exists in BASE.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
 
@@ -87,6 +95,9 @@ The example above uses `environment: destroy-approval` to require manual approva
 You must [configure the environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules)
 in your repository settings with required reviewers. The `--auto-approve` flag is used because approval
 happens at the GitHub Actions level, not at the Terraform prompt.
+
+**Important:** The destroy job must check out the **BASE branch** (target branch) rather than HEAD because
+`terraform destroy` needs access to the component's stack configuration, which only exists in BASE.
 :::
 
 ## Usage Example
