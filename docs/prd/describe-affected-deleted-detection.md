@@ -11,8 +11,8 @@ Implemented.
 ### Current Behavior
 
 The `atmos describe affected` command detects components and stacks that have been **modified** between two Git
-commits (HEAD vs. BASE). However, it does **not** detect components or stacks that have been **deleted** in HEAD compared
-to BASE.
+commits (HEAD vs. BASE). However, it does **not** detect components or stacks that have been **deleted** in HEAD
+compared to BASE.
 
 Currently, `describe affected` iterates over the stacks in HEAD (current branch) and compares them to BASE (target
 branch). This means:
