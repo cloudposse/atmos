@@ -1,11 +1,13 @@
 package exec
 
 import (
+	"errors"
 	"path/filepath"
 
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -117,8 +119,12 @@ func executeDescribeAffected(
 		remoteExcludeStackAbsPaths,
 	)
 	if err != nil {
-		// If no stack manifests found in BASE, use empty list (all stacks were deleted).
-		// Log at debug level to preserve observability for unexpected errors (e.g., permission issues).
+		// Propagate unexpected errors (permission issues, invalid paths, etc.) to avoid silently
+		// producing incorrect results.
+		if !errors.Is(err, errUtils.ErrNoStackManifestsFound) {
+			return nil, nil, nil, err
+		}
+		// No stack manifests found in BASE means all stacks were deleted in HEAD.
 		log.Debug("No stack manifests found in BASE, using empty list", "error", err)
 		remoteStackConfigFilesAbsolutePaths = []string{}
 	}

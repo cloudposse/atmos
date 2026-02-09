@@ -180,6 +180,10 @@ components:
 
 **GitHub Actions workflow:**
 
+> **Warning:** The destroy job below uses `--auto-approve` for automation purposes. In production environments,
+> consider adding a manual approval gate using GitHub Environment protection rules (e.g., `environment: production`)
+> or requiring PR review before executing destroy operations to prevent accidental resource deletion.
+
 ```yaml
 jobs:
   detect-changes:
@@ -218,6 +222,7 @@ jobs:
   destroy:
     needs: detect-changes
     if: needs.detect-changes.outputs.deleted != '[]'
+    environment: production  # Requires manual approval via GitHub Environment protection rules
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}

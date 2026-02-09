@@ -74,6 +74,7 @@ jobs:
   destroy:
     needs: detect-changes
     if: needs.detect-changes.outputs.deleted != '[]'
+    environment: destroy-approval  # Requires manual approval via GitHub Environment protection rules
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
@@ -81,8 +82,11 @@ jobs:
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
 
-:::warning
-Always review deleted components before running `terraform destroy`. Consider adding manual approval steps for destruction workflows to prevent accidental resource deletion.
+:::warning Destroy Operations Require Approval
+The example above uses `environment: destroy-approval` to require manual approval before destroying resources.
+You must [configure the environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules)
+in your repository settings with required reviewers. The `--auto-approve` flag is used because approval
+happens at the GitHub Actions level, not at the Terraform prompt.
 :::
 
 ## Usage Example

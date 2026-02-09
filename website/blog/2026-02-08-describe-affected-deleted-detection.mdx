@@ -89,6 +89,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - uses: cloudposse/github-action-setup-atmos@v2
 
       - name: Detect affected
         id: affected
@@ -109,15 +110,20 @@ jobs:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
 
   destroy:
     needs: detect-changes
     if: needs.detect-changes.outputs.deleted != '[]'
+    environment: production  # Requires manual approval
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
     steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
       - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
 ```
 

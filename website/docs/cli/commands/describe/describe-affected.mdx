@@ -1121,7 +1121,7 @@ Deleted components are marked with:
 - `deletion_type: component` or `deletion_type: stack` - Specifies whether just the component or the entire stack was removed
 - `affected: deleted` or `affected: deleted.stack` - The affected reason
 
-### Filtering Deleted vs Modified Components
+### Filtering Deleted vs. Modified Components
 
 Use `--query` or `jq` to separate deleted components from modified ones:
 
@@ -1178,6 +1178,7 @@ jobs:
   destroy:
     needs: detect-changes
     if: needs.detect-changes.outputs.deleted != '[]'
+    environment: production  # Requires manual approval via GitHub Environment protection rules
     strategy:
       matrix:
         include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
@@ -1186,8 +1187,10 @@ jobs:
 ```
 
 :::warning Destroy Operations
-Destruction of cloud resources is irreversible. Always review the list of deleted components before running
-`terraform destroy`. Consider adding manual approval steps in your CI/CD pipeline for destruction workflows.
+Destruction of cloud resources is irreversible. The example above uses `--auto-approve` for automation but
+includes `environment: production` to require manual approval via
+[GitHub Environment protection rules](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules).
+Always review the list of deleted components before running `terraform destroy`.
 :::
 
 :::note Abstract Components

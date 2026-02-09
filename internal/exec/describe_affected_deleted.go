@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/go-viper/mapstructure/v2"
-
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,14 +44,11 @@ func detectDeletedComponents(
 
 		if !stackExistsInHead {
 			// Entire stack was deleted - add all non-abstract components.
-			stackDeleted, err := processDeletedStack(
+			stackDeleted := processDeletedStack(
 				stackName,
 				remoteComponentsSection,
 				atmosConfig,
 			)
-			if err != nil {
-				return nil, err
-			}
 			deleted = append(deleted, stackDeleted...)
 		} else {
 			// Stack exists but check for deleted components within.
@@ -79,9 +74,27 @@ func processDeletedStack(
 	stackName string,
 	remoteComponentsSection map[string]any,
 	atmosConfig *schema.AtmosConfiguration,
-) ([]schema.Affected, error) {
+) []schema.Affected {
 	defer perf.Track(atmosConfig, "exec.processDeletedStack")()
 
+	return processAllComponentsAsDeleted(
+		stackName,
+		remoteComponentsSection,
+		atmosConfig,
+		affectedReasonDeletedStack,
+		deletionTypeStack,
+	)
+}
+
+// processAllComponentsAsDeleted marks all non-abstract components in a stack as deleted.
+// This is used both when an entire stack is deleted and when a stack exists but has no components section.
+func processAllComponentsAsDeleted(
+	stackName string,
+	remoteComponentsSection map[string]any,
+	atmosConfig *schema.AtmosConfiguration,
+	affectedReason string,
+	deletionType string,
+) []schema.Affected {
 	var deleted []schema.Affected
 
 	// Process each component type.
@@ -107,19 +120,21 @@ func processDeletedStack(
 				stackName:        stackName,
 				componentType:    componentType,
 				componentSection: &componentSection,
-				affectedReason:   affectedReasonDeletedStack,
-				deletionType:     deletionTypeStack,
+				affectedReason:   affectedReason,
+				deletionType:     deletionType,
 				atmosConfig:      atmosConfig,
 			})
 			deleted = append(deleted, affected)
 		}
 	}
 
-	return deleted, nil
+	return deleted
 }
 
 // processDeletedComponentsInStack handles the case where a stack exists but some components were deleted.
 // Components that exist in BASE but not in HEAD are marked as deleted with deletion_type: "component".
+//
+//nolint:funlen,revive // function-length: logic is straightforward, splitting would reduce readability
 func processDeletedComponentsInStack(
 	stackName string,
 	remoteComponentsSection map[string]any,
@@ -128,18 +143,25 @@ func processDeletedComponentsInStack(
 ) ([]schema.Affected, error) {
 	defer perf.Track(atmosConfig, "exec.processDeletedComponentsInStack")()
 
-	var deleted []schema.Affected
-
 	currentStackMap, ok := currentStackSection.(map[string]any)
 	if !ok {
-		return deleted, nil
+		return nil, nil
 	}
 
 	currentComponentsSection, ok := currentStackMap["components"].(map[string]any)
 	if !ok {
-		// No components section in HEAD means all BASE components are deleted.
-		return processDeletedStack(stackName, remoteComponentsSection, atmosConfig)
+		// Stack exists in HEAD but has no components section - all BASE components are deleted.
+		// Use deletion_type: "component" (not "stack") since the stack itself still exists.
+		return processAllComponentsAsDeleted(
+			stackName,
+			remoteComponentsSection,
+			atmosConfig,
+			affectedReasonDeleted,
+			deletionTypeComponent,
+		), nil
 	}
+
+	var deleted []schema.Affected
 
 	// Process each component type.
 	for _, componentType := range []string{cfg.TerraformComponentType, cfg.HelmfileComponentType, cfg.PackerComponentType} {
@@ -240,17 +262,14 @@ func createDeletedAffectedItem(params *deletedItemParams) schema.Affected {
 func populateDeletedItemMetadata(affected *schema.Affected, params *deletedItemParams) {
 	componentSection := *params.componentSection
 
-	// Extract vars section and decode to Context for metadata fields.
+	// Extract vars section and use GetContextFromVars for consistency with the rest of the codebase.
 	varsSection, ok := componentSection[cfg.VarsSectionName].(map[string]any)
 	if !ok {
 		return
 	}
 
-	var context schema.Context
-	if err := mapstructure.Decode(varsSection, &context); err != nil {
-		// If decoding fails, skip metadata population but continue.
-		return
-	}
+	// Use cfg.GetContextFromVars for consistency with spacelift_utils.go and atlantis_utils.go.
+	context := cfg.GetContextFromVars(varsSection)
 
 	// Populate context metadata fields.
 	affected.Namespace = context.Namespace

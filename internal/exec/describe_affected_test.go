@@ -1447,7 +1447,8 @@ func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
 		// Note: Stack names may contain unprocessed templates in some edge cases during
 		// deleted component detection, so we check for both processed and unprocessed versions.
 		// Use HasSuffix to avoid matching unintended stacks like "non-production-staging".
-		isProductionStack := a.Stack == "ue1-production" || strings.HasSuffix(a.Stack, "-production")
+		// Also check for exact "production" match in case the stack name is just "production".
+		isProductionStack := a.Stack == "ue1-production" || a.Stack == "production" || strings.HasSuffix(a.Stack, "-production")
 		if isProductionStack && a.DeletionType == deletionTypeStack {
 			switch a.Component {
 			case "vpc":
