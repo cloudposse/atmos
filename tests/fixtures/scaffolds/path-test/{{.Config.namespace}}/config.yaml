@@ -1,0 +1,8 @@
+# Configuration for {{.Config.namespace}}
+namespace: {{ .Config.namespace }}
+author: {{ .Config.author | default "Unknown" }}
+description: "Configuration file for {{.Config.namespace}} namespace"
+
+# Template test values
+name: {{ .TemplateName }}
+target_path: {{ .ScaffoldPath }}

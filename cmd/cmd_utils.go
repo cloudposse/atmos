@@ -975,7 +975,13 @@ func CheckForAtmosUpdateAndPrintMessage(atmosConfig schema.AtmosConfiguration) {
 
 // Check Atmos is version command.
 func isVersionCommand() bool {
-	return len(os.Args) > 1 && (os.Args[1] == "version" || os.Args[1] == "--version")
+	return isVersionCommandWithArgs(os.Args)
+}
+
+// isVersionCommandWithArgs checks if the given args represent a version command.
+// This is a testable version of isVersionCommand that accepts args as a parameter.
+func isVersionCommandWithArgs(args []string) bool {
+	return len(args) > 1 && (args[1] == "version" || args[1] == "--version")
 }
 
 // isVersionManagementCommand checks if the current command is a version management command.

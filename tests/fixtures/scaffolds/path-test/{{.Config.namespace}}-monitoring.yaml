@@ -1,0 +1,9 @@
+# Monitoring configuration for {{.Config.namespace}}
+# This file demonstrates templated file names
+
+namespace: {{ .Config.namespace }}
+monitoring:
+  enabled: {{ .Config.enable_monitoring | default false }}
+  alerts:
+    - name: "High CPU in {{.Config.namespace}}"
+      threshold: 80

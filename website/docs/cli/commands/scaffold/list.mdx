@@ -1,0 +1,295 @@
+---
+title: atmos scaffold list
+sidebar_label: list
+sidebar_class_name: command
+id: list
+description: List available scaffold templates configured in atmos.yaml.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+List all scaffold templates configured in your `atmos.yaml` file. This helps you discover available templates and their details before generating code.
+</Intro>
+
+<Screengrab title="atmos scaffold list --help" slug="atmos-scaffold-list--help" />
+
+## Usage
+
+```shell
+atmos scaffold list
+```
+
+This command reads the `scaffold.templates` section from your `atmos.yaml` and displays all configured templates in a formatted table.
+
+## Examples
+
+### List All Templates
+
+```shell
+$ atmos scaffold list
+
+Available scaffold templates:
+
+Name              Source                                          Version    Description
+────────────────  ──────────────────────────────────────────────  ─────────  ────────────────────────────────
+vpc-component     ./scaffolds/vpc                                 1.0.0      AWS VPC component template
+eks-cluster       ./scaffolds/eks                                 2.1.0      EKS cluster template
+rds-instance      github.com/acme/scaffolds/rds.git               1.5.0      RDS database template
+microservice      github.com/acme/scaffolds/microservice.git      2.0.0      Standard microservice template
+```
+
+## Output Format
+
+The list command displays a table with the following columns:
+
+<dl>
+  <dt>Name</dt>
+  <dd>Template identifier used with <code>atmos scaffold generate</code></dd>
+
+  <dt>Source</dt>
+  <dd>
+    Template location:
+    <ul>
+      <li>Local path: <code>./scaffolds/vpc</code></li>
+      <li>Git repository: <code>github.com/org/repo.git</code></li>
+    </ul>
+  </dd>
+
+  <dt>Version</dt>
+  <dd>Template version number</dd>
+
+  <dt>Description</dt>
+  <dd>Human-readable template description</dd>
+</dl>
+
+## Configuration
+
+Templates must be configured in `atmos.yaml`:
+
+```yaml
+scaffold:
+  # Optional: base path for local templates
+  base_path: "./scaffolds"
+
+  # Template definitions
+  templates:
+    # Local template
+    vpc-component:
+      description: "AWS VPC component template"
+      source: "./scaffolds/vpc"
+      version: "1.0.0"
+
+    # Remote Git template
+    eks-cluster:
+      description: "EKS cluster template"
+      source: "github.com/cloudposse/atmos-scaffolds/eks.git"
+      version: "2.1.0"
+      ref: "tags/v2.1.0"
+
+    # Another local template
+    rds-instance:
+      description: "RDS database template"
+      source: "./scaffolds/rds"
+      version: "1.5.0"
+```
+
+## Use Cases
+
+### Discover Available Templates
+
+Before generating code, see what templates are available:
+
+```shell
+# List templates
+atmos scaffold list
+
+# Pick one and generate
+atmos scaffold generate vpc-component ./components/terraform/vpc
+```
+
+### Verify Template Configuration
+
+Check that your templates are properly configured:
+
+```shell
+$ atmos scaffold list
+
+# If empty or missing templates, check atmos.yaml
+```
+
+### Team Onboarding
+
+New team members can quickly see standard templates:
+
+```shell
+# Show what templates the team maintains
+atmos scaffold list
+
+# Generate using team standard
+atmos scaffold generate team-vpc ./components/terraform/vpc
+```
+
+### Documentation
+
+Generate documentation of available scaffolds:
+
+```shell
+# Redirect to file for documentation
+atmos scaffold list > docs/available-scaffolds.txt
+```
+
+## Troubleshooting
+
+### No Templates Found
+
+```
+No scaffold templates configured in atmos.yaml.
+Add a 'scaffold.templates' section to your atmos.yaml to configure available templates.
+```
+
+**Solution**: Add templates to your `atmos.yaml`:
+
+```yaml
+scaffold:
+  templates:
+    my-template:
+      description: "My template"
+      source: "./scaffolds/my-template"
+      version: "1.0.0"
+```
+
+### Invalid Configuration
+
+```
+Error: templates section is not a valid configuration
+```
+
+**Solutions**:
+1. Check YAML syntax in `atmos.yaml`
+2. Ensure `scaffold.templates` is a map/object
+3. Validate each template has required fields
+
+### atmos.yaml Not Found
+
+```
+Error: failed to read scaffold section from atmos.yaml
+```
+
+**Solutions**:
+1. Run command from your Atmos project root
+2. Verify `atmos.yaml` exists
+3. Check file permissions
+
+## Tips and Best Practices
+
+### Organize Templates by Category
+
+Group related templates in configuration:
+
+```yaml
+scaffold:
+  templates:
+    # Networking templates
+    vpc-component:
+      description: "AWS VPC component"
+      source: "./scaffolds/networking/vpc"
+      version: "1.0.0"
+
+    subnet-component:
+      description: "AWS Subnet component"
+      source: "./scaffolds/networking/subnet"
+      version: "1.0.0"
+
+    # Compute templates
+    eks-cluster:
+      description: "EKS cluster"
+      source: "./scaffolds/compute/eks"
+      version: "2.0.0"
+
+    ec2-instance:
+      description: "EC2 instance"
+      source: "./scaffolds/compute/ec2"
+      version: "1.5.0"
+```
+
+### Use Descriptive Names
+
+Choose clear, searchable template names:
+
+```yaml
+# Good - descriptive and clear
+vpc-component:
+  description: "AWS VPC component with NAT gateway"
+
+eks-cluster-private:
+  description: "EKS cluster in private subnets"
+
+# Avoid - unclear and generic
+template1:
+  description: "Template"
+
+my-template:
+  description: "Something"
+```
+
+### Document Template Requirements
+
+Add detailed descriptions:
+
+```yaml
+vpc-component:
+  description: "AWS VPC component. Requires: vpc_name, cidr_block. Optional: enable_nat_gateway, enable_dns_hostnames"
+  source: "./scaffolds/vpc"
+  version: "1.0.0"
+```
+
+### Version Your Templates
+
+Use semantic versioning:
+
+```yaml
+vpc-component:
+  source: "./scaffolds/vpc"
+  version: "1.2.3"  # major.minor.patch
+```
+
+Update version when making changes:
+- **Major**: Breaking changes (incompatible API changes)
+- **Minor**: New features (backward-compatible)
+- **Patch**: Bug fixes (backward-compatible)
+
+## Example Workflow
+
+```shell
+# 1. List available templates
+$ atmos scaffold list
+
+Name              Description
+────────────────  ────────────────────────
+vpc-component     AWS VPC component
+eks-cluster       EKS cluster template
+
+# 2. Choose a template
+$ atmos scaffold generate vpc-component ./components/terraform/vpc
+
+# 3. Customize generated code
+$ cd components/terraform/vpc
+$ vim main.tf
+
+# 4. Commit
+$ git add .
+$ git commit -m "Add VPC component from scaffold"
+```
+
+## Related Commands
+
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate) - Generate code from a template
+- [`atmos scaffold validate`](/cli/commands/scaffold/validate) - Validate scaffold configuration
+- [`atmos init`](/cli/commands/init) - Initialize new Atmos projects
+
+## Learn More
+
+- [Configuring Scaffold Templates](/cli/commands/scaffold)
+- [atmos.yaml Configuration Reference](/cli/configuration)
+- [Creating Custom Templates](/cli/commands/scaffold/generate)

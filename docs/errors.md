@@ -417,7 +417,7 @@ When converting code to use ErrorBuilder:
 - [Error Handling Strategy PRD](prd/error-handling-strategy.md) - Architecture decisions
 - [Error Types and Sentinels](prd/error-types-and-sentinels.md) - Complete error catalog
 - [Exit Codes](prd/exit-codes.md) - Exit code standards
-- [Implementation Plan](prd/atmos-error-implementation-plan.md) - Migration phases
+- [Implementation Plan](proposals/atmos-error-implementation-plan.md) - Migration phases
 
 ## Summary
 

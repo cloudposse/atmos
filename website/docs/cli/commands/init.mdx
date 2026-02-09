@@ -1,0 +1,390 @@
+---
+title: atmos init
+sidebar_label: init
+sidebar_class_name: command
+id: init
+description: Use this command to initialize a new Atmos project from built-in templates.
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
+
+<Intro>
+Use this command to quickly bootstrap new Atmos projects with best-practice configurations and directory structures. Perfect for getting started with Atmos or creating new infrastructure projects.
+</Intro>
+
+<Screengrab title="atmos init --help" slug="atmos-init--help" />
+
+## Usage
+
+```shell
+atmos init [template] [target] [flags]
+```
+
+This command creates a complete Atmos project from built-in templates that are embedded in the Atmos binary. Templates include all necessary configuration files, directory structures, and documentation to get you started immediately.
+
+## Examples
+
+### Interactive Mode
+
+Run `atmos init` without arguments for a guided setup experience:
+
+```shell
+atmos init
+```
+
+You'll be prompted to:
+1. Select a template (simple or atmos)
+2. Enter configuration values (project name, AWS region, etc.)
+3. Specify the target directory.
+
+### Non-Interactive Mode
+
+Create a project with all values specified upfront:
+
+```shell
+atmos init simple ./my-project
+```
+
+### With Custom Values
+
+Pass template values using the `--set` flag:
+
+```shell
+atmos init atmos ./my-infrastructure \
+  --set project_name=acme-prod \
+  --set terraform_version=1.6.0 \
+  --set aws_region=us-east-1
+```
+
+### Force Overwrite
+
+Overwrite existing files (use with caution):
+
+```shell
+atmos init simple ./existing-project --force
+```
+
+### Automation/CI Mode
+
+Disable interactivity for automated workflows:
+
+```shell
+atmos init atmos ./my-project \
+  --set project_name=auto-generated \
+  --set aws_region=us-west-2 \
+  --no-interactive
+```
+
+## Arguments
+
+<dl>
+  <dt>`template`</dt>
+  <dd>
+    **Optional**. Template name to use for project initialization.
+
+    Available templates:
+    - `simple` - Basic Atmos project structure with minimal configuration
+    - `atmos` - Complete Atmos project with full `atmos.yaml` and directory structure
+
+    If omitted, an interactive selection menu is shown.
+  </dd>
+
+  <dt>`target`</dt>
+  <dd>
+    **Optional**. Target directory where the project will be created.
+
+    - Can be relative (`./my-project`) or absolute (`/path/to/project`)
+    - Directory will be created if it doesn't exist
+    - If omitted in interactive mode, you'll be prompted for the path
+    - Required in non-interactive mode
+  </dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`-f, --force`</dt>
+  <dd>
+    Overwrite existing files without prompting.
+
+    **Default**: `false`
+
+    **Warning**: Use with caution as this will replace any existing files with the same names.
+  </dd>
+
+  <dt>`-i, --interactive`</dt>
+  <dd>
+    Enable interactive mode with prompts for template selection and configuration.
+
+    **Default**: `true`
+
+    Set to `false` (`--no-interactive` or `--interactive=false`) for automated workflows.
+  </dd>
+
+  <dt>`--set key=value`</dt>
+  <dd>
+    Set template variable values. Can be used multiple times.
+
+    **Example**:
+    ```shell
+    --set project_name=my-app \
+    --set terraform_version=1.5.0 \
+    --set aws_region=us-east-1
+    ```
+
+    Values set via this flag override defaults and skip prompts for those fields.
+  </dd>
+
+  <dt>`-h, --help`</dt>
+  <dd>
+    Display help information for the init command.
+  </dd>
+</dl>
+
+## Templates
+
+### Simple Template
+
+The `simple` template creates a minimal Atmos project structure:
+
+```
+my-project/
+├── atmos.yaml              # Basic Atmos configuration
+├── README.md               # Project documentation
+├── components/
+│   └── terraform/          # Terraform components directory
+└── stacks/                 # Stack configuration directory
+```
+
+**Best for**:
+- Getting started quickly
+- Learning Atmos fundamentals
+- Simple infrastructure projects
+
+**Configuration prompts**:
+- `project_name` - Name of your project
+
+### Atmos Template
+
+The `atmos` template creates a complete production-ready project:
+
+```
+my-project/
+├── atmos.yaml              # Full Atmos configuration
+├── README.md               # Comprehensive project documentation
+├── components/
+│   ├── terraform/          # Terraform components
+│   └── helmfile/           # Helmfile components
+├── stacks/                 # Stack configurations
+├── schemas/
+│   ├── jsonschema/         # JSON Schema validations
+│   └── opa/                # OPA policies
+├── workflows/              # Atmos workflows
+└── vendor/                 # Vendored components
+```
+
+**Best for**:
+- Production infrastructure projects
+- Multi-environment setups
+- Team collaboration
+- Enterprise use cases
+
+**Configuration prompts**:
+- `project_name` - Name of your project
+- `terraform_version` - Terraform version to use
+- `aws_region` - Default AWS region
+
+## How It Works
+
+1. **Template Selection**: Choose a template (or use the specified one)
+2. **Configuration**: Provide values for template variables (via prompts or `--set` flags)
+3. **Path Resolution**: Resolve the target directory (create if needed)
+4. **File Generation**: Process template files and generate project structure
+5. **Completion**: Display summary of created files and next steps
+
+## Interactive Prompts
+
+When running in interactive mode (default), you'll see prompts like:
+
+```
+? Select a template:
+  ❯ simple - Basic Atmos project structure
+    atmos - Complete Atmos project with full configuration
+
+? Enter project name: my-infrastructure
+
+? Enter Terraform version: 1.5.0
+
+? Enter default AWS region: us-west-2
+
+? Enter target directory: ./my-infrastructure
+```
+
+## Output
+
+Successful execution shows a summary of created files:
+
+```
+Initializing my-infrastructure in ./my-infrastructure
+
+  ✓ atmos.yaml
+  ✓ README.md
+  ✓ components/terraform/.gitkeep
+  ✓ stacks/.gitkeep
+
+Initialized 4 files.
+
+Next steps:
+1. Add your Terraform components in components/terraform/
+2. Create stack configurations in stacks/
+3. Run `atmos terraform plan <component> -s <stack>` to get started
+```
+
+## Common Use Cases
+
+### New Team Member Onboarding
+
+Get new developers productive immediately:
+
+```shell
+atmos init simple ./my-first-atmos-project
+cd my-first-atmos-project
+# Start adding components and stacks
+```
+
+### Starting a New Infrastructure Project
+
+Bootstrap a production-ready project:
+
+```shell
+atmos init atmos ./prod-infrastructure \
+  --set project_name=acme-production \
+  --set aws_region=us-east-1 \
+  --set terraform_version=1.6.0
+```
+
+### CI/CD Pipeline Project Creation
+
+Automate project creation in pipelines:
+
+```shell
+#!/bin/bash
+PROJECT_NAME="auto-generated-$(date +%Y%m%d)"
+
+atmos init simple "./${PROJECT_NAME}" \
+  --set project_name="${PROJECT_NAME}" \
+  --no-interactive \
+  --force
+```
+
+## Tips and Best Practices
+
+### Version Control
+
+After initialization, immediately initialize git:
+
+```shell
+atmos init atmos ./my-project
+cd my-project
+git init
+git add .
+git commit -m "Initial commit from atmos init"
+```
+
+### Customize After Creation
+
+Templates create starting points - customize the generated files:
+
+1. Update `atmos.yaml` with your specific requirements
+2. Add additional stack configuration sections
+3. Configure backend settings for your environment
+4. Add custom validation schemas
+
+### Template Values
+
+Use meaningful values for template variables:
+
+```shell
+# Good - descriptive and unique
+--set project_name=acme-platform-prod
+
+# Avoid - generic and unclear
+--set project_name=project1
+```
+
+### Directory Structure
+
+Choose a consistent directory structure approach:
+
+```shell
+# Option 1: Infrastructure in its own repo
+atmos init atmos ./acme-infrastructure
+
+# Option 2: Within a monorepo
+atmos init simple ./infrastructure/atmos
+```
+
+## Troubleshooting
+
+### Directory Already Exists
+
+If the target directory exists and contains files:
+
+```
+Error: target directory already exists and contains files
+```
+
+**Solutions**:
+1. Use a different target directory
+2. Use `--force` flag to overwrite (warning: destructive)
+3. Manually clean the directory first
+
+### Permission Denied
+
+If you encounter permission errors:
+
+```
+Error: failed to create directory: permission denied
+```
+
+**Solutions**:
+1. Check directory permissions
+2. Use a directory where you have write access
+3. Run with appropriate permissions (avoid sudo unless necessary)
+
+### Non-Interactive Mode Missing Values
+
+If required values are missing in non-interactive mode:
+
+```
+Error: target directory is required in non-interactive mode
+```
+
+**Solution**: Provide all required values:
+
+```shell
+atmos init atmos ./my-project \
+  --set project_name=my-app \
+  --no-interactive
+```
+
+## Related Commands
+
+- [`atmos scaffold generate`](/cli/commands/scaffold/generate) - Generate infrastructure code from templates
+- [`atmos scaffold list`](/cli/commands/scaffold/list) - List available scaffold templates
+- [`atmos describe config`](/cli/commands/describe/config) - View Atmos configuration
+
+## Example
+
+Explore a working example that demonstrates scaffold templates.
+
+<EmbedExample example="scaffolding" />
+
+## Learn More
+
+- [Core Concepts: Project Structure](/projects)
+- [Core Concepts: Components](/components)
+- [Core Concepts: Stacks](/stacks)
+- [Configuration: atmos.yaml](/cli/configuration)

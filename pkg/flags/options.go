@@ -111,6 +111,37 @@ func WithStringSliceFlag(name, shorthand string, defaultValue []string, descript
 	}
 }
 
+// WithStringMapFlag adds a string map flag for key=value pairs.
+//
+// Parameters:
+//   - name: Long flag name (without --)
+//   - shorthand: Short flag name (single character, without -)
+//   - defaultValue: Default map if flag not provided
+//   - description: Help text
+//
+// Usage:
+//
+//	WithStringMapFlag("set", "", map[string]string{}, "Set template values (key=value)")
+//
+// This flag accepts repeated key=value pairs:
+//   - CLI: --set foo=bar --set baz=qux
+//   - ENV: ATMOS_SET=foo=bar,baz=qux (comma-separated)
+//   - Config: set: {foo: bar, baz: qux}
+//
+// Use ParseStringMap() in viper_helpers.go to retrieve the parsed map.
+func WithStringMapFlag(name, shorthand string, defaultValue map[string]string, description string) Option {
+	defer perf.Track(nil, "flags.WithStringMapFlag")()
+
+	return func(cfg *parserConfig) {
+		cfg.registry.Register(&StringMapFlag{
+			Name:        name,
+			Shorthand:   shorthand,
+			Default:     defaultValue,
+			Description: description,
+		})
+	}
+}
+
 // WithRequiredStringFlag adds a required string flag.
 func WithRequiredStringFlag(name, shorthand, description string) Option {
 	defer perf.Track(nil, "flags.WithRequiredStringFlag")()
@@ -238,6 +269,8 @@ func WithEnvVars(flagName string, envVars ...string) Option {
 		case *IntFlag:
 			f.EnvVars = envVars
 		case *StringSliceFlag:
+			f.EnvVars = envVars
+		case *StringMapFlag:
 			f.EnvVars = envVars
 		}
 	}
