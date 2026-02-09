@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# BASE (main branch) state - HAS the new prometheus component
+# This simulates the main branch after a PR added prometheus
+
+vars:
+  environment: ue1
+  stage: staging
+
+components:
+  terraform:
+    # Existing component that exists in both HEAD and BASE
+    vpc:
+      metadata:
+        component: mock
+      vars:
+        cidr_block: "10.0.0.0/16"
+        environment: "{{ .vars.environment }}"
+
+    # Another existing component - modified to reference prometheus
+    eks:
+      metadata:
+        component: mock
+      vars:
+        cluster_name: "eks-{{ .vars.stage }}"
+        # This references the prometheus component which exists in BASE but NOT in HEAD
+        # When describe affected runs from HEAD, this will fail because prometheus doesn't exist
+        # prometheus_endpoint: '!terraform.state prometheus workspace_endpoint'
+
+    # NEW component added in main (BASE) - does NOT exist in HEAD (PR branch)
+    # This is the component that PR1 added and merged into main
+    prometheus:
+      metadata:
+        component: mock
+      vars:
+        workspace_name: "prometheus-{{ .vars.stage }}"
+        # Note: In real scenario, this component might have outputs like:
+        # - workspace_endpoint
+        # - workspace_arn
