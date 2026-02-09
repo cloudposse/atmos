@@ -11,7 +11,7 @@ Implemented.
 ### Current Behavior
 
 The `atmos describe affected` command detects components and stacks that have been **modified** between two Git
-commits (HEAD vs BASE). However, it does **not** detect components or stacks that have been **deleted** in HEAD compared
+commits (HEAD vs. BASE). However, it does **not** detect components or stacks that have been **deleted** in HEAD compared
 to BASE.
 
 Currently, `describe affected` iterates over the stacks in HEAD (current branch) and compares them to BASE (target
@@ -21,12 +21,6 @@ branch). This means:
    the affected output
 2. **No way to trigger destroy workflows** - CI/CD pipelines have no automated way to know which resources need
    `terraform destroy`
-
-### User Request
-
-> "How do you destroy atmos components/resources in your github pipelines? For what I have seen I will have to create a
-> specific job to run destroy plans against my resources. I was hoping that somehow I could use the cloudposse plan action
-> to create a destroy plan but I do not think describe affected can do that today."
 
 ### Impact
 
@@ -79,7 +73,7 @@ Add new fields to the affected output schema:
 
 **Current algorithm:**
 
-```
+```text
 for each stack in HEAD:
     for each component in stack:
         compare with BASE
@@ -88,7 +82,7 @@ for each stack in HEAD:
 
 **New algorithm:**
 
-```
+```text
 for each stack in HEAD:
     for each component in stack:
         compare with BASE
@@ -289,25 +283,28 @@ atmos describe affected --query '[.[] | select(.deleted == true and .stack == "p
 ### Phase 2: Documentation
 
 1. Update `website/docs/cli/commands/describe/describe-affected.mdx`:
-  - Add `deleted` and `deletion_type` to output schema
-  - Document `deleted` affected reason
-  - Add examples for deletion detection
-  - Add CI/CD workflow examples for destroy pipelines
+
+- Add `deleted` and `deletion_type` to output schema
+- Document `deleted` affected reason
+- Add examples for deletion detection
+- Add CI/CD workflow examples for destroy pipelines
 
 2. Update GitHub Actions documentation for destroy workflows
 
 ### Phase 3: Testing
 
 1. Add test fixtures for:
-  - Component deleted from stack
-  - Entire stack deleted
-  - Multiple deletions
-  - Mixed modifications and deletions
+
+- Component deleted from stack
+- Entire stack deleted
+- Multiple deletions
+- Mixed modifications and deletions
 
 2. Add unit tests:
-  - `TestDetectDeletedComponents`
-  - `TestDetectDeletedStacks`
-  - `TestDescribeAffectedWithDeleted`
+
+- `TestDetectDeletedComponents`
+- `TestDetectDeletedStacks`
+- `TestDescribeAffectedWithDeleted`
 
 ## Edge Cases
 
@@ -331,7 +328,7 @@ Users should handle this case in their pipelines (may need manual intervention t
 
 ### 4. Stack File Moved
 
-If a stack file is moved (but results in same logical stack):
+If a stack file is moved (but results in the same logical stack):
 
 - Need to compare by stack name, not file path
 - May require additional logic to detect moves vs deletes
@@ -393,4 +390,3 @@ Compare stack configuration with actual Terraform state to detect:
 
 - [GitHub Actions: Affected Stacks](https://atmos.tools/integrations/github-actions/affected-stacks)
 - [Terraform Destroy](https://developer.hashicorp.com/terraform/cli/commands/destroy)
-- Related issue: Components only in BASE not detected (known limitation documented in tests)
