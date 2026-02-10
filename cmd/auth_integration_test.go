@@ -190,11 +190,8 @@ func TestAuthCommandCompletion(t *testing.T) {
 		// Call the completion function.
 		completions, directive := completionFunc(authEnvCmd, []string{}, "")
 
-		// Verify we get the expected formats.
-		assert.Equal(t, 3, len(completions))
-		assert.Contains(t, completions, "json")
-		assert.Contains(t, completions, "bash")
-		assert.Contains(t, completions, "dotenv")
+		// Verify we get the expected formats (must match SupportedFormats in auth_env.go).
+		assert.ElementsMatch(t, SupportedFormats, completions)
 		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
 	})
 

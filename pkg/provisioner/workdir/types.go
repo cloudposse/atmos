@@ -1,11 +1,14 @@
 package workdir
 
 import (
+	"path/filepath"
 	"time"
+
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // WorkdirMetadata stores metadata about a working directory.
-// This is persisted to .workdir-metadata.json in each workdir.
+// This is persisted to .atmos/metadata.json in each workdir.
 type WorkdirMetadata struct {
 	// Component is the component name.
 	Component string `json:"component"`
@@ -13,11 +16,17 @@ type WorkdirMetadata struct {
 	// Stack is the stack name (optional, for stack-specific workdirs).
 	Stack string `json:"stack,omitempty"`
 
-	// SourceType indicates the source type (always "local" for workdir provisioner).
+	// SourceType indicates the source type ("local" or "remote").
 	SourceType SourceType `json:"source_type"`
 
 	// Source is the original component source path.
 	Source string `json:"source,omitempty"`
+
+	// SourceURI is the remote source URI (for remote sources).
+	SourceURI string `json:"source_uri,omitempty"`
+
+	// SourceVersion is the remote source version (for remote sources).
+	SourceVersion string `json:"source_version,omitempty"`
 
 	// CreatedAt is when the workdir was created.
 	CreatedAt time.Time `json:"created_at"`
@@ -25,7 +34,10 @@ type WorkdirMetadata struct {
 	// UpdatedAt is when the workdir was last updated.
 	UpdatedAt time.Time `json:"updated_at"`
 
-	// ContentHash is a hash of the source content for change detection.
+	// LastAccessed is when the workdir was last accessed (for TTL tracking).
+	LastAccessed time.Time `json:"last_accessed,omitempty"`
+
+	// ContentHash is a hash of the source content for change detection (local sources only).
 	ContentHash string `json:"content_hash,omitempty"`
 }
 
@@ -35,6 +47,9 @@ type SourceType string
 const (
 	// SourceTypeLocal indicates the component source is a local path.
 	SourceTypeLocal SourceType = "local"
+
+	// SourceTypeRemote indicates the component source is a remote URI.
+	SourceTypeRemote SourceType = "remote"
 )
 
 // WorkdirConfig holds configuration for the workdir provisioner.
@@ -47,8 +62,22 @@ type WorkdirConfig struct {
 // WorkdirPath returns the standard workdir directory name.
 const WorkdirPath = ".workdir"
 
-// WorkdirMetadataFile is the name of the metadata file in each workdir.
+// AtmosDir is the Atmos-specific directory within each workdir.
+const AtmosDir = ".atmos"
+
+// MetadataFile is the name of the metadata file within AtmosDir.
+const MetadataFile = "metadata.json"
+
+// WorkdirMetadataFile is the legacy name of the metadata file.
+// Deprecated: Use MetadataPath() instead.
 const WorkdirMetadataFile = ".workdir-metadata.json"
+
+// MetadataPath returns the full path to the metadata file within a workdir.
+func MetadataPath(workdirPath string) string {
+	defer perf.Track(nil, "workdir.MetadataPath")()
+
+	return filepath.Join(workdirPath, AtmosDir, MetadataFile)
+}
 
 // File permission constants.
 const (

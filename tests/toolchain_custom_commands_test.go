@@ -13,8 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain/installer"
 	"github.com/cloudposse/atmos/tests/testhelpers"
-	"github.com/cloudposse/atmos/toolchain/installer"
 )
 
 // TestToolchainCustomCommands_InstallAllTools verifies that all tools defined in

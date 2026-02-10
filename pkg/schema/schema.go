@@ -368,6 +368,8 @@ type AtmosSettings struct {
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+	// Provision contains global defaults for provisioning.
+	Provision ProvisionSettings `yaml:"provision,omitempty" json:"provision,omitempty" mapstructure:"provision"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
@@ -376,6 +378,20 @@ type TelemetrySettings struct {
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
 	Logging  bool   `yaml:"logging" json:"logging" mapstructure:"logging"`
+}
+
+// ProvisionSettings contains global defaults for provisioning.
+type ProvisionSettings struct {
+	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
+}
+
+// ProvisionWorkdirSettings contains default settings for workdir provisioning.
+type ProvisionWorkdirSettings struct {
+	// Enabled sets the default enabled state for workdir provisioning.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// TTL is the default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
+	// Workdirs not accessed within this duration can be cleaned up.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Docs struct {
@@ -940,6 +956,8 @@ type Affected struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
+	Deleted              bool                `yaml:"deleted,omitempty" json:"deleted,omitempty" mapstructure:"deleted"`
+	DeletionType         string              `yaml:"deletion_type,omitempty" json:"deletion_type,omitempty" mapstructure:"deletion_type"`
 }
 
 type BaseComponentConfig struct {

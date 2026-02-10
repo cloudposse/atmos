@@ -101,6 +101,7 @@ var (
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 	ErrStackRequired              = errors.New("--stack flag is required")
 	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
+	ErrNoStackManifestsFound      = errors.New("no stack manifests found")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -223,6 +224,7 @@ var (
 	ErrLatestFileNotFound           = errors.New("latest version file not found")
 	ErrRegistryNotReachable         = errors.New("registry not reachable")
 	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
 	ErrAliasNotFound                = errors.New("alias not found")
 	ErrBinaryNotExecutable          = errors.New("binary not executable")
 	ErrBinaryNotFound               = errors.New("binary not found")
@@ -407,6 +409,11 @@ var (
 	// Validation errors.
 	ErrValidationFailed = errors.New("validation failed")
 
+	// EditorConfig validation errors.
+	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
+	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
+	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
+
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
 	ErrInvalidSettingsSection           = errors.New("invalid settings section")
@@ -557,6 +564,7 @@ var (
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
 	ErrOpenFile            = errors.New("failed to open file")
+	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")
 	ErrRemoveDirectory     = errors.New("failed to remove directory")
 	ErrSetPermissions      = errors.New("failed to set permissions")

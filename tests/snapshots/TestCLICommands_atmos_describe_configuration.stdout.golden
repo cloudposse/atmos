@@ -59,7 +59,7 @@ settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: "false"
+    pager: less
     unicode: false
     syntax_highlighting:
       enabled: false

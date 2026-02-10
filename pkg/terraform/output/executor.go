@@ -69,6 +69,7 @@ func defaultRunnerFactory(workdir, executable string) (TerraformRunner, error) {
 
 // DescribeComponentParams contains parameters for describing a component.
 type DescribeComponentParams struct {
+	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
 	ProcessTemplates     bool
@@ -247,6 +248,7 @@ func (e *Executor) GetOutput(
 
 	// Describe the component to get its configuration.
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
@@ -324,6 +326,7 @@ func (e *Executor) fetchAndCacheOutputs(
 	defer perf.Track(atmosConfig, "output.Executor.fetchAndCacheOutputs")()
 
 	sections, err := e.componentDescriber.DescribeComponent(&DescribeComponentParams{
+		AtmosConfig:          atmosConfig,
 		Component:            component,
 		Stack:                stack,
 		ProcessTemplates:     true,
@@ -375,13 +378,10 @@ func (e *Executor) execute(
 	}
 
 	// Step 2: Extract and validate component configuration.
-	config, err := ExtractComponentConfig(
-		sections,
-		component,
-		stack,
-		atmosConfig.Components.Terraform.AutoGenerateBackendFile,
-		atmosConfig.Components.Terraform.InitRunReconfigure,
-	)
+	// ExtractComponentConfig uses utils.GetComponentPath internally to ensure
+	// proper path resolution that works correctly with --chdir and when running
+	// from non-project-root directories.
+	config, err := ExtractComponentConfig(atmosConfig, sections, component, stack)
 	if err != nil {
 		return nil, err
 	}

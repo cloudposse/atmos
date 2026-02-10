@@ -169,6 +169,9 @@
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
+    },
+    "provision": {
+      "workdir": {}
     }
   },
   "describe": {
