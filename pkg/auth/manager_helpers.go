@@ -17,7 +17,7 @@ import (
 // autoDetectDefaultIdentity attempts to find and return a default identity from configuration.
 // Returns empty string if no default identity is found (not an error condition).
 // If multiple defaults exist and allowInteractive is true, prompts user to select.
-func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
+func autoDetectDefaultIdentity(authConfig *schema.AuthConfig, cliConfigPath string) (string, error) {
 	// Create a temporary manager to call GetDefaultIdentity which handles:
 	// - Global defaults from atmos.yaml
 	// - Stack-level defaults from stack configs
@@ -28,7 +28,7 @@ func autoDetectDefaultIdentity(authConfig *schema.AuthConfig) (string, error) {
 	}
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo)
+	tempManager, err := NewAuthManager(authConfig, credStore, validator, tempStackInfo, cliConfigPath)
 	if err != nil {
 		return "", errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -82,7 +82,7 @@ func isAuthConfigured(authConfig *schema.AuthConfig) bool {
 // resolveIdentityName resolves the final identity name to use for authentication.
 // Returns empty string if no authentication should be performed.
 // Returns error if identity resolution fails.
-func resolveIdentityName(identityName string, authConfig *schema.AuthConfig) (string, error) {
+func resolveIdentityName(identityName string, authConfig *schema.AuthConfig, cliConfigPath string) (string, error) {
 	// If identity already specified (not empty, not disabled), use it as-is.
 	if identityName != "" && identityName != cfg.IdentityFlagDisabledValue {
 		return identityName, nil
@@ -94,7 +94,7 @@ func resolveIdentityName(identityName string, authConfig *schema.AuthConfig) (st
 	}
 
 	// Try to auto-detect default identity.
-	defaultIdentity, err := autoDetectDefaultIdentity(authConfig)
+	defaultIdentity, err := autoDetectDefaultIdentity(authConfig, cliConfigPath)
 	if err != nil {
 		return "", err
 	}
@@ -103,14 +103,16 @@ func resolveIdentityName(identityName string, authConfig *schema.AuthConfig) (st
 }
 
 // createAuthManagerInstance creates a new AuthManager instance with the given configuration.
-func createAuthManagerInstance(authConfig *schema.AuthConfig) (AuthManager, error) {
+// Note: This function is used internally for temporary managers during identity resolution.
+// For persistent auth managers, use NewAuthManager directly with the proper cliConfigPath.
+func createAuthManagerInstance(authConfig *schema.AuthConfig, cliConfigPath string) (AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
 
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo)
+	authManager, err := NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -237,8 +239,14 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 		loadAndMergeStackAuthDefaults(authConfig, atmosConfig)
 	}
 
+	// Get cliConfigPath from atmosConfig if available, otherwise use empty string.
+	cliConfigPath := ""
+	if atmosConfig != nil {
+		cliConfigPath = atmosConfig.CliConfigPath
+	}
+
 	// Resolve the identity name to use (may auto-detect or return empty).
-	resolvedIdentity, err := resolveIdentityName(identityName, authConfig)
+	resolvedIdentity, err := resolveIdentityName(identityName, authConfig, cliConfigPath)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +263,7 @@ func CreateAndAuthenticateManagerWithAtmosConfig(
 	}
 
 	// Create AuthManager instance.
-	authManager, err := createAuthManagerInstance(authConfig)
+	authManager, err := createAuthManagerInstance(authConfig, cliConfigPath)
 	if err != nil {
 		return nil, err
 	}

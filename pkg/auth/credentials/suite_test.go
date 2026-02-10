@@ -43,11 +43,11 @@ func testStoreAndRetrieve(t *testing.T, factory StoreFactory) {
 	}
 
 	// Store credentials.
-	err := store.Store(alias, creds)
+	err := store.Store(alias, creds, "")
 	require.NoError(t, err)
 
 	// Retrieve credentials.
-	retrieved, err := store.Retrieve(alias)
+	retrieved, err := store.Retrieve(alias, "")
 	require.NoError(t, err)
 
 	awsCreds, ok := retrieved.(*types.AWSCredentials)
@@ -68,21 +68,21 @@ func testIsExpired(t *testing.T, factory StoreFactory) {
 		Expiration: time.Now().UTC().Add(30 * time.Minute).Format(time.RFC3339),
 	}
 
-	require.NoError(t, store.Store("expired", expiredCreds))
-	require.NoError(t, store.Store("fresh", freshCreds))
+	require.NoError(t, store.Store("expired", expiredCreds, ""))
+	require.NoError(t, store.Store("fresh", freshCreds, ""))
 
 	// Check expired credentials.
-	isExpired, err := store.IsExpired("expired")
+	isExpired, err := store.IsExpired("expired", "")
 	require.NoError(t, err)
 	assert.True(t, isExpired)
 
 	// Check fresh credentials.
-	isExpired, err = store.IsExpired("fresh")
+	isExpired, err = store.IsExpired("fresh", "")
 	require.NoError(t, err)
 	assert.False(t, isExpired)
 
 	// Missing alias returns true with error.
-	isExpired, err = store.IsExpired("missing")
+	isExpired, err = store.IsExpired("missing", "")
 	assert.Error(t, err)
 	assert.True(t, isExpired)
 }
@@ -95,14 +95,14 @@ func testDelete(t *testing.T, factory StoreFactory) {
 	creds := &types.OIDCCredentials{Token: "test-token", Provider: "github"}
 
 	// Store then delete.
-	require.NoError(t, store.Store(alias, creds))
-	require.NoError(t, store.Delete(alias))
+	require.NoError(t, store.Store(alias, creds, ""))
+	require.NoError(t, store.Delete(alias, ""))
 
 	// Verify it's gone.
-	_, err := store.Retrieve(alias)
+	_, err := store.Retrieve(alias, "")
 	assert.Error(t, err)
 
 	// Delete non-existent should succeed (idempotent).
-	err = store.Delete("non-existent")
+	err = store.Delete("non-existent", "")
 	assert.NoError(t, err)
 }
