@@ -20,6 +20,14 @@ const (
 	affectedReasonStackSettings   = "stack.settings"
 	affectedReasonStackSource     = "stack.source"
 	affectedReasonStackProvision  = "stack.provision"
+	affectedReasonDeleted         = "deleted"
+	affectedReasonDeletedStack    = "deleted.stack"
+)
+
+// Deletion type constants.
+const (
+	deletionTypeComponent = "component"
+	deletionTypeStack     = "stack"
 )
 
 // Section name constants for isEqual comparisons.

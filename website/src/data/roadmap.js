@@ -258,11 +258,13 @@ export const roadmapConfig = {
         { label: 'Workflows can now change directories before executing commands', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/workflows', changelog: 'working-directory-support', description: 'Execute workflow steps in specific directories, enabling multi-repo orchestration.', category: 'featured', priority: 'high', benefits: 'Orchestrate across multiple repositories in a single workflow.' },
         { label: 'Integration with `atmos auth` identities for per-step authentication', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/identities', changelog: 'authentication-for-workflows-and-custom-commands', version: 'v1.197.0', description: 'Each workflow step can use different credentials for cross-account deployments.', category: 'featured', priority: 'high', benefits: 'Deploy to multiple accounts in sequence without credential juggling.' },
         { label: 'Unified task execution (`pkg/runner`)', status: 'shipped', quarter: 'q4-2025', pr: 1901, changelog: 'unified-task-runner', description: 'A single execution engine for all task types—Terraform, Helmfile, shell, and custom commands.', benefits: 'Consistent behavior across all command types. Same output handling, error reporting, and logging.' },
+        { label: 'Workflow environment variables', status: 'shipped', quarter: 'q1-2026', pr: 2050, changelog: 'workflow-environment-variables', description: 'Set environment variables once per workflow and override only what matters at each step.', benefits: 'Parameterize workflow steps using simple environment variables.' },
       ],
       issues: [],
       prs: [
         { number: 1899, title: 'Implement workflow step types with registry pattern' },
         { number: 1901, title: 'Create pkg/runner with unified task execution' },
+        { number: 2050, title: 'Add workflow environment variables with hierarchical merging' },
       ],
     },
     {
@@ -337,13 +339,14 @@ export const roadmapConfig = {
       tagline: 'Native CI/CD support — local = CI',
       description:
         'CI pipelines shouldn\'t require complicated workflows, custom actions, and shell commands just to run what should be a one liner. They should just work. What works locally should work identically in CI with minimal configuration.',
-      progress: 75,
+      progress: 80,
       status: 'in-progress',
       milestones: [
         { label: 'Native GitHub OIDC enables automatic role assumptions', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/auth/providers', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Secretless CI/CD with native OIDC—no AWS access keys stored in GitHub secrets.', category: 'featured', priority: 'high', benefits: 'No long-lived credentials to rotate. Security posture improves and audit burden decreases.' },
         { label: 'Native GitHub Actions PATH integration', status: 'shipped', quarter: 'q1-2026', pr: 1979, docs: '/cli/commands/toolchain/toolchain-env', changelog: 'github-actions-toolchain-path', description: 'Native `github` format for `atmos toolchain env` that outputs paths compatible with $GITHUB_PATH, with automatic file detection and append mode.', category: 'featured', priority: 'high', benefits: 'Add toolchain paths to GitHub Actions PATH with a single command. No shell tricks or manual file handling required.' },
         { label: 'Easily share Terraform outputs between GitHub Actions steps', status: 'shipped', quarter: 'q1-2026', pr: 1985, docs: '/cli/commands/terraform/output', changelog: 'github-output-format', description: 'Native --format=github option writes Terraform outputs directly to $GITHUB_OUTPUT, with automatic heredoc handling for multiline values—no jq parsing or manual heredoc construction required.', category: 'featured', priority: 'high', benefits: 'Pass outputs between workflow steps naturally. Complex values like JSON configs just work.' },
         { label: 'Simplified GitHub Actions with native CI mode', status: 'in-progress', quarter: 'q1-2026', pr: 1891, docs: '/integrations/github-actions/github-actions', description: 'CLI auto-detects CI environments and generates rich job summaries with resource badges, collapsible diffs, and status checks. Replaces separate actions like github-action-atmos-terraform-plan.', category: 'featured', priority: 'high', benefits: 'No wrapper scripts needed. Same command works locally and in CI. Ships with GitHub Actions support; provider architecture enables future GitLab and Azure DevOps support.' },
+        { label: 'Detect deleted components in affected stacks', status: 'shipped', quarter: 'q1-2026', pr: 2063, docs: '/cli/commands/describe/affected', changelog: 'describe-affected-deleted-detection', description: 'Automatically detect components and stacks that have been deleted in the current branch compared to the target branch. Enables CI/CD pipelines to trigger terraform destroy workflows for removed infrastructure.', category: 'featured', priority: 'high', benefits: 'CI/CD pipelines can now separate apply and destroy workflows automatically. No more orphaned cloud resources from removed components.' },
       ],
       issues: [],
       prs: [

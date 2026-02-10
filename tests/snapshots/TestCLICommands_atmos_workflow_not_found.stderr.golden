@@ -13,6 +13,12 @@
   • double-hyphen-step-stack
   • double-hyphen-with-stack
   • double-hyphen-workflow-stack
+  • env-inheritance-example
+  • env-merge
+  • env-precedence
+  • env-scoping
+  • env-step-level
+  • env-workflow-level
   • fail
   • fail-with-stack
   • invalid-step-type
