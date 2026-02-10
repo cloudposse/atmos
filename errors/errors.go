@@ -460,6 +460,8 @@ var (
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+	ErrMissingHelmfileClusterName        = errors.New("helmfile cluster name is required")
+	ErrMissingHelmfileAuth               = errors.New("helmfile AWS authentication is required")
 
 	// Packer configuration errors.
 	ErrMissingPackerBasePath = errors.New("packer base path is required")

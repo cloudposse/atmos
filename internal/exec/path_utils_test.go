@@ -331,3 +331,168 @@ func TestConstructPackerComponentVarfilePath(t *testing.T) {
 	got2 := constructPackerComponentVarfilePath(&atmosConfig2, &info2)
 	assert.Equal(t, filepath.Join("root", "packer-templates", "platform", "base", "prod-plat-base.packer.vars.json"), got2)
 }
+
+func TestConstructHelmfileComponentVarfileName(t *testing.T) {
+	tests := []struct {
+		name string
+		info schema.ConfigAndStacksInfo
+		want string
+	}{
+		{
+			name: "simple component",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix: "tenant1-ue2-dev",
+				Component:     "echo-server",
+			},
+			want: "tenant1-ue2-dev-echo-server.helmfile.vars.yaml",
+		},
+		{
+			name: "with folder prefix replaced",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:                 "tenant1-ue2-prod",
+				Component:                     "nginx",
+				ComponentFolderPrefixReplaced: "apps",
+			},
+			want: "tenant1-ue2-prod-apps-nginx.helmfile.vars.yaml",
+		},
+		{
+			name: "empty folder prefix replaced",
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:                 "dev-ue2-staging",
+				Component:                     "monitoring",
+				ComponentFolderPrefixReplaced: "",
+			},
+			want: "dev-ue2-staging-monitoring.helmfile.vars.yaml",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constructHelmfileComponentVarfileName(&tt.info)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConstructHelmfileComponentVarfilePath(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig schema.AtmosConfiguration
+		info        schema.ConfigAndStacksInfo
+		want        string
+	}{
+		{
+			name: "basic path",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "project",
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath: filepath.Join("components", "helmfile"),
+					},
+				},
+			},
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:         "tenant1-ue2-dev",
+				ComponentFolderPrefix: "",
+				Component:             "echo-server",
+				FinalComponent:        "echo-server",
+			},
+			want: filepath.Join("project", "components", "helmfile", "echo-server", "tenant1-ue2-dev-echo-server.helmfile.vars.yaml"),
+		},
+		{
+			name: "with folder prefix",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "base",
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath: "helmfile",
+					},
+				},
+			},
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:         "prod-us-west-2",
+				ComponentFolderPrefix: "apps",
+				Component:             "api-gateway",
+				FinalComponent:        "api-gateway",
+			},
+			want: filepath.Join("base", "helmfile", "apps", "api-gateway", "prod-us-west-2-api-gateway.helmfile.vars.yaml"),
+		},
+		{
+			name: "with workdir path (JIT vendored)",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "project",
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath: filepath.Join("components", "helmfile"),
+					},
+				},
+			},
+			info: schema.ConfigAndStacksInfo{
+				ContextPrefix:         "tenant1-ue2-dev",
+				ComponentFolderPrefix: "",
+				Component:             "vendored-chart",
+				FinalComponent:        "vendored-chart",
+				ComponentSection: map[string]any{
+					provWorkdir.WorkdirPathKey: filepath.Join("tmp", "vendor", "chart"),
+				},
+			},
+			want: filepath.Join("tmp", "vendor", "chart", "tenant1-ue2-dev-vendored-chart.helmfile.vars.yaml"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constructHelmfileComponentVarfilePath(&tt.atmosConfig, &tt.info)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestConstructHelmfileComponentWorkingDir_WithFolderPrefix(t *testing.T) {
+	tests := []struct {
+		name        string
+		atmosConfig schema.AtmosConfiguration
+		info        schema.ConfigAndStacksInfo
+		want        string
+	}{
+		{
+			name: "with folder prefix",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "base",
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath: filepath.Join("components", "helmfile"),
+					},
+				},
+			},
+			info: schema.ConfigAndStacksInfo{
+				ComponentFolderPrefix: "apps",
+				FinalComponent:        "nginx",
+			},
+			want: filepath.Join("base", "components", "helmfile", "apps", "nginx"),
+		},
+		{
+			name: "deeply nested folder prefix",
+			atmosConfig: schema.AtmosConfiguration{
+				BasePath: "project",
+				Components: schema.Components{
+					Helmfile: schema.Helmfile{
+						BasePath: "helmfile",
+					},
+				},
+			},
+			info: schema.ConfigAndStacksInfo{
+				ComponentFolderPrefix: filepath.Join("platform", "monitoring"),
+				FinalComponent:        "prometheus",
+			},
+			want: filepath.Join("project", "helmfile", "platform", "monitoring", "prometheus"),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := constructHelmfileComponentWorkingDir(&tt.atmosConfig, &tt.info)
+			assert.Equal(t, tt.want, got)
+		})
+	}
+}
