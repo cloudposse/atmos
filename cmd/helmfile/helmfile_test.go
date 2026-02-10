@@ -4,6 +4,7 @@ import (
 	"os/exec"
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -24,17 +25,22 @@ func TestHelmfileCommands_Error(t *testing.T) {
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
 	t.Setenv("ATMOS_BASE_PATH", stacksPath)
 
-	err := helmfileApplyCmd.RunE(helmfileApplyCmd, []string{})
-	assert.Error(t, err, "helmfile apply command should return an error when called with no parameters")
+	testCases := []struct {
+		name string
+		cmd  *cobra.Command
+	}{
+		{"apply", helmfileApplyCmd},
+		{"destroy", helmfileDestroyCmd},
+		{"diff", helmfileDiffCmd},
+		{"sync", helmfileSyncCmd},
+	}
 
-	err = helmfileDestroyCmd.RunE(helmfileDestroyCmd, []string{})
-	assert.Error(t, err, "helmfile destroy command should return an error when called with no parameters")
-
-	err = helmfileDiffCmd.RunE(helmfileDiffCmd, []string{})
-	assert.Error(t, err, "helmfile diff command should return an error when called with no parameters")
-
-	err = helmfileSyncCmd.RunE(helmfileSyncCmd, []string{})
-	assert.Error(t, err, "helmfile sync command should return an error when called with no parameters")
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.cmd.RunE(tc.cmd, []string{})
+			assert.Error(t, err, "helmfile %s should error with no parameters", tc.name)
+		})
+	}
 }
 
 func TestHelmfileCommandProvider_GetCommand(t *testing.T) {

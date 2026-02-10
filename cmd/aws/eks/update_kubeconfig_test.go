@@ -17,31 +17,46 @@ func TestUpdateKubeconfigCmd_Flags(t *testing.T) {
 	flags := updateKubeconfigCmd.Flags()
 
 	tests := []struct {
-		name       string
-		flagName   string
-		shorthand  string
-		expectFlag bool
+		name      string
+		flagName  string
+		shorthand string
 	}{
-		{name: "stack flag", flagName: "stack", shorthand: "s", expectFlag: true},
-		{name: "profile flag", flagName: "profile", shorthand: "", expectFlag: true},
-		{name: "name flag", flagName: "name", shorthand: "", expectFlag: true},
-		{name: "region flag", flagName: "region", shorthand: "", expectFlag: true},
-		{name: "kubeconfig flag", flagName: "kubeconfig", shorthand: "", expectFlag: true},
-		{name: "role-arn flag", flagName: "role-arn", shorthand: "", expectFlag: true},
-		{name: "dry-run flag", flagName: "dry-run", shorthand: "", expectFlag: true},
-		{name: "verbose flag", flagName: "verbose", shorthand: "", expectFlag: true},
-		{name: "alias flag", flagName: "alias", shorthand: "", expectFlag: true},
+		{name: "stack flag", flagName: "stack", shorthand: "s"},
+		{name: "profile flag", flagName: "profile", shorthand: ""},
+		{name: "name flag", flagName: "name", shorthand: ""},
+		{name: "region flag", flagName: "region", shorthand: ""},
+		{name: "kubeconfig flag", flagName: "kubeconfig", shorthand: ""},
+		{name: "role-arn flag", flagName: "role-arn", shorthand: ""},
+		{name: "dry-run flag", flagName: "dry-run", shorthand: ""},
+		{name: "verbose flag", flagName: "verbose", shorthand: ""},
+		{name: "alias flag", flagName: "alias", shorthand: ""},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			flag := flags.Lookup(tt.flagName)
-			if tt.expectFlag {
-				require.NotNil(t, flag, "flag %s should exist", tt.flagName)
-				if tt.shorthand != "" {
-					assert.Equal(t, tt.shorthand, flag.Shorthand)
-				}
+			require.NotNil(t, flag, "flag %s should exist", tt.flagName)
+			if tt.shorthand != "" {
+				assert.Equal(t, tt.shorthand, flag.Shorthand)
 			}
+		})
+	}
+}
+
+func TestUpdateKubeconfigCmd_UnexpectedFlags(t *testing.T) {
+	// Verify that arbitrary flags do not exist.
+	flags := updateKubeconfigCmd.Flags()
+
+	unexpectedFlags := []string{
+		"nonexistent-flag",
+		"aws-profile",  // We use "profile" not "aws-profile".
+		"cluster-name", // We use "name" not "cluster-name".
+	}
+
+	for _, flagName := range unexpectedFlags {
+		t.Run(flagName, func(t *testing.T) {
+			flag := flags.Lookup(flagName)
+			assert.Nil(t, flag, "flag %s should not exist", flagName)
 		})
 	}
 }

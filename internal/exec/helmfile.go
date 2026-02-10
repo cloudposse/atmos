@@ -282,7 +282,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		log.Debug("Using AWS auth", "source", authResult.Source, "useIdentity", useIdentityAuth)
 
 		// Download kubeconfig by running `aws eks update-kubeconfig`.
-		kubeconfigPath := fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix)
+		kubeconfigPath := filepath.Join(atmosConfig.Components.Helmfile.KubeconfigPath, info.ContextPrefix+"-kubecfg")
 		log.Debug("Downloading and saving kubeconfig", logKeyCluster, clusterName, "path", kubeconfigPath)
 
 		// Build aws eks update-kubeconfig command args.
@@ -389,7 +389,9 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars = append(envVars, fmt.Sprintf("REGION=%s", context.Region))
 	}
 
-	if atmosConfig.Components.Helmfile.KubeconfigPath != "" {
+	// Set KUBECONFIG: When UseEKS is true, the EKS-specific kubeconfig (from envVarsEKS)
+	// takes precedence over the general KubeconfigPath setting.
+	if atmosConfig.Components.Helmfile.KubeconfigPath != "" && !atmosConfig.Components.Helmfile.UseEKS {
 		envVars = append(envVars, fmt.Sprintf("KUBECONFIG=%s", atmosConfig.Components.Helmfile.KubeconfigPath))
 	}
 

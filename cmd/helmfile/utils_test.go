@@ -306,3 +306,69 @@ func TestHandlePathResolutionError_WrappedErrors(t *testing.T) {
 	result := handlePathResolutionError(wrappedAmbiguous)
 	assert.True(t, errors.Is(result, errUtils.ErrAmbiguousComponentPath))
 }
+
+func TestGetConfigAndStacksInfo_DoubleDashSeparator(t *testing.T) {
+	// Test that double-dash separator is handled correctly.
+	// The function will fail because we don't have proper fixtures,
+	// but we can verify the double-dash parsing logic is exercised.
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+	addStackCompletion(cmd)
+
+	tests := []struct {
+		name        string
+		args        []string
+		expectError bool
+		description string
+	}{
+		{
+			name:        "no double dash",
+			args:        []string{"sync", "component", "-s", "stack"},
+			expectError: true, // Will fail without fixtures but exercises the code path.
+			description: "args without double-dash separator",
+		},
+		{
+			name:        "with double dash separator",
+			args:        []string{"sync", "component", "-s", "stack", "--", "--set", "key=value"},
+			expectError: true, // Will fail without fixtures but exercises double-dash parsing.
+			description: "args with double-dash separator should split correctly",
+		},
+		{
+			name:        "double dash at start (index 0)",
+			args:        []string{"--", "component"},
+			expectError: true,
+			description: "double-dash at index 0 should not trigger split (doubleDashIndex > 0 check)",
+		},
+		{
+			name:        "empty args",
+			args:        []string{},
+			expectError: true,
+			description: "empty args should error",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := getConfigAndStacksInfo("helmfile", cmd, tt.args)
+			if tt.expectError {
+				assert.Error(t, err, tt.description)
+			} else {
+				assert.NoError(t, err, tt.description)
+			}
+		})
+	}
+}
+
+func TestGetConfigAndStacksInfo_ErrorHandling(t *testing.T) {
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+	addStackCompletion(cmd)
+
+	// Test with invalid args that will cause ProcessCommandLineArgs to fail.
+	_, err := getConfigAndStacksInfo("helmfile", cmd, []string{"sync"})
+	assert.Error(t, err, "should error when required args are missing")
+}

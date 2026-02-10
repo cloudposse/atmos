@@ -78,9 +78,9 @@ atmos helmfile apply my-component -s prod
 
 This is useful for CI/CD pipelines where you want to enable EKS integration without modifying configuration files.
 
-### Option 3: Per-Stack Override
+### Option 3: Per-Component Cluster Configuration
 
-Override the setting in specific stacks:
+Configure EKS cluster details at the component level using vars:
 
 ```yaml
 # stacks/prod.yaml
@@ -93,11 +93,13 @@ vars:
 components:
   helmfile:
     my-component:
-      settings:
-        # Stack-level override (if supported by your component)
+      vars:
+        # Component-level cluster configuration
+        eks_cluster_name: "prod-eks-cluster"
+        eks_cluster_region: "us-west-2"
 ```
 
-Note: Stack-level settings depend on component implementation.
+Note: The `use_eks` setting is configured globally in `atmos.yaml`. Per-component vars can provide cluster-specific details that are used by `cluster_name_template`.
 
 ## Impact on Existing Configurations
 
@@ -122,7 +124,7 @@ Note: Stack-level settings depend on component implementation.
 
 When using deprecated options, Atmos will log warnings but continue to work:
 
-```
+```text
 WARN: helm_aws_profile_pattern is deprecated. Use --identity flag for AWS authentication.
 WARN: cluster_name_pattern is deprecated. Use cluster_name_template with Go template syntax.
 ```
