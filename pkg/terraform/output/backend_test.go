@@ -187,6 +187,19 @@ func TestGenerateBackendConfig(t *testing.T) {
 				assert.Equal(t, "production", tags[1])
 			},
 		},
+		{
+			name:        "cloud backend with workspace token causing invalid  after replacement - UnmarshalYAML fails",
+			backendType: "cloud",
+			backendConfig: map[string]any{
+				"organization": "my-org",
+				"workspaces": map[string]any{
+					"name": "workspace-{terraform_workspace}",
+				},
+			},
+			workspace:   "prod: [invalid",
+			authContext: nil,
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {
