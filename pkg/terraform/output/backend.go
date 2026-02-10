@@ -97,7 +97,7 @@ func generateBackendConfig(backendType string, backendConfig map[string]any, ter
 		backendConfigFinal := backendConfig
 
 		if terraformWorkspace != "" {
-			// Process template tokens in the backend config.
+			// Process template tokens in the backend config (e.g., {terraform_workspace}).
 			backendConfigStr, err := u.ConvertToYAML(backendConfig)
 			if err != nil {
 				return nil, err
