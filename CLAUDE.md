@@ -386,7 +386,9 @@ Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` in
 - **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`
 - **ALWAYS use `filepath.Join()`** with separate arguments: `filepath.Join(tempDir, "components", "terraform", "vpc")`
 - **NEVER use forward slashes in `filepath.Join()`** like `filepath.Join(dir, "a/b/c")` - use `filepath.Join(dir, "a", "b", "c")`
+- **NEVER hardcode Unix paths in expected values** like `assert.Equal(t, "/project/components/vpc", path)` - build expected paths with `filepath.Join()`
 - **For path suffix checks**, use `filepath.ToSlash()` to normalize: `strings.HasSuffix(filepath.ToSlash(path), "expected/suffix")`
+- **NEVER use bash/shell commands in tests** - use Go stdlib (`os`, `filepath`, `io`) for file operations
 
 **Why:** Windows uses backslash (`\`) as path separator, Unix uses forward slash (`/`). Hardcoded paths fail on Windows CI.
 

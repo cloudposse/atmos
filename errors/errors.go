@@ -101,6 +101,7 @@ var (
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 	ErrStackRequired              = errors.New("--stack flag is required")
 	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
+	ErrNoStackManifestsFound      = errors.New("no stack manifests found")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
