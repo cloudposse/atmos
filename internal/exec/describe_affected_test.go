@@ -1380,3 +1380,152 @@ func TestDescribeAffectedSourceVersionChange(t *testing.T) {
 		}
 	}
 }
+
+// setupDescribeAffectedDeletedDetectionTest sets up the test environment for testing
+// the scenario where components/stacks exist in BASE (main) but have been deleted in HEAD (PR branch).
+func setupDescribeAffectedDeletedDetectionTest(t *testing.T, affectedStacksDir string) (atmosConfig schema.AtmosConfiguration, repoPath string) {
+	t.Helper()
+	return setupDescribeAffectedTestWithFixture(t, "atmos-describe-affected-deleted-detection", affectedStacksDir)
+}
+
+// TestDescribeAffectedDeletedComponentDetection tests the scenario where a component
+// is deleted in HEAD (PR branch) compared to BASE (main branch).
+// This enables CI/CD pipelines to detect resources that need terraform destroy.
+//
+// Scenario:
+// - HEAD (PR branch): monitoring component has been DELETED from staging stack
+// - HEAD (PR branch): production stack has been entirely DELETED
+// - BASE (main branch): has monitoring component and production stack
+// Expected:
+// - monitoring component should be marked as affected with deleted: true, deletion_type: "component"
+// - All components from production stack should be marked with deleted: true, deletion_type: "stack".
+func TestDescribeAffectedDeletedComponentDetection(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedDeletedDetectionTest(t, "stacks-with-deleted-component")
+
+	// Run describe affected comparing HEAD (with deleted components) to BASE (with all components).
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"",
+		true,  // processTemplates
+		false, // processYamlFunctions - don't need YAML functions for this test
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+
+	// Log what was found.
+	t.Logf("Found %d affected components", len(affected))
+	for _, a := range affected {
+		t.Logf("  - %s in %s (affected: %s, deleted: %v, deletion_type: %s)",
+			a.Component, a.Stack, a.Affected, a.Deleted, a.DeletionType)
+	}
+
+	// Track what we find.
+	var (
+		foundMonitoringDeleted bool
+		foundVpcDeletedStack   bool
+		foundEksDeletedStack   bool
+		foundRdsDeletedStack   bool
+		foundAbstractDeleted   bool
+		deletedComponentCount  int
+		deletedStackCount      int
+	)
+
+	for _, a := range affected {
+		// Check for monitoring component deleted from staging stack.
+		if a.Component == "monitoring" && a.Stack == "ue1-staging" {
+			foundMonitoringDeleted = true
+			assert.True(t, a.Deleted, "monitoring should have deleted: true")
+			assert.Equal(t, deletionTypeComponent, a.DeletionType, "monitoring should have deletion_type: component")
+			assert.Equal(t, affectedReasonDeleted, a.Affected, "monitoring should have affected: deleted")
+		}
+
+		// Check for production stack components (entire stack deleted).
+		// Note: Stack names may contain unprocessed templates in some edge cases during
+		// deleted component detection, so we check for both processed and unprocessed versions.
+		// Use HasSuffix to avoid matching unintended stacks like "non-production-staging".
+		// Also check for exact "production" match in case the stack name is just "production".
+		isProductionStack := a.Stack == "ue1-production" || a.Stack == "production" || strings.HasSuffix(a.Stack, "-production")
+		if isProductionStack && a.DeletionType == deletionTypeStack {
+			switch a.Component {
+			case "vpc":
+				foundVpcDeletedStack = true
+			case "eks":
+				foundEksDeletedStack = true
+			case "rds":
+				foundRdsDeletedStack = true
+			}
+			assert.True(t, a.Deleted, "%s in production should have deleted: true", a.Component)
+			assert.Equal(t, deletionTypeStack, a.DeletionType, "%s should have deletion_type: stack", a.Component)
+			assert.Equal(t, affectedReasonDeletedStack, a.Affected, "%s should have affected: deleted.stack", a.Component)
+		}
+
+		// Abstract components should NOT be reported as deleted.
+		if a.Component == "base-monitoring" {
+			foundAbstractDeleted = true
+		}
+
+		// Count deleted components by type.
+		if a.Deleted {
+			switch a.DeletionType {
+			case deletionTypeComponent:
+				deletedComponentCount++
+			case deletionTypeStack:
+				deletedStackCount++
+			}
+		}
+	}
+
+	// Verify monitoring component was detected as deleted.
+	assert.True(t, foundMonitoringDeleted, "monitoring component should be detected as deleted from staging stack")
+
+	// Verify all production stack components were detected as deleted.
+	assert.True(t, foundVpcDeletedStack, "vpc should be detected as deleted (stack deletion)")
+	assert.True(t, foundEksDeletedStack, "eks should be detected as deleted (stack deletion)")
+	assert.True(t, foundRdsDeletedStack, "rds should be detected as deleted (stack deletion)")
+
+	// Verify abstract component is NOT reported as deleted.
+	assert.False(t, foundAbstractDeleted, "abstract component base-monitoring should NOT be reported as deleted")
+
+	// Verify counts.
+	assert.Equal(t, 1, deletedComponentCount, "should have exactly 1 deleted component (monitoring)")
+	assert.Equal(t, 3, deletedStackCount, "should have exactly 3 components deleted from stack (vpc, eks, rds)")
+
+	t.Logf("Deleted detection successful: %d components deleted, %d from deleted stack",
+		deletedComponentCount, deletedStackCount)
+}
+
+// TestDescribeAffectedDeletedComponentFiltering tests filtering deleted components
+// using the stack filter.
+func TestDescribeAffectedDeletedComponentFiltering(t *testing.T) {
+	atmosConfig, repoPath := setupDescribeAffectedDeletedDetectionTest(t, "stacks-with-deleted-component")
+
+	// Run describe affected with stack filter for staging only.
+	affected, _, _, _, err := ExecuteDescribeAffectedWithTargetRepoPath(
+		&atmosConfig,
+		repoPath,
+		false,
+		true,
+		"ue1-staging", // Filter to staging stack only
+		true,
+		false,
+		nil,
+		false,
+	)
+	require.NoError(t, err)
+
+	// Should only find monitoring deleted from staging, not production stack deletions.
+	var deletedCount int
+	for _, a := range affected {
+		if a.Deleted {
+			deletedCount++
+			assert.Equal(t, "ue1-staging", a.Stack, "with stack filter, should only find deletions in ue1-staging")
+		}
+	}
+
+	// Should find only the monitoring component deleted.
+	assert.Equal(t, 1, deletedCount, "with stack filter ue1-staging, should find only 1 deleted component")
+}
