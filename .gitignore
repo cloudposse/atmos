@@ -69,6 +69,7 @@ examples/demo-vendoring/components/**
 tests/fixtures/scenarios/vendor-globs/components/**
 tests/fixtures/scenarios/vendor/components/**
 tests/fixtures/scenarios/vendor-simple-excludes/components/**
+tests/fixtures/scenarios/complete/components/terraform/infra/account-map/context.tf
 internal/exec/output.*
 
 # Coverage files
