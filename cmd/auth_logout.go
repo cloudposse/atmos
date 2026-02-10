@@ -20,7 +20,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/xdg"
 )
@@ -144,7 +144,8 @@ func confirmKeychainDeletion(identityOrProvider string, force bool, isTTY bool) 
 		u.PrintfMarkdownToTUI("Keychain deletion requires confirmation. Options:\n")
 		u.PrintfMarkdownToTUI("  • Use `--force` to bypass confirmation in CI/CD\n")
 		u.PrintfMarkdownToTUI("  • Run interactively to confirm deletion\n\n")
-		u.PrintfMarkdownToTUI("%s Logout cancelled - use `--force` to delete keychain in non-interactive mode\n\n", theme.Styles.XMark)
+		ui.Error("Logout cancelled - use --force to delete keychain in non-interactive mode")
+		ui.Writeln("")
 		return false, errUtils.ErrKeychainDeletionRequiresConfirmation
 	}
 
@@ -270,16 +271,22 @@ func performIdentityLogout(ctx context.Context, authManager auth.AuthManager, id
 	if err := authManager.Logout(ctx, identityName, deleteKeychain); err != nil {
 		// Check if it's a partial logout.
 		if errors.Is(err, errUtils.ErrPartialLogout) {
-			u.PrintfMessageToTUI("\n%s Logged out %s with warnings (realm: %s)\n\n", theme.Styles.Checkmark, identityName, realmInfo.Value)
+			ui.Writeln("")
+			ui.Success(fmt.Sprintf("Logged out %s with warnings (realm: %s)", identityName, realmInfo.Value))
+			ui.Writeln("")
 			u.PrintfMessageToTUI("Some credentials could not be removed:\n")
 			u.PrintfMessageToTUI("  %v\n\n", err)
 		} else {
-			u.PrintfMessageToTUI("\n%s Failed to log out %s\n\n", theme.Styles.XMark, identityName)
+			ui.Writeln("")
+			ui.Error(fmt.Sprintf("Failed to log out %s", identityName))
+			ui.Writeln("")
 			u.PrintfMessageToTUI("Error: %v\n\n", err)
 			return err
 		}
 	} else {
-		u.PrintfMessageToTUI("\n%s Logged out %s (realm: %s)\n\n", theme.Styles.Checkmark, identityName, realmInfo.Value)
+		ui.Writeln("")
+		ui.Success(fmt.Sprintf("Logged out %s (realm: %s)", identityName, realmInfo.Value))
+		ui.Writeln("")
 	}
 
 	// Display browser session warning.
@@ -350,13 +357,16 @@ func performProviderLogout(ctx context.Context, authManager auth.AuthManager, pr
 			return nil
 		}
 
-		u.PrintfMessageToTUI("%s Failed to log out provider\n\n", theme.Styles.XMark)
+		ui.Error("Failed to log out provider")
+		ui.Writeln("")
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
 
 	realmInfo := authManager.GetRealm()
-	u.PrintfMessageToTUI("\n%s Logged out provider %s (%d identities) (realm: %s)\n\n", theme.Styles.Checkmark, providerName, len(identitiesForProvider), realmInfo.Value)
+	ui.Writeln("")
+	ui.Success(fmt.Sprintf("Logged out provider %s (%d identities) (realm: %s)", providerName, len(identitiesForProvider), realmInfo.Value))
+	ui.Writeln("")
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -503,14 +513,17 @@ func performLogoutAll(ctx context.Context, authManager auth.AuthManager, dryRun 
 			return nil
 		}
 
-		u.PrintfMessageToTUI("%s Failed to log out all identities\n\n", theme.Styles.XMark)
+		ui.Error("Failed to log out all identities")
+		ui.Writeln("")
 		u.PrintfMessageToTUI("Error: %v\n\n", err)
 		return err
 	}
 
 	identities := authManager.GetIdentities()
 	realmInfo := authManager.GetRealm()
-	u.PrintfMessageToTUI("\n%s Logged out all %d identities (realm: %s)\n\n", theme.Styles.Checkmark, len(identities), realmInfo.Value)
+	ui.Writeln("")
+	ui.Success(fmt.Sprintf("Logged out all %d identities (realm: %s)", len(identities), realmInfo.Value))
+	ui.Writeln("")
 
 	// Display browser session warning.
 	displayBrowserWarning()
@@ -539,7 +552,9 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 	}
 
 	if len(realms) == 0 {
-		u.PrintfMessageToTUI("\n%s No realms found - nothing to logout\n\n", theme.Styles.Checkmark)
+		ui.Writeln("")
+		ui.Success("No realms found - nothing to logout")
+		ui.Writeln("")
 		return nil
 	}
 
@@ -603,7 +618,7 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 		}
 
 		successCount++
-		u.PrintfMessageToTUI("  %s Realm: %s\n", theme.Styles.Checkmark, realmName)
+		ui.Success(fmt.Sprintf("Realm: %s", realmName))
 	}
 
 	u.PrintfMessageToTUI("\n")
@@ -616,7 +631,8 @@ func performLogoutAllRealms(ctx context.Context, atmosConfig *schema.AtmosConfig
 		u.PrintfMessageToTUI("\n")
 	}
 
-	u.PrintfMessageToTUI("%s Logged out from %d realm(s)\n\n", theme.Styles.Checkmark, successCount)
+	ui.Success(fmt.Sprintf("Logged out from %d realm(s)", successCount))
+	ui.Writeln("")
 
 	// Display browser session warning.
 	displayBrowserWarning()
