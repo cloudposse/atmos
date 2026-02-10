@@ -194,3 +194,115 @@ func TestStackFlagCompletion(t *testing.T) {
 	assert.Nil(t, completions)
 	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
 }
+
+func TestStackFlagCompletion_WithArgs(t *testing.T) {
+	cmd := &cobra.Command{
+		Use:   "test",
+		Short: "Test command",
+	}
+
+	tests := []struct {
+		name       string
+		args       []string
+		toComplete string
+	}{
+		{
+			name:       "empty args and empty completion",
+			args:       []string{},
+			toComplete: "",
+		},
+		{
+			name:       "with args",
+			args:       []string{"component"},
+			toComplete: "dev",
+		},
+		{
+			name:       "partial completion",
+			args:       []string{"my-component", "-s"},
+			toComplete: "prod-",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			completions, directive := stackFlagCompletion(cmd, tt.args, tt.toComplete)
+
+			// Always returns empty completions with no file comp directive.
+			assert.Nil(t, completions)
+			assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+		})
+	}
+}
+
+func TestEnableHeatmapIfRequested(t *testing.T) {
+	// This function checks os.Args directly, so we can test its structure
+	// but not its full behavior without manipulating os.Args which is tricky.
+	// We verify it doesn't panic with normal execution.
+	enableHeatmapIfRequested()
+	// If we got here without panic, the function works.
+}
+
+func TestHandleHelpRequest_AllHelpForms(t *testing.T) {
+	tests := []struct {
+		name           string
+		args           []string
+		expectedResult bool
+	}{
+		{
+			name:           "short help -h",
+			args:           []string{"-h"},
+			expectedResult: true,
+		},
+		{
+			name:           "long help --help",
+			args:           []string{"--help"},
+			expectedResult: true,
+		},
+		{
+			name:           "help subcommand",
+			args:           []string{"help"},
+			expectedResult: true,
+		},
+		{
+			name:           "help in middle of args",
+			args:           []string{"component", "-h", "-s", "stack"},
+			expectedResult: true,
+		},
+		{
+			name:           "help at end",
+			args:           []string{"component", "-s", "stack", "--help"},
+			expectedResult: true,
+		},
+		{
+			name:           "no help - valid command",
+			args:           []string{"component", "-s", "stack"},
+			expectedResult: false,
+		},
+		{
+			name:           "no help - flag-like arg",
+			args:           []string{"--other-flag"},
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{
+				Use:   "test",
+				Short: "Test command",
+			}
+			result := handleHelpRequest(cmd, tt.args)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestHandlePathResolutionError_WrappedErrors(t *testing.T) {
+	// Test that wrapped errors still match correctly.
+	wrappedAmbiguous := errUtils.Build(errUtils.ErrAmbiguousComponentPath).
+		WithCause(errors.New("multiple matches")).
+		Err()
+
+	result := handlePathResolutionError(wrappedAmbiguous)
+	assert.True(t, errors.Is(result, errUtils.ErrAmbiguousComponentPath))
+}
