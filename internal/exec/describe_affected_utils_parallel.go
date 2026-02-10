@@ -94,6 +94,18 @@ func findAffectedParallel(
 		allAffected = append(allAffected, result.affected...)
 	}
 
+	// Detect deleted components (exist in BASE/remote but not in HEAD/current).
+	deletedAffected, err := detectDeletedComponents(
+		remoteStacks,
+		currentStacks,
+		atmosConfig,
+		stackToFilter,
+	)
+	if err != nil {
+		return nil, err
+	}
+	allAffected = append(allAffected, deletedAffected...)
+
 	return allAffected, nil
 }
 
