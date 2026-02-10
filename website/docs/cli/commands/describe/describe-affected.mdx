@@ -1104,7 +1104,7 @@ When processing the above output, you might decide to not plan/apply the `compon
 since they are in the `dependents` property of the `component-1` component. Instead, you might just
 trigger `component-1` and then `component-2` and `component-3` in the order of dependencies.
 
-## Detecting Deleted Components for Destruction Workflows
+## Detecting Deleted Components in Affected Stacks
 
 The `atmos describe affected` command automatically detects components and stacks that exist in the BASE branch
 but have been deleted in HEAD. This enables CI/CD pipelines to trigger `terraform destroy` for removed infrastructure.

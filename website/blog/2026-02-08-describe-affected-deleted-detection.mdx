@@ -1,6 +1,6 @@
 ---
 slug: describe-affected-deleted-detection
-title: 'New: Describe Affected Now Detects Deleted Components and Stacks'
+title: 'Describe Affected Now Detects Deleted Components and Stacks'
 authors:
   - aknysh
 tags:
@@ -70,6 +70,23 @@ atmos describe affected --query '[.[] | select(.deleted == true)]'
 atmos describe affected --query '[.[] | select(.deleted != true)]'
 ```
 
+## Using with List Affected
+
+The [`atmos list affected`](/cli/commands/list/affected) command also supports deleted detection, providing a human-readable table view:
+
+```shell
+# List all affected components including deleted ones
+atmos list affected
+
+# Filter deleted components in JSON format
+atmos list affected --format json | jq '[.[] | select(.deleted == true)]'
+
+# Custom columns showing deletion status
+atmos list affected --columns "Component={{ .component }},Stack={{ .stack }},Deleted={{ .deleted }}"
+```
+
+The `deleted` and `deletion_type` fields are available for custom column templates.
+
 ## CI/CD Integration Example
 
 Here's how to separate apply and destroy workflows in GitHub Actions:
@@ -138,5 +155,6 @@ jobs:
 ## Related Documentation
 
 - [Describe Affected Command](/cli/commands/describe/affected) - Full command reference
+- [List Affected Command](/cli/commands/list/affected) - Human-readable table view
 - [Affected Stacks GitHub Action](/integrations/github-actions/affected-stacks) - CI/CD integration
 - [Component Inheritance](/design-patterns/inheritance-patterns/abstract-component) - Abstract component patterns

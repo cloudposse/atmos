@@ -1,4 +1,4 @@
-# PRD: Detect Deleted Components and Stacks in `describe affected`
+# PRD: Detect Deleted Components in Affected Stacks
 
 **Date**: 2026-02-08
 
@@ -254,6 +254,21 @@ atmos describe affected --query '[.[] | select(.deleted != true)]'
 atmos describe affected --query '[.[] | select(.deleted == true and .stack == "prod-us-east-1")]'
 ```
 
+### Use Case 5: List Affected with Deleted Detection
+
+The `atmos list affected` command provides a human-readable table view with the same deletion detection:
+
+```shell
+# List all affected components (including deleted) in table format
+atmos list affected
+
+# Filter deleted components using JSON output
+atmos list affected --format json | jq '[.[] | select(.deleted == true)]'
+
+# Custom columns showing deletion status
+atmos list affected --columns "Component={{ .component }},Stack={{ .stack }},Deleted={{ .deleted }},Type={{ .deletion_type }}"
+```
+
 ## Implementation
 
 ### Phase 1: Core Detection
@@ -302,6 +317,25 @@ atmos describe affected --query '[.[] | select(.deleted == true and .stack == "p
 - Add CI/CD workflow examples for destroy pipelines
 
 2. Update GitHub Actions documentation for destroy workflows
+
+3. Update `website/docs/cli/commands/list/list-affected.mdx`:
+
+- Add `deleted` and `deletion_type` to available fields
+- Add filtering examples for deleted vs. modified components
+- Add section on detecting deleted components
+
+### Phase 2.1: List Affected Integration
+
+The `atmos list affected` command shares the same underlying detection logic as `describe affected`.
+To support deleted components in `list affected`:
+
+1. **Update extraction logic** in `pkg/list/extract/affected.go`:
+   - Add `deleted` and `deletion_type` fields to `affectedToMap` function
+
+2. **Add tests** in `pkg/list/extract/affected_test.go`:
+   - `TestAffected_DeletedComponent`
+   - `TestAffected_DeletedStack`
+   - `TestAffected_MixedDeletedAndModified`
 
 ### Phase 3: Testing
 
