@@ -1973,6 +1973,64 @@ func TestBuildLocalsResult_NilLocalsWithHasLocals(t *testing.T) {
 	assert.NotNil(t, result.locals, "locals should be initialized to empty map when hasLocals is true")
 }
 
+func TestProcessImportSection_NoImportSection(t *testing.T) {
+	// Test with no import section present.
+	stackMap := map[string]any{
+		"vars": map[string]any{"stage": "dev"},
+	}
+
+	imports, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_NilImportSection(t *testing.T) {
+	// Test with nil import section.
+	stackMap := map[string]any{
+		"import": nil,
+	}
+
+	imports, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_EmptyList(t *testing.T) {
+	// Test with empty import list.
+	stackMap := map[string]any{
+		"import": []any{},
+	}
+
+	imports, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	require.NoError(t, err)
+	assert.Nil(t, imports)
+}
+
+func TestProcessImportSection_InvalidType(t *testing.T) {
+	// Test with invalid import section type (not a list).
+	stackMap := map[string]any{
+		"import": "not-a-list",
+	}
+
+	_, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImportSection)
+}
+
+func TestProcessImportSection_NilElement(t *testing.T) {
+	// Test with nil element in import list.
+	stackMap := map[string]any{
+		"import": []any{
+			"valid/path.yaml",
+			nil,
+		},
+	}
+
+	_, err := ProcessImportSection(stackMap, filepath.Join("test", "path.yaml"))
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidImport)
+}
+
 // TestProcessTemplatesInSection tests the processTemplatesInSection helper function.
 func TestProcessTemplatesInSection(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{}

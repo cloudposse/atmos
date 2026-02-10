@@ -38,6 +38,10 @@ exclude = [
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)
   "gnu\\.org",
+  # kubernetes.io (blocks automated requests)
+  "kubernetes\\.io",
+  # runatlantis.io (connection resets on automated requests)
+  "runatlantis\\.io",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)
