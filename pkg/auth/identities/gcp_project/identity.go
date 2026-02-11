@@ -22,6 +22,7 @@ const (
 // This identity sets project context without authentication.
 type Identity struct {
 	name      string
+	realm     string
 	principal *types.GCPProjectIdentityPrincipal
 	config    *schema.Identity
 }
@@ -39,6 +40,11 @@ func New(principal *types.GCPProjectIdentityPrincipal) (*Identity, error) {
 // SetName sets the identity name.
 func (i *Identity) SetName(name string) {
 	i.name = name
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *Identity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // Kind returns the identity kind.

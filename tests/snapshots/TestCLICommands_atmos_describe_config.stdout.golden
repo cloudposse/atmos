@@ -217,14 +217,14 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""
     },
     "keyring": {},
     "providers": null,
-    "identities": null,
-    "realm": "<hash>"
+    "identities": null
   },
   "profiler": {
     "enabled": false,

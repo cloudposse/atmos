@@ -45,6 +45,7 @@ type iamServiceFactory func(ctx context.Context, accessToken string) (gcp.IAMCre
 // Provider implements the gcp/workload-identity-federation provider.
 type Provider struct {
 	name              string
+	realm             string
 	spec              *types.GCPWorkloadIdentityFederationProviderSpec
 	httpClient        *http.Client
 	stsURL            string
@@ -69,6 +70,11 @@ func New(spec *types.GCPWorkloadIdentityFederationProviderSpec) (*Provider, erro
 // SetName sets the provider name.
 func (p *Provider) SetName(name string) {
 	p.name = name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *Provider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // WithHTTPClient sets the HTTP client used for token requests.

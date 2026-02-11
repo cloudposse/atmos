@@ -140,6 +140,7 @@ func (m *MockProvider) PrepareEnvironment(context.Context, map[string]string) (m
 }
 func (m *MockProvider) Logout(context.Context) error { return nil }
 func (m *MockProvider) GetFilesDisplayPath() string  { return "" }
+func (m *MockProvider) SetRealm(string)              {}
 
 func TestAuthenticate_WrongCredentialType(t *testing.T) {
 	principal := &types.GCPServiceAccountIdentityPrincipal{

@@ -34,6 +34,7 @@ type tokenEmailFetcher func(ctx context.Context, accessToken string) (string, er
 // Provider implements the gcp/adc authentication provider.
 type Provider struct {
 	name             string
+	realm            string
 	spec             *types.GCPADCProviderSpec
 	findCredentials  credentialsFinder
 	fetchTokenEmail  tokenEmailFetcher
@@ -56,6 +57,11 @@ func New(spec *types.GCPADCProviderSpec) (*Provider, error) {
 // SetName sets the provider name (used by the factory when registering).
 func (p *Provider) SetName(name string) {
 	p.name = name
+}
+
+// SetRealm sets the credential isolation realm for this provider.
+func (p *Provider) SetRealm(realm string) {
+	p.realm = realm
 }
 
 // Kind returns the provider kind.

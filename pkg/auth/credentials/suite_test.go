@@ -76,11 +76,11 @@ func testStoreAndRetrieveGCP(t *testing.T, factory StoreFactory) {
 	}
 
 	// Store credentials.
-	err := store.Store(alias, creds)
+	err := store.Store(alias, creds, "test-realm")
 	require.NoError(t, err)
 
 	// Retrieve credentials.
-	retrieved, err := store.Retrieve(alias)
+	retrieved, err := store.Retrieve(alias, "test-realm")
 	require.NoError(t, err)
 
 	gcpCreds, ok := retrieved.(*types.GCPCredentials)
