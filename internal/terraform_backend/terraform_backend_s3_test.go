@@ -2,6 +2,8 @@ package terraform_backend_test
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // MD5 is required by S3 SSE-C protocol for key integrity verification.
+	"encoding/base64"
 	"errors"
 	"io"
 	"strings"
@@ -11,6 +13,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"github.com/aws/smithy-go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	tb "github.com/cloudposse/atmos/internal/terraform_backend"
@@ -378,6 +381,180 @@ func TestReadTerraformBackendS3Internal_DefaultWorkspace(t *testing.T) {
 				tt.workspace, tt.workspaceKeyPrefix, tt.expectedPath, client.requestedKey)
 		})
 	}
+}
+
+// mockS3ClientWithSSEC captures the GetObjectInput for SSE-C header verification.
+type mockS3ClientWithSSEC struct {
+	capturedInput *s3.GetObjectInput
+}
+
+func (m *mockS3ClientWithSSEC) GetObject(_ context.Context, input *s3.GetObjectInput, _ ...func(*s3.Options)) (*s3.GetObjectOutput, error) {
+	m.capturedInput = input
+	body := `{"version": 4, "outputs": {"test": {"value": "ok", "type": "string"}}}`
+	return &s3.GetObjectOutput{
+		Body: io.NopCloser(strings.NewReader(body)),
+	}, nil
+}
+
+// validSSECKey returns a valid base64-encoded 32-byte key for testing.
+func validSSECKey() string {
+	// 32 bytes of 'A' => base64 is exactly 44 chars.
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = 'A'
+	}
+	return base64.StdEncoding.EncodeToString(key)
+}
+
+// altSSECKey returns an alternative valid base64-encoded 32-byte key for testing precedence.
+func altSSECKey() string {
+	key := make([]byte, 32)
+	for i := range key {
+		key[i] = 'B'
+	}
+	return base64.StdEncoding.EncodeToString(key)
+}
+
+func TestReadTerraformBackendS3Internal_SSEC(t *testing.T) {
+	tt := []struct {
+		name              string
+		backendKey        string
+		envKey            string
+		expectSSEC        bool
+		expectedKeyBase64 string
+	}{
+		{
+			name:              "SSE-C key from backend config",
+			backendKey:        validSSECKey(),
+			envKey:            "",
+			expectSSEC:        true,
+			expectedKeyBase64: validSSECKey(),
+		},
+		{
+			name:              "SSE-C key from AWS_SSE_CUSTOMER_KEY env var",
+			backendKey:        "",
+			envKey:            validSSECKey(),
+			expectSSEC:        true,
+			expectedKeyBase64: validSSECKey(),
+		},
+		{
+			name:              "backend config takes precedence over env var",
+			backendKey:        validSSECKey(),
+			envKey:            altSSECKey(),
+			expectSSEC:        true,
+			expectedKeyBase64: validSSECKey(),
+		},
+		{
+			name:              "no key configured - no SSE-C headers",
+			backendKey:        "",
+			envKey:            "",
+			expectSSEC:        false,
+			expectedKeyBase64: "",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_SSE_CUSTOMER_KEY", tc.envKey)
+
+			client := &mockS3ClientWithSSEC{}
+			componentSections := map[string]any{"workspace": "default"}
+			backend := map[string]any{
+				"bucket": "test-bucket",
+				"region": "us-east-1",
+				"key":    "terraform.tfstate",
+			}
+			if tc.backendKey != "" {
+				backend["sse_customer_key"] = tc.backendKey
+			}
+
+			content, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+			require.NoError(t, err)
+			assert.NotNil(t, content)
+
+			if tc.expectSSEC {
+				require.NotNil(t, client.capturedInput.SSECustomerKey, "SSECustomerKey should be set")
+				require.NotNil(t, client.capturedInput.SSECustomerAlgorithm, "SSECustomerAlgorithm should be set")
+				require.NotNil(t, client.capturedInput.SSECustomerKeyMD5, "SSECustomerKeyMD5 should be set")
+
+				assert.Equal(t, tc.expectedKeyBase64, *client.capturedInput.SSECustomerKey)
+				assert.Equal(t, "AES256", *client.capturedInput.SSECustomerAlgorithm)
+
+				// Verify MD5 is correct: base64(md5(decoded_key)).
+				decoded, decErr := base64.StdEncoding.DecodeString(tc.expectedKeyBase64)
+				require.NoError(t, decErr)
+				sum := md5.Sum(decoded) //nolint:gosec // MD5 is required by S3 SSE-C protocol.
+				expectedMD5 := base64.StdEncoding.EncodeToString(sum[:])
+				assert.Equal(t, expectedMD5, *client.capturedInput.SSECustomerKeyMD5)
+			} else {
+				assert.Nil(t, client.capturedInput.SSECustomerKey, "SSECustomerKey should not be set")
+				assert.Nil(t, client.capturedInput.SSECustomerAlgorithm, "SSECustomerAlgorithm should not be set")
+				assert.Nil(t, client.capturedInput.SSECustomerKeyMD5, "SSECustomerKeyMD5 should not be set")
+			}
+		})
+	}
+}
+
+func TestReadTerraformBackendS3Internal_SSEC_Validation(t *testing.T) {
+	tt := []struct {
+		name string
+		key  string
+	}{
+		{
+			name: "key too short",
+			key:  "dG9vc2hvcnQ=", // "tooshort" base64
+		},
+		{
+			name: "key too long",
+			key:  "QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQQ==x", // 45 chars
+		},
+		{
+			name: "invalid base64 (44 chars)",
+			key:  "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!=",
+		},
+	}
+
+	for _, tc := range tt {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("AWS_SSE_CUSTOMER_KEY", "")
+
+			client := &mockS3ClientWithSSEC{}
+			componentSections := map[string]any{"workspace": "default"}
+			backend := map[string]any{
+				"bucket":           "test-bucket",
+				"region":           "us-east-1",
+				"key":              "terraform.tfstate",
+				"sse_customer_key": tc.key,
+			}
+
+			content, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+			assert.ErrorIs(t, err, errUtils.ErrInvalidSSECustomerKey)
+			assert.Nil(t, content)
+		})
+	}
+}
+
+func TestReadTerraformBackendS3Internal_SSEC_MD5(t *testing.T) {
+	t.Setenv("AWS_SSE_CUSTOMER_KEY", "")
+
+	client := &mockS3ClientWithSSEC{}
+	componentSections := map[string]any{"workspace": "default"}
+	backend := map[string]any{
+		"bucket":           "test-bucket",
+		"region":           "us-east-1",
+		"key":              "terraform.tfstate",
+		"sse_customer_key": validSSECKey(),
+	}
+
+	_, err := tb.ReadTerraformBackendS3Internal(client, &componentSections, &backend)
+	require.NoError(t, err)
+
+	// Verify the MD5 header is valid base64.
+	require.NotNil(t, client.capturedInput.SSECustomerKeyMD5)
+	md5Bytes, err := base64.StdEncoding.DecodeString(*client.capturedInput.SSECustomerKeyMD5)
+	require.NoError(t, err)
+	// MD5 digest is always 16 bytes.
+	assert.Len(t, md5Bytes, 16)
 }
 
 func TestGetS3BackendAssumeRoleArn(t *testing.T) {

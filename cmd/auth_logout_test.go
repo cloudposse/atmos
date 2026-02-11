@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -36,6 +39,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
@@ -79,6 +83,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(errUtils.ErrPartialLogout)
 			},
 			expectedError: nil, // Partial logout is treated as success.
@@ -94,6 +99,7 @@ func TestPerformIdentityLogout(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(errUtils.ErrLogoutFailed)
 			},
 			expectedError: errUtils.ErrLogoutFailed,
@@ -159,6 +165,7 @@ func TestPerformProviderLogout(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
@@ -273,6 +280,7 @@ func TestPerformLogoutAll(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 					"identity2": {Kind: "aws/user"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -437,6 +445,7 @@ func TestPerformLogoutAll_WithAllFlag(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 					"identity2": {Kind: "aws/user"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -515,6 +524,7 @@ func TestPerformIdentityLogout_WithKeychainFlag(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
@@ -529,6 +539,7 @@ func TestPerformIdentityLogout_WithKeychainFlag(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", true).Return(nil)
 			},
 			expectedError: nil,
@@ -578,6 +589,7 @@ func TestPerformProviderLogout_WithKeychainFlag(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
@@ -595,6 +607,7 @@ func TestPerformProviderLogout_WithKeychainFlag(t *testing.T) {
 					"identity1": {Kind: "aws/permission-set"},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", true).Return(nil)
 			},
 			expectedError: nil,
@@ -639,6 +652,7 @@ func TestPerformLogoutAll_WithKeychainFlag(t *testing.T) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {Kind: "aws/permission-set"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -651,6 +665,7 @@ func TestPerformLogoutAll_WithKeychainFlag(t *testing.T) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {Kind: "aws/permission-set"},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -1119,6 +1134,7 @@ func TestExecuteLogoutOption(t *testing.T) {
 					"test-identity": {},
 				})
 				m.EXPECT().GetProviderForIdentity("test-identity").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().Logout(gomock.Any(), "test-identity", false).Return(nil)
 			},
 			expectedError: nil,
@@ -1137,6 +1153,7 @@ func TestExecuteLogoutOption(t *testing.T) {
 					"identity1": {},
 				})
 				m.EXPECT().GetProviderForIdentity("identity1").Return("test-provider")
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 				m.EXPECT().LogoutProvider(gomock.Any(), "test-provider", false).Return(nil)
 			},
 			expectedError: nil,
@@ -1152,6 +1169,7 @@ func TestExecuteLogoutOption(t *testing.T) {
 				m.EXPECT().GetIdentities().Return(map[string]schema.Identity{
 					"identity1": {},
 				})
+				m.EXPECT().GetRealm().Return(realm.RealmInfo{Value: "test-realm", Source: "auto"})
 			},
 			expectedError: nil,
 		},
@@ -1178,6 +1196,268 @@ func TestExecuteLogoutOption(t *testing.T) {
 				assert.ErrorIs(t, err, tt.expectedError)
 			} else {
 				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestPerformLogoutAllRealms_DryRun(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	realm2Azure := filepath.Join(tempDir, "atmos", "realm2", "azure")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+	err = os.MkdirAll(realm2Azure, 0o755)
+	assert.NoError(t, err)
+
+	// Test dry run mode - should not delete anything.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, true, false, false)
+	assert.NoError(t, err)
+
+	// Verify directories still exist (dry run should not delete).
+	_, err = os.Stat(realm1AWS)
+	assert.NoError(t, err, "realm1 should still exist after dry run")
+	_, err = os.Stat(realm2Azure)
+	assert.NoError(t, err, "realm2 should still exist after dry run")
+}
+
+func TestPerformLogoutAllRealms_ActualLogout(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+
+	// Test actual logout - should delete the realm.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, false, false, false)
+	assert.NoError(t, err)
+
+	// Verify directory was deleted.
+	_, err = os.Stat(filepath.Join(tempDir, "atmos", "realm1"))
+	assert.True(t, os.IsNotExist(err), "realm1 should be deleted after logout")
+}
+
+func TestPerformLogoutAllRealms_NoRealms(t *testing.T) {
+	// Create a temp directory with no realms.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create the atmos directory but no realm subdirectories.
+	atmosDir := filepath.Join(tempDir, "atmos")
+	err := os.MkdirAll(atmosDir, 0o755)
+	assert.NoError(t, err)
+
+	// Test with no realms.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, false, false, false)
+	assert.NoError(t, err)
+}
+
+func TestPerformLogoutAllRealms_DryRunWithKeychain(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+
+	// Test dry run mode with keychain flag - should not delete anything.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err = performLogoutAllRealms(ctx, atmosConfig, true, true, false)
+	assert.NoError(t, err)
+
+	// Verify directory still exists (dry run should not delete).
+	_, err = os.Stat(realm1AWS)
+	assert.NoError(t, err, "realm1 should still exist after dry run")
+}
+
+func TestPerformLogoutAllRealms_ActualLogoutWithKeychain(t *testing.T) {
+	// Create a temp directory with realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create realm directories.
+	realm1AWS := filepath.Join(tempDir, "atmos", "realm1", "aws")
+	err := os.MkdirAll(realm1AWS, 0o755)
+	assert.NoError(t, err)
+
+	// Test actual logout with keychain deletion and force flag.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Force flag bypasses confirmation prompt.
+	err = performLogoutAllRealms(ctx, atmosConfig, false, true, true)
+	assert.NoError(t, err)
+
+	// Verify directory was deleted.
+	_, err = os.Stat(filepath.Join(tempDir, "atmos", "realm1"))
+	assert.True(t, os.IsNotExist(err), "realm1 should be deleted after logout")
+}
+
+func TestPerformLogoutAllRealms_MultipleRealms(t *testing.T) {
+	// Create a temp directory with multiple realm structure.
+	tempDir := t.TempDir()
+
+	// Set up XDG_CONFIG_HOME to use our temp directory.
+	t.Setenv("XDG_CONFIG_HOME", tempDir)
+
+	// Create multiple realm directories.
+	realms := []string{"realm1", "realm2", "realm3"}
+	for _, realm := range realms {
+		realmAWS := filepath.Join(tempDir, "atmos", realm, "aws")
+		err := os.MkdirAll(realmAWS, 0o755)
+		assert.NoError(t, err)
+	}
+
+	// Test actual logout of multiple realms.
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	err := performLogoutAllRealms(ctx, atmosConfig, false, false, false)
+	assert.NoError(t, err)
+
+	// Verify all directories were deleted.
+	for _, realm := range realms {
+		_, err = os.Stat(filepath.Join(tempDir, "atmos", realm))
+		assert.True(t, os.IsNotExist(err), "%s should be deleted after logout", realm)
+	}
+}
+
+func TestDiscoverRealms(t *testing.T) {
+	tests := []struct {
+		name           string
+		setupDir       func(t *testing.T) string
+		expectedRealms []string
+		expectError    bool
+	}{
+		{
+			name: "empty directory returns no realms",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				return dir
+			},
+			expectedRealms: nil,
+			expectError:    false,
+		},
+		{
+			name: "non-existent directory returns no realms",
+			setupDir: func(t *testing.T) string {
+				return filepath.Join(t.TempDir(), "nonexistent")
+			},
+			expectedRealms: nil,
+			expectError:    false,
+		},
+		{
+			name: "directory with aws realm",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				realmDir := filepath.Join(dir, "test-realm", "aws")
+				err := os.MkdirAll(realmDir, 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"test-realm"},
+			expectError:    false,
+		},
+		{
+			name: "directory with azure realm",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				realmDir := filepath.Join(dir, "azure-realm", "azure")
+				err := os.MkdirAll(realmDir, 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"azure-realm"},
+			expectError:    false,
+		},
+		{
+			name: "directory with multiple realms",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				// Create AWS realm.
+				err := os.MkdirAll(filepath.Join(dir, "realm1", "aws"), 0o755)
+				assert.NoError(t, err)
+				// Create Azure realm.
+				err = os.MkdirAll(filepath.Join(dir, "realm2", "azure"), 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"realm1", "realm2"},
+			expectError:    false,
+		},
+		{
+			name: "directory with non-realm subdirectories ignored",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				// Create a valid realm.
+				err := os.MkdirAll(filepath.Join(dir, "valid-realm", "aws"), 0o755)
+				assert.NoError(t, err)
+				// Create a directory without provider subdirs.
+				err = os.MkdirAll(filepath.Join(dir, "not-a-realm", "something-else"), 0o755)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"valid-realm"},
+			expectError:    false,
+		},
+		{
+			name: "files in directory are ignored",
+			setupDir: func(t *testing.T) string {
+				dir := t.TempDir()
+				// Create a valid realm.
+				err := os.MkdirAll(filepath.Join(dir, "valid-realm", "aws"), 0o755)
+				assert.NoError(t, err)
+				// Create a file (not a directory).
+				err = os.WriteFile(filepath.Join(dir, "some-file.txt"), []byte("test"), 0o644)
+				assert.NoError(t, err)
+				return dir
+			},
+			expectedRealms: []string{"valid-realm"},
+			expectError:    false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			baseDir := tt.setupDir(t)
+			realms, err := discoverRealms(baseDir)
+
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				// Sort both slices for comparison since order may vary.
+				assert.ElementsMatch(t, tt.expectedRealms, realms)
 			}
 		})
 	}

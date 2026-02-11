@@ -8,6 +8,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -125,6 +126,10 @@ func (s *stubAuthManager) ResolvePrincipalSetting(identityName, key string) (int
 
 func (s *stubAuthManager) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (s *stubAuthManager) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestGetConfigLogLevels(t *testing.T) {

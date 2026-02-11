@@ -29,11 +29,20 @@ func (m *manager) Logout(ctx context.Context, identityName string, deleteKeychai
 
 	// Step 1: Delete keyring entry ONLY if deleteKeychain flag is set.
 	if deleteKeychain {
-		if err := m.credentialStore.Delete(identityName); err != nil {
-			log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, "error", err)
+		// Delete realm-scoped entry (current format).
+		if err := m.credentialStore.Delete(identityName, m.realm.Value); err != nil {
+			log.Debug("Failed to delete keyring entry (may not exist)", logKeyIdentity, identityName, "realm", m.realm.Value, "error", err)
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, identityName, err))
 		} else {
-			log.Debug("Deleted keyring entry", logKeyIdentity, identityName)
+			log.Debug("Deleted keyring entry", logKeyIdentity, identityName, "realm", m.realm.Value)
+		}
+		// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
+		if m.realm.Value != "" {
+			if err := m.credentialStore.Delete(identityName, ""); err != nil {
+				log.Debug("No legacy keyring entry to delete", logKeyIdentity, identityName)
+			} else {
+				log.Debug("Deleted legacy keyring entry (pre-realm)", logKeyIdentity, identityName)
+			}
 		}
 	} else {
 		log.Debug("Skipping keyring deletion (preserving credentials)", logKeyIdentity, identityName)
@@ -140,9 +149,18 @@ func (m *manager) LogoutProvider(ctx context.Context, providerName string, delet
 
 	// Delete provider credentials from keyring ONLY if deleteKeychain flag is set.
 	if deleteKeychain {
-		if err := m.credentialStore.Delete(providerName); err != nil {
-			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
+		// Delete realm-scoped entry (current format).
+		if err := m.credentialStore.Delete(providerName, m.realm.Value); err != nil {
+			log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "realm", m.realm.Value, "error", err)
 			errs = append(errs, fmt.Errorf(errFormatWrapTwo, errUtils.ErrKeyringDeletion, providerName, err))
+		}
+		// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
+		if m.realm.Value != "" {
+			if err := m.credentialStore.Delete(providerName, ""); err != nil {
+				log.Debug("No legacy provider keyring entry to delete", logKeyProvider, providerName)
+			} else {
+				log.Debug("Deleted legacy provider keyring entry (pre-realm)", logKeyProvider, providerName)
+			}
 		}
 	} else {
 		log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)
@@ -197,9 +215,18 @@ func (m *manager) LogoutAll(ctx context.Context, deleteKeychain bool) error {
 	for providerName, provider := range m.providers {
 		// Delete provider credentials from keyring ONLY if deleteKeychain flag is set.
 		if deleteKeychain {
-			if err := m.credentialStore.Delete(providerName); err != nil {
-				log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "error", err)
+			// Delete realm-scoped entry (current format).
+			if err := m.credentialStore.Delete(providerName, m.realm.Value); err != nil {
+				log.Debug("Failed to delete provider keyring entry", logKeyProvider, providerName, "realm", m.realm.Value, "error", err)
 				errs = append(errs, fmt.Errorf("%w for provider %q: %w", errUtils.ErrKeyringDeletion, providerName, err))
+			}
+			// Also delete legacy entry (pre-realm format) for backward compatibility cleanup.
+			if m.realm.Value != "" {
+				if err := m.credentialStore.Delete(providerName, ""); err != nil {
+					log.Debug("No legacy provider keyring entry to delete", logKeyProvider, providerName)
+				} else {
+					log.Debug("Deleted legacy provider keyring entry (pre-realm)", logKeyProvider, providerName)
+				}
 			}
 		} else {
 			log.Debug("Skipping provider keyring deletion (preserving credentials)", logKeyProvider, providerName)

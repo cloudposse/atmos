@@ -18,6 +18,7 @@ import (
 	"github.com/versent/saml2aws/v2"
 	"github.com/versent/saml2aws/v2/pkg/creds"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -194,6 +195,10 @@ func (s stubSamlMgr) ResolvePrincipalSetting(string, string) (interface{}, bool)
 
 func (s stubSamlMgr) ResolveProviderConfig(string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (s stubSamlMgr) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestSAMLProvider_PreAuthenticate(t *testing.T) {
@@ -827,7 +832,7 @@ func TestSAMLProvider_GetFilesDisplayPath(t *testing.T) {
 				URL:    "https://idp.example.com/saml",
 				Region: "us-east-1",
 			},
-			expected: "atmos/aws", // XDG path contains atmos/aws
+			expected: "atmos", // XDG path contains atmos (aws is added in subdirectories)
 		},
 		{
 			name: "custom base_path",
