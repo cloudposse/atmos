@@ -460,6 +460,8 @@ var (
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+	ErrMissingHelmfileClusterName        = errors.New("helmfile cluster name is required")
+	ErrMissingHelmfileAuth               = errors.New("helmfile AWS authentication is required")
 
 	// Packer configuration errors.
 	ErrMissingPackerBasePath = errors.New("packer base path is required")
@@ -692,6 +694,15 @@ var (
 
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
+	// Realm errors.
+	ErrFailedToComputeRealm = errors.New("failed to compute realm")
+	ErrInvalidRealm         = errors.New("invalid realm value")
+
+	// Logout errors.
+	ErrFailedGetConfigDir   = errors.New("failed to get config directory")
+	ErrFailedDiscoverRealms = errors.New("failed to discover realms")
+	ErrFailedRemoveRealm    = errors.New("failed to remove realm")
 
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")
