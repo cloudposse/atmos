@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -24,6 +25,22 @@ const workflowErrorTitle = "Workflow Error"
 
 // toolchainDocsURL is the documentation URL for toolchain configuration.
 const toolchainDocsURL = "https://atmos.tools/cli/commands/toolchain/"
+
+// mergeWorkflowEnv merges workflow and step environment variables.
+// Step env overrides workflow env for same keys.
+func mergeWorkflowEnv(workflowEnv, stepEnv map[string]string) map[string]string {
+	if len(workflowEnv) == 0 && len(stepEnv) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(workflowEnv)+len(stepEnv))
+	for k, v := range workflowEnv {
+		merged[k] = v
+	}
+	for k, v := range stepEnv {
+		merged[k] = v
+	}
+	return merged
+}
 
 // Executor handles workflow execution with dependency injection for testing.
 type Executor struct {
@@ -180,8 +197,12 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		commandType = "atmos"
 	}
 
-	// Prepare environment with authentication if needed.
-	stepEnv, err := e.prepareStepEnvironment(params.Ctx, stepIdentity, step.Name)
+	// Prepare environment: workflow + step env vars, plus auth if needed.
+	// Note: The runners merge with system env + global env from atmos.yaml.
+	stepEnv, err := e.prepareStepEnvironment(
+		params.Ctx, stepIdentity, step.Name,
+		params.WorkflowDefinition.Env, step.Env,
+	)
 	if err != nil {
 		return stepResultInternal{
 			StepResult: StepResult{
@@ -223,12 +244,25 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	}
 }
 
-// prepareStepEnvironment prepares the environment for a step, handling authentication if needed.
-func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, stepName string) ([]string, error) {
+// prepareStepEnvironment prepares the environment for a step.
+// Returns only workflow/step/auth specific env vars - the runners handle system env merging.
+// If identity is specified, also handles authentication.
+func (e *Executor) prepareStepEnvironment(
+	ctx context.Context,
+	stepIdentity, stepName string,
+	workflowEnv, stepEnv map[string]string,
+) ([]string, error) {
+	// Merge workflow and step env vars (step overrides workflow for same keys).
+	// This returns only the workflow/step specific vars - runners merge with system env.
+	mergedEnv := mergeWorkflowEnv(workflowEnv, stepEnv)
+	envSlice := envpkg.ConvertMapToSlice(mergedEnv)
+
+	// No identity specified, return just the workflow/step env vars.
 	if stepIdentity == "" || e.authProvider == nil {
-		return []string{}, nil
+		return envSlice, nil
 	}
-	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName)
+
+	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName, envSlice)
 }
 
 // ensureToolchainDependencies resolves and installs workflow dependencies and .tool-versions tools.
@@ -379,7 +413,8 @@ func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdP
 }
 
 // prepareAuthenticatedEnvironment prepares environment variables with authentication.
-func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string) ([]string, error) {
+// baseEnv contains workflow/step env vars that should be preserved alongside auth vars.
+func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string, baseEnv []string) ([]string, error) {
 	if e.authProvider == nil {
 		return nil, fmt.Errorf("%w: identity %q specified for step %q", errUtils.ErrAuthProviderNotAvailable, identity, stepName)
 	}
@@ -397,8 +432,8 @@ func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity
 		}
 	}
 
-	// Prepare environment.
-	stepEnv, err := e.authProvider.PrepareEnvironment(ctx, identity, nil)
+	// Prepare environment with authentication credentials on top of baseEnv.
+	stepEnv, err := e.authProvider.PrepareEnvironment(ctx, identity, baseEnv)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, identity, stepName, err)
 	}

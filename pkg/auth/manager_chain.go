@@ -205,7 +205,7 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 // accurate expiration times in whoami output.
 func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
 	// Fast path: Try keyring cache first.
-	keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName)
+	keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName, m.realm.Value)
 	if keyringErr == nil {
 		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
 
@@ -322,7 +322,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	if isSessionToken(credentials) {
 		log.Debug("Skipping keyring cache for session token provider credentials", logKeyProvider, providerName)
 	} else {
-		if err := m.credentialStore.Store(providerName, credentials); err != nil {
+		if err := m.credentialStore.Store(providerName, credentials, m.realm.Value); err != nil {
 			log.Debug("Failed to cache provider credentials", "error", err)
 		} else {
 			log.Debug("Cached provider credentials", "providerName", providerName)
@@ -498,7 +498,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		if isSessionToken(currentCreds) {
 			log.Debug("Skipping keyring cache for session tokens", "identityStep", identityStep)
 		} else {
-			if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
+			if err := m.credentialStore.Store(identityStep, currentCreds, m.realm.Value); err != nil {
 				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
 			} else {
 				log.Debug("Cached credentials", "identityStep", identityStep)

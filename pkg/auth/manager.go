@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws" // Register aws/ecr integration.
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -72,6 +73,8 @@ type manager struct {
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
+	// realm provides credential isolation between different repositories.
+	realm realm.RealmInfo
 }
 
 type realmSetter interface {
@@ -103,11 +106,13 @@ func (m *manager) resolveIdentityName(inputName string) (string, bool) {
 }
 
 // NewAuthManager creates a new AuthManager instance.
+// The cliConfigPath parameter is used to compute the credential realm for isolation.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
 	validator types.Validator,
 	stackInfo *schema.ConfigAndStacksInfo,
+	cliConfigPath string,
 ) (types.AuthManager, error) {
 	if config == nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Config", "auth config cannot be nil")
@@ -122,6 +127,16 @@ func NewAuthManager(
 		return nil, errUtils.ErrNilParam
 	}
 
+	// Compute the credential realm for isolation.
+	realmInfo, err := realm.GetRealm(config.Realm, cliConfigPath)
+	if err != nil {
+		wrappedErr := fmt.Errorf("failed to compute auth realm: %w", err)
+		errUtils.CheckErrorAndPrint(wrappedErr, "Compute Auth Realm", "")
+		return nil, wrappedErr
+	}
+
+	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
+
 	m := &manager{
 		config:          config,
 		providers:       make(map[string]types.Provider),
@@ -129,6 +144,7 @@ func NewAuthManager(
 		credentialStore: credentialStore,
 		validator:       validator,
 		stackInfo:       stackInfo,
+		realm:           realmInfo,
 	}
 
 	// Initialize providers.
@@ -138,11 +154,21 @@ func NewAuthManager(
 		return nil, wrappedErr
 	}
 
+	// Propagate realm to all providers for credential isolation.
+	for _, provider := range m.providers {
+		provider.SetRealm(m.realm.Value)
+	}
+
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize identities: %w", err)
 		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Identities", "")
 		return nil, wrappedErr
+	}
+
+	// Propagate realm to all identities for credential isolation.
+	for _, identity := range m.identities {
+		identity.SetRealm(m.realm.Value)
 	}
 
 	return m, nil
@@ -153,6 +179,13 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	defer perf.Track(nil, "auth.GetStackInfo")()
 
 	return m.stackInfo
+}
+
+// GetRealm returns the computed realm information for this auth manager.
+func (m *manager) GetRealm() realm.RealmInfo {
+	defer perf.Track(nil, "auth.GetRealm")()
+
+	return m.realm
 }
 
 // Authenticate performs hierarchical authentication for the specified identity.
@@ -221,6 +254,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			IdentityName: identityName,
 			Credentials:  finalCreds,
 			Manager:      m,
+			Realm:        m.realm.Value,
 		}); err != nil {
 			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")

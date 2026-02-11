@@ -145,7 +145,7 @@ func loadAuthManager() (authTypes.AuthManager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
-	manager, err := createAuthManager(&atmosConfig.Auth)
+	manager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -214,6 +214,16 @@ func buildWhoamiTableRows(whoami *authTypes.WhoamiInfo) [][]string {
 	const expiringThresholdMinutes = 15
 
 	var rows [][]string
+
+	// Display realm if set (credential isolation boundary).
+	if whoami.Realm != "" {
+		realmDisplay := whoami.Realm
+		if whoami.RealmSource != "" {
+			realmDisplay = fmt.Sprintf("%s (%s)", whoami.Realm, whoami.RealmSource)
+		}
+		rows = append(rows, []string{"Realm", realmDisplay})
+	}
+
 	rows = append(rows, []string{"Provider", whoami.Provider})
 	rows = append(rows, []string{"Identity", whoami.Identity})
 

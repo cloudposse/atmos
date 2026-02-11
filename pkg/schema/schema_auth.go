@@ -2,6 +2,11 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
+	// Realm provides credential isolation between different repositories or customer environments.
+	// Different repositories with the same identity names will have isolated credentials.
+	// If not set, defaults to a SHA256 hash of the CLI config path (first 8 characters).
+	// Can also be set via ATMOS_AUTH_REALM environment variable (highest precedence).
+	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
 	Logs         Logs                   `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Keyring      KeyringConfig          `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
 	Providers    map[string]Provider    `yaml:"providers" json:"providers" mapstructure:"providers"`
