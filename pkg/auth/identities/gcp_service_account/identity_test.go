@@ -567,7 +567,7 @@ func TestPostAuthenticate_Success(t *testing.T) {
 	err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 		Credentials:  creds,
 		ProviderName: "gcp-adc",
-		AuthContext:   authCtx,
+		AuthContext:  authCtx,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, authCtx.GCP)

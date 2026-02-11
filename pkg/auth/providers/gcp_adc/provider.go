@@ -33,11 +33,11 @@ type tokenEmailFetcher func(ctx context.Context, accessToken string) (string, er
 
 // Provider implements the gcp/adc authentication provider.
 type Provider struct {
-	name             string
-	realm            string
-	spec             *types.GCPADCProviderSpec
-	findCredentials  credentialsFinder
-	fetchTokenEmail  tokenEmailFetcher
+	name            string
+	realm           string
+	spec            *types.GCPADCProviderSpec
+	findCredentials credentialsFinder
+	fetchTokenEmail tokenEmailFetcher
 }
 
 // New creates a new ADC provider from the given spec.
