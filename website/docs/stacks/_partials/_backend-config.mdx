@@ -105,7 +105,7 @@ terraform:
       sse_customer_key: "base64-encoded-32-byte-key"
 ```
 
-The `sse_customer_key` must be a base64-encoded 256-bit (32-byte) key. It can also be provided via the `AWS_SSE_CUSTOMER_KEY`
+The [`sse_customer_key`](https://developer.hashicorp.com/terraform/language/backend/s3#sse_customer_key) must be a base64-encoded 256-bit (32-byte) key. It can also be provided via the `AWS_SSE_CUSTOMER_KEY`
 environment variable. The backend attribute takes precedence over the environment variable.
 
 :::note
