@@ -182,13 +182,31 @@ func ExecuteAwsEksUpdateKubeconfig(kubeconfigContext schema.AwsEksUpdateKubeconf
 		if kubeconfigPath == "" {
 			kubeconfigPath = fmt.Sprintf("%s/%s-kubecfg", atmosConfig.Components.Helmfile.KubeconfigPath, kubeconfigContext.Stack)
 		}
-		// `clusterName` can be overridden on the command line
+		// `clusterName` can be overridden on the command line.
+		// Determine cluster name with precedence:
+		// 1. --name flag (already set above)
+		// 2. cluster_name in config
+		// 3. cluster_name_template expanded (Go template syntax)
+		// 4. cluster_name_pattern expanded (deprecated, logs warning)
 		if clusterName == "" {
-			clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+			//nolint:gocritic // if-else chain is clearer than switch for checking different variables
+			if atmosConfig.Components.Helmfile.ClusterName != "" {
+				clusterName = atmosConfig.Components.Helmfile.ClusterName
+			} else if atmosConfig.Components.Helmfile.ClusterNameTemplate != "" {
+				clusterName, err = ProcessTmpl(&atmosConfig, "cluster_name_template", atmosConfig.Components.Helmfile.ClusterNameTemplate, configAndStacksInfo.ComponentSection, false)
+				if err != nil {
+					return fmt.Errorf("failed to process cluster_name_template: %w", err)
+				}
+			} else if atmosConfig.Components.Helmfile.ClusterNamePattern != "" {
+				log.Warn("cluster_name_pattern is deprecated, use cluster_name_template with Go template syntax instead")
+				clusterName = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.ClusterNamePattern)
+			}
 		}
-		// `profile` can be overridden on the command line
-		// `--role-arn` suppresses `profile` being automatically set
-		if profile == "" && roleArn == "" {
+		// `profile` can be overridden on the command line.
+		// `--role-arn` suppresses `profile` being automatically set.
+		// Note: helm_aws_profile_pattern is deprecated, use --identity flag instead.
+		if profile == "" && roleArn == "" && atmosConfig.Components.Helmfile.HelmAwsProfilePattern != "" {
+			log.Warn("helm_aws_profile_pattern is deprecated, use --identity flag instead")
 			profile = cfg.ReplaceContextTokens(context, atmosConfig.Components.Helmfile.HelmAwsProfilePattern)
 		}
 		// `region` can be overridden on the command line

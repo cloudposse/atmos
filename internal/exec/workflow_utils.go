@@ -321,7 +321,7 @@ func ExecuteWorkflow(
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
 		var err error
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
 			return fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err)
 		}

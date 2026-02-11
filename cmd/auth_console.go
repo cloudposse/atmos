@@ -233,7 +233,7 @@ func initializeAuthManager() (types.AuthManager, error) {
 		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrAuthConsole, err)
 	}
 
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to create auth manager: %w", errUtils.ErrAuthConsole, err)
 	}
@@ -280,7 +280,8 @@ func retrieveCredentials(whoami *types.WhoamiInfo) (types.ICredentials, error) {
 		return whoami.Credentials, nil
 	case whoami.CredentialsRef != "":
 		credStore := credentials.NewCredentialStore()
-		creds, err := credStore.Retrieve(whoami.CredentialsRef)
+		// Use realm from whoami info for credential retrieval.
+		creds, err := credStore.Retrieve(whoami.CredentialsRef, whoami.Realm)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to retrieve credentials from store: %w", errUtils.ErrAuthConsole, err)
 		}

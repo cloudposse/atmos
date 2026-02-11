@@ -14,6 +14,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -812,6 +813,10 @@ func (m *mockAuthManagerForProvider) ResolveProviderConfig(identityName string) 
 	return nil, false
 }
 
+func (m *mockAuthManagerForProvider) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
+}
+
 // mockAuthManagerForIdentity implements minimal AuthManager for testing resolveIdentityName.
 // Only GetDefaultIdentity is implemented - other methods return ErrNotImplemented
 // because they are not needed by TestResolveIdentityName.
@@ -925,6 +930,10 @@ func (m *mockAuthManagerForIdentity) ResolvePrincipalSetting(identityName, key s
 
 func (m *mockAuthManagerForIdentity) ResolveProviderConfig(identityName string) (*schema.Provider, bool) {
 	return nil, false
+}
+
+func (m *mockAuthManagerForIdentity) GetRealm() realm.RealmInfo {
+	return realm.RealmInfo{}
 }
 
 func TestResolveConsoleDuration(t *testing.T) {
