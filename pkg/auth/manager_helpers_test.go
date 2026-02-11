@@ -234,6 +234,7 @@ func TestCreateAndAuthenticateManager_ManagerCreation(t *testing.T) {
 		credStore,
 		validator,
 		stackInfo,
+		"",
 	)
 
 	require.NoError(t, err, "NewAuthManager should succeed with valid config")
@@ -802,7 +803,7 @@ func TestResolveIdentityName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveIdentityName(tt.identityName, tt.authConfig)
+			got, err := resolveIdentityName(tt.identityName, tt.authConfig, "")
 			if tt.wantErr {
 				assert.Error(t, err)
 			} else {
@@ -829,7 +830,7 @@ func TestCreateAuthManagerInstance(t *testing.T) {
 		},
 	}
 
-	manager, err := createAuthManagerInstance(authConfig)
+	manager, err := createAuthManagerInstance(authConfig, "")
 
 	require.NoError(t, err, "should successfully create manager")
 	require.NotNil(t, manager, "manager should not be nil")
@@ -837,7 +838,7 @@ func TestCreateAuthManagerInstance(t *testing.T) {
 
 func TestCreateAuthManagerInstance_NilConfig(t *testing.T) {
 	// Creating manager with nil config should fail validation.
-	manager, err := createAuthManagerInstance(nil)
+	manager, err := createAuthManagerInstance(nil, "")
 
 	// The NewAuthManager constructor should handle nil gracefully or error.
 	// In this case, we expect an error since nil config is invalid.
@@ -1076,7 +1077,7 @@ func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
 	}
 
 	// Create manager
-	manager, err := createAuthManagerInstance(authConfig)
+	manager, err := createAuthManagerInstance(authConfig, "")
 	require.NoError(t, err)
 
 	// Call with identity matching select value - triggers forceSelect branch
@@ -1117,7 +1118,7 @@ func TestResolveIdentityName_EmptyWithAuth(t *testing.T) {
 	}
 
 	// Empty identity should auto-detect the default
-	resolved, err := resolveIdentityName("", authConfig)
+	resolved, err := resolveIdentityName("", authConfig, "")
 	require.NoError(t, err)
 	assert.Equal(t, "default-identity", resolved)
 }

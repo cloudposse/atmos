@@ -30,6 +30,8 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
+      "cluster_name_template": "",
+      "cluster_name": "",
       "command": "",
       "auto_generate_files": false
     },
@@ -170,6 +172,9 @@
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
+    },
+    "provision": {
+      "workdir": {}
     }
   },
   "describe": {

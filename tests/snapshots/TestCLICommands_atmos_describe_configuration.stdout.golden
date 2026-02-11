@@ -22,6 +22,8 @@ components:
     kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
     cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    cluster_name_template: ""
+    cluster_name: ""
     command: ""
     auto_generate_files: false
   packer:
@@ -57,7 +59,7 @@ settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: "false"
+    pager: less
     unicode: false
     syntax_highlighting:
       enabled: false

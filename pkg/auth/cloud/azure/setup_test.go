@@ -66,7 +66,7 @@ func TestSetupFiles(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := SetupFiles(tt.providerName, tt.identityName, tt.creds, tt.basePath)
+			err := SetupFiles(tt.providerName, tt.identityName, tt.creds, tt.basePath, "")
 
 			if tt.expectError {
 				require.Error(t, err)
@@ -335,7 +335,7 @@ func TestSetEnvironmentVariables(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	// Create credentials file for testing.
-	mgr, err := NewAzureFileManager(tmpDir)
+	mgr, err := NewAzureFileManager(tmpDir, "")
 	require.NoError(t, err)
 
 	now := time.Now().UTC()

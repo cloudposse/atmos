@@ -97,6 +97,7 @@ func acquireFileLock(lockPath string) (*flock.Flock, error) {
 // AWSFileManager provides helpers to manage AWS credentials/config files.
 type AWSFileManager struct {
 	baseDir string
+	realm   string // Realm for credential isolation (optional).
 }
 
 // LoadINIFile loads an INI file with options that preserve section comments.
@@ -109,14 +110,18 @@ func LoadINIFile(path string) (*ini.File, error) {
 
 // NewAWSFileManager creates a new AWS file manager instance.
 // BasePath is optional and can be empty to use defaults.
+// Realm is optional and provides credential isolation between different Atmos configurations.
 // Precedence: 1) basePath parameter from provider spec, 2) XDG config directory.
 //
 // Default path follows XDG Base Directory Specification:
-//   - Linux/macOS: $XDG_CONFIG_HOME/atmos/aws (default: ~/.config/atmos/aws)
-//   - Windows: %APPDATA%\atmos\aws
+//   - Linux/macOS: $XDG_CONFIG_HOME/atmos (default: ~/.config/atmos)
+//   - Windows: %APPDATA%\atmos
+//
+// With realm: {baseDir}/{realm}/aws/{provider}/credentials
+// Without realm: {baseDir}/aws/{provider}/credentials
 //
 // Respects ATMOS_XDG_CONFIG_HOME and XDG_CONFIG_HOME environment variables.
-func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
+func NewAWSFileManager(basePath, realm string) (*AWSFileManager, error) {
 	var baseDir string
 
 	if basePath != "" {
@@ -127,13 +132,13 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 		}
 		baseDir = expanded
 	} else {
-		// Default: Use XDG config directory for AWS credentials.
-		// This keeps Atmos-managed AWS credentials under Atmos's namespace,
+		// Default: Use XDG config directory for Atmos credentials.
+		// This keeps Atmos-managed credentials under Atmos's namespace,
 		// following the same pattern as cache and keyring storage.
 		var err error
-		baseDir, err = xdg.GetXDGConfigDir("aws", PermissionRWX)
+		baseDir, err = xdg.GetXDGConfigDir("", PermissionRWX)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get XDG config directory for AWS: %w", err)
+			return nil, fmt.Errorf("failed to get XDG config directory for Atmos: %w", err)
 		}
 
 		// Check for legacy ~/.aws/atmos path and warn if found.
@@ -142,6 +147,7 @@ func NewAWSFileManager(basePath string) (*AWSFileManager, error) {
 
 	return &AWSFileManager{
 		baseDir: baseDir,
+		realm:   realm,
 	}, nil
 }
 
@@ -552,23 +558,35 @@ func (m *AWSFileManager) GetBaseDir() string {
 	return m.baseDir
 }
 
+// GetRealm returns the realm used for credential isolation.
+func (m *AWSFileManager) GetRealm() string {
+	return m.realm
+}
+
 // GetDisplayPath returns a user-friendly display path (with ~ if under home directory).
+// Path always includes realm for credential isolation.
 func (m *AWSFileManager) GetDisplayPath() string {
+	basePath := filepath.Join(m.baseDir, m.realm)
+
 	homeDir, err := homedir.Dir()
-	if err == nil && homeDir != "" && strings.HasPrefix(m.baseDir, homeDir) {
-		return strings.Replace(m.baseDir, homeDir, "~", 1)
+	if err == nil && homeDir != "" && strings.HasPrefix(basePath, homeDir) {
+		return strings.Replace(basePath, homeDir, "~", 1)
 	}
-	return m.baseDir
+	return basePath
 }
 
 // GetCredentialsPath returns the path to the credentials file for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/credentials
+// Realm is always required for credential isolation.
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
-	return filepath.Join(m.baseDir, providerName, "credentials")
+	return filepath.Join(m.baseDir, m.realm, "aws", providerName, "credentials")
 }
 
 // GetConfigPath returns the path to the config file for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/config
+// Realm is always required for credential isolation.
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
-	return filepath.Join(m.baseDir, providerName, "config")
+	return filepath.Join(m.baseDir, m.realm, "aws", providerName, "config")
 }
 
 // GetCachePath returns the AWS SDK cache directory path.
@@ -631,10 +649,12 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 }
 
 // Cleanup removes AWS files for the provider.
+// Path structure: {baseDir}/{realm}/aws/{provider}/
+// Realm is always required for credential isolation.
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	defer perf.Track(nil, "aws.files.Cleanup")()
 
-	providerDir := filepath.Join(m.baseDir, providerName)
+	providerDir := filepath.Join(m.baseDir, m.realm, "aws", providerName)
 
 	log.Debug("Cleaning up AWS files directory",
 		"provider", providerName,
@@ -717,16 +737,19 @@ func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
 	return nil
 }
 
-// CleanupAll removes entire base directory (all providers).
+// CleanupAll removes the realm-specific directory (all providers for this realm).
+// Only removes credentials for the current realm, preserving other realms.
+// Path structure: {baseDir}/{realm}/
 func (m *AWSFileManager) CleanupAll() error {
 	defer perf.Track(nil, "aws.files.CleanupAll")()
 
-	if err := os.RemoveAll(m.baseDir); err != nil {
+	realmDir := filepath.Join(m.baseDir, m.realm)
+	if err := os.RemoveAll(realmDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).
 		if os.IsNotExist(err) {
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, m.baseDir, "failed to cleanup all AWS files")
+		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, realmDir, "failed to cleanup all AWS files for realm")
 		return ErrCleanupAWSFiles
 	}
 

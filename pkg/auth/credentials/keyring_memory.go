@@ -24,8 +24,8 @@ func newMemoryKeyringStore() *memoryKeyringStore {
 	}
 }
 
-// Store stores credentials for the given alias.
-func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials) error {
+// Store stores credentials for the given alias within the specified realm.
+func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials, realm string) error {
 	defer perf.Track(nil, "credentials.memoryKeyringStore.Store")()
 
 	s.mu.Lock()
@@ -57,18 +57,20 @@ func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials) error
 		return errors.Join(ErrCredentialStore, fmt.Errorf("failed to marshal credentials: %w", err))
 	}
 
-	s.items[alias] = string(data)
+	key := buildKeyringKey(alias, realm)
+	s.items[key] = string(data)
 	return nil
 }
 
-// Retrieve retrieves credentials for the given alias.
-func (s *memoryKeyringStore) Retrieve(alias string) (types.ICredentials, error) {
+// Retrieve retrieves credentials for the given alias within the specified realm.
+func (s *memoryKeyringStore) Retrieve(alias string, realm string) (types.ICredentials, error) {
 	defer perf.Track(nil, "credentials.memoryKeyringStore.Retrieve")()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	data, ok := s.items[alias]
+	key := buildKeyringKey(alias, realm)
+	data, ok := s.items[key]
 	if !ok {
 		return nil, fmt.Errorf("%w for alias %q", errors.Join(ErrCredentialStore, ErrCredentialsNotFound), alias)
 	}
@@ -96,37 +98,51 @@ func (s *memoryKeyringStore) Retrieve(alias string) (types.ICredentials, error) 
 	}
 }
 
-// Delete deletes credentials for the given alias.
-func (s *memoryKeyringStore) Delete(alias string) error {
+// Delete deletes credentials for the given alias within the specified realm.
+func (s *memoryKeyringStore) Delete(alias string, realm string) error {
 	defer perf.Track(nil, "credentials.memoryKeyringStore.Delete")()
 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	// Treat "not found" as success - credential already removed (idempotent).
-	delete(s.items, alias)
+	key := buildKeyringKey(alias, realm)
+	delete(s.items, key)
 	return nil
 }
 
-// List returns all stored credential aliases.
-func (s *memoryKeyringStore) List() ([]string, error) {
+// List returns all stored credential aliases within the specified realm.
+func (s *memoryKeyringStore) List(realm string) ([]string, error) {
 	defer perf.Track(nil, "credentials.memoryKeyringStore.List")()
 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	aliases := make([]string, 0, len(s.items))
-	for alias := range s.items {
-		aliases = append(aliases, alias)
+	if realm != "" {
+		prefix := KeyringRealmPrefix + KeyringSeparator + realm + KeyringSeparator
+		for key := range s.items {
+			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+				aliases = append(aliases, key[len(prefix):])
+			}
+		}
+	} else {
+		// When realm is empty, return all keys but strip the "atmos_" prefix.
+		prefix := KeyringRealmPrefix + KeyringSeparator
+		for key := range s.items {
+			if len(key) > len(prefix) && key[:len(prefix)] == prefix {
+				aliases = append(aliases, key[len(prefix):])
+			}
+		}
 	}
 	return aliases, nil
 }
 
-// IsExpired checks if credentials for the given alias are expired.
-func (s *memoryKeyringStore) IsExpired(alias string) (bool, error) {
+// IsExpired checks if credentials for the given alias are expired within the specified realm.
+func (s *memoryKeyringStore) IsExpired(alias string, realm string) (bool, error) {
 	defer perf.Track(nil, "credentials.memoryKeyringStore.IsExpired")()
 
-	creds, err := s.Retrieve(alias)
+	creds, err := s.Retrieve(alias, realm)
 	if err != nil {
 		return true, err
 	}

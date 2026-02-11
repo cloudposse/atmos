@@ -93,6 +93,53 @@ auth:
   <dd>Optional. Session name for CloudTrail auditing.</dd>
 </dl>
 
+## AWS Assume Root (Organizations)
+
+For centralized root access in AWS Organizations using sts:AssumeRoot. This allows privileged operations on member accounts without enabling root user credentials.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    root-audit:
+      kind: aws/assume-root
+      via:
+        identity: admin-base        # Chain through an existing identity
+      principal:
+        target_principal: "123456789012"           # 12-digit member account ID
+        task_policy_arn: arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials
+        duration: 15m                              # Optional (max 15m for AssumeRoot)
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `aws/assume-root`.</dd>
+
+  <dt>`via.identity`</dt>
+  <dd>**Required.** Name of another identity to chain from (must provide AWS credentials).</dd>
+
+  <dt>`principal.target_principal`</dt>
+  <dd>**Required.** 12-digit AWS account ID of the member account to assume root on.</dd>
+
+  <dt>`principal.task_policy_arn`</dt>
+  <dd>**Required.** AWS-managed root task policy ARN. See supported policies below.</dd>
+
+  <dt>`principal.duration`</dt>
+  <dd>Optional. Session duration (max 15 minutes for AssumeRoot).</dd>
+</dl>
+
+**Supported task policies:**
+- `arn:aws:iam::aws:policy/root-task/IAMAuditRootUserCredentials`
+- `arn:aws:iam::aws:policy/root-task/IAMCreateRootUserPassword`
+- `arn:aws:iam::aws:policy/root-task/IAMDeleteRootUserCredentials`
+- `arn:aws:iam::aws:policy/root-task/S3UnlockBucketPolicy`
+- `arn:aws:iam::aws:policy/root-task/SQSUnlockQueuePolicy`
+
+:::note
+AssumeRoot requires AWS Organizations with centralized root access enabled and appropriate permissions on the base identity.
+:::
+
 ## AWS User (Break-glass)
 
 For static IAM user credentials, typically used for emergency access.
@@ -131,6 +178,44 @@ auth:
 :::tip
 Instead of storing credentials in configuration, use `atmos auth user configure` to store them securely in the system keyring.
 :::
+
+## Azure Subscription
+
+For targeting a specific Azure subscription using credentials from an Azure provider.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    dev-subscription:
+      kind: azure/subscription
+      via:
+        provider: azure-cli          # Reference to an Azure provider
+      principal:
+        subscription_id: "12345678-1234-1234-1234-123456789012"
+        location: eastus             # Optional: default location
+        resource_group: my-rg        # Optional: default resource group
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `azure/subscription`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of an Azure provider to obtain credentials from.</dd>
+
+  <dt>`principal.subscription_id`</dt>
+  <dd>**Required.** Azure subscription ID to target.</dd>
+
+  <dt>`principal.location`</dt>
+  <dd>Optional. Default Azure region for resources.</dd>
+
+  <dt>`principal.resource_group`</dt>
+  <dd>Optional. Default resource group for resources.</dd>
+</dl>
+
+The Azure subscription identity inherits credentials from the provider and sets subscription-specific environment variables (`AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, etc.) for Terraform and other Azure tools.
 
 ## Identity Chaining
 
@@ -253,57 +338,72 @@ Only one identity should be marked as default. If multiple identities have `defa
 
 ## Using Profiles for Role-Based Access
 
-Use [Atmos profiles](/cli/configuration/profiles) to define different identity configurations for various team roles:
+Use [Atmos profiles](/cli/configuration/profiles) to define different identity configurations for various team roles. Each profile is a **directory** containing YAML configuration files.
 
-<File title="atmos.yaml">
+**Profile structure:**
+```
+profiles/
+├── developer/
+│   └── auth.yaml      # Developer identity config
+├── platform/
+│   └── auth.yaml      # Platform engineer identity config
+└── ci/
+    └── auth.yaml      # CI/CD identity config
+```
+
+<File title="profiles/developer/auth.yaml">
 ```yaml
-profiles:
-  # Profile for developers - limited to dev/staging
-  developer:
-    auth:
-      identities:
-        dev-access:
-          kind: aws/permission-set
-          default: true
-          via:
-            provider: company-sso
-          principal:
-            name: DeveloperAccess
-            account:
-              name: development
+# Profile for developers - limited to dev/staging
+auth:
+  identities:
+    dev-access:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: DeveloperAccess
+        account:
+          name: development
+```
+</File>
 
-  # Profile for DevOps/Platform engineers - cross-account access
-  platform:
-    auth:
-      identities:
-        platform-admin:
-          kind: aws/permission-set
-          default: true
-          via:
-            provider: company-sso
-          principal:
-            name: AdminAccess
-            account:
-              name: core-identity
+<File title="profiles/platform/auth.yaml">
+```yaml
+# Profile for DevOps/Platform engineers - cross-account access
+auth:
+  identities:
+    platform-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: core-identity
 
-        prod-deploy:
-          kind: aws/assume-role
-          via:
-            identity: platform-admin
-          principal:
-            assume_role: arn:aws:iam::999999999999:role/ProductionDeploy
+    prod-deploy:
+      kind: aws/assume-role
+      via:
+        identity: platform-admin
+      principal:
+        assume_role: arn:aws:iam::999999999999:role/ProductionDeploy
+```
+</File>
 
-  # Profile for CI/CD pipelines
-  ci:
-    auth:
-      identities:
-        github-deploy:
-          kind: aws/assume-role
-          default: true
-          via:
-            provider: github-oidc
-          principal:
-            assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+<File title="profiles/ci/auth.yaml">
+```yaml
+# Profile for CI/CD pipelines
+auth:
+  identities:
+    github-deploy:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
 ```
 </File>
 

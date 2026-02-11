@@ -41,6 +41,7 @@ const (
 type userIdentity struct {
 	name   string
 	config *schema.Identity
+	realm  string // Credential isolation realm set by auth manager.
 }
 
 // NewUserIdentity creates a new AWS user identity.
@@ -61,6 +62,11 @@ func NewUserIdentity(name string, config *schema.Identity) (types.Identity, erro
 // Kind returns the identity kind.
 func (i *userIdentity) Kind() string {
 	return "aws/user"
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *userIdentity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // GetProviderName returns the provider name for this identity.
@@ -213,8 +219,9 @@ func (i *userIdentity) credentialsFromConfig() (*types.AWSCredentials, error) {
 
 // credentialsFromStore retrieves AWS credentials from the keyring store.
 func (i *userIdentity) credentialsFromStore() (*types.AWSCredentials, error) {
+	// Use realm for credential isolation between different repositories.
 	credStore := atmosCredentials.NewCredentialStore()
-	retrieved, err := credStore.Retrieve(i.name)
+	retrieved, err := credStore.Retrieve(i.name, i.realm)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to retrieve AWS User credentials for %q: %w", errUtils.ErrAwsUserNotConfigured, i.name, err)
 	}
@@ -241,7 +248,8 @@ func (i *userIdentity) resolveRegion() string {
 
 // writeAWSFiles writes credentials to AWS config files using "aws-user" as mock provider.
 func (i *userIdentity) writeAWSFiles(creds *types.AWSCredentials, region string) error {
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// User identity writes files with realm for credential isolation.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -407,8 +415,9 @@ func (i *userIdentity) handleInvalidClientTokenId(ctx context.Context, apiErr sm
 
 // clearStaleCredentials removes stale credentials from the keyring.
 func (i *userIdentity) clearStaleCredentials() {
+	// Use realm for credential isolation between different repositories.
 	credStore := atmosCredentials.NewCredentialStore()
-	if delErr := credStore.Delete(i.name); delErr != nil {
+	if delErr := credStore.Delete(i.name, i.realm); delErr != nil {
 		log.Debug("Failed to clear stale credentials from keyring", logKeyIdentity, i.name, "error", delErr)
 	} else {
 		log.Debug("Cleared stale credentials from keyring", logKeyIdentity, i.name)
@@ -645,7 +654,8 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 
 	// Get AWS file environment variables using "aws-user" as mock provider.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -654,6 +664,13 @@ func (i *userIdentity) Environment() (map[string]string, error) {
 	// Convert to map format.
 	for _, envVar := range awsEnvVars {
 		env[envVar.Key] = envVar.Value
+	}
+
+	// Include region ONLY if explicitly configured (not default fallback).
+	// This enables users to reference AWS_REGION via !env in stack configurations.
+	if r, ok := i.config.Credentials["region"].(string); ok && r != "" {
+		env["AWS_REGION"] = r
+		env["AWS_DEFAULT_REGION"] = r
 	}
 
 	// Add environment variables from identity config.
@@ -676,7 +693,8 @@ func (i *userIdentity) Paths() ([]types.Path, error) {
 func (i *userIdentity) PrepareEnvironment(ctx context.Context, environ map[string]string) (map[string]string, error) {
 	defer perf.Track(nil, "aws.userIdentity.PrepareEnvironment")()
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -742,7 +760,8 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 	identityName := i.name
 
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(providerName, identityName, params.Credentials, ""); err != nil {
+	// Use realm from params for credential isolation.
+	if err := awsCloud.SetupFiles(providerName, identityName, params.Credentials, "", params.Realm); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -754,6 +773,7 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 		IdentityName: identityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
@@ -770,7 +790,8 @@ func (i *userIdentity) PostAuthenticate(ctx context.Context, params *types.PostA
 func (i *userIdentity) CredentialsExist() (bool, error) {
 	defer perf.Track(nil, "aws.userIdentity.CredentialsExist")()
 
-	mgr, err := awsCloud.NewAWSFileManager("")
+	// Uses realm for credential isolation between different repositories.
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -826,8 +847,9 @@ func (i *userIdentity) Logout(ctx context.Context) error {
 	defer perf.Track(nil, "aws.userIdentity.Logout")()
 
 	// AWS user identities use "aws-user" as their provider name.
-	// Clean up files under XDG config directory (e.g., ~/.config/atmos/aws/aws-user/ on Linux).
-	fileManager, err := awsCloud.NewAWSFileManager("")
+	// Clean up files under XDG config directory (e.g., ~/.config/atmos/{realm}/aws/aws-user/ on Linux).
+	// Uses realm for credential isolation between different repositories.
+	fileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrLogoutFailed, err)
 	}

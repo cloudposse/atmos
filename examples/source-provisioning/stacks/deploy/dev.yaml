@@ -5,14 +5,23 @@ vars:
 
 components:
   terraform:
-    # Component with source provisioning
-    myapp:
+    # LOCAL source - vendors from sibling directory
+    weather:
       source:
-        uri: "github.com/cloudposse/terraform-null-label"
-        version: "0.25.0"
+        uri: "../demo-library/weather"
       provision:
         workdir:
           enabled: true
       vars:
-        enabled: true
-        environment: "dev"
+        location: "San Francisco"
+
+    # REMOTE source - vendors from GitHub
+    ipinfo:
+      source:
+        uri: "github.com/cloudposse/atmos//examples/demo-library/ipinfo"
+        version: "main"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        ip_address: "8.8.8.8"

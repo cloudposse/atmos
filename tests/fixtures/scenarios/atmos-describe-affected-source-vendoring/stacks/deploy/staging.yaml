@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+#
+# HEAD (PR branch) state - has source.version = "1.0.0"
+# This simulates the current PR branch
+
+vars:
+  environment: ue1
+  stage: staging
+
+components:
+  terraform:
+    # Component with source vendoring
+    vpc-source:
+      metadata:
+        component: mock
+      source:
+        uri: "github.com/cloudposse/terraform-null-label//exports"
+        version: "1.0.0"
+      vars:
+        enabled: true
+        name: "vpc"
+
+    # Component with source vendoring AND workdir
+    vpc-source-workdir:
+      metadata:
+        component: mock
+      source:
+        uri: "github.com/cloudposse/terraform-null-label//exports"
+        version: "1.0.0"
+      provision:
+        workdir:
+          enabled: true
+      vars:
+        enabled: true
+        name: "vpc-workdir"
+
+    # Regular component without source (for comparison)
+    regular-component:
+      metadata:
+        component: mock
+      vars:
+        enabled: true
+        name: "regular"
+
+    # Component with workdir disabled in HEAD (will be enabled in BASE)
+    component-workdir-only:
+      metadata:
+        component: mock
+      # No provision section in HEAD - workdir not enabled
+      vars:
+        enabled: true
+        name: "workdir-only"

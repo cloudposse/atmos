@@ -15,6 +15,8 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
 )
@@ -163,24 +165,44 @@ func runMainLogic() {
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
-	filePaths, err := files.GetFiles(config)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
-
+	// Dry-run mode - just list files without spinner.
 	if config.DryRun {
+		filePaths, err := files.GetFiles(config)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 		for _, file := range filePaths {
 			log.Info(file)
 		}
 		return
 	}
 
-	errors := validation.ProcessValidation(filePaths, config)
-	log.Debug("Files checked", "count", len(filePaths))
-	errorCount := er.GetErrorCount(errors)
-	if errorCount != 0 {
-		er.PrintErrors(errors, config)
+	var filePaths []string
+	var validationErrors []er.ValidationErrors
+
+	err := spinner.ExecWithSpinner(
+		"Validating EditorConfig...",
+		"EditorConfig validation passed",
+		func() error {
+			var err error
+			filePaths, err = files.GetFiles(config)
+			if err != nil {
+				return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrEditorConfigGetFiles, err)
+			}
+			validationErrors = validation.ProcessValidation(filePaths, config)
+			log.Debug("Files checked", "count", len(filePaths))
+			if er.GetErrorCount(validationErrors) != 0 {
+				return errUtils.ErrEditorConfigValidationFailed
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		if len(validationErrors) > 0 {
+			er.PrintErrors(validationErrors, config)
+		} else {
+			ui.Error(fmt.Sprintf("Validation failed: %v", err))
+		}
 		errUtils.Exit(1)
 	}
-	u.PrintMessage("No errors found")
 }
 
 func checkVersion(config config.Config) error {
@@ -188,8 +210,8 @@ func checkVersion(config config.Config) error {
 		return nil
 	}
 	if config.Version != version.Version {
-		return fmt.Errorf("version mismatch: binary=%s, config=%s",
-			version.Version, config.Version)
+		return fmt.Errorf("%w: binary=%s, config=%s",
+			errUtils.ErrEditorConfigVersionMismatch, version.Version, config.Version)
 	}
 
 	return nil

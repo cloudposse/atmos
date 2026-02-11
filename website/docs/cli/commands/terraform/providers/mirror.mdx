@@ -1,0 +1,101 @@
+---
+title: atmos terraform providers mirror
+sidebar_label: providers mirror
+sidebar_class_name: command
+id: mirror
+description: Save local copies of all required provider plugins.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to save local copies of all required provider plugins for an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform providers mirror --help" slug="atmos-terraform-providers-mirror--help" />
+
+## Usage
+
+Execute the `terraform providers mirror` command like this:
+
+```shell
+atmos terraform providers mirror <component> -s <stack> <target-dir> [options]
+```
+
+This command downloads the providers required for the component and saves them to a local directory. This is useful for creating a local mirror for air-gapped environments or reducing external network dependencies.
+
+:::tip
+Run `atmos terraform providers mirror --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Mirror providers to a local directory
+atmos terraform providers mirror vpc -s dev /path/to/mirror
+
+# Mirror for specific platforms
+atmos terraform providers mirror vpc -s dev /path/to/mirror -platform=linux_amd64 -platform=darwin_amd64
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+
+    <dt>`target-dir` <em>(required)</em></dt>
+    <dd>
+        The target directory where provider plugins will be saved.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform providers mirror vpc -s dev /path/to/mirror --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform providers mirror vpc -s dev /path/to/mirror --skip-init
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform providers mirror` command supports native `terraform providers mirror` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-platform=OS_ARCH`</dt>
+    <dd>
+        Target platform for provider packages. Can be specified multiple times to mirror for multiple platforms.
+
+        ```shell
+        atmos terraform providers mirror vpc -s dev /path/to/mirror -platform=linux_amd64 -platform=darwin_amd64
+        ```
+    </dd>
+</dl>
+
+## See Also
+
+- [`atmos terraform providers`](/cli/commands/terraform/providers) - Show provider requirements
+- [`atmos terraform providers lock`](/cli/commands/terraform/providers/lock) - Write out dependency locks
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

@@ -81,3 +81,51 @@ tests:
         - "stacks:"
         - "base_path: stacks"
       exit_code: 0
+
+  - name: "atmos --chdir config isolation"
+    enabled: true
+    snapshot: true
+    description: "Verify --chdir uses ONLY the target directory config, not repo root config"
+    workdir: "../"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "tests/fixtures/scenarios/chdir-isolation"
+      - "describe"
+      - "config"
+      - "-f"
+      - "yaml"
+    expect:
+      diff:
+        - 'github_token:'  # Varies by environment (present when GITHUB_TOKEN is set)
+      stdout:
+        # Must see the scenario's unique values
+        - "chdir-isolation-vendor"
+        - "chdir-isolation-components"
+        - "chdir-isolation-stacks"
+        # Must NOT see the repo root config values (which would indicate config merging)
+        - !not "vendor.yaml"
+        - !not "components/terraform"
+      exit_code: 0
+
+  - name: "atmos --chdir with describe stacks resolves component paths"
+    enabled: true
+    snapshot: false
+    short: false
+    description: "Verify --chdir correctly resolves component paths when describing stacks. Regression test for path resolution issue in v1.195.0+ where relative component_path was not resolved against BasePath."
+    workdir: "../examples"
+    command: "atmos"
+    args:
+      - "--chdir"
+      - "../tests/fixtures/scenarios/stack-templates"
+      - "describe"
+      - "stacks"
+      - "-s"
+      - "nonprod"
+      - "--format"
+      - "yaml"
+    expect:
+      stdout:
+        - "component_path:"
+        - "components/terraform"
+      exit_code: 0

@@ -1,0 +1,126 @@
+---
+title: atmos terraform providers lock
+sidebar_label: providers lock
+sidebar_class_name: command
+id: lock
+description: Write out dependency locks for the configured providers.
+---
+import Intro from '@site/src/components/Intro'
+import Screengrab from '@site/src/components/Screengrab'
+
+<Intro>
+Use this command to write out dependency locks for the configured providers of an Atmos component in a stack.
+</Intro>
+
+<Screengrab title="atmos terraform providers lock --help" slug="atmos-terraform-providers-lock--help" />
+
+## Usage
+
+Execute the `terraform providers lock` command like this:
+
+```shell
+atmos terraform providers lock <component> -s <stack> [options]
+```
+
+This command creates or updates the dependency lock file (`.terraform.lock.hcl`) for the providers used by the component. This is useful for ensuring reproducible builds across different platforms.
+
+:::tip
+Run `atmos terraform providers lock --help` to see all the available options
+:::
+
+## Examples
+
+```shell
+# Lock providers for a component
+atmos terraform providers lock vpc -s dev
+
+# Lock for specific platforms
+atmos terraform providers lock vpc -s dev -platform=linux_amd64 -platform=darwin_amd64
+
+# Lock for multiple platforms including ARM
+atmos terraform providers lock vpc -s prod -platform=linux_amd64 -platform=linux_arm64 -platform=darwin_amd64 -platform=darwin_arm64
+```
+
+## Arguments
+
+<dl>
+    <dt>`component` <em>(required)</em></dt>
+    <dd>
+        Atmos terraform component.
+    </dd>
+</dl>
+
+## Flags
+
+<dl>
+    <dt>`--stack` <em>(alias `-s`)</em> <em>(required)</em></dt>
+    <dd>
+        Atmos stack.
+    </dd>
+
+    <dt>`--dry-run` <em>(optional)</em></dt>
+    <dd>
+        Show what would be executed without actually running the command.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev --dry-run
+        ```
+    </dd>
+
+    <dt>`--skip-init` <em>(optional)</em></dt>
+    <dd>
+        Skip running `terraform init` before executing the command.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev --skip-init
+        ```
+    </dd>
+</dl>
+
+## Native Terraform Flags
+
+The `atmos terraform providers lock` command supports native `terraform providers lock` flags. Pass them directly or use `--` to separate Atmos flags from Terraform flags.
+
+<dl>
+    <dt>`-platform=OS_ARCH`</dt>
+    <dd>
+        Target platform for provider packages. Can be specified multiple times to lock for multiple platforms.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -platform=linux_amd64 -platform=darwin_amd64
+        ```
+    </dd>
+
+    <dt>`-fs-mirror=DIR`</dt>
+    <dd>
+        Consult the given filesystem mirror directory for provider packages instead of the origin registry.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -fs-mirror=/path/to/mirror
+        ```
+    </dd>
+
+    <dt>`-net-mirror=URL`</dt>
+    <dd>
+        Consult the given network mirror for provider packages instead of the origin registry.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -net-mirror=https://mirror.example.com/
+        ```
+    </dd>
+
+    <dt>`-enable-plugin-cache`</dt>
+    <dd>
+        Enable the global plugin cache during lock file creation.
+
+        ```shell
+        atmos terraform providers lock vpc -s dev -enable-plugin-cache
+        ```
+    </dd>
+</dl>
+
+## See Also
+
+- [`atmos terraform providers`](/cli/commands/terraform/providers) - Show provider requirements
+- [`atmos terraform providers mirror`](/cli/commands/terraform/providers/mirror) - Save local copies of provider plugins
+- [`atmos terraform init`](/cli/commands/terraform/init) - Initialize working directory

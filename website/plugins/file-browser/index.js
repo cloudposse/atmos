@@ -105,7 +105,9 @@ const DOCS_MAP = {
     { label: 'CLI Configuration', url: '/cli/configuration' },
   ],
   toolchain: [
-    { label: 'Getting Started', url: '/quick-start' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
+    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
   ],
   devcontainer: [
     { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },

@@ -580,6 +580,84 @@ func TestSubscriptionIdentity_Logout(t *testing.T) {
 	assert.NoError(t, err, "Logout should always succeed")
 }
 
+func TestSubscriptionIdentity_SetRealm(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Initially realm should be empty.
+	assert.Empty(t, identity.realm)
+
+	// Set a realm.
+	identity.SetRealm("test-realm-123")
+	assert.Equal(t, "test-realm-123", identity.realm)
+
+	// Update realm.
+	identity.SetRealm("new-realm-456")
+	assert.Equal(t, "new-realm-456", identity.realm)
+
+	// Set empty realm.
+	identity.SetRealm("")
+	assert.Empty(t, identity.realm)
+}
+
+func TestSubscriptionIdentity_Paths(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Paths should return a list with credentials file path.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+	assert.Equal(t, types.PathTypeFile, paths[0].Type)
+	assert.True(t, paths[0].Required)
+	assert.Contains(t, paths[0].Location, "azure-provider")
+	assert.Contains(t, paths[0].Location, "credentials.json")
+}
+
+func TestSubscriptionIdentity_Paths_WithRealm(t *testing.T) {
+	config := &schema.Identity{
+		Kind: "azure/subscription",
+		Principal: map[string]interface{}{
+			"subscription_id": "sub-123",
+		},
+		Via: &schema.IdentityVia{
+			Provider: "azure-provider",
+		},
+	}
+
+	identity, err := NewSubscriptionIdentity("test", config)
+	require.NoError(t, err)
+
+	// Set a realm.
+	identity.SetRealm("test-realm")
+
+	// Paths should include realm in the path.
+	paths, err := identity.Paths()
+	assert.NoError(t, err)
+	assert.Len(t, paths, 1)
+	assert.Contains(t, paths[0].Location, "test-realm")
+}
+
 func TestSubscriptionIdentity_PrincipalFieldTypes(t *testing.T) {
 	// Test that non-string types in principal are ignored.
 	config := &schema.Identity{

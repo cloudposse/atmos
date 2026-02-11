@@ -138,4 +138,43 @@ func TestYamlFuncTerraformState(t *testing.T) {
 	assert.Contains(t, y, `test_map:
     key1: fallback1
     key2: fallback2`)
+
+	// Test bracket notation with map keys containing slashes (user-reported issue)
+	// https://atmos.tools/functions/yaml/terraform.state#handling-yq-expressions-with-bracket-notation-and-quotes
+	t.Run("bracket notation with slashes in map keys", func(t *testing.T) {
+		// Test with single quotes around the YQ expression (recommended syntax)
+		d, err = processTagTerraformState(&atmosConfig, `!terraform.state component-1 '.secret_arns_map["auth0-event-stream/app/client-id"]'`, stack, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123", d)
+
+		// Test with bare brackets (also valid)
+		d, err = processTagTerraformState(&atmosConfig, `!terraform.state component-1 .secret_arns_map["auth0-event-stream/app/client-id"]`, stack, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123", d)
+
+		// Test with stack parameter and single quotes
+		d, err = processTagTerraformState(&atmosConfig, `!terraform.state component-1 nonprod '.secret_arns_map["auth0-event-stream/app/client-secret"]'`, stack, nil)
+		assert.NoError(t, err)
+		assert.Equal(t, "arn:aws:secretsmanager:us-east-1:123456789012:secret:client-secret-xyz789", d)
+	})
+
+	// Test the component-bracket-notation component resolution
+	t.Run("component-bracket-notation describe", func(t *testing.T) {
+		res, err = ExecuteDescribeComponent(&ExecuteDescribeComponentParams{
+			Component:            "component-bracket-notation",
+			Stack:                stack,
+			ProcessTemplates:     true,
+			ProcessYamlFunctions: true,
+			Skip:                 nil,
+			AuthManager:          nil,
+		})
+		assert.NoError(t, err)
+
+		y, err = u.ConvertToYAML(res)
+		assert.Nil(t, err)
+		assert.Contains(t, y, "client_id_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+		assert.Contains(t, y, "client_secret_arn: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-secret-xyz789")
+		assert.Contains(t, y, "client_id_arn_bare: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+		assert.Contains(t, y, "client_id_arn_with_stack: arn:aws:secretsmanager:us-east-1:123456789012:secret:client-id-abc123")
+	})
 }
