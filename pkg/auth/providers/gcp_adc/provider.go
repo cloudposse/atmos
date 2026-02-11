@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/option"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -24,10 +25,18 @@ const (
 	DefaultScope = "https://www.googleapis.com/auth/cloud-platform"
 )
 
+// credentialsFinder abstracts google.FindDefaultCredentials for testability.
+type credentialsFinder func(ctx context.Context, scopes ...string) (*google.Credentials, error)
+
+// tokenEmailFetcher abstracts the OAuth2 tokeninfo call for testability.
+type tokenEmailFetcher func(ctx context.Context, accessToken string) (string, error)
+
 // Provider implements the gcp/adc authentication provider.
 type Provider struct {
-	name string
-	spec *types.GCPADCProviderSpec
+	name             string
+	spec             *types.GCPADCProviderSpec
+	findCredentials  credentialsFinder
+	fetchTokenEmail  tokenEmailFetcher
 }
 
 // New creates a new ADC provider from the given spec.
@@ -37,7 +46,11 @@ func New(spec *types.GCPADCProviderSpec) (*Provider, error) {
 	if spec == nil {
 		return nil, fmt.Errorf("%w: GCP ADC provider spec cannot be nil", errUtils.ErrInvalidProviderConfig)
 	}
-	return &Provider{spec: spec}, nil
+	return &Provider{
+		spec:            spec,
+		findCredentials: google.FindDefaultCredentials,
+		fetchTokenEmail: getTokenEmail,
+	}, nil
 }
 
 // SetName sets the provider name (used by the factory when registering).
@@ -77,7 +90,7 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 	}
 
 	// Find default credentials using ADC chain.
-	creds, err := google.FindDefaultCredentials(ctx, scopes...)
+	creds, err := p.findCredentials(ctx, scopes...)
 	if err != nil {
 		return nil, fmt.Errorf("%w: find default credentials: %w", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -103,7 +116,7 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 	// Optionally get service account email via tokeninfo (best-effort).
 	var saEmail string
 	if token.AccessToken != "" {
-		saEmail, _ = getTokenEmail(ctx, token.AccessToken)
+		saEmail, _ = p.fetchTokenEmail(ctx, token.AccessToken)
 	}
 
 	return &types.GCPCredentials{
@@ -135,7 +148,9 @@ func (p *Provider) Validate() error {
 func (p *Provider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	if p.spec != nil && p.spec.ProjectID != "" {
-		env["GOOGLE_CLOUD_PROJECT"] = p.spec.ProjectID
+		for key, value := range gcp.ProjectEnvVars(p.spec.ProjectID) {
+			env[key] = value
+		}
 	}
 	return env, nil
 }
@@ -156,7 +171,9 @@ func (p *Provider) PrepareEnvironment(ctx context.Context, environ map[string]st
 		out = make(map[string]string)
 	}
 	if p.spec != nil && p.spec.ProjectID != "" {
-		out["GOOGLE_CLOUD_PROJECT"] = p.spec.ProjectID
+		for key, value := range gcp.ProjectEnvVars(p.spec.ProjectID) {
+			out[key] = value
+		}
 	}
 	return out, nil
 }

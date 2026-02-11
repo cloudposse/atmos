@@ -38,38 +38,14 @@ const (
 	permFile = 0o600
 )
 
-// ADCFileContent represents the structure of an ADC JSON file.
-type ADCFileContent struct {
+// AuthorizedUserContent represents the structure of an authorized_user ADC JSON file.
+type AuthorizedUserContent struct {
 	Type         string `json:"type"`
 	AccessToken  string `json:"access_token,omitempty"`
 	RefreshToken string `json:"refresh_token,omitempty"`
 	ClientID     string `json:"client_id,omitempty"`
 	ClientSecret string `json:"client_secret,omitempty"`
 	TokenExpiry  string `json:"token_expiry,omitempty"`
-
-	// For service account impersonation.
-	ServiceAccountImpersonationURL string `json:"service_account_impersonation_url,omitempty"`
-
-	// For workload identity federation.
-	Audience         string            `json:"audience,omitempty"`
-	SubjectTokenType string            `json:"subject_token_type,omitempty"`
-	TokenURL         string            `json:"token_url,omitempty"`
-	CredentialSource *CredentialSource `json:"credential_source,omitempty"`
-}
-
-// CredentialSource defines where to get the source credential for WIF.
-type CredentialSource struct {
-	File          string            `json:"file,omitempty"`
-	URL           string            `json:"url,omitempty"`
-	Headers       map[string]string `json:"headers,omitempty"`
-	EnvironmentID string            `json:"environment_id,omitempty"`
-	Format        *CredentialFormat `json:"format,omitempty"`
-}
-
-// CredentialFormat defines the format of the credential source.
-type CredentialFormat struct {
-	Type                  string `json:"type,omitempty"`
-	SubjectTokenFieldName string `json:"subject_token_field_name,omitempty"`
 }
 
 // GetGCPBaseDir returns the base directory for GCP credentials.
@@ -79,7 +55,7 @@ func GetGCPBaseDir() (string, error) {
 
 	dir, err := xdg.GetXDGConfigDir("", permDir)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
+		return "", fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return dir, nil
 }
@@ -93,8 +69,8 @@ func GetProviderDir(realm, providerName string) (string, error) {
 	if err := validatePathSegment("provider name", providerName); err != nil {
 		return "", err
 	}
-	if realm == "" {
-		return "", fmt.Errorf("%w: realm is required for credential isolation", errUtils.ErrInvalidAuthConfig)
+	if err := validatePathSegment("realm", realm); err != nil {
+		return "", err
 	}
 	base, err := GetGCPBaseDir()
 	if err != nil {
@@ -188,7 +164,7 @@ func GetAccessTokenFilePath(realm, providerName, identityName string) (string, e
 
 // WriteADCFile writes the Application Default Credentials JSON file.
 // Realm is required for credential isolation.
-func WriteADCFile(realm, providerName, identityName string, content *ADCFileContent) (string, error) {
+func WriteADCFile(realm, providerName, identityName string, content *AuthorizedUserContent) (string, error) {
 	defer perf.Track(nil, "gcp.WriteADCFile")()
 
 	if content == nil {
@@ -236,6 +212,9 @@ func WritePropertiesFile(realm, providerName, identityName string, projectID str
 func WriteAccessTokenFile(realm, providerName, identityName string, accessToken string, expiry time.Time) (string, error) {
 	defer perf.Track(nil, "gcp.WriteAccessTokenFile")()
 
+	if accessToken == "" {
+		return "", fmt.Errorf("%w: access token cannot be empty", errUtils.ErrWriteAccessTokenFile)
+	}
 	path, err := GetAccessTokenFilePath(realm, providerName, identityName)
 	if err != nil {
 		return "", fmt.Errorf("%w: resolve access token file path: %w", errUtils.ErrWriteAccessTokenFile, err)

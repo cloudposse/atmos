@@ -27,11 +27,9 @@ var GCPEnvironmentVariables = []string{
 // PrepareEnvironment clears GCP-related environment variables to ensure
 // a clean state before setting up isolated credentials.
 // This prevents conflicts between user's existing gcloud config and Atmos-managed credentials.
-func PrepareEnvironment(ctx context.Context, atmosConfig *schema.AtmosConfiguration) error {
+func PrepareEnvironment() error {
 	defer perf.Track(nil, "gcp.PrepareEnvironment")()
 
-	_ = ctx
-	_ = atmosConfig
 	for _, key := range GCPEnvironmentVariables {
 		if _, ok := os.LookupEnv(key); ok {
 			log.Debug("Clearing GCP environment variable", "key", key)
@@ -57,9 +55,8 @@ func GetCurrentGCPEnvironment() map[string]string {
 
 // SetEnvironmentVariables sets the GCP environment variables based on the
 // identity configuration and credential file paths.
-// When stackInfo is non-nil and stackInfo.AuthContext.GCP is set, project/region are applied.
 // Realm is required for credential isolation.
-func SetEnvironmentVariables(ctx context.Context, atmosConfig *schema.AtmosConfiguration, realm, providerName, identityName string) error {
+func SetEnvironmentVariables(ctx context.Context, realm, providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.SetEnvironmentVariables")()
 
 	return setEnvironmentVariablesFromAuth(ctx, realm, providerName, identityName, nil)
@@ -80,7 +77,7 @@ func SetEnvironmentVariablesFromStackInfo(ctx context.Context, stackInfo *schema
 }
 
 func setEnvironmentVariablesFromAuth(ctx context.Context, realm, providerName, identityName string, gcpAuth *schema.GCPAuthContext) error {
-	_ = ctx
+	_ = ctx // Context is reserved for future cancellation support.
 	env, err := GetEnvironmentVariablesForIdentity(realm, providerName, identityName, gcpAuth)
 	if err != nil {
 		return err
@@ -95,12 +92,45 @@ func setEnvironmentVariablesFromAuth(ctx context.Context, realm, providerName, i
 // for the given identity, without actually setting them.
 // authContext is optional; when authContext.GCP is set, project/region are included.
 // Realm is required for credential isolation.
-func GetEnvironmentVariables(atmosConfig *schema.AtmosConfiguration, realm, providerName, identityName string) (map[string]string, error) {
+func GetEnvironmentVariables(realm, providerName, identityName string) (map[string]string, error) {
 	defer perf.Track(nil, "gcp.GetEnvironmentVariables")()
 
-	_ = atmosConfig
 	var gcpAuth *schema.GCPAuthContext
 	return GetEnvironmentVariablesForIdentity(realm, providerName, identityName, gcpAuth)
+}
+
+// ProjectEnvVars returns project-related environment variables.
+func ProjectEnvVars(projectID string) map[string]string {
+	if projectID == "" {
+		return map[string]string{}
+	}
+	return map[string]string{
+		"GOOGLE_CLOUD_PROJECT":  projectID,
+		"GCLOUD_PROJECT":        projectID,
+		"CLOUDSDK_CORE_PROJECT": projectID,
+	}
+}
+
+// RegionEnvVars returns region-related environment variables.
+func RegionEnvVars(region string) map[string]string {
+	if region == "" {
+		return map[string]string{}
+	}
+	return map[string]string{
+		"GOOGLE_CLOUD_REGION":     region,
+		"CLOUDSDK_COMPUTE_REGION": region,
+	}
+}
+
+// ZoneEnvVars returns zone-related environment variables.
+func ZoneEnvVars(zone string) map[string]string {
+	if zone == "" {
+		return map[string]string{}
+	}
+	return map[string]string{
+		"GOOGLE_CLOUD_ZONE":     zone,
+		"CLOUDSDK_COMPUTE_ZONE": zone,
+	}
 }
 
 // GetEnvironmentVariablesForIdentity returns the env map for an identity.
@@ -149,18 +179,14 @@ func GetEnvironmentVariablesForIdentity(realm, providerName, identityName string
 		if gcpAuth.ConfigDir != "" {
 			env["CLOUDSDK_CONFIG"] = gcpAuth.ConfigDir
 		}
-		if gcpAuth.ProjectID != "" {
-			env["GOOGLE_CLOUD_PROJECT"] = gcpAuth.ProjectID
-			env["GCLOUD_PROJECT"] = gcpAuth.ProjectID
-			env["CLOUDSDK_CORE_PROJECT"] = gcpAuth.ProjectID
+		for key, value := range ProjectEnvVars(gcpAuth.ProjectID) {
+			env[key] = value
 		}
-		if gcpAuth.Region != "" {
-			env["GOOGLE_CLOUD_REGION"] = gcpAuth.Region
-			env["CLOUDSDK_COMPUTE_REGION"] = gcpAuth.Region
+		for key, value := range RegionEnvVars(gcpAuth.Region) {
+			env[key] = value
 		}
-		if gcpAuth.Location != "" {
-			env["GOOGLE_CLOUD_ZONE"] = gcpAuth.Location
-			env["CLOUDSDK_COMPUTE_ZONE"] = gcpAuth.Location
+		for key, value := range ZoneEnvVars(gcpAuth.Location) {
+			env[key] = value
 		}
 	}
 
@@ -169,10 +195,9 @@ func GetEnvironmentVariablesForIdentity(realm, providerName, identityName string
 
 // RestoreEnvironment restores the original GCP environment variables.
 // This is used during logout or cleanup.
-func RestoreEnvironment(ctx context.Context, savedEnv map[string]string) error {
+func RestoreEnvironment(savedEnv map[string]string) error {
 	defer perf.Track(nil, "gcp.RestoreEnvironment")()
 
-	_ = ctx
 	for _, key := range GCPEnvironmentVariables {
 		os.Unsetenv(key)
 	}

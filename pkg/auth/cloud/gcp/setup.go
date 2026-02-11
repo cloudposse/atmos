@@ -23,7 +23,6 @@ import (
 //
 // Parameters:
 //   - ctx: Context for cancellation.
-//   - atmosConfig: Atmos configuration.
 //   - realm: The realm for credential isolation (typically derived from atmos config hash).
 //   - providerName: Name of the provider being set up.
 //   - identityName: Name of the identity being set up.
@@ -32,7 +31,6 @@ import (
 // Returns the paths of all written files and any error.
 func SetupFiles(
 	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
 	realm string,
 	providerName string,
 	identityName string,
@@ -40,8 +38,6 @@ func SetupFiles(
 ) ([]string, error) {
 	defer perf.Track(nil, "gcp.SetupFiles")()
 
-	_ = ctx
-	_ = atmosConfig
 	if creds == nil {
 		return nil, fmt.Errorf("%w: GCP credentials cannot be nil", errUtils.ErrInvalidAuthConfig)
 	}
@@ -56,7 +52,7 @@ func SetupFiles(
 	if err != nil {
 		return nil, err
 	}
-	adcContent := &ADCFileContent{
+	adcContent := &AuthorizedUserContent{
 		Type:         "authorized_user",
 		AccessToken:  creds.AccessToken,
 		TokenExpiry:  formatTokenExpiry(creds.TokenExpiry),
@@ -202,7 +198,6 @@ func SetAuthContext(authContext *schema.AuthContext, realm, providerName, identi
 // Realm is required for credential isolation.
 func Setup(
 	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
 	realm string,
 	providerName string,
 	identityName string,
@@ -210,10 +205,10 @@ func Setup(
 ) error {
 	defer perf.Track(nil, "gcp.Setup")()
 
-	if err := PrepareEnvironment(ctx, atmosConfig); err != nil {
+	if err := PrepareEnvironment(); err != nil {
 		return err
 	}
-	if _, err := SetupFiles(ctx, atmosConfig, realm, providerName, identityName, creds); err != nil {
+	if _, err := SetupFiles(ctx, realm, providerName, identityName, creds); err != nil {
 		return err
 	}
 	// Set env vars with project/region from creds.
@@ -238,11 +233,10 @@ func Setup(
 // Cleanup removes all credential files and clears environment variables
 // for a GCP identity.
 // Realm is required for credential isolation.
-func Cleanup(ctx context.Context, atmosConfig *schema.AtmosConfiguration, realm, providerName, identityName string) error {
+func Cleanup(ctx context.Context, realm, providerName, identityName string) error {
 	defer perf.Track(nil, "gcp.Cleanup")()
 
-	_ = ctx
-	_ = atmosConfig
+	_ = ctx // Context is reserved for future cancellation support.
 	if err := CleanupIdentityFiles(realm, providerName, identityName); err != nil {
 		return err
 	}
@@ -258,15 +252,13 @@ func Cleanup(ctx context.Context, atmosConfig *schema.AtmosConfiguration, realm,
 // Realm is required for credential isolation.
 func LoadCredentialsFromFiles(
 	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
 	realm string,
 	providerName string,
 	identityName string,
 ) (*types.GCPCredentials, error) {
 	defer perf.Track(nil, "gcp.LoadCredentialsFromFiles")()
 
-	_ = ctx
-	_ = atmosConfig
+	_ = ctx // Context is reserved for future cancellation support.
 	adcPath, err := GetADCFilePath(realm, providerName, identityName)
 	if err != nil {
 		return nil, err
@@ -278,7 +270,7 @@ func LoadCredentialsFromFiles(
 		}
 		return nil, fmt.Errorf("%w: read ADC file: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
-	var adc ADCFileContent
+	var adc AuthorizedUserContent
 	if err := json.Unmarshal(data, &adc); err != nil {
 		return nil, fmt.Errorf("%w: parse ADC file: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
@@ -304,14 +296,13 @@ func LoadCredentialsFromFiles(
 // Realm is required for credential isolation.
 func CredentialsExist(
 	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
 	realm string,
 	providerName string,
 	identityName string,
 ) (bool, error) {
 	defer perf.Track(nil, "gcp.CredentialsExist")()
 
-	creds, err := LoadCredentialsFromFiles(ctx, atmosConfig, realm, providerName, identityName)
+	creds, err := LoadCredentialsFromFiles(ctx, realm, providerName, identityName)
 	if err != nil || creds == nil {
 		return false, err
 	}

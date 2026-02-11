@@ -221,7 +221,8 @@
     },
     "keyring": {},
     "providers": null,
-    "identities": null
+    "identities": null,
+    "realm": "<hash>"
   },
   "profiler": {
     "enabled": false,

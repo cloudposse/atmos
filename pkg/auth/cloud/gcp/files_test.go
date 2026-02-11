@@ -119,7 +119,7 @@ func TestWriteADCFile(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	providerName := "gcp-adc"
 
-	content := &ADCFileContent{
+	content := &AuthorizedUserContent{
 		Type:        "authorized_user",
 		AccessToken: "ya29.test-token",
 		TokenExpiry: "2025-12-31T23:59:59Z",
@@ -131,7 +131,7 @@ func TestWriteADCFile(t *testing.T) {
 
 	data, err := os.ReadFile(path)
 	require.NoError(t, err)
-	var parsed ADCFileContent
+	var parsed AuthorizedUserContent
 	require.NoError(t, json.Unmarshal(data, &parsed))
 	assert.Equal(t, "authorized_user", parsed.Type)
 	assert.Equal(t, "ya29.test-token", parsed.AccessToken)
@@ -213,7 +213,7 @@ func TestCleanupIdentityFiles(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	providerName := "gcp-adc"
 
-	_, err := WriteADCFile(testRealm, providerName, "cleanup-id", &ADCFileContent{Type: "authorized_user", AccessToken: "x"})
+	_, err := WriteADCFile(testRealm, providerName, "cleanup-id", &AuthorizedUserContent{Type: "authorized_user", AccessToken: "x"})
 	require.NoError(t, err)
 	_, err = WritePropertiesFile(testRealm, providerName, "cleanup-id", "p", "r")
 	require.NoError(t, err)

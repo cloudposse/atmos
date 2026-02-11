@@ -13,10 +13,9 @@ import (
 	"time"
 
 	"golang.org/x/oauth2"
-	"google.golang.org/api/iamcredentials/v1"
-	"google.golang.org/api/option"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -40,12 +39,16 @@ const (
 	TokenRequestTimeout = 10
 )
 
-var gcpWIFHTTPClient = &http.Client{Timeout: TokenRequestTimeout * time.Second}
+// iamServiceFactory abstracts IAM credential service creation for testability.
+type iamServiceFactory func(ctx context.Context, accessToken string) (gcp.IAMCredentialsService, error)
 
 // Provider implements the gcp/workload-identity-federation provider.
 type Provider struct {
-	name string
-	spec *types.GCPWorkloadIdentityFederationProviderSpec
+	name              string
+	spec              *types.GCPWorkloadIdentityFederationProviderSpec
+	httpClient        *http.Client
+	stsURL            string
+	iamServiceFactory iamServiceFactory
 }
 
 // New creates a new WIF provider from the given spec.
@@ -55,12 +58,23 @@ func New(spec *types.GCPWorkloadIdentityFederationProviderSpec) (*Provider, erro
 	if spec == nil {
 		return nil, fmt.Errorf("%w: WIF provider spec cannot be nil", errUtils.ErrInvalidProviderConfig)
 	}
-	return &Provider{spec: spec}, nil
+	return &Provider{
+		spec:              spec,
+		httpClient:        &http.Client{Timeout: TokenRequestTimeout * time.Second},
+		stsURL:            stsEndpoint,
+		iamServiceFactory: gcp.NewIAMCredentialsService,
+	}, nil
 }
 
 // SetName sets the provider name.
 func (p *Provider) SetName(name string) {
 	p.name = name
+}
+
+// WithHTTPClient sets the HTTP client used for token requests.
+func (p *Provider) WithHTTPClient(client *http.Client) *Provider {
+	p.httpClient = client
+	return p
 }
 
 // Kind returns the provider kind.
@@ -199,7 +213,7 @@ func (p *Provider) getTokenFromFile() (string, error) {
 	}
 	data, err := os.ReadFile(p.spec.TokenSource.FilePath)
 	if err != nil {
-		return "", fmt.Errorf("%w: read token file: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: read token file: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	token := strings.TrimSpace(string(data))
 	if token == "" {
@@ -224,7 +238,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 
 	u, err := url.Parse(tokenURL)
 	if err != nil {
-		return "", fmt.Errorf("%w: parse token URL: %v", errUtils.ErrInvalidProviderConfig, err)
+		return "", fmt.Errorf("%w: parse token URL: %w", errUtils.ErrInvalidProviderConfig, err)
 	}
 	if u.Scheme != "https" {
 		return "", fmt.Errorf("%w: token URL must use https", errUtils.ErrInvalidProviderConfig)
@@ -250,7 +264,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, tokenURL, nil)
 	if err != nil {
-		return "", fmt.Errorf("%w: create request: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: create request: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
 	// Add bearer token if provided.
@@ -262,9 +276,9 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 		req.Header.Set("Authorization", "Bearer "+bearerToken)
 	}
 
-	resp, err := gcpWIFHTTPClient.Do(req)
+	resp, err := p.getHTTPClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("%w: request token: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: request token: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	defer resp.Body.Close()
 
@@ -277,7 +291,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 		Value string `json:"value"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("%w: decode response: %v", errUtils.ErrAuthenticationFailed, err)
+		return "", fmt.Errorf("%w: decode response: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	token := strings.TrimSpace(result.Value)
 	if token == "" {
@@ -326,13 +340,13 @@ func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2
 		"subject_token":        {oidcToken},
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, stsEndpoint, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.getStsURL(), strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("%w: create STS request: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := gcpWIFHTTPClient.Do(req)
+	resp, err := p.getHTTPClient().Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: STS request: %w", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -363,30 +377,28 @@ func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2
 func (p *Provider) impersonateServiceAccount(ctx context.Context, federatedToken *oauth2.Token) (string, time.Time, error) {
 	defer perf.Track(nil, "gcp_wif.impersonateServiceAccount")()
 
-	// Create IAM Credentials client with the federated token.
-	svc, err := iamcredentials.NewService(ctx,
-		option.WithTokenSource(oauth2.StaticTokenSource(federatedToken)),
-	)
+	factory := p.iamServiceFactory
+	if factory == nil {
+		factory = gcp.NewIAMCredentialsService
+	}
+	svc, err := factory(ctx, federatedToken.AccessToken)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("%w: create IAM credentials service: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	name := fmt.Sprintf("projects/-/serviceAccounts/%s", p.spec.ServiceAccountEmail)
-	req := &iamcredentials.GenerateAccessTokenRequest{
-		Scope: p.getScopes(),
-	}
-
-	resp, err := svc.Projects.ServiceAccounts.GenerateAccessToken(name, req).Context(ctx).Do()
+	accessToken, expiry, err := gcp.ImpersonateServiceAccount(
+		ctx,
+		svc,
+		p.spec.ServiceAccountEmail,
+		p.getScopes(),
+		nil,
+		"",
+	)
 	if err != nil {
-		return "", time.Time{}, fmt.Errorf("%w: generate access token: %w", errUtils.ErrAuthenticationFailed, err)
+		return "", time.Time{}, fmt.Errorf("%w: %w", errUtils.ErrAuthenticationFailed, err)
 	}
 
-	expiry, err := time.Parse(time.RFC3339, resp.ExpireTime)
-	if err != nil {
-		expiry = time.Now().Add(1 * time.Hour) // Default 1 hour.
-	}
-
-	return resp.AccessToken, expiry, nil
+	return accessToken, expiry, nil
 }
 
 func (p *Provider) getScopes() []string {
@@ -400,7 +412,9 @@ func (p *Provider) getScopes() []string {
 func (p *Provider) Environment() (map[string]string, error) {
 	env := make(map[string]string)
 	if p.spec != nil && p.spec.ProjectID != "" {
-		env["GOOGLE_CLOUD_PROJECT"] = p.spec.ProjectID
+		for key, value := range gcp.ProjectEnvVars(p.spec.ProjectID) {
+			env[key] = value
+		}
 	}
 	return env, nil
 }
@@ -419,9 +433,25 @@ func (p *Provider) PrepareEnvironment(ctx context.Context, environ map[string]st
 		result = make(map[string]string)
 	}
 	if p.spec != nil && p.spec.ProjectID != "" {
-		result["GOOGLE_CLOUD_PROJECT"] = p.spec.ProjectID
+		for key, value := range gcp.ProjectEnvVars(p.spec.ProjectID) {
+			result[key] = value
+		}
 	}
 	return result, nil
+}
+
+func (p *Provider) getHTTPClient() *http.Client {
+	if p.httpClient != nil {
+		return p.httpClient
+	}
+	return &http.Client{Timeout: TokenRequestTimeout * time.Second}
+}
+
+func (p *Provider) getStsURL() string {
+	if p.stsURL != "" {
+		return p.stsURL
+	}
+	return stsEndpoint
 }
 
 // Logout is a no-op for WIF provider.

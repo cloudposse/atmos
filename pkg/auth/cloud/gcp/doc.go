@@ -30,11 +30,11 @@
 // Usage:
 //
 //	// Complete setup for an identity
-//	err := gcp.Setup(ctx, atmosConfig, "my-realm", "my-provider", "my-identity", creds)
+//	err := gcp.Setup(ctx, "my-realm", "my-provider", "my-identity", creds)
 //
 //	// Or step by step:
-//	err := gcp.PrepareEnvironment(ctx, atmosConfig)
-//	paths, err := gcp.SetupFiles(ctx, atmosConfig, "my-realm", "my-provider", "my-identity", creds)
+//	err := gcp.PrepareEnvironment()
+//	paths, err := gcp.SetupFiles(ctx, "my-realm", "my-provider", "my-identity", creds)
 //	err = gcp.SetAuthContext(authContext, "my-realm", "my-provider", "my-identity", creds)
-//	err = gcp.SetEnvironmentVariables(ctx, atmosConfig, "my-realm", "my-provider", "my-identity")
+//	err = gcp.SetEnvironmentVariables(ctx, "my-realm", "my-provider", "my-identity")
 package gcp

@@ -7,10 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"golang.org/x/oauth2"
-	"google.golang.org/api/iamcredentials/v1"
-	"google.golang.org/api/option"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
 	"github.com/cloudposse/atmos/pkg/auth/types"
@@ -36,7 +32,7 @@ type Identity struct {
 	principal         *types.GCPServiceAccountIdentityPrincipal
 	provider          types.Provider
 	config            *schema.Identity
-	iamServiceFactory IAMCredentialsServiceFactory
+	iamServiceFactory gcp.IAMCredentialsServiceFactory
 }
 
 // New creates a new service account identity.
@@ -49,7 +45,7 @@ func New(principal *types.GCPServiceAccountIdentityPrincipal) (*Identity, error)
 	return &Identity{
 		principal:         principal,
 		realm:             "default",
-		iamServiceFactory: newIAMCredentialsService,
+		iamServiceFactory: gcp.NewIAMCredentialsService,
 	}, nil
 }
 
@@ -166,62 +162,27 @@ func (i *Identity) Authenticate(ctx context.Context, baseCreds types.ICredential
 	}, nil
 }
 
-// IAMCredentialsService provides access to IAM Credentials API token generation.
-type IAMCredentialsService interface {
-	GenerateAccessToken(ctx context.Context, name string, req *iamcredentials.GenerateAccessTokenRequest) (*iamcredentials.GenerateAccessTokenResponse, error)
-}
-
-// IAMCredentialsServiceFactory creates IAM credentials service instances for a token.
-type IAMCredentialsServiceFactory func(ctx context.Context, accessToken string) (IAMCredentialsService, error)
-
-type iamCredentialsService struct {
-	svc *iamcredentials.Service
-}
-
-func (s *iamCredentialsService) GenerateAccessToken(ctx context.Context, name string, req *iamcredentials.GenerateAccessTokenRequest) (*iamcredentials.GenerateAccessTokenResponse, error) {
-	return s.svc.Projects.ServiceAccounts.GenerateAccessToken(name, req).Context(ctx).Do()
-}
-
-func newIAMCredentialsService(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
-	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
-	svc, err := iamcredentials.NewService(ctx, option.WithTokenSource(ts))
-	if err != nil {
-		return nil, err
-	}
-	return &iamCredentialsService{svc: svc}, nil
-}
-
 // impersonateServiceAccount uses IAM Credentials API to generate an access token.
 func (i *Identity) impersonateServiceAccount(ctx context.Context, upstreamToken string) (string, time.Time, error) {
 	defer perf.Track(nil, "gcp_service_account.impersonateServiceAccount")()
 
 	factory := i.iamServiceFactory
 	if factory == nil {
-		factory = newIAMCredentialsService
+		factory = gcp.NewIAMCredentialsService
 	}
 	svc, err := factory(ctx, upstreamToken)
 	if err != nil {
 		return "", time.Time{}, fmt.Errorf("create IAM credentials service: %w", err)
 	}
 
-	name := fmt.Sprintf("projects/-/serviceAccounts/%s", i.principal.ServiceAccountEmail)
-	req := &iamcredentials.GenerateAccessTokenRequest{
-		Scope:     i.getScopes(),
-		Delegates: i.formatDelegates(),
-		Lifetime:  i.getLifetime(),
-	}
-
-	resp, err := svc.GenerateAccessToken(ctx, name, req)
-	if err != nil {
-		return "", time.Time{}, fmt.Errorf("generate access token: %w", err)
-	}
-
-	expiry, err := time.Parse(time.RFC3339, resp.ExpireTime)
-	if err != nil {
-		expiry = time.Now().Add(1 * time.Hour)
-	}
-
-	return resp.AccessToken, expiry, nil
+	return gcp.ImpersonateServiceAccount(
+		ctx,
+		svc,
+		i.principal.ServiceAccountEmail,
+		i.getScopes(),
+		i.formatDelegates(),
+		i.getLifetime(),
+	)
 }
 
 func (i *Identity) getScopes() []string {
@@ -273,10 +234,8 @@ func (i *Identity) Environment() (map[string]string, error) {
 	if projectID == "" {
 		projectID = extractProjectFromEmail(i.principal.ServiceAccountEmail)
 	}
-	if projectID != "" {
-		env["GOOGLE_CLOUD_PROJECT"] = projectID
-		env["GCLOUD_PROJECT"] = projectID
-		env["CLOUDSDK_CORE_PROJECT"] = projectID
+	for key, value := range gcp.ProjectEnvVars(projectID) {
+		env[key] = value
 	}
 	return env, nil
 }
@@ -300,12 +259,12 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 	// Load credentials from files to get the access token.
 	providerName, err := i.GetProviderName()
 	if err != nil {
-		return nil, fmt.Errorf("%w: resolve provider name: %v", errUtils.ErrInvalidIdentityConfig, err)
+		return nil, fmt.Errorf("%w: resolve provider name: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 	if providerName == "" {
 		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, i.realmOrDefault(), providerName, i.Name())
+	creds, err := gcp.LoadCredentialsFromFiles(ctx, i.realmOrDefault(), providerName, i.Name())
 	if err != nil {
 		joinedErr := errors.Join(errUtils.ErrAuthenticationFailed, err)
 		return nil, fmt.Errorf("load credentials: %w", joinedErr)
@@ -356,9 +315,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 		return fmt.Errorf("%w: expected GCP credentials", errUtils.ErrAuthenticationFailed)
 	}
 
-	// ConfigAndStacksInfo does not embed AtmosConfiguration; pass nil and rely on gcp.Setup behavior.
-	var atmosConfig *schema.AtmosConfiguration
-	if err := gcp.Setup(ctx, atmosConfig, i.realmOrDefault(), params.ProviderName, i.Name(), gcpCreds); err != nil {
+	if err := gcp.Setup(ctx, i.realmOrDefault(), params.ProviderName, i.Name(), gcpCreds); err != nil {
 		return err
 	}
 	if params.AuthContext != nil {
@@ -380,7 +337,7 @@ func (i *Identity) Logout(ctx context.Context) error {
 	if providerName == "" {
 		return fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	return gcp.Cleanup(ctx, nil, i.realmOrDefault(), providerName, i.Name())
+	return gcp.Cleanup(ctx, i.realmOrDefault(), providerName, i.Name())
 }
 
 // CredentialsExist checks if valid credentials exist for this identity.
@@ -394,7 +351,7 @@ func (i *Identity) CredentialsExist() (bool, error) {
 	if providerName == "" {
 		return false, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	return gcp.CredentialsExist(context.Background(), nil, i.realmOrDefault(), providerName, i.Name())
+	return gcp.CredentialsExist(context.Background(), i.realmOrDefault(), providerName, i.Name())
 }
 
 // LoadCredentials loads credentials from identity-managed storage.
@@ -408,7 +365,7 @@ func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, err
 	if providerName == "" {
 		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	creds, err := gcp.LoadCredentialsFromFiles(ctx, nil, i.realmOrDefault(), providerName, i.Name())
+	creds, err := gcp.LoadCredentialsFromFiles(ctx, i.realmOrDefault(), providerName, i.Name())
 	if err != nil {
 		return nil, fmt.Errorf("%w: load credentials: %w", errUtils.ErrAuthenticationFailed, err)
 	}

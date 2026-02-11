@@ -12,7 +12,7 @@ import (
 
 const (
 	authRealmEnvVar    = "ATMOS_AUTH_REALM"
-	realmHashByteCount = 8 // 16 hex chars
+	realmHashByteCount = 8 // 16 hex chars.
 )
 
 // setAuthRealm determines the auth realm and source for credential isolation.

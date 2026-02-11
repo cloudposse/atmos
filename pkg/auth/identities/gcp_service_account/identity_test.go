@@ -8,11 +8,12 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/api/iamcredentials/v1"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	gcpCloud "github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"google.golang.org/api/iamcredentials/v1"
 )
 
 func TestNew(t *testing.T) {
@@ -293,7 +294,7 @@ func TestImpersonateServiceAccount_Success(t *testing.T) {
 		},
 	}
 
-	id.iamServiceFactory = func(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
 		assert.Equal(t, "upstream-token", accessToken)
 		return mockSvc, nil
 	}
@@ -313,7 +314,7 @@ func TestImpersonateServiceAccount_FactoryError(t *testing.T) {
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
 		},
-		iamServiceFactory: func(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+		iamServiceFactory: func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
 			return nil, errors.New("factory error")
 		},
 	}
@@ -331,7 +332,7 @@ func TestImpersonateServiceAccount_ServiceError(t *testing.T) {
 	}
 
 	mockSvc := &mockIAMService{err: errors.New("svc error")}
-	id.iamServiceFactory = func(ctx context.Context, accessToken string) (IAMCredentialsService, error) {
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
 		return mockSvc, nil
 	}
 
@@ -413,4 +414,268 @@ func TestPrepareEnvironment_NoCredentials(t *testing.T) {
 	assert.Contains(t, err.Error(), "no valid credentials found")
 	assert.Contains(t, err.Error(), "test-identity-no-creds")
 	assert.Contains(t, err.Error(), "atmos auth login")
+}
+
+func TestSetRealm(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	id.SetRealm("custom-realm")
+	assert.Equal(t, "custom-realm", id.realm)
+}
+
+func TestRealmOrDefault(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	// Empty realm returns "default".
+	id.realm = ""
+	assert.Equal(t, "default", id.realmOrDefault())
+
+	id.realm = "custom"
+	assert.Equal(t, "custom", id.realmOrDefault())
+}
+
+func TestPaths(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	paths, err := id.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths)
+}
+
+func TestAuthenticate_Success(t *testing.T) {
+	principal := &types.GCPServiceAccountIdentityPrincipal{
+		ServiceAccountEmail: "sa@my-project.iam.gserviceaccount.com",
+		Scopes:              []string{"scope1"},
+		Lifetime:            "1800s",
+	}
+	id, err := New(principal)
+	require.NoError(t, err)
+
+	expiry := time.Now().Add(30 * time.Minute).UTC()
+	mockSvc := &mockIAMService{
+		resp: &iamcredentials.GenerateAccessTokenResponse{
+			AccessToken: "impersonated-token",
+			ExpireTime:  expiry.Format(time.RFC3339),
+		},
+	}
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
+		return mockSvc, nil
+	}
+
+	baseCreds := &types.GCPCredentials{
+		AccessToken: "upstream-token",
+		TokenExpiry: time.Now().Add(time.Hour),
+	}
+	result, err := id.Authenticate(context.Background(), baseCreds)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	gcpCreds, ok := result.(*types.GCPCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "impersonated-token", gcpCreds.AccessToken)
+	assert.Equal(t, "sa@my-project.iam.gserviceaccount.com", gcpCreds.ServiceAccountEmail)
+	assert.Equal(t, "my-project", gcpCreds.ProjectID)
+}
+
+func TestAuthenticate_ExplicitProjectID(t *testing.T) {
+	principal := &types.GCPServiceAccountIdentityPrincipal{
+		ServiceAccountEmail: "sa@other-project.iam.gserviceaccount.com",
+		ProjectID:           "explicit-project",
+	}
+	id, err := New(principal)
+	require.NoError(t, err)
+
+	mockSvc := &mockIAMService{
+		resp: &iamcredentials.GenerateAccessTokenResponse{
+			AccessToken: "token",
+			ExpireTime:  time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
+		return mockSvc, nil
+	}
+
+	baseCreds := &types.GCPCredentials{AccessToken: "upstream"}
+	result, err := id.Authenticate(context.Background(), baseCreds)
+	require.NoError(t, err)
+
+	gcpCreds := result.(*types.GCPCredentials)
+	assert.Equal(t, "explicit-project", gcpCreds.ProjectID)
+}
+
+func TestPostAuthenticate_NilParams(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	err := id.PostAuthenticate(context.Background(), nil)
+	assert.NoError(t, err)
+}
+
+func TestPostAuthenticate_NilCredentials(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{})
+	assert.NoError(t, err)
+}
+
+func TestPostAuthenticate_WrongCredentialType(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		Credentials: &mockNonGCPCreds{},
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "expected GCP credentials")
+}
+
+func TestPostAuthenticate_Success(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	id := &Identity{
+		name:  "test-sa",
+		realm: "test-realm",
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+
+	creds := &types.GCPCredentials{
+		AccessToken: "test-token",
+		TokenExpiry: time.Now().Add(time.Hour),
+		ProjectID:   "test-project",
+	}
+	authCtx := &schema.AuthContext{}
+	err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		Credentials:  creds,
+		ProviderName: "gcp-adc",
+		AuthContext:   authCtx,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, authCtx.GCP)
+	assert.Equal(t, "test-project", authCtx.GCP.ProjectID)
+}
+
+func TestLogout_NoProvider(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	err := id.Logout(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "provider name is required")
+}
+
+func TestLogout_Success(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	id := &Identity{
+		name:  "test-sa",
+		realm: "test-realm",
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+		config: &schema.Identity{
+			Via: &schema.IdentityVia{
+				Provider: "gcp-adc",
+			},
+		},
+	}
+	err := id.Logout(context.Background())
+	assert.NoError(t, err)
+}
+
+func TestCredentialsExist_NoProvider(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	exists, err := id.CredentialsExist()
+	require.Error(t, err)
+	assert.False(t, exists)
+}
+
+func TestCredentialsExist_NoCreds(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	id := &Identity{
+		name:  "cred-check-identity",
+		realm: "test-realm",
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+		config: &schema.Identity{
+			Via: &schema.IdentityVia{
+				Provider: "gcp-adc",
+			},
+		},
+	}
+	exists, err := id.CredentialsExist()
+	require.NoError(t, err)
+	assert.False(t, exists)
+}
+
+func TestLoadCredentials_NoProvider(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	creds, err := id.LoadCredentials(context.Background())
+	require.Error(t, err)
+	assert.Nil(t, creds)
+}
+
+func TestLoadCredentials_NoCreds(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	id := &Identity{
+		name:  "load-test-identity",
+		realm: "test-realm",
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+		config: &schema.Identity{
+			Via: &schema.IdentityVia{
+				Provider: "gcp-adc",
+			},
+		},
+	}
+	creds, err := id.LoadCredentials(context.Background())
+	require.Error(t, err)
+	assert.Nil(t, creds)
+	assert.ErrorIs(t, err, errUtils.ErrNoCredentialsFound)
+}
+
+func TestPrepareEnvironment_NoProviderName(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	_, err := id.PrepareEnvironment(context.Background(), nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "provider name is required")
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/cloud/gcp"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -118,26 +119,23 @@ func (i *Identity) Environment() (map[string]string, error) {
 
 	env := make(map[string]string)
 
-	if i.principal.ProjectID != "" {
-		env["GOOGLE_CLOUD_PROJECT"] = i.principal.ProjectID
-		env["GCLOUD_PROJECT"] = i.principal.ProjectID
-		env["CLOUDSDK_CORE_PROJECT"] = i.principal.ProjectID
+	for key, value := range gcp.ProjectEnvVars(i.principal.ProjectID) {
+		env[key] = value
 	}
 
-	if i.principal.Region != "" {
-		env["GOOGLE_CLOUD_REGION"] = i.principal.Region
-		env["CLOUDSDK_COMPUTE_REGION"] = i.principal.Region
+	for key, value := range gcp.RegionEnvVars(i.principal.Region) {
+		env[key] = value
 	}
 
-	if i.principal.Zone != "" {
-		env["GOOGLE_CLOUD_ZONE"] = i.principal.Zone
-		env["CLOUDSDK_COMPUTE_ZONE"] = i.principal.Zone
+	for key, value := range gcp.ZoneEnvVars(i.principal.Zone) {
+		env[key] = value
 	}
 
 	// Location is a legacy field that maps to zone if zone is not set.
 	if i.principal.Location != "" && i.principal.Zone == "" {
-		env["GOOGLE_CLOUD_ZONE"] = i.principal.Location
-		env["CLOUDSDK_COMPUTE_ZONE"] = i.principal.Location
+		for key, value := range gcp.ZoneEnvVars(i.principal.Location) {
+			env[key] = value
+		}
 	}
 
 	return env, nil
@@ -158,7 +156,7 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 	}
 	for k, v := range env {
 		if err := os.Setenv(k, v); err != nil {
-			return fmt.Errorf("%w: set environment variable %s: %v", errUtils.ErrAuthenticationFailed, k, err)
+			return fmt.Errorf("%w: set environment variable %s: %w", errUtils.ErrAuthenticationFailed, k, err)
 		}
 	}
 

@@ -85,4 +85,8 @@ docs:
   generate:
     readme:
       output: ./README.md
+auth:
+  providers: {}
+  identities: {}
+  realm: <hash>
 

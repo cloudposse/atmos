@@ -43,7 +43,7 @@ func TestSetupFiles(t *testing.T) {
 		TokenExpiry: time.Now().Add(1 * time.Hour),
 		ProjectID:   "test-project",
 	}
-	paths, err := SetupFiles(ctx, nil, testRealm, providerName, "setup-identity", creds)
+	paths, err := SetupFiles(ctx, testRealm, providerName, "setup-identity", creds)
 	require.NoError(t, err)
 	require.Len(t, paths, 3)
 
@@ -63,7 +63,7 @@ func TestSetupFiles_NilCreds(t *testing.T) {
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	_, err := SetupFiles(ctx, nil, testRealm, providerName, "id", nil)
+	_, err := SetupFiles(ctx, testRealm, providerName, "id", nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "nil")
 }
@@ -113,7 +113,9 @@ func TestSetAuthContext_NilCreds(t *testing.T) {
 func TestSetup(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
-	writeADCClientCredentials(t)
+	// Use ATMOS_GCP_ADC_CLIENT_SECRET because Setup calls PrepareEnvironment
+	// which clears GOOGLE_APPLICATION_CREDENTIALS before SetupFiles reads it.
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
@@ -124,7 +126,7 @@ func TestSetup(t *testing.T) {
 		TokenExpiry: time.Now().Add(1 * time.Hour),
 		ProjectID:   "new-project",
 	}
-	err := Setup(ctx, nil, testRealm, providerName, "setup-full-identity", creds)
+	err := Setup(ctx, testRealm, providerName, "setup-full-identity", creds)
 	require.NoError(t, err)
 
 	assert.Equal(t, "new-project", os.Getenv("GOOGLE_CLOUD_PROJECT"))
@@ -157,7 +159,7 @@ func TestSetupFiles_NoADCSecretAndNoADCFile(t *testing.T) {
 		ProjectID:   "test-project",
 	}
 
-	_, err := SetupFiles(ctx, nil, testRealm, providerName, "setup-identity", creds)
+	_, err := SetupFiles(ctx, testRealm, providerName, "setup-identity", creds)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "application-default login")
 }
@@ -170,14 +172,14 @@ func TestCleanup(t *testing.T) {
 	providerName := "gcp-adc"
 
 	creds := &types.GCPCredentials{AccessToken: "x", TokenExpiry: time.Now().Add(1 * time.Hour)}
-	_, err := SetupFiles(ctx, nil, testRealm, providerName, "cleanup-identity", creds)
+	_, err := SetupFiles(ctx, testRealm, providerName, "cleanup-identity", creds)
 	require.NoError(t, err)
 
 	adcPath, _ := GetADCFilePath(testRealm, providerName, "cleanup-identity")
 	_, err = os.Stat(adcPath)
 	require.NoError(t, err)
 
-	err = Cleanup(ctx, nil, testRealm, providerName, "cleanup-identity")
+	err = Cleanup(ctx, testRealm, providerName, "cleanup-identity")
 	require.NoError(t, err)
 
 	_, err = os.Stat(adcPath)
@@ -190,7 +192,7 @@ func TestLoadCredentialsFromFiles(t *testing.T) {
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	content := &ADCFileContent{
+	content := &AuthorizedUserContent{
 		Type:        "authorized_user",
 		AccessToken: "ya29.loaded-token",
 		TokenExpiry: "2026-01-15T12:00:00Z",
@@ -198,7 +200,7 @@ func TestLoadCredentialsFromFiles(t *testing.T) {
 	_, err := WriteADCFile(testRealm, providerName, "load-id", content)
 	require.NoError(t, err)
 
-	creds, err := LoadCredentialsFromFiles(ctx, nil, testRealm, providerName, "load-id")
+	creds, err := LoadCredentialsFromFiles(ctx, testRealm, providerName, "load-id")
 	require.NoError(t, err)
 	require.NotNil(t, creds)
 	assert.Equal(t, "ya29.loaded-token", creds.AccessToken)
@@ -211,7 +213,7 @@ func TestLoadCredentialsFromFiles_NoFile(t *testing.T) {
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	creds, err := LoadCredentialsFromFiles(ctx, nil, testRealm, providerName, "nonexistent-load-id")
+	creds, err := LoadCredentialsFromFiles(ctx, testRealm, providerName, "nonexistent-load-id")
 	require.NoError(t, err)
 	assert.Nil(t, creds)
 }
@@ -222,18 +224,18 @@ func TestCredentialsExist(t *testing.T) {
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	exists, err := CredentialsExist(ctx, nil, testRealm, providerName, "nonexistent-exist-id")
+	exists, err := CredentialsExist(ctx, testRealm, providerName, "nonexistent-exist-id")
 	require.NoError(t, err)
 	assert.False(t, exists)
 
-	_, err = WriteADCFile(testRealm, providerName, "exist-id", &ADCFileContent{
+	_, err = WriteADCFile(testRealm, providerName, "exist-id", &AuthorizedUserContent{
 		Type:        "authorized_user",
 		AccessToken: "token",
 		TokenExpiry: time.Now().Add(1 * time.Hour).UTC().Format(time.RFC3339),
 	})
 	require.NoError(t, err)
 
-	exists, err = CredentialsExist(ctx, nil, testRealm, providerName, "exist-id")
+	exists, err = CredentialsExist(ctx, testRealm, providerName, "exist-id")
 	require.NoError(t, err)
 	assert.True(t, exists)
 }
@@ -244,14 +246,14 @@ func TestCredentialsExist_Expired(t *testing.T) {
 	ctx := context.Background()
 	providerName := "gcp-adc"
 
-	_, err := WriteADCFile(testRealm, providerName, "expired-id", &ADCFileContent{
+	_, err := WriteADCFile(testRealm, providerName, "expired-id", &AuthorizedUserContent{
 		Type:        "authorized_user",
 		AccessToken: "token",
 		TokenExpiry: "2020-01-01T00:00:00Z",
 	})
 	require.NoError(t, err)
 
-	exists, err := CredentialsExist(ctx, nil, testRealm, providerName, "expired-id")
+	exists, err := CredentialsExist(ctx, testRealm, providerName, "expired-id")
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
