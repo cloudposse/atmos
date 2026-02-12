@@ -33,7 +33,7 @@ func init() {
 	describeAffectedCmd.PersistentFlags().Bool("include-spacelift-admin-stacks", false, "Include the Spacelift admin stack of any stack that is affected by config changes")
 	describeAffectedCmd.PersistentFlags().Bool("include-dependents", false, "Include the dependent components and stacks")
 	describeAffectedCmd.PersistentFlags().Bool("include-settings", false, "Include the `settings` section for each affected component")
-	describeAffectedCmd.PersistentFlags().Bool("upload", false, "Upload the affected components and stacks to a specified HTTP endpoint")
+	describeAffectedCmd.PersistentFlags().Bool("upload", false, "Output minimal payload optimized for Atmos Pro upload (strips unused fields to reduce size)")
 	AddStackCompletion(describeAffectedCmd)
 	describeAffectedCmd.PersistentFlags().Bool("clone-target-ref", false, "Clone the target reference with which to compare the current branch\n"+
 		"If set to `false` (default), the target reference will be checked out instead\n"+

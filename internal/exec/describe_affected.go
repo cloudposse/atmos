@@ -284,6 +284,12 @@ func (d *describeAffectedExec) Execute(a *DescribeAffectedCmdArgs) error {
 		}
 	}
 
+	// Strip unnecessary fields when uploading to Atmos Pro to reduce payload size
+	// and stay within Inngest's 256KB limit
+	if a.Upload {
+		affected = StripAffectedForUpload(affected)
+	}
+
 	return d.view(a, repoUrl, headHead, baseHead, affected)
 }
 
