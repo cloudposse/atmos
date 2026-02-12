@@ -28,6 +28,7 @@ const (
 	PermissionRW  = 0o600
 
 	// Directory names.
+	awsDirName      = "aws" // AWS credential subdirectory name under the auth base directory.
 	awsCacheDirName = "aws" // AWS SDK cache directory name under XDG_CACHE_HOME.
 
 	// File locking timeouts.
@@ -564,9 +565,14 @@ func (m *AWSFileManager) GetRealm() string {
 }
 
 // GetDisplayPath returns a user-friendly display path (with ~ if under home directory).
-// Path always includes realm for credential isolation.
+// Path includes realm subdirectory when realm is configured.
 func (m *AWSFileManager) GetDisplayPath() string {
-	basePath := filepath.Join(m.baseDir, m.realm)
+	var basePath string
+	if m.realm != "" {
+		basePath = filepath.Join(m.baseDir, m.realm)
+	} else {
+		basePath = m.baseDir
+	}
 
 	homeDir, err := homedir.Dir()
 	if err == nil && homeDir != "" && strings.HasPrefix(basePath, homeDir) {
@@ -576,17 +582,17 @@ func (m *AWSFileManager) GetDisplayPath() string {
 }
 
 // GetCredentialsPath returns the path to the credentials file for the provider.
-// Path structure: {baseDir}/{realm}/aws/{provider}/credentials
-// Realm is always required for credential isolation.
+// Path structure: {baseDir}/{realm}/aws/{provider}/credentials (with realm)
+// or {baseDir}/aws/{provider}/credentials (without realm, backward-compatible).
 func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
-	return filepath.Join(m.baseDir, m.realm, "aws", providerName, "credentials")
+	return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "credentials")
 }
 
 // GetConfigPath returns the path to the config file for the provider.
-// Path structure: {baseDir}/{realm}/aws/{provider}/config
-// Realm is always required for credential isolation.
+// Path structure: {baseDir}/{realm}/aws/{provider}/config (with realm)
+// or {baseDir}/aws/{provider}/config (without realm, backward-compatible).
 func (m *AWSFileManager) GetConfigPath(providerName string) string {
-	return filepath.Join(m.baseDir, m.realm, "aws", providerName, "config")
+	return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "config")
 }
 
 // GetCachePath returns the AWS SDK cache directory path.
@@ -649,12 +655,12 @@ func (m *AWSFileManager) GetEnvironmentVariables(providerName, identityName stri
 }
 
 // Cleanup removes AWS files for the provider.
-// Path structure: {baseDir}/{realm}/aws/{provider}/
-// Realm is always required for credential isolation.
+// Path structure: {baseDir}/{realm}/aws/{provider}/ (with realm)
+// or {baseDir}/aws/{provider}/ (without realm).
 func (m *AWSFileManager) Cleanup(providerName string) error {
 	defer perf.Track(nil, "aws.files.Cleanup")()
 
-	providerDir := filepath.Join(m.baseDir, m.realm, "aws", providerName)
+	providerDir := filepath.Join(m.baseDir, m.realm, awsDirName, providerName)
 
 	log.Debug("Cleaning up AWS files directory",
 		"provider", providerName,
@@ -739,17 +745,25 @@ func (m *AWSFileManager) removeIniSection(filePath, sectionName string) error {
 
 // CleanupAll removes the realm-specific directory (all providers for this realm).
 // Only removes credentials for the current realm, preserving other realms.
-// Path structure: {baseDir}/{realm}/
+// Path structure: {baseDir}/{realm}/ (with realm) or {baseDir}/aws/ (without realm).
 func (m *AWSFileManager) CleanupAll() error {
 	defer perf.Track(nil, "aws.files.CleanupAll")()
 
-	realmDir := filepath.Join(m.baseDir, m.realm)
-	if err := os.RemoveAll(realmDir); err != nil {
+	var targetDir string
+	if m.realm != "" {
+		// With realm: remove the entire realm directory.
+		targetDir = filepath.Join(m.baseDir, m.realm)
+	} else {
+		// Without realm: remove only the aws subdirectory to avoid deleting the entire baseDir.
+		targetDir = filepath.Join(m.baseDir, awsDirName)
+	}
+
+	if err := os.RemoveAll(targetDir); err != nil {
 		// If directory doesn't exist, that's not an error (already cleaned up).
 		if os.IsNotExist(err) {
 			return nil
 		}
-		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, realmDir, "failed to cleanup all AWS files for realm")
+		errUtils.CheckErrorAndPrint(ErrCleanupAWSFiles, targetDir, "failed to cleanup all AWS files for realm")
 		return ErrCleanupAWSFiles
 	}
 
