@@ -190,6 +190,12 @@ func ProcessCommandLineArgs(
 	configAndStacksInfo.ClusterName = argsAndFlagsInfo.ClusterName
 	configAndStacksInfo.NeedsPathResolution = argsAndFlagsInfo.NeedsPathResolution
 
+	// Override identity from Cobra's parsed flags if available (manual parser can't see consumed flags).
+	// This matches the pattern used for --stack flag at line 209.
+	if identityFromFlag, err := cmd.Flags().GetString("identity"); err == nil && identityFromFlag != "" {
+		configAndStacksInfo.Identity = cfg.NormalizeIdentityValue(identityFromFlag)
+	}
+
 	// Fallback to ATMOS_IDENTITY environment variable if identity not set via flag.
 	// Use os.Getenv directly to avoid polluting viper config with temporary binding.
 	// Normalize the value to handle boolean false representations (false, 0, no, off).
