@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add an `--upload` flag to `atmos describe affected` that produces a minimal payload optimized for Atmos Pro. This addresses Inngest's 256KB payload limit by stripping fields that aren't used in downstream processing.
+Update the existing `--upload` flag on `atmos describe affected` to produce a minimal payload optimized for Atmos Pro. This addresses Inngest's 256KB payload limit by stripping fields that aren't used in downstream processing.
 
 ## Background
 
@@ -54,7 +54,7 @@ The larger fixture (328 KB) exceeds Inngest's 256KB limit. After stripping, it's
 
 ### Why CLI-Side?
 
-Erik Osterman's feedback: "We shouldn't be filtering this at the Atmos Pro level. That's the wrong level."
+Payload stripping belongs in the CLI, not at the Atmos Pro API level. The CLI is the right place to decide what data to send.
 
 Benefits of CLI-side stripping:
 - Unused data never leaves the customer's GitHub Action
@@ -65,7 +65,7 @@ Benefits of CLI-side stripping:
 
 ## Proposed Solution
 
-Add `--upload` flag to `atmos describe affected` that outputs only the fields required by Atmos Pro.
+Update the existing `--upload` flag on `atmos describe affected` to strip fields not required by Atmos Pro, producing a minimal payload optimized for upload.
 
 ### Usage
 
