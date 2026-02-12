@@ -6,6 +6,7 @@ tags: [feature]
 date: 2025-12-05
 release: v1.201.0
 ---
+import EmbedExample from '@site/src/components/EmbedExample'
 
 Running Atmos and managing cloud infrastructure inevitably means depending on dozens of tools—Terraform, kubectl, Helmfile, AWS CLI, and many more. But here's the problem every platform team faces: **"It works on my machine."**
 
@@ -106,33 +107,32 @@ Each instance is an independent container with its own state, perfect for runnin
 
 ## Configuration in atmos.yaml
 
-Define devcontainers alongside your stack and component configuration:
+Devcontainers are configured under the top-level `devcontainer` key in `atmos.yaml`. You can define them inline or import existing `devcontainer.json` files — both approaches are fully supported.
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        name: "Geodesic DevOps Toolbox"
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${PWD},target=/workspace"
-        forwardPorts:
-          - 8080
-        containerEnv:
-          ATMOS_BASE_PATH: "/workspace"
-        remoteUser: "root"
+devcontainer:
+  geodesic:
+    spec:
+      name: "Geodesic DevOps Toolbox"
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${PWD},target=/workspace"
+      forwardPorts:
+        - 8080
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+      remoteUser: "root"
 
-    terraform:
-      spec:
-        name: "Terraform Development"
-        image: "hashicorp/terraform:1.10"
-        workspaceFolder: "/workspace"
-        forwardPorts:
-          - 3000
-        mounts:
-          - "type=bind,source=${HOME}/.aws,target=/root/.aws,readonly"
+  terraform:
+    spec:
+      name: "Terraform Development"
+      image: "hashicorp/terraform:1.10"
+      workspaceFolder: "/workspace"
+      forwardPorts:
+        - 3000
+      mounts:
+        - "type=bind,source=${HOME}/.aws,target=/root/.aws,readonly"
 ```
 
 ### Use Existing devcontainer.json Files
@@ -141,24 +141,22 @@ Already have `.devcontainer/devcontainer.json` files? Atmos can use them directl
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec: !include .devcontainer/devcontainer.json
+devcontainer:
+  geodesic:
+    spec: !include .devcontainer/devcontainer.json
 ```
 
 Or include and override specific fields:
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        - !include .devcontainer/devcontainer.json
-        - containerEnv:
-            ATMOS_BASE_PATH: "/workspace"
-            CUSTOM_VAR: "value"
+devcontainer:
+  geodesic:
+    spec:
+      - !include .devcontainer/devcontainer.json
+      - containerEnv:
+          ATMOS_BASE_PATH: "/workspace"
+          CUSTOM_VAR: "value"
 ```
 
 This is the **real Atmos `!include` function**—the same powerful YAML processing you use everywhere else in Atmos. It supports deep merging, overrides, and all the template functions you know.
@@ -289,11 +287,10 @@ Works with both Docker and Podman, with automatic runtime detection. No vendor l
 
 ```yaml
 # Per-devcontainer runtime selection
-components:
-  devcontainer:
-    geodesic:
-      settings:
-        runtime: docker  # or podman, or omit for auto-detect
+devcontainer:
+  geodesic:
+    settings:
+      runtime: docker  # or podman, or omit for auto-detect
 ```
 
 ### 6. Identity Injection
@@ -446,18 +443,16 @@ atmos devcontainer shell
 **New way:**
 ```yaml
 # project-a/atmos.yaml
-components:
-  devcontainer:
-    toolbox:
-      spec:
-        image: "cloudposse/geodesic:4.3.0"  # Pinned toolbox version
+devcontainer:
+  toolbox:
+    spec:
+      image: "cloudposse/geodesic:4.3.0"  # Pinned toolbox version
 
 # project-b/atmos.yaml
-components:
-  devcontainer:
-    toolbox:
-      spec:
-        image: "cloudposse/geodesic:4.4.0"  # Different toolbox version
+devcontainer:
+  toolbox:
+    spec:
+      image: "cloudposse/geodesic:4.4.0"  # Different toolbox version
 ```
 
 Each project gets the right tool versions automatically.
@@ -473,27 +468,18 @@ brew upgrade atmos
 
 ### 2. Check Out the Examples
 
-```bash
-# Browse or clone the examples
-https://github.com/cloudposse/atmos/tree/main/examples/devcontainer
-
-# Or try it locally
-git clone https://github.com/cloudposse/atmos.git
-cd atmos/examples/devcontainer
-atmos devcontainer shell geodesic
-```
+<EmbedExample example="devcontainer" title="Devcontainer Example" />
 
 ### 3. Add to Your Project
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${PWD},target=/workspace"
+devcontainer:
+  geodesic:
+    spec:
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${PWD},target=/workspace"
 
 cli:
   aliases:
