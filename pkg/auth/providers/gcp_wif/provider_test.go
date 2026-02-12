@@ -65,6 +65,25 @@ func TestProvider_Name(t *testing.T) {
 	assert.Equal(t, "custom-wif", p.Name())
 }
 
+// TestSetRealm_RealmIndependent verifies that SetRealm stores the value
+// (for interface compliance) but WIF behavior is unaffected since it performs
+// stateless token exchange with no credential file I/O.
+func TestSetRealm_RealmIndependent(t *testing.T) {
+	p := &Provider{spec: &types.GCPWorkloadIdentityFederationProviderSpec{ProjectID: "proj"}}
+	p.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", p.realm)
+
+	// Paths is always nil regardless of realm.
+	paths, err := p.Paths()
+	require.NoError(t, err)
+	assert.Nil(t, paths)
+
+	// Environment is unaffected by realm.
+	env, err := p.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "proj", env["GOOGLE_CLOUD_PROJECT"])
+}
+
 func TestValidate(t *testing.T) {
 	tests := []struct {
 		name    string

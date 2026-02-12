@@ -59,7 +59,10 @@ func (p *Provider) SetName(name string) {
 	p.name = name
 }
 
-// SetRealm sets the credential isolation realm for this provider.
+// SetRealm satisfies the Provider interface. ADC is realm-independent because it
+// relies on external credential sources (GOOGLE_APPLICATION_CREDENTIALS, gcloud
+// config, or metadata server) and performs no credential file I/O. The value is
+// stored but not used in behavior.
 func (p *Provider) SetRealm(realm string) {
 	p.realm = realm
 }

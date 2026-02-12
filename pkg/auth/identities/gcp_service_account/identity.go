@@ -44,7 +44,6 @@ func New(principal *types.GCPServiceAccountIdentityPrincipal) (*Identity, error)
 	}
 	return &Identity{
 		principal:         principal,
-		realm:             "default",
 		iamServiceFactory: gcp.NewIAMCredentialsService,
 	}, nil
 }
@@ -55,15 +54,21 @@ func (i *Identity) SetName(name string) {
 }
 
 // SetRealm sets the credential realm for filesystem isolation.
+// Realm is mandatory for this identity type — all credential file operations
+// (setup, cleanup, load, environment) use realm to partition storage paths.
+// An empty realm will cause those operations to fail fast with ErrEmptyRealm.
 func (i *Identity) SetRealm(realm string) {
 	i.realm = realm
 }
 
-func (i *Identity) realmOrDefault() string {
+// requireRealm returns the realm or an error if it has not been set.
+// Realm is mandatory for all credential file operations to ensure isolation.
+func (i *Identity) requireRealm() (string, error) {
 	if i.realm == "" {
-		return "default"
+		return "", fmt.Errorf("%w: identity %q requires realm for credential file operations; ensure auth manager propagates realm before use",
+			errUtils.ErrEmptyRealm, i.Name())
 	}
-	return i.realm
+	return i.realm, nil
 }
 
 // Kind returns the identity kind.
@@ -256,6 +261,11 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 		out[k] = v
 	}
 
+	realm, err := i.requireRealm()
+	if err != nil {
+		return nil, err
+	}
+
 	// Load credentials from files to get the access token.
 	providerName, err := i.GetProviderName()
 	if err != nil {
@@ -264,7 +274,7 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 	if providerName == "" {
 		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	creds, err := gcp.LoadCredentialsFromFiles(ctx, i.realmOrDefault(), providerName, i.Name())
+	creds, err := gcp.LoadCredentialsFromFiles(ctx, realm, providerName, i.Name())
 	if err != nil {
 		joinedErr := errors.Join(errUtils.ErrAuthenticationFailed, err)
 		return nil, fmt.Errorf("load credentials: %w", joinedErr)
@@ -290,7 +300,7 @@ func (i *Identity) PrepareEnvironment(ctx context.Context, environ map[string]st
 
 	// Get all GCP environment variables using the centralized function.
 	// This ensures GOOGLE_OAUTH_ACCESS_TOKEN is set when we have an access token.
-	gcpEnv, err := gcp.GetEnvironmentVariablesForIdentity(i.realmOrDefault(), providerName, i.Name(), gcpAuth)
+	gcpEnv, err := gcp.GetEnvironmentVariablesForIdentity(realm, providerName, i.Name(), gcpAuth)
 	if err != nil {
 		return nil, fmt.Errorf("get GCP environment variables: %w", err)
 	}
@@ -315,11 +325,16 @@ func (i *Identity) PostAuthenticate(ctx context.Context, params *types.PostAuthe
 		return fmt.Errorf("%w: expected GCP credentials", errUtils.ErrAuthenticationFailed)
 	}
 
-	if err := gcp.Setup(ctx, i.realmOrDefault(), params.ProviderName, i.Name(), gcpCreds); err != nil {
+	realm, err := i.requireRealm()
+	if err != nil {
+		return err
+	}
+
+	if err := gcp.Setup(ctx, realm, params.ProviderName, i.Name(), gcpCreds); err != nil {
 		return err
 	}
 	if params.AuthContext != nil {
-		if err := gcp.SetAuthContext(params.AuthContext, i.realmOrDefault(), params.ProviderName, i.Name(), gcpCreds); err != nil {
+		if err := gcp.SetAuthContext(params.AuthContext, realm, params.ProviderName, i.Name(), gcpCreds); err != nil {
 			return err
 		}
 	}
@@ -337,7 +352,11 @@ func (i *Identity) Logout(ctx context.Context) error {
 	if providerName == "" {
 		return fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	return gcp.Cleanup(ctx, i.realmOrDefault(), providerName, i.Name())
+	realm, err := i.requireRealm()
+	if err != nil {
+		return err
+	}
+	return gcp.Cleanup(ctx, realm, providerName, i.Name())
 }
 
 // CredentialsExist checks if valid credentials exist for this identity.
@@ -351,7 +370,11 @@ func (i *Identity) CredentialsExist() (bool, error) {
 	if providerName == "" {
 		return false, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	return gcp.CredentialsExist(context.Background(), i.realmOrDefault(), providerName, i.Name())
+	realm, err := i.requireRealm()
+	if err != nil {
+		return false, err
+	}
+	return gcp.CredentialsExist(context.Background(), realm, providerName, i.Name())
 }
 
 // LoadCredentials loads credentials from identity-managed storage.
@@ -365,7 +388,11 @@ func (i *Identity) LoadCredentials(ctx context.Context) (types.ICredentials, err
 	if providerName == "" {
 		return nil, fmt.Errorf("%w: provider name is required for identity %q", errUtils.ErrInvalidIdentityConfig, i.Name())
 	}
-	creds, err := gcp.LoadCredentialsFromFiles(ctx, i.realmOrDefault(), providerName, i.Name())
+	realm, err := i.requireRealm()
+	if err != nil {
+		return nil, err
+	}
+	creds, err := gcp.LoadCredentialsFromFiles(ctx, realm, providerName, i.Name())
 	if err != nil {
 		return nil, fmt.Errorf("%w: load credentials: %w", errUtils.ErrAuthenticationFailed, err)
 	}

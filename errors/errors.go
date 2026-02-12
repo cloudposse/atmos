@@ -699,6 +699,7 @@ var (
 	// Realm errors.
 	ErrFailedToComputeRealm = errors.New("failed to compute realm")
 	ErrInvalidRealm         = errors.New("invalid realm value")
+	ErrEmptyRealm           = errors.New("realm is required for credential isolation but was not set")
 
 	// Logout errors.
 	ErrFailedGetConfigDir   = errors.New("failed to get config directory")

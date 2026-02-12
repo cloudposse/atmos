@@ -77,10 +77,6 @@ type manager struct {
 	realm realm.RealmInfo
 }
 
-type realmSetter interface {
-	SetRealm(realm string)
-}
-
 // resolveIdentityName performs case-insensitive identity name lookup.
 // If an exact match exists, it returns the exact match.
 // Otherwise, it looks up the lowercase version in the case map.
@@ -133,6 +129,12 @@ func NewAuthManager(
 		wrappedErr := fmt.Errorf("failed to compute auth realm: %w", err)
 		errUtils.CheckErrorAndPrint(wrappedErr, "Compute Auth Realm", "")
 		return nil, wrappedErr
+	}
+
+	// Realm must be non-empty — identity types that manage credential files
+	// depend on it for path isolation and will fail fast on empty realm.
+	if realmInfo.Value == "" {
+		return nil, fmt.Errorf("%w: realm computation produced an empty value", errUtils.ErrEmptyRealm)
 	}
 
 	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
@@ -555,17 +557,15 @@ func (m *manager) initializeProviders() error {
 }
 
 // initializeIdentities creates identity instances from configuration.
+// Note: realm is propagated to all identities centrally after this method
+// returns (in NewAuthManager), using the fully-computed m.realm.Value which
+// accounts for env var, config, and auto-hash precedence.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)
 		if err != nil {
 			errUtils.CheckErrorAndPrint(err, "Initialize Identities", "")
 			return fmt.Errorf("%w: identity=%s: %w", errUtils.ErrInvalidIdentityConfig, name, err)
-		}
-		if m.config.Realm != "" {
-			if setter, ok := identity.(realmSetter); ok {
-				setter.SetRealm(m.config.Realm)
-			}
 		}
 		m.identities[name] = identity
 	}

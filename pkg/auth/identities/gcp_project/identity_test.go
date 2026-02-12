@@ -44,6 +44,35 @@ func TestIdentity_Name(t *testing.T) {
 	assert.Equal(t, "custom-project", id.Name())
 }
 
+// TestSetRealm_RealmIndependent verifies that SetRealm stores the value
+// (for interface compliance) but project identity behavior is unaffected since
+// it only sets project/region/zone context via environment variables and
+// performs no credential file I/O.
+func TestSetRealm_RealmIndependent(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPProjectIdentityPrincipal{
+			ProjectID: "test-project",
+		},
+	}
+	id.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", id.realm)
+
+	// Paths is always empty regardless of realm.
+	paths, err := id.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths)
+
+	// Environment is unaffected by realm.
+	env, err := id.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "test-project", env["GOOGLE_CLOUD_PROJECT"])
+
+	// CredentialsExist always returns true (no credential files to check).
+	exists, err := id.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
 func TestGetProviderName(t *testing.T) {
 	id := &Identity{principal: &types.GCPProjectIdentityPrincipal{}}
 	name, err := id.GetProviderName()

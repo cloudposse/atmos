@@ -42,7 +42,10 @@ func (i *Identity) SetName(name string) {
 	i.name = name
 }
 
-// SetRealm sets the credential isolation realm for this identity.
+// SetRealm satisfies the Identity interface. The project identity is
+// realm-independent because it only sets GCP project/region/zone context via
+// environment variables — it performs no credential file I/O. The value is
+// stored but not used in behavior.
 func (i *Identity) SetRealm(realm string) {
 	i.realm = realm
 }

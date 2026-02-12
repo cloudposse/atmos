@@ -72,7 +72,10 @@ func (p *Provider) SetName(name string) {
 	p.name = name
 }
 
-// SetRealm sets the credential isolation realm for this provider.
+// SetRealm satisfies the Provider interface. WIF is realm-independent because it
+// performs stateless token exchange (OIDC → STS → optional impersonation) with no
+// credential file I/O. Credential files are managed by the downstream identity
+// (e.g., gcp/service-account). The value is stored but not used in behavior.
 func (p *Provider) SetRealm(realm string) {
 	p.realm = realm
 }
@@ -426,6 +429,8 @@ func (p *Provider) Environment() (map[string]string, error) {
 }
 
 // Paths returns file paths used by this provider.
+// WIF performs stateless token exchange and stores no credential files;
+// file management is delegated to the downstream identity.
 func (p *Provider) Paths() ([]types.Path, error) {
 	return nil, nil
 }

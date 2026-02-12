@@ -68,6 +68,25 @@ func TestProvider_SetName(t *testing.T) {
 	assert.Equal(t, "custom", p.name)
 }
 
+// TestSetRealm_RealmIndependent verifies that SetRealm stores the value
+// (for interface compliance) but ADC behavior is unaffected since it performs
+// no credential file I/O.
+func TestSetRealm_RealmIndependent(t *testing.T) {
+	p := &Provider{spec: &types.GCPADCProviderSpec{ProjectID: "proj"}}
+	p.SetRealm("test-realm")
+	assert.Equal(t, "test-realm", p.realm)
+
+	// Paths is always empty regardless of realm.
+	paths, err := p.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths)
+
+	// Environment is unaffected by realm.
+	env, err := p.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "proj", env["GOOGLE_CLOUD_PROJECT"])
+}
+
 func TestPreAuthenticate(t *testing.T) {
 	p := &Provider{spec: &types.GCPADCProviderSpec{}}
 	err := p.PreAuthenticate(nil)

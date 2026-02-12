@@ -395,7 +395,8 @@ func TestPrepareEnvironment_NoCredentials(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
 	id := &Identity{
-		name: "test-identity-no-creds",
+		name:  "test-identity-no-creds",
+		realm: "test-realm",
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
 		},
@@ -427,18 +428,29 @@ func TestSetRealm(t *testing.T) {
 	assert.Equal(t, "custom-realm", id.realm)
 }
 
-func TestRealmOrDefault(t *testing.T) {
+func TestRequireRealm_Empty(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
 		},
 	}
-	// Empty realm returns "default".
 	id.realm = ""
-	assert.Equal(t, "default", id.realmOrDefault())
+	realm, err := id.requireRealm()
+	require.Error(t, err)
+	assert.Empty(t, realm)
+	assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+}
 
+func TestRequireRealm_Set(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
 	id.realm = "custom"
-	assert.Equal(t, "custom", id.realmOrDefault())
+	realm, err := id.requireRealm()
+	require.NoError(t, err)
+	assert.Equal(t, "custom", realm)
 }
 
 func TestPaths(t *testing.T) {
@@ -675,8 +687,143 @@ func TestPrepareEnvironment_NoProviderName(t *testing.T) {
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
 		},
+		realm: "test-realm",
 	}
 	_, err := id.PrepareEnvironment(context.Background(), nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "provider name is required")
+}
+
+// TestEmptyRealm_RejectedByFileOperations verifies that all credential file
+// operations fail fast with ErrEmptyRealm when realm has not been set.
+func TestEmptyRealm_RejectedByFileOperations(t *testing.T) {
+	makeIdentity := func() *Identity {
+		return &Identity{
+			name: "test-sa",
+			// realm intentionally left empty.
+			principal: &types.GCPServiceAccountIdentityPrincipal{
+				ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+			},
+			config: &schema.Identity{
+				Via: &schema.IdentityVia{
+					Provider: "gcp-adc",
+				},
+			},
+		}
+	}
+
+	t.Run("PrepareEnvironment", func(t *testing.T) {
+		id := makeIdentity()
+		_, err := id.PrepareEnvironment(context.Background(), nil)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	})
+
+	t.Run("PostAuthenticate", func(t *testing.T) {
+		id := makeIdentity()
+		err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+			Credentials:  &types.GCPCredentials{AccessToken: "tok"},
+			ProviderName: "gcp-adc",
+		})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	})
+
+	t.Run("Logout", func(t *testing.T) {
+		id := makeIdentity()
+		err := id.Logout(context.Background())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	})
+
+	t.Run("CredentialsExist", func(t *testing.T) {
+		id := makeIdentity()
+		_, err := id.CredentialsExist()
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	})
+
+	t.Run("LoadCredentials", func(t *testing.T) {
+		id := makeIdentity()
+		_, err := id.LoadCredentials(context.Background())
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	})
+}
+
+// TestRealmIsolation_DistinctPaths verifies that two identities with the same
+// name and provider but different realms produce distinct credential file paths.
+func TestRealmIsolation_DistinctPaths(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	makeIdentityWithRealm := func(realmValue string) *Identity {
+		return &Identity{
+			name:  "shared-identity",
+			realm: realmValue,
+			principal: &types.GCPServiceAccountIdentityPrincipal{
+				ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+			},
+			config: &schema.Identity{
+				Via: &schema.IdentityVia{
+					Provider: "shared-provider",
+				},
+			},
+		}
+	}
+
+	id1 := makeIdentityWithRealm("realm-alpha")
+	id2 := makeIdentityWithRealm("realm-beta")
+
+	creds := &types.GCPCredentials{
+		AccessToken: "test-token",
+		TokenExpiry: time.Now().Add(time.Hour),
+		ProjectID:   "proj",
+	}
+
+	// Write credentials for both realms.
+	err := id1.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		Credentials:  creds,
+		ProviderName: "shared-provider",
+		AuthContext:   &schema.AuthContext{},
+	})
+	require.NoError(t, err)
+
+	err = id2.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		Credentials:  creds,
+		ProviderName: "shared-provider",
+		AuthContext:   &schema.AuthContext{},
+	})
+	require.NoError(t, err)
+
+	// Both must have credentials.
+	exists1, err := id1.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists1, "realm-alpha should have credentials")
+
+	exists2, err := id2.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists2, "realm-beta should have credentials")
+
+	// Cleaning up realm-alpha must not affect realm-beta.
+	err = id1.Logout(context.Background())
+	require.NoError(t, err)
+
+	exists1After, err := id1.CredentialsExist()
+	require.NoError(t, err)
+	assert.False(t, exists1After, "realm-alpha should have no credentials after logout")
+
+	exists2After, err := id2.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists2After, "realm-beta should still have credentials after realm-alpha logout")
+}
+
+// TestNewIdentity_NoDefaultRealm verifies that newly constructed identities
+// do not have a default realm — it must be explicitly set via SetRealm.
+func TestNewIdentity_NoDefaultRealm(t *testing.T) {
+	id, err := New(&types.GCPServiceAccountIdentityPrincipal{
+		ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+	})
+	require.NoError(t, err)
+	assert.Empty(t, id.realm, "new identity must not have a default realm")
 }
