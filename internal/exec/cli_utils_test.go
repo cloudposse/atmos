@@ -791,14 +791,13 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 	}
 }
 
-// TestProcessCommandLineArgs_IdentityFromCobraParsedFlags reproduces the bug where
-// --identity flag value is lost when Cobra pre-parses it before ProcessCommandLineArgs.
+// TestProcessCommandLineArgs_IdentityFromCobraParsedFlags verifies that the --identity
+// flag value is preserved when Cobra pre-parses it before ProcessCommandLineArgs.
 // This simulates the real terraform command flow:
-// 1. plan.go RunE receives full args including --identity
+// 1. Plan.go RunE receives full args including --identity.
 // 2. Cobra parses flags (identity is consumed and stored in cmd.Flags())
 // 3. RunE calls terraformRunWithOptions with only positional args (flags removed)
-// 4. ProcessCommandLineArgs receives stripped args, manual parser finds nothing
-// 5. Identity is lost (manual parser returns empty, Cobra flag storage ignored)
+// 4. ProcessCommandLineArgs receives stripped args, reads identity from Cobra flag storage.
 func TestProcessCommandLineArgs_IdentityFromCobraParsedFlags(t *testing.T) {
 	tests := []struct {
 		name           string
@@ -840,7 +839,7 @@ func TestProcessCommandLineArgs_IdentityFromCobraParsedFlags(t *testing.T) {
 
 			// Verify results.
 			require.NoError(t, err)
-			// BUG: This assertion will FAIL - identity is lost.
+			// Identity preserved from Cobra-parsed flags.
 			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should be preserved from Cobra's parsed flags")
 		})
 	}
