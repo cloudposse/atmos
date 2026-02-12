@@ -785,14 +785,14 @@ func TestRealmIsolation_DistinctPaths(t *testing.T) {
 	err := id1.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 		Credentials:  creds,
 		ProviderName: "shared-provider",
-		AuthContext:   &schema.AuthContext{},
+		AuthContext:  &schema.AuthContext{},
 	})
 	require.NoError(t, err)
 
 	err = id2.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 		Credentials:  creds,
 		ProviderName: "shared-provider",
-		AuthContext:   &schema.AuthContext{},
+		AuthContext:  &schema.AuthContext{},
 	})
 	require.NoError(t, err)
 
