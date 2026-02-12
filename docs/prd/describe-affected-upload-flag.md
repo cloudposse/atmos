@@ -63,6 +63,12 @@ Benefits of CLI-side stripping:
 - Single source of truth for what fields Atmos Pro needs
 - Customers can inspect the minimal payload locally
 
+### Why Strip After Construction?
+
+The `schema.Affected` struct is built incrementally across multiple files (`describe_affected_components.go`, `describe_affected_deleted.go`, `describe_affected_utils_2.go`). There is no single DTO constructor — fields like `Settings`, `SpaceliftStack`, `ComponentPath`, and `StackSlug` are added at different stages in `appendToAffected()` and its callers.
+
+An alternative approach would be to skip populating unused fields at the source, but that would require threading the `Upload` flag through `appendToAffected()` and all construction sites, adding conditionals throughout the already-spread-out build logic. Stripping at the end keeps the `--upload` concern isolated to a single function and avoids complicating the construction pipeline. The performance difference is negligible at these data sizes.
+
 ## Proposed Solution
 
 Update the existing `--upload` flag on `atmos describe affected` to strip fields not required by Atmos Pro, producing a minimal payload optimized for upload.
