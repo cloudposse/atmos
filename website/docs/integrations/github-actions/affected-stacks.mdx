@@ -28,6 +28,78 @@ Overall Process:
 
 Atmos checks component folders for changes first, marking all related components and stacks as affected when changes are detected. It then skips evaluating those stacks for differences, streamlining the process.
 
+### Deleted Component Detection
+
+The `describe affected` command also detects components and stacks that have been deleted in the current branch compared to the target branch. This enables CI/CD pipelines to trigger `terraform destroy` workflows for removed infrastructure.
+
+Deleted components are marked with:
+- `deleted: true` - Indicates the component was removed
+- `deletion_type: component` or `deletion_type: stack` - Specifies whether just the component or the entire stack was deleted
+
+You can filter the matrix output to separate apply and destroy workflows:
+
+```yaml
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      modified: ${{ steps.affected.outputs.modified }}
+      deleted: ${{ steps.affected.outputs.deleted }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect affected
+        id: affected
+        run: |
+          atmos describe affected --format json > affected.json
+
+          # Separate modified and deleted components
+          jq '[.[] | select(.deleted != true)]' affected.json > modified.json
+          jq '[.[] | select(.deleted == true)]' affected.json > deleted.json
+
+          echo "modified=$(cat modified.json | jq -c)" >> $GITHUB_OUTPUT
+          echo "deleted=$(cat deleted.json | jq -c)" >> $GITHUB_OUTPUT
+
+  apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.modified != '[]'
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
+
+  destroy:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.deleted != '[]'
+    environment: destroy-approval  # Requires manual approval via GitHub Environment protection rules
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
+    steps:
+      # IMPORTANT: Check out the BASE branch (target branch), not HEAD.
+      # The deleted component's configuration only exists in BASE.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
+```
+
+:::warning Destroy Operations Require Approval
+The example above uses `environment: destroy-approval` to require manual approval before destroying resources.
+You must [configure the environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#environment-protection-rules)
+in your repository settings with required reviewers. The `--auto-approve` flag is used because approval
+happens at the GitHub Actions level, not at the Terraform prompt.
+
+**Important:** The destroy job must check out the **BASE branch** (target branch) rather than HEAD because
+`terraform destroy` needs access to the component's stack configuration, which only exists in BASE.
+:::
+
 ## Usage Example
 
 <RemoteFile source="https://raw.githubusercontent.com/cloudposse/docs/refs/heads/master/examples/legacy/snippets/.github/workflows/atmos-terraform-plan.yaml" />

@@ -106,7 +106,7 @@ func FindAllStackConfigsInPathsForStack(
 	}
 
 	if len(absolutePaths) == 0 {
-		return nil, nil, false, fmt.Errorf("no matches found for the provided stack '%s' in the paths %v", stack, includeStackPaths)
+		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths %v", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, false, nil

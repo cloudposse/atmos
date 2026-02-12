@@ -2,9 +2,12 @@ package terraform_backend
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // MD5 is required by S3 SSE-C protocol for key integrity verification.
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"sync"
 	"time"
@@ -24,6 +27,60 @@ import (
 
 // maxRetryCount defines the max attempts to read a state file from an S3 bucket.
 const maxRetryCount = 2
+
+const (
+	// sseCustomerKeyLength is the expected length of a base64-encoded 32-byte AES-256 key.
+	sseCustomerKeyLength = 44
+	// sseCustomerKeyAlgorithm is the encryption algorithm for SSE-C.
+	sseCustomerKeyAlgorithm = "AES256"
+)
+
+// sseCustomerKeyConfig holds a decoded SSE-C customer-provided encryption key.
+type sseCustomerKeyConfig struct {
+	key []byte
+}
+
+// getSSECustomerKeyMD5 returns the base64-encoded MD5 digest of the raw key,
+// as required by the S3 SSE-C protocol for key integrity verification.
+// This matches the OpenTofu implementation (client.go:599-602).
+func (c *sseCustomerKeyConfig) getSSECustomerKeyMD5() string {
+	sum := md5.Sum(c.key) //nolint:gosec // MD5 is required by S3 SSE-C protocol for key integrity verification.
+	return base64.StdEncoding.EncodeToString(sum[:])
+}
+
+// applyToGetObjectInput sets SSE-C headers on the given S3 GetObjectInput.
+func (c *sseCustomerKeyConfig) applyToGetObjectInput(input *s3.GetObjectInput) {
+	input.SSECustomerKey = aws.String(base64.StdEncoding.EncodeToString(c.key))
+	input.SSECustomerAlgorithm = aws.String(sseCustomerKeyAlgorithm)
+	input.SSECustomerKeyMD5 = aws.String(c.getSSECustomerKeyMD5())
+}
+
+// resolveSSECustomerKey reads the SSE-C customer key from the backend config
+// (`sse_customer_key` attribute) or the `AWS_SSE_CUSTOMER_KEY` environment variable.
+// Returns nil if no key is configured. Returns an error if the key is invalid.
+// This follows the same configuration conventions as OpenTofu (backend.go:701-737).
+func resolveSSECustomerKey(backend *map[string]any) (*sseCustomerKeyConfig, error) {
+	keyB64 := GetBackendAttribute(backend, "sse_customer_key")
+	if keyB64 == "" {
+		keyB64 = os.Getenv("AWS_SSE_CUSTOMER_KEY")
+	}
+	if keyB64 == "" {
+		return nil, nil
+	}
+
+	if len(keyB64) != sseCustomerKeyLength {
+		return nil, fmt.Errorf("%w: expected %d characters, got %d",
+			errUtils.ErrInvalidSSECustomerKey, sseCustomerKeyLength, len(keyB64))
+	}
+
+	decoded, err := base64.StdEncoding.DecodeString(keyB64)
+	if err != nil {
+		return nil, fmt.Errorf("%w: invalid base64 encoding: %v",
+			errUtils.ErrInvalidSSECustomerKey, err)
+	}
+
+	return &sseCustomerKeyConfig{key: decoded}, nil
+}
 
 // GetS3BackendAssumeRoleArn returns the s3 backend role ARN from the S3 backend config.
 // https://developer.hashicorp.com/terraform/language/backend/s3#assume-role-configuration
@@ -144,16 +201,27 @@ func ReadTerraformBackendS3Internal(
 
 	bucket := GetBackendAttribute(backend, "bucket")
 
+	// Resolve SSE-C customer-provided encryption key if configured.
+	sseConfig, err := resolveSSECustomerKey(backend)
+	if err != nil {
+		return nil, err
+	}
+
 	var lastErr error
 	for attempt := 0; attempt <= maxRetryCount; attempt++ {
 		// 30 sec timeout to read the state file from the S3 bucket.
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 
-		output, err := s3Client.GetObject(ctx, &s3.GetObjectInput{
+		getInput := &s3.GetObjectInput{
 			Bucket: aws.String(bucket),
 			Key:    aws.String(tfStateFilePath),
-		})
+		}
+		if sseConfig != nil {
+			sseConfig.applyToGetObjectInput(getInput)
+		}
+
+		output, err := s3Client.GetObject(ctx, getInput)
 		if err != nil {
 			// Check if the error is because the object doesn't exist.
 			// If the state file does not exist (the component in the stack has not been provisioned yet), return a `nil` result and no error.

@@ -217,3 +217,101 @@ workflows:
     steps:
       - command: echo "before --" -- "after --"
         type: shell
+
+  # Test cases for environment variable support
+  # These test the new env map feature at workflow and step levels
+
+  # Test workflow-level env vars
+  env-workflow-level:
+    description: |
+      Test workflow-level environment variables.
+    env:
+      MY_WORKFLOW_VAR: workflow-value
+    steps:
+      - command: env | grep MY_WORKFLOW_VAR
+        type: shell
+
+  # Test step-level env vars
+  env-step-level:
+    description: |
+      Test step-level environment variables.
+    steps:
+      - command: env | grep MY_STEP_VAR
+        type: shell
+        env:
+          MY_STEP_VAR: step-value
+
+  # Test env var precedence (step overrides workflow)
+  env-precedence:
+    description: |
+      Test that step env overrides workflow env.
+    env:
+      MY_VAR: workflow-value
+    steps:
+      - command: test "$MY_VAR" = "step-value"
+        type: shell
+        env:
+          MY_VAR: step-value
+
+  # Test env var merge (different keys from workflow and step)
+  env-merge:
+    description: |
+      Test that workflow and step env vars are merged.
+    env:
+      WORKFLOW_VAR: from-workflow
+    steps:
+      - command: |
+          test "$WORKFLOW_VAR" = "from-workflow" && \
+          test "$STEP_VAR" = "from-step"
+        type: shell
+        env:
+          STEP_VAR: from-step
+
+  # Test env vars with inheritance and override (the user's example)
+  env-inheritance-example:
+    description: |
+      Test the user's example: FOO inherited, BAZ overridden.
+      Expected output: bar - baz
+    env:
+      FOO: bar
+      BAZ: foo
+    steps:
+      - command: echo "$FOO - $BAZ"
+        type: shell
+        env:
+          BAZ: baz
+
+  # Test environment variable scoping
+  # Demonstrates that:
+  # - Workflow env applies to all steps
+  # - Step env only applies to that specific step
+  # - Step env does NOT persist to subsequent steps
+  # - Shell exports do NOT persist to subsequent steps (each step runs in isolation)
+  env-scoping:
+    description: |
+      Test environment variable scoping behavior.
+      Demonstrates that step-level env and shell exports are scoped to individual steps.
+    env:
+      FOO: workflow
+    steps:
+      # Step 1: Should see workflow-level FOO
+      - command: test "$FOO" = "workflow"
+        type: shell
+
+      # Step 2: Override FOO at step level
+      - command: test "$FOO" = "stepEnv"
+        type: shell
+        env:
+          FOO: stepEnv
+
+      # Step 3: Step env should NOT persist - back to workflow value
+      - command: test "$FOO" = "workflow"
+        type: shell
+
+      # Step 4: Export FOO in shell (this only affects the current step's process)
+      - command: export FOO=exported && test "$FOO" = "exported"
+        type: shell
+
+      # Step 5: Shell export should NOT persist - back to workflow value
+      - command: test "$FOO" = "workflow"
+        type: shell
