@@ -127,7 +127,7 @@ With `--upload`, each stack contains only:
 In `cmd/describe_affected.go`:
 
 ```go
-describeAffectedCmd.PersistentFlags().Bool("upload", false, 
+describeAffectedCmd.PersistentFlags().Bool("upload", false,
     "Output minimal payload optimized for Atmos Pro upload")
 ```
 
@@ -140,7 +140,7 @@ func stripForUpload(stack map[string]interface{}) map[string]interface{} {
         "stack":                 stack["stack"],
         "included_in_dependents": stack["included_in_dependents"],
     }
-    
+
     // Recursively strip dependents
     if dependents, ok := stack["dependents"].([]interface{}); ok {
         strippedDependents := make([]interface{}, len(dependents))
@@ -153,14 +153,14 @@ func stripForUpload(stack map[string]interface{}) map[string]interface{} {
     } else {
         result["dependents"] = []interface{}{}
     }
-    
+
     // Keep only settings.pro if present
     if settings, ok := stack["settings"].(map[string]interface{}); ok {
         if pro, ok := settings["pro"]; ok {
             result["settings"] = map[string]interface{}{"pro": pro}
         }
     }
-    
+
     return result
 }
 ```
@@ -231,7 +231,7 @@ The `atmos-affected-stacks` GitHub Action should be updated to use `--upload`:
 # Before
 - run: atmos describe affected --format json > affected.json
 
-# After  
+# After
 - run: atmos describe affected --upload --format json > affected.json
 ```
 
