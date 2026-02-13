@@ -4,8 +4,6 @@
 package realm
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"regexp"
@@ -25,14 +23,11 @@ const (
 	// SourceConfig indicates the realm was set via atmos.yaml configuration.
 	SourceConfig = "config"
 
-	// SourceAuto indicates the realm was automatically computed from the config path.
+	// SourceAuto indicates the realm was not explicitly configured (empty realm for backward compatibility).
 	SourceAuto = "auto"
 
 	// MaxLength is the maximum allowed length for a realm value.
 	MaxLength = 64
-
-	// hashLength is the number of characters to use from the SHA256 hash.
-	hashLength = 8
 )
 
 // RealmInfo contains the computed realm value and its source.
@@ -47,10 +42,14 @@ type RealmInfo struct {
 // GetRealm computes the authentication realm with the following precedence:
 //  1. ATMOS_AUTH_REALM environment variable (highest priority)
 //  2. configRealm from atmos.yaml auth.realm configuration
-//  3. SHA256 hash of cliConfigPath (first 8 characters) as automatic default
+//  3. Empty realm (no isolation) for backward compatibility
+//
+// Realm isolation is opt-in: credentials are stored without realm subdirectory
+// unless explicitly configured via ATMOS_AUTH_REALM env var or auth.realm config.
+// This preserves backward-compatible credential paths for CI/CD environments.
+// See: https://github.com/cloudposse/atmos/issues/2071
 //
 // Returns an error if an explicit realm value (env var or config) contains invalid characters.
-// Auto-generated realms from path hashes are always valid since they only contain hex characters.
 func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 	defer perf.Track(nil, "realm.GetRealm")()
 
@@ -76,19 +75,13 @@ func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 		}, nil
 	}
 
-	// Priority 3: Auto-generate from path hash.
-	autoRealm := computeHash(cliConfigPath)
+	// Priority 3: No realm configured - use empty realm for backward compatibility.
+	// Credential paths will be {baseDir}/aws/{provider}/credentials (no realm subdirectory).
+	// Users who want isolation should explicitly set auth.realm or ATMOS_AUTH_REALM.
 	return RealmInfo{
-		Value:  autoRealm,
+		Value:  "",
 		Source: SourceAuto,
 	}, nil
-}
-
-// computeHash generates an 8-character hex string from the SHA256 hash of the input.
-// If the input is empty, returns a hash of an empty string for consistency.
-func computeHash(input string) string {
-	hash := sha256.Sum256([]byte(input))
-	return hex.EncodeToString(hash[:])[:hashLength]
 }
 
 // validRealmPattern matches valid realm characters: lowercase alphanumeric, hyphen, underscore.
@@ -168,10 +161,7 @@ func (r RealmInfo) SourceDescription(cliConfigPath string) string {
 	case SourceConfig:
 		return "atmos.yaml (auth.realm)"
 	case SourceAuto:
-		if cliConfigPath != "" {
-			return fmt.Sprintf("auto-generated from %s", cliConfigPath)
-		}
-		return "auto-generated"
+		return "default (no realm isolation)"
 	default:
 		return r.Source
 	}

@@ -374,8 +374,7 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	}
 
 	// Get AWS file environment variables.
-	// Environment() is called before authentication, so we use empty realm for path resolution.
-	awsFileManager, err := awsCloud.NewAWSFileManager("", "")
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -419,8 +418,7 @@ func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	// PrepareEnvironment is called before authentication, so we use empty realm for path resolution.
-	awsFileManager, err := awsCloud.NewAWSFileManager("", "")
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -611,8 +609,7 @@ func (i *assumeRoleIdentity) CredentialsExist() (bool, error) {
 		return false, err
 	}
 
-	// CredentialsExist checks storage before authentication, so we use empty realm.
-	mgr, err := awsCloud.NewAWSFileManager("", "")
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
