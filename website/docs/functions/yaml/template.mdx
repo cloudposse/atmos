@@ -11,8 +11,8 @@ import Intro from '@site/src/components/Intro'
 
 <Intro>
     The `!template` Atmos YAML function is used to [handle the outputs containing maps or
-    lists](/functions/template/atmos.Component#handling-outputs-containing-maps-or-lists)
-    returned from the [`atmos.Component`](/functions/template/atmos.Component) template function.
+    lists](/functions/template/atmos-Component#handling-outputs-containing-maps-or-lists)
+    returned from the [`atmos.Component`](/functions/template/atmos-Component) template function.
 </Intro>
 
 ## Usage
@@ -27,7 +27,7 @@ var2: !template '{{ toJson (atmos.Component "component1" .stack).outputs.test_ma
 
 ## Why `!template` is needed?
 
-You can use the [`atmos.Component`](/functions/template/atmos.Component) template function to
+You can use the [`atmos.Component`](/functions/template/atmos-Component) template function to
 read outputs (remote state) from Terraform/OpenTofu components, and use those in your stack manifests.
 
 When the output of the `atmos.Component` function is a simple type (string or number), it's correctly handled in YAML,
@@ -103,7 +103,7 @@ var2: |
 __The `!template` Atmos YAML function to the rescue!__
 
 The `!template` YAML function receives the result
-from the [`atmos.Component`](/functions/template/atmos.Component)
+from the [`atmos.Component`](/functions/template/atmos-Component)
 and [`toJson`](https://masterminds.github.io/sprig/defaults.html) functions, and converts it into the complex
 types (list or map) by decoding the JSON strings.
 
@@ -134,7 +134,7 @@ of its input variables.
 :::tip
 
 When reading Atmos components outputs (remote state) in Atmos stack manifests, instead of using the three functions
-`atmos.Component`, `toJson` and `!template`, use the [`!terraform.output`](/functions/yaml/terraform.output)
+`atmos.Component`, `toJson` and `!template`, use the [`!terraform.output`](/functions/yaml/terraform-output)
 YAML function. It produces the same results, correctly handles the complex types (lists and maps), and has a much simpler syntax.
 
 :::

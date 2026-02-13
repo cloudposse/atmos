@@ -94,15 +94,15 @@ const config = {
                     // Redirects for template functions moved to /functions/template/
                     {
                         from: '/core-concepts/stacks/templates/functions/atmos.Component',
-                        to: '/functions/template/atmos.Component'
+                        to: '/functions/template/atmos-Component'
                     },
                     {
                         from: '/core-concepts/stacks/templates/functions/atmos.GomplateDatasource',
-                        to: '/functions/template/atmos.GomplateDatasource'
+                        to: '/functions/template/atmos-GomplateDatasource'
                     },
                     {
                         from: '/core-concepts/stacks/templates/functions/atmos.Store',
-                        to: '/functions/template/atmos.Store'
+                        to: '/functions/template/atmos-Store'
                     },
                     // Redirects for YAML functions moved to /functions/yaml/
                     {
@@ -119,7 +119,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/yaml-functions/include.raw',
-                        to: '/functions/yaml/include.raw'
+                        to: '/functions/yaml/include-raw'
                     },
                     {
                         from: '/core-concepts/stacks/yaml-functions/repo-root',
@@ -127,7 +127,7 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/yaml-functions/store.get',
-                        to: '/functions/yaml/store.get'
+                        to: '/functions/yaml/store-get'
                     },
                     {
                         from: '/core-concepts/stacks/yaml-functions/store',
@@ -139,11 +139,56 @@ const config = {
                     },
                     {
                         from: '/core-concepts/stacks/yaml-functions/terraform.output',
-                        to: '/functions/yaml/terraform.output'
+                        to: '/functions/yaml/terraform-output'
                     },
                     {
                         from: '/core-concepts/stacks/yaml-functions/terraform.state',
-                        to: '/functions/yaml/terraform.state'
+                        to: '/functions/yaml/terraform-state'
+                    },
+                    // Redirects for dot-to-dash URL migration
+                    {
+                        from: '/functions/yaml/terraform.output',
+                        to: '/functions/yaml/terraform-output'
+                    },
+                    {
+                        from: '/functions/yaml/terraform.state',
+                        to: '/functions/yaml/terraform-state'
+                    },
+                    {
+                        from: '/functions/yaml/store.get',
+                        to: '/functions/yaml/store-get'
+                    },
+                    {
+                        from: '/functions/yaml/include.raw',
+                        to: '/functions/yaml/include-raw'
+                    },
+                    {
+                        from: '/functions/yaml/aws.region',
+                        to: '/functions/yaml/aws-region'
+                    },
+                    {
+                        from: '/functions/yaml/aws.account-id',
+                        to: '/functions/yaml/aws-account-id'
+                    },
+                    {
+                        from: '/functions/yaml/aws.caller-identity-arn',
+                        to: '/functions/yaml/aws-caller-identity-arn'
+                    },
+                    {
+                        from: '/functions/yaml/aws.caller-identity-user-id',
+                        to: '/functions/yaml/aws-caller-identity-user-id'
+                    },
+                    {
+                        from: '/functions/template/atmos.Component',
+                        to: '/functions/template/atmos-Component'
+                    },
+                    {
+                        from: '/functions/template/atmos.GomplateDatasource',
+                        to: '/functions/template/atmos-GomplateDatasource'
+                    },
+                    {
+                        from: '/functions/template/atmos.Store',
+                        to: '/functions/template/atmos-Store'
                     },
                     // Redirect for the YAML functions index page
                     {
