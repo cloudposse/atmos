@@ -2,7 +2,7 @@
 
 **Status:** Production Ready (Core Features), Planned Enhancements (Advanced Features)
 **Version:** 1.1
-**Last Updated:** 2026-01-26
+**Last Updated:** 2026-02-14
 
 ---
 
@@ -76,57 +76,56 @@ Atmos LSP eliminates the need to leave your editor to validate configurations, l
 
 ### Dual-Component Design
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                   Atmos LSP System                           │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │           Atmos LSP Server                             │ │
-│  │         (pkg/lsp/server/)                              │ │
-│  ├────────────────────────────────────────────────────────┤ │
-│  │  Purpose: IDE integration for Atmos-specific features  │ │
-│  │                                                          │ │
-│  │  • Autocomplete (keywords, components, variables)      │ │
-│  │  • Hover documentation (markdown)                      │ │
-│  │  • Diagnostics (Atmos-specific validation)             │ │
-│  │  • Definition (🚧 planned)                              │ │
-│  │  • Symbols (🚧 planned)                                 │ │
-│  │                                                          │ │
-│  │  Transports: stdio, TCP, WebSocket                     │ │
-│  └────────────────────────────────────────────────────────┘ │
-│           ▲                                                  │
-│           │ JSON-RPC 2.0                                     │
-│           │                                                  │
-│       IDE/Editor                                             │
-│   (VS Code, Neovim,                                          │
-│    Zed, Cursor, etc.)                                        │
-│                                                              │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌────────────────────────────────────────────────────────┐ │
-│  │           Atmos LSP Client                             │ │
-│  │         (pkg/lsp/client/)                              │ │
-│  ├────────────────────────────────────────────────────────┤ │
-│  │  Purpose: Integrate external LSP servers with Atmos    │ │
-│  │                                                          │ │
-│  │  • Manager for multiple LSP servers                    │ │
-│  │  • File type routing (yaml, tf, json)                  │ │
-│  │  • Diagnostic aggregation                              │ │
-│  │  • AI tool integration                                 │ │
-│  │                                                          │ │
-│  │  Supported Servers:                                    │ │
-│  │  - yaml-language-server                                │ │
-│  │  - terraform-ls                                        │ │
-│  │  - Any LSP-compatible server                           │ │
-│  └────────────────────────────────────────────────────────┘ │
-│           ▲                                                  │
-│           │ stdio                                            │
-│           │                                                  │
-│   External LSP Servers                                       │
-│   (yaml-ls, terraform-ls)                                    │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+```text
+┌────────────────────────────────────────────────────────────────┐
+│                        Atmos LSP System                        │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                     Atmos LSP Server                     │  │
+│  │                    (pkg/lsp/server/)                     │  │
+│  ├──────────────────────────────────────────────────────────┤  │
+│  │  Purpose: IDE integration for Atmos-specific features    │  │
+│  │                                                          │  │
+│  │  • Autocomplete (keywords, components, variables)        │  │
+│  │  • Hover documentation (markdown)                        │  │
+│  │  • Diagnostics (Atmos-specific validation)               │  │
+│  │  • Definition (planned)                                  │  │
+│  │  • Symbols (planned)                                     │  │
+│  │                                                          │  │
+│  │  Transports: stdio, TCP, WebSocket                       │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│           ▲                                                    │
+│           │ JSON-RPC 2.0                                       │
+│           │                                                    │
+│       IDE/Editor                                               │
+│   (VS Code, Neovim, Zed, Cursor, etc.)                         │
+│                                                                │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                     Atmos LSP Client                     │  │
+│  │                    (pkg/lsp/client/)                     │  │
+│  ├──────────────────────────────────────────────────────────┤  │
+│  │  Purpose: Integrate external LSP servers with Atmos      │  │
+│  │                                                          │  │
+│  │  • Manager for multiple LSP servers                      │  │
+│  │  • File type routing (yaml, tf, json)                    │  │
+│  │  • Diagnostic aggregation                                │  │
+│  │  • AI tool integration                                   │  │
+│  │                                                          │  │
+│  │  Supported Servers:                                      │  │
+│  │  - yaml-language-server                                  │  │
+│  │  - terraform-ls                                          │  │
+│  │  - Any LSP-compatible server                             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│           ▲                                                    │
+│           │ stdio                                              │
+│           │                                                    │
+│   External LSP Servers                                         │
+│   (yaml-ls, terraform-ls)                                      │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ### Component Responsibilities
@@ -151,7 +150,7 @@ Atmos LSP eliminates the need to leave your editor to validate configurations, l
 
 ## Package Structure
 
-```
+```text
 pkg/lsp/
 ├── server/                    # LSP Server (IDE → Atmos)
 │   ├── server.go              # Server initialization, transport setup
@@ -517,7 +516,7 @@ type Diagnostic struct {
 **Output Formats:**
 
 1. **Full Format** - Detailed human-readable
-   ```
+   ```text
    ERRORS (2):
    1. Line 15, Col 5: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
       Source: yaml-language-server
@@ -531,14 +530,14 @@ type Diagnostic struct {
    ```
 
 2. **Compact Format** - One line per issue
-   ```
+   ```text
    vpc.yaml:15:5: error: Unknown property 'vpc_ciddr' (yaml-ls)
    vpc.yaml:23:3: error: Invalid CIDR block format (yaml-ls)
    vpc.yaml:30:7: warning: Property 'availability_zones' is deprecated (yaml-ls)
    ```
 
 3. **AI-Optimized Format** - Structured for AI consumption
-   ```
+   ```text
    Found 3 issue(s) in /stacks/prod/vpc.yaml:
 
    ERRORS (2):
@@ -579,7 +578,7 @@ if formatter.HasErrors() {
 - **Notification** - Server → Client without response
 
 **Example Message Flow:**
-```
+```text
 → Request: initialize
 ← Response: ServerCapabilities
 → Notification: initialized
@@ -626,7 +625,7 @@ file_path (required): string
 ```
 
 **AI Usage Example:**
-```
+```text
 User: Validate stacks/prod/vpc.yaml
 
 AI: *Uses validate_file_lsp tool with file_path="stacks/prod/vpc.yaml"*
@@ -710,7 +709,7 @@ components:
 - Quick navigation within file
 
 **Use Case:**
-```
+```text
 Outline View:
 ├── imports (3)
 │   ├── catalog/vpc
@@ -938,7 +937,7 @@ settings:
 **Note:** Per verification report recommendations, capabilities are only advertised when handlers are implemented to avoid IDE feature failures.
 
 **Message Format:**
-```
+```text
 Content-Length: 123\r\n
 \r\n
 {"jsonrpc":"2.0","id":1,"method":"initialize","params":{...}}
@@ -1381,25 +1380,3 @@ Atmos LSP builds upon the Language Server Protocol standard and benefits from:
 - **JSON-RPC 2.0** - Remote procedure call protocol
 - **YAML 1.2** - Configuration file format
 - **Terraform HCL** - HashiCorp Configuration Language
-
----
-
-**Document Status:** Complete and Accurate
-**Maintenance:** Living document, updated with each release
-**Contact:** https://github.com/cloudposse/atmos/issues
-
----
-
-## Version History
-
-- **v1.0** (2025-10-30) - Initial PRD
-  - Server: Completion, hover, validation (production ready)
-  - Client: Multi-server management (production ready)
-  - Documentation: Comprehensive guides for 13+ editors
-  - Known issues and limitations documented
-  - Future roadmap defined
-
-- **v1.1** (2026-01-26) - Documentation updates
-  - Fixed duplicate list numbering
-  - Updated cross-references to AI documentation
-  - Clarified feature status alignment with AI PRD

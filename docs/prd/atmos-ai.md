@@ -2,7 +2,7 @@
 
 **Status:** Production Ready
 **Version:** 2.1
-**Last Updated:** 2026-01-26
+**Last Updated:** 2026-02-14
 
 ---
 
@@ -73,42 +73,42 @@ Compared to industry-leading AI systems:
 
 ### System Components
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                      Atmos AI System                         │
-├─────────────────────────────────────────────────────────────┤
-│                                                              │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │         User Interfaces                               │  │
-│  ├──────────────────────────────────────────────────────┤  │
-│  │ • TUI (Bubble Tea)      • CLI (atmos ai ask/chat)    │  │
-│  │ • MCP Server (stdio/HTTP)                            │  │
-│  └────────────────────┬─────────────────────────────────┘  │
-│                       │                                      │
-│  ┌────────────────────▼─────────────────────────────────┐  │
-│  │         Core AI Engine                                │  │
-│  ├──────────────────────────────────────────────────────┤  │
-│  │ • Multi-Provider Factory                             │  │
-│  │ • Session Manager                                    │  │
-│  │ • Agent Registry                                     │  │
-│  │ • Tool Executor                                      │  │
-│  │ • Permission System                                  │  │
-│  └────────────────────┬─────────────────────────────────┘  │
-│                       │                                      │
-│  ┌────────────────────▼─────────────────────────────────┐  │
-│  │         Storage & Context                             │  │
-│  ├──────────────────────────────────────────────────────┤  │
-│  │ • SQLite (sessions)  • ATMOS.md (memory)             │  │
-│  │ • Permission Cache (.atmos/ai.settings.local.json)   │  │
-│  │ • Local Registry     • Cache                         │  │
-│  └──────────────────────────────────────────────────────┘  │
-│                                                              │
-└─────────────────────────────────────────────────────────────┘
+```text
+┌────────────────────────────────────────────────────────────────┐
+│                        Atmos AI System                         │
+├────────────────────────────────────────────────────────────────┤
+│                                                                │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │           User Interfaces                                │  │
+│  ├──────────────────────────────────────────────────────────┤  │
+│  │ • TUI (Bubble Tea)       • CLI (atmos ai ask/chat)      │  │
+│  │ • MCP Server (stdio/HTTP)                               │  │
+│  └─────────────────────────┬────────────────────────────────┘  │
+│                             │                                  │
+│  ┌─────────────────────────▼────────────────────────────────┐  │
+│  │           Core AI Engine                                 │  │
+│  ├──────────────────────────────────────────────────────────┤  │
+│  │ • Multi-Provider Factory                                │  │
+│  │ • Session Manager                                       │  │
+│  │ • Agent Registry                                        │  │
+│  │ • Tool Executor                                         │  │
+│  │ • Permission System                                     │  │
+│  └─────────────────────────┬────────────────────────────────┘  │
+│                             │                                  │
+│  ┌─────────────────────────▼────────────────────────────────┐  │
+│  │           Storage & Context                              │  │
+│  ├──────────────────────────────────────────────────────────┤  │
+│  │ • SQLite (sessions)    • ATMOS.md (memory)              │  │
+│  │ • Permission Cache (.atmos/ai.settings.local.json)      │  │
+│  │ • Local Registry       • Cache                          │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                                                                │
+└────────────────────────────────────────────────────────────────┘
 ```
 
 ### Package Structure
 
-```
+```text
 pkg/ai/
 ├── agent/                  # AI provider implementations
 │   ├── base/              # Shared provider utilities
@@ -567,7 +567,7 @@ Location: `.atmos/ai.settings.local.json` (git-ignored by default)
 
 **Permission Decision Flow:**
 
-```
+```text
 Tool Execution Requested
          │
          ▼
@@ -591,9 +591,9 @@ Tool Execution Requested
 └────────┬───────────┘
          │No
          ▼
-┌────────────────────┐
+┌──────────────────────┐
 │ Show prompt (a/y/n/d)│
-└────────┬───────────┘
+└────────┬─────────────┘
          │
          ▼
    User Decision
@@ -726,7 +726,7 @@ Specialized AI agents provide task-specific expertise and focused tool access, i
 #### User Experience
 
 **TUI Agent Selection:**
-```
+```text
 Press Ctrl+A to select agent:
 
 1. General (default)
@@ -777,7 +777,7 @@ type Agent struct {
 - Stored in `~/.atmos/agents/`
 
 **Agent Format:**
-```
+```text
 agent-repo/
 ├── .agent.yaml        # Agent metadata
 ├── prompt.md          # System prompt
@@ -885,7 +885,7 @@ atmos mcp start --transport http --port 3000
 
 #### Architecture
 
-```
+```text
 ┌────────────────────────────────────────────┐
 │         MCP Clients                        │
 │  (Claude Desktop, VSCode, etc.)            │
@@ -895,7 +895,7 @@ atmos mcp start --transport http --port 3000
                  │
 ┌────────────────▼───────────────────────────┐
 │         Atmos MCP Server                   │
-│         (atmos mcp start)                 │
+│         (atmos mcp start)                  │
 ├────────────────────────────────────────────┤
 │ • JSON-RPC 2.0 Protocol Handler            │
 │ • Transport Layer (stdio/HTTP)             │
@@ -1014,7 +1014,7 @@ settings:
 
 Allows AI to validate files using LSP servers:
 
-```
+```text
 User: "Validate stacks/prod/vpc.yaml"
 
 AI: *Uses validate_file_lsp tool*
@@ -1417,7 +1417,7 @@ settings:
 
 #### Keyboard Shortcuts
 
-```
+```text
 Ctrl+N      Create new session
 Ctrl+L      Switch session
 Ctrl+P      Switch provider
@@ -1432,17 +1432,17 @@ f           Filter by provider (in session list)
 
 #### Session List UI
 
-```
+```text
 ┌─ Atmos AI Sessions ────────────────────────────────────┐
 │ Filter: All | Claude | GPT | Gemini | Grok | Ollama    │
 ├────────────────────────────────────────────────────────┤
-│ [Claude] vpc-migration                                  │
+│ [Claude] vpc-migration                                 │
 │   Created: 2025-10-28  Messages: 45                    │
-│                                                          │
-│ [GPT] security-audit                                    │
+│                                                        │
+│ [GPT] security-audit                                   │
 │   Created: 2025-10-27  Messages: 23                    │
-│                                                          │
-│ [Ollama] cost-analysis                                  │
+│                                                        │
+│ [Ollama] cost-analysis                                 │
 │   Created: 2025-10-26  Messages: 12                    │
 ├────────────────────────────────────────────────────────┤
 │ Ctrl+N: New | Ctrl+L: Switch | d: Delete | r: Rename   │
@@ -1452,21 +1452,21 @@ f           Filter by provider (in session list)
 
 #### Chat Interface
 
-```
-┌─ Atmos AI Chat ────────────────────────────────────────┐
-│ Session: vpc-migration | Provider: Claude | Agent: General│
-├────────────────────────────────────────────────────────┤
-│                                                          │
-│ You: What's the VPC CIDR for prod?                      │
-│                                                          │
-│ AI: The production VPC uses 10.2.0.0/16...              │
-│                                                          │
-│ You: ▊                                                   │
-│                                                          │
-├────────────────────────────────────────────────────────┤
-│ Ctrl+P: Provider | Ctrl+A: Agent | Ctrl+N: New Session │
-│ Ctrl+C: Quit                                            │
-└────────────────────────────────────────────────────────┘
+```text
+┌─ Atmos AI Chat ────────────────────────────────────────────┐
+│ Session: vpc-migration | Provider: Claude | Agent: General │
+├────────────────────────────────────────────────────────────┤
+│                                                            │
+│ You: What's the VPC CIDR for prod?                         │
+│                                                            │
+│ AI: The production VPC uses 10.2.0.0/16...                 │
+│                                                            │
+│ You: ▊                                                     │
+│                                                            │
+├────────────────────────────────────────────────────────────┤
+│ Ctrl+P: Provider | Ctrl+A: Agent | Ctrl+N: New Session     │
+│ Ctrl+C: Quit                                               │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### CLI Commands
@@ -2174,13 +2174,6 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 - **Tool** - Executable operation the AI can perform (e.g., validate, describe)
 - **TUI** - Terminal User Interface built with Bubble Tea
 
-### Version History
-
-- **v1.0** (2025-10-20) - Initial release with sessions, tools, memory
-- **v1.5** (2025-10-25) - Added MCP integration, LSP support
-- **v2.0** (2025-10-30) - Agent system, enterprise providers, production ready
-- **v2.1** (2026-01-26) - Added AI example, documentation improvements, clarified marketplace status
-
 ### References
 
 - [Atmos Documentation](https://atmos.tools)
@@ -2190,9 +2183,3 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 - [OpenAI Documentation](https://platform.openai.com/docs)
 - [Google Gemini API](https://ai.google.dev/gemini-api/docs)
 - [Ollama](https://ollama.com)
-
----
-
-**Document Status:** Production Ready
-**Maintenance:** Living document, updated with each release
-**Contact:** https://github.com/cloudposse/atmos/issues

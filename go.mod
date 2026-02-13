@@ -29,7 +29,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.32.7
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.7
 	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.0
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.48.0
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.49.0
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.1
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.0
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.8
@@ -40,7 +40,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v0.21.1
 	github.com/charmbracelet/bubbletea v1.3.10
-	github.com/charmbracelet/colorprofile v0.4.1
+	github.com/charmbracelet/colorprofile v0.4.2
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/charmbracelet/huh v0.8.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
@@ -54,7 +54,7 @@ require (
 	github.com/fatih/color v1.18.0
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/getsentry/sentry-go v0.42.0
-	github.com/go-git/go-git/v5 v5.16.4
+	github.com/go-git/go-git/v5 v5.16.5
 	github.com/go-viper/mapstructure/v2 v2.5.0
 	github.com/gobwas/glob v0.2.3
 	github.com/goccy/go-yaml v1.19.2
