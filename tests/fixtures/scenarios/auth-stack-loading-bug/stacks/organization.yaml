@@ -1,0 +1,16 @@
+# Organization stack - sets "organization" as the default identity.
+vars:
+  stage: organization
+
+auth:
+  identities:
+    organization:
+      default: true
+
+components:
+  terraform:
+    network:
+      metadata:
+        component: network
+      vars:
+        name: org-network

@@ -124,6 +124,41 @@ func TestAssumeRoleIdentity_PrepareEnvironment(t *testing.T) {
 	assert.Equal(t, "us-west-2", result["AWS_DEFAULT_REGION"])
 }
 
+// TestAssumeRoleIdentity_PrepareEnvironment_RealmInCredentialPaths verifies that when a realm is set,
+// PrepareEnvironment() returns credential paths that include the realm subdirectory.
+func TestAssumeRoleIdentity_PrepareEnvironment_RealmInCredentialPaths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("HOME", tempHome)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tempHome, ".config"))
+
+	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+			"region":      "us-west-2",
+		},
+		Via: &schema.IdentityVia{Provider: "test-provider"},
+	})
+	require.NoError(t, err)
+
+	identity := id.(*assumeRoleIdentity)
+	identity.SetRealm("test-realm-xyz")
+	require.NoError(t, identity.Validate())
+
+	environ := map[string]string{}
+	result, err := identity.PrepareEnvironment(context.Background(), environ)
+	require.NoError(t, err)
+
+	// Credential paths must include the realm subdirectory.
+	credFile := filepath.ToSlash(result["AWS_SHARED_CREDENTIALS_FILE"])
+	configFile := filepath.ToSlash(result["AWS_CONFIG_FILE"])
+	assert.Contains(t, credFile, "test-realm-xyz/aws/test-provider/credentials",
+		"PrepareEnvironment() must include realm in credentials path")
+	assert.Contains(t, configFile, "test-realm-xyz/aws/test-provider/config",
+		"PrepareEnvironment() must include realm in config path")
+}
+
 func TestAssumeRoleIdentity_getRootProviderFromVia_CachedValue(t *testing.T) {
 	id, err := NewAssumeRoleIdentity("role", &schema.Identity{
 		Kind: "aws/assume-role",
@@ -219,6 +254,60 @@ func TestAssumeRoleIdentity_Environment(t *testing.T) {
 	assert.NotEmpty(t, env["AWS_CONFIG_FILE"])
 	assert.NotEmpty(t, env["AWS_PROFILE"])
 	assert.Equal(t, "role", env["AWS_PROFILE"])
+}
+
+// TestAssumeRoleIdentity_Environment_RealmInCredentialPaths verifies that when a realm is set,
+// Environment() returns credential paths that include the realm subdirectory.
+// This is the regression test for Issue #4 (ECR Docker push 403).
+func TestAssumeRoleIdentity_Environment_RealmInCredentialPaths(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tempHome)
+
+	i := &assumeRoleIdentity{
+		name:  "role",
+		realm: "abc123hash",
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	require.NoError(t, err)
+
+	// Credential paths must include the realm subdirectory.
+	credFile := env["AWS_SHARED_CREDENTIALS_FILE"]
+	configFile := env["AWS_CONFIG_FILE"]
+	assert.Contains(t, filepath.ToSlash(credFile), "abc123hash/aws/test-provider/credentials",
+		"Environment() must include realm in credentials path")
+	assert.Contains(t, filepath.ToSlash(configFile), "abc123hash/aws/test-provider/config",
+		"Environment() must include realm in config path")
+}
+
+// TestAssumeRoleIdentity_Environment_EmptyRealmBackwardCompatible verifies that when realm is empty,
+// credential paths do NOT include a realm subdirectory (backward-compatible behavior).
+func TestAssumeRoleIdentity_Environment_EmptyRealmBackwardCompatible(t *testing.T) {
+	tempHome := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tempHome)
+
+	i := &assumeRoleIdentity{
+		name:  "role",
+		realm: "", // Empty realm = backward-compatible.
+		config: &schema.Identity{
+			Kind:      "aws/assume-role",
+			Principal: map[string]any{"assume_role": "arn:aws:iam::123:role/x"},
+			Via:       &schema.IdentityVia{Provider: "test-provider"},
+		},
+	}
+	env, err := i.Environment()
+	require.NoError(t, err)
+
+	// Credential paths must NOT have a realm segment between baseDir and "aws".
+	credFile := filepath.ToSlash(env["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.Contains(t, credFile, "atmos/aws/test-provider/credentials",
+		"with empty realm, path should be {baseDir}/aws/{provider}/credentials")
+	assert.NotContains(t, credFile, "//aws/",
+		"with empty realm, path should not have double slashes")
 }
 
 func TestAssumeRoleIdentity_Environment_WithRegion(t *testing.T) {
@@ -785,6 +874,62 @@ func TestAssumeRoleIdentity_CredentialsExist(t *testing.T) {
 	}
 }
 
+// TestAssumeRoleIdentity_CredentialsExist_WithRealm verifies that CredentialsExist() uses the realm
+// when looking for credential files. This is the regression test for Issue #4.
+func TestAssumeRoleIdentity_CredentialsExist_WithRealm(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+	identity.(*assumeRoleIdentity).SetRealm("my-realm-hash")
+
+	// Create credentials at the realm-scoped path (where PostAuthenticate writes).
+	credPath := filepath.Join(tmpDir, "atmos", "my-realm-hash", "aws", "aws-sso", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(credPath), 0o700))
+	require.NoError(t, os.WriteFile(credPath, []byte("[test-role]\naws_access_key_id=AKIA123\n"), 0o600))
+
+	// CredentialsExist must find them at the realm-scoped path.
+	exists, err := identity.CredentialsExist()
+	assert.NoError(t, err)
+	assert.True(t, exists, "CredentialsExist() should find credentials at realm-scoped path")
+}
+
+// TestAssumeRoleIdentity_CredentialsExist_WithRealm_NotAtOldPath verifies that when realm is set,
+// credentials at the old (non-realm) path are NOT found.
+// This reproduces the exact Issue #4 bug where PostAuthenticate wrote to realm-scoped paths
+// but CredentialsExist looked at non-realm paths.
+func TestAssumeRoleIdentity_CredentialsExist_WithRealm_NotAtOldPath(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", tmpDir)
+
+	identity, err := NewAssumeRoleIdentity("test-role", &schema.Identity{
+		Kind: "aws/assume-role",
+		Via:  &schema.IdentityVia{Provider: "aws-sso"},
+		Principal: map[string]interface{}{
+			"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+		},
+	})
+	require.NoError(t, err)
+	identity.(*assumeRoleIdentity).SetRealm("my-realm-hash")
+
+	// Create credentials at the OLD (non-realm) path only.
+	oldCredPath := filepath.Join(tmpDir, "atmos", "aws", "aws-sso", "credentials")
+	require.NoError(t, os.MkdirAll(filepath.Dir(oldCredPath), 0o700))
+	require.NoError(t, os.WriteFile(oldCredPath, []byte("[test-role]\naws_access_key_id=AKIA123\n"), 0o600))
+
+	// CredentialsExist must NOT find them because realm is set and it should look at realm-scoped path.
+	exists, err := identity.CredentialsExist()
+	assert.NoError(t, err)
+	assert.False(t, exists, "CredentialsExist() must not find credentials at non-realm path when realm is set")
+}
+
 func TestAssumeRoleIdentity_LoadCredentials(t *testing.T) {
 	tmpDir := t.TempDir()
 
@@ -1211,7 +1356,7 @@ func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_IgnoresAmbientCredentials(
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "secretkey")
 	t.Setenv("AWS_SESSION_TOKEN", "sessiontoken")
 	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/tmp/fake-creds")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "fake-creds"))
 
 	identity := &assumeRoleIdentity{
 		name: "oidc-role",
@@ -1521,4 +1666,78 @@ func TestAssumeRoleIdentity_WebIdentityVsStandardAssumeRole_DifferentCredentialH
 	assert.NotContains(t, err.Error(), "base AWS credentials or OIDC credentials are required")
 	// Should not try to use ambient credentials.
 	assert.NotContains(t, err.Error(), "AMBIENT_KEY")
+}
+
+// TestAssumeRoleIdentity_PostAuthenticate_Environment_PathConsistency is the definitive regression test
+// for Issue #4 (ECR Docker push 403 after upgrading to v1.206.0).
+//
+// The bug: PostAuthenticate() wrote credentials to {baseDir}/{realm}/aws/{provider}/credentials
+// but Environment() returned AWS_SHARED_CREDENTIALS_FILE pointing to {baseDir}/aws/{provider}/credentials
+// (without realm). This caused the AWS SDK to not find the credentials file, falling back to the
+// runner's default IAM role which had limited permissions.
+//
+// This test verifies that the credential paths written by PostAuthenticate match the paths
+// returned by Environment() when a realm is set.
+func TestAssumeRoleIdentity_PostAuthenticate_Environment_PathConsistency(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+	t.Setenv("ATMOS_XDG_CONFIG_HOME", filepath.Join(tmpDir, ".config"))
+
+	testRealm := "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+
+	i := &assumeRoleIdentity{
+		name:  "plat-dev/terraform",
+		realm: testRealm,
+		config: &schema.Identity{
+			Kind: "aws/assume-role",
+			Principal: map[string]any{
+				"assume_role": "arn:aws:iam::123456789012:role/MyRole",
+			},
+			Via: &schema.IdentityVia{Provider: "github-oidc"},
+		},
+	}
+
+	// Simulate PostAuthenticate writing credentials.
+	creds := &types.AWSCredentials{
+		AccessKeyID:     "AKIAIOSFODNN7EXAMPLE",
+		SecretAccessKey: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		SessionToken:    "FwoGZXIvYXdzEBExample",
+		Region:          "us-west-1",
+	}
+
+	authContext := &schema.AuthContext{}
+	stack := &schema.ConfigAndStacksInfo{}
+	err := i.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		StackInfo:    stack,
+		ProviderName: "github-oidc",
+		IdentityName: "plat-dev/terraform",
+		Credentials:  creds,
+		Realm:        testRealm,
+	})
+	require.NoError(t, err)
+
+	// Now get the environment variables that would be exported (the read side).
+	env, err := i.Environment()
+	require.NoError(t, err)
+
+	// The credential file written by PostAuthenticate must exist at the path
+	// returned by Environment(). This is the exact bug that caused Issue #4.
+	credFile := env["AWS_SHARED_CREDENTIALS_FILE"]
+	require.NotEmpty(t, credFile, "AWS_SHARED_CREDENTIALS_FILE must be set")
+
+	_, err = os.Stat(credFile)
+	assert.NoError(t, err, "credential file at path returned by Environment() must exist (was written by PostAuthenticate)")
+
+	configFile := env["AWS_CONFIG_FILE"]
+	require.NotEmpty(t, configFile, "AWS_CONFIG_FILE must be set")
+
+	_, err = os.Stat(configFile)
+	assert.NoError(t, err, "config file at path returned by Environment() must exist (was written by PostAuthenticate)")
+
+	// Verify paths include the realm.
+	assert.Contains(t, filepath.ToSlash(credFile), testRealm+"/aws/github-oidc/credentials",
+		"credential path must include realm")
+	assert.Contains(t, filepath.ToSlash(configFile), testRealm+"/aws/github-oidc/config",
+		"config path must include realm")
 }
