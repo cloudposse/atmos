@@ -1356,7 +1356,7 @@ func TestAssumeRoleIdentity_assumeRoleWithWebIdentity_IgnoresAmbientCredentials(
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "secretkey")
 	t.Setenv("AWS_SESSION_TOKEN", "sessiontoken")
 	t.Setenv("AWS_PROFILE", "test-profile")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/tmp/fake-creds")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", filepath.Join(t.TempDir(), "fake-creds"))
 
 	identity := &assumeRoleIdentity{
 		name: "oidc-role",
