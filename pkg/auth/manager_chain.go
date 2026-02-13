@@ -246,10 +246,12 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 	// Each identity type knows how to load its own credentials from storage.
 	loadedCreds, loadErr := identity.LoadCredentials(ctx)
 	if loadErr != nil {
+		m.emitRealmMismatchWarning(identityName)
 		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
 	}
 
 	if loadedCreds == nil {
+		m.emitRealmMismatchWarning(identityName)
 		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
 	}
 

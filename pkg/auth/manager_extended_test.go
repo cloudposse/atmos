@@ -721,13 +721,13 @@ func TestManager_GetRealm(t *testing.T) {
 			},
 		},
 		{
-			name: "returns auto-generated realm",
+			name: "returns auto realm (empty for backward compatibility)",
 			realm: realm.RealmInfo{
-				Value:  "a1b2c3d4",
+				Value:  "",
 				Source: realm.SourceAuto,
 			},
 			expected: realm.RealmInfo{
-				Value:  "a1b2c3d4",
+				Value:  "",
 				Source: realm.SourceAuto,
 			},
 		},
