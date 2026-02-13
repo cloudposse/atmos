@@ -113,6 +113,7 @@ type ChatModel struct {
 	currentSkill         *skills.Skill         // Currently active skill
 	skillSelectMode      bool                  // Whether we're in skill selection mode
 	selectedSkillIdx     int                   // Selected skill index in skill selection UI
+	loadingText          string                // Text to display next to spinner
 }
 
 // ChatMessage represents a single message in the chat.
@@ -242,6 +243,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		}
 	}
 
+	model.loadingText = "AI is thinking..."
 	return model, nil
 }
 
@@ -499,6 +501,10 @@ func (m *ChatModel) handleMessage(msg tea.Msg, cmds *[]tea.Cmd) (bool, tea.Cmd) 
 	case providerSwitchedMsg:
 		m.handleProviderSwitched(msg)
 		return true, nil
+
+	case statusMsg:
+		m.loadingText = string(msg)
+		return true, nil
 	}
 
 	return false, nil
@@ -553,6 +559,7 @@ func (m *ChatModel) handleSendMessage(msg sendMessageMsg) (bool, tea.Cmd) {
 	m.historyBuffer = "" // Clear history buffer.
 	m.textarea.Reset()
 	m.isLoading = true
+	m.loadingText = "AI is thinking..."
 	m.isCancelling = false
 
 	// Create cancellable context for this AI request.
@@ -775,7 +782,11 @@ func (m *ChatModel) footerView() string {
 			usageStr = fmt.Sprintf(" · %s tokens", formatTokenCount(m.cumulativeUsage.TotalTokens))
 		}
 
-		content = fmt.Sprintf("%s AI is thinking...%s %s", m.spinner.View(), usageStr, cancelHint)
+		loadingText := m.loadingText
+		if loadingText == "" {
+			loadingText = "AI is thinking..."
+		}
+		content = fmt.Sprintf("%s %s%s %s", m.spinner.View(), loadingText, usageStr, cancelHint)
 	} else {
 		helpStyle := lipgloss.NewStyle().
 			Foreground(lipgloss.Color("240")).
@@ -1175,6 +1186,9 @@ type providerSwitchedMsg struct {
 	err            error
 }
 
+// statusMsg updates the loading status text.
+type statusMsg string
+
 func (m *ChatModel) sendMessage(content string) tea.Cmd {
 	return func() tea.Msg {
 		return sendMessageMsg(content)
@@ -1395,6 +1409,11 @@ func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.To
 
 	for i, toolCall := range toolCalls {
 		log.Debug(fmt.Sprintf("Executing tool: %s with params: %v", toolCall.Name, toolCall.Input))
+
+		// Update UI status if possible.
+		if m.program != nil {
+			m.program.Send(statusMsg(fmt.Sprintf("Executing tool: %s...", toolCall.Name)))
+		}
 
 		// Execute the tool.
 		result, err := m.executor.Execute(ctx, toolCall.Name, toolCall.Input)

@@ -146,7 +146,8 @@ func TestFormatFileContent(t *testing.T) {
 		{
 			name: "handles non-existent file",
 			setupFunc: func(t *testing.T) string {
-				return "/nonexistent/file.yaml"
+				// Use a path that is guaranteed not to exist in the temp directory.
+				return filepath.Join(t.TempDir(), "nonexistent", "file.yaml")
 			},
 			maxLines:    10,
 			expectError: true,
@@ -450,6 +451,14 @@ func TestSanitizeContext(t *testing.T) {
 			input: "test",
 			contains: []string{
 				"========================================",
+			},
+		},
+		{
+			name:  "redacts secrets",
+			input: "password: mysecretpassword\naws_access_key_id: AKIA1234567890123456",
+			contains: []string{
+				"password: \"***MASKED***\"",
+				"AKIA****************",
 			},
 		},
 	}

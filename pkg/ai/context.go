@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/spf13/viper"
@@ -223,17 +224,39 @@ func QuestionNeedsContext(question string) bool {
 	return false
 }
 
+// ReductSecrets replaces sensitive information with a masked value.
+func RedactSecrets(text string) string {
+	// Common secret patterns
+	patterns := map[string]string{
+		// AWS Access Key ID (AKIA...)
+		`\b(AKIA|ASIA)[A-Z0-9]{16}\b`: "$1****************",
+		// GitHub Personal Access Token (classic and fine-grained)
+		`\b(ghp|gho|ghu|ghs|ghr|github_pat)_[a-zA-Z0-9]{36,}\b`: "$1_****************",
+		// Private Key Header
+		`-----BEGIN [A-Z ]+ PRIVATE KEY-----`: "-----BEGIN *** PRIVATE KEY-----",
+		// Generic "password", "secret", "token" in YAML/JSON (key: value)
+		`(?i)(password|secret|token|api_key|access_key|secret_key)["']?\s*[:=]\s*["']?([^"'\s]+)["']?`: "$1: \"***MASKED***\"",
+	}
+
+	redacted := text
+	for pattern, replacement := range patterns {
+		re := regexp.MustCompile(pattern)
+		redacted = re.ReplaceAllString(redacted, replacement)
+	}
+	return redacted
+}
+
 // SanitizeContext removes sensitive information from context before sending to AI.
 func SanitizeContext(context string) string {
-	// This is a basic implementation - can be enhanced based on security requirements.
-	// For now, we'll add warnings about sensitive data.
-
 	var sanitized strings.Builder
 
 	sanitized.WriteString("⚠️  PRIVACY NOTE: The following configurations are being sent to the AI provider.\n")
-	sanitized.WriteString("Ensure no sensitive data (API keys, passwords, secrets) are included.\n")
+	sanitized.WriteString("Sensitive data (API keys, passwords, secrets) has been automatically redacted.\n")
 	sanitized.WriteString("========================================\n\n")
-	sanitized.WriteString(context)
+
+	// Apply redaction rules
+	safeContext := RedactSecrets(context)
+	sanitized.WriteString(safeContext)
 
 	return sanitized.String()
 }
