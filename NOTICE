@@ -139,7 +139,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/aws/aws-sdk-go-v2/service/bedrockruntime
     License: Apache-2.0
-    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.48.0/service/bedrockruntime/LICENSE.txt
+    URL: https://github.com/aws/aws-sdk-go-v2/blob/service/bedrockruntime/v1.49.0/service/bedrockruntime/LICENSE.txt
 
   - github.com/aws/aws-sdk-go-v2/service/ecr
     License: Apache-2.0
@@ -271,7 +271,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-git/go-git/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-git/blob/v5.16.4/LICENSE
+    URL: https://github.com/go-git/go-git/blob/v5.16.5/LICENSE
 
   - github.com/go-ini/ini
     License: Apache-2.0
@@ -1170,7 +1170,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/charmbracelet/colorprofile
     License: MIT
-    URL: https://github.com/charmbracelet/colorprofile/blob/v0.4.1/LICENSE
+    URL: https://github.com/charmbracelet/colorprofile/blob/v0.4.2/LICENSE
 
   - github.com/charmbracelet/glamour
     License: MIT
