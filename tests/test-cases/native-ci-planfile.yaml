@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "atmos terraform planfile list"
+    enabled: true
+    snapshot: false
+    description: "Verify 'atmos terraform planfile list' command exists and returns exit code 0."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "planfile"
+      - "list"
+    expect:
+      exit_code: 0
