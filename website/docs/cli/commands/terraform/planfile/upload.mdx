@@ -15,24 +15,20 @@ Upload a Terraform planfile to a storage backend for later use. This is useful i
 ## Usage
 
 ```shell
-atmos terraform planfile upload <planfile> [options]
+atmos terraform planfile upload [options]
 ```
-
-## Arguments
-
-<dl>
-  <dt>`<planfile>`</dt>
-  <dd>Path to the local planfile to upload (required).</dd>
-</dl>
 
 ## Flags
 
 <dl>
+  <dt>`--planfile`</dt>
+  <dd>Path to the local planfile to upload. Optional when `--component` and `--stack` are provided (the path is derived automatically).</dd>
+
   <dt>`--stack` / `-s`</dt>
-  <dd>Stack name. Used for generating the storage key.</dd>
+  <dd>Stack name. Used for generating the storage key and resolving the planfile path when `--planfile` is not specified.</dd>
 
   <dt>`--component`</dt>
-  <dd>Component name. Used for generating the storage key.</dd>
+  <dd>Component name. Used for generating the storage key and resolving the planfile path when `--planfile` is not specified.</dd>
 
   <dt>`--sha`</dt>
   <dd>Git commit SHA. Used for generating the storage key. Defaults to current HEAD.</dd>
@@ -46,10 +42,21 @@ atmos terraform planfile upload <planfile> [options]
 
 ## Examples
 
-### Upload with auto-generated key
+### Upload with auto-detected planfile path
+
+When `--planfile` is omitted, the path is derived from `--component` and `--stack`:
 
 ```shell
-atmos terraform planfile upload vpc.planfile \
+atmos terraform planfile upload \
+  --stack dev-us-east-1 \
+  --component vpc
+```
+
+### Upload with explicit planfile path
+
+```shell
+atmos terraform planfile upload \
+  --planfile vpc.planfile \
   --stack dev-us-east-1 \
   --component vpc
 ```
@@ -57,14 +64,16 @@ atmos terraform planfile upload vpc.planfile \
 ### Upload with explicit key
 
 ```shell
-atmos terraform planfile upload vpc.planfile \
+atmos terraform planfile upload \
+  --planfile vpc.planfile \
   --key "dev-us-east-1/vpc/abc123.tfplan"
 ```
 
 ### Upload to specific store
 
 ```shell
-atmos terraform planfile upload vpc.planfile \
+atmos terraform planfile upload \
+  --planfile vpc.planfile \
   --stack dev-us-east-1 \
   --component vpc \
   --store s3
@@ -75,7 +84,7 @@ atmos terraform planfile upload vpc.planfile \
 ```yaml
 - name: Upload planfile
   run: |
-    atmos terraform planfile upload ${{ steps.plan.outputs.planfile }} \
+    atmos terraform planfile upload \
       --stack ${{ matrix.stack }} \
       --component ${{ matrix.component }} \
       --sha ${{ github.sha }}

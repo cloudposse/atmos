@@ -16,6 +16,8 @@
 **/nohup.out
 **/kubeconfig.yaml
 **/*.planfile.json
+.atmos/planfiles
+.atmos/planfiles/**
 
 # Atmos binary (only in root directory)
 /atmos
@@ -104,6 +106,7 @@ tools/gomodcheck/.gomodcheck
 .claude-flow/
 .hive-mind/
 .claude/plans/
+.claude/settings.local.json
 
 performance-optimization/
 node_modules

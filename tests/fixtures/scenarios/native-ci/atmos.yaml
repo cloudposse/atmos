@@ -81,7 +81,7 @@ ci:
   # Job summary with plan/apply results
   # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts
   summary:
-    enabled: false
+    enabled: true
     # template: "custom-summary.md"
 
   # Commit status checks
