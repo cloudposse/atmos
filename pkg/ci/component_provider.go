@@ -82,6 +82,17 @@ type ComponentCIProvider interface {
 	GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string
 }
 
+// ComponentConfigurationResolver is an optional interface that ComponentCIProviders can implement
+// to resolve artifact paths (e.g., planfile paths) when not explicitly provided.
+// The executor checks for this interface before upload/download actions and uses it
+// to derive the path from component and stack information.
+type ComponentConfigurationResolver interface {
+	// ResolveComponentPlanfilePath derives the planfile path from component/stack information.
+	// It also populates resolved fields on info needed for metadata (e.g., ContextPrefix).
+	// Returns the resolved path, or empty string if resolution is not possible.
+	ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error)
+}
+
 // OutputResult contains parsed command output.
 type OutputResult struct {
 	// ExitCode is the command exit code.

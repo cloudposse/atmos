@@ -19,6 +19,8 @@
 .atmos/planfiles
 .atmos/planfiles/**
 
+**/.atmos
+
 # Atmos binary (only in root directory)
 /atmos
 

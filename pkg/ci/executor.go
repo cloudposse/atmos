@@ -373,8 +373,20 @@ func executeUploadAction(ctx *actionContext) error {
 }
 
 // validateUploadPrerequisites checks if upload can proceed and returns the path and key.
+// When the planfile path is not explicitly set, it attempts to resolve it via ComponentConfigurationResolver.
 func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
+	if path == "" {
+		if resolver, ok := ctx.Provider.(ComponentConfigurationResolver); ok {
+			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
+			if err != nil {
+				log.Debug("Failed to resolve artifact path for upload", "error", err)
+			} else {
+				ctx.Opts.Info.PlanFile = resolved
+				path = resolved
+			}
+		}
+	}
 	if path == "" {
 		log.Debug("No planfile path specified, skipping upload")
 		return "", "", true
@@ -434,8 +446,20 @@ func executeDownloadAction(ctx *actionContext) error {
 }
 
 // validateDownloadPrerequisites checks if download can proceed and returns the path and key.
+// When the planfile path is not explicitly set, it attempts to resolve it via ComponentConfigurationResolver.
 func validateDownloadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
+	if path == "" {
+		if resolver, ok := ctx.Provider.(ComponentConfigurationResolver); ok {
+			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
+			if err != nil {
+				log.Debug("Failed to resolve artifact path for download", "error", err)
+			} else {
+				ctx.Opts.Info.PlanFile = resolved
+				path = resolved
+			}
+		}
+	}
 	if path == "" {
 		log.Debug("No planfile path specified, skipping download")
 		return "", "", true
