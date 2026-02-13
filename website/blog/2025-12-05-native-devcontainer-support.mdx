@@ -106,33 +106,32 @@ Each instance is an independent container with its own state, perfect for runnin
 
 ## Configuration in atmos.yaml
 
-Define devcontainers alongside your stack and component configuration:
+Define devcontainers in your `atmos.yaml` configuration:
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        name: "Geodesic DevOps Toolbox"
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${PWD},target=/workspace"
-        forwardPorts:
-          - 8080
-        containerEnv:
-          ATMOS_BASE_PATH: "/workspace"
-        remoteUser: "root"
+devcontainer:
+  geodesic:
+    spec:
+      name: "Geodesic DevOps Toolbox"
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${PWD},target=/workspace"
+      forwardPorts:
+        - 8080
+      containerEnv:
+        ATMOS_BASE_PATH: "/workspace"
+      remoteUser: "root"
 
-    terraform:
-      spec:
-        name: "Terraform Development"
-        image: "hashicorp/terraform:1.10"
-        workspaceFolder: "/workspace"
-        forwardPorts:
-          - 3000
-        mounts:
-          - "type=bind,source=${HOME}/.aws,target=/root/.aws,readonly"
+  terraform:
+    spec:
+      name: "Terraform Development"
+      image: "hashicorp/terraform:1.10"
+      workspaceFolder: "/workspace"
+      forwardPorts:
+        - 3000
+      mounts:
+        - "type=bind,source=${HOME}/.aws,target=/root/.aws,readonly"
 ```
 
 ### Use Existing devcontainer.json Files
@@ -141,24 +140,22 @@ Already have `.devcontainer/devcontainer.json` files? Atmos can use them directl
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec: !include .devcontainer/devcontainer.json
+devcontainer:
+  geodesic:
+    spec: !include .devcontainer/devcontainer.json
 ```
 
 Or include and override specific fields:
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        - !include .devcontainer/devcontainer.json
-        - containerEnv:
-            ATMOS_BASE_PATH: "/workspace"
-            CUSTOM_VAR: "value"
+devcontainer:
+  geodesic:
+    spec:
+      - !include .devcontainer/devcontainer.json
+      - containerEnv:
+          ATMOS_BASE_PATH: "/workspace"
+          CUSTOM_VAR: "value"
 ```
 
 This is the **real Atmos `!include` function**—the same powerful YAML processing you use everywhere else in Atmos. It supports deep merging, overrides, and all the template functions you know.
@@ -289,11 +286,10 @@ Works with both Docker and Podman, with automatic runtime detection. No vendor l
 
 ```yaml
 # Per-devcontainer runtime selection
-components:
-  devcontainer:
-    geodesic:
-      settings:
-        runtime: docker  # or podman, or omit for auto-detect
+devcontainer:
+  geodesic:
+    settings:
+      runtime: docker  # or podman, or omit for auto-detect
 ```
 
 ### 6. Identity Injection
@@ -446,18 +442,16 @@ atmos devcontainer shell
 **New way:**
 ```yaml
 # project-a/atmos.yaml
-components:
-  devcontainer:
-    toolbox:
-      spec:
-        image: "cloudposse/geodesic:4.3.0"  # Pinned toolbox version
+devcontainer:
+  toolbox:
+    spec:
+      image: "cloudposse/geodesic:4.3.0"  # Pinned toolbox version
 
 # project-b/atmos.yaml
-components:
-  devcontainer:
-    toolbox:
-      spec:
-        image: "cloudposse/geodesic:4.4.0"  # Different toolbox version
+devcontainer:
+  toolbox:
+    spec:
+      image: "cloudposse/geodesic:4.4.0"  # Different toolbox version
 ```
 
 Each project gets the right tool versions automatically.
@@ -487,13 +481,12 @@ atmos devcontainer shell geodesic
 
 ```yaml
 # atmos.yaml
-components:
-  devcontainer:
-    geodesic:
-      spec:
-        image: "cloudposse/geodesic:latest"
-        workspaceFolder: "/workspace"
-        workspaceMount: "type=bind,source=${PWD},target=/workspace"
+devcontainer:
+  geodesic:
+    spec:
+      image: "cloudposse/geodesic:latest"
+      workspaceFolder: "/workspace"
+      workspaceMount: "type=bind,source=${PWD},target=/workspace"
 
 cli:
   aliases:
