@@ -262,6 +262,6 @@ The `atmos-affected-stacks` GitHub Action should be updated to use `--upload`:
 ## References
 
 - Linear: DEV-3940
-- Atmos Pro Apps PR: [cloudposse-corp/apps#683](https://github.com/cloudposse-corp/apps/pull/683)
+- Atmos Pro Apps PR: cloudposse-corp/apps#683 (private)
 - Inngest event payload limit: 256KB (free), 3MB (paid)
 - Vercel request body limit: 4.5MB
