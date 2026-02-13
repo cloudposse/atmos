@@ -244,3 +244,153 @@ func TestCleanupIdentityFiles_Nonexistent(t *testing.T) {
 	err := CleanupIdentityFiles(testRealm, "gcp-adc", "nonexistent-identity")
 	require.NoError(t, err)
 }
+
+func TestWriteAccessTokenFile_EmptyToken(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	_, err := WriteAccessTokenFile(testRealm, "gcp-adc", "empty-token-id", "", time.Time{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "access token cannot be empty")
+}
+
+func TestWriteAccessTokenFile_ZeroExpiry(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	path, err := WriteAccessTokenFile(testRealm, "gcp-adc", "zero-expiry-id", "ya29.token", time.Time{})
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "ya29.token")
+	// Zero expiry should not write a second line with timestamp.
+	assert.Equal(t, "ya29.token\n", content)
+}
+
+func TestWritePropertiesFile_SpecialCharacters(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	// Test that ini.v1 properly handles special characters in values.
+	path, err := WritePropertiesFile(testRealm, "gcp-adc", "special-id", "my-project-with-dashes_123", "us-east1")
+	require.NoError(t, err)
+
+	data, err := os.ReadFile(path)
+	require.NoError(t, err)
+	content := string(data)
+	assert.Contains(t, content, "my-project-with-dashes_123")
+	assert.Contains(t, content, "us-east1")
+}
+
+func TestWritePropertiesFile_FilePermissions(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("File permission tests not reliable on Windows")
+	}
+
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	path, err := WritePropertiesFile(testRealm, "gcp-adc", "perm-id", "proj", "region")
+	require.NoError(t, err)
+
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+}
+
+func TestWriteADCFile_Overwrite(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	// Write first version.
+	content1 := &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "first-token",
+	}
+	path1, err := WriteADCFile(testRealm, "gcp-adc", "overwrite-id", content1)
+	require.NoError(t, err)
+
+	// Write second version to same identity.
+	content2 := &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "second-token",
+	}
+	path2, err := WriteADCFile(testRealm, "gcp-adc", "overwrite-id", content2)
+	require.NoError(t, err)
+	assert.Equal(t, path1, path2)
+
+	// Verify second version is written.
+	data, err := os.ReadFile(path2)
+	require.NoError(t, err)
+	var parsed AuthorizedUserContent
+	require.NoError(t, json.Unmarshal(data, &parsed))
+	assert.Equal(t, "second-token", parsed.AccessToken)
+}
+
+func TestGetConfigDir_InvalidIdentity(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	_, err := GetConfigDir(testRealm, "gcp-adc", "..")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "must not be")
+}
+
+func TestGetConfigDir_EmptyIdentity(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	_, err := GetConfigDir(testRealm, "gcp-adc", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "identity name is required")
+}
+
+func TestGetAccessTokenFilePath(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	path, err := GetAccessTokenFilePath(testRealm, "gcp-adc", "token-path-id")
+	require.NoError(t, err)
+	expected := filepath.Join(tmp, "atmos", testRealm, GCPSubdir, "gcp-adc", ADCSubdir, "token-path-id", AccessTokenFileName)
+	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(path))
+}
+
+func TestCleanupIdentityFiles_InvalidIdentity(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	err := CleanupIdentityFiles(testRealm, "gcp-adc", "")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "identity name is required")
+}
+
+func TestValidatePathSegment(t *testing.T) {
+	tests := []struct {
+		name      string
+		label     string
+		value     string
+		wantErr   bool
+		errSubstr string
+	}{
+		{name: "valid segment", label: "test", value: "valid-name", wantErr: false},
+		{name: "empty value", label: "test", value: "", wantErr: true, errSubstr: "is required"},
+		{name: "dot segment", label: "test", value: ".", wantErr: true, errSubstr: "must not be"},
+		{name: "dotdot segment", label: "test", value: "..", wantErr: true, errSubstr: "must not be"},
+		{name: "forward slash", label: "test", value: "a/b", wantErr: true, errSubstr: "path separators"},
+		{name: "backslash", label: "test", value: "a\\b", wantErr: true, errSubstr: "path separators"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validatePathSegment(tt.label, tt.value)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errSubstr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}

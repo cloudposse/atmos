@@ -111,3 +111,106 @@ func TestSetEnvironmentVariables(t *testing.T) {
 		os.Unsetenv(key)
 	}
 }
+
+func TestSetEnvironmentVariablesFromStackInfo(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	ctx := context.Background()
+	providerName := "gcp-adc"
+
+	// Test with stack info containing GCP auth context.
+	stackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			GCP: &schema.GCPAuthContext{
+				ProjectID: "stack-project",
+				Region:    "eu-west1",
+			},
+		},
+	}
+
+	err := SetEnvironmentVariablesFromStackInfo(ctx, stackInfo, testRealm, providerName, "stack-identity")
+	require.NoError(t, err)
+
+	assert.Equal(t, "stack-project", os.Getenv("GOOGLE_CLOUD_PROJECT"))
+	assert.Equal(t, "eu-west1", os.Getenv("GOOGLE_CLOUD_REGION"))
+
+	// Clean up for other tests.
+	for _, key := range GCPEnvironmentVariables {
+		os.Unsetenv(key)
+	}
+}
+
+func TestSetEnvironmentVariablesFromStackInfo_NilStackInfo(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	ctx := context.Background()
+	providerName := "gcp-adc"
+
+	// nil stackInfo should not panic and should set file-based env vars.
+	err := SetEnvironmentVariablesFromStackInfo(ctx, nil, testRealm, providerName, "nil-stack-identity")
+	require.NoError(t, err)
+
+	// Should still set file-based env vars.
+	assert.NotEmpty(t, os.Getenv("GOOGLE_APPLICATION_CREDENTIALS"))
+	assert.NotEmpty(t, os.Getenv("CLOUDSDK_CONFIG"))
+
+	// Clean up for other tests.
+	for _, key := range GCPEnvironmentVariables {
+		os.Unsetenv(key)
+	}
+}
+
+func TestProjectEnvVars_Empty(t *testing.T) {
+	env := ProjectEnvVars("")
+	assert.Empty(t, env)
+}
+
+func TestProjectEnvVars_WithProject(t *testing.T) {
+	env := ProjectEnvVars("my-project")
+	assert.Equal(t, "my-project", env["GOOGLE_CLOUD_PROJECT"])
+	assert.Equal(t, "my-project", env["GCLOUD_PROJECT"])
+	assert.Equal(t, "my-project", env["CLOUDSDK_CORE_PROJECT"])
+}
+
+func TestZoneEnvVars_Empty(t *testing.T) {
+	env := ZoneEnvVars("")
+	assert.Empty(t, env)
+}
+
+func TestZoneEnvVars_WithZone(t *testing.T) {
+	env := ZoneEnvVars("us-central1-a")
+	assert.Equal(t, "us-central1-a", env["GOOGLE_CLOUD_ZONE"])
+	assert.Equal(t, "us-central1-a", env["CLOUDSDK_COMPUTE_ZONE"])
+}
+
+func TestGetEnvironmentVariablesForIdentity_WithAccessToken(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+
+	// When access token is present, GOOGLE_OAUTH_ACCESS_TOKEN should be set
+	// and GOOGLE_APPLICATION_CREDENTIALS should NOT be set.
+	gcpAuth := &schema.GCPAuthContext{
+		AccessToken: "ya29.access-token",
+		ProjectID:   "token-project",
+	}
+	env, err := GetEnvironmentVariablesForIdentity(testRealm, providerName, "token-id", gcpAuth)
+	require.NoError(t, err)
+	assert.Equal(t, "ya29.access-token", env["GOOGLE_OAUTH_ACCESS_TOKEN"])
+	_, hasADC := env["GOOGLE_APPLICATION_CREDENTIALS"]
+	assert.False(t, hasADC, "GOOGLE_APPLICATION_CREDENTIALS should not be set when access token is available")
+}
+
+func TestGetEnvironmentVariablesForIdentity_WithLocation(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	providerName := "gcp-adc"
+
+	gcpAuth := &schema.GCPAuthContext{
+		Location: "us-central1-a",
+	}
+	env, err := GetEnvironmentVariablesForIdentity(testRealm, providerName, "zone-id", gcpAuth)
+	require.NoError(t, err)
+	assert.Equal(t, "us-central1-a", env["GOOGLE_CLOUD_ZONE"])
+	assert.Equal(t, "us-central1-a", env["CLOUDSDK_COMPUTE_ZONE"])
+}

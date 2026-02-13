@@ -257,3 +257,111 @@ func TestCredentialsExist_Expired(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, exists)
 }
+
+func TestFormatTokenExpiry(t *testing.T) {
+	// Non-zero time should produce RFC3339 string.
+	expiry := time.Date(2026, 3, 15, 10, 30, 0, 0, time.UTC)
+	result := formatTokenExpiry(expiry)
+	assert.Equal(t, "2026-03-15T10:30:00Z", result)
+}
+
+func TestFormatTokenExpiry_ZeroTime(t *testing.T) {
+	// Zero time should return empty string.
+	result := formatTokenExpiry(time.Time{})
+	assert.Empty(t, result)
+}
+
+func TestAdcCredentialsPath_CLOUDSDK_CONFIG(t *testing.T) {
+	// Clear GOOGLE_APPLICATION_CREDENTIALS to test CLOUDSDK_CONFIG fallback.
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	configDir := t.TempDir()
+	t.Setenv("CLOUDSDK_CONFIG", configDir)
+
+	path := adcCredentialsPath()
+	expected := filepath.Join(configDir, "application_default_credentials.json")
+	assert.Equal(t, expected, path)
+}
+
+func TestAdcCredentialsPath_GOOGLE_APPLICATION_CREDENTIALS(t *testing.T) {
+	// GOOGLE_APPLICATION_CREDENTIALS takes precedence.
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/custom/path/creds.json")
+	t.Setenv("CLOUDSDK_CONFIG", "/should/not/be/used")
+
+	path := adcCredentialsPath()
+	assert.Equal(t, "/custom/path/creds.json", path)
+}
+
+func TestAdcCredentialsPath_DefaultHomePath(t *testing.T) {
+	// With neither env var set, should fall back to ~/.config/gcloud/...
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "")
+	t.Setenv("CLOUDSDK_CONFIG", "")
+
+	path := adcCredentialsPath()
+	assert.Contains(t, path, "application_default_credentials.json")
+	assert.Contains(t, path, "gcloud")
+}
+
+func TestLoadCredentialsFromFiles_EmptyAccessToken(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	ctx := context.Background()
+	providerName := "gcp-adc"
+
+	// Write ADC file with empty access token.
+	_, err := WriteADCFile(testRealm, providerName, "empty-token-id", &AuthorizedUserContent{
+		Type:        "authorized_user",
+		AccessToken: "",
+	})
+	require.NoError(t, err)
+
+	creds, err := LoadCredentialsFromFiles(ctx, testRealm, providerName, "empty-token-id")
+	require.NoError(t, err)
+	assert.Nil(t, creds)
+}
+
+func TestLoadCredentialsFromFiles_InvalidJSON(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	ctx := context.Background()
+	providerName := "gcp-adc"
+
+	// Write invalid JSON to ADC file path.
+	adcPath, err := GetADCFilePath(testRealm, providerName, "invalid-json-id")
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(adcPath, []byte("{invalid json"), 0o600))
+
+	_, err = LoadCredentialsFromFiles(ctx, testRealm, providerName, "invalid-json-id")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "parse ADC file")
+}
+
+func TestSetup_NilCreds(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	ctx := context.Background()
+
+	err := Setup(ctx, testRealm, "gcp-adc", "nil-creds-id", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "nil")
+}
+
+func TestResolveADCClientCredentials_WithEnvVar(t *testing.T) {
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "env-secret")
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_ID", "env-client-id")
+
+	clientID, clientSecret, err := resolveADCClientCredentials()
+	require.NoError(t, err)
+	assert.Equal(t, "env-client-id", clientID)
+	assert.Equal(t, "env-secret", clientSecret)
+}
+
+func TestResolveADCClientCredentials_SecretOnlyFromEnv(t *testing.T) {
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "env-secret-only")
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_ID", "")
+
+	clientID, clientSecret, err := resolveADCClientCredentials()
+	require.NoError(t, err)
+	// Should use default client ID when env var is empty.
+	assert.Equal(t, "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com", clientID)
+	assert.Equal(t, "env-secret-only", clientSecret)
+}
