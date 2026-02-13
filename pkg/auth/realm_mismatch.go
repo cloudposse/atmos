@@ -16,9 +16,6 @@ var realmMismatchWarningOnce sync.Once
 // awsDirName is the AWS credential subdirectory name.
 const awsDirNameForMismatch = "aws"
 
-// xdgDirPermissions is the permission mode for XDG config directories.
-const xdgDirPermissions = 0o700
-
 // emitRealmMismatchWarning checks if credentials exist under a different realm
 // and emits a warning if so. This helps users who changed auth.realm or
 // ATMOS_AUTH_REALM and don't understand why their cached credentials are gone.
@@ -62,8 +59,9 @@ func (m *manager) checkRealmMismatchKeyring(identityName, currentRealm string) s
 // different realm than the current one. Returns a description of the found realm,
 // or empty string if no mismatch detected.
 func checkRealmMismatchFiles(currentRealm string) string {
-	baseDir, err := xdg.GetXDGConfigDir("", xdgDirPermissions)
-	if err != nil {
+	// Use read-only lookup to avoid creating directories as a side effect.
+	baseDir := xdg.LookupXDGConfigDir("")
+	if _, err := os.Stat(baseDir); err != nil {
 		return ""
 	}
 

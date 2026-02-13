@@ -84,7 +84,7 @@ Modified `LoadStackAuthDefaults()` in `pkg/config/stack_auth_loader.go` to detec
 After upgrading to v1.206.0, GitHub Actions CI/CD pipeline fails with `403 Forbidden` when Docker buildx
 pushes to AWS ECR. The Docker login step succeeds, but the push fails:
 
-```
+```text
 ERROR: failed to push <account>.dkr.ecr.<region>.amazonaws.com/<org>/<repo>:sha-...
 unexpected status from HEAD request to .../v2/<org>/<repo>/blobs/sha256:...: 403 Forbidden
 ```
