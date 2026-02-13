@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strconv"
 
+	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -18,8 +19,11 @@ var defaultTemplates embed.FS
 // Provider implements ci.ComponentCIProvider for Terraform.
 type Provider struct{}
 
-// Ensure Provider implements ComponentCIProvider.
-var _ ci.ComponentCIProvider = (*Provider)(nil)
+// Ensure Provider implements ComponentCIProvider and ArtifactPathResolver.
+var (
+	_ ci.ComponentCIProvider            = (*Provider)(nil)
+	_ ci.ComponentConfigurationResolver = (*Provider)(nil)
+)
 
 func init() {
 	// Self-register on package import.
@@ -163,4 +167,31 @@ func (p *Provider) GetArtifactKey(info *schema.ConfigAndStacksInfo, command stri
 
 	// Default pattern: stack/component.tfplan
 	return fmt.Sprintf("%s/%s.tfplan", stack, component)
+}
+
+// ResolveArtifactPath derives the planfile path from component and stack information.
+// During `terraform plan`, the planfile path is generated internally but not propagated
+// to PostRunE hooks. This method reconstructs it so CI hooks can find and upload the planfile.
+// It also populates resolved fields on info needed for metadata (ContextPrefix, Component, etc.).
+func (p *Provider) ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(atmosConfig, "terraform.Provider.ResolveArtifactPath")()
+
+	if info.Stack == "" || info.ComponentFromArg == "" {
+		return "", fmt.Errorf("both stack and component are required to resolve planfile path")
+	}
+
+	resolvedInfo, err := e.ProcessStacks(atmosConfig, *info, true, false, false, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to resolve component path: %w", err)
+	}
+
+	// Carry over resolved fields needed by CI hooks for metadata.
+	info.ContextPrefix = resolvedInfo.ContextPrefix
+	info.Component = resolvedInfo.Component
+	info.FinalComponent = resolvedInfo.FinalComponent
+	info.ComponentFolderPrefix = resolvedInfo.ComponentFolderPrefix
+	info.ComponentFolderPrefixReplaced = resolvedInfo.ComponentFolderPrefixReplaced
+	info.ComponentSection = resolvedInfo.ComponentSection
+
+	return e.ConstructTerraformComponentPlanfilePath(atmosConfig, &resolvedInfo), nil
 }
