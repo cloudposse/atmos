@@ -85,6 +85,58 @@ func TestResolveUploadKey(t *testing.T) {
 	})
 }
 
+func TestResolveUploadPlanfilePath(t *testing.T) {
+	t.Run("explicit planfile path", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "/tmp/my-plan.tfplan",
+			Stack:        "dev",
+			Component:    "vpc",
+		}
+
+		path, err := resolveUploadPlanfilePath(opts, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/my-plan.tfplan", path)
+	})
+
+	t.Run("missing planfile and component", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "",
+			Stack:        "dev",
+			Component:    "",
+		}
+
+		_, err := resolveUploadPlanfilePath(opts, nil)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
+		assert.Contains(t, err.Error(), "--planfile is required")
+	})
+
+	t.Run("missing planfile and stack", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "",
+			Stack:        "",
+			Component:    "vpc",
+		}
+
+		_, err := resolveUploadPlanfilePath(opts, nil)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
+		assert.Contains(t, err.Error(), "--planfile is required")
+	})
+
+	t.Run("missing planfile stack and component", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "",
+			Stack:        "",
+			Component:    "",
+		}
+
+		_, err := resolveUploadPlanfilePath(opts, nil)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
+	})
+}
+
 func TestGetStoreOptions(t *testing.T) {
 	t.Run("explicit S3 store", func(t *testing.T) {
 		// Clear environment.
