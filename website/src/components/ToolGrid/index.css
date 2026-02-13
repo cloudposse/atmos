@@ -1,0 +1,31 @@
+.tool-grid {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.tool-grid--cols-1 {
+  grid-template-columns: 1fr;
+}
+
+.tool-grid--cols-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.tool-grid--cols-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* Responsive breakpoints */
+@media (max-width: 996px) {
+  .tool-grid--cols-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .tool-grid--cols-2,
+  .tool-grid--cols-3 {
+    grid-template-columns: 1fr;
+  }
+}
