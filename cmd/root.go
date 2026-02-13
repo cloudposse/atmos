@@ -54,8 +54,10 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/about"
 	_ "github.com/cloudposse/atmos/cmd/ai"
 	_ "github.com/cloudposse/atmos/cmd/ai/skill"
+	_ "github.com/cloudposse/atmos/cmd/aws"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/lsp"
@@ -69,7 +71,7 @@ import (
 	_ "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (

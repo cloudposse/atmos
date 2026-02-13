@@ -10,6 +10,7 @@ import (
 	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -142,8 +143,8 @@ func TestManager_FindFirstValidCachedCredentials_NoCredentials(t *testing.T) {
 	}
 
 	// No credentials found should return -1.
-	mockStore.EXPECT().Retrieve("identity1").Return(nil, errors.New("not found"))
-	mockStore.EXPECT().Retrieve("provider1").Return(nil, errors.New("not found"))
+	mockStore.EXPECT().Retrieve("identity1", gomock.Any()).Return(nil, errors.New("not found"))
+	mockStore.EXPECT().Retrieve("provider1", gomock.Any()).Return(nil, errors.New("not found"))
 
 	result := m.findFirstValidCachedCredentials()
 	assert.Equal(t, -1, result)
@@ -173,7 +174,7 @@ func TestManager_GetChainCredentials_Error(t *testing.T) {
 	}
 
 	// Credential retrieval fails.
-	mockStore.EXPECT().Retrieve("identity1").Return(nil, errors.New("retrieval failed"))
+	mockStore.EXPECT().Retrieve("identity1", gomock.Any()).Return(nil, errors.New("retrieval failed"))
 
 	_, err := m.getChainCredentials(m.chain, 1)
 	assert.Error(t, err)
@@ -426,7 +427,7 @@ func TestNewAuthManager_NilConfig(t *testing.T) {
 	mockStore := types.NewMockCredentialStore(ctrl)
 	mockValidator := types.NewMockValidator(ctrl)
 
-	_, err := NewAuthManager(nil, mockStore, mockValidator, nil)
+	_, err := NewAuthManager(nil, mockStore, mockValidator, nil, "")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
@@ -438,7 +439,7 @@ func TestNewAuthManager_NilCredentialStore(t *testing.T) {
 	config := &schema.AuthConfig{}
 	mockValidator := types.NewMockValidator(ctrl)
 
-	_, err := NewAuthManager(config, nil, mockValidator, nil)
+	_, err := NewAuthManager(config, nil, mockValidator, nil, "")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
@@ -450,7 +451,7 @@ func TestNewAuthManager_NilValidator(t *testing.T) {
 	config := &schema.AuthConfig{}
 	mockStore := types.NewMockCredentialStore(ctrl)
 
-	_, err := NewAuthManager(config, mockStore, nil, nil)
+	_, err := NewAuthManager(config, mockStore, nil, nil, "")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrNilParam)
 }
@@ -487,7 +488,7 @@ func TestManager_GetCachedCredentials_ExpiredCredentials(t *testing.T) {
 		Expiration:      "2020-01-01T00:00:00Z",
 	}
 
-	mockStore.EXPECT().Retrieve("identity1").Return(expiredCreds, nil)
+	mockStore.EXPECT().Retrieve("identity1", gomock.Any()).Return(expiredCreds, nil)
 
 	_, err := m.GetCachedCredentials(context.Background(), "identity1")
 	assert.Error(t, err)
@@ -533,7 +534,7 @@ func TestManager_loadCredentialsWithFallback_PrefersSessionCredsFromFiles(t *tes
 		Expiration:      futureTime,
 	}
 
-	mockStore.EXPECT().Retrieve("identity1").Return(longLivedCreds, nil)
+	mockStore.EXPECT().Retrieve("identity1", gomock.Any()).Return(longLivedCreds, nil)
 	mockIdentity.EXPECT().LoadCredentials(gomock.Any()).Return(sessionCreds, nil)
 
 	creds, err := m.loadCredentialsWithFallback(context.Background(), "identity1")
@@ -576,7 +577,7 @@ func TestManager_loadCredentialsWithFallback_KeyringWithSessionToken(t *testing.
 		Expiration:      futureTime,
 	}
 
-	mockStore.EXPECT().Retrieve("identity1").Return(sessionCreds, nil)
+	mockStore.EXPECT().Retrieve("identity1", gomock.Any()).Return(sessionCreds, nil)
 	// LoadCredentials should NOT be called because keyring has session token.
 
 	creds, err := m.loadCredentialsWithFallback(context.Background(), "identity1")
@@ -700,4 +701,57 @@ func TestManager_loadSessionCredsFromFiles_ReturnsNilOnLoadError(t *testing.T) {
 
 	creds := m.loadSessionCredsFromFiles(context.Background(), "identity1")
 	assert.Nil(t, creds, "Should return nil when LoadCredentials fails")
+}
+
+func TestManager_GetRealm(t *testing.T) {
+	tests := []struct {
+		name     string
+		realm    realm.RealmInfo
+		expected realm.RealmInfo
+	}{
+		{
+			name: "returns realm from config",
+			realm: realm.RealmInfo{
+				Value:  "config-realm",
+				Source: realm.SourceConfig,
+			},
+			expected: realm.RealmInfo{
+				Value:  "config-realm",
+				Source: realm.SourceConfig,
+			},
+		},
+		{
+			name: "returns auto realm (empty for backward compatibility)",
+			realm: realm.RealmInfo{
+				Value:  "",
+				Source: realm.SourceAuto,
+			},
+			expected: realm.RealmInfo{
+				Value:  "",
+				Source: realm.SourceAuto,
+			},
+		},
+		{
+			name: "returns env-sourced realm",
+			realm: realm.RealmInfo{
+				Value:  "env-realm",
+				Source: realm.SourceEnv,
+			},
+			expected: realm.RealmInfo{
+				Value:  "env-realm",
+				Source: realm.SourceEnv,
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := &manager{
+				config: &schema.AuthConfig{},
+				realm:  tt.realm,
+			}
+			result := m.GetRealm()
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
