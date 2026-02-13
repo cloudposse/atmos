@@ -5,8 +5,8 @@ import (
 )
 
 // StripAffectedForUpload removes fields from affected stacks that aren't used
-// by Atmos Pro's Inngest processing. This significantly reduces payload size
-// (typically 70-75% reduction) to stay within Inngest's 256KB limit.
+// by Atmos Pro processing. This significantly reduces payload size
+// (typically 70-75% reduction) to stay within serverless function payload limits.
 //
 // Fields kept:
 //   - component: Stack identification
@@ -17,10 +17,10 @@ import (
 //
 // Fields removed:
 //   - settings.depends_on: Dependency graph (largest contributor to size)
-//   - settings.github: Not used by Inngest handlers
+//   - settings.github: Not used by downstream handlers
 //   - component_type, component_path: Not used in downstream processing
 //   - namespace, tenant, environment, stage: Redundant (encoded in stack name)
-//   - stack_slug, affected: Not used in Inngest processing
+//   - stack_slug, affected: Not used in downstream processing
 func StripAffectedForUpload(affected []schema.Affected) []schema.Affected {
 	result := make([]schema.Affected, len(affected))
 	for i, a := range affected {

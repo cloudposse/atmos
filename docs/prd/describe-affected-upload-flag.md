@@ -2,7 +2,7 @@
 
 ## Overview
 
-Update the existing `--upload` flag on `atmos describe affected` to produce a minimal payload optimized for Atmos Pro. This addresses Inngest's 256KB payload limit by stripping fields that aren't used in downstream processing.
+Update the existing `--upload` flag on `atmos describe affected` to produce a minimal payload optimized for Atmos Pro. This reduces payload size to stay within Inngest's 256KB event payload limit and Vercel's 4.5MB request body limit by stripping fields that aren't used in downstream processing.
 
 ## Background
 
@@ -11,7 +11,7 @@ Update the existing `--upload` flag on `atmos describe affected` to produce a mi
 1. GitHub Action runs `atmos describe affected` in customer infrastructure repos
 2. Action POSTs the full output to Atmos Pro's `/api/v1/affected-stacks` endpoint
 3. Atmos Pro forwards the payload to Inngest for async processing
-4. **Problem:** Large repos with many stacks and deep dependency graphs exceed Inngest's 256KB payload limit
+4. **Problem:** Large repos with many stacks and deep dependency graphs exceed Inngest's 256KB event payload limit
 5. When exceeded, Inngest returns a 500 error and the affected stacks event is lost
 6. Additionally, Vercel has a 4.5MB request body limit that could be hit with extremely large payloads
 
@@ -50,7 +50,7 @@ Testing against realistic fixtures from the Atmos Pro codebase:
 | affected-stacks.json | 328.4 KB | 85.1 KB | **74.1%** |
 | affected-stacks-with-dependents.json | 4.8 KB | 1.4 KB | **70.7%** |
 
-The larger fixture (328 KB) exceeds Inngest's 256KB limit. After stripping, it's comfortably under at 85 KB.
+The larger fixture (328 KB) exceeds Inngest's 256KB event payload limit. After stripping, it's comfortably under at 85 KB.
 
 ### Why CLI-Side?
 
@@ -115,15 +115,15 @@ With `--upload`, each stack contains only:
 
 | Field | Reason |
 |-------|--------|
-| `settings.depends_on` | Dependency graph data; not used in Inngest processing; largest contributor to size |
-| `settings.github` | Not read by Inngest handlers |
+| `settings.depends_on` | Dependency graph data; not used in downstream processing; largest contributor to size |
+| `settings.github` | Not used by downstream handlers |
 | `component_type` | Not used in downstream processing |
 | `component_path` | Not used in downstream processing |
 | `namespace` | Redundant (encoded in stack name) |
 | `tenant` | Redundant (encoded in stack name) |
 | `environment` | Redundant (encoded in stack name) |
 | `stage` | Redundant (encoded in stack name) |
-| `stack_slug` | Not used in Inngest processing |
+| `stack_slug` | Not used in downstream processing |
 | `affected` | Not used in downstream processing |
 
 ### Implementation
@@ -255,12 +255,13 @@ The `atmos-affected-stacks` GitHub Action should be updated to use `--upload`:
 
 ## Limitations
 
-- Does not guarantee all payloads fit within 256KB (extremely large repos may still exceed)
+- Does not guarantee all payloads fit within Inngest's 256KB limit (extremely large repos may still exceed after stripping)
+- Server-side blob storage handles arbitrarily large payloads (see Atmos Pro PRD)
 - Future work: payload chunking or alternative transport for edge cases
 
 ## References
 
 - Linear: DEV-3940
-- Atmos Pro PR #636 (original server-side approach)
-- Inngest payload limit: 256KB
+- Atmos Pro Apps PR: [cloudposse-corp/apps#683](https://github.com/cloudposse-corp/apps/pull/683)
+- Inngest event payload limit: 256KB (free), 3MB (paid)
 - Vercel request body limit: 4.5MB
