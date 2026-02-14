@@ -561,6 +561,7 @@ func TestPostAuthenticate_WrongCredentialType(t *testing.T) {
 func TestPostAuthenticate_Success(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 
 	id := &Identity{
 		name:  "test-sa",
@@ -756,6 +757,7 @@ func TestEmptyRealm_RejectedByFileOperations(t *testing.T) {
 func TestRealmIsolation_DistinctPaths(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 
 	makeIdentityWithRealm := func(realmValue string) *Identity {
 		return &Identity{
