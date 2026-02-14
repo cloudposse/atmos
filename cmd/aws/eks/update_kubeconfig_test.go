@@ -87,6 +87,13 @@ func TestUpdateKubeconfigParser(t *testing.T) {
 // This is the regression test for issue #2076 where AWS_PROFILE env var was
 // incorrectly treated as an Atmos configuration profile name.
 func TestUpdateKubeconfigParser_ViperPrefix(t *testing.T) {
+	// Clear env vars that could interfere (e.g., AWS_REGION set in CI).
+	t.Setenv("AWS_PROFILE", "")
+	t.Setenv("ATMOS_AWS_PROFILE", "")
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("ATMOS_AWS_REGION", "")
+	t.Setenv("ATMOS_STACK", "")
+
 	// Create a fresh Viper instance to avoid polluting the global instance.
 	v := viper.New()
 
