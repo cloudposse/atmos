@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -630,8 +631,7 @@ func TestFindOrInstallVersionWithConfig_InstallFails(t *testing.T) {
 	path, err := findOrInstallVersionWithConfig("1.160.0", cfg)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to install Atmos 1.160.0")
-	assert.Contains(t, err.Error(), "network error")
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
 	assert.Empty(t, path)
 }
 
@@ -647,7 +647,7 @@ func TestFindOrInstallVersionWithConfig_InstallSucceedsButBinaryNotFound(t *test
 	path, err := findOrInstallVersionWithConfig("1.160.0", cfg)
 
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "installed Atmos 1.160.0 but could not find binary")
+	assert.ErrorIs(t, err, errUtils.ErrToolNotFound)
 	assert.Empty(t, path)
 }
 
