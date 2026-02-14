@@ -217,6 +217,7 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""

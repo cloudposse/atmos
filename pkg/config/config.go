@@ -52,6 +52,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
+	setAuthRealm(&atmosConfig)
+
 	// Set log config BEFORE processing stacks so pre-hooks (including auth) see the correct log level.
 	setLogConfig(&atmosConfig)
 

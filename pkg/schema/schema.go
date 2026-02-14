@@ -699,8 +699,10 @@ type AuthContext struct {
 	// Azure holds Azure credentials if an Azure identity is active.
 	Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 
+	// GCP holds GCP credentials if a GCP identity is active.
+	GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty" mapstructure:"gcp"`
+
 	// Future: Add other cloud providers as needed
-	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 }
 
@@ -754,6 +756,29 @@ type AzureAuthContext struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
+}
+
+// GCPAuthContext holds GCP-specific authentication context.
+// This is populated by the GCP auth system and consumed by GCP SDK calls.
+type GCPAuthContext struct {
+	// ProjectID is the GCP project ID.
+	ProjectID string `json:"project_id,omitempty" yaml:"project_id,omitempty" mapstructure:"project_id"`
+	// ProjectName is a human-readable project name (optional).
+	ProjectName string `json:"project_name,omitempty" yaml:"project_name,omitempty" mapstructure:"project_name"`
+	// ServiceAccountEmail is the service account being used (when impersonating).
+	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
+	// AccessToken is the OAuth2 access token.
+	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
+	// TokenExpiry is when the token expires.
+	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`
+	// Region is the GCP region (optional).
+	Region string `json:"region,omitempty" yaml:"region,omitempty" mapstructure:"region"`
+	// Location is the GCP location (optional, e.g., multi-region or zone).
+	Location string `json:"location,omitempty" yaml:"location,omitempty" mapstructure:"location"`
+	// ConfigDir is the directory for GCP config isolation.
+	ConfigDir string `json:"config_dir,omitempty" yaml:"config_dir,omitempty" mapstructure:"config_dir"`
+	// CredentialsFile is the path to the credentials file managed by Atmos.
+	CredentialsFile string `json:"credentials_file,omitempty" yaml:"credentials_file,omitempty" mapstructure:"credentials_file"`
 }
 
 type ConfigAndStacksInfo struct {

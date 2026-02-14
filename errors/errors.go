@@ -627,6 +627,10 @@ var (
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrInvalidADCContent            = errors.New("invalid ADC content")
+	ErrWriteADCFile                 = errors.New("failed to write ADC file")
+	ErrWritePropertiesFile          = errors.New("failed to write properties file")
+	ErrWriteAccessTokenFile         = errors.New("failed to write access token file")
 	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
 	ErrAuthManager                  = errors.New("auth manager error")
 	ErrDefaultIdentity              = errors.New("default identity error")
@@ -695,6 +699,7 @@ var (
 	// Realm errors.
 	ErrFailedToComputeRealm = errors.New("failed to compute realm")
 	ErrInvalidRealm         = errors.New("invalid realm value")
+	ErrEmptyRealm           = errors.New("realm is required for credential isolation but was not set")
 
 	// Logout errors.
 	ErrFailedGetConfigDir   = errors.New("failed to get config directory")

@@ -131,6 +131,12 @@ func NewAuthManager(
 		return nil, wrappedErr
 	}
 
+	// Realm must be non-empty — identity types that manage credential files
+	// depend on it for path isolation and will fail fast on empty realm.
+	if realmInfo.Value == "" {
+		return nil, fmt.Errorf("%w: realm computation produced an empty value", errUtils.ErrEmptyRealm)
+	}
+
 	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
 
 	m := &manager{
@@ -207,7 +213,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		}
 		return nil, wrappedErr
 	}
 	// Persist the chain for later retrieval by providers or callers.
@@ -218,7 +226,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
+		}
 		return nil, wrappedErr
 	}
 
@@ -387,6 +397,7 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// and can be used to derive the identity credentials without interactive prompts.
 	// Use a non-interactive context to prevent credential prompts during whoami.
 	nonInteractiveCtx := types.WithAllowPrompts(ctx, false)
+	nonInteractiveCtx = types.WithSuppressAuthErrors(nonInteractiveCtx, true)
 	authInfo, authErr := m.Authenticate(nonInteractiveCtx, identityName)
 	if authErr == nil {
 		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
@@ -395,8 +406,8 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 	log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
 
-	// Return the original GetCachedCredentials error since chain auth also failed.
-	return nil, err
+	// Return the chain authentication error since it contains the most actionable context.
+	return nil, authErr
 }
 
 // Validate validates the entire auth configuration.
@@ -546,6 +557,9 @@ func (m *manager) initializeProviders() error {
 }
 
 // initializeIdentities creates identity instances from configuration.
+// Note: realm is propagated to all identities centrally after this method
+// returns (in NewAuthManager), using the fully-computed m.realm.Value which
+// accounts for env var, config, and auto-hash precedence.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)
