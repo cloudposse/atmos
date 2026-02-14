@@ -267,7 +267,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - github.com/go-git/go-git/v5
     License: Apache-2.0
-    URL: https://github.com/go-git/go-git/blob/v5.16.4/LICENSE
+    URL: https://github.com/go-git/go-git/blob/v5.16.5/LICENSE
 
   - github.com/go-ini/ini
     License: Apache-2.0
