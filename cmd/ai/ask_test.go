@@ -103,6 +103,7 @@ func TestAskCommand_ErrorCases(t *testing.T) {
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Use the actual ask command's RunE function.
 		err := askCmd.RunE(testCmd, []string{"test question"})
@@ -138,6 +139,7 @@ func TestAskCommand_FlagInteraction(t *testing.T) {
 	t.Run("no-auto-context flag can be toggled", func(t *testing.T) {
 		testCmd := &cobra.Command{Use: "test-ask"}
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Initial value should be false.
 		noAutoContext, err := testCmd.Flags().GetBool("no-auto-context")
@@ -298,6 +300,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"test question"})
 		assert.Error(t, err)
@@ -487,6 +490,7 @@ func TestAskCommand_InvalidConfigPath(t *testing.T) {
 			testCmd.Flags().StringSlice("include", nil, "Include patterns")
 			testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 			testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+			testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 			err := askCmd.RunE(testCmd, []string{"test question"})
 			assert.Error(t, err)
@@ -626,6 +630,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"test question"})
 		assert.Error(t, err)
@@ -694,6 +699,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set include patterns.
 		err := testCmd.Flags().Set("include", "*.yml")
@@ -714,6 +720,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set exclude patterns.
 		err := testCmd.Flags().Set("exclude", "*.bak")
@@ -733,6 +740,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set both patterns.
 		err := testCmd.Flags().Set("include", "*.yml,*.json")
@@ -804,6 +812,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set no-auto-context flag.
 		err := testCmd.Flags().Set("no-auto-context", "true")
@@ -1132,6 +1141,7 @@ settings:
 			testCmd.Flags().StringSlice("include", nil, "Include patterns")
 			testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 			testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+			testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 			// The command will fail due to missing API key, but it should get past the env var check.
 			err := askCmd.RunE(testCmd, []string{"test question"})
@@ -1202,6 +1212,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set all flags.
 		err := testCmd.Flags().Set("include", "*.json,*.hcl")
@@ -1272,6 +1283,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Simulate multiple words as args (like when unquoted on command line).
 		err := askCmd.RunE(testCmd, []string{"What", "are", "the", "available", "components?"})
@@ -1441,6 +1453,7 @@ func TestAskCommand_ErrorMessageFormats(t *testing.T) {
 			testCmd.Flags().StringSlice("include", nil, "Include patterns")
 			testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 			testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+			testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 			err := askCmd.RunE(testCmd, []string{"test question"})
 			assert.Error(t, err)
@@ -1556,6 +1569,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
 		assert.Error(t, err)
@@ -1694,11 +1708,12 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"test question"})
 		assert.Error(t, err)
 		// Should fail at SendMessage due to connection error.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -1772,11 +1787,12 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"What is in my stacks?"})
 		assert.Error(t, err)
 		// Should fail at SendMessage due to connection error, but after context gathering.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -1845,11 +1861,12 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"test"})
 		assert.Error(t, err)
 		// Should fail at SendMessage but use custom timeout.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -1922,6 +1939,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set both include and exclude patterns.
 		err := testCmd.Flags().Set("include", "*.json")
@@ -1932,7 +1950,7 @@ settings:
 		err = askCmd.RunE(testCmd, []string{"test"})
 		assert.Error(t, err)
 		// Should fail at SendMessage but patterns should be applied first.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -2001,6 +2019,7 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		// Set no-auto-context flag.
 		err := testCmd.Flags().Set("no-auto-context", "true")
@@ -2009,7 +2028,7 @@ settings:
 		err = askCmd.RunE(testCmd, []string{"test"})
 		assert.Error(t, err)
 		// Should fail at SendMessage but context should be disabled.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -2085,11 +2104,12 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"What components are available in my stacks?"})
 		assert.Error(t, err)
 		// Should fail at SendMessage due to connection error, but after context gathering.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -2165,11 +2185,12 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"What stacks do I have?"})
 		assert.Error(t, err)
 		// Should fail at SendMessage due to connection error, but context was gathered.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }
 
@@ -2259,11 +2280,12 @@ settings:
 		testCmd.Flags().StringSlice("include", nil, "Include patterns")
 		testCmd.Flags().StringSlice("exclude", nil, "Exclude patterns")
 		testCmd.Flags().Bool("no-auto-context", false, "Disable auto context")
+		testCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 		err := askCmd.RunE(testCmd, []string{"What stacks do I have?"})
 		assert.Error(t, err)
 		// Should fail at SendMessage but context gathering succeeded.
 		// The finalQuestion includes both context and the original question.
-		assert.Contains(t, err.Error(), "failed to get AI response")
+		assert.Contains(t, err.Error(), "AI execution failed")
 	})
 }

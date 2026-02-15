@@ -5,7 +5,7 @@ go 1.25.5
 require (
 	al.essio.dev/pkg/shellescape v1.6.0
 	cloud.google.com/go/secretmanager v1.16.0
-	cloud.google.com/go/storage v1.59.2
+	cloud.google.com/go/storage v1.60.0
 	dario.cat/mergo v1.0.2
 	github.com/99designs/keyring v1.2.2
 	github.com/Azure/azure-sdk-for-go/sdk/azcore v1.21.0
@@ -82,10 +82,10 @@ require (
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-runewidth v0.0.19
-	github.com/mikefarah/yq/v4 v4.52.2
+	github.com/mikefarah/yq/v4 v4.52.4
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/modelcontextprotocol/go-sdk v1.1.0
+	github.com/modelcontextprotocol/go-sdk v1.3.0
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
@@ -114,9 +114,9 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4
 	golang.org/x/oauth2 v0.35.0
 	golang.org/x/term v0.40.0
-	golang.org/x/text v0.33.0
+	golang.org/x/text v0.34.0
 	google.golang.org/api v0.266.0
-	google.golang.org/genai v1.34.0
+	google.golang.org/genai v1.46.0
 	google.golang.org/grpc v1.79.1
 	gopkg.in/ini.v1 v1.67.1
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
@@ -252,7 +252,7 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/flatbuffers v25.12.19+incompatible // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
-	github.com/google/jsonschema-go v0.3.0 // indirect
+	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/google/wire v0.7.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.11 // indirect
@@ -421,10 +421,10 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	go4.org/unsafe/assume-no-moving-gc v0.0.0-20231121144256-b99613f794b6 // indirect
 	gocloud.dev v0.41.0 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
+	golang.org/x/crypto v0.48.0 // indirect
 	golang.org/x/exp v0.0.0-20260112195511-716be5621a96 // indirect
-	golang.org/x/mod v0.32.0 // indirect
-	golang.org/x/net v0.49.0 // indirect
+	golang.org/x/mod v0.33.0 // indirect
+	golang.org/x/net v0.50.0 // indirect
 	golang.org/x/sync v0.19.0 // indirect
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
