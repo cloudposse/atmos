@@ -2653,7 +2653,7 @@ func TestFormatAPIError(t *testing.T) {
 		{
 			name:     "function calling not enabled (Gemini image model)",
 			err:      fmt.Errorf("Error 400, Message: Function calling is not enabled for models/gemini-2.0-flash-preview-image-generation, Status: INVALID_ARGUMENT"),
-			expected: "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.0-flash-exp or gemini-1.5-pro.",
+			expected: "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.5-flash or gemini-1.5-pro.",
 		},
 		{
 			name:     "error with request ID stripped",

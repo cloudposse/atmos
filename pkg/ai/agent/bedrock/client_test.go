@@ -47,7 +47,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
-				Model:     "anthropic.claude-sonnet-4-20250514-v2:0",
+				Model:     "anthropic.claude-sonnet-4-5-20250929-v1:0",
 				BaseURL:   "us-east-1", // Region stored in BaseURL.
 				MaxTokens: 4096,
 			},
@@ -112,7 +112,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   true,
-				Model:     "anthropic.claude-sonnet-4-20250514-v2:0",
+				Model:     "anthropic.claude-sonnet-4-5-20250929-v1:0",
 				BaseURL:   "eu-west-1",
 				MaxTokens: 4096,
 			},
@@ -172,7 +172,7 @@ func TestNewClient_Disabled(t *testing.T) {
 func TestClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
-		Model:     "anthropic.claude-sonnet-4-20250514-v2:0",
+		Model:     "anthropic.claude-sonnet-4-5-20250929-v1:0",
 		BaseURL:   "us-east-1",
 		MaxTokens: 4096,
 	}
@@ -183,7 +183,7 @@ func TestClientGetters(t *testing.T) {
 		region: "us-east-1",
 	}
 
-	assert.Equal(t, "anthropic.claude-sonnet-4-20250514-v2:0", client.GetModel())
+	assert.Equal(t, "anthropic.claude-sonnet-4-5-20250929-v1:0", client.GetModel())
 	assert.Equal(t, 4096, client.GetMaxTokens())
 	assert.Equal(t, "us-east-1", client.GetRegion())
 }
@@ -191,7 +191,7 @@ func TestClientGetters(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "bedrock", ProviderName)
 	assert.Equal(t, 4096, DefaultMaxTokens)
-	assert.Equal(t, "anthropic.claude-sonnet-4-20250514-v2:0", DefaultModel)
+	assert.Equal(t, "anthropic.claude-sonnet-4-5-20250929-v1:0", DefaultModel)
 	assert.Equal(t, "us-east-1", DefaultRegion)
 }
 
@@ -619,7 +619,7 @@ func TestBedrockModels(t *testing.T) {
 		modelID     string
 		description string
 	}{
-		{"anthropic.claude-sonnet-4-20250514-v2:0", "Claude Sonnet 4"},
+		{"anthropic.claude-sonnet-4-5-20250929-v1:0", "Claude Sonnet 4.5"},
 		{"anthropic.claude-3-haiku-20240307-v1:0", "Claude 3 Haiku"},
 		{"anthropic.claude-3-opus-20240229-v1:0", "Claude 3 Opus"},
 		{"anthropic.claude-3-sonnet-20240229-v1:0", "Claude 3 Sonnet"},

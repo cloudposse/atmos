@@ -1050,7 +1050,7 @@ Atmos AI supports 7 AI providers, covering cloud, on-premises, and enterprise us
 #### 1. Anthropic (Claude)
 
 **Models:**
-- `claude-sonnet-4-20250514` (default) - Most capable
+- `claude-sonnet-4-5-20250929` (default) - Most capable
 - `claude-3-5-haiku-20241022` - Fast and cost-effective
 - `claude-3-opus-20240229` - Maximum intelligence
 
@@ -1059,7 +1059,7 @@ Atmos AI supports 7 AI providers, covering cloud, on-premises, and enterprise us
 settings:
   ai:
     provider: anthropic
-    model: claude-sonnet-4-20250514
+    model: claude-sonnet-4-5-20250929
     api_key_env: ANTHROPIC_API_KEY
 ```
 
@@ -1086,7 +1086,7 @@ settings:
 #### 3. Google Gemini
 
 **Models:**
-- `gemini-2.0-flash-exp` (default) - Latest experimental model
+- `gemini-2.5-flash` (default) - Latest experimental model
 - `gemini-1.5-pro` - Most capable stable model
 - `gemini-1.5-flash` - Fast and efficient
 
@@ -1095,7 +1095,7 @@ settings:
 settings:
   ai:
     provider: gemini
-    model: gemini-2.0-flash-exp
+    model: gemini-2.5-flash
     api_key_env: GEMINI_API_KEY
 ```
 
@@ -1155,7 +1155,7 @@ atmos ai chat
 #### 6. AWS Bedrock (Enterprise)
 
 **Models:**
-- `anthropic.claude-sonnet-4-20250514-v2:0` (default)
+- `anthropic.claude-sonnet-4-5-20250929-v1:0` (default)
 - `anthropic.claude-3-haiku-20240307-v1:0`
 - `anthropic.claude-3-opus-20240229-v1:0`
 
@@ -1164,7 +1164,7 @@ atmos ai chat
 settings:
   ai:
     provider: bedrock
-    model: anthropic.claude-sonnet-4-20250514-v2:0
+    model: anthropic.claude-sonnet-4-5-20250929-v1:0
     base_url: us-east-1  # AWS region
 ```
 
@@ -1226,7 +1226,7 @@ settings:
 
     providers:
       anthropic:
-        model: claude-sonnet-4-20250514
+        model: claude-sonnet-4-5-20250929
         api_key_env: ANTHROPIC_API_KEY
         max_tokens: 4096
 
@@ -1236,7 +1236,7 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: gemini-2.0-flash-exp
+        model: gemini-2.5-flash
         api_key_env: GEMINI_API_KEY
         max_tokens: 4096
 
@@ -1250,7 +1250,7 @@ settings:
         base_url: http://localhost:11434/v1
 
       bedrock:
-        model: anthropic.claude-sonnet-4-20250514-v2:0
+        model: anthropic.claude-sonnet-4-5-20250929-v1:0
         base_url: us-east-1
 
       azureopenai:
@@ -1556,7 +1556,7 @@ settings:
     # Provider configurations
     providers:
       anthropic:
-        model: claude-sonnet-4-20250514
+        model: claude-sonnet-4-5-20250929
         api_key_env: ANTHROPIC_API_KEY
         max_tokens: 4096
 
@@ -1566,7 +1566,7 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: gemini-2.0-flash-exp
+        model: gemini-2.5-flash
         api_key_env: GEMINI_API_KEY
         max_tokens: 4096
 
@@ -1580,7 +1580,7 @@ settings:
         base_url: http://localhost:11434/v1
 
       bedrock:
-        model: anthropic.claude-sonnet-4-20250514-v2:0
+        model: anthropic.claude-sonnet-4-5-20250929-v1:0
         base_url: us-east-1
 
       azureopenai:

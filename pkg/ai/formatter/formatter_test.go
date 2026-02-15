@@ -44,7 +44,7 @@ func TestJSONFormatter(t *testing.T) {
 					Total:      150,
 				},
 				Metadata: ExecutionMetadata{
-					Model:        "claude-sonnet-4-20250514",
+					Model:        "claude-sonnet-4-5-20250929",
 					Provider:     "anthropic",
 					DurationMs:   1234,
 					Timestamp:    time.Date(2025, 10, 31, 10, 0, 0, 0, time.UTC),
@@ -58,7 +58,7 @@ func TestJSONFormatter(t *testing.T) {
 
 				assert.True(t, result["success"].(bool))
 				assert.Equal(t, "Here is the answer to your question.", result["response"])
-				assert.Equal(t, "claude-sonnet-4-20250514", result["metadata"].(map[string]interface{})["model"])
+				assert.Equal(t, "claude-sonnet-4-5-20250929", result["metadata"].(map[string]interface{})["model"])
 			},
 		},
 		{
@@ -119,7 +119,7 @@ func TestJSONFormatter(t *testing.T) {
 					},
 				},
 				Metadata: ExecutionMetadata{
-					Model:      "claude-sonnet-4-20250514",
+					Model:      "claude-sonnet-4-5-20250929",
 					Provider:   "anthropic",
 					DurationMs: 100,
 					Timestamp:  time.Date(2025, 10, 31, 10, 0, 0, 0, time.UTC),

@@ -3,6 +3,7 @@ package atmos
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 
@@ -15,12 +16,20 @@ import (
 // ExecuteAtmosCommandTool executes any Atmos CLI command.
 type ExecuteAtmosCommandTool struct {
 	atmosConfig *schema.AtmosConfiguration
+	binaryPath  string
 }
 
 // NewExecuteAtmosCommandTool creates a new Atmos command execution tool.
 func NewExecuteAtmosCommandTool(atmosConfig *schema.AtmosConfiguration) *ExecuteAtmosCommandTool {
+	// Resolve the current binary path so this works with both installed atmos and go run.
+	binary, err := os.Executable()
+	if err != nil {
+		binary = "atmos"
+	}
+
 	return &ExecuteAtmosCommandTool{
 		atmosConfig: atmosConfig,
+		binaryPath:  binary,
 	}
 }
 
@@ -31,7 +40,7 @@ func (t *ExecuteAtmosCommandTool) Name() string {
 
 // Description returns the tool description.
 func (t *ExecuteAtmosCommandTool) Description() string {
-	return "Execute any Atmos CLI command and return the output. Use this when the user explicitly asks to 'execute', 'run', or use a specific Atmos command. This includes ALL commands: 'describe stacks', 'describe component', 'list stacks', 'validate stacks', 'describe affected', 'terraform plan', 'terraform apply', 'workflow', etc. Examples: 'describe stacks', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'terraform plan vpc -s prod-us-east-1'."
+	return "LAST RESORT: Execute an Atmos CLI command as a subprocess. Only use this for commands that do NOT have a dedicated tool. Do NOT use this for: listing stacks (use atmos_list_stacks), describing components (use atmos_describe_component), describing affected (use atmos_describe_affected), or validating stacks (use atmos_validate_stacks). Use this only for commands like 'terraform plan', 'terraform apply', 'workflow', etc."
 }
 
 // Parameters returns the tool parameters.
@@ -39,7 +48,7 @@ func (t *ExecuteAtmosCommandTool) Parameters() []tools.Parameter {
 	return []tools.Parameter{
 		{
 			Name:        "command",
-			Description: "The Atmos command to execute (without the 'atmos' prefix). Can be ANY Atmos command. Examples: 'describe stacks', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'describe affected', 'terraform plan vpc -s prod-us-east-1'.",
+			Description: "The Atmos command to execute (without the 'atmos' prefix). Examples: 'terraform plan vpc -s prod-us-east-1', 'terraform apply vpc -s prod-us-east-1', 'workflow deploy'.",
 			Type:        tools.ParamTypeString,
 			Required:    true,
 		},
@@ -68,8 +77,8 @@ func (t *ExecuteAtmosCommandTool) Execute(ctx context.Context, params map[string
 		}, nil
 	}
 
-	// Create the command.
-	cmd := exec.CommandContext(ctx, "atmos", args...)
+	// Create the command using the resolved binary path.
+	cmd := exec.CommandContext(ctx, t.binaryPath, args...) //nolint:gosec // binaryPath is resolved from os.Executable() at construction time, not user input.
 	cmd.Dir = t.atmosConfig.BasePath
 
 	// Capture output.

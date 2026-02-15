@@ -171,14 +171,14 @@ func TestGetModelFromConfig(t *testing.T) {
 						DefaultProvider: "anthropic",
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model:     "claude-sonnet-4-20250514",
+								Model:     "claude-sonnet-4-5-20250929",
 								MaxTokens: 4096,
 							},
 						},
 					},
 				},
 			},
-			expectedResult: "claude-sonnet-4-20250514",
+			expectedResult: "claude-sonnet-4-5-20250929",
 		},
 		{
 			name: "returns empty string when provider not found",
@@ -188,7 +188,7 @@ func TestGetModelFromConfig(t *testing.T) {
 						DefaultProvider: "openai",
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model:     "claude-sonnet-4-20250514",
+								Model:     "claude-sonnet-4-5-20250929",
 								MaxTokens: 4096,
 							},
 						},
@@ -595,7 +595,7 @@ func TestGetModelFromConfigWithMultipleProviders(t *testing.T) {
 				DefaultProvider: "openai",
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
-						Model:     "claude-sonnet-4-20250514",
+						Model:     "claude-sonnet-4-5-20250929",
 						MaxTokens: 4096,
 					},
 					"openai": {
@@ -618,7 +618,7 @@ func TestGetModelFromConfigWithMultipleProviders(t *testing.T) {
 	// Change default provider and verify.
 	atmosConfig.Settings.AI.DefaultProvider = "anthropic"
 	result = getModelFromConfig(atmosConfig)
-	assert.Equal(t, "claude-sonnet-4-20250514", result)
+	assert.Equal(t, "claude-sonnet-4-5-20250929", result)
 
 	// Change to gemini.
 	atmosConfig.Settings.AI.DefaultProvider = "gemini"
@@ -832,7 +832,7 @@ func TestChatCmd_RunE_AIClientCreationError(t *testing.T) {
 					DefaultProvider: "anthropic",
 					Providers: map[string]*schema.AIProviderConfig{
 						"anthropic": {
-							Model:     "claude-sonnet-4-20250514",
+							Model:     "claude-sonnet-4-5-20250929",
 							MaxTokens: 4096,
 						},
 					},
@@ -841,7 +841,7 @@ func TestChatCmd_RunE_AIClientCreationError(t *testing.T) {
 		}
 		assert.True(t, isAIEnabled(atmosConfig))
 		assert.Equal(t, "anthropic", getProviderFromConfig(atmosConfig))
-		assert.Equal(t, "claude-sonnet-4-20250514", getModelFromConfig(atmosConfig))
+		assert.Equal(t, "claude-sonnet-4-5-20250929", getModelFromConfig(atmosConfig))
 	})
 
 	t.Run("missing provider config returns empty model", func(t *testing.T) {
@@ -1094,7 +1094,7 @@ func TestGetModelFromConfig_EdgeCases(t *testing.T) {
 					DefaultProvider: "anthropic",
 					Providers: map[string]*schema.AIProviderConfig{
 						"anthropic": {
-							Model:     "claude-sonnet-4-20250514",
+							Model:     "claude-sonnet-4-5-20250929",
 							MaxTokens: 4096,
 							ApiKeyEnv: "ANTHROPIC_API_KEY",
 							BaseURL:   "https://api.anthropic.com/v1",
@@ -1104,7 +1104,7 @@ func TestGetModelFromConfig_EdgeCases(t *testing.T) {
 			},
 		}
 		result := getModelFromConfig(atmosConfig)
-		assert.Equal(t, "claude-sonnet-4-20250514", result)
+		assert.Equal(t, "claude-sonnet-4-5-20250929", result)
 	})
 
 	t.Run("returns model from provider with minimal fields", func(t *testing.T) {

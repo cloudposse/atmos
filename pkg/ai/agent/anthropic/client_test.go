@@ -48,7 +48,7 @@ func TestExtractConfig(t *testing.T) {
 			},
 			expectedConfig: &base.Config{
 				Enabled:   false,
-				Model:     "claude-sonnet-4-20250514",
+				Model:     "claude-sonnet-4-5-20250929",
 				APIKeyEnv: "ANTHROPIC_API_KEY",
 				MaxTokens: 4096,
 			},
@@ -156,7 +156,7 @@ func TestNewSimpleClient_MissingAPIKey(t *testing.T) {
 func TestSimpleClientGetters(t *testing.T) {
 	config := &base.Config{
 		Enabled:   true,
-		Model:     "claude-sonnet-4-20250514",
+		Model:     "claude-sonnet-4-5-20250929",
 		APIKeyEnv: "ANTHROPIC_API_KEY",
 		MaxTokens: 4096,
 	}
@@ -166,7 +166,7 @@ func TestSimpleClientGetters(t *testing.T) {
 		config: config,
 	}
 
-	assert.Equal(t, "claude-sonnet-4-20250514", client.GetModel())
+	assert.Equal(t, "claude-sonnet-4-5-20250929", client.GetModel())
 	assert.Equal(t, 4096, client.GetMaxTokens())
 }
 
@@ -456,7 +456,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model: "claude-sonnet-4-20250514",
+								Model: "claude-sonnet-4-5-20250929",
 							},
 						},
 					},
@@ -476,7 +476,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model: "claude-sonnet-4-20250514",
+								Model: "claude-sonnet-4-5-20250929",
 								Cache: &schema.AICacheSettings{
 									Enabled: false,
 								},
@@ -499,7 +499,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model: "claude-sonnet-4-20250514",
+								Model: "claude-sonnet-4-5-20250929",
 								Cache: &schema.AICacheSettings{
 									Enabled:            true,
 									CacheSystemPrompt:  true,
@@ -560,7 +560,7 @@ func TestExtractCacheConfig(t *testing.T) {
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model: "claude-sonnet-4-20250514",
+								Model: "claude-sonnet-4-5-20250929",
 								Cache: &schema.AICacheSettings{
 									Enabled:            true,
 									CacheSystemPrompt:  false,
@@ -722,7 +722,7 @@ func TestCacheConfiguration_CostSavings(t *testing.T) {
 func TestDefaultConstants(t *testing.T) {
 	assert.Equal(t, "anthropic", ProviderName)
 	assert.Equal(t, 4096, DefaultMaxTokens)
-	assert.Equal(t, "claude-sonnet-4-20250514", DefaultModel)
+	assert.Equal(t, "claude-sonnet-4-5-20250929", DefaultModel)
 	assert.Equal(t, "ANTHROPIC_API_KEY", DefaultAPIKeyEnv)
 }
 
@@ -824,8 +824,8 @@ func TestClientGetters_CustomValues(t *testing.T) {
 		maxTokens int
 	}{
 		{
-			name:      "Default Claude Sonnet 4",
-			model:     "claude-sonnet-4-20250514",
+			name:      "Default Claude Sonnet 4.5",
+			model:     "claude-sonnet-4-5-20250929",
 			maxTokens: 4096,
 		},
 		{
@@ -845,7 +845,7 @@ func TestClientGetters_CustomValues(t *testing.T) {
 		},
 		{
 			name:      "High token limit",
-			model:     "claude-sonnet-4-20250514",
+			model:     "claude-sonnet-4-5-20250929",
 			maxTokens: 131072,
 		},
 	}
@@ -873,7 +873,7 @@ func TestAnthropicModels(t *testing.T) {
 		modelID     string
 		description string
 	}{
-		{"claude-sonnet-4-20250514", "Claude Sonnet 4"},
+		{"claude-sonnet-4-5-20250929", "Claude Sonnet 4.5"},
 		{"claude-4-20250514", "Claude 4"},
 		{"claude-3-5-sonnet-20241022", "Claude 3.5 Sonnet"},
 		{"claude-3-opus-20240229", "Claude 3 Opus"},
@@ -1131,7 +1131,7 @@ func TestParseAnthropicResponse_TextOnly(t *testing.T) {
 		ID:         "msg_123",
 		Type:       "message",
 		Role:       "assistant",
-		Model:      "claude-sonnet-4-20250514",
+		Model:      "claude-sonnet-4-5-20250929",
 		StopReason: "end_turn",
 		Usage: anthropic.Usage{
 			InputTokens:  100,
@@ -1630,7 +1630,7 @@ func TestExtractCacheConfig_NilCache(t *testing.T) {
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
-						Model: "claude-sonnet-4-20250514",
+						Model: "claude-sonnet-4-5-20250929",
 						Cache: nil, // Explicitly nil.
 					},
 				},
@@ -1694,7 +1694,7 @@ func TestSimpleClient_ConfigVariations(t *testing.T) {
 			name:             "Default sonnet 4",
 			model:            DefaultModel,
 			maxTokens:        DefaultMaxTokens,
-			expectedModel:    "claude-sonnet-4-20250514",
+			expectedModel:    "claude-sonnet-4-5-20250929",
 			expectedMaxToken: 4096,
 		},
 		{

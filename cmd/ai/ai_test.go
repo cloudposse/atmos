@@ -54,7 +54,7 @@ func TestIsAIEnabled(t *testing.T) {
 						Enabled: true,
 						Providers: map[string]*schema.AIProviderConfig{
 							"anthropic": {
-								Model:     "claude-sonnet-4-20250514",
+								Model:     "claude-sonnet-4-5-20250929",
 								MaxTokens: 4096,
 							},
 						},

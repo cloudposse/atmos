@@ -79,7 +79,7 @@ jobs:
             Provide estimates in USD and flag changes >$1000/month as HIGH COST.
 
           provider: anthropic
-          model: claude-sonnet-4-20250514
+          model: claude-sonnet-4-5-20250929
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           format: json
           post-comment: true

@@ -70,7 +70,7 @@ settings:
       # Anthropic Claude - Best for complex reasoning
       # Docs: https://atmos.tools/ai/providers#anthropic
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
         # Token caching for cost savings (Anthropic-specific)
@@ -90,7 +90,7 @@ settings:
       # Google Gemini - Fast with large context
       # Docs: https://atmos.tools/ai/providers#gemini
       gemini:
-        model: "gemini-2.0-flash-exp"
+        model: "gemini-2.5-flash"
         api_key_env: "GEMINI_API_KEY"
         max_tokens: 8192
 

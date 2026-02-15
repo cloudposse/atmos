@@ -19,12 +19,12 @@ Atmos supports 7 AI providers, giving you flexibility to choose based on your ne
 
 | Provider | Default Model | Authentication | Best For |
 |----------|---------------|----------------|----------|
-| **Anthropic (Claude)** | `claude-sonnet-4-20250514` | API Key | Advanced reasoning, default choice |
+| **Anthropic (Claude)** | `claude-sonnet-4-5-20250929` | API Key | Advanced reasoning, default choice |
 | **OpenAI (GPT)** | `gpt-4o` | API Key | Widely available, strong general capabilities |
-| **Google (Gemini)** | `gemini-2.0-flash-exp` | API Key | Fast responses, larger context window |
+| **Google (Gemini)** | `gemini-2.5-flash` | API Key | Fast responses, larger context window |
 | **xAI (Grok)** | `grok-4-latest` | API Key | OpenAI-compatible, real-time knowledge |
 | **Ollama (Local)** | `llama3.3:70b` | None (local) | Privacy, offline use, zero API costs |
-| **AWS Bedrock** | `anthropic.claude-sonnet-4-20250514-v2:0` | AWS Credentials | Enterprise security, AWS integration |
+| **AWS Bedrock** | `anthropic.claude-sonnet-4-5-20250929-v1:0` | AWS Credentials | Enterprise security, AWS integration |
 | **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
 
 ## Feature Comparison
@@ -103,7 +103,7 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
@@ -246,7 +246,7 @@ settings:
     # Configure one or more providers
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 ```
@@ -379,7 +379,7 @@ providers:
     # model: "gemini-2.5-flash"        # Best price-performance (recommended)
     # model: "gemini-2.5-flash-lite"   # Fastest, most cost-efficient
     # Previous generation (2.0 series):
-    # model: "gemini-2.0-flash-exp"    # Experimental flash model
+    # model: "gemini-2.5-flash"    # Experimental flash model
     # Legacy models (1.5 series):
     # model: "gemini-1.5-pro"          # Previous pro model
     # model: "gemini-1.5-flash"        # Previous flash model
@@ -397,7 +397,7 @@ providers:
 | Gemini 2.5 Flash | `gemini-2.5-flash` | 1M tokens | 8K tokens | Best price-performance, large-scale processing (recommended) | Jan 2025 |
 | Gemini 2.5 Flash-Lite | `gemini-2.5-flash-lite` | 1M tokens | 8K tokens | Fastest, most cost-efficient, high throughput | Jan 2025 |
 | **Previous Generation (2.0)** | | | | | |
-| Gemini 2.0 Flash | `gemini-2.0-flash-exp` | 1M tokens | 8K tokens | Experimental fast model | Nov 2024 |
+| Gemini 2.0 Flash | `gemini-2.5-flash` | 1M tokens | 8K tokens | Experimental fast model | Nov 2024 |
 | **Legacy Models (1.5)** | | | | | |
 | Gemini 1.5 Pro | `gemini-1.5-pro` | 2M tokens | 8K tokens | Previous generation pro model | Earlier 2024 |
 | Gemini 1.5 Flash | `gemini-1.5-flash` | 1M tokens | 8K tokens | Previous generation flash model | Earlier 2024 |
@@ -1465,7 +1465,7 @@ Run Claude models via AWS Bedrock for enterprise security and compliance.
 ```yaml
 providers:
   bedrock:
-    model: "anthropic.claude-sonnet-4-20250514-v2:0"
+    model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
     # Alternatives:
     # model: "anthropic.claude-3-opus-20240229-v1:0"
     # model: "anthropic.claude-3-haiku-20240307-v1:0"
@@ -1580,7 +1580,7 @@ settings:
     providers:
       # Cloud providers
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
@@ -1596,7 +1596,7 @@ settings:
 
       # Enterprise providers
       bedrock:
-        model: "anthropic.claude-sonnet-4-20250514-v2:0"
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
         base_url: "us-east-1"
         # Uses AWS credentials
 
@@ -1766,7 +1766,7 @@ Use the exact model ID strings listed below, not marketing names. For example, u
 
 | Model | API Model ID | Notes |
 |-------|--------------|-------|
-| Claude Sonnet 4 | `claude-sonnet-4-20250514` | Previous version |
+| Claude Sonnet 4 | `claude-sonnet-4-5-20250929` | Previous version |
 | Claude 3.7 Sonnet | `claude-3-7-sonnet-20250219` | Legacy |
 | Claude Opus 4 | `claude-opus-4-20250514` | Previous version |
 | Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | Legacy |

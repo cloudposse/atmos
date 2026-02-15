@@ -28,7 +28,7 @@ settings:
     # Configure your chosen provider
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 ```
@@ -65,7 +65,7 @@ settings:
     providers:
       # Cloud Providers
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
@@ -75,7 +75,7 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: "gemini-2.0-flash-exp"
+        model: "gemini-2.5-flash"
         api_key_env: "GEMINI_API_KEY"
         max_tokens: 8192
 
@@ -92,7 +92,7 @@ settings:
 
       # Enterprise Providers
       bedrock:
-        model: "anthropic.claude-sonnet-4-20250514-v2:0"
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
         base_url: "us-east-1"              # AWS region
         # Uses AWS credentials (no api_key_env needed)
 
@@ -123,7 +123,7 @@ settings:
   ai:
     enabled: true
     provider: "anthropic"                 # Old pattern
-    model: "claude-sonnet-4-20250514"
+    model: "claude-sonnet-4-5-20250929"
     api_key_env: "ANTHROPIC_API_KEY"
 ```
 </File>
@@ -138,7 +138,7 @@ settings:
     default_provider: "anthropic"         # New pattern
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 ```
 </File>
@@ -257,14 +257,14 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"   # Default model
+        model: "claude-sonnet-4-5-20250929"   # Default model
         api_key_env: "ANTHROPIC_API_KEY"      # Default: ANTHROPIC_API_KEY
         max_tokens: 4096                      # Default: 4096
 ```
 </File>
 
 **Available Models:**
-- `claude-sonnet-4-20250514` - Best balance of speed and capability
+- `claude-sonnet-4-5-20250929` - Best balance of speed and capability
 - `claude-3-opus-20240229` - Most capable, slower
 - `claude-3-haiku-20240307` - Fastest, lighter tasks
 
@@ -325,14 +325,14 @@ settings:
     default_provider: "gemini"
     providers:
       gemini:
-        model: "gemini-2.0-flash-exp"      # Default: gemini-2.0-flash-exp
+        model: "gemini-2.5-flash"      # Default: gemini-2.5-flash
         api_key_env: "GEMINI_API_KEY"      # Default: GEMINI_API_KEY
         max_tokens: 8192                   # Default: 8192
 ```
 </File>
 
 **Available Models:**
-- `gemini-2.0-flash-exp` (recommended) - Latest fast model
+- `gemini-2.5-flash` (recommended) - Latest fast model
 - `gemini-1.5-pro` - Most capable
 - `gemini-1.5-flash` - Fastest
 
@@ -437,7 +437,7 @@ settings:
     default_provider: "bedrock"
     providers:
       bedrock:
-        model: "anthropic.claude-sonnet-4-20250514-v2:0"  # Full Bedrock model ID
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"  # Full Bedrock model ID
         base_url: "us-east-1"                                # AWS region
         max_tokens: 4096
         # Uses AWS SDK credential chain (no api_key_env needed)
@@ -445,7 +445,7 @@ settings:
 </File>
 
 **Available Models:**
-- `anthropic.claude-sonnet-4-20250514-v2:0` (recommended)
+- `anthropic.claude-sonnet-4-5-20250929-v1:0` (recommended)
 - `anthropic.claude-3-opus-20240229-v1:0`
 - `anthropic.claude-3-haiku-20240307-v1:0`
 
@@ -651,7 +651,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 
     # Session management settings
@@ -805,7 +805,7 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 ```
 </File>
@@ -824,7 +824,7 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 ```
 </File>
@@ -844,7 +844,7 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 ```
 </File>
@@ -863,7 +863,7 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 
     sessions:
@@ -909,7 +909,7 @@ settings:
 
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 
     sessions:
@@ -977,7 +977,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
 
     # Tool execution settings
@@ -1124,7 +1124,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
     use_lsp: true                      # Allow AI to use LSP (default: false)
     tools:
@@ -1231,7 +1231,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
     # Always send context, but prompt each time for confirmation
     send_context: true
@@ -1249,7 +1249,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
     # Always send context without prompting (not recommended)
     send_context: true
@@ -1298,7 +1298,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
     send_context: false  # Default - never send context
 ```
@@ -1363,9 +1363,9 @@ AI: [Response from Claude...]
 
 # Press Ctrl+P during conversation
 Provider Selection:
-  1. Anthropic (Claude) - claude-sonnet-4-20250514
+  1. Anthropic (Claude) - claude-sonnet-4-5-20250929
   2. OpenAI (GPT) - gpt-4o
-  3. Google (Gemini) - gemini-2.0-flash-exp
+  3. Google (Gemini) - gemini-2.5-flash
   4. Ollama (Local) - llama3.3:70b
 
 Select provider (1-4): 2
@@ -1390,10 +1390,10 @@ settings:
     default_provider: "gemini"  # Changed from anthropic to gemini
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
       gemini:
-        model: "gemini-2.0-flash-exp"
+        model: "gemini-2.5-flash"
         api_key_env: "GEMINI_API_KEY"
 ```
 </File>
@@ -1426,7 +1426,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         timeout_seconds: 120     # Increase for complex questions (default: 60)
 

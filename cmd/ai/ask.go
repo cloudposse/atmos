@@ -10,6 +10,8 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/executor"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -37,6 +39,7 @@ Examples:
 		includePatterns, _ := cmd.Flags().GetStringSlice("include")
 		excludePatterns, _ := cmd.Flags().GetStringSlice("exclude")
 		noAutoContext, _ := cmd.Flags().GetBool("no-auto-context")
+		noTools, _ := cmd.Flags().GetBool("no-tools")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -73,28 +76,31 @@ Examples:
 			return fmt.Errorf("failed to create AI client: %w", err)
 		}
 
-		// Check if we should send context with the question.
-		sendContext, prompted, err := ai.ShouldSendContext(&atmosConfig, question)
-		if err != nil {
-			return fmt.Errorf("failed to determine context requirements: %w", err)
-		}
-
-		// Prepare the final question with optional context.
+		// Gather context if explicitly configured (skip interactive prompt since tools handle introspection).
 		finalQuestion := question
-		if sendContext {
-			if prompted {
-				utils.PrintfMessageToTUI("📖 Reading stack configurations...\n")
-			}
-
+		if atmosConfig.Settings.AI.SendContext {
 			stackContext, err := ai.GatherStackContext(&atmosConfig)
 			if err != nil {
-				utils.PrintfMessageToTUI("⚠️  Warning: Could not gather stack context: %v\n", err)
-				utils.PrintfMessageToTUI("Proceeding without context...\n\n")
+				log.Debug("Could not gather stack context", "error", err)
 			} else {
-				// Combine context and question.
 				finalQuestion = fmt.Sprintf("%s\n\n%s", stackContext, question)
 			}
 		}
+
+		// Create read-only tool executor (if tools are enabled).
+		// The ask command uses only in-process, read-only tools (no subprocess execution).
+		var toolExecutor *tools.Executor
+		if !noTools && atmosConfig.Settings.AI.Tools.Enabled {
+			_, toolExecutor, err = initializeAIReadOnlyTools(&atmosConfig)
+			if err != nil {
+				log.Warn("Failed to initialize tools", "error", err)
+				// Continue without tools rather than failing.
+				toolExecutor = nil
+			}
+		}
+
+		// Create non-interactive executor.
+		exec := executor.NewExecutor(client, toolExecutor, &atmosConfig)
 
 		// Create context with timeout (default 60 seconds if not configured).
 		timeoutSeconds := 60
@@ -104,15 +110,22 @@ Examples:
 		ctx, cancel := context.WithTimeout(context.Background(), time.Duration(timeoutSeconds)*time.Second)
 		defer cancel()
 
-		// Send question and get response.
+		// Execute question with tool support.
 		utils.PrintfMessageToTUI("👽 Thinking...\n")
-		response, err := client.SendMessage(ctx, finalQuestion)
-		if err != nil {
-			return fmt.Errorf("failed to get AI response: %w", err)
+		result := exec.Execute(ctx, executor.Options{
+			Prompt:       finalQuestion,
+			ToolsEnabled: !noTools && toolExecutor != nil,
+		})
+
+		if !result.Success {
+			if result.Error != nil {
+				return fmt.Errorf("%w: %s", errUtils.ErrAIExecutionFailed, result.Error.Message)
+			}
+			return errUtils.ErrAIExecutionFailed
 		}
 
-		// Print response.
-		fmt.Println(response)
+		// Render response as Markdown for rich terminal output.
+		utils.PrintfMarkdown("%s", result.Response)
 
 		return nil
 	},
@@ -123,6 +136,7 @@ func init() {
 	askCmd.Flags().StringSlice("include", nil, "Add glob patterns to include in context (can be repeated)")
 	askCmd.Flags().StringSlice("exclude", nil, "Add glob patterns to exclude from context (can be repeated)")
 	askCmd.Flags().Bool("no-auto-context", false, "Disable automatic context discovery")
+	askCmd.Flags().Bool("no-tools", false, "Disable tool execution")
 
 	aiCmd.AddCommand(askCmd)
 }

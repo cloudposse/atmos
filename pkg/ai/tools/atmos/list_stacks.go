@@ -3,6 +3,7 @@ package atmos
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/cloudposse/atmos/internal/exec"
@@ -29,7 +30,7 @@ func (t *ListStacksTool) Name() string {
 
 // Description returns the tool description.
 func (t *ListStacksTool) Description() string {
-	return "List all available Atmos stacks"
+	return "List all available Atmos stacks with their components. Use this tool whenever you need to know what stacks exist or what components are in each stack."
 }
 
 // Parameters returns the tool parameters.
@@ -76,29 +77,75 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 		}, err
 	}
 
-	// Format output - extract stack names from the map.
+	// Extract stack names and their components.
 	var output strings.Builder
-	output.WriteString(fmt.Sprintf("Available Stacks (%s format):\n\n", format))
+	output.WriteString(fmt.Sprintf("Available Stacks (%d):\n\n", len(stacks)))
 
-	// Extract stack names from the stacks map.
 	stackNames := make([]string, 0, len(stacks))
 	for stackName := range stacks {
 		stackNames = append(stackNames, stackName)
 	}
+	sort.Strings(stackNames)
 
-	// Write stack names.
-	for _, name := range stackNames {
-		output.WriteString(fmt.Sprintf("- %s\n", name))
+	stackComponents := make(map[string][]string, len(stacks))
+	for _, stackName := range stackNames {
+		output.WriteString(fmt.Sprintf("Stack: %s\n", stackName))
+
+		// Extract component names from the stack data.
+		components := extractComponentNames(stacks[stackName])
+		stackComponents[stackName] = components
+		if len(components) > 0 {
+			output.WriteString(fmt.Sprintf("  Components: %s\n", strings.Join(components, ", ")))
+		} else {
+			output.WriteString("  Components: (none)\n")
+		}
+		output.WriteString("\n")
 	}
 
 	return &tools.Result{
 		Success: true,
 		Output:  output.String(),
 		Data: map[string]interface{}{
-			"format": format,
-			"stacks": stackNames,
+			"format":     format,
+			"stacks":     stackNames,
+			"components": stackComponents,
 		},
 	}, nil
+}
+
+// extractComponentNames extracts component names from a stack's data structure.
+// The stack data is a map with a "components" key containing component types (e.g., "terraform")
+// each mapping to individual component configurations.
+func extractComponentNames(stackData any) []string {
+	stackMap, ok := stackData.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	componentsData, ok := stackMap["components"]
+	if !ok {
+		return nil
+	}
+
+	componentsMap, ok := componentsData.(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	var names []string
+	// Iterate over component types (e.g., "terraform", "helmfile").
+	for _, typeComponents := range componentsMap {
+		typeMap, ok := typeComponents.(map[string]any)
+		if !ok {
+			continue
+		}
+		for componentName := range typeMap {
+			names = append(names, componentName)
+		}
+	}
+
+	sort.Strings(names)
+	return names
 }
 
 // RequiresPermission returns true if this tool needs permission.

@@ -976,7 +976,7 @@ func TestExtractConfig_MultipleProviders(t *testing.T) {
 						MaxTokens: 8192,
 					},
 					"anthropic": {
-						Model: "claude-sonnet-4-20250514",
+						Model: "claude-sonnet-4-5-20250929",
 					},
 				},
 			},

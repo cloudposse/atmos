@@ -70,7 +70,7 @@ jobs:
             Output format: JSON with findings categorized by severity (CRITICAL, HIGH, MEDIUM, LOW).
 
           provider: anthropic
-          model: claude-sonnet-4-20250514
+          model: claude-sonnet-4-5-20250929
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           format: json
           post-comment: ${{ github.event_name == 'pull_request' }}

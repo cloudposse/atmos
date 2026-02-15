@@ -136,9 +136,17 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 		}
 	}
 
-	// For non-interactive execution, we don't use agent system prompts.
-	// Just use empty system prompt and ATMOS.md for caching.
-	systemPrompt := ""
+	// System prompt guides the AI to use specific tools over generic ones.
+	systemPrompt := `You are an AI assistant for Atmos infrastructure management with access to tools.
+
+Prefer specific tools over generic ones:
+- Use atmos_list_stacks to list stacks (not execute_atmos_command)
+- Use atmos_describe_component to describe components (not execute_atmos_command)
+- Use read_file, read_stack_file, read_component_file for reading files
+- Use search_files for searching
+- Only use execute_atmos_command for commands that don't have a dedicated tool
+
+Always use tools when needed rather than describing what you would do.`
 
 	// Tool execution loop (with iteration limit to prevent infinite loops).
 	var accumulatedResponse string

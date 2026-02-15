@@ -54,12 +54,12 @@ settings:
     web_search:
       enabled: true
 
-    default_provider: "anthropic"  # Default provider for CLI commands
+    default_provider: "gemini"  # Default provider for CLI commands
 
     # Providers
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 
@@ -69,7 +69,7 @@ settings:
         max_tokens: 4096
 
       gemini:
-        model: "gemini-2.0-flash-exp"
+        model: "gemini-2.5-flash"
         api_key_env: "GEMINI_API_KEY"
         max_tokens: 8192
 
@@ -86,7 +86,7 @@ settings:
 
       # Enterprise Providers
       bedrock:
-        model: "anthropic.claude-sonnet-4-20250514-v2:0"
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
         base_url: "us-east-1"              # AWS region
         # Uses AWS credentials (no api_key_env needed)
 

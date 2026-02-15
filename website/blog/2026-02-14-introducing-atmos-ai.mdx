@@ -426,7 +426,7 @@ atmos ai exec "What are the risks?" --session "$SESSION" --format json
     "cached": 50
   },
   "metadata": {
-    "model": "claude-sonnet-4-20250514",
+    "model": "claude-sonnet-4-5-20250929",
     "provider": "anthropic",
     "duration_ms": 1234
   }
@@ -504,7 +504,7 @@ settings:
   ai:
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         cache:
           enabled: true              # Enable prompt caching
           cache_system_prompt: true  # Cache skill system prompt
@@ -665,7 +665,7 @@ Add to your `atmos.yaml`:
         # Configure your provider
         providers:
           anthropic:
-            model: "claude-sonnet-4-20250514"
+            model: "claude-sonnet-4-5-20250929"
             api_key_env: "ANTHROPIC_API_KEY"
             max_tokens: 4096
 

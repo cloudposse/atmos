@@ -52,7 +52,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
       openai:
         model: "gpt-4o"
       ollama:

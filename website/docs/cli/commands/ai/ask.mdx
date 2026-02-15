@@ -52,7 +52,7 @@ settings:
     default_provider: "anthropic"  # Provider used for 'atmos ai ask'
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
       openai:
@@ -75,6 +75,22 @@ export AZURE_OPENAI_API_KEY="your-key"     # For Azure OpenAI
 ```
 
 **Note:** The `ask` command uses the provider specified in `default_provider`. To use a different provider, either change the `default_provider` setting or use [`atmos ai chat`](/cli/commands/ai/chat) which allows switching providers with `Ctrl+P`.
+
+### Flags
+
+<dl>
+  <dt>`--include <pattern>`</dt>
+  <dd>Add glob patterns to include in context (can be repeated)</dd>
+
+  <dt>`--exclude <pattern>`</dt>
+  <dd>Add glob patterns to exclude from context (can be repeated)</dd>
+
+  <dt>`--no-auto-context`</dt>
+  <dd>Disable automatic context discovery</dd>
+
+  <dt>`--no-tools`</dt>
+  <dd>Disable tool execution for faster, simpler queries</dd>
+</dl>
 
 ## Examples
 

@@ -294,13 +294,13 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 			},
 			providerName: "anthropic",
 			defaults: ProviderDefaults{
-				Model:     "claude-sonnet-4-20250514",
+				Model:     "claude-sonnet-4-5-20250929",
 				APIKeyEnv: "ANTHROPIC_API_KEY",
 				MaxTokens: 4096,
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
-				Model:     "claude-sonnet-4-20250514",
+				Model:     "claude-sonnet-4-5-20250929",
 				APIKeyEnv: "ANTHROPIC_API_KEY",
 				MaxTokens: 4096,
 			},
@@ -334,13 +334,13 @@ func TestExtractConfig_TableDriven(t *testing.T) {
 			},
 			providerName: "gemini",
 			defaults: ProviderDefaults{
-				Model:     "gemini-2.0-flash-exp",
+				Model:     "gemini-2.5-flash",
 				APIKeyEnv: "GEMINI_API_KEY",
 				MaxTokens: 8192,
 			},
 			expectedConfig: &Config{
 				Enabled:   false,
-				Model:     "gemini-2.0-flash-exp",
+				Model:     "gemini-2.5-flash",
 				APIKeyEnv: "GEMINI_API_KEY",
 				MaxTokens: 8192,
 			},

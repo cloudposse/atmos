@@ -61,19 +61,21 @@ func TestExecuteAtmosCommandTool_Execute_EmptyCommand(t *testing.T) {
 
 func TestExecuteAtmosCommandTool_Execute_ValidCommand(t *testing.T) {
 	config := &schema.AtmosConfiguration{
-		BasePath: "../../../../../../", // Point to repo root.
+		BasePath: t.TempDir(),
 	}
 
 	tool := NewExecuteAtmosCommandTool(config)
+	// Override binary to a known command for testing (not the test binary).
+	tool.binaryPath = "echo"
 	ctx := context.Background()
 
-	// Test with 'atmos version' which should always work.
+	// Test with echo which always works.
 	result, err := tool.Execute(ctx, map[string]interface{}{
-		"command": "version",
+		"command": "hello world",
 	})
 
 	assert.NoError(t, err)
-	// Command might succeed or fail depending on environment, but should not panic.
 	assert.NotNil(t, result)
-	assert.NotEmpty(t, result.Output)
+	assert.True(t, result.Success)
+	assert.Contains(t, result.Output, "hello world")
 }

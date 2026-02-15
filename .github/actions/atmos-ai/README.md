@@ -68,7 +68,7 @@ jobs:
             - Review network security configurations
             - Flag any compliance issues
           provider: anthropic
-          model: claude-sonnet-4-20250514
+          model: claude-sonnet-4-5-20250929
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
           format: json
           post-comment: true
@@ -266,7 +266,7 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-20250514"
+        model: "claude-sonnet-4-5-20250929"
         api_key_env: "ANTHROPIC_API_KEY"
         max_tokens: 4096
 ```

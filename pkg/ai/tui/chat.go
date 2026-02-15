@@ -1743,7 +1743,7 @@ func formatAPIError(err error) string {
 	// Detect function calling not supported errors (Gemini image generation models).
 	if strings.Contains(errStr, "Function calling is not enabled") ||
 		(strings.Contains(errStr, "function calling") && (strings.Contains(errStr, "not enabled") || strings.Contains(errStr, "not supported"))) {
-		return "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.0-flash-exp or gemini-1.5-pro."
+		return "This model doesn't support function calling (tool use). Please switch to a different model using Ctrl+P. Try gemini-2.5-flash or gemini-1.5-pro."
 	}
 
 	// Detect rate limit errors (429 Too Many Requests).
@@ -2066,12 +2066,12 @@ func (m *ChatModel) getConfiguredProvidersForCreate() []ProviderWithModel {
 	if m.atmosConfig == nil || m.atmosConfig.Settings.AI.Providers == nil {
 		// Fallback to default providers with hardcoded models if no config
 		return []ProviderWithModel{
-			{Name: "anthropic", DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-20250514"},
+			{Name: "anthropic", DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-5-20250929"},
 			{Name: "openai", DisplayName: "OpenAI (GPT)", Model: "gpt-4o"},
-			{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.0-flash-exp"},
+			{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.5-flash"},
 			{Name: "grok", DisplayName: "xAI (Grok)", Model: "grok-4"},
 			{Name: "ollama", DisplayName: "Ollama (Local)", Model: "llama3.3:70b"},
-			{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-20250514-v2:0"},
+			{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-5-20250929-v1:0"},
 			{Name: "azureopenai", DisplayName: "Azure OpenAI", Model: "gpt-4o"},
 		}
 	}
@@ -2108,12 +2108,12 @@ func (m *ChatModel) getConfiguredProvidersForCreate() []ProviderWithModel {
 	// If no providers are configured, return all with defaults
 	if len(configured) == 0 {
 		return []ProviderWithModel{
-			{Name: "anthropic", DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-20250514"},
+			{Name: "anthropic", DisplayName: "Anthropic (Claude)", Model: "claude-sonnet-4-5-20250929"},
 			{Name: "openai", DisplayName: "OpenAI (GPT)", Model: "gpt-4o"},
-			{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.0-flash-exp"},
+			{Name: "gemini", DisplayName: "Google (Gemini)", Model: "gemini-2.5-flash"},
 			{Name: "grok", DisplayName: "xAI (Grok)", Model: "grok-4"},
 			{Name: "ollama", DisplayName: "Ollama (Local)", Model: "llama3.3:70b"},
-			{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-20250514-v2:0"},
+			{Name: "bedrock", DisplayName: "AWS Bedrock", Model: "anthropic.claude-sonnet-4-5-20250929-v1:0"},
 			{Name: "azureopenai", DisplayName: "Azure OpenAI", Model: "gpt-4o"},
 		}
 	}

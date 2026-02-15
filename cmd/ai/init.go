@@ -61,3 +61,33 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 
 	return registry, executor, nil
 }
+
+// initializeAIReadOnlyTools initializes a tool executor with only read-only, in-process tools.
+// This is used by non-interactive commands like 'ask' where subprocess tools and write tools
+// are not appropriate.
+func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.Registry, *tools.Executor, error) {
+	if !atmosConfig.Settings.AI.Tools.Enabled {
+		return nil, nil, errUtils.ErrAIToolsDisabled
+	}
+
+	log.Debug("Initializing read-only AI tools")
+
+	// Create tool registry with only read-only tools.
+	registry := tools.NewRegistry()
+	if err := atmosTools.RegisterReadOnlyTools(registry, atmosConfig); err != nil {
+		log.Warn(fmt.Sprintf("Failed to register read-only Atmos tools: %v", err))
+	}
+
+	log.Debug(fmt.Sprintf("Registered %d read-only tools", registry.Count()))
+
+	// Read-only tools don't require permissions, but create a permissive checker just in case.
+	permConfig := &permission.Config{
+		Mode: permission.ModeAllow,
+	}
+	permChecker := permission.NewChecker(permConfig, nil)
+
+	executor := tools.NewExecutor(registry, permChecker, tools.DefaultTimeout)
+	log.Debug("Read-only tool executor initialized")
+
+	return registry, executor, nil
+}

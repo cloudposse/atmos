@@ -195,7 +195,7 @@ func TestExtractConfig_DifferentProviderOnly(t *testing.T) {
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
-						Model: "claude-sonnet-4-20250514",
+						Model: "claude-sonnet-4-5-20250929",
 					},
 				},
 			},
@@ -785,7 +785,7 @@ func TestExtractConfig_MultipleProviders(t *testing.T) {
 				Enabled: true,
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
-						Model: "claude-sonnet-4-20250514",
+						Model: "claude-sonnet-4-5-20250929",
 					},
 					"openai": {
 						Model:     "gpt-4o",

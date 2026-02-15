@@ -66,7 +66,7 @@ func TestListStacksTool_Execute_DefaultFormat(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "Available Stacks (yaml format)")
+	assert.Contains(t, result.Output, "Available Stacks (")
 
 	// Check data fields.
 	assert.Equal(t, "yaml", result.Data["format"])
@@ -90,7 +90,7 @@ func TestListStacksTool_Execute_YamlFormat(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "Available Stacks (yaml format)")
+	assert.Contains(t, result.Output, "Available Stacks (")
 
 	assert.Equal(t, "yaml", result.Data["format"])
 }
@@ -108,7 +108,7 @@ func TestListStacksTool_Execute_JsonFormat(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "Available Stacks (json format)")
+	assert.Contains(t, result.Output, "Available Stacks (")
 
 	assert.Equal(t, "json", result.Data["format"])
 }
@@ -127,7 +127,7 @@ func TestListStacksTool_Execute_EmptyFormat(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "Available Stacks (yaml format)")
+	assert.Contains(t, result.Output, "Available Stacks (")
 
 	assert.Equal(t, "yaml", result.Data["format"])
 }
@@ -146,7 +146,7 @@ func TestListStacksTool_Execute_NonStringFormat(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.True(t, result.Success)
-	assert.Contains(t, result.Output, "Available Stacks (yaml format)")
+	assert.Contains(t, result.Output, "Available Stacks (")
 
 	assert.Equal(t, "yaml", result.Data["format"])
 }
@@ -239,7 +239,7 @@ func TestListStacksTool_Execute_MultipleStacks(t *testing.T) {
 	// If we have stacks, output should contain them.
 	if len(stacks) > 0 {
 		for _, stackName := range stacks {
-			assert.Contains(t, result.Output, "- "+stackName)
+			assert.Contains(t, result.Output, "Stack: "+stackName)
 		}
 	}
 }
