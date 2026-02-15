@@ -547,7 +547,7 @@ APACHE 2.0 LICENSED DEPENDENCIES
 
   - google.golang.org/grpc
     License: Apache-2.0
-    URL: https://github.com/grpc/grpc-go/blob/v1.78.0/LICENSE
+    URL: https://github.com/grpc/grpc-go/blob/v1.79.1/LICENSE
 
   - gopkg.in/ini.v1
     License: Apache-2.0
@@ -816,7 +816,7 @@ BSD LICENSED DEPENDENCIES
 
   - golang.org/x/term
     License: BSD-3-Clause
-    URL: https://cs.opensource.google/go/x/term/+/v0.39.0:LICENSE
+    URL: https://cs.opensource.google/go/x/term/+/v0.40.0:LICENSE
 
   - golang.org/x/text
     License: BSD-3-Clause
@@ -832,11 +832,11 @@ BSD LICENSED DEPENDENCIES
 
   - google.golang.org/api
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.265.0/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.266.0/LICENSE
 
   - google.golang.org/api/internal/third_party/uritemplates
     License: BSD-3-Clause
-    URL: https://github.com/googleapis/google-api-go-client/blob/v0.265.0/internal/third_party/uritemplates/LICENSE
+    URL: https://github.com/googleapis/google-api-go-client/blob/v0.266.0/internal/third_party/uritemplates/LICENSE
 
   - google.golang.org/protobuf
     License: BSD-3-Clause
@@ -858,17 +858,13 @@ BSD LICENSED DEPENDENCIES
     License: BSD-3-Clause
     URL: https://github.com/kubernetes/client-go/blob/v0.35.0/third_party/forked/golang/LICENSE
 
-  - modernc.org/libc
-    License: BSD-3-Clause
-    URL: https://gitlab.com/cznic/libc/blob/v1.66.10/LICENSE-GO
-
   - modernc.org/memory
     License: BSD-3-Clause
     URL: https://gitlab.com/cznic/memory/blob/v1.11.0/LICENSE-GO
 
   - modernc.org/sqlite
     License: BSD-3-Clause
-    URL: https://gitlab.com/cznic/sqlite/blob/v1.40.0/LICENSE
+    URL: https://gitlab.com/cznic/sqlite/blob/v1.45.0/LICENSE
 
   - mvdan.cc/sh/v3
     License: BSD-3-Clause
@@ -1106,7 +1102,7 @@ MIT LICENSED DEPENDENCIES
 
   - github.com/anthropics/anthropic-sdk-go
     License: MIT
-    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.19.0/LICENSE
+    URL: https://github.com/anthropics/anthropic-sdk-go/blob/v1.22.1/LICENSE
 
   - github.com/apparentlymart/go-cidr/cidr
     License: MIT
@@ -1731,6 +1727,10 @@ MIT LICENSED DEPENDENCIES
   - gopkg.in/yaml.v3
     License: MIT
     URL: https://github.com/go-yaml/yaml/blob/v3.0.1/LICENSE
+
+  - modernc.org/libc
+    License: MIT
+    URL: https://gitlab.com/cznic/libc/blob/v1.67.6/LICENSE-3RD-PARTY.md
 
 
 ================================================================================
