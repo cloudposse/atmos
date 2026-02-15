@@ -1,0 +1,2349 @@
+---
+title: AI Tool Execution
+sidebar_label: Tools
+sidebar_position: 5
+description: AI tool execution and permission system for Atmos AI Assistant
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+# AI Tool Execution
+
+<Experimental />
+
+Atmos AI can execute tools to query your infrastructure configuration. Tools allow the AI to automatically inspect stacks, components, and validate configurations without requiring manual intervention.
+
+## Overview
+
+Tool execution provides:
+- **Automated Queries**: AI can inspect your infrastructure on demand
+- **Read-only Operations**: Safe execution of describe, list, and validate commands
+- **Permission System**: Granular control over what the AI can execute
+- **User Confirmations**: Smart prompts for sensitive operations
+- **Timeout Protection**: Automatic cancellation of long-running operations
+
+## How Tool Calling Works
+
+### The Tool Calling Process
+
+When you chat with Atmos AI, here's what happens behind the scenes:
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant AtmosAI as Atmos AI Chat
+    participant LLM as AI Provider (Claude)
+    participant Tools as Local Tools
+    participant Files as Local Files
+
+    User->>AtmosAI: "What's the VPC CIDR in prod-use1?"
+    AtmosAI->>LLM: Send message + tool definitions (metadata only)
+    Note over LLM: AI analyzes question<br/>Determines it needs tool
+    LLM->>AtmosAI: Response: "I need atmos_describe_component"
+    AtmosAI->>User: Request permission (if required)
+    User->>AtmosAI: Approve
+    AtmosAI->>Tools: Execute: describe_component(vpc, prod-use1)
+    Tools->>Files: Read local stack/component files
+    Files-->>Tools: Component configuration
+    Tools-->>AtmosAI: Tool result with CIDR info
+    AtmosAI->>LLM: Send tool results
+    LLM->>AtmosAI: Final answer with CIDR
+    AtmosAI->>User: "The VPC CIDR is 10.0.0.0/16"
+```
+
+### The House-Building Analogy
+
+*Prefer a real-world analogy? Here's a fun way to understand tool calling:*
+
+```text
+                          BUILDING A HOUSE
+                     (How AI Tool Calling Works)
+
+    YOU (The Homeowner)                    THE ARCHITECT (AI Provider)
+           [You]                                   [Brain]
+             │                                        │
+             │  "I want to build a house              │
+             │   with 3 bedrooms!"                    │
+             │ ─────────────────────────────────────> │
+             │                                        │
+             │   Also, here are my workers:           │
+             │   - Alex (has an axe)                  │
+             │   - Maya (has measuring tape)          │
+             │   - Sam (has a saw)                    │
+             │ ─────────────────────────────────────> │
+             │                                        │
+             │                             ┌──────────────────┐
+             │                             │ Architect thinks │
+             │                             │ "To build this,  │
+             │                             │  I need lumber   │
+             │                             │  measurements"   │
+             │                             └────────┬─────────┘
+             │                                      │
+             │ <─────────────────────────────────── │
+             │  "Please have Maya measure           │
+             │   the lumber pile"                   │
+             │                                      │
+             │                                      │
+    YOUR WORKERS (Local Tools)                      │
+    ┌─────────────────────┐                         │
+    │ Maya measures...    │                         │
+    │ "It's 8 feet!"      │                         │
+    └─────────────────────┘                         │
+             │                                      │
+             │  Maya's result: "8 feet"             │
+             │ ──────────────────────────────────>  │
+             │                                      │
+             │                             ┌──────────────────┐
+             │                             │ "Good! Now I     │
+             │                             │  need Sam to     │
+             │                             │  cut it to 6ft"  │
+             │                             └────────┬─────────┘
+             │                                      │
+             │ <─────────────────────────────────── │
+             │  "Have Sam cut the lumber            │
+             │   to 6 feet"                         │
+             │                                      │
+    ┌─────────────────────┐                         │
+    │ Sam cuts...         │                         │
+    │ "Done! 6 feet!"     │                         │
+    └─────────────────────┘                         │
+             │                                      │
+             │  Sam's result: "Cut complete"        │
+             │ ──────────────────────────────────>  │
+             │                                      │
+             │                             ┌──────────────────┐
+             │                             │ "Perfect! Here's │
+             │                             │  your house      │
+             │                             │  blueprint..."   │
+             │                             └────────┬─────────┘
+             │                                      │
+             │ <─────────────────────────────────── │
+             │  "Your 3-bedroom house plan          │
+             │   is ready!"
+
+
+    THE ANALOGY MAPPING:
+
+    [You] Homeowner        = You typing in Atmos AI chat
+    [Brain] Architect      = AI Provider (Claude, GPT, etc.)
+    Workers (Alex/Maya/Sam)= Atmos tools (describe, list, validate, etc.)
+    Tool descriptions      = "Alex has an axe and can chop wood"
+    Tool results           = "The lumber is 8 feet long"
+
+    KEY INSIGHT: The Architect (AI) never touches the tools directly!
+    They only TELL YOU which worker to use. You run the tool locally,
+    then report back with the results. Your lumber never leaves your yard!
+```
+
+:::tip Privacy Insight
+Just like the Architect never physically visits your property - they only receive reports from your workers - the AI provider never directly accesses your files. Tools run **locally on your machine**, and only the specific results you request are sent back to the AI.
+:::
+
+### What Gets Sent to AI Servers
+
+It's important to understand **when and what** data is sent to the AI provider:
+
+#### Initial Message (Always Sent)
+When you start a conversation, Atmos sends:
+1. **Your question** - The message you type
+2. **Tool definitions** - Metadata describing available tools (names, parameters, descriptions)
+3. **Context** - Session history and memory context (if enabled)
+
+**Example tool definition sent to AI:**
+```json
+{
+  "name": "atmos_describe_component",
+  "description": "Describe an Atmos component configuration in a specific stack",
+  "parameters": {
+    "component": {"type": "string", "description": "Component name", "required": true},
+    "stack": {"type": "string", "description": "Stack name", "required": true}
+  }
+}
+```
+
+**Note:** At this stage, **no actual component or stack data** is sent - only the tool definitions (metadata).
+
+#### When AI Decides to Use a Tool
+
+If the AI determines it needs information from your local environment:
+
+1. **AI sends back a tool call request** - Specifies which tool and parameters
+2. **Tool executes locally** - Reads your local files/runs Atmos commands
+3. **Only the tool results are sent** - Specific data the AI requested
+
+**Example flow:**
+```
+You: "What's the VPC configuration in prod-use1?"
+
+→ Sent to AI: Your question + tool definitions (no actual data yet)
+← AI responds: "I need to call atmos_describe_component(vpc, prod-use1)"
+→ Tool executes locally, reads your stack files
+→ Sent to AI: Only the VPC component configuration for prod-use1
+← AI responds: "The VPC in prod-use1 has CIDR 10.0.0.0/16 with..."
+```
+
+### Multi-Turn Conversations with Tools
+
+When you ask the AI to perform complex tasks with tools, it automatically follows through to completion. Instead of just showing you raw tool output, the AI analyzes the results and provides complete, formatted answers.
+
+**Example - Complete Response:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Execute 'atmos describe stacks' and create a table of all stacks"
+
+AI: I'll execute the describe stacks command and create a formatted table for you.
+
+🔧 Executing tool: execute_atmos_command
+Parameters: { command: "describe stacks" }
+
+✅ Tool executed successfully
+
+Here's a formatted table of your Atmos stacks:
+
+| Stack Name      | Stage   | Region    | Components         |
+|-----------------|---------|-----------|-------------------|
+| prod-use1       | prod    | us-east-1 | vpc, rds, eks     |
+| prod-use2       | prod    | us-east-2 | vpc, rds          |
+| staging-use1    | staging | us-east-1 | vpc, rds          |
+| dev-use1        | dev     | us-east-1 | vpc               |
+
+You have 4 stacks across 3 stages (prod, staging, dev) in 2 regions.
+```
+</Terminal>
+
+**What Happens Behind the Scenes:**
+
+1. **You make a request** - Ask the AI to execute a command and format results
+2. **AI plans the task** - "I need to execute the command, then format the output as a table"
+3. **Tool executes** - Command runs locally and returns raw data
+4. **AI receives results** - Raw output is sent back to the AI
+5. **AI formats and explains** - Creates the table and provides insights
+
+**Benefits:**
+
+- **Complete Answers** - Get formatted, analyzed results instead of raw output
+- **Natural Flow** - The AI completes what it promises to do
+- **Smart Analysis** - AI can interpret data, create visualizations, and provide insights
+- **Multi-Step Tasks** - Handle requests like "compare these components and create a table"
+
+**More Examples:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Example 1: Analysis after tool execution
+You: "Check if my VPC configurations are consistent across all prod stacks"
+
+AI: I'll check the VPC configurations and analyze consistency.
+
+[Executes: atmos_describe_component vpc -s prod-use1]
+[Executes: atmos_describe_component vpc -s prod-use2]
+
+Analysis of VPC configurations across prod stacks:
+
+✅ CIDR blocks follow consistent pattern:
+   - prod-use1: 10.0.0.0/16
+   - prod-use2: 10.1.0.0/16
+
+✅ All use 3 availability zones
+✅ All have VPN gateway enabled
+⚠️  prod-use2 has different NAT gateway configuration
+
+Your VPCs are mostly consistent, but you may want to review the NAT gateway settings.
+
+# Example 2: Multiple tool executions with summary
+You: "Find all components that use the VPC module and list them"
+
+AI: I'll search for VPC module usage and summarize findings.
+
+[Executes: search_files pattern="module \"vpc\""]
+
+Found 5 components using the VPC module:
+
+1. components/terraform/eks/main.tf (line 12)
+2. components/terraform/rds/main.tf (line 8)
+3. components/terraform/networking/main.tf (lines 5, 23)
+
+The VPC module is primarily used for networking infrastructure across your
+EKS, RDS, and dedicated networking components.
+```
+</Terminal>
+
+This intelligent behavior ensures you always get complete, useful answers rather than just raw command output.
+
+---
+
+### When Tools Are Called
+
+The AI automatically decides to call tools when:
+
+1. **Specific Information Needed**: You ask about a specific component, stack, or configuration
+   - "What's the CIDR block for VPC in prod?"
+   - "Show me the RDS configuration"
+
+2. **Listing/Discovery**: You want to see what's available
+   - "What stacks do I have?"
+   - "List all components"
+
+3. **Validation**: You ask about configuration correctness
+   - "Is my stack configuration valid?"
+   - "Check for errors in my stacks"
+
+4. **File Operations**: You request file content or modifications
+   - "Show me the vpc/main.tf file"
+   - "Read the catalog/vpc.yaml file"
+
+5. **Analysis**: You ask the AI to analyze or compare configurations
+   - "Compare VPC configs across all prod stacks"
+   - "Find differences between dev and prod"
+
+**The AI will NOT call tools when:**
+- Answering general questions about Atmos ("What is a stack?")
+- Explaining concepts ("How do components work?")
+- Providing documentation ("How do I configure Atmos?")
+- You explicitly ask it not to ("Don't look at my files, just explain...")
+
+### How Tool Descriptions Determine Triggering
+
+**The Critical Role of Tool Descriptions:**
+
+Tool descriptions are the **instruction manual** for the AI - they tell the AI exactly WHEN and WHY to call each tool. Without proper descriptions, the AI has no way to know that a tool exists or what it does.
+
+**Technical Implementation:**
+
+When Atmos sends tool definitions to the AI provider (Claude, GPT, Gemini, etc.), each tool includes:
+
+1. **Name** - The tool identifier (e.g., `atmos_describe_component`)
+2. **Description** - **Critical!** Explains WHAT the tool does and WHEN to use it
+3. **Parameters** - The inputs the tool accepts
+
+The AI analyzes your question, reads all tool descriptions, and decides which tool (if any) can help answer your question.
+
+**Example - How Descriptions Enable Tool Selection:**
+
+<File title="Tool Definition Sent to AI Provider">
+```json
+{
+  "name": "web_search",
+  "description": "Search the web for information using DuckDuckGo or Google Custom Search. Returns titles, URLs, and descriptions of search results. Use this to find current information, documentation, examples, or answers to questions that require up-to-date knowledge.",
+  "parameters": {
+    "query": {
+      "type": "string",
+      "description": "The search query to execute",
+      "required": true
+    },
+    "max_results": {
+      "type": "integer",
+      "description": "Maximum number of search results to return (1-50, default: 10)",
+      "required": false
+    }
+  }
+}
+```
+</File>
+
+**When you ask:** "Search for the latest Terraform AWS VPC module documentation"
+
+**The AI thinks:**
+1. Reads the question: needs to "search for" something
+2. Scans tool descriptions
+3. Finds `web_search` description mentions "Search the web for information"
+4. Determines this tool can help
+5. Calls `web_search` with query="Terraform AWS VPC module documentation"
+
+**Writing Effective Tool Descriptions:**
+
+Good descriptions should include:
+- **Action** - What the tool does (e.g., "Search the web", "Validate files", "List stacks")
+- **Purpose** - What problem it solves
+- **Use Cases** - When to use it (e.g., "Use this to find current information")
+- **Scope** - What it covers (e.g., "Returns titles, URLs, and descriptions")
+
+**Anti-pattern (Bad Description):**
+```json
+{
+  "name": "web_search",
+  "description": "Searches the web"  // ❌ Too vague, AI won't know when to use it
+}
+```
+
+**Best Practice (Good Description):**
+```json
+{
+  "name": "web_search",
+  "description": "Search the web for information using DuckDuckGo or Google Custom Search. Returns titles, URLs, and descriptions of search results. Use this to find current information, documentation, examples, or answers to questions that require up-to-date knowledge."  // ✅ Clear, specific, explains when to use it
+}
+```
+
+**Key Takeaway:** Tool descriptions are not optional metadata - they are the **mechanism** by which the AI knows tools exist and when to use them. Every tool in Atmos includes a detailed description specifically designed to help the AI make the right decision about when to call it.
+
+### Data Privacy and Security
+
+**Key Points:**
+
+✅ **Tool definitions are always sent** - These contain no sensitive data, just metadata about what tools exist
+
+✅ **Your questions are always sent** - This is how the AI understands what you're asking
+
+✅ **Actual data is only sent when tools are called** - Component configs, stack files, validation results are ONLY sent when the AI specifically requests them by calling a tool
+
+✅ **You control tool execution** - Permission system lets you approve/deny each tool call
+
+✅ **Local execution** - Tools run on your machine, reading your local files
+
+✅ **Results only** - Only the tool's output is sent, not your entire codebase
+
+**Example - What gets sent:**
+
+```
+Question: "Explain how Atmos stacks work"
+→ Sent to AI: Your question + tool definitions
+→ Tools called: NONE
+→ Data sent: NONE (just your question)
+
+Question: "What's the VPC CIDR in prod-use1?"
+→ Sent to AI: Your question + tool definitions
+→ Tools called: atmos_describe_component(vpc, prod-use1)
+→ Data sent: VPC component configuration from prod-use1 stack ONLY
+```
+
+### Tool Execution Security
+
+When a tool is executed:
+
+1. **Permission Check**: Verifies tool is allowed (not blocked, respects permissions)
+2. **User Prompt**: Shows tool name, description, and parameters (if confirmation required)
+3. **Local Execution**: Tool runs on your machine with your Atmos configuration
+4. **Path Validation**: File operations validate paths to prevent directory traversal
+5. **Timeout Protection**: Operations automatically cancelled after 30 seconds
+6. **Result Transmission**: Only the tool's specific output is sent back to the AI
+
+**Security Features:**
+- Path traversal protection for file operations
+- Sandboxed execution within configured directories
+- File permissions (0600 for sensitive files)
+- Permission system prevents unauthorized operations
+- All execution happens locally on your machine
+
+## Configuration
+
+Enable tool execution in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    tools:
+      enabled: true                        # Enable tool execution
+      # require_confirmation: true         # Default: true (secure by default)
+                                            # Set to false to opt-out of prompts
+
+      # Tools that can execute without user confirmation
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - atmos_describe_*                 # Wildcard patterns supported
+
+      # Tools that always require confirmation
+      restricted_tools:
+        - write_component_file
+        - write_stack_file
+        - atmos_terraform_plan
+
+      # Tools that are completely blocked
+      blocked_tools:
+        - atmos_terraform_destroy
+        - atmos_terraform_apply
+
+      yolo_mode: false                     # Skip all confirmations (DANGEROUS!)
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`tools.enabled`</dt>
+  <dd>Enable or disable AI tool execution capabilities (default: `false`)</dd>
+
+  <dt>`tools.require_confirmation`</dt>
+  <dd>Prompt user before executing tools (default: `true` for security). Set to `false` to opt-out of prompts and allow all tools except `restricted_tools` to execute automatically.</dd>
+
+  <dt>`tools.allowed_tools`</dt>
+  <dd>List of tools that can execute without user confirmation. Supports wildcard patterns like `atmos_*` (default: `[]`)</dd>
+
+  <dt>`tools.restricted_tools`</dt>
+  <dd>List of tools that always require user confirmation, even if `require_confirmation` is `false` (default: `[]`)</dd>
+
+  <dt>`tools.blocked_tools`</dt>
+  <dd>List of tools that are completely blocked from execution (default: `[]`)</dd>
+
+  <dt>`tools.yolo_mode`</dt>
+  <dd>Skip all permission checks and execute all tools automatically. **DANGEROUS!** Only use in trusted CI/CD environments (default: `false`)</dd>
+</dl>
+
+## Available Tools
+
+### Atmos Tools
+
+These tools interact with your Atmos configuration:
+
+#### `atmos_describe_component`
+
+Describes an Atmos component configuration in a specific stack.
+
+**Parameters:**
+- `component` (string, required) - Component name (e.g., 'vpc', 'rds')
+- `stack` (string, required) - Stack name (e.g., 'prod-use1')
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What's the CIDR block for the VPC in prod-use1?"
+
+AI: Let me check that for you.
+
+🔧 Tool Execution Request
+Tool: atmos_describe_component
+Description: Describe an Atmos component configuration in a specific stack
+
+Parameters:
+  component: vpc
+  stack: prod-use1
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+The VPC in prod-use1 uses CIDR block 10.0.0.0/16 with the following configuration:
+...
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+---
+
+#### `atmos_list_stacks`
+
+Lists all available Atmos stacks.
+
+**Parameters:**
+- `format` (string, optional) - Output format: `yaml` or `json` (default: `yaml`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What stacks are available?"
+
+AI: Let me list the available stacks.
+
+🔧 Tool Execution Request
+Tool: atmos_list_stacks
+Description: List all available Atmos stacks
+
+Parameters:
+  format: yaml
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+You have the following stacks:
+- prod-use1
+- prod-use2
+- staging-use1
+- dev-use1
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+---
+
+#### `atmos_validate_stacks`
+
+Validates Atmos stack configurations for correctness.
+
+**Parameters:**
+- `schema_type` (string, optional) - Schema validation type: `jsonschema` or `opa` (default: `jsonschema`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Are my stack configurations valid?"
+
+AI: Let me validate your stack configurations.
+
+🔧 Tool Execution Request
+Tool: atmos_validate_stacks
+Description: Validate Atmos stack configurations for correctness
+
+Parameters:
+  schema_type: jsonschema
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+✅ All stacks validated successfully using jsonschema.
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+---
+
+#### `validate_file_lsp`
+
+Validates a YAML, Terraform, or HCL file using Language Server Protocol for real-time diagnostics and error detection.
+
+:::info Prerequisites
+This tool requires [LSP to be configured](/lsp/lsp-client) in your `atmos.yaml` and `ai.use_lsp: true`.
+:::
+
+**Parameters:**
+- `file_path` (string, required) - Absolute or relative path to the file to validate (e.g., 'stacks/prod/vpc.yaml', 'components/terraform/vpc/main.tf')
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Validate stacks/prod/vpc.yaml"
+
+AI: I'll validate that file using LSP.
+
+🔧 Tool Execution Request
+Tool: validate_file_lsp
+Description: Validate a YAML, Terraform, or HCL file using Language Server Protocol
+
+Parameters:
+  file_path: stacks/prod/vpc.yaml
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Found 2 issue(s) in /project/stacks/prod/vpc.yaml:
+
+ERRORS (1):
+1. Line 15: Unknown property 'vpc_ciddr' (did you mean 'vpc_cidr'?)
+
+WARNINGS (1):
+1. Line 23: Property 'availability_zones' is deprecated, use 'azs' instead
+
+The file has 1 error and 1 warning. The error on line 15 is a typo in the property name - it should be 'vpc_cidr' not 'vpc_ciddr'. Would you like me to help fix these issues?
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Benefits:**
+- **Precise error locations** with line and column numbers
+- **Real-time validation** before running Terraform/Atmos commands
+- **Syntax and schema checks** for YAML, Terraform, and HCL
+- **Early error detection** catches issues during development
+
+**Learn more:** [LSP Integration](/lsp/lsp-client)
+
+---
+
+#### `read_component_file`
+
+Reads a file from the components directory (Terraform, Helmfile, or Packer).
+
+**Parameters:**
+- `component_type` (string, required) - Component type: `terraform`, `helmfile`, or `packer`
+- `file_path` (string, required) - Relative file path within the component type directory (e.g., `vpc/main.tf`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Show me the VPC Terraform configuration"
+
+AI: Let me read that file for you.
+
+🔧 Tool Execution Request
+Tool: read_component_file
+Description: Read a file from the components directory
+
+Parameters:
+  component_type: terraform
+  file_path: vpc/main.tf
+
+✅ Executing tool...
+
+Here's the VPC configuration from components/terraform/vpc/main.tf:
+[file contents displayed]
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Security:** Path traversal protection ensures files can only be read from the configured components directory.
+
+---
+
+#### `read_stack_file`
+
+Reads a file from the stacks directory.
+
+**Parameters:**
+- `file_path` (string, required) - Relative file path within the stacks directory (e.g., `catalog/vpc.yaml`)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Show me the VPC stack configuration"
+
+AI: Let me read that stack file.
+
+🔧 Tool Execution Request
+Tool: read_stack_file
+Description: Read a file from the stacks directory
+
+Parameters:
+  file_path: catalog/vpc.yaml
+
+✅ Executing tool...
+
+Here's the stack configuration from stacks/catalog/vpc.yaml:
+[file contents displayed]
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Security:** Path traversal protection ensures files can only be read from the configured stacks directory.
+
+---
+
+#### `write_component_file`
+
+Writes or modifies a file in the components directory.
+
+**Parameters:**
+- `component_type` (string, required) - Component type: `terraform`, `helmfile`, or `packer`
+- `file_path` (string, required) - Relative file path within the component type directory
+- `content` (string, required) - File content to write
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Create a new Terraform variables file for the VPC component"
+
+AI: I'll create that file for you.
+
+🔧 Tool Execution Request
+Tool: write_component_file
+Description: Write or modify a file in the components directory
+
+Parameters:
+  component_type: terraform
+  file_path: vpc/variables.tf
+  content: |
+    variable "cidr_block" {
+      type        = string
+      description = "CIDR block for VPC"
+    }
+
+⚠️  This tool requires confirmation (writes files)
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Successfully created components/terraform/vpc/variables.tf
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (modifies files)
+
+**Security:**
+- Path traversal protection
+- File permissions set to 0600 (owner read/write only)
+- Parent directories created with 0755 permissions
+
+---
+
+#### `write_stack_file`
+
+Writes or modifies a file in the stacks directory.
+
+**Parameters:**
+- `file_path` (string, required) - Relative file path within the stacks directory
+- `content` (string, required) - File content to write
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Create a new stack configuration for the VPC"
+
+AI: I'll create that stack file.
+
+🔧 Tool Execution Request
+Tool: write_stack_file
+Description: Write or modify a file in the stacks directory
+
+Parameters:
+  file_path: catalog/vpc-new.yaml
+  content: |
+    components:
+      terraform:
+        vpc:
+          vars:
+            cidr_block: 10.1.0.0/16
+
+⚠️  This tool requires confirmation (writes files)
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Successfully created stacks/catalog/vpc-new.yaml
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (modifies files)
+
+**Security:**
+- Path traversal protection
+- File permissions set to 0600 (owner read/write only)
+- Parent directories created with 0755 permissions
+
+---
+
+### File and Command Tools
+
+These tools provide powerful file operations and command execution capabilities.
+
+#### `read_file`
+
+Read any file from the Atmos repository (atmos.yaml, workflows, vendor manifests, documentation, etc.).
+
+**Parameters:**
+- `file_path` (string, required) - Path to the file to read. Can be relative to Atmos base path (e.g., 'atmos.yaml', 'workflows/deploy.yaml') or absolute.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Show me the atmos.yaml configuration"
+
+AI: Let me read that file for you.
+
+🔧 Tool Execution Request
+Tool: read_file
+Description: Read any file from the Atmos repository
+
+Parameters:
+  file_path: atmos.yaml
+
+✅ Executing tool...
+
+Here's your atmos.yaml configuration:
+[file contents displayed]
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Security:** Path traversal protection ensures files can only be read from within the Atmos base path.
+
+---
+
+#### `execute_atmos_command`
+
+Execute any Atmos CLI command and return the output.
+
+**Parameters:**
+- `command` (string, required) - The Atmos command to execute (without the 'atmos' prefix). Examples: 'terraform plan vpc -s prod-us-east-1', 'describe component vpc -s prod-us-east-1', 'list stacks', 'validate stacks', 'describe affected'.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Run terraform plan for the VPC in prod-us-east-1"
+
+AI: I'll run that Terraform plan for you.
+
+🔧 Tool Execution Request
+Tool: execute_atmos_command
+Description: Execute any Atmos CLI command and return the output
+
+Parameters:
+  command: terraform plan vpc -s prod-us-east-1
+
+⚠️  This tool requires confirmation (executes commands)
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Here's the Terraform plan output:
+[plan output displayed]
+
+The plan shows 3 resources will be added for the VPC infrastructure.
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (executes commands)
+
+**Security:**
+- Command executed in Atmos base path
+- Combined output (stdout + stderr) captured
+- Timeout protection (operations cancelled after timeout)
+
+**Use Cases:**
+- Run Terraform operations: `terraform plan`, `terraform apply`
+- Execute workflows: `workflow deploy`
+- Describe affected components: `describe affected`
+- Any other Atmos CLI command
+
+---
+
+#### `search_files`
+
+Search for text patterns or regex across files in the Atmos repository.
+
+**Parameters:**
+- `pattern` (string, required) - The text pattern or regular expression to search for (e.g., 'module "vpc"', 'terraform_version', 'backend_type').
+- `path` (string, optional) - The path to search in, relative to Atmos base path. Use '.' for entire repository, 'components/terraform' for components, 'stacks' for stacks. Default is '.' (entire repository).
+- `file_pattern` (string, optional) - File pattern to filter (e.g., '*.yaml', '*.tf', '*.hcl'). Default is '*' (all files).
+- `case_sensitive` (boolean, optional) - Whether the search should be case-sensitive. Default is false.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Find all components that use the VPC module"
+
+AI: Let me search for that pattern.
+
+🔧 Tool Execution Request
+Tool: search_files
+Description: Search for a text pattern or regex across files
+
+Parameters:
+  pattern: module "vpc"
+  path: components/terraform
+  file_pattern: *.tf
+
+✅ Executing tool...
+
+Found 5 matches in 3 files for pattern 'module "vpc"':
+
+components/terraform/eks/main.tf:
+  Line 12: module "vpc" {
+
+components/terraform/rds/main.tf:
+  Line 8: module "vpc" {
+
+components/terraform/networking/main.tf:
+  Line 5: module "vpc" {
+  Line 23: module "vpc_endpoints" {
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Find components using specific modules
+- Locate stacks with particular configurations
+- Search for variable usage across configurations
+- Find all references to a resource
+
+---
+
+#### `list_component_files`
+
+List all files in a component directory to discover component structure.
+
+**Parameters:**
+- `component_type` (string, required) - Type of component: 'terraform', 'helmfile', or 'packer'
+- `component_path` (string, optional) - Path to the component within the component type directory (e.g., 'vpc', 'eks', 'networking/vpc'). Use '.' to list all components. Default is '.'.
+- `file_pattern` (string, optional) - File pattern to filter (e.g., '*.tf', '*.yaml', '*.hcl'). Default is '*' (all files).
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What files are in the VPC component?"
+
+AI: Let me list those files.
+
+🔧 Tool Execution Request
+Tool: list_component_files
+Description: List all files in a component directory
+
+Parameters:
+  component_type: terraform
+  component_path: vpc
+  file_pattern: *.tf
+
+✅ Executing tool...
+
+Files in terraform/vpc (pattern: *.tf):
+(4 files, 1 directories)
+
+main.tf
+variables.tf
+outputs.tf
+versions.tf
+modules/
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Discover component structure
+- Find configuration files
+- Understand component organization
+- Locate specific files before reading them
+
+---
+
+#### `get_template_context`
+
+Get the template context (variables and functions) available for a component in a stack. Use this to debug Go template failures.
+
+**Parameters:**
+- `component` (string, required) - The component name (e.g., 'vpc', 'eks', 'rds')
+- `stack` (string, required) - The stack name (e.g., 'prod-us-east-1', 'staging-eu-west-1')
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Why is the Go template failing in the VPC component for prod-us-east-1?"
+
+AI: Let me check the template context.
+
+🔧 Tool Execution Request
+Tool: get_template_context
+Description: Get template context for debugging Go template failures
+
+Parameters:
+  component: vpc
+  stack: prod-us-east-1
+
+✅ Executing tool...
+
+Template context for component 'vpc' in stack 'prod-us-east-1':
+
+{
+  "vars": {
+    "cidr_block": "10.0.0.0/16",
+    "availability_zones": ["us-east-1a", "us-east-1b", "us-east-1c"],
+    ...
+  },
+  "settings": {...},
+  ...
+}
+
+Available template functions:
+- atmos.Component(component, stack) - Get component configuration
+- atmos.Stack(stack) - Get stack configuration
+- atmos.Setting(key) - Get Atmos setting
+- terraform.output(component, stack, output_name) - Get Terraform output
+- terraform.state(component, stack) - Get Terraform state
+- store.get(key) - Get value from configured store (SSM, Azure Key Vault, etc.)
+- exec(command) - Execute shell command
+- env(var_name) - Get environment variable
+Plus all Gomplate functions: https://docs.gomplate.ca/functions/
+
+I can see that the context includes all the variables and functions you need.
+The template should have access to `atmos.Component("vpc", "prod-us-east-1")` which returns the configuration shown above.
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Debug Go template failures
+- Understand available template variables
+- See what `atmos.Component()` returns
+- Verify template function availability
+- Troubleshoot template rendering issues
+
+---
+
+#### `describe_affected`
+
+Show components affected by git changes for change impact analysis.
+
+**Parameters:**
+- `ref` (string, optional) - Git reference to compare against (e.g., 'main', 'HEAD~1', 'origin/main'). Default is 'main'.
+- `verbose` (boolean, optional) - Include detailed information about affected files. Default is false.
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "What components will be affected by my changes?"
+
+AI: Let me check what's affected.
+
+🔧 Tool Execution Request
+Tool: describe_affected
+Description: Show components affected by git changes
+
+Parameters:
+  ref: main
+  verbose: false
+
+✅ Executing tool...
+
+Affected components (compared to main):
+
+Total: 3 components
+
+- vpc in stack prod-us-east-1
+- vpc in stack staging-us-east-1
+- rds in stack prod-us-east-1
+
+These components will be affected by your changes since diverging from main branch.
+```
+</Terminal>
+
+**Permissions:** Read-only, no confirmation required by default
+
+**Use Cases:**
+- Change impact analysis
+- Understand deployment scope
+- Plan deployments
+- Review PR impact
+- Identify affected infrastructure
+
+---
+
+#### `web_search`
+
+Search the web for current information, documentation, and examples using DuckDuckGo or Google Custom Search.
+
+:::info Configuration Required
+This tool requires web search to be enabled in your `atmos.yaml` configuration. See [Configuration](#web-search-configuration) below.
+:::
+
+**Parameters:**
+- `query` (string, required) - The search query to execute (e.g., 'Terraform AWS VPC module', 'latest Kubernetes version')
+- `max_results` (integer, optional) - Maximum number of search results to return (1-50, default: 10)
+
+**Example Usage:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Search for the latest Terraform AWS VPC module documentation"
+
+AI: I'll search the web for that information.
+
+🔧 Tool Execution Request
+Tool: web_search
+Description: Search the web for information using DuckDuckGo
+
+Parameters:
+  query: Terraform AWS VPC module documentation
+  max_results: 5
+
+Allow execution? (y/N): y
+
+✅ Executing tool...
+
+Web search results for 'Terraform AWS VPC module documentation' (5 results):
+
+1. Terraform AWS VPC Module - Official Documentation
+   URL: https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws
+   Terraform module to create AWS VPC resources with best practices...
+
+2. AWS VPC Terraform Module Examples
+   URL: https://github.com/terraform-aws-modules/terraform-aws-vpc
+   Complete examples for using the terraform-aws-vpc module...
+
+3. How to Create a VPC Using Terraform
+   URL: https://spacelift.io/blog/terraform-aws-vpc
+   Step-by-step guide to creating AWS VPCs with Terraform...
+
+Based on the search results, the official Terraform AWS VPC module documentation
+is available at https://registry.terraform.io/modules/terraform-aws-modules/vpc/aws.
+```
+</Terminal>
+
+**Permissions:** Requires user confirmation (makes external HTTP requests)
+
+**Use Cases:**
+- Find current documentation and examples
+- Research best practices and solutions
+- Look up latest versions and features
+- Discover community resources and tutorials
+- Get up-to-date information beyond AI's knowledge cutoff
+
+#### Web Search Configuration
+
+Enable web search in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+
+    # Enable web search
+    web_search:
+      enabled: true
+      max_results: 10          # Optional: limit results (default: 10)
+      engine: "duckduckgo"     # Optional: duckduckgo or google (default: duckduckgo)
+
+      # Optional: Google Custom Search API (requires API key)
+      # google_api_key: "your-api-key"
+      # google_cse_id: "your-cse-id"
+```
+</File>
+
+**Search Engines:**
+
+- **DuckDuckGo** (default): No API key required, privacy-focused, works out of the box
+- **Google Custom Search**: Requires API key and CSE ID, provides more comprehensive results
+
+**Privacy & Security:**
+- Web searches make external HTTP requests to search engines
+- No search queries are logged or stored by Atmos
+- DuckDuckGo does not track searches
+- Google Custom Search respects your Google account privacy settings
+- Tool requires user confirmation before making requests
+
+---
+
+## Permission System
+
+The permission system provides granular control over what tools the AI can execute.
+
+### Permission Modes
+
+#### Prompt Mode (Default - Secure by Default)
+
+By default, users are prompted for each tool execution (secure by default):
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  # require_confirmation: true  # This is the default - no need to specify
+
+  # OR explicitly set to true
+  require_confirmation: true
+```
+</File>
+
+#### Allow Mode (Opt-Out)
+
+Opt-out of prompts - all tools execute automatically (except restricted tools):
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  require_confirmation: false  # Explicitly opt-out of security prompts
+
+  # Still prompt for restricted_tools
+  restricted_tools:
+    - atmos_terraform_plan
+```
+</File>
+
+#### YOLO Mode (⚠️ Dangerous)
+
+All tools execute automatically without any prompts:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  yolo_mode: true  # ⚠️ DANGEROUS! No safety checks!
+```
+</File>
+
+**Warning:** Only use YOLO mode in isolated CI/CD environments with strict access controls.
+
+### Permission Flow
+
+When the AI requests tool execution:
+
+```
+1. YOLO Mode Enabled?
+   └─ Yes → Execute immediately (skip all checks)
+   └─ No  → Continue to step 2
+
+2. Tool in Blocked List?
+   └─ Yes → Deny execution
+   └─ No  → Continue to step 3
+
+3. Tool in Allowed List?
+   └─ Yes → Execute without prompt
+   └─ No  → Continue to step 4
+
+4. Tool in Restricted List?
+   └─ Yes → Always prompt user
+   └─ No  → Continue to step 5
+
+5. require_confirmation = true?
+   └─ Yes → Prompt user
+   └─ No  → Execute without prompt
+```
+
+### Wildcard Patterns
+
+Use wildcards to match multiple tools:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  allowed_tools:
+    - atmos_describe_*      # Match: atmos_describe_component, atmos_describe_stacks
+    - atmos_list_*          # Match: atmos_list_stacks, atmos_list_components
+    - file_read*            # Match: file_read, file_read_lines
+    - *_validate            # Match: atmos_validate, stack_validate
+```
+</File>
+
+**Pattern Rules:**
+- `*` matches any characters
+- Patterns are matched against the full tool name
+- First match wins (check order matters)
+
+### Permission Lists
+
+#### Allowed Tools
+
+Tools that execute without confirmation:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  allowed_tools:
+    - atmos_describe_component   # Specific tool
+    - atmos_list_stacks
+    - atmos_validate_stacks
+    - atmos_describe_*           # All describe commands
+    - read_component_file        # Read component files
+    - read_stack_file            # Read stack files
+```
+</File>
+
+Use for:
+- ✅ Read-only operations
+- ✅ Safe query commands
+- ✅ Frequently used tools
+
+#### Restricted Tools
+
+Tools that always require confirmation:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  restricted_tools:
+    - write_component_file       # Modifies component files
+    - write_stack_file           # Modifies stack files
+    - atmos_terraform_plan       # Generates plans
+    - atmos_terraform_*          # All terraform operations
+```
+</File>
+
+Use for:
+- ⚠️ Operations that modify state
+- ⚠️ Commands that generate plans
+- ⚠️ Potentially expensive operations
+
+#### Blocked Tools
+
+Tools that are completely prohibited:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  blocked_tools:
+    - atmos_terraform_destroy    # Destructive operation
+    - atmos_terraform_apply      # Applies changes
+    - *_delete                   # Block all delete operations
+```
+</File>
+
+Use for:
+- 🚫 Destructive operations
+- 🚫 Commands that apply changes
+- 🚫 Tools that should never run automatically
+
+## Permission Prompts
+
+When a tool requires confirmation, you'll see a detailed prompt:
+
+<Terminal title="atmos ai chat">
+```bash
+🔧 Tool Execution Request
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Tool: atmos_describe_component
+Description: Describe an Atmos component configuration in a specific stack
+
+Parameters:
+  component: vpc
+  stack: prod-use1
+
+Options:
+  [a] Always allow (save to .atmos/ai.settings.local.json)
+  [y] Allow once
+  [n] Deny once
+  [d] Always deny (save to .atmos/ai.settings.local.json)
+
+Choice (a/y/n/d):
+```
+</Terminal>
+
+**Responses:**
+- `a` or `always` - Always allow this tool (saves to persistent cache)
+- `y` or `yes` - Allow this execution once
+- `n` or `no` or Enter - Deny this execution once
+- `d` or `deny` - Always deny this tool (saves to persistent cache)
+
+### Prompt Information
+
+Each prompt shows:
+- **Tool Name** - The specific tool being executed
+- **Description** - What the tool does
+- **Parameters** - All parameters being passed to the tool
+
+This allows you to make informed decisions about tool execution.
+
+### Persistent Permission Cache
+
+When you choose "always allow" or "always deny", Atmos saves your decision to `.atmos/ai.settings.local.json`. This file stores your permission preferences so you're not repeatedly prompted for the same tools.
+
+**Cache File Structure:**
+
+<File title=".atmos/ai.settings.local.json">
+```json
+{
+  "permissions": {
+    "allow": [
+      "atmos_describe_component",
+      "atmos_list_stacks",
+      "atmos_validate_component"
+    ],
+    "deny": [
+      "atmos_terraform_apply",
+      "atmos_terraform_destroy"
+    ]
+  }
+}
+```
+</File>
+
+**Key Features:**
+
+- **Automatic Creation** - File is created automatically when you save your first permission decision
+- **User-Specific** - Located in your project's `.atmos` directory (gitignored by default)
+- **Manual Editing** - You can edit this file directly to add or remove permissions
+- **Pattern Matching** - Tool names are matched exactly (future versions may support wildcards)
+- **Session Persistence** - Decisions persist across all AI sessions
+
+**Manual Management:**
+
+You can edit the cache file directly to manage permissions:
+
+<Terminal title="shell">
+```bash
+# View current permissions
+cat .atmos/ai.settings.local.json
+
+# Edit permissions manually
+vim .atmos/ai.settings.local.json
+
+# Clear all cached permissions
+rm .atmos/ai.settings.local.json
+```
+</Terminal>
+
+**Priority Order:**
+
+Permission decisions follow this priority (highest to lowest):
+
+1. **Blocked Tools** (from `atmos.yaml`) - Always blocked, cannot be overridden
+2. **Cached Denials** (from `.atmos/ai.settings.local.json`) - User denied previously
+3. **Allowed Tools** (from `atmos.yaml`) - Pre-approved in config
+4. **Cached Allowances** (from `.atmos/ai.settings.local.json`) - User allowed previously
+5. **Restricted Tools** (from `atmos.yaml`) - Requires prompt if not cached
+6. **Default Behavior** - Defaults to prompting for security (unless `require_confirmation: false` is set to opt-out)
+
+## Security Best Practices
+
+### Start Conservative
+
+Begin with strict permissions (the default) and relax over time:
+
+<File title="atmos.yaml">
+```yaml
+# Day 1: Use the secure default - prompt for everything (no config needed!)
+tools:
+  enabled: true
+  # require_confirmation defaults to true - no need to specify
+  # No allowed_tools means you'll be prompted for each tool
+
+# After trust is established: Allow read-only tools
+tools:
+  enabled: true
+  # Still use default require_confirmation: true
+  allowed_tools:
+    - atmos_describe_*         # Pre-approve safe read-only tools
+    - atmos_list_*
+    - atmos_validate_*
+
+# Advanced: Opt-out of prompts for convenience (after trust is established)
+tools:
+  enabled: true
+  require_confirmation: false  # Opt-out - allow all tools automatically
+  restricted_tools:
+    - write_*                  # Still prompt for write operations
+    - atmos_terraform_*        # Still prompt for terraform operations
+```
+</File>
+
+### Block Destructive Operations
+
+Always block tools that modify infrastructure:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  blocked_tools:
+    - atmos_terraform_destroy
+    - atmos_terraform_apply
+    - write_component_file        # Prevent AI from modifying components
+    - write_stack_file            # Prevent AI from modifying stacks
+    - *_delete
+    - *_destroy
+```
+</File>
+
+### Use Restricted List Wisely
+
+Force confirmation for state-modifying operations:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  restricted_tools:
+    - atmos_terraform_plan      # Always confirm plans
+    - write_component_file      # Always confirm component edits
+    - write_stack_file          # Always confirm stack edits
+    - atmos_workflow_*          # Always confirm workflows
+```
+</File>
+
+### Avoid YOLO Mode
+
+Never use YOLO mode in:
+- ❌ Production environments
+- ❌ Shared development environments
+- ❌ Workstations with access to production
+- ❌ Any environment with sensitive data
+
+Only use YOLO mode in:
+- ✅ Isolated CI/CD runners
+- ✅ Read-only analysis environments
+- ✅ Sandboxed testing environments
+
+### Use Persistent Cache Wisely
+
+The permission cache (`.atmos/ai.settings.local.json`) is convenient but requires careful use:
+
+**Safe for "Always Allow":**
+- ✅ Read-only tools (`atmos_describe_*`, `atmos_list_*`, `atmos_validate_*`)
+- ✅ Information gathering tools you use frequently
+- ✅ Non-destructive analysis tools
+
+**Avoid "Always Allow" for:**
+- ❌ State-modifying operations (`atmos_terraform_*`)
+- ❌ File write operations (`write_component_file`, `write_stack_file`)
+- ❌ Workflow execution tools
+- ❌ Any tool that could impact infrastructure
+
+**Best Practice:**
+
+<Terminal title="atmos ai chat">
+```bash
+# First time using a describe tool
+🔧 Tool: atmos_describe_component
+Choice (a/y/n/d): a  # Safe to always allow
+
+# First time with a destructive tool
+🔧 Tool: atmos_terraform_apply
+Choice (a/y/n/d): d  # Always deny, use manual workflows instead
+```
+</Terminal>
+
+**Review Cache Regularly:**
+
+<Terminal title="shell">
+```bash
+# Review your cached permissions
+cat .atmos/ai.settings.local.json
+
+# Audit what you've allowed
+jq '.permissions.allow[]' .atmos/ai.settings.local.json
+
+# Clear cache if needed
+rm .atmos/ai.settings.local.json
+```
+</Terminal>
+
+### Review Permissions Regularly
+
+Audit your tool configuration as new tools are added:
+
+<Terminal title="shell">
+```bash
+# Review current configuration
+grep -A 20 "tools:" atmos.yaml
+
+# Review cached permissions
+cat .atmos/ai.settings.local.json
+
+# Test permission system
+atmos ai chat
+> "List all stacks"  # Should trigger permission prompt or execute based on config
+```
+</Terminal>
+
+### Environment-Specific Configuration
+
+Use different configurations for different environments:
+
+<File title="atmos.yaml (production)">
+```yaml
+# Production: Very restrictive
+tools:
+  enabled: true
+  require_confirmation: true
+  allowed_tools: []              # Nothing auto-allowed
+  blocked_tools:
+    - atmos_terraform_*          # Block all Terraform operations
+    - write_*                    # Block all write operations
+```
+</File>
+
+<File title="atmos.yaml (development)">
+```yaml
+# Development: More permissive
+tools:
+  enabled: true
+  require_confirmation: true
+  allowed_tools:
+    - atmos_describe_*           # Allow describe operations
+    - atmos_list_*               # Allow list operations
+    - atmos_validate_*           # Allow validation
+    - read_component_file        # Allow reading component files
+    - read_stack_file            # Allow reading stack files
+  blocked_tools:
+    - atmos_terraform_destroy    # Still block destroy
+    - write_component_file       # Block file modifications
+    - write_stack_file           # Block file modifications
+```
+</File>
+
+## Skill-Specific Tool Access
+
+Different AI skills have different tool access based on their specialization. This allows each skill to focus on its area of expertise while preventing inappropriate actions.
+
+### How Skill Tool Filtering Works
+
+When you switch to a specialized skill, Atmos automatically filters the available tools to match that skill's capabilities:
+
+1. **Skill Defines Allowed Tools** - Each skill specifies which tools it can use
+2. **Restricted Tools Require Confirmation** - Some skills mark certain tools as requiring user approval
+3. **Blocked Tools Are Unavailable** - Tools not in the allowed list cannot be called by that skill
+4. **Provider Restrictions** - Tools are filtered before being sent to the AI provider
+
+This creates a safety layer where specialized skills can only perform actions relevant to their purpose.
+
+### Built-in Skills and Their Tool Access
+
+#### General Skill (Default)
+
+**Access:** Full tool access - all tools available
+
+The default general-purpose skill has unrestricted access to all tools. It can perform any operation that your global tool configuration allows.
+
+**Use Cases:**
+- General infrastructure queries
+- Multi-purpose conversations
+- Tasks requiring diverse tool access
+- Exploratory analysis
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+You: List all stacks and describe the VPC component in prod
+
+AI (general): I'll list the stacks and describe the VPC for you.
+
+🔧 Tool: atmos_list_stacks
+✅ Executing...
+[Lists all stacks]
+
+🔧 Tool: atmos_describe_component (vpc, prod-use1)
+✅ Executing...
+[Shows VPC configuration]
+
+Here's what I found:
+- 15 stacks available
+- VPC in prod-use1 has CIDR 10.0.0.0/16 with 3 availability zones...
+```
+</Terminal>
+
+---
+
+#### Stack Analyzer Skill
+
+**Allowed Tools:**
+- ✅ `atmos_describe_component` - Examine component details
+- ✅ `atmos_describe_affected` - Impact analysis
+- ✅ `atmos_list_stacks` - Stack inventory
+- ✅ `read_stack_file` - Read stack configurations
+- ✅ `atmos_get_template_context` - Understand variables
+- ✅ `read_file` - Read any file
+- ❌ **Cannot edit files** - Read-only skill
+- ❌ **Cannot execute commands** - Analysis only
+
+**Use Cases:**
+- Analyzing stack configurations and dependencies
+- Understanding inheritance patterns
+- Reviewing architecture design
+- Identifying configuration issues
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Stack Analyzer skill
+Ctrl+A → Select "Stack Analyzer"
+
+You: Analyze the prod-use1 stack dependencies
+
+AI (stack-analyzer): I'll analyze the dependency chain for prod-use1.
+
+🔧 Tool: atmos_describe_component (vpc, prod-use1)
+✅ Executing...
+
+🔧 Tool: read_stack_file (stacks/prod/use1.yaml)
+✅ Executing...
+
+🔧 Tool: atmos_describe_affected (vpc)
+✅ Executing...
+
+Here's the dependency analysis:
+
+**Stack: prod-use1**
+- Inherits from: mixins/prod.yaml, mixins/use1.yaml
+- Components: vpc, eks, rds
+- Dependencies: vpc → eks → rds
+
+The VPC component is the foundation, with EKS and RDS depending on it.
+If you modify the VPC, it will affect 2 downstream components.
+
+# If you try to edit a file:
+You: Edit the vpc configuration
+
+AI (stack-analyzer): I'm a read-only analysis skill and cannot edit files.
+To make changes, please switch to the Component Refactor skill (Ctrl+A)
+or use the General skill.
+```
+</Terminal>
+
+**Why This Restriction?**
+Stack Analyzer is optimized for understanding and analyzing configurations, not modifying them. This prevents accidental changes during investigation and ensures the skill stays focused on its analytical role.
+
+---
+
+#### Component Refactor Skill
+
+**Allowed Tools:**
+- ✅ `list_component_files` - Discover component structure
+- ✅ `read_component_file` - Read component code
+- ✅ `read_file` - Read any file
+- ✅ `edit_file` ⚠️ - Edit files (requires confirmation)
+- ✅ `search_files` - Find patterns across files
+- ✅ `execute_bash` ⚠️ - Run commands (requires confirmation)
+- ❌ **Cannot access Atmos describe tools** - Focused on code, not stack queries
+- ❌ **Cannot validate stacks** - Not a validation skill
+
+**Restricted Tools (Require Confirmation):**
+- ⚠️ `edit_file` - Always prompts before modifying files
+- ⚠️ `execute_bash` - Always prompts before running commands
+
+**Use Cases:**
+- Refactoring Terraform/Helmfile components
+- Improving code structure and organization
+- Applying infrastructure-as-code best practices
+- Modernizing deprecated patterns
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Component Refactor skill
+Ctrl+A → Select "Component Refactor"
+
+You: Refactor the VPC component to use modern naming conventions
+
+AI (component-refactor): I'll analyze and refactor the VPC component.
+
+🔧 Tool: list_component_files (terraform, vpc)
+✅ Executing...
+
+🔧 Tool: read_component_file (terraform, vpc, main.tf)
+✅ Executing...
+
+I've identified several improvements:
+1. Variable names should use snake_case consistently
+2. Resources should follow the naming pattern: <type>-<env>-<name>
+3. Local values can reduce duplication
+
+Let me make these changes:
+
+🔧 Tool: edit_file
+Description: Update variable naming in vpc/variables.tf
+Parameters:
+  file_path: components/terraform/vpc/variables.tf
+  old_content: variable "vpcCIDR" {
+  new_content: variable "vpc_cidr" {
+
+⚠️ Allow execution? (y/N): y
+✅ Executing...
+
+File updated successfully. I've improved the variable naming consistency.
+
+# If you try to describe a stack:
+You: What stacks use this VPC?
+
+AI (component-refactor): I don't have access to stack analysis tools.
+For stack queries, please switch to the Stack Analyzer skill (Ctrl+A)
+or use the General skill.
+```
+</Terminal>
+
+**Why These Restrictions?**
+Component Refactor focuses exclusively on code quality and structure. It requires confirmation before making changes or running commands to ensure you review all modifications. It doesn't need stack analysis tools because its job is improving code, not analyzing infrastructure topology.
+
+---
+
+#### Security Auditor Skill
+
+**Allowed Tools:**
+- ✅ `atmos_describe_component` - Examine component security
+- ✅ `atmos_list_stacks` - Inventory all stacks
+- ✅ `read_stack_file` - Review stack configurations
+- ✅ `read_component_file` - Check component code
+- ✅ `atmos_validate_stacks` - Validate configurations
+- ✅ `read_file` - Read any file
+- ✅ `search_files` - Find security patterns
+- ❌ **Cannot edit files** - Audit only, no modifications
+- ❌ **Cannot execute commands** - Security review only
+
+**Use Cases:**
+- Security audits of infrastructure configurations
+- Identifying IAM policy issues
+- Checking network security (CIDR blocks, security groups)
+- Validating encryption and secrets management
+- Detecting exposed credentials
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Security Auditor skill
+Ctrl+A → Select "Security Auditor"
+
+You: Audit the VPC security configuration for prod
+
+AI (security-auditor): I'll perform a comprehensive security audit.
+
+🔧 Tool: atmos_describe_component (vpc, prod-use1)
+✅ Executing...
+
+🔧 Tool: read_component_file (terraform, vpc, security_groups.tf)
+✅ Executing...
+
+🔧 Tool: search_files (pattern: "0.0.0.0/0", path: components/terraform/vpc)
+✅ Executing...
+
+**SECURITY AUDIT REPORT: VPC prod-use1**
+
+🔴 CRITICAL FINDINGS (2):
+
+1. **Unrestricted SSH Access**
+   File: components/terraform/vpc/security_groups.tf:23
+   Issue: Security group allows SSH (port 22) from 0.0.0.0/0
+   Risk: Publicly accessible SSH increases brute-force attack risk
+   Fix: Restrict ingress to specific IP ranges or use bastion host
+
+2. **Overly Permissive Security Group**
+   File: components/terraform/vpc/security_groups.tf:45
+   Issue: Egress rule allows all traffic to 0.0.0.0/0
+   Risk: Potential data exfiltration if instance compromised
+   Fix: Restrict egress to specific destinations/ports
+
+🟡 HIGH FINDINGS (1):
+
+3. **Missing VPC Flow Logs**
+   Issue: VPC flow logs not enabled
+   Risk: No network traffic visibility for security monitoring
+   Fix: Enable VPC flow logs to CloudWatch or S3
+
+Recommendations:
+1. Implement bastion host for SSH access
+2. Use AWS Session Manager instead of direct SSH
+3. Enable VPC flow logs for all environments
+4. Review and tighten all security group rules
+
+# If you try to fix the issues:
+You: Fix these security issues
+
+AI (security-auditor): I'm an audit-only skill and cannot modify configurations.
+To implement these fixes, please switch to the Component Refactor skill (Ctrl+A)
+or use the General skill.
+
+I can provide you with the specific changes needed if you'd like.
+```
+</Terminal>
+
+**Why This Restriction?**
+Security Auditor is a read-only skill focused on finding and reporting security issues. It cannot make changes because security fixes require careful review and testing. This separation ensures audit findings remain objective and that all fixes go through proper review processes.
+
+---
+
+#### Config Validator Skill
+
+**Allowed Tools:**
+- ✅ `atmos_validate_stacks` - Comprehensive validation
+- ✅ `atmos_describe_config` - Understand configuration
+- ✅ `read_stack_file` - Read stack configurations
+- ✅ `read_file` - Read any file
+- ✅ `validate_file_lsp` - Detailed diagnostics (if LSP enabled)
+- ❌ **Cannot edit files** - Validation only
+- ❌ **Cannot execute commands** - Check only, no actions
+- ❌ **Cannot describe components** - Schema focus, not content
+
+**Use Cases:**
+- Validating YAML syntax and structure
+- Checking schema compliance
+- Verifying variable references
+- Detecting circular dependencies
+- Ensuring required fields are present
+
+**Example:**
+
+<Terminal title="atmos ai chat">
+```bash
+# Switch to Config Validator skill
+Ctrl+A → Select "Config Validator"
+
+You: Validate all stack configurations
+
+AI (config-validator): I'll run comprehensive validation on all stacks.
+
+🔧 Tool: atmos_validate_stacks
+✅ Executing...
+
+🔧 Tool: read_stack_file (stacks/prod/use1.yaml)
+✅ Executing...
+
+**VALIDATION REPORT**
+
+✅ PASSED (12 stacks):
+- prod-use1, prod-use2, prod-euw1
+- staging-use1, staging-use2
+- dev-use1, dev-use2
+- sandbox-1, sandbox-2
+- test-integration
+- dr-use1, dr-euw1
+
+❌ FAILED (2 stacks):
+
+**1. Stack: prod-apne1**
+   File: stacks/prod/apne1.yaml:45
+   Error: Invalid component reference
+   Details: Component 'vpc-legacy' does not exist
+   Fix: Change 'vpc-legacy' to 'vpc' or create the component
+
+**2. Stack: staging-apse1**
+   File: stacks/staging/apse1.yaml:23
+   Error: Missing required field
+   Details: Component 'eks' is missing required 'cluster_version' variable
+   Fix: Add 'cluster_version' to the component vars section
+
+Example fix for staging-apse1:
+
+    components:
+      terraform:
+        eks:
+          vars:
+            cluster_version: "1.27"  # Add this line
+
+All validation issues must be resolved before deployment.
+
+# If you try to make edits:
+You: Fix the validation errors
+
+AI (config-validator): I can identify and explain errors but cannot edit files.
+To fix these issues, please switch to the General skill (Ctrl+A)
+or manually edit the files based on my recommendations.
+```
+</Terminal>
+
+**Why This Restriction?**
+Config Validator focuses exclusively on finding configuration errors and schema violations. It's designed to be a "linter" skill that reports issues but doesn't modify files, ensuring validation results remain authoritative and objective.
+
+---
+
+### Creating Custom Skills with Tool Restrictions
+
+You can create custom skills with specific tool access in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    skills:
+      # Custom read-only documentation skill
+      - name: "docs-helper"
+        display_name: "Documentation Helper"
+        description: "Helps write and review infrastructure documentation"
+        allowed_tools:
+          - read_file
+          - read_component_file
+          - read_stack_file
+          - search_files
+          - atmos_describe_component
+        # Restricted tools require confirmation
+        restricted_tools:
+          - edit_file
+        system_prompt: |
+          You are a documentation specialist for infrastructure.
+          Help users create clear, accurate documentation for their Atmos components and stacks.
+
+      # Custom terraform-focused skill
+      - name: "terraform-expert"
+        display_name: "Terraform Expert"
+        description: "Specialized in Terraform operations and best practices"
+        allowed_tools:
+          - list_component_files
+          - read_component_file
+          - edit_file
+          - atmos_terraform_plan
+          - atmos_terraform_validate
+        restricted_tools:
+          - edit_file
+          - atmos_terraform_plan
+        system_prompt: |
+          You are a Terraform expert focused on infrastructure code quality.
+          Help users write better Terraform code following best practices.
+```
+</File>
+
+**Key Concepts:**
+
+- **`allowed_tools`** - Explicitly list which tools this skill can use
+  - Empty list `[]` means all tools are allowed (like General skill)
+  - Specified list limits the skill to only those tools
+- **`restricted_tools`** - Tools that require user confirmation even if allowed
+  - Useful for write operations that should always be reviewed
+  - Overrides global `allowed_tools` auto-approval
+- **Tool filtering happens at runtime** - AI provider never sees tools the skill can't use
+
+### Practical Use Cases
+
+#### Workflow: Security Review → Fixes
+
+```bash
+# Step 1: Audit with Security Auditor (read-only)
+Ctrl+A → "Security Auditor"
+You: Audit the VPC security configuration
+
+AI: [Performs audit, identifies issues]
+    🔴 Found 3 critical security issues
+    [Details of each issue with line numbers]
+
+# Step 2: Fix with Component Refactor (write access)
+Ctrl+A → "Component Refactor"
+You: Fix the security issues we just found
+
+AI: I'll implement the security fixes:
+    [Makes each change with confirmation]
+    ✅ Fixed SSH access restriction
+    ✅ Tightened egress rules
+    ✅ Enabled VPC flow logs
+
+# Step 3: Validate with Config Validator
+Ctrl+A → "Config Validator"
+You: Validate the changes
+
+AI: [Runs validation]
+    ✅ All stacks valid
+    ✅ No schema errors
+```
+
+#### Workflow: Architecture Analysis → Refactoring
+
+```bash
+# Step 1: Analyze with Stack Analyzer
+Ctrl+A → "Stack Analyzer"
+You: Analyze our VPC architecture across all environments
+
+AI: [Performs deep analysis]
+    Found inconsistent subnet configurations between environments
+    [Shows detailed comparison]
+
+# Step 2: Refactor with Component Refactor
+Ctrl+A → "Component Refactor"
+You: Standardize the subnet configurations
+
+AI: [Makes changes with confirmation]
+    Updated 5 component files for consistency
+```
+
+### Benefits of Skill-Specific Tool Access
+
+1. **Safety** - Skills can only perform actions appropriate to their role
+2. **Focus** - Specialized prompts work better with limited, relevant tools
+3. **Intent Clarity** - Clear separation between analysis, modification, and validation
+4. **Audit Trail** - Easy to track which skill made what changes
+5. **Reduced Errors** - Skills can't accidentally use wrong tools for their task
+
+### Related Documentation
+
+- [AI Skills](/ai/skills) - Complete skill documentation and customization
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [Permission System](#permission-system) - Global tool permission controls
+
+## Tool Execution Behavior
+
+### Timeouts
+
+Tools have a default timeout of 30 seconds:
+
+- Long-running operations are automatically cancelled
+- Prevents hanging on unresponsive operations
+- Error returned to AI if timeout occurs
+
+### Error Handling
+
+When a tool fails:
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Describe the vpc component in nonexistent-stack"
+
+AI: Let me check that.
+
+🔧 Tool Execution Request
+Tool: atmos_describe_component
+Parameters:
+  component: vpc
+  stack: nonexistent-stack
+
+Allow execution? (y/N): y
+
+❌ Tool execution failed: stack 'nonexistent-stack' not found
+
+I apologize, but the stack 'nonexistent-stack' doesn't exist in your configuration.
+Would you like me to list the available stacks instead?
+```
+</Terminal>
+
+The AI receives error information and can adjust its response accordingly.
+
+### Tool Results
+
+Tools return structured results:
+
+```go
+type Result struct {
+    Success bool                      // Did the tool succeed?
+    Output  string                    // Human-readable output
+    Data    map[string]interface{}    // Structured data
+    Error   error                     // Error if failed
+}
+```
+
+The AI uses this information to:
+- Provide accurate answers
+- Handle errors gracefully
+- Make follow-up queries
+
+## Use Cases
+
+### Automated Infrastructure Analysis
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Analyze the VPC configuration across all production stacks"
+
+AI: Let me analyze the VPC configurations.
+
+# AI automatically executes:
+# 1. atmos_list_stacks to find all prod stacks
+# 2. atmos_describe_component vpc prod-use1
+# 3. atmos_describe_component vpc prod-use2
+# ... (with appropriate permissions)
+
+Based on my analysis of your production VPCs:
+- prod-use1: CIDR 10.0.0.0/16, 3 availability zones
+- prod-use2: CIDR 10.1.0.0/16, 3 availability zones
+- Both use consistent subnet layouts
+- All have VPN gateway enabled
+```
+</Terminal>
+
+### Configuration Validation
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Are all my stack configurations valid?"
+
+AI: Let me validate your configurations.
+
+# AI executes: atmos_validate_stacks
+
+All stack configurations are valid! I found:
+- 15 stacks validated
+- No schema violations
+- No missing required fields
+
+Your configurations look good.
+```
+</Terminal>
+
+### Troubleshooting
+
+<Terminal title="atmos ai chat">
+```bash
+You: "Why is the prod-use1 stack failing validation?"
+
+AI: Let me check the configuration.
+
+# AI executes:
+# 1. atmos_describe_component * prod-use1
+# 2. atmos_validate_stacks
+
+I found the issue. The `vpc` component in prod-use1 is missing the required
+`enable_dns_hostnames` field. This is required by your JSON schema.
+
+Would you like me to suggest the correct configuration?
+```
+</Terminal>
+
+## Troubleshooting
+
+### Tool Execution Denied
+
+If you see "tool execution denied" errors:
+
+<Terminal title="shell">
+```bash
+# Check if tools are enabled
+grep -A 5 "tools:" atmos.yaml
+
+# Verify tool isn't blocked
+grep -A 10 "blocked_tools:" atmos.yaml
+```
+</Terminal>
+
+### Permission Prompts Not Appearing
+
+If prompts don't appear when expected:
+
+<File title="atmos.yaml">
+```yaml
+# Ensure require_confirmation is true
+tools:
+  require_confirmation: true
+
+# Check if tool is in allowed_tools
+allowed_tools:
+  - atmos_describe_*  # This would skip prompts!
+```
+</File>
+
+### Timeouts
+
+If tools are timing out:
+
+- Tools have a 30-second timeout
+- Long-running operations will be cancelled
+- Consider running the operation manually: `atmos describe component <component> <stack>`
+
+### YOLO Mode Not Working
+
+YOLO mode requires explicit configuration:
+
+<File title="atmos.yaml">
+```yaml
+tools:
+  enabled: true
+  yolo_mode: true  # Must be explicitly set
+```
+</File>
+
+**Warning:** Only use YOLO mode in controlled environments.
+
+## Complete Tool Catalog
+
+Atmos AI now includes a comprehensive set of tools for infrastructure management:
+
+**Component & Stack Tools:**
+- ✅ `atmos_describe_component` - Describe component configuration in a stack
+- ✅ `atmos_list_stacks` - List all available stacks
+- ✅ `describe_affected` - Show affected components from git changes
+- ✅ `get_template_context` - Debug Go template failures
+
+**Validation Tools:**
+- ✅ `atmos_validate_stacks` - Validate all stack configurations
+- ✅ `validate_file_lsp` - Validate files with Language Server Protocol
+
+**File Operation Tools:**
+- ✅ `read_component_file` - Read files from components directory
+- ✅ `write_component_file` - Write files to components directory
+- ✅ `read_stack_file` - Read files from stacks directory
+- ✅ `write_stack_file` - Write files to stacks directory
+- ✅ `read_file` - Read any file from repository
+- ✅ `search_files` - Search for patterns across files
+- ✅ `list_component_files` - List files in a component
+
+**Command Execution Tools:**
+- ✅ `execute_atmos_command` - Execute any Atmos CLI command
+
+**Web & Research Tools:**
+- ✅ `web_search` - Search the web for current information and documentation
+
+**Total Tools Available:** 15 tools across all categories
+
+With these tools, Atmos AI has full Claude Code-like capabilities for infrastructure management!
+
+## Related Documentation
+
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [AI Sessions](/ai/sessions) - Learn about persistent conversation sessions
+- [AI Commands](/cli/commands/ai/usage) - Complete command reference

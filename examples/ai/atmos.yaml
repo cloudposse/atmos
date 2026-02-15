@@ -1,0 +1,231 @@
+# Atmos AI Assistant Example Configuration
+# This demonstrates multi-provider AI configuration with sessions, tools, and custom skills.
+#
+# Documentation: https://atmos.tools/ai
+
+# Base paths
+base_path: "."
+
+# Components configuration
+# Docs: https://atmos.tools/core-concepts/components
+components:
+  terraform:
+    base_path: "components/terraform"
+
+# Stacks configuration
+# Docs: https://atmos.tools/core-concepts/stacks
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  # Stack naming template
+  # Docs: https://atmos.tools/core-concepts/stacks/templates
+  name_template: "{{ .vars.environment }}-{{ .vars.stage }}"
+
+# Templates configuration
+# Docs: https://atmos.tools/core-concepts/stacks/templates
+templates:
+  settings:
+    enabled: true
+    # Sprig functions: https://atmos.tools/core-concepts/stacks/templates/functions/sprig-functions
+    sprig:
+      enabled: true
+    # Gomplate functions: https://atmos.tools/core-concepts/stacks/templates/functions/gomplate-functions
+    gomplate:
+      enabled: true
+
+# AI Assistant Configuration
+# Docs: https://atmos.tools/ai/configuration
+settings:
+  ai:
+    # Enable AI features (required)
+    # Docs: https://atmos.tools/ai/configuration#enabling-ai
+    enabled: true
+
+    # Default provider for CLI commands
+    # Docs: https://atmos.tools/ai/providers
+    default_provider: "anthropic"
+
+    # Default skill to use
+    # Docs: https://atmos.tools/ai/skills
+    default_skill: "general"
+
+    # Context settings - control what information is sent to the AI
+    # Docs: https://atmos.tools/ai/configuration#context-settings
+    send_context: false      # Don't auto-send stack configs
+    prompt_on_send: true     # Prompt before sending context
+
+    # History management - limit conversation history size
+    # Docs: https://atmos.tools/ai/configuration#history-management
+    max_history_messages: 50  # Keep last 50 messages
+    max_history_tokens: 8000  # Or limit by tokens
+
+    # Timeouts for AI API calls
+    # Docs: https://atmos.tools/ai/configuration#timeouts
+    timeout_seconds: 60
+
+    # Configure multiple AI providers
+    # Docs: https://atmos.tools/ai/providers
+    providers:
+      # Anthropic Claude - Best for complex reasoning
+      # Docs: https://atmos.tools/ai/providers#anthropic
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+        # Token caching for cost savings (Anthropic-specific)
+        # Docs: https://atmos.tools/ai/providers#prompt-caching
+        cache:
+          enabled: true
+          cache_system_prompt: true
+          cache_project_memory: true
+
+      # OpenAI GPT - Strong general capabilities
+      # Docs: https://atmos.tools/ai/providers#openai
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+
+      # Google Gemini - Fast with large context
+      # Docs: https://atmos.tools/ai/providers#gemini
+      gemini:
+        model: "gemini-2.5-flash"
+        api_key_env: "GEMINI_API_KEY"
+        max_tokens: 8192
+
+      # Ollama - Local, private, no API costs
+      # Docs: https://atmos.tools/ai/providers#ollama
+      ollama:
+        model: "llama3.3:70b"
+        base_url: "http://localhost:11434/v1"
+        timeout_seconds: 120  # Longer timeout for local models
+
+    # Session management - persist conversations across sessions
+    # Docs: https://atmos.tools/ai/sessions
+    sessions:
+      enabled: true
+      storage: "sqlite"
+      path: ".atmos/sessions"
+      max_sessions: 10
+      auto_save: true
+      retention_days: 30
+
+      # Auto-compact for long conversations
+      # Docs: https://atmos.tools/ai/sessions#auto-compaction
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.75    # Compact at 75% of max_history_messages
+        compact_ratio: 0.4         # Compact 40% of old messages
+        preserve_recent: 10        # Always keep last 10 messages
+        use_ai_summary: true       # Use AI for intelligent summaries
+        summary_model: "claude-3-haiku-20240307"  # Faster/cheaper for summaries
+        summary_max_tokens: 2048
+        show_summary_markers: false
+        compact_on_resume: true
+
+    # Tool execution settings - control what the AI can do
+    # Docs: https://atmos.tools/ai/tools
+    tools:
+      enabled: true
+      require_confirmation: true   # Prompt before tool execution
+
+      # Tools that execute without confirmation
+      # Docs: https://atmos.tools/ai/tools#allowed-tools
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - read_stack_file
+
+      # Tools that always require confirmation
+      # Docs: https://atmos.tools/ai/tools#restricted-tools
+      restricted_tools:
+        - file_edit
+        - atmos_terraform_plan
+
+      # Tools that are completely blocked
+      # Docs: https://atmos.tools/ai/tools#blocked-tools
+      blocked_tools:
+        - atmos_terraform_apply
+        - atmos_terraform_destroy
+
+      # Skip all confirmations (DANGEROUS - only for trusted environments)
+      # Docs: https://atmos.tools/ai/tools#yolo-mode
+      yolo_mode: false
+
+    # Project memory - persistent context across sessions
+    # Docs: https://atmos.tools/ai/memory
+    memory:
+      enabled: true
+      file_path: "ATMOS.md"
+      auto_update: false
+      create_if_missing: true
+
+    # Custom skills - specialized AI personas for different tasks
+    # Docs: https://atmos.tools/ai/skills
+    skills:
+      # Cost optimization specialist
+      # Docs: https://atmos.tools/ai/skills#custom-skills
+      cost-optimizer:
+        display_name: "Cost Optimizer"
+        description: "Analyzes infrastructure for cost savings opportunities"
+        category: "analysis"
+        system_prompt: |
+          You are a cost optimization expert for Atmos infrastructure.
+
+          FOCUS AREAS:
+          - Identify overprovisioned resources
+          - Suggest rightsizing opportunities
+          - Find unused or idle resources
+          - Recommend reserved capacity where appropriate
+          - Analyze component configurations for cost efficiency
+
+          APPROACH:
+          1. Always use tools to gather data before making recommendations
+          2. Provide specific, actionable suggestions with estimated savings
+          3. Consider both immediate and long-term cost impacts
+          4. Balance cost optimization with reliability and performance
+
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_list_stacks
+          - read_stack_file
+          - read_file
+
+        restricted_tools: []
+
+      # Security auditor
+      # Docs: https://atmos.tools/ai/skills#custom-skills
+      security-reviewer:
+        display_name: "Security Reviewer"
+        description: "Reviews infrastructure for security best practices"
+        category: "security"
+        system_prompt: |
+          You are a security expert reviewing Atmos infrastructure configurations.
+
+          FOCUS AREAS:
+          - Network security (VPC, security groups, NACLs)
+          - IAM policies and roles (least privilege)
+          - Encryption at rest and in transit
+          - Secrets management
+          - Compliance requirements
+
+          APPROACH:
+          1. Use tools to inspect actual configurations
+          2. Reference security best practices and compliance standards
+          3. Prioritize findings by severity
+          4. Provide remediation steps for each finding
+
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_list_stacks
+          - atmos_validate_stacks
+          - read_stack_file
+
+        restricted_tools: []
+
+# Workflows
+# Docs: https://atmos.tools/core-concepts/workflows
+workflows:
+  base_path: "workflows"

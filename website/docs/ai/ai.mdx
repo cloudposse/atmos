@@ -1,0 +1,229 @@
+---
+title: Atmos AI
+sidebar_position: 1
+sidebar_label: Atmos AI
+sidebar_class_name: hidden
+description: AI-powered capabilities for Atmos infrastructure management
+id: ai
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import DocCardList from '@theme/DocCardList'
+import Experimental from '@site/src/components/Experimental'
+
+# Atmos AI
+
+<Experimental />
+
+Atmos integrates AI capabilities directly into infrastructure management, providing intelligent assistance for understanding configurations, analyzing stacks, troubleshooting issues, and automating workflows.
+
+## AI Capabilities
+
+| Capability | Description | Learn More |
+|------------|-------------|------------|
+| **[AI Assistant](#ai-assistant)** | Interactive terminal agent for conversations, Q&A, and guided help | [Configuration](/ai/configuration) |
+| **[Tool Execution](/ai/tools)** | AI can inspect your infrastructure using read-only Atmos commands | [Tools Reference](/ai/tools) |
+| **[AI Skills](/ai/skills)** | Specialized assistants for security, stack analysis, and more | [Skills Guide](/ai/skills) |
+| **[MCP Server](/ai/mcp-server)** | Expose Atmos tools to Claude Desktop and other MCP clients | [MCP Setup](/ai/mcp-server) |
+| **[Claude Code](/ai/claude-code-integration)** | Use Atmos with Claude Code IDE via MCP protocol | [Integration Guide](/ai/claude-code-integration) |
+| **[LSP Client](/lsp/lsp-client)** | AI validation using external language servers (yaml-ls, terraform-ls) | [LSP Client](/lsp/lsp-client) |
+
+## Supported Providers
+
+Atmos supports 7 AI providers, giving you flexibility for cloud, local, or enterprise deployments:
+
+| Provider | Best For | Privacy |
+|----------|----------|---------|
+| **Anthropic (Claude)** | Advanced reasoning, default choice | Cloud |
+| **OpenAI (GPT)** | Widely available, fast | Cloud |
+| **Google (Gemini)** | Large context window | Cloud |
+| **xAI (Grok)** | Real-time knowledge | Cloud |
+| **Ollama** | Complete privacy, offline use | 100% Local |
+| **AWS Bedrock** | Enterprise security, AWS integration | Your Cloud |
+| **Azure OpenAI** | Enterprise compliance, Azure integration | Your Cloud |
+
+See [AI Providers](/ai/providers) for configuration details.
+
+## Quick Start
+
+Enable AI in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+```
+</File>
+
+Set your API key and start:
+
+<Terminal title="shell">
+```bash
+export ANTHROPIC_API_KEY="your-api-key"
+atmos ai chat
+```
+</Terminal>
+
+---
+
+## AI Assistant
+
+The **Atmos AI Assistant** is an interactive terminal agent that helps with Atmos infrastructure management. It provides intelligent assistance with understanding Atmos concepts, analyzing configurations, troubleshooting issues, and learning best practices.
+
+### Features
+
+#### Conversation Management
+- **Interactive Chat Interface**: Terminal-based chat session for extended conversations
+- **Multi-Provider Support**: Configure and use multiple AI providers simultaneously (see [Providers](/ai/providers))
+- **Provider Switching**: Switch between AI providers mid-conversation with Ctrl+P
+- **Persistent Sessions**: Save and resume conversations across CLI invocations
+- **Auto-Compact**: Intelligent conversation summarization for extended sessions (see [Auto-Compact](/ai/sessions#auto-compact-extended-conversations))
+- **In-TUI Session Creation**: Create new sessions with provider selection using Ctrl+N
+- **Session Switching**: Switch between sessions without leaving the TUI (Ctrl+L)
+- **Session Management**: Delete (d), rename (r), and filter (f) sessions in the TUI
+- **Provider Filtering**: Filter sessions by AI provider
+- **Enhanced Display**: Color-coded provider badges, creation dates, and message counts
+- **Message History**: Complete conversation history stored locally in SQLite
+- **History Navigation**: Navigate through previous messages with ↑/↓ arrow keys
+- **Markdown Rendering**: AI responses rendered with rich formatting (bold, italic, lists, tables)
+- **Syntax Highlighting**: Code blocks displayed with syntax highlighting for better readability
+- **Named Sessions**: Organize conversations by topic or project
+- **Provider-Aware Sessions**: Each session remembers its AI provider and model
+
+#### AI Capabilities
+- **Command-line Q&A**: Ask questions directly from the command line
+- **Context-aware Help**: Get help on specific Atmos topics
+- **Configuration Analysis**: The AI has knowledge of your Atmos setup
+- **Best Practice Guidance**: Receive recommendations for optimal configurations
+
+#### Tool Execution
+- **Automated Queries**: AI can automatically inspect your infrastructure configuration
+- **Read-only Tools**: Safe execution of describe, list, and validate operations
+- **Permission System**: Granular control over what tools the AI can execute
+- **Smart Prompts**: User confirmation for sensitive operations
+
+#### LSP Integration
+- **Real-time Validation**: AI can validate YAML, Terraform, and HCL files using Language Server Protocol
+- **Precise Error Locations**: Get exact line and column numbers for configuration errors
+- **Early Error Detection**: Catch syntax and schema issues before running Atmos commands
+- **Multi-Language Support**: YAML for stacks, Terraform for components, HCL for configurations
+- **IDE-Quality Feedback**: Same validation as modern code editors, directly in the AI chat
+
+#### Non-Interactive Execution
+- **Automation Support**: Execute AI prompts non-interactively for scripting and CI/CD (`atmos ai exec`)
+- **Structured Output**: JSON, text, or markdown formats for parsing and integration
+- **Stdin Piping**: Read prompts from pipes or redirects for shell integration
+- **Standard Exit Codes**: 0 (success), 1 (AI error), 2 (tool error) for automation workflows
+- **Output Redirection**: Save results to files for further processing
+- **CI/CD Integration**: Integrate AI assistance into deployment pipelines and validation workflows
+
+#### Project Memory
+- **Persistent Context**: AI remembers project-specific patterns and conventions
+- **Markdown-Based**: Simple `ATMOS.md` file stores project knowledge
+- **Customizable Sections**: Control what context is shared with AI
+- **Team Collaboration**: Share memory file with your team via version control
+
+#### Automatic Context Discovery
+- **Smart File Detection**: Automatically discover relevant project files using glob patterns
+- **Gitignore Awareness**: Respect `.gitignore` to prevent exposing sensitive files
+- **Size Limits**: Configurable max files and size limits to control context size
+- **Pattern Matching**: Include/exclude patterns for precise control over discovered files
+- **Caching**: Automatic caching of discovered files for faster responses
+- **CLI Overrides**: Override discovery patterns with `--include` and `--exclude` flags
+
+:::tip Understanding Tool Calling
+Wondering how AI tool execution works and what data is sent to AI providers? See [How Tool Calling Works](/ai/tools#how-tool-calling-works) for a detailed explanation with diagrams showing:
+- The tool calling process flow
+- What gets sent to AI servers (and when)
+- Privacy and security implications
+- Tool execution security features
+:::
+
+:::tip Specialized AI Skills
+Want task-specific AI assistance? See [AI Skills](/ai/skills) to learn about built-in skills for stack analysis, security auditing, and more. For IDE integration, see [Claude Code Integration](/ai/claude-code-integration).
+:::
+
+### Using the Assistant
+
+<Terminal title="atmos ai">
+```bash
+# Interactive chat
+atmos ai chat
+
+# Interactive chat with named session
+atmos ai chat --session vpc-refactor
+
+# Quick question
+atmos ai ask "What components are available?"
+
+# Topic help
+atmos ai help stacks
+
+# Non-interactive execution (for scripting/CI-CD)
+atmos ai exec "List all available stacks"
+
+# With JSON output for parsing
+atmos ai exec "Describe the vpc component" --format json
+
+# Override context discovery patterns
+atmos ai ask "Review my code" --include "**/*.go" --exclude "**/*_test.go"
+```
+</Terminal>
+
+### TUI Keyboard Shortcuts
+
+**Chat View:**
+- **Ctrl+N** - Create a new session with provider selection
+- **Ctrl+L** - Open session picker to switch between sessions
+- **Ctrl+P** - Switch AI provider mid-conversation
+- **Ctrl+A** - Switch AI skill (specialized assistants)
+- **Ctrl+C** - Quit the application
+- **Enter** - Send message
+- **Ctrl+J** - Add newline in message (Shift+Enter alternative)
+- **↑** - Navigate to previous message in history
+- **↓** - Navigate to next message in history
+
+**Session Picker:**
+- **↑/↓** or **j/k** - Navigate through sessions
+- **Enter** - Switch to selected session
+- **d** - Delete selected session (with confirmation)
+- **r** - Rename selected session
+- **f** - Cycle through provider filters (All/Claude/GPT/Gemini/Grok/Ollama/Bedrock/Azure)
+- **n** or **Ctrl+N** - Create a new session
+- **Esc** or **q** - Return to chat
+
+### What the AI Can Help With
+
+- **Understanding Concepts**: Atmos architecture, stack vs component relationships, template functions
+- **Configuration Analysis**: Reviewing configs, understanding inheritance, debugging issues
+- **Best Practices**: Stack organization, component reusability, validation approaches
+- **Troubleshooting**: Error interpretation, debugging workflows, performance optimization
+
+### Security and Privacy
+
+- **API Key Security**: Store your API keys securely and never commit them to version control
+- **Configuration Privacy**: The AI assistant does not store or transmit your configuration data beyond the current session
+- **Local Processing**: Cloud providers (Anthropic, OpenAI, Google, xAI) process data through their APIs
+- **Privacy-First Option**: Use [Ollama](/ai/providers#ollama) for complete data privacy - no data leaves your machine
+- **Enterprise Options**: AWS Bedrock and Azure OpenAI provide enterprise-grade security and compliance
+
+See [AI Providers](/ai/providers) for detailed security and privacy considerations for each provider.
+
+### Limitations
+
+- **AI Knowledge Cutoff**: The AI's knowledge of Atmos is current as of its training date
+- **API Dependencies**: Cloud providers require internet connection and valid API key; Ollama works offline
+- **Configuration Context**: The AI works with your current Atmos configuration but cannot make direct changes
+- **Rate Limits**: Cloud providers are subject to API rate limits and usage policies; Ollama has no rate limits
+
+---
+
+## Related Documentation
+
+<DocCardList/>

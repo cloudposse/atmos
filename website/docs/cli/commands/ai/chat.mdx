@@ -1,0 +1,416 @@
+---
+title: atmos ai chat
+sidebar_label: chat
+sidebar_class_name: command
+id: chat
+description: Start an interactive AI chat session with the Atmos AI assistant
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to start an interactive chat session with the Atmos AI assistant. Get intelligent help with Atmos concepts, configuration analysis, and best practices.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos ai chat --help" slug="atmos-ai-chat--help" />
+
+## Description
+
+The `atmos ai chat` command opens a terminal-based chat interface where you can have extended conversations with the AI assistant about your Atmos infrastructure.
+
+The AI assistant has access to your current Atmos configuration and can help with:
+- Explaining Atmos concepts and architecture
+- Analyzing your specific components and stacks
+- Suggesting optimizations and best practices
+- Debugging configuration issues
+- Providing step-by-step implementation guidance
+
+## Usage
+
+```shell
+atmos ai chat [flags]
+```
+
+### Flags
+
+<dl>
+  <dt>`--session <name>`</dt>
+  <dd>Start or resume a named session. If the session doesn't exist, it will be created. If it exists, the conversation history will be loaded.</dd>
+</dl>
+
+### Examples
+
+```shell
+# Start anonymous session (auto-generated name)
+atmos ai chat
+
+# Start or resume named session
+atmos ai chat --session vpc-refactor
+
+# Resume existing session
+atmos ai chat --session my-session
+```
+
+## Configuration
+
+Atmos AI supports multiple AI providers simultaneously. Configure one or more providers in your `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"  # Default for CLI commands like 'atmos ai ask'
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+      gemini:
+        model: "gemini-2.5-flash"
+        api_key_env: "GEMINI_API_KEY"
+        max_tokens: 8192
+      grok:
+        model: "grok-4"
+        api_key_env: "XAI_API_KEY"
+        max_tokens: 4096
+        base_url: "https://api.x.ai/v1"
+      ollama:
+        model: "llama3.3:70b"
+        api_key_env: "OLLAMA_API_KEY"  # Optional for local instances
+        max_tokens: 4096
+        base_url: "http://localhost:11434/v1"
+      bedrock:
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        max_tokens: 4096
+        base_url: "us-east-1"  # AWS region
+      azureopenai:
+        model: "gpt-4o"  # Your Azure deployment name
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        max_tokens: 4096
+        base_url: "https://<your-resource>.openai.azure.com"
+```
+
+**Note:** You don't need to configure all providers - only the ones you want to use. The `default_provider` is used for non-interactive commands like `atmos ai ask`.
+
+For detailed configuration options, see the [AI Assistant documentation](/ai/).
+
+## Supported Providers
+
+| Provider | Environment Variable | Default Model | Notes |
+|----------|---------------------|---------------|-------|
+| Anthropic (Claude) | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` | Industry-leading reasoning |
+| OpenAI (GPT) | `OPENAI_API_KEY` | `gpt-4o` | Most popular, widely adopted |
+| Google (Gemini) | `GEMINI_API_KEY` | `gemini-2.5-flash` | Strong multimodal capabilities |
+| xAI (Grok) | `XAI_API_KEY` | `grok-4` | Real-time data access |
+| Ollama | `OLLAMA_API_KEY` | `llama3.3:70b` | Local models, no API key for local |
+| AWS Bedrock | AWS credentials | `anthropic.claude-sonnet-4-5-20250929-v1:0` | Enterprise-grade, AWS security |
+| Azure OpenAI | `AZURE_OPENAI_API_KEY` | `gpt-4o` | Enterprise OpenAI with Azure integration |
+
+## Enterprise Providers
+
+For organizations with strict security, compliance, and data governance requirements, Atmos supports enterprise-grade AI providers that integrate with your existing cloud infrastructure.
+
+### AWS Bedrock
+
+**Security & Compliance Benefits:**
+- **Data Privacy**: Your data never leaves AWS infrastructure
+- **IAM-Based Access**: No API keys to manage - uses standard AWS credentials
+- **Audit Logging**: Complete audit trail via AWS CloudTrail
+- **Network Isolation**: Supports VPC endpoints and AWS PrivateLink for private connectivity
+- **Compliance**: Inherits AWS compliance certifications (SOC2, HIPAA, ISO, etc.)
+
+**Configuration:**
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    max_tokens: 4096
+    base_url: "us-east-1"  # AWS region
+```
+
+**Authentication**: Uses standard AWS SDK credential chain (IAM roles, profiles, environment variables)
+
+### Azure OpenAI
+
+**Security & Compliance Benefits:**
+- **Data Residency**: Control exactly where your data is stored and processed
+- **Azure AD Integration**: Use managed identities instead of API keys
+- **Compliance Certifications**: SOC2, HIPAA, ISO 27001, and more
+- **Private Endpoints**: Azure Private Link for secure, private connections
+- **Customer-Managed Keys**: Bring your own encryption keys (BYOK)
+
+**Configuration:**
+```yaml
+providers:
+  azureopenai:
+    model: "gpt-4o"  # Your Azure deployment name
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    max_tokens: 4096
+    base_url: "https://<your-resource>.openai.azure.com"
+```
+
+**Authentication**: API key via environment variable or Azure AD managed identity
+
+**When to Use Enterprise Providers:**
+- Your organization has existing AWS/Azure infrastructure
+- You need to meet compliance requirements (healthcare, finance, government)
+- Data must stay within specific geographic regions
+- You want centralized billing and governance
+- You need private network connectivity (no public internet)
+
+## Examples
+
+### Basic Chat Session
+
+```shell
+atmos ai chat
+```
+
+This opens an interactive chat where you can ask questions like:
+
+```
+You: What components are available in my configuration?
+AI: Based on your configuration, I can see the following components...
+
+You: How do I validate my stack configuration?
+AI: You can validate stack configurations using...
+```
+
+### Using with Different Providers
+
+<Terminal title="atmos ai chat">
+```console
+# Using Anthropic Claude (default)
+export ANTHROPIC_API_KEY="your-key"
+atmos ai chat
+
+# Using OpenAI GPT
+export OPENAI_API_KEY="your-key"
+atmos ai chat
+
+# Using Google Gemini
+export GEMINI_API_KEY="your-key"
+atmos ai chat
+
+# Using xAI Grok
+export XAI_API_KEY="your-key"
+atmos ai chat
+```
+</Terminal>
+
+## Interactive Features
+
+The chat interface supports:
+- **Multi-turn conversations**: Ask follow-up questions
+- **Context awareness**: The AI remembers your conversation
+- **Markdown rendering**: AI responses rendered with rich formatting (bold, italic, lists, tables)
+- **Syntax highlighting**: Code blocks displayed with language-specific syntax highlighting
+- **History navigation**: Navigate through previous messages with ↑/↓ arrow keys (like Bash history)
+- **Multi-line input**: Press `Shift+Enter` or `Alt+Enter` to add newlines in your messages
+- **Session management**: Press `Ctrl+L` to switch between sessions without leaving the chat
+- **Provider switching**: Press `Ctrl+P` to switch between configured AI providers mid-conversation
+- **Session history**: See session metadata (name, created date, message count) in the header
+- **Exit commands**: Type `exit`, `quit`, or press `Ctrl+C` to close the chat
+
+### Keyboard Shortcuts
+
+| Shortcut | Action |
+|----------|--------|
+| `Enter` | Send message |
+| `Shift+Enter` or `Alt+Enter` | Add newline (multi-line input) |
+| `↑` | Navigate to previous message in history |
+| `↓` | Navigate to next message in history |
+| `Ctrl+L` | Open session picker |
+| `Ctrl+N` | Create new session |
+| `Ctrl+P` | Switch AI provider |
+| `Ctrl+C` | Quit chat |
+
+### History Navigation
+
+Navigate through your previous messages using the arrow keys, just like in Bash or Zsh:
+
+```
+You: What components are available?
+AI: [Response about components...]
+
+# Press ↑ to recall your last message
+You: What components are available?  [← Previous message restored]
+
+# Edit and resend, or press ↓ to return to empty input
+```
+
+**How it works:**
+- Press `↑` to recall previous messages, starting from most recent
+- Press `↓` to move forward through history
+- When you reach the end of history (↓ past the last message), your original unsent input is restored
+- Sending a message automatically resets history navigation
+
+This is especially useful for:
+- Reusing similar queries with minor changes
+- Correcting typos in sent messages
+- Iterating on complex questions
+- Avoiding retyping long commands
+
+### Markdown Rendering & Syntax Highlighting
+
+AI responses are automatically rendered with rich markdown formatting for better readability:
+
+**Supported Formatting:**
+- **Bold** and *italic* text
+- Headers and subheadings
+- Bulleted and numbered lists
+- Tables with proper alignment
+- Code blocks with syntax highlighting
+- Blockquotes and horizontal rules
+
+**Code Block Example:**
+
+When the AI responds with code, it's automatically syntax-highlighted:
+
+````
+AI: Here's a sample Atmos stack configuration:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"
+        enable_dns_hostnames: true
+        availability_zones:
+          - us-east-1a
+          - us-east-1b
+```
+````
+
+The code will be displayed with:
+- ✅ Language-specific syntax highlighting (YAML, HCL, Go, Python, etc.)
+- ✅ Proper indentation and formatting
+- ✅ Color-coded keywords and values
+- ✅ Automatic terminal theme detection
+
+**Note:** Only AI assistant messages are rendered with markdown. Your input messages remain as plain text for clarity.
+
+### Multi-line Messages
+
+You can compose multi-line messages using `Shift+Enter`:
+
+```
+You: I need help with a complex Terraform configuration. Here's what I'm trying to do:
+[Shift+Enter]
+1. Create a VPC with multiple subnets
+[Shift+Enter]
+2. Set up route tables for each subnet
+[Shift+Enter]
+3. Configure NAT gateways
+[Enter to send]
+```
+
+This is especially useful for:
+- Pasting code snippets
+- Writing detailed questions
+- Formatting structured information
+- Creating multi-paragraph descriptions
+
+### Session Picker
+
+While chatting, press `Ctrl+L` to open the session picker:
+
+```
+Session List
+↑/↓: Navigate | Enter: Select | Esc/q: Back | Ctrl+C: Quit
+
+→ vpc-refactor (Jan 20, 14:30, 47 messages)
+  rds-troubleshooting (Jan 18, 09:15, 23 messages)
+  session-20251015-091032 (Jan 15, 09:10, 12 messages)
+```
+
+**Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate sessions
+- `Enter` - Switch to selected session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit application
+
+This allows you to seamlessly switch between different conversation topics without restarting the chat.
+
+### Provider Switching
+
+While chatting, press `Ctrl+P` to switch between configured AI providers:
+
+```
+Provider Selection
+↑/↓: Navigate | Enter: Select | Esc/q: Back | Ctrl+C: Quit
+
+→ Anthropic Claude - Industry-leading reasoning and coding
+  OpenAI GPT - Most popular, widely adopted models
+  Google Gemini - Strong multimodal capabilities
+  xAI Grok - Real-time data access
+  Ollama - Local models for privacy and offline use
+```
+
+**Provider Switching Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate providers
+- `Enter` - Switch to selected provider
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit application
+
+When you switch providers:
+- ✅ **Message history is preserved** - Continue your conversation with a different AI
+- ✅ **Session is updated** - The new provider is saved to your session
+- ✅ **Seamless transition** - No need to restart the chat or lose context
+
+**Example Use Case:**
+```
+You: [Using Claude] Explain the difference between Terraform and Helmfile
+Claude: [Detailed technical explanation...]
+
+[Press Ctrl+P, switch to GPT-4]
+
+You: Can you give me a simpler explanation?
+GPT-4: [Alternative explanation with different perspective...]
+```
+
+This feature is useful for:
+- Comparing responses from different AI models
+- Using specialized models for specific tasks
+- Switching to local models (Ollama) for privacy-sensitive questions
+- Trying different providers to find the best fit for your workflow
+
+**Note:** Only providers configured in your `atmos.yaml` will appear in the provider picker.
+
+## Common Use Cases
+
+### Learning Atmos Concepts
+
+```
+You: I'm new to Atmos. What should I know about stacks and components?
+AI: [Provides detailed explanation of Atmos architecture]
+```
+
+### Debugging Configuration Issues
+
+```
+You: I'm getting a validation error for my vpc component. How do I fix it?
+AI: [Analyzes the error and provides specific guidance]
+```
+
+### Best Practices
+
+```
+You: What's the best way to organize my stack configurations?
+AI: [Suggests organizational patterns and best practices]
+```
+
+## Related Commands
+
+- [`atmos ai ask`](/cli/commands/ai/ask) - Ask a single question without entering chat mode
+- [`atmos ai help`](/cli/commands/ai/ai-help) - Get help on specific Atmos topics
+- [`atmos ai sessions`](/ai/sessions) - Learn about persistent conversation sessions

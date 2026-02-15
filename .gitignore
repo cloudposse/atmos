@@ -52,9 +52,11 @@ demos/audio/
 .tool-versions
 !examples/toolchain/.tool-versions
 
-# Ignore cache files
+# Ignore cache files and sessions
 **/.atmos/cache.yaml
+**/.atmos/sessions/
 **/cache.*.txt
+**/.atmos/ai.settings.local.json
 
 # Conductor workspace uses pnpm, but project uses npm
 website/pnpm-lock.yaml

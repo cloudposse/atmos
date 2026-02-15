@@ -1,0 +1,1216 @@
+---
+title: AI Sessions
+sidebar_label: Sessions
+sidebar_position: 4
+description: Persistent conversation sessions for the Atmos AI Assistant
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+# AI Sessions
+
+<Experimental />
+
+Atmos AI supports persistent conversation sessions that maintain message history across CLI invocations. Sessions allow you to have long-running conversations with the AI assistant, picking up exactly where you left off.
+
+## Overview
+
+Sessions provide:
+- **Persistent History**: Complete conversation history saved locally
+- **Named Sessions**: Organize conversations by topic or project
+- **Context Preservation**: Session-specific context and references
+- **SQLite Storage**: Fast, reliable local storage
+- **Automatic Cleanup**: Configurable retention policies
+- **Conversation Memory**: AI remembers previous messages within a session
+
+## Conversation Memory
+
+Atmos AI now has **full conversation memory** within sessions. When you send a message, the AI receives the complete conversation history, enabling:
+
+### How It Works
+
+1. **Message History**: All previous messages (user and assistant) are stored in the session database
+2. **Context Window**: When you send a message, the full conversation history is sent to the AI provider
+3. **Multi-turn Conversations**: The AI can reference previous questions and answers
+4. **Follow-up Questions**: You can ask "yes", "tell me more", or "what about that?" and the AI understands
+
+### Example Conversations
+
+**Example 1: Follow-up Questions**
+
+<Terminal title="atmos ai chat --session vpc-design">
+```bash
+You: What are Atmos stacks?
+
+AI: Atmos stacks are configuration files that define your infrastructure.
+    They use inheritance and composition to share configuration across environments.
+    For example, you might have a base stack with common settings, then specific
+    stacks for dev, staging, and prod that inherit from the base.
+
+You: yes
+
+AI: Great! Since you understand stacks, let me explain how they work with components.
+    # ✅ AI remembers it just explained stacks
+
+You: can you show me an example for production?
+
+AI: Sure! Based on the stack structure I explained, here's a production stack example:
+    # ✅ AI references the earlier explanation
+    [Shows YAML example with production values]
+
+You: what about staging?
+
+AI: For staging, you'd use a similar structure but with different values:
+    # ✅ AI knows you want comparison to production
+    [Shows staging example highlighting differences from production]
+```
+</Terminal>
+
+**Example 2: Multi-Step Problem Solving**
+
+<Terminal title="atmos ai chat --session rds-setup">
+```bash
+You: I need to set up RDS in production
+
+AI: I'll help you set up RDS. First, let's plan the configuration:
+    1. VPC and subnet selection
+    2. Security groups
+    3. Instance size and storage
+    4. Backup and maintenance windows
+    What VPC will this RDS instance be in?
+
+You: use the prod-use1-network VPC
+
+AI: Perfect, I'll use prod-use1-network. Now, what instance size do you need?
+    # ✅ Remembers we're setting up RDS in prod-use1-network
+    Options: db.t3.micro (dev), db.t3.medium (staging), db.r5.large (prod)
+
+You: db.r5.large
+
+AI: Good choice for production. I'm configuring:
+    # ✅ Remembers: RDS, prod-use1-network VPC, db.r5.large
+    - VPC: prod-use1-network
+    - Instance: db.r5.large
+    - Environment: production
+
+    What's your preferred backup window? (off-peak hours recommended)
+
+You: 2am to 4am UTC
+
+AI: Excellent. Here's your complete RDS configuration:
+    # ✅ Remembers all choices from the conversation
+    [Shows complete YAML with all specified values]
+```
+</Terminal>
+
+**Example 3: Session Continuity Across Days**
+
+<Terminal title="atmos ai chat --session migration-plan">
+```bash
+# Day 1: Initial planning
+You: We're migrating from 10.0.0.0/16 to 10.1.0.0/16
+
+AI: I'll help plan this VPC migration. This is a significant change that will require:
+    1. Creating the new VPC (10.1.0.0/16)
+    2. Setting up VPC peering during transition
+    3. Migrating resources incrementally
+    4. Updating route tables and security groups
+    5. Decommissioning the old VPC
+
+    Should we start by planning the new VPC structure?
+
+You: yes, let's define the subnets first
+
+AI: For 10.1.0.0/16, I recommend this subnet layout:
+    [Provides detailed subnet plan]
+
+# Day 2: Resume session
+atmos ai chat --session migration-plan
+
+You: let's continue with the migration plan
+
+AI: Welcome back! We were planning the VPC migration from 10.0.0.0/16 to 10.1.0.0/16.
+    # ✅ Remembers the entire discussion from Day 1
+
+    Yesterday we defined the subnet structure for the new VPC.
+    Ready to plan the VPC peering setup for the transition period?
+
+You: yes
+
+AI: Based on the subnet plan we created yesterday:
+    # ✅ Can reference specific details from previous session
+    [Shows VPC peering configuration using the exact subnets discussed]
+
+# Week later: Review decisions
+atmos ai chat --session migration-plan
+
+You: why did we choose /16 instead of /24?
+
+AI: We chose /16 (65,536 IPs) to accommodate future growth.
+    # ✅ Can recall reasoning from the original discussion
+    In our initial planning, we discussed that /24 (256 IPs) would be too small
+    for production workloads with plans to scale EKS nodes and additional services.
+```
+</Terminal>
+
+### Benefits
+
+- **Natural Conversations**: Talk to the AI like you would a colleague
+- **No Repetition**: Don't need to repeat context in every message
+- **Complex Workflows**: Build on previous answers to solve multi-step problems
+- **Session Continuity**: Resume conversations days later with full context
+
+### Technical Implementation
+
+The conversation memory works across **all 7 AI providers**:
+- ✅ **Anthropic** (Claude) - Full history support
+- ✅ **OpenAI** (GPT) - Full history support
+- ✅ **Google** (Gemini) - Full history support
+- ✅ **xAI** (Grok) - Full history support
+- ✅ **Ollama** (Local) - Full history support
+- ✅ **AWS Bedrock** - Full history support
+- ✅ **Azure OpenAI** - Full history support
+
+Each provider receives messages in their native format while maintaining the same conversation experience.
+
+:::info Privacy Note
+When resuming a session, the complete message history is sent to the AI provider. If your conversations contain sensitive information, review the [Privacy and Security](#privacy-and-security) section below.
+:::
+
+## Configuration
+
+Enable sessions in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    sessions:
+      enabled: true                    # Enable persistent sessions
+      storage: "sqlite"                # Storage backend (default: sqlite)
+      path: ".atmos/sessions"          # Storage directory (default: .atmos/sessions)
+      max_sessions: 10                 # Max sessions per project (default: 10)
+      auto_save: true                  # Auto-save messages (default: true)
+      retention_days: 30               # Retention period in days (default: 30)
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`sessions.enabled`</dt>
+  <dd>Enable or disable persistent sessions (default: `false`)</dd>
+
+  <dt>`sessions.storage`</dt>
+  <dd>Storage backend for sessions. Currently only `sqlite` is supported (default: `sqlite`)</dd>
+
+  <dt>`sessions.path`</dt>
+  <dd>Directory path where the session database is stored (default: `.atmos/sessions`)</dd>
+
+  <dt>`sessions.max_sessions`</dt>
+  <dd>Maximum number of sessions to keep per project. When this limit is reached, the oldest sessions are automatically cleaned up (default: `10`)</dd>
+
+  <dt>`sessions.auto_save`</dt>
+  <dd>Automatically save messages after each exchange. If disabled, messages are only saved when you exit the chat (default: `true`)</dd>
+
+  <dt>`sessions.retention_days`</dt>
+  <dd>Number of days to retain sessions before automatic cleanup. Set to `0` to keep sessions indefinitely (default: `30`)</dd>
+</dl>
+
+## Auto-Compact: Extended Conversations
+
+Sessions support **auto-compact**, which intelligently summarizes older conversation history to enable extended multi-day/week conversations without losing context.
+
+### Why Auto-Compact?
+
+Infrastructure conversations often span days or weeks:
+- **VPC migrations**: Planning, validation, execution across multiple sessions
+- **Security audits**: Reviewing configurations across hundreds of components
+- **Architecture reviews**: Multi-day discussions about design decisions
+
+Without auto-compact, sessions hit message limits (e.g., 50 messages) and start forgetting early context. Auto-compact solves this by:
+- ✅ **Summarizing old messages** instead of dropping them
+- ✅ **Preserving infrastructure decisions** (CIDR choices, security patterns, component configs)
+- ✅ **Enabling unlimited conversations** (sessions can continue indefinitely)
+- ✅ **Working transparently** (users don't notice compaction happening)
+
+### How It Works
+
+<Terminal title="Example: Auto-Compact in Action">
+```bash
+# You have a 50-message session discussing VPC configuration
+# Messages 1-38: VPC design decisions, CIDR planning, security groups
+# Auto-compact triggers at 75% capacity (38/50 messages)
+
+# Compaction process:
+# 1. AI summarizes messages 1-20 (oldest 40%)
+# 2. Summary preserves key decisions: "Chose 10.0.0.0/16 for production,
+#    3 AZs, /20 public subnets, NAT gateway per AZ..."
+# 3. Original messages marked as archived
+# 4. Next message sees: [Summary] + Messages 21-50
+
+# You continue the conversation:
+You: "What CIDR did we choose for production again?"
+
+AI: "Based on our earlier discussion (in the summary), we chose 10.0.0.0/16
+     for production to ensure adequate IP space for growth..."
+     # ✅ AI still knows context from messages 1-20 via summary
+```
+</Terminal>
+
+### Visual Status Messages
+
+When auto-compact triggers, you'll see status messages **directly in the chat** (not in the terminal) to keep you informed:
+
+<Terminal title="Compaction Status Messages in Chat">
+```bash
+# When compaction starts:
+System: Compacting conversation (40 messages)...
+# (Spinner shows while AI is generating the summary)
+
+# When compaction completes:
+System: Conversation compacted successfully (40 messages summarized, ~8000 tokens saved)
+
+# If compaction fails:
+System: Compaction failed: <error details>
+```
+</Terminal>
+
+**Why status messages matter:**
+- ⏱️ **Transparency**: You know when compaction is happening (typically 5-10 seconds for AI summarization)
+- 💰 **Cost Awareness**: See exactly how many tokens you're saving
+- 🔍 **Troubleshooting**: Clear error messages if summarization fails
+- ✅ **Reassurance**: Confirms your conversation history is being preserved, not lost
+
+:::tip Status Messages in Full-Screen Mode
+Since Atmos AI runs in full-screen mode, all status messages appear **in the chat viewport**, not in your terminal. You'll never miss important compaction updates even when the TUI is active.
+:::
+
+### Configuration
+
+Enable auto-compact in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    max_history_messages: 50              # Message limit (triggers compaction at 75%)
+
+    sessions:
+      enabled: true
+      auto_compact:
+        enabled: true                     # Enable auto-compact
+        trigger_threshold: 0.75           # Compact at 75% capacity (default)
+        compact_ratio: 0.4                # Summarize oldest 40% (default)
+        preserve_recent: 10               # Always keep last 10 messages (default)
+        use_ai_summary: true              # Use AI for smart summaries (default)
+        summary_provider: "anthropic"     # Optional: specific provider for summaries
+        summary_model: "claude-3-haiku-20240307"  # Optional: cheaper model
+        summary_max_tokens: 2048          # Max tokens for summaries (default)
+        show_summary_markers: false       # Show [SUMMARY] tags (default: false)
+```
+</File>
+
+### Configuration Options
+
+<dl>
+  <dt>`auto_compact.enabled`</dt>
+  <dd>Enable intelligent auto-compaction. When `false`, uses traditional truncation (drops old messages). Default: `false`</dd>
+
+  <dt>`auto_compact.trigger_threshold`</dt>
+  <dd>Percentage (0.0-1.0) of `max_history_messages` at which to trigger compaction. Default: `0.75` (75%). Example: With 50-message limit, triggers at 38 messages.</dd>
+
+  <dt>`auto_compact.compact_ratio`</dt>
+  <dd>Percentage (0.0-1.0) of oldest messages to summarize. Default: `0.4` (40%). Example: With 50 messages, summarizes oldest 20.</dd>
+
+  <dt>`auto_compact.preserve_recent`</dt>
+  <dd>Number of most recent messages to never compact. Default: `10`. Ensures immediate context is always available verbatim.</dd>
+
+  <dt>`auto_compact.use_ai_summary`</dt>
+  <dd>Use AI to generate intelligent summaries. If `false`, uses simple concatenation. Default: `true` (recommended)</dd>
+
+  <dt>`auto_compact.summary_provider`</dt>
+  <dd>AI provider to use for generating summaries. If not specified, uses `default_provider`. Useful for using a cheaper provider (e.g., Haiku instead of Sonnet) to reduce costs.</dd>
+
+  <dt>`auto_compact.summary_model`</dt>
+  <dd>Model to use for summary generation. Defaults to provider's default model. Use faster/cheaper models like `claude-3-haiku-20240307` to optimize costs.</dd>
+
+  <dt>`auto_compact.summary_max_tokens`</dt>
+  <dd>Maximum tokens for generated summaries. Default: `2048`. Controls summary length and cost.</dd>
+
+  <dt>`auto_compact.show_summary_markers`</dt>
+  <dd>Display visual markers `[SUMMARY: Messages 1-20]` around summaries. Default: `false`. Enable for debugging or transparency.</dd>
+</dl>
+
+### What Gets Preserved in Summaries
+
+AI-generated summaries preserve critical infrastructure context:
+
+✅ **Infrastructure Decisions**
+- CIDR choices and reasoning ("Chose 10.0.0.0/16 for growth capacity")
+- Component selections (VPC, RDS, EKS configurations)
+- Architectural patterns and dependencies
+
+✅ **Technical Details**
+- Stack names, component names, environment names
+- File paths, directory structures, configuration values
+- Terraform/Helmfile/component changes made
+
+✅ **Security Context**
+- Security group rules and justifications
+- IAM policies and compliance requirements
+- Encryption settings and key management decisions
+
+✅ **Validation Results**
+- Errors found and how they were resolved
+- Schema validation issues
+- Configuration corrections made
+
+❌ **NOT Preserved** (intentionally filtered out):
+- Conversational filler ("Thanks!", "OK")
+- Step-by-step process details (focuses on outcomes)
+- Tool execution details (focuses on results)
+
+### Example Configurations
+
+#### Cost-Optimized Setup
+
+Use a cheaper model for summaries while keeping powerful model for conversation:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"     # Powerful model for conversation
+        api_key_env: "ANTHROPIC_API_KEY"
+
+    max_history_messages: 50
+
+    sessions:
+      auto_compact:
+        enabled: true
+        summary_provider: "anthropic"
+        summary_model: "claude-3-haiku-20240307"  # Cheaper model for summaries
+```
+</File>
+
+**Result**: Conversation uses Sonnet (high quality), summaries use Haiku (lower cost).
+
+#### Privacy-First Setup
+
+Keep all data local with Ollama:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_provider: "ollama"
+    providers:
+      ollama:
+        model: "llama3.3:70b"
+        base_url: "http://localhost:11434/v1"
+
+    max_history_messages: 100
+
+    sessions:
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.8              # Wait until 80% full
+        summary_provider: "ollama"          # Keep summaries local too
+```
+</File>
+
+**Result**: All conversation history and summaries stay on your machine. No external API calls.
+
+#### Aggressive Compaction for Long Sessions
+
+Optimize for very long conversations (100+ messages):
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    max_history_messages: 100
+
+    sessions:
+      auto_compact:
+        enabled: true
+        trigger_threshold: 0.6              # Compact earlier (60%)
+        compact_ratio: 0.5                  # Summarize more (50%)
+        preserve_recent: 15                 # Keep more recent context
+```
+</File>
+
+**Result**: Earlier compaction (at 60 messages), more aggressive summarization, sessions can go 200+ messages.
+
+### Debugging Auto-Compact
+
+#### View Summary Markers
+
+See exactly what was summarized:
+
+<File title="atmos.yaml">
+```yaml
+sessions:
+  auto_compact:
+    enabled: true
+    show_summary_markers: true              # Show [SUMMARY] tags
+```
+</File>
+
+**Result**: Summaries appear with markers in conversation:
+
+<Terminal title="atmos ai chat --session debug">
+```bash
+[SUMMARY: Messages 1-20]
+
+VPC Configuration:
+- Chose 10.0.0.0/16 CIDR for production with 3 AZs
+- Configured /20 public subnets, /22 private subnets
+- NAT gateway per AZ for redundancy
+...
+
+[END SUMMARY]
+
+# Recent messages appear verbatim after summary
+You: Now let's configure RDS...
+```
+</Terminal>
+
+### Performance and Costs
+
+**Token Usage**:
+- **Original messages** (20 messages): ~8,000 tokens
+- **AI-generated summary**: ~300-500 tokens
+- **Savings**: ~94% reduction in context size
+
+**API Costs** (example with Anthropic):
+- **Summary generation**: 1 API call (~8,000 input tokens + 500 output tokens)
+- **Future messages**: Save ~7,500 tokens per message (20x fewer tokens in context)
+- **Break-even**: After ~2 messages, you've saved more than the summary cost
+
+**Recommendation**: Auto-compact pays for itself quickly in long conversations.
+
+## Using Sessions
+
+### Starting a Named Session
+
+Start a new chat session with a specific name:
+
+<Terminal title="atmos ai chat --session">
+```bash
+atmos ai chat --session vpc-refactor
+```
+</Terminal>
+
+If the session doesn't exist, it will be created. If it exists, the conversation history will be loaded.
+
+### Starting an Anonymous Session
+
+If you don't provide a session name, a new anonymous session is created:
+
+<Terminal title="atmos ai chat">
+```bash
+atmos ai chat
+# Creates session with auto-generated name like: session-20250123-143022
+```
+</Terminal>
+
+### Resuming an Existing Session
+
+Resume a previous conversation by specifying its name:
+
+<Terminal title="atmos ai chat --session">
+```bash
+# Continue your vpc-refactor conversation
+atmos ai chat --session vpc-refactor
+```
+</Terminal>
+
+The AI will have access to the complete conversation history, providing continuity and context.
+
+### Managing Sessions in the TUI
+
+While in an active chat session, you can manage sessions using built-in TUI features. The TUI provides an enhanced chat experience with:
+
+- **Markdown Rendering**: AI responses displayed with rich formatting (bold, italic, lists, tables)
+- **Syntax Highlighting**: Code blocks shown with language-specific highlighting
+- **History Navigation**: Navigate previous messages with ↑/↓ arrow keys (like Bash history)
+- **Multi-line Input**: Compose complex messages with `Shift+Enter`
+
+See the [`atmos ai chat` documentation](/cli/commands/ai/chat) for details on all interactive features.
+
+#### Creating New Sessions (Ctrl+N)
+
+Create a new session without leaving the TUI:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+N to open the create session form
+Ctrl+N
+```
+</Terminal>
+
+The create session form allows you to:
+- **Enter a custom session name** - Descriptive names help organize conversations
+- **Select an AI provider** - Choose from 7 providers: cloud (Anthropic, OpenAI, Gemini, Grok), local (Ollama), or enterprise (Bedrock, Azure)
+- **Pick the default model** - Each provider has its default model pre-selected
+
+**Create Session Form Controls:**
+- `Tab` - Switch between name input and provider selection
+- `↑`/`↓` - Navigate provider options
+- `Enter` - Create the session and start chatting
+- `Esc` - Cancel and return to previous view
+
+**Available Providers:**
+- **Anthropic (Claude)** - `claude-sonnet-4-5-20250929` - Cloud provider, advanced reasoning
+- **OpenAI (GPT)** - `gpt-4o` - Cloud provider, general capabilities
+- **Google (Gemini)** - `gemini-2.5-flash` - Cloud provider, fast responses
+- **xAI (Grok)** - `grok-4` - Cloud provider, real-time knowledge
+- **Ollama (Local)** - `llama3.3:70b` - Local provider, complete privacy
+- **AWS Bedrock** - `anthropic.claude-sonnet-4-5-20250929-v1:0` - Enterprise provider, AWS integration
+- **Azure OpenAI** - `gpt-4o` - Enterprise provider, Azure integration
+
+:::tip Provider-Aware Sessions
+Each session remembers which provider and model it was created with. This allows you to have different sessions using different AI providers, each optimized for specific tasks.
+:::
+
+### Skill Persistence
+
+**Sessions now remember which AI skill you're using!** When you switch skills during a conversation (with `Ctrl+A`), that choice is automatically saved to the session. When you resume the session later, it will continue using the same skill.
+
+#### How It Works
+
+1. **Start a session with a skill** - When you create a session, it uses your default skill (usually "general")
+2. **Switch skills during conversation** - Press `Ctrl+A` to switch to a specialized skill
+3. **Skill choice saved automatically** - Your skill selection is persisted to the session
+4. **Resume with same skill** - Next time you load the session, it automatically uses that skill
+
+#### Example: Skill Persistence Workflow
+
+<Terminal title="atmos ai chat --session infrastructure-review">
+```bash
+# Day 1: Start with general skill
+atmos ai chat --session infrastructure-review
+
+You: I want to review our infrastructure
+
+AI (general): I can help you review your infrastructure. What would you
+    like to focus on first?
+
+# Press Ctrl+A to switch to security-auditor skill
+Ctrl+A
+# Select "security-auditor"
+
+AI (system): Switched to skill: Security Auditor (Specialized in security reviews,
+              compliance checks, and vulnerability assessments)
+
+You: Now audit our VPC configuration for security issues
+
+AI (security-auditor): I'll perform a comprehensive security audit of your VPC.
+    Let me check for common security issues:
+    1. Security group rules analysis
+    2. Network ACL configuration
+    3. VPC flow logs status
+    4. Public subnet exposure
+    ...
+
+# Day 2: Resume session
+atmos ai chat --session infrastructure-review
+
+AI (security-auditor): Welcome back! We were performing a security audit of your
+    # ✅ Automatically restored to security-auditor skill
+    VPC configuration. Would you like to continue where we left off?
+
+You: yes, let's review the findings from yesterday
+
+AI (security-auditor): Based on yesterday's audit, I found several issues:
+    # ✅ Skill context preserved across sessions
+    [Provides detailed security findings from previous conversation]
+```
+</Terminal>
+
+#### Benefits
+
+- **Specialized Context Preserved**: Each session maintains its skill specialization
+- **No Manual Switching**: Automatically resumes with the right skill for the conversation
+- **Task-Focused Sessions**: Keep security reviews with security-auditor, component work with component-refactor, etc.
+- **Seamless Experience**: Skill context flows naturally across session resumptions
+
+#### Multiple Sessions with Different Skills
+
+You can have multiple sessions, each using different specialized skills:
+
+```
+sessions:
+  vpc-security-review      [security-auditor]   # Security-focused skill
+  component-refactor       [component-refactor] # Refactoring specialist
+  stack-analysis          [stack-analyzer]      # Stack investigation
+  config-validation       [config-validator]    # Configuration expert
+  general-questions       [general]             # General purpose skill
+```
+
+Each session maintains its own skill assignment, allowing you to organize conversations by both topic and the type of AI assistance needed.
+
+:::info Skill Availability
+If you resume a session that was using a custom skill that's no longer available in your configuration, Atmos will fall back to the default skill and log a debug message. The session will continue working, but with the default skill instead.
+:::
+
+#### Switching Between Sessions (Ctrl+L)
+
+Switch to a different existing session:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+```
+</Terminal>
+
+The session picker displays:
+- All available sessions with metadata
+- Session names, providers, and models
+- Creation dates and message counts
+- Visual selection indicator
+
+**Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate through sessions
+- `Enter` - Switch to the selected session
+- `n` or `Ctrl+N` - Create a new session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit the application
+
+**Example Workflow:**
+
+```
+1. Start a chat session
+   atmos ai chat
+
+2. Press Ctrl+N to create a new session
+   → Enter name: "vpc-refactor"
+   → Select provider: Anthropic (Claude)
+   → Press Enter
+
+3. Have a conversation with the AI
+
+4. Press Ctrl+L to open session picker
+
+5. Press 'n' to create another session
+   → Enter name: "security-review"
+   → Select provider: OpenAI (GPT)
+   → Press Enter
+
+6. Press Ctrl+L again to switch between sessions
+
+7. Navigate with arrow keys and press Enter to switch
+```
+
+The TUI session management provides a seamless way to organize multiple AI conversations without leaving your terminal.
+
+#### Deleting Sessions (d key)
+
+Delete unwanted sessions directly from the session picker:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+
+# Navigate to the session you want to delete
+# Press 'd' to delete
+d
+```
+</Terminal>
+
+**Delete Workflow:**
+1. Navigate to the session you want to delete using `↑`/`↓` or `j`/`k`
+2. Press `d` to initiate deletion
+3. Confirm with `y` or cancel with `n`/`Esc`
+
+**Safety Features:**
+- **Confirmation required** - Prevents accidental deletion
+- **Clear warning message** - Shows session name and warns action cannot be undone
+- **Graceful handling** - If you delete the currently active session, you'll be returned to a clean state
+
+:::warning Permanent Action
+Deleting a session permanently removes all conversation history for that session. This action cannot be undone.
+:::
+
+#### Renaming Sessions (r key)
+
+Rename sessions to keep your conversations organized:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+
+# Navigate to the session you want to rename
+# Press 'r' to rename
+r
+```
+</Terminal>
+
+**Rename Workflow:**
+1. Navigate to the session you want to rename using `↑`/`↓` or `j`/`k`
+2. Press `r` to enter rename mode
+3. Edit the session name (pre-filled with current name)
+4. Press `Enter` to save or `Esc` to cancel
+
+**Rename Features:**
+- **Inline editing** - Edit directly in the session picker
+- **Pre-filled value** - Current name is pre-populated for easy editing
+- **Validation** - Empty names are rejected
+- **Live update** - If renaming the active session, the name updates immediately
+
+#### Filtering Sessions by Provider (f key)
+
+Filter sessions to show only those from a specific AI provider:
+
+<Terminal title="atmos ai chat">
+```bash
+# Press Ctrl+L to open the session picker
+Ctrl+L
+
+# Press 'f' to cycle through provider filters
+f  # Shows only Claude sessions
+f  # Shows only GPT sessions
+f  # Shows only Gemini sessions
+f  # Shows only Grok sessions
+f  # Shows only Ollama sessions
+f  # Shows only Bedrock sessions
+f  # Shows only Azure sessions
+f  # Shows all sessions
+```
+</Terminal>
+
+**Filter Options:**
+- **All** - Show all sessions (default)
+- **Claude** - Show only Claude (Anthropic) sessions
+- **GPT** - Show only GPT (OpenAI) sessions
+- **Gemini** - Show only Gemini (Google) sessions
+- **Grok** - Show only Grok (xAI) sessions
+- **Ollama** - Show only Ollama (local) sessions
+- **Bedrock** - Show only Bedrock (AWS) sessions
+- **Azure** - Show only Azure OpenAI sessions
+
+**Visual Indicators:**
+- **Title shows active filter** - "Session List [Claude]" when filtering
+- **Color-coded provider badges** - Each session displays its provider with color coding:
+  - `[Claude]` in cyan
+  - `[GPT]` in green
+  - `[Gemini]` in yellow
+  - `[Grok]` in pink
+  - `[Ollama]` in purple
+  - `[Bedrock]` in orange
+  - `[Azure]` in blue
+- **Empty state message** - "No sessions for Gemini" when filter has no results
+
+**Navigation with Filters:**
+All session operations (select, delete, rename) work seamlessly with filters. When you filter sessions:
+- Navigation only shows filtered sessions
+- Selection index resets to first filtered session
+- Delete and rename operate on the filtered session
+
+#### Enhanced Session Display
+
+The session picker now displays rich metadata for each session:
+
+**Display Format:**
+```
+→ vpc-refactor [Claude] • Oct 23 • 47 msg
+  security-review [GPT] • Oct 22 • 12 msg
+  cost-analysis [Gemini] • Oct 20 • 8 msg
+```
+
+**Metadata Shown:**
+- **Session name** - Your custom session name
+- **Provider badge** - Color-coded AI provider indicator
+- **Creation date** - When the session was created (condensed format)
+- **Message count** - Total messages in the conversation
+
+**Complete Session Picker Controls:**
+- `↑`/`↓` or `j`/`k` - Navigate through sessions
+- `Enter` - Switch to the selected session
+- `d` - Delete the selected session (with confirmation)
+- `r` - Rename the selected session
+- `f` - Cycle through provider filters
+- `n` or `Ctrl+N` - Create a new session
+- `Esc` or `q` - Return to current chat
+- `Ctrl+C` - Quit the application
+
+### Listing Sessions
+
+View all available sessions:
+
+<Terminal title="atmos ai sessions">
+```bash
+atmos ai sessions
+```
+</Terminal>
+
+Example output:
+```
+Available Sessions:
+
+Name: vpc-refactor
+  ID: a8f3e9d2-4b1c-4d7e-8f3a-9c2b4e8d7f3a
+  Created: 2025-10-20 14:30:22
+  Updated: 2025-10-23 09:15:45
+  Messages: 47
+  Model: claude-sonnet-4-5-20250929
+  Provider: anthropic
+
+Name: session-20251015-091032
+  ID: b7e2d8c1-3a4b-5c6d-7e8f-1a2b3c4d5e6f
+  Created: 2025-10-15 09:10:32
+  Updated: 2025-10-15 09:45:18
+  Messages: 12
+  Model: gpt-4o
+  Provider: openai
+```
+
+### Cleaning Old Sessions
+
+Remove sessions older than a specified period:
+
+<Terminal title="atmos ai sessions clean">
+```bash
+# Clean sessions older than 30 days
+atmos ai sessions clean --older-than 30d
+
+# Clean sessions older than 7 days
+atmos ai sessions clean --older-than 7d
+
+# Clean sessions older than 24 hours
+atmos ai sessions clean --older-than 24h
+```
+</Terminal>
+
+Example output:
+```
+🧹 Cleaning sessions older than 30 days...
+✅ Deleted 5 sessions
+```
+
+Supported time units:
+- `h` - hours (e.g., `24h`)
+- `d` - days (e.g., `7d`)
+- `w` - weeks (e.g., `2w`)
+- `m` - months (e.g., `3m`)
+
+## Session Storage
+
+### How Sessions Are Stored
+
+Atmos stores all your AI conversations **locally on your machine** in a lightweight SQLite database. When you chat with the AI, your messages and the AI's responses are automatically saved so you can continue conversations later.
+
+**Storage Benefits:**
+- ✅ **Fast & Efficient** - Optimized for quick access to conversation history
+- ✅ **Fully Local** - All data stays on your computer, nothing sent to cloud storage
+- ✅ **Automatic** - No manual saving required, conversations persist automatically
+- ✅ **Portable** - Single database file you can backup, share, or move between machines
+
+### Storage Location
+
+Sessions are stored in a SQLite database file inside your project directory:
+
+```
+<project-root>/.atmos/sessions/sessions.db
+```
+
+**Example locations:**
+```
+~/infrastructure/.atmos/sessions/sessions.db          # Local project
+/workspace/atmos-config/.atmos/sessions/sessions.db   # Team project
+```
+
+The database file is created automatically when you start your first session. You can customize the storage location in your `atmos.yaml` configuration:
+
+```yaml
+settings:
+  ai:
+    sessions:
+      path: ".atmos/sessions"  # Default location
+```
+
+:::tip File System Performance
+The session database uses Write-Ahead Logging (WAL) mode for optimal performance. This means writes don't block reads, and you get fast response times even with long conversation histories.
+:::
+
+### What's Stored
+
+Each session contains:
+- **Your messages** - Everything you ask the AI
+- **AI responses** - Complete conversation history
+- **Session metadata** - Name, creation date, model, provider
+- **Context references** - Links to stack files and components discussed
+
+The database is optimized for performance with proper indexes on frequently accessed data, ensuring your chat experience remains fast even with hundreds of messages.
+
+### Backing Up Sessions
+
+To backup your sessions, simply copy the database file:
+
+<Terminal title="shell">
+```bash
+# Backup sessions
+cp .atmos/sessions/sessions.db .atmos/sessions/sessions.db.backup
+
+# Restore from backup
+cp .atmos/sessions/sessions.db.backup .atmos/sessions/sessions.db
+```
+</Terminal>
+
+### Viewing Session Details
+
+Use the built-in commands to view your sessions without needing to access the database directly:
+
+<Terminal title="atmos ai sessions">
+```bash
+# List all sessions with metadata
+atmos ai sessions
+
+# View sessions in the interactive TUI
+atmos ai chat
+# Press Ctrl+L to see all sessions with details
+```
+</Terminal>
+
+The session picker shows everything you need: session names, AI providers, creation dates, and message counts.
+
+:::info Advanced Users
+If you're comfortable with SQLite, you can query the database directly at `.atmos/sessions/sessions.db` using any SQLite client. However, we recommend using the built-in `atmos ai sessions` command for most use cases.
+:::
+
+## Privacy and Security
+
+### Local Storage
+
+Sessions are stored **locally on your machine** in the SQLite database. No session data is transmitted to AI providers except during active conversations.
+
+### Session Data
+
+Sessions contain:
+- ✅ Your questions and the AI's responses
+- ✅ Session metadata (name, timestamps, model)
+- ✅ Context references (stack files, components)
+- ❌ No API keys or credentials
+- ❌ No data sent to AI providers unless actively chatting
+
+### Data Sent to AI Providers
+
+When you resume a session, the message history is sent to the AI provider to provide context. This happens:
+- Only during active chat sessions
+- Only for the specific session you're using
+- According to your provider's data handling policies
+
+**Important**: If your conversations contain sensitive information (AWS account IDs, infrastructure details), be aware that this data is sent to your AI provider.
+
+### Deleting Sessions
+
+To permanently delete a session:
+
+<Terminal title="shell">
+```bash
+# Clean all sessions older than 0 days (delete all)
+atmos ai sessions clean --older-than 0d
+
+# Or manually delete the database
+rm .atmos/sessions/sessions.db
+```
+</Terminal>
+
+## Best Practices
+
+### Naming Conventions
+
+Use descriptive session names that reflect the topic:
+
+<Terminal title="shell">
+```bash
+# Good session names
+atmos ai chat --session vpc-refactor
+atmos ai chat --session rds-troubleshooting
+atmos ai chat --session new-region-setup
+
+# Avoid generic names
+atmos ai chat --session test
+atmos ai chat --session temp
+```
+</Terminal>
+
+### Session Organization
+
+- **One Topic per Session**: Keep conversations focused on a single topic
+- **Descriptive Names**: Use clear names that describe the conversation purpose
+- **Regular Cleanup**: Clean old sessions regularly to avoid clutter
+- **Important Sessions**: For critical sessions, backup the database file
+
+### Retention Strategy
+
+Choose retention based on your needs:
+
+<File title="atmos.yaml">
+```yaml
+# For active development (keep recent sessions)
+sessions:
+  retention_days: 7
+
+# For long-term projects (keep longer)
+sessions:
+  retention_days: 90
+
+# Never auto-delete (manual cleanup only)
+sessions:
+  retention_days: 0
+```
+</File>
+
+### Performance Optimization
+
+For large repositories:
+
+<File title="atmos.yaml">
+```yaml
+sessions:
+  max_sessions: 20          # Increase if you need more active sessions
+  auto_save: true           # Keep enabled for data safety
+  retention_days: 30        # Clean up regularly to maintain performance
+```
+</File>
+
+## Use Cases
+
+### Long-term Infrastructure Projects
+
+<Terminal title="shell">
+```bash
+# Start a session for a major refactoring project
+atmos ai chat --session vpc-migration-2025
+
+# Work on it over multiple days/weeks
+# Each time you resume, the AI remembers the context
+
+# Day 1: Planning
+atmos ai chat --session vpc-migration-2025
+> "Let's plan the VPC migration from 10.0.0.0/16 to 10.1.0.0/16"
+
+# Day 2: Implementation
+atmos ai chat --session vpc-migration-2025
+> "Show me the plan we discussed yesterday"
+# AI has full context of previous discussion
+
+# Week 2: Troubleshooting
+atmos ai chat --session vpc-migration-2025
+> "We're seeing routing issues with the new VPC"
+# AI can reference earlier conversations about the migration
+```
+</Terminal>
+
+### Topic-Specific Sessions
+
+<Terminal title="shell">
+```bash
+# Separate sessions for different concerns
+atmos ai chat --session security-review
+atmos ai chat --session performance-optimization
+atmos ai chat --session cost-reduction
+atmos ai chat --session dr-planning
+```
+</Terminal>
+
+### Team Collaboration
+
+<Terminal title="shell">
+```bash
+# Share session database with team
+# Team members can view conversation history
+sqlite3 .atmos/sessions/sessions.db .dump > session-export.sql
+
+# Team member imports
+sqlite3 .atmos/sessions/sessions.db < session-export.sql
+```
+</Terminal>
+
+## Troubleshooting
+
+### Session Not Found
+
+If you get "session not found" errors:
+
+<Terminal title="shell">
+```bash
+# List all sessions to verify the name
+atmos ai sessions
+
+# Check database exists
+ls -la .atmos/sessions/sessions.db
+```
+</Terminal>
+
+### Database Corruption
+
+If you encounter database errors:
+
+<Terminal title="shell">
+```bash
+# Check database integrity
+sqlite3 .atmos/sessions/sessions.db "PRAGMA integrity_check;"
+
+# If corrupted, restore from backup
+cp .atmos/sessions/sessions.db.backup .atmos/sessions/sessions.db
+
+# Or start fresh (WARNING: deletes all sessions)
+rm .atmos/sessions/sessions.db
+```
+</Terminal>
+
+### Disk Space Issues
+
+If sessions are consuming too much disk space:
+
+<Terminal title="shell">
+```bash
+# Check database size
+du -h .atmos/sessions/sessions.db
+
+# Clean old sessions
+atmos ai sessions clean --older-than 7d
+
+# Vacuum database to reclaim space
+sqlite3 .atmos/sessions/sessions.db "VACUUM;"
+```
+</Terminal>
+
+### Permission Errors
+
+If you get permission errors:
+
+<Terminal title="shell">
+```bash
+# Check directory permissions
+ls -la .atmos/sessions/
+
+# Fix permissions
+chmod 755 .atmos/sessions
+chmod 644 .atmos/sessions/sessions.db
+```
+</Terminal>
+
+## Related Documentation
+
+- [AI Configuration](/ai/configuration) - Configure AI providers and settings
+- [AI Commands](/cli/commands/ai/usage) - Complete command reference
+- [Tool Execution](/ai/tools) - Learn about AI tool execution capabilities
