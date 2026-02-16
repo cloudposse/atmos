@@ -844,13 +844,13 @@ func TestNewAuthManager_ParamValidation(t *testing.T) {
 
 func TestNewAuthManager_InitializeErrors(t *testing.T) {
 	t.Run("invalid provider kind", func(t *testing.T) {
-		cfg := &schema.AuthConfig{Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
+		cfg := &schema.AuthConfig{Realm: "test-realm", Providers: map[string]schema.Provider{"bad": {Kind: "unknown"}}}
 		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
 	})
 
 	t.Run("invalid identity kind", func(t *testing.T) {
-		cfg := &schema.AuthConfig{Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
+		cfg := &schema.AuthConfig{Realm: "test-realm", Identities: map[string]schema.Identity{"x": {Kind: "unknown"}}}
 		_, err := NewAuthManager(cfg, &testStore{}, dummyValidator{}, nil, "")
 		assert.ErrorIs(t, err, errUtils.ErrInvalidIdentityConfig)
 	})
