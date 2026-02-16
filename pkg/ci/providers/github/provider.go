@@ -163,7 +163,7 @@ func (p *Provider) UpdateCheckRun(ctx context.Context, opts *provider.UpdateChec
 func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "github.Provider.OutputWriter")()
 
-	return ci.NewFileOutputWriter(
+	return provider.NewFileOutputWriter(
 		os.Getenv("GITHUB_OUTPUT"),
 		os.Getenv("GITHUB_STEP_SUMMARY"),
 	)

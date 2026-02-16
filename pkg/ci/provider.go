@@ -1,4 +1,3 @@
-// Package ci provides CI/CD provider abstractions and integrations.
 package ci
 
 import (

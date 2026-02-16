@@ -1,4 +1,4 @@
-package ci
+package provider
 
 import (
 	"os"
@@ -7,30 +7,28 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 func TestNoopOutputWriter_WriteOutput(t *testing.T) {
-	writer := &provider.NoopOutputWriter{}
+	writer := &NoopOutputWriter{}
 	err := writer.WriteOutput("key", "value")
 	assert.NoError(t, err)
 }
 
 func TestNoopOutputWriter_WriteSummary(t *testing.T) {
-	writer := &provider.NoopOutputWriter{}
+	writer := &NoopOutputWriter{}
 	err := writer.WriteSummary("summary content")
 	assert.NoError(t, err)
 }
 
 func TestNewFileOutputWriter(t *testing.T) {
-	writer := provider.NewFileOutputWriter("/tmp/output", "/tmp/summary")
+	writer := NewFileOutputWriter("/tmp/output", "/tmp/summary")
 	assert.Equal(t, "/tmp/output", writer.OutputPath)
 	assert.Equal(t, "/tmp/summary", writer.SummaryPath)
 }
 
 func TestFileOutputWriter_WriteOutput_EmptyPath(t *testing.T) {
-	writer := &provider.FileOutputWriter{OutputPath: ""}
+	writer := &FileOutputWriter{OutputPath: ""}
 	err := writer.WriteOutput("key", "value")
 	assert.NoError(t, err)
 }
@@ -39,7 +37,7 @@ func TestFileOutputWriter_WriteOutput_SingleLine(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	err := writer.WriteOutput("mykey", "myvalue")
 	require.NoError(t, err)
 
@@ -52,7 +50,7 @@ func TestFileOutputWriter_WriteOutput_Multiline(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	err := writer.WriteOutput("mykey", "line1\nline2\nline3")
 	require.NoError(t, err)
 
@@ -69,7 +67,7 @@ func TestFileOutputWriter_WriteOutput_MultilineWithEOFInContent(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	// Content contains "EOF", so delimiter should be changed.
 	err := writer.WriteOutput("mykey", "line1\nEOF\nline2")
 	require.NoError(t, err)
@@ -87,7 +85,7 @@ func TestFileOutputWriter_WriteOutput_MultipleWrites(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 
 	err := writer.WriteOutput("key1", "value1")
 	require.NoError(t, err)
@@ -103,7 +101,7 @@ func TestFileOutputWriter_WriteOutput_MultipleWrites(t *testing.T) {
 }
 
 func TestFileOutputWriter_WriteSummary_EmptyPath(t *testing.T) {
-	writer := &provider.FileOutputWriter{SummaryPath: ""}
+	writer := &FileOutputWriter{SummaryPath: ""}
 	err := writer.WriteSummary("summary content")
 	assert.NoError(t, err)
 }
@@ -112,7 +110,7 @@ func TestFileOutputWriter_WriteSummary(t *testing.T) {
 	tmpDir := t.TempDir()
 	summaryPath := filepath.Join(tmpDir, "summary.md")
 
-	writer := &provider.FileOutputWriter{SummaryPath: summaryPath}
+	writer := &FileOutputWriter{SummaryPath: summaryPath}
 	err := writer.WriteSummary("# Summary\n\nThis is a test.")
 	require.NoError(t, err)
 
@@ -125,7 +123,7 @@ func TestFileOutputWriter_WriteSummary_Append(t *testing.T) {
 	tmpDir := t.TempDir()
 	summaryPath := filepath.Join(tmpDir, "summary.md")
 
-	writer := &provider.FileOutputWriter{SummaryPath: summaryPath}
+	writer := &FileOutputWriter{SummaryPath: summaryPath}
 
 	err := writer.WriteSummary("Part 1\n")
 	require.NoError(t, err)
@@ -139,7 +137,7 @@ func TestFileOutputWriter_WriteSummary_Append(t *testing.T) {
 }
 
 func TestNewOutputHelpers(t *testing.T) {
-	writer := &provider.NoopOutputWriter{}
+	writer := &NoopOutputWriter{}
 	helpers := NewOutputHelpers(writer)
 	assert.NotNil(t, helpers)
 	assert.Equal(t, writer, helpers.Writer)
@@ -148,10 +146,10 @@ func TestNewOutputHelpers(t *testing.T) {
 func TestOutputHelpers_WritePlanOutputs(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
-	opts := provider.PlanOutputOptions{
+	opts := PlanOutputOptions{
 		HasChanges:        true,
 		HasAdditions:      true,
 		AdditionsCount:    5,
@@ -182,10 +180,10 @@ func TestOutputHelpers_WritePlanOutputs(t *testing.T) {
 func TestOutputHelpers_WritePlanOutputs_NoArtifactKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
-	opts := provider.PlanOutputOptions{
+	opts := PlanOutputOptions{
 		HasChanges:   false,
 		HasAdditions: false,
 		ExitCode:     0,
@@ -206,10 +204,10 @@ func TestOutputHelpers_WritePlanOutputs_NoArtifactKey(t *testing.T) {
 func TestOutputHelpers_WriteApplyOutputs(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
-	opts := provider.ApplyOutputOptions{
+	opts := ApplyOutputOptions{
 		ExitCode: 0,
 		Success:  true,
 		Outputs: map[string]string{
@@ -234,10 +232,10 @@ func TestOutputHelpers_WriteApplyOutputs(t *testing.T) {
 func TestOutputHelpers_WriteApplyOutputs_NoOutputs(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &provider.FileOutputWriter{OutputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
-	opts := provider.ApplyOutputOptions{
+	opts := ApplyOutputOptions{
 		ExitCode: 1,
 		Success:  false,
 		Outputs:  nil,
@@ -256,7 +254,7 @@ func TestOutputHelpers_WriteApplyOutputs_NoOutputs(t *testing.T) {
 }
 
 func TestPlanOutputOptions_Struct(t *testing.T) {
-	opts := provider.PlanOutputOptions{
+	opts := PlanOutputOptions{
 		HasChanges:        true,
 		HasAdditions:      true,
 		AdditionsCount:    10,
@@ -278,7 +276,7 @@ func TestPlanOutputOptions_Struct(t *testing.T) {
 }
 
 func TestApplyOutputOptions_Struct(t *testing.T) {
-	opts := provider.ApplyOutputOptions{
+	opts := ApplyOutputOptions{
 		ExitCode: 0,
 		Success:  true,
 		Outputs: map[string]string{
