@@ -171,20 +171,18 @@ Atmos supports both Docker and Podman as container runtimes:
 Devcontainers are configured in `atmos.yaml` under the `devcontainer` section:
 
 ```yaml
-components:
-  devcontainer:
-    <name>:  # Choose any name for your devcontainer (e.g., geodesic, terraform, python)
-      settings:
-        runtime: podman  # Optional: docker, podman, or omit for auto-detect
-      spec: !include devcontainer.json
+devcontainer:
+  <name>:  # Choose any name for your devcontainer (e.g., geodesic, terraform, python)
+    settings:
+      runtime: podman  # Optional: docker, podman, or omit for auto-detect
+    spec: !include devcontainer.json
 ```
 
 **Example with `geodesic`:**
 ```yaml
-components:
-  devcontainer:
-    geodesic:
-      spec: !include devcontainer.json
+devcontainer:
+  geodesic:
+    spec: !include devcontainer.json
 ```
 
 The `<name>` is a user-defined identifier you choose for your devcontainer. Use it with commands like `atmos devcontainer start <name>`.
