@@ -38,6 +38,10 @@ func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
 	// Build environment with sandbox overrides.
 	sandboxEnv := sandbox.GetEnvironmentVariables()
 
+	// Clean up any existing planfiles from previous runs.
+	planfileStore := filepath.Join(fixtureDir, ".atmos", "planfiles")
+	_ = os.RemoveAll(planfileStore)
+
 	// Step 1: Run `atmos terraform plan mycomponent -s prod --ci`.
 	planCmd := runner.Command("terraform", "plan", "mycomponent", "-s", "prod", "--ci")
 	planCmd.Dir = fixtureDir
