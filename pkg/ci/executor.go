@@ -82,7 +82,12 @@ func detectPlatform(forceCIMode bool) Provider {
 		platform := Detect()
 		if platform == nil {
 			log.Debug("CI mode forced but no platform detected, using generic provider")
-			return NewGenericProvider()
+			generic, err := Get("generic")
+			if err != nil {
+				log.Warn("Failed to get generic CI provider", "error", err)
+				return nil
+			}
+			return generic
 		}
 		return platform
 	}

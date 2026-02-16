@@ -27,8 +27,6 @@ type Context struct {
 	Ref string
 
 	// Branch is the branch name (e.g., "main", "feature/foo").
-	// For push events, this is the pushed branch.
-	// For PR events, this is the head/source branch.
 	Branch string
 
 	// SHA is the git commit SHA.

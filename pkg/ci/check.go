@@ -120,7 +120,6 @@ type UpdateCheckRunOptions struct {
 }
 
 // FormatCheckRunName creates a standardized check run name for Atmos.
-// Format: "atmos/<action>: <stack>/<component>".
 func FormatCheckRunName(action, stack, component string) string {
 	defer perf.Track(nil, "ci.FormatCheckRunName")()
 

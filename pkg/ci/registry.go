@@ -37,12 +37,6 @@ func Get(name string) (Provider, error) {
 }
 
 // Detect returns a provider that detects it is active in the current environment.
-// Returns nil if no provider is detected.
-//
-// Note: Provider detection order is non-deterministic (map iteration order).
-// In practice, only one provider should detect as active in any given CI environment
-// (e.g., GitHub Actions environment variables are only present in GitHub Actions).
-// If multiple providers could match, use Get() with an explicit provider name instead.
 func Detect() Provider {
 	defer perf.Track(nil, "ci.Detect")()
 
@@ -87,4 +81,21 @@ func IsCI() bool {
 	defer perf.Track(nil, "ci.IsCI")()
 
 	return Detect() != nil
+}
+
+// testSaveAndClearRegistry clears the provider registry and returns the previous
+// map. For use in tests only. Restore with testRestoreRegistry.
+func testSaveAndClearRegistry() map[string]Provider {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	prev := providers
+	providers = make(map[string]Provider)
+	return prev
+}
+
+// testRestoreRegistry restores the provider registry from a previous snapshot.
+func testRestoreRegistry(m map[string]Provider) {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	providers = m
 }

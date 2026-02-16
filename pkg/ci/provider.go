@@ -5,7 +5,7 @@ import "context"
 
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).
 type Provider interface {
-	// Name returns the provider name (e.g., "github-actions", "gitlab-ci").
+	// Name returns the provider name (e.g., "github-actions", "generic").
 	Name() string
 
 	// Detect returns true if this provider is active in the current environment.
