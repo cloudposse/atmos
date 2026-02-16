@@ -1,4 +1,4 @@
-package ci
+package generic
 
 import (
 	"os"
@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestGenericProvider(t *testing.T) {
-	p := NewGenericProvider()
+func TestProvider(t *testing.T) {
+	p := NewProvider()
 
 	t.Run("Name returns generic", func(t *testing.T) {
-		assert.Equal(t, GenericProviderName, p.Name())
+		assert.Equal(t, ProviderName, p.Name())
 	})
 
 	t.Run("Detect always returns false", func(t *testing.T) {
@@ -24,7 +24,7 @@ func TestGenericProvider(t *testing.T) {
 	t.Run("Context returns empty context", func(t *testing.T) {
 		ctx, err := p.Context()
 		require.NoError(t, err)
-		assert.Equal(t, GenericProviderName, ctx.Provider)
+		assert.Equal(t, ProviderName, ctx.Provider)
 	})
 
 	t.Run("Context uses environment variables", func(t *testing.T) {
@@ -35,7 +35,7 @@ func TestGenericProvider(t *testing.T) {
 		t.Setenv("ATMOS_CI_ACTOR", "testuser")
 
 		// Create new provider to pick up env vars.
-		p := NewGenericProvider()
+		p := NewProvider()
 		ctx, err := p.Context()
 		require.NoError(t, err)
 
@@ -53,12 +53,12 @@ func TestGenericProvider(t *testing.T) {
 	})
 }
 
-func TestGenericOutputWriter(t *testing.T) {
+func TestOutputWriter(t *testing.T) {
 	t.Run("WriteOutput to file", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		outputFile := filepath.Join(tmpDir, "output")
 
-		w := &GenericOutputWriter{
+		w := &OutputWriter{
 			outputFile: outputFile,
 		}
 
@@ -78,7 +78,7 @@ func TestGenericOutputWriter(t *testing.T) {
 		tmpDir := t.TempDir()
 		outputFile := filepath.Join(tmpDir, "output")
 
-		w := &GenericOutputWriter{
+		w := &OutputWriter{
 			outputFile: outputFile,
 		}
 
@@ -96,7 +96,7 @@ func TestGenericOutputWriter(t *testing.T) {
 		tmpDir := t.TempDir()
 		summaryFile := filepath.Join(tmpDir, "summary")
 
-		w := &GenericOutputWriter{
+		w := &OutputWriter{
 			summaryFile: summaryFile,
 		}
 
@@ -110,7 +110,7 @@ func TestGenericOutputWriter(t *testing.T) {
 	})
 
 	t.Run("WriteOutput without file logs debug", func(t *testing.T) {
-		w := &GenericOutputWriter{}
+		w := &OutputWriter{}
 
 		// Should not error when no file is configured.
 		err := w.WriteOutput("key", "value")
@@ -118,7 +118,7 @@ func TestGenericOutputWriter(t *testing.T) {
 	})
 
 	t.Run("WriteSummary without file writes to stderr", func(t *testing.T) {
-		w := &GenericOutputWriter{}
+		w := &OutputWriter{}
 
 		// Should not error when no file is configured.
 		err := w.WriteSummary("test summary")

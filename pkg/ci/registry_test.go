@@ -48,17 +48,8 @@ func (m *mockProvider) OutputWriter() OutputWriter {
 }
 
 func TestRegisterAndGet(t *testing.T) {
-	// Clear providers for isolated test.
-	providersMu.Lock()
-	originalProviders := providers
-	providers = make(map[string]Provider)
-	providersMu.Unlock()
-
-	defer func() {
-		providersMu.Lock()
-		providers = originalProviders
-		providersMu.Unlock()
-	}()
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
 
 	mock := &mockProvider{name: "test-provider", detected: false}
 	Register(mock)
@@ -75,17 +66,8 @@ func TestRegisterAndGet(t *testing.T) {
 }
 
 func TestDetect(t *testing.T) {
-	// Clear providers for isolated test.
-	providersMu.Lock()
-	originalProviders := providers
-	providers = make(map[string]Provider)
-	providersMu.Unlock()
-
-	defer func() {
-		providersMu.Lock()
-		providers = originalProviders
-		providersMu.Unlock()
-	}()
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
 
 	// Test no providers detected.
 	p := Detect()
@@ -106,17 +88,8 @@ func TestDetect(t *testing.T) {
 }
 
 func TestDetectOrError(t *testing.T) {
-	// Clear providers for isolated test.
-	providersMu.Lock()
-	originalProviders := providers
-	providers = make(map[string]Provider)
-	providersMu.Unlock()
-
-	defer func() {
-		providersMu.Lock()
-		providers = originalProviders
-		providersMu.Unlock()
-	}()
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
 
 	// Test no providers detected.
 	_, err := DetectOrError()
@@ -132,17 +105,8 @@ func TestDetectOrError(t *testing.T) {
 }
 
 func TestList(t *testing.T) {
-	// Clear providers for isolated test.
-	providersMu.Lock()
-	originalProviders := providers
-	providers = make(map[string]Provider)
-	providersMu.Unlock()
-
-	defer func() {
-		providersMu.Lock()
-		providers = originalProviders
-		providersMu.Unlock()
-	}()
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
 
 	// Empty list.
 	names := List()
@@ -159,17 +123,8 @@ func TestList(t *testing.T) {
 }
 
 func TestIsCI(t *testing.T) {
-	// Clear providers for isolated test.
-	providersMu.Lock()
-	originalProviders := providers
-	providers = make(map[string]Provider)
-	providersMu.Unlock()
-
-	defer func() {
-		providersMu.Lock()
-		providers = originalProviders
-		providersMu.Unlock()
-	}()
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
 
 	// Not in CI.
 	assert.False(t, IsCI())

@@ -16,17 +16,8 @@ func boolPtr(b bool) *bool {
 
 func TestExecute(t *testing.T) {
 	t.Run("returns nil when platform not detected and force mode disabled", func(t *testing.T) {
-		// Clear any registered providers to ensure no detection.
-		providersMu.Lock()
-		originalProviders := providers
-		providers = make(map[string]Provider)
-		providersMu.Unlock()
-
-		defer func() {
-			providersMu.Lock()
-			providers = originalProviders
-			providersMu.Unlock()
-		}()
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
 
 		err := Execute(ExecuteOptions{
 			Event:       "after.terraform.plan",
@@ -36,17 +27,10 @@ func TestExecute(t *testing.T) {
 	})
 
 	t.Run("uses generic provider when force mode enabled and no platform detected", func(t *testing.T) {
-		// Clear any registered providers to ensure no detection.
-		providersMu.Lock()
-		originalProviders := providers
-		providers = make(map[string]Provider)
-		providersMu.Unlock()
-
-		defer func() {
-			providersMu.Lock()
-			providers = originalProviders
-			providersMu.Unlock()
-		}()
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+		// Register a mock "generic" provider so Get("generic") succeeds.
+		Register(&mockProvider{name: "generic", detected: false})
 
 		// Force CI mode should use generic provider.
 		err := Execute(ExecuteOptions{
