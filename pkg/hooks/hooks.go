@@ -9,7 +9,7 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/terraform" // Register terraform CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI provider.
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )

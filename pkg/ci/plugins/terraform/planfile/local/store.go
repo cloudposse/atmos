@@ -11,7 +11,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 	"github.com/cloudposse/atmos/pkg/perf"
 )

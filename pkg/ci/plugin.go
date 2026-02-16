@@ -1,7 +1,7 @@
 // Package ci provides CI/CD provider abstractions and integrations.
 package ci
 
-//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=component_provider.go -destination=mock_component_provider_test.go -package=ci
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=plugin.go -destination=mock_plugin_test.go -package=ci
 
 import (
 	"embed"
@@ -43,11 +43,11 @@ type HookBinding struct {
 	Template string
 }
 
-// ComponentCIProvider is implemented by component types that support CI integration.
+// Plugin is implemented by component types that support CI integration.
 // Covers templates, outputs, and artifacts for pipeline automation.
 // Unlike Provider (which represents CI platforms like GitHub/GitLab), this interface
 // represents component types (terraform, helmfile) and their CI behavior.
-type ComponentCIProvider interface {
+type Plugin interface {
 	// GetType returns the component type (e.g., "terraform", "helmfile").
 	GetType() string
 
@@ -82,7 +82,7 @@ type ComponentCIProvider interface {
 	GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string
 }
 
-// ComponentConfigurationResolver is an optional interface that ComponentCIProviders can implement
+// ComponentConfigurationResolver is an optional interface that Plugins can implement
 // to resolve artifact paths (e.g., planfile paths) when not explicitly provided.
 // The executor checks for this interface before upload/download actions and uses it
 // to derive the path from component and stack information.

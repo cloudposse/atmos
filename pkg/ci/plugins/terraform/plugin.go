@@ -1,4 +1,4 @@
-// Package terraform provides the CI provider implementation for Terraform.
+// Package terraform provides the CI Plugin implementation for Terraform.
 package terraform
 
 import (
@@ -16,33 +16,33 @@ import (
 //go:embed templates/*.md
 var defaultTemplates embed.FS
 
-// Provider implements ci.ComponentCIProvider for Terraform.
-type Provider struct{}
+// Plugin implements ci.Plugin for Terraform.
+type Plugin struct{}
 
-// Ensure Provider implements ComponentCIProvider and ArtifactPathResolver.
+// Ensure Plugin implements Plugin and ComponentConfigurationResolver.
 var (
-	_ ci.ComponentCIProvider            = (*Provider)(nil)
-	_ ci.ComponentConfigurationResolver = (*Provider)(nil)
+	_ ci.Plugin                         = (*Plugin)(nil)
+	_ ci.ComponentConfigurationResolver = (*Plugin)(nil)
 )
 
 func init() {
 	// Self-register on package import.
-	if err := ci.RegisterComponentProvider(&Provider{}); err != nil {
+	if err := ci.RegisterPlugin(&Plugin{}); err != nil {
 		// Panic on registration failure - this is a programming error.
-		panic(fmt.Sprintf("failed to register terraform CI provider: %v", err))
+		panic(fmt.Sprintf("failed to register terraform CI plugin: %v", err))
 	}
 }
 
 // GetType returns the component type.
-func (p *Provider) GetType() string {
-	defer perf.Track(nil, "terraform.Provider.GetType")()
+func (p *Plugin) GetType() string {
+	defer perf.Track(nil, "terraform.Plugin.GetType")()
 
 	return "terraform"
 }
 
 // GetHookBindings returns the hook bindings for Terraform CI integration.
-func (p *Provider) GetHookBindings() []ci.HookBinding {
-	defer perf.Track(nil, "terraform.Provider.GetHookBindings")()
+func (p *Plugin) GetHookBindings() []ci.HookBinding {
+	defer perf.Track(nil, "terraform.Plugin.GetHookBindings")()
 
 	return []ci.HookBinding{
 		{
@@ -64,21 +64,21 @@ func (p *Provider) GetHookBindings() []ci.HookBinding {
 }
 
 // GetDefaultTemplates returns the embedded default templates.
-func (p *Provider) GetDefaultTemplates() embed.FS {
-	defer perf.Track(nil, "terraform.Provider.GetDefaultTemplates")()
+func (p *Plugin) GetDefaultTemplates() embed.FS {
+	defer perf.Track(nil, "terraform.Plugin.GetDefaultTemplates")()
 
 	return defaultTemplates
 }
 
 // BuildTemplateContext creates a TerraformTemplateContext from execution results.
 // Returns an extended context with terraform-specific fields for template rendering.
-func (p *Provider) BuildTemplateContext(
+func (p *Plugin) BuildTemplateContext(
 	info *schema.ConfigAndStacksInfo,
 	ciCtx *ci.Context,
 	output string,
 	command string,
 ) (any, error) {
-	defer perf.Track(nil, "terraform.Provider.BuildTemplateContext")()
+	defer perf.Track(nil, "terraform.Plugin.BuildTemplateContext")()
 
 	// Parse the output to get structured data.
 	result := ParseOutput(output, command)
@@ -106,15 +106,15 @@ func (p *Provider) BuildTemplateContext(
 }
 
 // ParseOutput parses terraform command output.
-func (p *Provider) ParseOutput(output string, command string) (*ci.OutputResult, error) {
-	defer perf.Track(nil, "terraform.Provider.ParseOutput")()
+func (p *Plugin) ParseOutput(output string, command string) (*ci.OutputResult, error) {
+	defer perf.Track(nil, "terraform.Plugin.ParseOutput")()
 
 	return ParseOutput(output, command), nil
 }
 
 // GetOutputVariables returns CI output variables for a command.
-func (p *Provider) GetOutputVariables(result *ci.OutputResult, command string) map[string]string {
-	defer perf.Track(nil, "terraform.Provider.GetOutputVariables")()
+func (p *Plugin) GetOutputVariables(result *ci.OutputResult, command string) map[string]string {
+	defer perf.Track(nil, "terraform.Plugin.GetOutputVariables")()
 
 	vars := make(map[string]string)
 
@@ -142,11 +142,11 @@ func (p *Provider) GetOutputVariables(result *ci.OutputResult, command string) m
 }
 
 // GetArtifactKey generates the artifact storage key for a command.
-// TODO: Consider changing ComponentCIProvider interface to return (string, error)
+// TODO: Consider changing Plugin interface to return (string, error)
 // to align with planfile.GenerateKey validation pattern. Currently uses defensive
 // placeholders since the key is only used for debug logging.
-func (p *Provider) GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
-	defer perf.Track(nil, "terraform.Provider.GetArtifactKey")()
+func (p *Plugin) GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
+	defer perf.Track(nil, "terraform.Plugin.GetArtifactKey")()
 
 	// Validate required fields.
 	if info == nil {
@@ -173,8 +173,8 @@ func (p *Provider) GetArtifactKey(info *schema.ConfigAndStacksInfo, command stri
 // During `terraform plan`, the planfile path is generated internally but not propagated
 // to PostRunE hooks. This method reconstructs it so CI hooks can find and upload the planfile.
 // It also populates resolved fields on info needed for metadata (ContextPrefix, Component, etc.).
-func (p *Provider) ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
-	defer perf.Track(atmosConfig, "terraform.Provider.ResolveArtifactPath")()
+func (p *Plugin) ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
+	defer perf.Track(atmosConfig, "terraform.Plugin.ResolveArtifactPath")()
 
 	if info.Stack == "" || info.ComponentFromArg == "" {
 		return "", fmt.Errorf("both stack and component are required to resolve planfile path")

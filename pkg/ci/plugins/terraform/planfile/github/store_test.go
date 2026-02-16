@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 )
 
 func TestStore_Name(t *testing.T) {

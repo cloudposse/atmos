@@ -9,95 +9,95 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-// createMockProvider creates a MockComponentCIProvider with the given type and bindings.
-func createMockProvider(ctrl *gomock.Controller, componentType string, bindings []HookBinding) *MockComponentCIProvider {
-	mock := NewMockComponentCIProvider(ctrl)
+// createMockPlugin creates a MockPlugin with the given type and bindings.
+func createMockPlugin(ctrl *gomock.Controller, componentType string, bindings []HookBinding) *MockPlugin {
+	mock := NewMockPlugin(ctrl)
 	mock.EXPECT().GetType().Return(componentType).AnyTimes()
 	mock.EXPECT().GetHookBindings().Return(bindings).AnyTimes()
 	mock.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
 	return mock
 }
 
-func TestRegisterComponentProvider(t *testing.T) {
+func TestRegisterPlugin(t *testing.T) {
 	// Clear registry before test.
-	ClearComponentProviders()
+	ClearPlugins()
 
 	t.Run("successful registration", func(t *testing.T) {
 		ctrl := gomock.NewController(t)
-		provider := createMockProvider(ctrl, "test-type", nil)
-		err := RegisterComponentProvider(provider)
+		plugin := createMockPlugin(ctrl, "test-type", nil)
+		err := RegisterPlugin(plugin)
 		require.NoError(t, err)
 
 		// Verify registration.
-		p, ok := GetComponentProvider("test-type")
+		p, ok := GetPlugin("test-type")
 		assert.True(t, ok)
 		assert.Equal(t, "test-type", p.GetType())
 	})
 
 	t.Run("nil provider", func(t *testing.T) {
-		err := RegisterComponentProvider(nil)
+		err := RegisterPlugin(nil)
 		require.Error(t, err)
 	})
 
 	t.Run("empty type", func(t *testing.T) {
-		ClearComponentProviders()
+		ClearPlugins()
 		ctrl := gomock.NewController(t)
-		provider := createMockProvider(ctrl, "", nil)
-		err := RegisterComponentProvider(provider)
+		plugin := createMockPlugin(ctrl, "", nil)
+		err := RegisterPlugin(plugin)
 		require.Error(t, err)
 	})
 
 	t.Run("duplicate registration", func(t *testing.T) {
-		ClearComponentProviders()
+		ClearPlugins()
 		ctrl := gomock.NewController(t)
-		provider := createMockProvider(ctrl, "duplicate-type", nil)
-		err := RegisterComponentProvider(provider)
+		plugin := createMockPlugin(ctrl, "duplicate-type", nil)
+		err := RegisterPlugin(plugin)
 		require.NoError(t, err)
 
 		// Second registration should fail.
-		err = RegisterComponentProvider(provider)
+		err = RegisterPlugin(plugin)
 		require.Error(t, err)
 	})
 }
 
-func TestGetComponentProviderForEvent(t *testing.T) {
-	ClearComponentProviders()
+func TestGetPluginForEvent(t *testing.T) {
+	ClearPlugins()
 	ctrl := gomock.NewController(t)
 
 	bindings := []HookBinding{
 		{Event: "after.test-terraform.plan", Actions: []HookAction{ActionSummary}},
 		{Event: "after.test-terraform.apply", Actions: []HookAction{ActionSummary}},
 	}
-	provider := createMockProvider(ctrl, "test-terraform", bindings)
-	err := RegisterComponentProvider(provider)
+	plugin := createMockPlugin(ctrl, "test-terraform", bindings)
+	err := RegisterPlugin(plugin)
 	require.NoError(t, err)
 
 	t.Run("event found", func(t *testing.T) {
-		p := GetComponentProviderForEvent("after.test-terraform.plan")
+		p := GetPluginForEvent("after.test-terraform.plan")
 		require.NotNil(t, p)
 		assert.Equal(t, "test-terraform", p.GetType())
 	})
 
 	t.Run("event not found", func(t *testing.T) {
-		p := GetComponentProviderForEvent("after.unknown.plan")
+		p := GetPluginForEvent("after.unknown.plan")
 		assert.Nil(t, p)
 	})
 }
 
-func TestListComponentProviders(t *testing.T) {
-	ClearComponentProviders()
+func TestListPlugins(t *testing.T) {
+	ClearPlugins()
 	ctrl := gomock.NewController(t)
 
-	// Register multiple providers.
-	providerNames := []string{"alpha", "beta", "gamma"}
-	for _, name := range providerNames {
-		provider := createMockProvider(ctrl, name, nil)
-		err := RegisterComponentProvider(provider)
+	// Register multiple plugins.
+	pluginNames := []string{"alpha", "beta", "gamma"}
+	for _, name := range pluginNames {
+		plugin := createMockPlugin(ctrl, name, nil)
+		err := RegisterPlugin(plugin)
 		require.NoError(t, err)
 	}
 
-	// List should return all providers sorted.
-	list := ListComponentProviders()
+	// List should return all plugins sorted.
+	list := ListPlugins()
 	assert.Equal(t, []string{"alpha", "beta", "gamma"}, list)
 }
 
