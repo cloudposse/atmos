@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	cipkg "github.com/cloudposse/atmos/pkg/ci"
 )
 
 func TestTruncateSHA(t *testing.T) {
@@ -47,37 +47,37 @@ func TestTruncateSHA(t *testing.T) {
 func TestGetCheckIcon(t *testing.T) {
 	tests := []struct {
 		name     string
-		state    ci.CheckStatusState
+		state    cipkg.CheckStatusState
 		expected string
 	}{
 		{
 			name:     "success",
-			state:    ci.CheckStatusStateSuccess,
+			state:    cipkg.CheckStatusStateSuccess,
 			expected: "\u2713",
 		},
 		{
 			name:     "failure",
-			state:    ci.CheckStatusStateFailure,
+			state:    cipkg.CheckStatusStateFailure,
 			expected: "\u2717",
 		},
 		{
 			name:     "pending",
-			state:    ci.CheckStatusStatePending,
+			state:    cipkg.CheckStatusStatePending,
 			expected: "\u25CB",
 		},
 		{
 			name:     "cancelled",
-			state:    ci.CheckStatusStateCancelled,
+			state:    cipkg.CheckStatusStateCancelled,
 			expected: "\u25CF",
 		},
 		{
 			name:     "skipped",
-			state:    ci.CheckStatusStateSkipped,
+			state:    cipkg.CheckStatusStateSkipped,
 			expected: "\u2212",
 		},
 		{
 			name:     "unknown",
-			state:    ci.CheckStatusState("unknown"),
+			state:    cipkg.CheckStatusState("unknown"),
 			expected: "?",
 		},
 	}
@@ -125,7 +125,7 @@ func TestRenderFunctions(t *testing.T) {
 	// Actual output verification would require UI mocking.
 
 	t.Run("renderStatus with empty data", func(t *testing.T) {
-		status := &ci.Status{
+		status := &cipkg.Status{
 			Repository: "owner/repo",
 		}
 		// Should not panic.
@@ -135,12 +135,12 @@ func TestRenderFunctions(t *testing.T) {
 	})
 
 	t.Run("renderStatus with current branch", func(t *testing.T) {
-		status := &ci.Status{
+		status := &cipkg.Status{
 			Repository: "owner/repo",
-			CurrentBranch: &ci.BranchStatus{
+			CurrentBranch: &cipkg.BranchStatus{
 				Branch:    "main",
 				CommitSHA: "abc123",
-				Checks:    []*ci.CheckStatus{},
+				Checks:    []*cipkg.CheckStatus{},
 			},
 		}
 		assert.NotPanics(t, func() {
@@ -149,16 +149,16 @@ func TestRenderFunctions(t *testing.T) {
 	})
 
 	t.Run("renderStatus with PRs", func(t *testing.T) {
-		status := &ci.Status{
+		status := &cipkg.Status{
 			Repository: "owner/repo",
-			CreatedByUser: []*ci.PRStatus{
+			CreatedByUser: []*cipkg.PRStatus{
 				{
 					Number: 1,
 					Title:  "Test PR",
 					Branch: "feature",
 				},
 			},
-			ReviewRequests: []*ci.PRStatus{
+			ReviewRequests: []*cipkg.PRStatus{
 				{
 					Number: 2,
 					Title:  "Review PR",
@@ -172,15 +172,15 @@ func TestRenderFunctions(t *testing.T) {
 	})
 
 	t.Run("renderBranchStatus with PR", func(t *testing.T) {
-		bs := &ci.BranchStatus{
+		bs := &cipkg.BranchStatus{
 			Branch:    "feature",
 			CommitSHA: "def456",
-			PullRequest: &ci.PRStatus{
+			PullRequest: &cipkg.PRStatus{
 				Number:    42,
 				Title:     "Feature PR",
 				Branch:    "feature",
 				AllPassed: true,
-				Checks:    []*ci.CheckStatus{},
+				Checks:    []*cipkg.CheckStatus{},
 			},
 		}
 		assert.NotPanics(t, func() {
@@ -189,10 +189,10 @@ func TestRenderFunctions(t *testing.T) {
 	})
 
 	t.Run("renderBranchStatus without PR", func(t *testing.T) {
-		bs := &ci.BranchStatus{
+		bs := &cipkg.BranchStatus{
 			Branch:    "main",
 			CommitSHA: "abc123",
-			Checks: []*ci.CheckStatus{
+			Checks: []*cipkg.CheckStatus{
 				{Name: "build", Status: "completed", Conclusion: "success"},
 			},
 		}
@@ -202,12 +202,12 @@ func TestRenderFunctions(t *testing.T) {
 	})
 
 	t.Run("renderPRStatus", func(t *testing.T) {
-		pr := &ci.PRStatus{
+		pr := &cipkg.PRStatus{
 			Number:    99,
 			Title:     "Big Feature",
 			Branch:    "big-feature",
 			AllPassed: false,
-			Checks: []*ci.CheckStatus{
+			Checks: []*cipkg.CheckStatus{
 				{Name: "test", Status: "completed", Conclusion: "failure"},
 			},
 		}
@@ -217,7 +217,7 @@ func TestRenderFunctions(t *testing.T) {
 	})
 
 	t.Run("renderChecks", func(t *testing.T) {
-		checks := []*ci.CheckStatus{
+		checks := []*cipkg.CheckStatus{
 			{Name: "build", Status: "completed", Conclusion: "success"},
 			{Name: "test", Status: "in_progress", Conclusion: ""},
 			{Name: "lint", Status: "completed", Conclusion: "failure"},

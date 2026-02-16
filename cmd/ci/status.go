@@ -6,7 +6,6 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cipkg "github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/providers/github" // Register GitHub provider.
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"

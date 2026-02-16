@@ -21,8 +21,8 @@ func (m *mockProvider) Name() string { return m.name }
 
 func (m *mockProvider) Detect() bool { return m.detected }
 
-func (m *mockProvider) Context() (*Context, error) {
-	return &Context{
+func (m *mockProvider) Context() (*provider.Context, error) {
+	return &provider.Context{
 		Provider:   m.name,
 		RunID:      "123",
 		Repository: "owner/repo",
@@ -40,8 +40,8 @@ func (m *mockProvider) CreateCheckRun(_ context.Context, _ *provider.CreateCheck
 	return &provider.CheckRun{ID: 1}, nil
 }
 
-func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *UpdateCheckRunOptions) (*CheckRun, error) {
-	return &CheckRun{ID: 1}, nil
+func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	return &provider.CheckRun{ID: 1}, nil
 }
 
 func (m *mockProvider) OutputWriter() provider.OutputWriter {

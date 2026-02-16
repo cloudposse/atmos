@@ -48,7 +48,7 @@ type actionContext struct {
 	Opts     ExecuteOptions
 	Plugin   plugin.Plugin
 	Platform provider.Provider
-	CICtx    *Context
+	CICtx    *provider.Context
 	Binding  *plugin.HookBinding
 	Command  string
 	Result   *plugin.OutputResult
