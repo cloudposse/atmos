@@ -12,7 +12,7 @@
 The `cloudposse/utils` Terraform provider exposes Atmos capabilities as Terraform data sources. The
 `data "utils_component_config"` data source is used by the `cloudposse/stack-config/yaml//modules/remote-state`
 module to resolve component backend configuration for cross-component state lookups. This module is widely used —
-for example, in the `prezzeepay-infra` repo it appears in 56 components.
+for example, in one affected repo it appears in 56 components.
 
 The provider imports two public functions from `pkg/component`:
 
