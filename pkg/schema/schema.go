@@ -699,6 +699,9 @@ type AuthContext struct {
 	// Azure holds Azure credentials if an Azure identity is active.
 	Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 
+	// Okta holds Okta credentials if an Okta identity is active.
+	Okta *OktaAuthContext `json:"okta,omitempty" yaml:"okta,omitempty"`
+
 	// Future: Add other cloud providers as needed
 	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
@@ -754,6 +757,30 @@ type AzureAuthContext struct {
 	// TokenFilePath is the path to the OIDC token file (e.g., from GitHub Actions).
 	// Optional - if not set, AZURE_FEDERATED_TOKEN_FILE env var will be used.
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
+}
+
+// OktaAuthContext holds Okta-specific authentication context.
+// This is populated by the Okta auth system and consumed by Okta SDK/API calls.
+type OktaAuthContext struct {
+	// TokensFile is the absolute path to the Okta tokens file managed by Atmos.
+	// Example: /home/user/.config/atmos/okta/okta-oidc/tokens.json
+	TokensFile string `json:"tokens_file" yaml:"tokens_file"`
+
+	// ConfigDir is the directory containing Okta token files.
+	// Example: /home/user/.config/atmos/okta/okta-oidc
+	ConfigDir string `json:"config_dir" yaml:"config_dir"`
+
+	// OrgURL is the Okta organization URL.
+	// Example: https://company.okta.com
+	OrgURL string `json:"org_url" yaml:"org_url"`
+
+	// AccessToken is the OAuth 2.0 access token (for in-process use).
+	// Note: For spawned processes, use OKTA_OAUTH2_ACCESS_TOKEN env var instead.
+	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty"`
+
+	// IDToken is the OpenID Connect ID token (for OIDC federation).
+	// Used for AWS AssumeRoleWithWebIdentity and similar federation flows.
+	IDToken string `json:"id_token,omitempty" yaml:"id_token,omitempty"`
 }
 
 type ConfigAndStacksInfo struct {

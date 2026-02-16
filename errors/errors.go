@@ -165,6 +165,17 @@ var (
 	ErrAzureTimeParseFailure       = errors.New("unable to parse time: tried RFC3339, local time formats, and Unix timestamp")
 	ErrAzureNoAccountsInCache      = errors.New("no accounts found in cache")
 	ErrAzureNoAccountForTenant     = errors.New("no account found for tenant")
+
+	// Okta authentication errors.
+	ErrOktaDeviceCodeExpired    = errors.New("Okta device code expired before user completed authentication")
+	ErrOktaDeviceCodeDenied     = errors.New("Okta device code authorization was denied by user")
+	ErrOktaTokenRefreshFailed   = errors.New("failed to refresh Okta token")
+	ErrOktaNoIDToken            = errors.New("Okta response did not include ID token (required for federation)")
+	ErrOktaAuthorizationPending = errors.New("authorization pending - user has not completed authentication")
+	ErrOktaSlowDown             = errors.New("polling too frequently - increasing interval")
+	ErrOktaTokenExpired         = errors.New("Okta token is expired")
+	ErrInvalidCredentials       = errors.New("invalid credentials")
+
 	ErrBackendConfigRequired       = errors.New("backend configuration is required")
 	ErrBackendTypeRequired         = errors.New("backend_type is required")
 	ErrBackendSectionMissing       = errors.New("no 'backend' section configured")

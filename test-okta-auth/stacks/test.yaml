@@ -1,0 +1,8 @@
+# Minimal test stack for Okta auth testing
+vars:
+  tenant: test
+  environment: dev
+  stage: us-east-1
+
+components:
+  terraform: {}

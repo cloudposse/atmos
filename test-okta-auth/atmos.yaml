@@ -1,0 +1,65 @@
+# Test configuration for Okta authentication
+# To use: cd test-okta-auth && atmos auth login --identity okta-api
+#
+# Prerequisites:
+# 1. Create an Okta application with Device Authorization Grant enabled
+# 2. Update org_url, client_id, and scopes below with your Okta app details
+# 3. For AWS federation, configure an AWS IAM Identity Provider for Okta OIDC
+
+base_path: "."
+
+# Minimal component/stack config for testing
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+# Authentication configuration
+auth:
+  # Okta OAuth 2.0 Device Code provider
+  providers:
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        # Replace with your Okta org URL
+        org_url: "https://your-company.okta.com"
+        # Replace with your Okta application client ID
+        client_id: "0oa1234567890abcdef"
+        # Scopes to request (openid is required, profile/email recommended)
+        # For AWS federation, you may need custom scopes
+        scopes:
+          - openid
+          - profile
+          - email
+          - offline_access  # Required for refresh tokens
+
+  # Identity configurations
+  identities:
+    # Direct Okta API access (for Terraform Okta provider, etc.)
+    okta-api:
+      kind: okta/api-access
+      via:
+        provider: okta-corp
+
+    # AWS role assumption using Okta OIDC federation
+    # Requires AWS IAM Identity Provider configured for Okta
+    aws-via-okta:
+      kind: aws/assume-role
+      via:
+        # Chain through Okta provider for OIDC token
+        provider: okta-corp
+      config:
+        # Replace with your AWS role ARN that trusts Okta OIDC
+        role_arn: "arn:aws:iam::123456789012:role/OktaFederatedRole"
+        # Optional: session duration (default: 1 hour)
+        duration_seconds: 3600
+        # Optional: session name
+        session_name: "atmos-okta-session"
+
+  # Default identity to use (optional)
+  # default_identity: okta-api

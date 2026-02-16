@@ -6,11 +6,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	awsIdentities "github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	azureIdentities "github.com/cloudposse/atmos/pkg/auth/identities/azure"
+	oktaIdentities "github.com/cloudposse/atmos/pkg/auth/identities/okta"
 	awsProviders "github.com/cloudposse/atmos/pkg/auth/providers/aws"
 	azureProviders "github.com/cloudposse/atmos/pkg/auth/providers/azure"
 	githubProviders "github.com/cloudposse/atmos/pkg/auth/providers/github"
 	mockProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock"
 	mockawsProviders "github.com/cloudposse/atmos/pkg/auth/providers/mock/aws"
+	oktaProviders "github.com/cloudposse/atmos/pkg/auth/providers/okta"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -35,6 +37,8 @@ func NewProvider(name string, config *schema.Provider) (types.Provider, error) {
 		return azureProviders.NewOIDCProvider(name, config)
 	case "github/oidc":
 		return githubProviders.NewOIDCProvider(name, config)
+	case "okta/device-code":
+		return oktaProviders.NewDeviceCodeProvider(name, config)
 	case "mock":
 		return mockProviders.NewProvider(name, config), nil
 	case "mock/aws":
@@ -61,6 +65,8 @@ func NewIdentity(name string, config *schema.Identity) (types.Identity, error) {
 		return awsIdentities.NewUserIdentity(name, config)
 	case "azure/subscription":
 		return azureIdentities.NewSubscriptionIdentity(name, config)
+	case "okta/api-access":
+		return oktaIdentities.NewAPIAccessIdentity(name, config)
 	case "mock":
 		return mockProviders.NewIdentity(name, config), nil
 	case "mock/aws":

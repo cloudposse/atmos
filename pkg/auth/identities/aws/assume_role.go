@@ -154,9 +154,20 @@ func (i *assumeRoleIdentity) Authenticate(ctx context.Context, baseCreds types.I
 		return nil, fmt.Errorf("%w: invalid assume role identity: %w", errUtils.ErrInvalidIdentityConfig, err)
 	}
 
-	// Check if base credentials are OIDC credentials.
+	// Check if base credentials are OIDC credentials (GitHub, etc.).
 	if oidcCreds, ok := baseCreds.(*types.OIDCCredentials); ok {
 		// Use AssumeRoleWithWebIdentity for OIDC credentials.
+		return i.assumeRoleWithWebIdentity(ctx, oidcCreds)
+	}
+
+	// Check if base credentials are Okta credentials with an ID token.
+	// Okta ID tokens can be used for AWS OIDC federation via AssumeRoleWithWebIdentity.
+	if oktaCreds, ok := baseCreds.(*types.OktaCredentials); ok && oktaCreds.IDToken != "" {
+		// Convert Okta credentials to OIDC credentials for AssumeRoleWithWebIdentity.
+		oidcCreds := &types.OIDCCredentials{
+			Token:    oktaCreds.IDToken,
+			Provider: "okta",
+		}
 		return i.assumeRoleWithWebIdentity(ctx, oidcCreds)
 	}
 
