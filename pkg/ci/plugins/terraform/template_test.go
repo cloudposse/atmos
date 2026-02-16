@@ -308,7 +308,7 @@ func TestTemplateRendering(t *testing.T) {
 		},
 	}
 
-	p := &Provider{}
+	p := &Plugin{}
 	fs := p.GetDefaultTemplates()
 
 	for _, tt := range tests {
@@ -341,7 +341,7 @@ func TestTemplateRendering(t *testing.T) {
 
 // TestTemplateWithCIContext tests that CI context is properly rendered.
 func TestTemplateWithCIContext(t *testing.T) {
-	p := &Provider{}
+	p := &Plugin{}
 	fs := p.GetDefaultTemplates()
 
 	ctx := &TerraformTemplateContext{
@@ -591,7 +591,7 @@ func TestTemplateGolden(t *testing.T) {
 		},
 	}
 
-	p := &Provider{}
+	p := &Plugin{}
 	fs := p.GetDefaultTemplates()
 
 	for _, tt := range tests {

@@ -10,13 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-func TestProvider_GetType(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_GetType(t *testing.T) {
+	p := &Plugin{}
 	assert.Equal(t, "terraform", p.GetType())
 }
 
-func TestProvider_GetHookBindings(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_GetHookBindings(t *testing.T) {
+	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
 	// Should have bindings for plan, apply, and before.apply (download).
@@ -45,8 +45,8 @@ func TestProvider_GetHookBindings(t *testing.T) {
 	assert.True(t, downloadBinding.HasAction(ci.ActionDownload))
 }
 
-func TestProvider_GetDefaultTemplates(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_GetDefaultTemplates(t *testing.T) {
+	p := &Plugin{}
 	fs := p.GetDefaultTemplates()
 
 	// Should be able to read plan.md.
@@ -62,8 +62,8 @@ func TestProvider_GetDefaultTemplates(t *testing.T) {
 	assert.Contains(t, string(content), ".Outputs")
 }
 
-func TestProvider_BuildTemplateContext(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_BuildTemplateContext(t *testing.T) {
+	p := &Plugin{}
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "vpc",
 		Stack:            "dev-us-east-1",
@@ -95,8 +95,8 @@ func TestProvider_BuildTemplateContext(t *testing.T) {
 	assert.True(t, ctx.HasChanges())
 }
 
-func TestProvider_ParseOutput(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_ParseOutput(t *testing.T) {
+	p := &Plugin{}
 
 	result, err := p.ParseOutput("Plan: 5 to add, 2 to change, 1 to destroy.", "plan")
 	require.NoError(t, err)
@@ -109,8 +109,8 @@ func TestProvider_ParseOutput(t *testing.T) {
 	assert.Equal(t, 1, data.ResourceCounts.Destroy)
 }
 
-func TestProvider_GetOutputVariables(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_GetOutputVariables(t *testing.T) {
+	p := &Plugin{}
 	result := &ci.OutputResult{
 		ExitCode:   0,
 		HasChanges: true,
@@ -136,8 +136,8 @@ func TestProvider_GetOutputVariables(t *testing.T) {
 	assert.Equal(t, "0", vars["resources_to_destroy"])
 }
 
-func TestProvider_GetArtifactKey(t *testing.T) {
-	p := &Provider{}
+func TestPlugin_GetArtifactKey(t *testing.T) {
+	p := &Plugin{}
 
 	t.Run("valid stack and component", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{

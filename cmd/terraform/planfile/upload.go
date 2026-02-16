@@ -11,12 +11,12 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ci/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 
 	// Import planfile store implementations to register them.
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/github"
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/local"
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/s3"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"

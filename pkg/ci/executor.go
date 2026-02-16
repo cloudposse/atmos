@@ -8,10 +8,10 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/planfile"
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/github" // Register github store.
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/local"  // Register local store.
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/s3"     // Register s3 store.
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github" // Register github store.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"  // Register local store.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"     // Register s3 store.
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -44,7 +44,7 @@ type ExecuteOptions struct {
 // actionContext holds all context needed to execute a CI action.
 type actionContext struct {
 	Opts     ExecuteOptions
-	Provider ComponentCIProvider
+	Plugin   Plugin
 	Platform Provider
 	CICtx    *Context
 	Binding  *HookBinding
@@ -63,14 +63,14 @@ func Execute(opts ExecuteOptions) error {
 		return nil
 	}
 
-	// Get provider and binding for this event.
-	provider, binding := getProviderAndBinding(opts)
-	if provider == nil || binding == nil {
+	// Get plugin and binding for this event.
+	plugin, binding := getPluginAndBinding(opts)
+	if plugin == nil || binding == nil {
 		return nil
 	}
 
 	// Build and execute actions.
-	actCtx := buildActionContext(opts, platform, provider, binding)
+	actCtx := buildActionContext(opts, platform, plugin, binding)
 	executeActions(actCtx, binding.Actions)
 
 	return nil
@@ -95,8 +95,8 @@ func detectPlatform(forceCIMode bool) Provider {
 	return platform
 }
 
-// getProviderAndBinding gets the component provider and hook binding for an event.
-func getProviderAndBinding(opts ExecuteOptions) (ComponentCIProvider, *HookBinding) {
+// getPluginAndBinding gets the CI plugin and hook binding for an event.
+func getPluginAndBinding(opts ExecuteOptions) (Plugin, *HookBinding) {
 	componentType := opts.ComponentType
 	if componentType == "" {
 		componentType = extractComponentType(opts.Event)
@@ -107,24 +107,24 @@ func getProviderAndBinding(opts ExecuteOptions) (ComponentCIProvider, *HookBindi
 		return nil, nil
 	}
 
-	provider, ok := GetComponentProvider(componentType)
+	plugin, ok := GetPlugin(componentType)
 	if !ok {
-		log.Debug("No CI provider registered for component type", "component_type", componentType)
+		log.Debug("No CI plugin registered for component type", "component_type", componentType)
 		return nil, nil
 	}
 
-	bindings := HookBindings(provider.GetHookBindings())
+	bindings := HookBindings(plugin.GetHookBindings())
 	binding := bindings.GetBindingForEvent(opts.Event)
 	if binding == nil {
-		log.Debug("Provider does not handle this event", "event", opts.Event, "component_type", componentType)
+		log.Debug("Plugin does not handle this event", "event", opts.Event, "component_type", componentType)
 		return nil, nil
 	}
 
-	return provider, binding
+	return plugin, binding
 }
 
 // buildActionContext builds the action context for executing CI actions.
-func buildActionContext(opts ExecuteOptions, platform Provider, provider ComponentCIProvider, binding *HookBinding) *actionContext {
+func buildActionContext(opts ExecuteOptions, platform Provider, plugin Plugin, binding *HookBinding) *actionContext {
 	ciCtx, err := platform.Context()
 	if err != nil {
 		log.Warn("Failed to get CI context", "error", err)
@@ -133,7 +133,7 @@ func buildActionContext(opts ExecuteOptions, platform Provider, provider Compone
 
 	command := extractCommand(opts.Event)
 
-	result, err := provider.ParseOutput(opts.Output, command)
+	result, err := plugin.ParseOutput(opts.Output, command)
 	if err != nil {
 		log.Warn("Failed to parse command output", "error", err)
 		result = &OutputResult{}
@@ -141,7 +141,7 @@ func buildActionContext(opts ExecuteOptions, platform Provider, provider Compone
 
 	return &actionContext{
 		Opts:     opts,
-		Provider: provider,
+		Plugin:   plugin,
 		Platform: platform,
 		CICtx:    ciCtx,
 		Binding:  binding,
@@ -256,7 +256,7 @@ func executeSummaryAction(ctx *actionContext) error {
 
 	// Build template context.
 	// Provider returns an extended context type (e.g., *TerraformTemplateContext) that embeds *TemplateContext.
-	tmplCtx, err := ctx.Provider.BuildTemplateContext(ctx.Opts.Info, ctx.CICtx, ctx.Opts.Output, ctx.Command)
+	tmplCtx, err := ctx.Plugin.BuildTemplateContext(ctx.Opts.Info, ctx.CICtx, ctx.Opts.Output, ctx.Command)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
@@ -267,9 +267,9 @@ func executeSummaryAction(ctx *actionContext) error {
 	// Load and render template.
 	loader := templates.NewLoader(ctx.Opts.AtmosConfig)
 	rendered, err := loader.LoadAndRender(
-		ctx.Provider.GetType(),
+		ctx.Plugin.GetType(),
 		templateName,
-		ctx.Provider.GetDefaultTemplates(),
+		ctx.Plugin.GetDefaultTemplates(),
 		tmplCtx,
 	)
 	if err != nil {
@@ -307,7 +307,7 @@ func executeOutputAction(ctx *actionContext) error {
 	}
 
 	// Get output variables from provider.
-	vars := ctx.Provider.GetOutputVariables(ctx.Result, ctx.Command)
+	vars := ctx.Plugin.GetOutputVariables(ctx.Result, ctx.Command)
 
 	// Add common variables.
 	vars["stack"] = ctx.Opts.Info.Stack
@@ -377,7 +377,7 @@ func executeUploadAction(ctx *actionContext) error {
 func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
 	if path == "" {
-		if resolver, ok := ctx.Provider.(ComponentConfigurationResolver); ok {
+		if resolver, ok := ctx.Plugin.(ComponentConfigurationResolver); ok {
 			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
 			if err != nil {
 				log.Debug("Failed to resolve artifact path for upload", "error", err)
@@ -395,7 +395,7 @@ func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip boo
 		log.Debug("Planfile does not exist, skipping upload", "path", path)
 		return "", "", true
 	}
-	key = ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
+	key = ctx.Plugin.GetArtifactKey(ctx.Opts.Info, ctx.Command)
 	if key == "" {
 		log.Debug("Could not generate artifact key, skipping upload")
 		return "", "", true
@@ -450,7 +450,7 @@ func executeDownloadAction(ctx *actionContext) error {
 func validateDownloadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
 	if path == "" {
-		if resolver, ok := ctx.Provider.(ComponentConfigurationResolver); ok {
+		if resolver, ok := ctx.Plugin.(ComponentConfigurationResolver); ok {
 			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
 			if err != nil {
 				log.Debug("Failed to resolve artifact path for download", "error", err)
@@ -464,7 +464,7 @@ func validateDownloadPrerequisites(ctx *actionContext) (path, key string, skip b
 		log.Debug("No planfile path specified, skipping download")
 		return "", "", true
 	}
-	key = ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
+	key = ctx.Plugin.GetArtifactKey(ctx.Opts.Info, ctx.Command)
 	if key == "" {
 		log.Debug("Could not generate artifact key, skipping download")
 		return "", "", true

@@ -20,11 +20,11 @@ A provider-based system where component types (terraform, helmfile, etc.) declar
 
 ## Architecture
 
-### Component CI Provider Interface
+### Plugin Interface
 
 ```go
-// ComponentCIProvider is implemented by component types that support CI integration.
-type ComponentCIProvider interface {
+// Plugin is implemented by component types that support CI integration.
+type Plugin interface {
     // Identity
     GetType() string  // "terraform", "helmfile"
 
@@ -106,9 +106,9 @@ ci:
 
 ```
 pkg/ci/
-├── component_provider.go     # ComponentCIProvider interface, HookBinding types
-├── component_registry.go     # Provider registry (thread-safe)
-├── component_registry_test.go
+├── plugin.go                 # Plugin interface, HookBinding types
+├── plugin_registry.go        # Plugin registry (thread-safe)
+├── plugin_registry_test.go
 ├── executor.go               # Execute() - unified action executor
 ├── templates/
 │   └── loader.go             # Template loading with override support
@@ -230,9 +230,9 @@ All files specified in this PRD have been implemented and tested.
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `pkg/ci/component_provider.go` | `ComponentCIProvider` interface, `HookBinding`, `HookAction` types | ✅ Done |
-| `pkg/ci/component_registry.go` | Thread-safe provider registry | ✅ Done |
-| `pkg/ci/component_registry_test.go` | Registry tests | ✅ Done |
+| `pkg/ci/plugin.go` | `Plugin` interface, `HookBinding`, `HookAction` types | ✅ Done |
+| `pkg/ci/plugin_registry.go` | Thread-safe plugin registry | ✅ Done |
+| `pkg/ci/plugin_registry_test.go` | Registry tests | ✅ Done |
 | `pkg/ci/executor.go` | Unified `Execute()` function | ✅ Done |
 | `pkg/ci/executor_test.go` | Executor tests | ✅ Done |
 | `pkg/ci/templates/loader.go` | Template loading with override support | ✅ Done |
@@ -265,7 +265,7 @@ All files specified in this PRD have been implemented and tested.
 
 All components include comprehensive tests:
 
-- `pkg/ci/component_registry_test.go` - Registry operations, binding lookup
+- `pkg/ci/plugin_registry_test.go` - Registry operations, binding lookup
 - `pkg/ci/terraform/parser_test.go` - Output parsing for various terraform outputs
 - `pkg/ci/terraform/provider_test.go` - Provider interface implementation
 
