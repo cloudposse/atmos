@@ -1,7 +1,6 @@
 package okta
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -499,13 +498,8 @@ func (p *deviceCodeProvider) Authenticate(ctx context.Context) (authTypes.ICrede
 	authCtx, cancel := context.WithTimeout(ctx, deviceCodeTimeout)
 	defer cancel()
 
-	// Poll for token.
-	var tokens *oktaCloud.OktaTokens
-	if isInteractive() {
-		tokens, err = pollForTokenWithSpinner(authCtx, p, deviceAuth)
-	} else {
-		tokens, err = p.pollForToken(authCtx, deviceAuth)
-	}
+	// Poll for token with spinner UI (we already verified isInteractive() above).
+	tokens, err := pollForTokenWithSpinner(authCtx, p, deviceAuth)
 	if err != nil {
 		return nil, err
 	}
@@ -538,6 +532,8 @@ func (p *deviceCodeProvider) tokensToCredentials(tokens *oktaCloud.OktaTokens) (
 
 // Validate checks the provider configuration.
 func (p *deviceCodeProvider) Validate() error {
+	defer perf.Track(nil, "okta.deviceCodeProvider.Validate")()
+
 	if p.orgURL == "" {
 		return fmt.Errorf("%w: org_url is required", errUtils.ErrInvalidProviderConfig)
 	}
@@ -629,6 +625,3 @@ func (p *deviceCodeProvider) GetFilesDisplayPath() string {
 
 // Ensure deviceCodeProvider implements Provider interface.
 var _ authTypes.Provider = (*deviceCodeProvider)(nil)
-
-// Silence unused variable warning for bytes import.
-var _ = bytes.Buffer{}

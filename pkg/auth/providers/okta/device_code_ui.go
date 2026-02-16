@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -193,6 +192,3 @@ func (m *oktaSpinnerModel) View() string {
 	}
 	return m.spinner.View() + " Waiting for Okta authentication...\n"
 }
-
-// Silence unused variable warning for time import.
-var _ = time.Second
