@@ -1,4 +1,5 @@
-package ci
+// Package provider provides CI provider interfaces and registry.
+package provider
 
 import (
 	"sync"
@@ -15,7 +16,7 @@ var (
 // Register registers a CI provider.
 // Providers should call this in their init() function.
 func Register(p Provider) {
-	defer perf.Track(nil, "ci.Register")()
+	defer perf.Track(nil, "provider.Register")()
 
 	providersMu.Lock()
 	defer providersMu.Unlock()
@@ -24,7 +25,7 @@ func Register(p Provider) {
 
 // Get returns a provider by name.
 func Get(name string) (Provider, error) {
-	defer perf.Track(nil, "ci.Get")()
+	defer perf.Track(nil, "provider.Get")()
 
 	providersMu.RLock()
 	defer providersMu.RUnlock()
@@ -38,7 +39,7 @@ func Get(name string) (Provider, error) {
 
 // Detect returns a provider that detects it is active in the current environment.
 func Detect() Provider {
-	defer perf.Track(nil, "ci.Detect")()
+	defer perf.Track(nil, "provider.Detect")()
 
 	providersMu.RLock()
 	defer providersMu.RUnlock()
@@ -53,7 +54,7 @@ func Detect() Provider {
 
 // DetectOrError returns the detected provider or an error if none is detected.
 func DetectOrError() (Provider, error) {
-	defer perf.Track(nil, "ci.DetectOrError")()
+	defer perf.Track(nil, "provider.DetectOrError")()
 
 	p := Detect()
 	if p == nil {
@@ -64,7 +65,7 @@ func DetectOrError() (Provider, error) {
 
 // List returns all registered provider names.
 func List() []string {
-	defer perf.Track(nil, "ci.List")()
+	defer perf.Track(nil, "provider.List")()
 
 	providersMu.RLock()
 	defer providersMu.RUnlock()
@@ -78,14 +79,14 @@ func List() []string {
 
 // IsCI returns true if any CI provider is detected.
 func IsCI() bool {
-	defer perf.Track(nil, "ci.IsCI")()
+	defer perf.Track(nil, "provider.IsCI")()
 
 	return Detect() != nil
 }
 
-// testSaveAndClearRegistry clears the provider registry and returns the previous
-// map. For use in tests only. Restore with testRestoreRegistry.
-func testSaveAndClearRegistry() map[string]Provider {
+// TestSaveAndClearRegistry clears the provider registry and returns the previous
+// map. Exported for cross-package test use. Restore with TestRestoreRegistry.
+func TestSaveAndClearRegistry() map[string]Provider {
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	prev := providers
@@ -93,8 +94,8 @@ func testSaveAndClearRegistry() map[string]Provider {
 	return prev
 }
 
-// testRestoreRegistry restores the provider registry from a previous snapshot.
-func testRestoreRegistry(m map[string]Provider) {
+// TestRestoreRegistry restores the provider registry from a previous snapshot.
+func TestRestoreRegistry(m map[string]Provider) {
 	providersMu.Lock()
 	defer providersMu.Unlock()
 	providers = m

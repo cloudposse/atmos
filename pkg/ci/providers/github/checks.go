@@ -8,7 +8,7 @@ import (
 	"github.com/google/go-github/v59/github"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 // GitHub API status values.
@@ -19,7 +19,7 @@ const (
 )
 
 // createCheckRun creates a new check run on a commit.
-func (p *Provider) createCheckRun(ctx context.Context, opts *ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	ghOpts := github.CreateCheckRunOptions{
 		Name:    opts.Name,
 		HeadSHA: opts.SHA,
@@ -27,9 +27,9 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *ci.CreateCheckRunOp
 
 	// Map status to GitHub API values.
 	switch opts.Status {
-	case ci.CheckRunStatePending:
+	case provider.CheckRunStatePending:
 		ghOpts.Status = github.String(statusQueued)
-	case ci.CheckRunStateInProgress:
+	case provider.CheckRunStateInProgress:
 		ghOpts.Status = github.String(statusInProgress)
 	default:
 		ghOpts.Status = github.String(statusQueued)
@@ -56,7 +56,7 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *ci.CreateCheckRunOp
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunCreateFailed, err)
 	}
 
-	return &ci.CheckRun{
+	return &provider.CheckRun{
 		ID:         checkRun.GetID(),
 		Name:       checkRun.GetName(),
 		Status:     mapGitHubStatusToCheckRunState(checkRun.GetStatus()),
@@ -69,18 +69,18 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *ci.CreateCheckRunOp
 }
 
 // updateCheckRun updates an existing check run.
-func (p *Provider) updateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	ghOpts := github.UpdateCheckRunOptions{
 		Name: opts.Name, // Name is required for updates.
 	}
 
 	// Map status to GitHub API values.
 	switch opts.Status {
-	case ci.CheckRunStatePending:
+	case provider.CheckRunStatePending:
 		ghOpts.Status = github.String(statusQueued)
-	case ci.CheckRunStateInProgress:
+	case provider.CheckRunStateInProgress:
 		ghOpts.Status = github.String(statusInProgress)
-	case ci.CheckRunStateSuccess, ci.CheckRunStateFailure, ci.CheckRunStateError, ci.CheckRunStateCancelled:
+	case provider.CheckRunStateSuccess, provider.CheckRunStateFailure, provider.CheckRunStateError, provider.CheckRunStateCancelled:
 		ghOpts.Status = github.String(statusCompleted)
 		ghOpts.Conclusion = github.String(mapCheckRunStateToConclusion(opts.Status, opts.Conclusion))
 	}
@@ -107,7 +107,7 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOp
 		completedAt = checkRun.CompletedAt.Time
 	}
 
-	return &ci.CheckRun{
+	return &provider.CheckRun{
 		ID:          checkRun.GetID(),
 		Name:        checkRun.GetName(),
 		Status:      mapGitHubStatusToCheckRunState(checkRun.GetStatus()),
@@ -120,41 +120,41 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOp
 	}, nil
 }
 
-// mapGitHubStatusToCheckRunState maps GitHub API status to ci.CheckRunState.
+// mapGitHubStatusToCheckRunState maps GitHub API status to provider.CheckRunState.
 // Note: For completed status, this returns CheckRunStateSuccess as a fallback.
 // When a check run is completed, callers should also examine the conclusion
 // field to determine the actual outcome (success, failure, cancelled, etc.).
-func mapGitHubStatusToCheckRunState(status string) ci.CheckRunState {
+func mapGitHubStatusToCheckRunState(status string) provider.CheckRunState {
 	switch status {
 	case statusQueued:
-		return ci.CheckRunStatePending
+		return provider.CheckRunStatePending
 	case statusInProgress:
-		return ci.CheckRunStateInProgress
+		return provider.CheckRunStateInProgress
 	case statusCompleted:
 		// Completed status requires conclusion to determine actual state.
 		// This is a fallback; callers should check the Conclusion field.
 		// GitHub conclusions: success, failure, neutral, cancelled, skipped,
 		// timed_out, action_required.
-		return ci.CheckRunStateSuccess
+		return provider.CheckRunStateSuccess
 	default:
-		return ci.CheckRunStatePending
+		return provider.CheckRunStatePending
 	}
 }
 
-// mapCheckRunStateToConclusion maps ci.CheckRunState to GitHub API conclusion.
-func mapCheckRunStateToConclusion(state ci.CheckRunState, providedConclusion string) string {
+// mapCheckRunStateToConclusion maps provider.CheckRunState to GitHub API conclusion.
+func mapCheckRunStateToConclusion(state provider.CheckRunState, providedConclusion string) string {
 	if providedConclusion != "" {
 		return providedConclusion
 	}
 
 	switch state {
-	case ci.CheckRunStateSuccess:
+	case provider.CheckRunStateSuccess:
 		return "success"
-	case ci.CheckRunStateFailure:
+	case provider.CheckRunStateFailure:
 		return "failure"
-	case ci.CheckRunStateError:
+	case provider.CheckRunStateError:
 		return "failure"
-	case ci.CheckRunStateCancelled:
+	case provider.CheckRunStateCancelled:
 		return "cancelled"
 	default:
 		return "neutral"

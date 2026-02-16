@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -16,7 +17,7 @@ const (
 	ProviderName = "github-actions"
 )
 
-// Provider implements ci.Provider for GitHub Actions.
+// Provider implements provider.Provider for GitHub Actions.
 type Provider struct {
 	client *Client
 }
@@ -54,12 +55,12 @@ func (p *Provider) Detect() bool {
 }
 
 // Context returns CI metadata from GitHub Actions environment variables.
-func (p *Provider) Context() (*ci.Context, error) {
+func (p *Provider) Context() (*provider.Context, error) {
 	defer perf.Track(nil, "github.Provider.Context")()
 
 	runNumber, _ := strconv.Atoi(os.Getenv("GITHUB_RUN_NUMBER"))
 
-	ctx := &ci.Context{
+	ctx := &provider.Context{
 		Provider:   ProviderName,
 		RunID:      os.Getenv("GITHUB_RUN_ID"),
 		RunNumber:  runNumber,
@@ -97,7 +98,7 @@ func (p *Provider) Context() (*ci.Context, error) {
 }
 
 // parsePRInfo extracts PR information from environment variables.
-func parsePRInfo() *ci.PRInfo {
+func parsePRInfo() *provider.PRInfo {
 	refName := os.Getenv("GITHUB_REF_NAME")
 	baseRef := os.Getenv("GITHUB_BASE_REF")
 	headRef := os.Getenv("GITHUB_HEAD_REF")
@@ -129,7 +130,7 @@ func parsePRInfo() *ci.PRInfo {
 		prURL = serverURL + "/" + repo + "/pull/" + strconv.Itoa(prNumber)
 	}
 
-	return &ci.PRInfo{
+	return &provider.PRInfo{
 		Number:  prNumber,
 		HeadRef: headRef,
 		BaseRef: baseRef,
@@ -138,28 +139,28 @@ func parsePRInfo() *ci.PRInfo {
 }
 
 // GetStatus returns the CI status for the current branch.
-func (p *Provider) GetStatus(ctx context.Context, opts ci.StatusOptions) (*ci.Status, error) {
+func (p *Provider) GetStatus(ctx context.Context, opts provider.StatusOptions) (*provider.Status, error) {
 	defer perf.Track(nil, "github.Provider.GetStatus")()
 
 	return p.getStatus(ctx, opts)
 }
 
 // CreateCheckRun creates a new check run on a commit.
-func (p *Provider) CreateCheckRun(ctx context.Context, opts *ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) CreateCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "github.Provider.CreateCheckRun")()
 
 	return p.createCheckRun(ctx, opts)
 }
 
 // UpdateCheckRun updates an existing check run.
-func (p *Provider) UpdateCheckRun(ctx context.Context, opts *ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) UpdateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "github.Provider.UpdateCheckRun")()
 
 	return p.updateCheckRun(ctx, opts)
 }
 
 // OutputWriter returns an OutputWriter for GitHub Actions.
-func (p *Provider) OutputWriter() ci.OutputWriter {
+func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "github.Provider.OutputWriter")()
 
 	return ci.NewFileOutputWriter(
@@ -181,6 +182,6 @@ func init() {
 			log.Debug("Failed to create GitHub provider", "error", err)
 			return
 		}
-		ci.Register(fullProvider)
+		provider.Register(fullProvider)
 	}
 }

@@ -6,7 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -26,23 +27,23 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	planBinding := findBinding(bindings, "after.terraform.plan")
 	require.NotNil(t, planBinding)
 	assert.Equal(t, "plan", planBinding.Template)
-	assert.True(t, planBinding.HasAction(ci.ActionSummary))
-	assert.True(t, planBinding.HasAction(ci.ActionOutput))
-	assert.True(t, planBinding.HasAction(ci.ActionUpload))
+	assert.True(t, planBinding.HasAction(plugin.ActionSummary))
+	assert.True(t, planBinding.HasAction(plugin.ActionOutput))
+	assert.True(t, planBinding.HasAction(plugin.ActionUpload))
 
 	// Check after.terraform.apply binding.
 	applyBinding := findBinding(bindings, "after.terraform.apply")
 	require.NotNil(t, applyBinding)
 	assert.Equal(t, "apply", applyBinding.Template)
-	assert.True(t, applyBinding.HasAction(ci.ActionSummary))
-	assert.True(t, applyBinding.HasAction(ci.ActionOutput))
-	assert.False(t, applyBinding.HasAction(ci.ActionUpload))
+	assert.True(t, applyBinding.HasAction(plugin.ActionSummary))
+	assert.True(t, applyBinding.HasAction(plugin.ActionOutput))
+	assert.False(t, applyBinding.HasAction(plugin.ActionUpload))
 
 	// Check before.terraform.apply binding (download).
 	downloadBinding := findBinding(bindings, "before.terraform.apply")
 	require.NotNil(t, downloadBinding)
 	assert.Empty(t, downloadBinding.Template)
-	assert.True(t, downloadBinding.HasAction(ci.ActionDownload))
+	assert.True(t, downloadBinding.HasAction(plugin.ActionDownload))
 }
 
 func TestPlugin_GetDefaultTemplates(t *testing.T) {
@@ -68,7 +69,7 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 		ComponentFromArg: "vpc",
 		Stack:            "dev-us-east-1",
 	}
-	ciCtx := &ci.Context{
+	ciCtx := &provider.Context{
 		SHA:        "abc123",
 		Repository: "owner/repo",
 		Actor:      "testuser",
@@ -102,7 +103,7 @@ func TestPlugin_ParseOutput(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, result.HasChanges)
 
-	data, ok := result.Data.(*ci.TerraformOutputData)
+	data, ok := result.Data.(*plugin.TerraformOutputData)
 	require.True(t, ok)
 	assert.Equal(t, 5, data.ResourceCounts.Create)
 	assert.Equal(t, 2, data.ResourceCounts.Change)
@@ -111,12 +112,12 @@ func TestPlugin_ParseOutput(t *testing.T) {
 
 func TestPlugin_GetOutputVariables(t *testing.T) {
 	p := &Plugin{}
-	result := &ci.OutputResult{
+	result := &plugin.OutputResult{
 		ExitCode:   0,
 		HasChanges: true,
 		HasErrors:  false,
-		Data: &ci.TerraformOutputData{
-			ResourceCounts: ci.ResourceCounts{
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts: plugin.ResourceCounts{
 				Create:  3,
 				Change:  2,
 				Replace: 1,
@@ -182,7 +183,7 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 }
 
 // Helper function to find a binding by event.
-func findBinding(bindings []ci.HookBinding, event string) *ci.HookBinding {
+func findBinding(bindings []plugin.HookBinding, event string) *plugin.HookBinding {
 	for i := range bindings {
 		if bindings[i].Event == event {
 			return &bindings[i]

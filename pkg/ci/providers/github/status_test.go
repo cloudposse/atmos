@@ -12,23 +12,23 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	ciprovider "github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 func TestAllChecksPassed(t *testing.T) {
 	tests := []struct {
 		name     string
-		checks   []*ci.CheckStatus
+		checks   []*ciprovider.CheckStatus
 		expected bool
 	}{
 		{
 			name:     "empty checks",
-			checks:   []*ci.CheckStatus{},
+			checks:   []*ciprovider.CheckStatus{},
 			expected: true,
 		},
 		{
 			name: "all success",
-			checks: []*ci.CheckStatus{
+			checks: []*ciprovider.CheckStatus{
 				{Name: "test1", Status: "completed", Conclusion: "success"},
 				{Name: "test2", Status: "completed", Conclusion: "success"},
 			},
@@ -36,14 +36,14 @@ func TestAllChecksPassed(t *testing.T) {
 		},
 		{
 			name: "all skipped",
-			checks: []*ci.CheckStatus{
+			checks: []*ciprovider.CheckStatus{
 				{Name: "test1", Status: "completed", Conclusion: "skipped"},
 			},
 			expected: true,
 		},
 		{
 			name: "mixed success and skipped",
-			checks: []*ci.CheckStatus{
+			checks: []*ciprovider.CheckStatus{
 				{Name: "test1", Status: "completed", Conclusion: "success"},
 				{Name: "test2", Status: "completed", Conclusion: "skipped"},
 			},
@@ -51,7 +51,7 @@ func TestAllChecksPassed(t *testing.T) {
 		},
 		{
 			name: "one failure",
-			checks: []*ci.CheckStatus{
+			checks: []*ciprovider.CheckStatus{
 				{Name: "test1", Status: "completed", Conclusion: "success"},
 				{Name: "test2", Status: "completed", Conclusion: "failure"},
 			},
@@ -59,7 +59,7 @@ func TestAllChecksPassed(t *testing.T) {
 		},
 		{
 			name: "one pending",
-			checks: []*ci.CheckStatus{
+			checks: []*ciprovider.CheckStatus{
 				{Name: "test1", Status: "completed", Conclusion: "success"},
 				{Name: "test2", Status: "in_progress", Conclusion: ""},
 			},
@@ -67,7 +67,7 @@ func TestAllChecksPassed(t *testing.T) {
 		},
 		{
 			name: "cancelled",
-			checks: []*ci.CheckStatus{
+			checks: []*ciprovider.CheckStatus{
 				{Name: "test1", Status: "completed", Conclusion: "cancelled"},
 			},
 			expected: false,
@@ -131,7 +131,7 @@ func TestProvider_GetStatus(t *testing.T) {
 		provider := NewProviderWithClient(client)
 
 		ctx := context.Background()
-		status, err := provider.GetStatus(ctx, ci.StatusOptions{
+		status, err := provider.GetStatus(ctx, ciprovider.StatusOptions{
 			Owner:  "owner",
 			Repo:   "repo",
 			Branch: "main",
@@ -364,7 +364,7 @@ func TestProvider_GetCombinedStatus(t *testing.T) {
 					{
 						"context":    "ci/travis",
 						"state":      "success",
-						"target_url": "https://travis-ci.org/build/1",
+						"target_url": "https://travis-provider.org/build/1",
 					},
 					{
 						"context":    "coverage/codecov",

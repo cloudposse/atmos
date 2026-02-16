@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 // mockProvider is a mock CI provider for testing.
@@ -132,4 +133,15 @@ func TestIsCI(t *testing.T) {
 	// In CI.
 	Register(&mockProvider{name: "ci", detected: true})
 	assert.True(t, IsCI())
+}
+
+// testSaveAndClearRegistry clears the provider registry and returns the previous
+// map. For use in tests only. Restore with testRestoreRegistry.
+func testSaveAndClearRegistry() map[string]Provider {
+	return provider.TestSaveAndClearRegistry()
+}
+
+// testRestoreRegistry restores the provider registry from a previous snapshot.
+func testRestoreRegistry(m map[string]Provider) {
+	provider.TestRestoreRegistry(m)
 }

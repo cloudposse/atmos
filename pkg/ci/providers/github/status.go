@@ -7,12 +7,12 @@ import (
 	"github.com/google/go-github/v59/github"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 // getStatus fetches the CI status for the given options.
-func (p *Provider) getStatus(ctx context.Context, opts ci.StatusOptions) (*ci.Status, error) {
-	status := &ci.Status{
+func (p *Provider) getStatus(ctx context.Context, opts provider.StatusOptions) (*provider.Status, error) {
+	status := &provider.Status{
 		Repository: fmt.Sprintf("%s/%s", opts.Owner, opts.Repo),
 	}
 
@@ -47,8 +47,8 @@ func (p *Provider) getStatus(ctx context.Context, opts ci.StatusOptions) (*ci.St
 }
 
 // getBranchStatus gets the status for a specific branch.
-func (p *Provider) getBranchStatus(ctx context.Context, owner, repo, branch, sha string) (*ci.BranchStatus, error) {
-	status := &ci.BranchStatus{
+func (p *Provider) getBranchStatus(ctx context.Context, owner, repo, branch, sha string) (*provider.BranchStatus, error) {
+	status := &provider.BranchStatus{
 		Branch:    branch,
 		CommitSHA: sha,
 	}
@@ -76,7 +76,7 @@ func (p *Provider) getBranchStatus(ctx context.Context, owner, repo, branch, sha
 }
 
 // getPRForBranch finds the PR associated with a branch.
-func (p *Provider) getPRForBranch(ctx context.Context, owner, repo, branch string) (*ci.PRStatus, error) {
+func (p *Provider) getPRForBranch(ctx context.Context, owner, repo, branch string) (*provider.PRStatus, error) {
 	// Search for PRs with this head branch.
 	prs, _, err := p.client.GitHub().PullRequests.List(ctx, owner, repo, &github.PullRequestListOptions{
 		Head:  owner + ":" + branch,
@@ -94,7 +94,7 @@ func (p *Provider) getPRForBranch(ctx context.Context, owner, repo, branch strin
 	}
 
 	pr := prs[0]
-	prStatus := &ci.PRStatus{
+	prStatus := &provider.PRStatus{
 		Number:     pr.GetNumber(),
 		Title:      pr.GetTitle(),
 		Branch:     pr.GetHead().GetRef(),
@@ -113,7 +113,7 @@ func (p *Provider) getPRForBranch(ctx context.Context, owner, repo, branch strin
 }
 
 // getCheckRuns fetches check runs for a commit.
-func (p *Provider) getCheckRuns(ctx context.Context, owner, repo, ref string) ([]*ci.CheckStatus, error) {
+func (p *Provider) getCheckRuns(ctx context.Context, owner, repo, ref string) ([]*provider.CheckStatus, error) {
 	result, _, err := p.client.GitHub().Checks.ListCheckRunsForRef(ctx, owner, repo, ref, &github.ListCheckRunsOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 100,
@@ -123,9 +123,9 @@ func (p *Provider) getCheckRuns(ctx context.Context, owner, repo, ref string) ([
 		return nil, err
 	}
 
-	checks := make([]*ci.CheckStatus, 0, len(result.CheckRuns))
+	checks := make([]*provider.CheckStatus, 0, len(result.CheckRuns))
 	for _, cr := range result.CheckRuns {
-		checks = append(checks, &ci.CheckStatus{
+		checks = append(checks, &provider.CheckStatus{
 			Name:       cr.GetName(),
 			Status:     cr.GetStatus(),
 			Conclusion: cr.GetConclusion(),
@@ -137,7 +137,7 @@ func (p *Provider) getCheckRuns(ctx context.Context, owner, repo, ref string) ([
 }
 
 // getCombinedStatus fetches the combined status for a ref (legacy status API).
-func (p *Provider) getCombinedStatus(ctx context.Context, owner, repo, ref string) ([]*ci.CheckStatus, error) {
+func (p *Provider) getCombinedStatus(ctx context.Context, owner, repo, ref string) ([]*provider.CheckStatus, error) {
 	status, _, err := p.client.GitHub().Repositories.GetCombinedStatus(ctx, owner, repo, ref, &github.ListOptions{
 		PerPage: 100,
 	})
@@ -145,9 +145,9 @@ func (p *Provider) getCombinedStatus(ctx context.Context, owner, repo, ref strin
 		return nil, err
 	}
 
-	checks := make([]*ci.CheckStatus, 0, len(status.Statuses))
+	checks := make([]*provider.CheckStatus, 0, len(status.Statuses))
 	for _, s := range status.Statuses {
-		checks = append(checks, &ci.CheckStatus{
+		checks = append(checks, &provider.CheckStatus{
 			Name:       s.GetContext(),
 			Status:     "completed", // Legacy status is always completed.
 			Conclusion: s.GetState(),
@@ -159,7 +159,7 @@ func (p *Provider) getCombinedStatus(ctx context.Context, owner, repo, ref strin
 }
 
 // getPRsCreatedByUser fetches PRs created by the authenticated user.
-func (p *Provider) getPRsCreatedByUser(ctx context.Context, owner, repo string) ([]*ci.PRStatus, error) {
+func (p *Provider) getPRsCreatedByUser(ctx context.Context, owner, repo string) ([]*provider.PRStatus, error) {
 	// Get authenticated user.
 	user, _, err := p.client.GitHub().Users.Get(ctx, "")
 	if err != nil {
@@ -172,7 +172,7 @@ func (p *Provider) getPRsCreatedByUser(ctx context.Context, owner, repo string) 
 }
 
 // getPRsRequestingReview fetches PRs requesting review from the authenticated user.
-func (p *Provider) getPRsRequestingReview(ctx context.Context, owner, repo string) ([]*ci.PRStatus, error) {
+func (p *Provider) getPRsRequestingReview(ctx context.Context, owner, repo string) ([]*provider.PRStatus, error) {
 	// Get authenticated user.
 	user, _, err := p.client.GitHub().Users.Get(ctx, "")
 	if err != nil {
@@ -185,7 +185,7 @@ func (p *Provider) getPRsRequestingReview(ctx context.Context, owner, repo strin
 }
 
 // searchPRsWithQuery searches for PRs using the given GitHub search query.
-func (p *Provider) searchPRsWithQuery(ctx context.Context, owner, repo, query string) ([]*ci.PRStatus, error) {
+func (p *Provider) searchPRsWithQuery(ctx context.Context, owner, repo, query string) ([]*provider.PRStatus, error) {
 	result, _, err := p.client.GitHub().Search.Issues(ctx, query, &github.SearchOptions{
 		ListOptions: github.ListOptions{
 			PerPage: 10,
@@ -195,9 +195,9 @@ func (p *Provider) searchPRsWithQuery(ctx context.Context, owner, repo, query st
 		return nil, err
 	}
 
-	prs := make([]*ci.PRStatus, 0, len(result.Issues))
+	prs := make([]*provider.PRStatus, 0, len(result.Issues))
 	for _, issue := range result.Issues {
-		pr := &ci.PRStatus{
+		pr := &provider.PRStatus{
 			Number: issue.GetNumber(),
 			Title:  issue.GetTitle(),
 			URL:    issue.GetHTMLURL(),
@@ -223,14 +223,14 @@ func (p *Provider) searchPRsWithQuery(ctx context.Context, owner, repo, query st
 }
 
 // allChecksPassed returns true if all checks have passed.
-func allChecksPassed(checks []*ci.CheckStatus) bool {
+func allChecksPassed(checks []*provider.CheckStatus) bool {
 	if len(checks) == 0 {
 		return true
 	}
 
 	for _, check := range checks {
 		state := check.CheckState()
-		if state != ci.CheckStatusStateSuccess && state != ci.CheckStatusStateSkipped {
+		if state != provider.CheckStatusStateSuccess && state != provider.CheckStatusStateSkipped {
 			return false
 		}
 	}

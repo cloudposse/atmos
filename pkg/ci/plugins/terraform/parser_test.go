@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 )
 
 func TestParsePlanJSON(t *testing.T) {
@@ -107,7 +107,7 @@ func TestParsePlanJSON(t *testing.T) {
 
 			assert.Equal(t, tt.wantHasChanges, result.HasChanges, "HasChanges mismatch")
 
-			tfData, ok := result.Data.(*ci.TerraformOutputData)
+			tfData, ok := result.Data.(*plugin.TerraformOutputData)
 			require.True(t, ok, "Data should be *TerraformOutputData")
 
 			assert.Equal(t, tt.wantCreate, tfData.ResourceCounts.Create, "Create count mismatch")
@@ -141,7 +141,7 @@ func TestParsePlanJSON_WithOutputs(t *testing.T) {
 	result, err := ParsePlanJSON(data)
 	require.NoError(t, err)
 
-	tfData, ok := result.Data.(*ci.TerraformOutputData)
+	tfData, ok := result.Data.(*plugin.TerraformOutputData)
 	require.True(t, ok)
 
 	// Check that outputs were parsed.
@@ -400,7 +400,7 @@ Error: Reference to undeclared resource
 			assert.Equal(t, tt.hasChanges, result.HasChanges, "HasChanges mismatch")
 			assert.Equal(t, tt.hasErrors, result.HasErrors, "HasErrors mismatch")
 
-			if data, ok := result.Data.(*ci.TerraformOutputData); ok {
+			if data, ok := result.Data.(*plugin.TerraformOutputData); ok {
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")
@@ -467,7 +467,7 @@ Error: resource already exists
 			assert.Equal(t, tt.hasChanges, result.HasChanges, "HasChanges mismatch")
 			assert.Equal(t, tt.hasErrors, result.HasErrors, "HasErrors mismatch")
 
-			if data, ok := result.Data.(*ci.TerraformOutputData); ok && !tt.hasErrors {
+			if data, ok := result.Data.(*plugin.TerraformOutputData); ok && !tt.hasErrors {
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")
@@ -497,32 +497,32 @@ func TestParseOutput(t *testing.T) {
 func TestBuildChangeSummary(t *testing.T) {
 	tests := []struct {
 		name   string
-		counts ci.ResourceCounts
+		counts plugin.ResourceCounts
 		want   string
 	}{
 		{
 			name:   "no changes",
-			counts: ci.ResourceCounts{},
+			counts: plugin.ResourceCounts{},
 			want:   "No changes",
 		},
 		{
 			name:   "single create",
-			counts: ci.ResourceCounts{Create: 1},
+			counts: plugin.ResourceCounts{Create: 1},
 			want:   "1 resource to add",
 		},
 		{
 			name:   "multiple creates",
-			counts: ci.ResourceCounts{Create: 3},
+			counts: plugin.ResourceCounts{Create: 3},
 			want:   "3 resources to add",
 		},
 		{
 			name:   "create and destroy",
-			counts: ci.ResourceCounts{Create: 2, Destroy: 1},
+			counts: plugin.ResourceCounts{Create: 2, Destroy: 1},
 			want:   "2 resources to add, 1 resource to destroy",
 		},
 		{
 			name:   "all types",
-			counts: ci.ResourceCounts{Create: 1, Change: 2, Replace: 3, Destroy: 4},
+			counts: plugin.ResourceCounts{Create: 1, Change: 2, Replace: 3, Destroy: 4},
 			want:   "1 resource to add, 2 resources to change, 3 resources to replace, 4 resources to destroy",
 		},
 	}
