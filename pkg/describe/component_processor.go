@@ -1,8 +1,6 @@
 package describe
 
 import (
-	"fmt"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -58,7 +56,7 @@ func ProcessComponentFromContext(params *ComponentFromContextParams) (map[string
 	defer perf.Track(nil, "describe.ProcessComponentFromContext")()
 
 	if params == nil {
-		return nil, fmt.Errorf("params cannot be nil")
+		return nil, errUtils.ErrNilParam
 	}
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo

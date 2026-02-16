@@ -227,7 +227,7 @@ func TestProcessComponentInStackServiceIamRole(t *testing.T) {
 // in ProcessComponentFromContext.
 
 func TestProcessComponentInStackWithNameTemplate(t *testing.T) {
-	atmosCliConfigPath := "../../tests/fixtures/scenarios/locals-logical-names"
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 	component := "vpc"
 	stack := "dev-us-east-1"
 
@@ -242,7 +242,7 @@ func TestProcessComponentInStackWithNameTemplate(t *testing.T) {
 }
 
 func TestProcessComponentFromContextWithNameTemplate(t *testing.T) {
-	atmosCliConfigPath := "../../tests/fixtures/scenarios/locals-logical-names"
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 
 	result, err := ProcessComponentFromContext(&ComponentFromContextParams{
 		Component:          "vpc",
@@ -260,7 +260,7 @@ func TestProcessComponentFromContextWithNameTemplate(t *testing.T) {
 }
 
 func TestProcessComponentFromContextWithNameTemplateInvalidContext(t *testing.T) {
-	atmosCliConfigPath := "../../tests/fixtures/scenarios/locals-logical-names"
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 
 	_, err := ProcessComponentFromContext(&ComponentFromContextParams{
 		Component:          "vpc",
@@ -272,7 +272,7 @@ func TestProcessComponentFromContextWithNameTemplateInvalidContext(t *testing.T)
 }
 
 func TestProcessComponentFromContextMatchesStackWithNameTemplate(t *testing.T) {
-	atmosCliConfigPath := "../../tests/fixtures/scenarios/locals-logical-names"
+	atmosCliConfigPath := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "locals-logical-names")
 
 	resultByStack, err := ProcessComponentInStack("vpc", "prod-us-west-2", atmosCliConfigPath, "")
 	require.NoError(t, err)
