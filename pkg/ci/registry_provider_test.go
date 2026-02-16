@@ -32,19 +32,19 @@ func (m *mockProvider) Context() (*Context, error) {
 	}, nil
 }
 
-func (m *mockProvider) GetStatus(_ context.Context, _ StatusOptions) (*Status, error) {
-	return &Status{}, nil
+func (m *mockProvider) GetStatus(_ context.Context, _ provider.StatusOptions) (*provider.Status, error) {
+	return &provider.Status{}, nil
 }
 
-func (m *mockProvider) CreateCheckRun(_ context.Context, _ *CreateCheckRunOptions) (*CheckRun, error) {
-	return &CheckRun{ID: 1}, nil
+func (m *mockProvider) CreateCheckRun(_ context.Context, _ *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+	return &provider.CheckRun{ID: 1}, nil
 }
 
 func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *UpdateCheckRunOptions) (*CheckRun, error) {
 	return &CheckRun{ID: 1}, nil
 }
 
-func (m *mockProvider) OutputWriter() OutputWriter {
+func (m *mockProvider) OutputWriter() provider.OutputWriter {
 	return nil
 }
 
@@ -137,11 +137,17 @@ func TestIsCI(t *testing.T) {
 
 // testSaveAndClearRegistry clears the provider registry and returns the previous
 // map. For use in tests only. Restore with testRestoreRegistry.
-func testSaveAndClearRegistry() map[string]Provider {
-	return provider.TestSaveAndClearRegistry()
+func testSaveAndClearRegistry() map[string]provider.Provider {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	prev := providers
+	providers = make(map[string]provider.Provider)
+	return prev
 }
 
-// testRestoreRegistry restores the provider registry from a previous snapshot.
-func testRestoreRegistry(m map[string]Provider) {
-	provider.TestRestoreRegistry(m)
+// TestRestoreRegistry restores the provider registry from a previous snapshot.
+func testRestoreRegistry(m map[string]provider.Provider) {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	providers = m
 }

@@ -6,6 +6,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -92,16 +94,16 @@ func TestExtractCommand(t *testing.T) {
 
 func TestHookActionConstants(t *testing.T) {
 	// Verify action constant values match expected strings.
-	assert.Equal(t, HookAction("summary"), ActionSummary)
-	assert.Equal(t, HookAction("output"), ActionOutput)
-	assert.Equal(t, HookAction("upload"), ActionUpload)
-	assert.Equal(t, HookAction("download"), ActionDownload)
-	assert.Equal(t, HookAction("check"), ActionCheck)
+	assert.Equal(t, plugin.HookAction("summary"), plugin.ActionSummary)
+	assert.Equal(t, plugin.HookAction("output"), plugin.ActionOutput)
+	assert.Equal(t, plugin.HookAction("upload"), plugin.ActionUpload)
+	assert.Equal(t, plugin.HookAction("download"), plugin.ActionDownload)
+	assert.Equal(t, plugin.HookAction("check"), plugin.ActionCheck)
 }
 
 func TestOutputResult(t *testing.T) {
 	t.Run("default values", func(t *testing.T) {
-		result := &OutputResult{}
+		result := &plugin.OutputResult{}
 		assert.Equal(t, 0, result.ExitCode)
 		assert.False(t, result.HasChanges)
 		assert.False(t, result.HasErrors)
@@ -110,11 +112,11 @@ func TestOutputResult(t *testing.T) {
 	})
 
 	t.Run("with terraform data", func(t *testing.T) {
-		result := &OutputResult{
+		result := &plugin.OutputResult{
 			ExitCode:   0,
 			HasChanges: true,
-			Data: &TerraformOutputData{
-				ResourceCounts: ResourceCounts{
+			Data: &plugin.TerraformOutputData{
+				ResourceCounts: plugin.ResourceCounts{
 					Create:  5,
 					Change:  3,
 					Destroy: 1,
@@ -122,7 +124,7 @@ func TestOutputResult(t *testing.T) {
 			},
 		}
 		assert.True(t, result.HasChanges)
-		tfData, ok := result.Data.(*TerraformOutputData)
+		tfData, ok := result.Data.(*plugin.TerraformOutputData)
 		require.True(t, ok)
 		assert.Equal(t, 5, tfData.ResourceCounts.Create)
 		assert.Equal(t, 3, tfData.ResourceCounts.Change)
@@ -131,7 +133,7 @@ func TestOutputResult(t *testing.T) {
 }
 
 func TestResourceCounts(t *testing.T) {
-	counts := ResourceCounts{
+	counts := plugin.ResourceCounts{
 		Create:  10,
 		Change:  5,
 		Replace: 2,
@@ -145,16 +147,16 @@ func TestResourceCounts(t *testing.T) {
 }
 
 func TestTemplateContext(t *testing.T) {
-	ctx := &TemplateContext{
+	ctx := &plugin.TemplateContext{
 		Component:     "vpc",
 		ComponentType: "terraform",
 		Stack:         "dev-us-east-1",
 		Command:       "plan",
-		CI: &Context{
+		CI: &provider.Context{
 			Provider: "github-actions",
 			SHA:      "abc123",
 		},
-		Result: &OutputResult{
+		Result: &plugin.OutputResult{
 			HasChanges: true,
 		},
 		Output: "terraform plan output...",
@@ -175,7 +177,7 @@ func TestTemplateContext(t *testing.T) {
 }
 
 func TestMovedResource(t *testing.T) {
-	moved := MovedResource{
+	moved := plugin.MovedResource{
 		From: "aws_instance.old",
 		To:   "aws_instance.new",
 	}
@@ -186,7 +188,7 @@ func TestMovedResource(t *testing.T) {
 
 func TestTerraformOutput(t *testing.T) {
 	t.Run("string output", func(t *testing.T) {
-		output := TerraformOutput{
+		output := plugin.TerraformOutput{
 			Value:     "vpc-12345",
 			Type:      "string",
 			Sensitive: false,
@@ -197,7 +199,7 @@ func TestTerraformOutput(t *testing.T) {
 	})
 
 	t.Run("sensitive output", func(t *testing.T) {
-		output := TerraformOutput{
+		output := plugin.TerraformOutput{
 			Value:     "secret-password",
 			Type:      "string",
 			Sensitive: true,
@@ -207,7 +209,7 @@ func TestTerraformOutput(t *testing.T) {
 }
 
 func TestReleaseInfo(t *testing.T) {
-	release := ReleaseInfo{
+	release := plugin.ReleaseInfo{
 		Name:      "my-app",
 		Namespace: "production",
 		Status:    "deployed",
@@ -219,8 +221,8 @@ func TestReleaseInfo(t *testing.T) {
 }
 
 func TestHelmfileOutputData(t *testing.T) {
-	data := &HelmfileOutputData{
-		Releases: []ReleaseInfo{
+	data := &plugin.HelmfileOutputData{
+		Releases: []plugin.ReleaseInfo{
 			{Name: "app1", Namespace: "default", Status: "deployed"},
 			{Name: "app2", Namespace: "kube-system", Status: "pending"},
 		},
@@ -232,8 +234,8 @@ func TestHelmfileOutputData(t *testing.T) {
 }
 
 func TestTerraformOutputData(t *testing.T) {
-	data := &TerraformOutputData{
-		ResourceCounts: ResourceCounts{Create: 5, Change: 3, Destroy: 1},
+	data := &plugin.TerraformOutputData{
+		ResourceCounts: plugin.ResourceCounts{Create: 5, Change: 3, Destroy: 1},
 		CreatedResources: []string{
 			"aws_vpc.main",
 			"aws_subnet.private[0]",
@@ -247,13 +249,13 @@ func TestTerraformOutputData(t *testing.T) {
 		DeletedResources: []string{
 			"aws_eip.old",
 		},
-		MovedResources: []MovedResource{
+		MovedResources: []plugin.MovedResource{
 			{From: "aws_instance.old", To: "module.compute.aws_instance.main"},
 		},
 		ImportedResources: []string{
 			"aws_s3_bucket.existing",
 		},
-		Outputs: map[string]TerraformOutput{
+		Outputs: map[string]plugin.TerraformOutput{
 			"vpc_id": {Value: "vpc-123", Type: "string"},
 		},
 		ChangedResult: "Plan: 5 to add, 3 to change, 1 to destroy.",
@@ -274,37 +276,37 @@ func TestIsActionEnabled(t *testing.T) {
 	tests := []struct {
 		name     string
 		config   *schema.AtmosConfiguration
-		action   HookAction
+		action   plugin.HookAction
 		expected bool
 	}{
 		{
 			name:     "nil config - summary enabled by default",
 			config:   nil,
-			action:   ActionSummary,
+			action:   plugin.ActionSummary,
 			expected: true,
 		},
 		{
 			name:     "nil config - output enabled by default",
 			config:   nil,
-			action:   ActionOutput,
+			action:   plugin.ActionOutput,
 			expected: true,
 		},
 		{
 			name:     "nil config - check disabled by default",
 			config:   nil,
-			action:   ActionCheck,
+			action:   plugin.ActionCheck,
 			expected: false,
 		},
 		{
 			name:     "nil config - upload always enabled",
 			config:   nil,
-			action:   ActionUpload,
+			action:   plugin.ActionUpload,
 			expected: true,
 		},
 		{
 			name:     "nil config - download always enabled",
 			config:   nil,
-			action:   ActionDownload,
+			action:   plugin.ActionDownload,
 			expected: true,
 		},
 		{
@@ -314,7 +316,7 @@ func TestIsActionEnabled(t *testing.T) {
 					Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
 				},
 			},
-			action:   ActionSummary,
+			action:   plugin.ActionSummary,
 			expected: true,
 		},
 		{
@@ -324,7 +326,7 @@ func TestIsActionEnabled(t *testing.T) {
 					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
 				},
 			},
-			action:   ActionSummary,
+			action:   plugin.ActionSummary,
 			expected: false,
 		},
 		{
@@ -334,7 +336,7 @@ func TestIsActionEnabled(t *testing.T) {
 					Output: schema.CIOutputConfig{Enabled: boolPtr(true)},
 				},
 			},
-			action:   ActionOutput,
+			action:   plugin.ActionOutput,
 			expected: true,
 		},
 		{
@@ -344,7 +346,7 @@ func TestIsActionEnabled(t *testing.T) {
 					Output: schema.CIOutputConfig{Enabled: boolPtr(false)},
 				},
 			},
-			action:   ActionOutput,
+			action:   plugin.ActionOutput,
 			expected: false,
 		},
 		{
@@ -354,7 +356,7 @@ func TestIsActionEnabled(t *testing.T) {
 					Checks: schema.CIChecksConfig{Enabled: boolPtr(true)},
 				},
 			},
-			action:   ActionCheck,
+			action:   plugin.ActionCheck,
 			expected: true,
 		},
 		{
@@ -364,7 +366,7 @@ func TestIsActionEnabled(t *testing.T) {
 					Checks: schema.CIChecksConfig{Enabled: boolPtr(false)},
 				},
 			},
-			action:   ActionCheck,
+			action:   plugin.ActionCheck,
 			expected: false,
 		},
 		{
@@ -372,7 +374,7 @@ func TestIsActionEnabled(t *testing.T) {
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{},
 			},
-			action:   ActionUpload,
+			action:   plugin.ActionUpload,
 			expected: true,
 		},
 		{
@@ -380,7 +382,7 @@ func TestIsActionEnabled(t *testing.T) {
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{},
 			},
-			action:   ActionDownload,
+			action:   plugin.ActionDownload,
 			expected: true,
 		},
 		{
@@ -388,7 +390,7 @@ func TestIsActionEnabled(t *testing.T) {
 			config: &schema.AtmosConfiguration{
 				CI: schema.CIConfig{},
 			},
-			action:   HookAction("unknown"),
+			action:   plugin.HookAction("unknown"),
 			expected: true,
 		},
 	}

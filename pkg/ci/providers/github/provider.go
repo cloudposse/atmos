@@ -182,6 +182,6 @@ func init() {
 			log.Debug("Failed to create GitHub provider", "error", err)
 			return
 		}
-		provider.Register(fullProvider)
+		ci.Register(fullProvider)
 	}
 }
