@@ -12,6 +12,8 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+
+	ci "github.com/cloudposse/atmos/pkg/ci"
 )
 
 //go:embed templates/*.md
@@ -28,7 +30,7 @@ var (
 
 func init() {
 	// Self-register on package import.
-	if err := plugin.RegisterPlugin(&Plugin{}); err != nil {
+	if err := ci.RegisterPlugin(&Plugin{}); err != nil {
 		// Panic on registration failure - this is a programming error.
 		panic(fmt.Sprintf("failed to register terraform CI plugin: %v", err))
 	}
