@@ -85,7 +85,7 @@ gomplate templates, `!terraform.state`/`!terraform.output` YAML tags), their `at
 files contain structures that the old Atmos v1.189.0 code in the provider cannot parse. This causes
 the provider to panic at runtime, which Terraform reports as:
 
-```
+```text
 Error: Plugin did not respond
   with module.iam_roles.module.account_map.data.utils_component_config.config[0],
   The plugin encountered an error, and failed to respond to the
@@ -105,14 +105,16 @@ would create an import cycle: `pkg/component` -> `internal/exec` -> `pkg/compone
 
 The functions are instead added to `pkg/describe/component_processor.go`, which already imports
 `internal/exec` without a cycle. The `terraform-provider-utils` provider will update its import from
-`pkg/component` to `pkg/describe` (a one-line change).
+`pkg/component` to `pkg/describe` and update the `ProcessComponentFromContext` call site to use
+`*ComponentFromContextParams` instead of seven positional arguments.
 
 ### Implementation
 
 The restored functions in `pkg/describe` are thin wrappers that delegate to
 `internal/exec.ExecuteDescribeComponent`. The implementation:
 
-1. Preserves the exact function signatures that `terraform-provider-utils` depends on
+1. Preserves the `ProcessComponentInStack` signature. `ProcessComponentFromContext` is updated to accept
+   `*ComponentFromContextParams` instead of seven positional arguments to satisfy linter argument-limit rules
 2. Honors `atmosCliConfigPath` and `atmosBasePath` by initializing config with these values and
    passing the resulting `AtmosConfiguration` to the internal API
 3. Benefits from the improved error handling in `detectComponentType` (only falls back on

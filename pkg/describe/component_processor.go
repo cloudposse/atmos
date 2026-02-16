@@ -1,6 +1,8 @@
 package describe
 
 import (
+	"fmt"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	e "github.com/cloudposse/atmos/internal/exec"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -44,13 +46,7 @@ func ProcessComponentInStack(
 		return nil, err
 	}
 
-	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
-		AtmosConfig:          &atmosConfig,
-		Component:            component,
-		Stack:                stack,
-		ProcessTemplates:     true,
-		ProcessYamlFunctions: true,
-	})
+	return processComponentInStackWithConfig(&atmosConfig, component, stack)
 }
 
 // ProcessComponentFromContext accepts context (namespace, tenant, environment, stage)
@@ -60,6 +56,10 @@ func ProcessComponentInStack(
 // See ProcessComponentInStack for details on why this lives in pkg/describe.
 func ProcessComponentFromContext(params *ComponentFromContextParams) (map[string]any, error) {
 	defer perf.Track(nil, "describe.ProcessComponentFromContext")()
+
+	if params == nil {
+		return nil, fmt.Errorf("params cannot be nil")
+	}
 
 	var configAndStacksInfo schema.ConfigAndStacksInfo
 	configAndStacksInfo.ComponentFromArg = params.Component
@@ -100,5 +100,21 @@ func ProcessComponentFromContext(params *ComponentFromContextParams) (map[string
 		return nil, errUtils.ErrMissingStackNameTemplateAndPattern
 	}
 
-	return ProcessComponentInStack(params.Component, stack, params.AtmosCliConfigPath, params.AtmosBasePath)
+	return processComponentInStackWithConfig(&atmosConfig, params.Component, stack)
+}
+
+// processComponentInStackWithConfig is the shared implementation used by both public functions.
+// It accepts an already-initialized AtmosConfiguration to avoid redundant config parsing.
+func processComponentInStackWithConfig(
+	atmosConfig *schema.AtmosConfiguration,
+	component string,
+	stack string,
+) (map[string]any, error) {
+	return e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{
+		AtmosConfig:          atmosConfig,
+		Component:            component,
+		Stack:                stack,
+		ProcessTemplates:     true,
+		ProcessYamlFunctions: true,
+	})
 }
