@@ -23,12 +23,12 @@ func TestNoopOutputWriter_WriteSummary(t *testing.T) {
 
 func TestNewFileOutputWriter(t *testing.T) {
 	writer := NewFileOutputWriter("/tmp/output", "/tmp/summary")
-	assert.Equal(t, "/tmp/output", writer.outputPath)
-	assert.Equal(t, "/tmp/summary", writer.summaryPath)
+	assert.Equal(t, "/tmp/output", writer.OutputPath)
+	assert.Equal(t, "/tmp/summary", writer.SummaryPath)
 }
 
 func TestFileOutputWriter_WriteOutput_EmptyPath(t *testing.T) {
-	writer := &FileOutputWriter{outputPath: ""}
+	writer := &FileOutputWriter{OutputPath: ""}
 	err := writer.WriteOutput("key", "value")
 	assert.NoError(t, err)
 }
@@ -37,7 +37,7 @@ func TestFileOutputWriter_WriteOutput_SingleLine(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	err := writer.WriteOutput("mykey", "myvalue")
 	require.NoError(t, err)
 
@@ -50,7 +50,7 @@ func TestFileOutputWriter_WriteOutput_Multiline(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	err := writer.WriteOutput("mykey", "line1\nline2\nline3")
 	require.NoError(t, err)
 
@@ -67,7 +67,7 @@ func TestFileOutputWriter_WriteOutput_MultilineWithEOFInContent(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	// Content contains "EOF", so delimiter should be changed.
 	err := writer.WriteOutput("mykey", "line1\nEOF\nline2")
 	require.NoError(t, err)
@@ -85,7 +85,7 @@ func TestFileOutputWriter_WriteOutput_MultipleWrites(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
 
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 
 	err := writer.WriteOutput("key1", "value1")
 	require.NoError(t, err)
@@ -101,7 +101,7 @@ func TestFileOutputWriter_WriteOutput_MultipleWrites(t *testing.T) {
 }
 
 func TestFileOutputWriter_WriteSummary_EmptyPath(t *testing.T) {
-	writer := &FileOutputWriter{summaryPath: ""}
+	writer := &FileOutputWriter{SummaryPath: ""}
 	err := writer.WriteSummary("summary content")
 	assert.NoError(t, err)
 }
@@ -110,7 +110,7 @@ func TestFileOutputWriter_WriteSummary(t *testing.T) {
 	tmpDir := t.TempDir()
 	summaryPath := filepath.Join(tmpDir, "summary.md")
 
-	writer := &FileOutputWriter{summaryPath: summaryPath}
+	writer := &FileOutputWriter{SummaryPath: summaryPath}
 	err := writer.WriteSummary("# Summary\n\nThis is a test.")
 	require.NoError(t, err)
 
@@ -123,7 +123,7 @@ func TestFileOutputWriter_WriteSummary_Append(t *testing.T) {
 	tmpDir := t.TempDir()
 	summaryPath := filepath.Join(tmpDir, "summary.md")
 
-	writer := &FileOutputWriter{summaryPath: summaryPath}
+	writer := &FileOutputWriter{SummaryPath: summaryPath}
 
 	err := writer.WriteSummary("Part 1\n")
 	require.NoError(t, err)
@@ -146,7 +146,7 @@ func TestNewOutputHelpers(t *testing.T) {
 func TestOutputHelpers_WritePlanOutputs(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
 	opts := PlanOutputOptions{
@@ -180,7 +180,7 @@ func TestOutputHelpers_WritePlanOutputs(t *testing.T) {
 func TestOutputHelpers_WritePlanOutputs_NoArtifactKey(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
 	opts := PlanOutputOptions{
@@ -204,7 +204,7 @@ func TestOutputHelpers_WritePlanOutputs_NoArtifactKey(t *testing.T) {
 func TestOutputHelpers_WriteApplyOutputs(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
 	opts := ApplyOutputOptions{
@@ -232,7 +232,7 @@ func TestOutputHelpers_WriteApplyOutputs(t *testing.T) {
 func TestOutputHelpers_WriteApplyOutputs_NoOutputs(t *testing.T) {
 	tmpDir := t.TempDir()
 	outputPath := filepath.Join(tmpDir, "output.txt")
-	writer := &FileOutputWriter{outputPath: outputPath}
+	writer := &FileOutputWriter{OutputPath: outputPath}
 	helpers := NewOutputHelpers(writer)
 
 	opts := ApplyOutputOptions{

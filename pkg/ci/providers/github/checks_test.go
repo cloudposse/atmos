@@ -13,39 +13,39 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 func TestMapGitHubStatusToCheckRunState(t *testing.T) {
 	tests := []struct {
 		name     string
 		status   string
-		expected ci.CheckRunState
+		expected provider.CheckRunState
 	}{
 		{
 			name:     "queued",
 			status:   "queued",
-			expected: ci.CheckRunStatePending,
+			expected: provider.CheckRunStatePending,
 		},
 		{
 			name:     "in_progress",
 			status:   "in_progress",
-			expected: ci.CheckRunStateInProgress,
+			expected: provider.CheckRunStateInProgress,
 		},
 		{
 			name:     "completed",
 			status:   "completed",
-			expected: ci.CheckRunStateSuccess, // Fallback for completed.
+			expected: provider.CheckRunStateSuccess, // Fallback for completed.
 		},
 		{
 			name:     "unknown status",
 			status:   "unknown",
-			expected: ci.CheckRunStatePending,
+			expected: provider.CheckRunStatePending,
 		},
 		{
 			name:     "empty status",
 			status:   "",
-			expected: ci.CheckRunStatePending,
+			expected: provider.CheckRunStatePending,
 		},
 	}
 
@@ -60,43 +60,43 @@ func TestMapGitHubStatusToCheckRunState(t *testing.T) {
 func TestMapCheckRunStateToConclusion(t *testing.T) {
 	tests := []struct {
 		name               string
-		state              ci.CheckRunState
+		state              provider.CheckRunState
 		providedConclusion string
 		expected           string
 	}{
 		{
 			name:               "success state",
-			state:              ci.CheckRunStateSuccess,
+			state:              provider.CheckRunStateSuccess,
 			providedConclusion: "",
 			expected:           "success",
 		},
 		{
 			name:               "failure state",
-			state:              ci.CheckRunStateFailure,
+			state:              provider.CheckRunStateFailure,
 			providedConclusion: "",
 			expected:           "failure",
 		},
 		{
 			name:               "error state",
-			state:              ci.CheckRunStateError,
+			state:              provider.CheckRunStateError,
 			providedConclusion: "",
 			expected:           "failure",
 		},
 		{
 			name:               "cancelled state",
-			state:              ci.CheckRunStateCancelled,
+			state:              provider.CheckRunStateCancelled,
 			providedConclusion: "",
 			expected:           "cancelled",
 		},
 		{
 			name:               "pending state",
-			state:              ci.CheckRunStatePending,
+			state:              provider.CheckRunStatePending,
 			providedConclusion: "",
 			expected:           "neutral",
 		},
 		{
 			name:               "provided conclusion overrides",
-			state:              ci.CheckRunStateFailure,
+			state:              provider.CheckRunStateFailure,
 			providedConclusion: "timed_out",
 			expected:           "timed_out",
 		},
@@ -185,21 +185,21 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		ghClient.BaseURL = serverURL
 
 		client := &Client{client: ghClient}
-		provider := NewProviderWithClient(client)
+		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
-		checkRun, err := provider.CreateCheckRun(ctx, &ci.CreateCheckRunOptions{
+		checkRun, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{
 			Owner:  "owner",
 			Repo:   "repo",
 			SHA:    "abc123",
 			Name:   "terraform-plan",
-			Status: ci.CheckRunStatePending,
+			Status: provider.CheckRunStatePending,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, checkRun)
 		assert.Equal(t, int64(12345), checkRun.ID)
 		assert.Equal(t, "terraform-plan", checkRun.Name)
-		assert.Equal(t, ci.CheckRunStatePending, checkRun.Status)
+		assert.Equal(t, provider.CheckRunStatePending, checkRun.Status)
 	})
 
 	t.Run("create check run with output", func(t *testing.T) {
@@ -233,15 +233,15 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 		ghClient.BaseURL = serverURL
 
 		client := &Client{client: ghClient}
-		provider := NewProviderWithClient(client)
+		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
-		checkRun, err := provider.CreateCheckRun(ctx, &ci.CreateCheckRunOptions{
+		checkRun, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{
 			Owner:   "owner",
 			Repo:    "repo",
 			SHA:     "abc123",
 			Name:    "terraform-plan",
-			Status:  ci.CheckRunStatePending,
+			Status:  provider.CheckRunStatePending,
 			Title:   "Terraform Plan",
 			Summary: "Plan summary here",
 		})
@@ -287,16 +287,16 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		ghClient.BaseURL = serverURL
 
 		client := &Client{client: ghClient}
-		provider := NewProviderWithClient(client)
+		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
 		now := time.Now()
-		checkRun, err := provider.UpdateCheckRun(ctx, &ci.UpdateCheckRunOptions{
+		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
 			Owner:       "owner",
 			Repo:        "repo",
 			CheckRunID:  12345,
 			Title:       "terraform-plan",
-			Status:      ci.CheckRunStateSuccess,
+			Status:      provider.CheckRunStateSuccess,
 			CompletedAt: &now,
 		})
 		require.NoError(t, err)
@@ -326,15 +326,15 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		ghClient.BaseURL = serverURL
 
 		client := &Client{client: ghClient}
-		provider := NewProviderWithClient(client)
+		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
-		checkRun, err := provider.UpdateCheckRun(ctx, &ci.UpdateCheckRunOptions{
+		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
 			Owner:      "owner",
 			Repo:       "repo",
 			CheckRunID: 12345,
 			Title:      "terraform-plan",
-			Status:     ci.CheckRunStateFailure,
+			Status:     provider.CheckRunStateFailure,
 			Summary:    "Plan failed with errors",
 		})
 		require.NoError(t, err)
@@ -369,15 +369,15 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		ghClient.BaseURL = serverURL
 
 		client := &Client{client: ghClient}
-		provider := NewProviderWithClient(client)
+		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
-		checkRun, err := provider.UpdateCheckRun(ctx, &ci.UpdateCheckRunOptions{
+		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
 			Owner:      "owner",
 			Repo:       "repo",
 			CheckRunID: 12345,
 			Title:      "terraform-plan",
-			Status:     ci.CheckRunStateInProgress,
+			Status:     provider.CheckRunStateInProgress,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, checkRun)

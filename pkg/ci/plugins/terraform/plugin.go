@@ -7,7 +7,8 @@ import (
 	"strconv"
 
 	e "github.com/cloudposse/atmos/internal/exec"
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -16,18 +17,18 @@ import (
 //go:embed templates/*.md
 var defaultTemplates embed.FS
 
-// Plugin implements ci.Plugin for Terraform.
+// Plugin implements plugin.Plugin for Terraform.
 type Plugin struct{}
 
 // Ensure Plugin implements Plugin and ComponentConfigurationResolver.
 var (
-	_ ci.Plugin                         = (*Plugin)(nil)
-	_ ci.ComponentConfigurationResolver = (*Plugin)(nil)
+	_ plugin.Plugin                         = (*Plugin)(nil)
+	_ plugin.ComponentConfigurationResolver = (*Plugin)(nil)
 )
 
 func init() {
 	// Self-register on package import.
-	if err := ci.RegisterPlugin(&Plugin{}); err != nil {
+	if err := plugin.RegisterPlugin(&Plugin{}); err != nil {
 		// Panic on registration failure - this is a programming error.
 		panic(fmt.Sprintf("failed to register terraform CI plugin: %v", err))
 	}
@@ -41,23 +42,23 @@ func (p *Plugin) GetType() string {
 }
 
 // GetHookBindings returns the hook bindings for Terraform CI integration.
-func (p *Plugin) GetHookBindings() []ci.HookBinding {
+func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 	defer perf.Track(nil, "terraform.Plugin.GetHookBindings")()
 
-	return []ci.HookBinding{
+	return []plugin.HookBinding{
 		{
 			Event:    "after.terraform.plan",
-			Actions:  []ci.HookAction{ci.ActionSummary, ci.ActionOutput, ci.ActionUpload},
+			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload},
 			Template: "plan",
 		},
 		{
 			Event:    "after.terraform.apply",
-			Actions:  []ci.HookAction{ci.ActionSummary, ci.ActionOutput},
+			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput},
 			Template: "apply",
 		},
 		{
 			Event:    "before.terraform.apply",
-			Actions:  []ci.HookAction{ci.ActionDownload},
+			Actions:  []plugin.HookAction{plugin.ActionDownload},
 			Template: "", // No template for download.
 		},
 	}
@@ -74,7 +75,7 @@ func (p *Plugin) GetDefaultTemplates() embed.FS {
 // Returns an extended context with terraform-specific fields for template rendering.
 func (p *Plugin) BuildTemplateContext(
 	info *schema.ConfigAndStacksInfo,
-	ciCtx *ci.Context,
+	ciCtx *provider.Context,
 	output string,
 	command string,
 ) (any, error) {
@@ -84,7 +85,7 @@ func (p *Plugin) BuildTemplateContext(
 	result := ParseOutput(output, command)
 
 	// Build base context.
-	baseCtx := &ci.TemplateContext{
+	baseCtx := &plugin.TemplateContext{
 		Component:     info.ComponentFromArg,
 		ComponentType: "terraform",
 		Stack:         info.Stack,
@@ -96,9 +97,9 @@ func (p *Plugin) BuildTemplateContext(
 	}
 
 	// Extract terraform-specific data.
-	var tfData *ci.TerraformOutputData
+	var tfData *plugin.TerraformOutputData
 	if result != nil && result.Data != nil {
-		tfData, _ = result.Data.(*ci.TerraformOutputData)
+		tfData, _ = result.Data.(*plugin.TerraformOutputData)
 	}
 
 	// Return extended context with terraform-specific fields.
@@ -106,14 +107,14 @@ func (p *Plugin) BuildTemplateContext(
 }
 
 // ParseOutput parses terraform command output.
-func (p *Plugin) ParseOutput(output string, command string) (*ci.OutputResult, error) {
+func (p *Plugin) ParseOutput(output string, command string) (*plugin.OutputResult, error) {
 	defer perf.Track(nil, "terraform.Plugin.ParseOutput")()
 
 	return ParseOutput(output, command), nil
 }
 
 // GetOutputVariables returns CI output variables for a command.
-func (p *Plugin) GetOutputVariables(result *ci.OutputResult, command string) map[string]string {
+func (p *Plugin) GetOutputVariables(result *plugin.OutputResult, command string) map[string]string {
 	defer perf.Track(nil, "terraform.Plugin.GetOutputVariables")()
 
 	vars := make(map[string]string)
@@ -130,7 +131,7 @@ func (p *Plugin) GetOutputVariables(result *ci.OutputResult, command string) map
 
 	// Terraform-specific outputs.
 	if result.Data != nil {
-		if data, ok := result.Data.(*ci.TerraformOutputData); ok {
+		if data, ok := result.Data.(*plugin.TerraformOutputData); ok {
 			vars["resources_to_create"] = strconv.Itoa(data.ResourceCounts.Create)
 			vars["resources_to_change"] = strconv.Itoa(data.ResourceCounts.Change)
 			vars["resources_to_replace"] = strconv.Itoa(data.ResourceCounts.Replace)

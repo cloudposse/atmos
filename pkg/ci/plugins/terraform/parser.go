@@ -11,7 +11,7 @@ import (
 	tfjson "github.com/hashicorp/terraform-json"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -39,7 +39,7 @@ var (
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
 // This is the preferred method for parsing plan data as it provides structured data.
-func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
+func ParsePlanJSON(jsonData []byte) (*plugin.OutputResult, error) {
 	defer perf.Track(nil, "terraform.ParsePlanJSON")()
 
 	var plan tfjson.Plan
@@ -48,7 +48,7 @@ func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
 	}
 
 	result := newEmptyResult()
-	data := result.Data.(*ci.TerraformOutputData)
+	data := result.Data.(*plugin.TerraformOutputData)
 
 	processResourceChanges(plan.ResourceChanges, data)
 	processOutputChanges(plan.OutputChanges, data)
@@ -62,27 +62,27 @@ func ParsePlanJSON(jsonData []byte) (*ci.OutputResult, error) {
 }
 
 // newEmptyResult creates an empty OutputResult with initialized data.
-func newEmptyResult() *ci.OutputResult {
-	return &ci.OutputResult{
+func newEmptyResult() *plugin.OutputResult {
+	return &plugin.OutputResult{
 		ExitCode:   0,
 		HasChanges: false,
 		HasErrors:  false,
 		Errors:     nil,
-		Data: &ci.TerraformOutputData{
-			ResourceCounts:    ci.ResourceCounts{},
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts:    plugin.ResourceCounts{},
 			CreatedResources:  []string{},
 			UpdatedResources:  []string{},
 			ReplacedResources: []string{},
 			DeletedResources:  []string{},
-			MovedResources:    []ci.MovedResource{},
+			MovedResources:    []plugin.MovedResource{},
 			ImportedResources: []string{},
-			Outputs:           make(map[string]ci.TerraformOutput),
+			Outputs:           make(map[string]plugin.TerraformOutput),
 		},
 	}
 }
 
 // processResourceChanges processes plan resource changes and updates the data.
-func processResourceChanges(changes []*tfjson.ResourceChange, data *ci.TerraformOutputData) {
+func processResourceChanges(changes []*tfjson.ResourceChange, data *plugin.TerraformOutputData) {
 	for _, rc := range changes {
 		if rc == nil || rc.Change == nil {
 			continue
@@ -92,7 +92,7 @@ func processResourceChanges(changes []*tfjson.ResourceChange, data *ci.Terraform
 }
 
 // processResourceChange processes a single resource change.
-func processResourceChange(rc *tfjson.ResourceChange, data *ci.TerraformOutputData) {
+func processResourceChange(rc *tfjson.ResourceChange, data *plugin.TerraformOutputData) {
 	addr := rc.Address
 	actions := rc.Change.Actions
 
@@ -117,12 +117,12 @@ func processResourceChange(rc *tfjson.ResourceChange, data *ci.TerraformOutputDa
 }
 
 // processOutputChanges processes plan output changes.
-func processOutputChanges(changes map[string]*tfjson.Change, data *ci.TerraformOutputData) {
+func processOutputChanges(changes map[string]*tfjson.Change, data *plugin.TerraformOutputData) {
 	for name, output := range changes {
 		if output == nil {
 			continue
 		}
-		data.Outputs[name] = ci.TerraformOutput{
+		data.Outputs[name] = plugin.TerraformOutput{
 			Value:     output.After,
 			Sensitive: output.AfterSensitive != nil,
 		}
@@ -130,7 +130,7 @@ func processOutputChanges(changes map[string]*tfjson.Change, data *ci.TerraformO
 }
 
 // hasResourceChanges checks if there are any resource changes.
-func hasResourceChanges(counts ci.ResourceCounts) bool {
+func hasResourceChanges(counts plugin.ResourceCounts) bool {
 	return counts.Create > 0 || counts.Change > 0 || counts.Replace > 0 || counts.Destroy > 0
 }
 
@@ -146,7 +146,7 @@ type OutputValue struct {
 
 // ParseOutputJSON parses terraform output JSON from `terraform output -json`.
 // Returns a map of output name to TerraformOutput.
-func ParseOutputJSON(jsonData []byte) (map[string]ci.TerraformOutput, error) {
+func ParseOutputJSON(jsonData []byte) (map[string]plugin.TerraformOutput, error) {
 	defer perf.Track(nil, "terraform.ParseOutputJSON")()
 
 	var outputs OutputJSON
@@ -154,9 +154,9 @@ func ParseOutputJSON(jsonData []byte) (map[string]ci.TerraformOutput, error) {
 		return nil, fmt.Errorf("%w: failed to unmarshal output JSON: %w", errUtils.ErrParseFile, err)
 	}
 
-	result := make(map[string]ci.TerraformOutput)
+	result := make(map[string]plugin.TerraformOutput)
 	for name, out := range outputs {
-		result[name] = ci.TerraformOutput{
+		result[name] = plugin.TerraformOutput{
 			Value:     out.Value,
 			Type:      formatType(out.Type),
 			Sensitive: out.Sensitive,
@@ -218,27 +218,27 @@ func ExtractWarnings(stdout string) []string {
 
 // ParsePlanOutput parses terraform plan stdout (fallback when JSON not available).
 // Prefer ParsePlanJSON when a planfile is available.
-func ParsePlanOutput(output string) *ci.OutputResult {
+func ParsePlanOutput(output string) *plugin.OutputResult {
 	defer perf.Track(nil, "terraform.ParsePlanOutput")()
 
-	result := &ci.OutputResult{
+	result := &plugin.OutputResult{
 		ExitCode:   0,
 		HasChanges: false,
 		HasErrors:  false,
 		Errors:     nil,
-		Data: &ci.TerraformOutputData{
-			ResourceCounts:    ci.ResourceCounts{},
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts:    plugin.ResourceCounts{},
 			CreatedResources:  []string{},
 			UpdatedResources:  []string{},
 			ReplacedResources: []string{},
 			DeletedResources:  []string{},
-			MovedResources:    []ci.MovedResource{},
+			MovedResources:    []plugin.MovedResource{},
 			ImportedResources: []string{},
-			Outputs:           make(map[string]ci.TerraformOutput),
+			Outputs:           make(map[string]plugin.TerraformOutput),
 		},
 	}
 
-	data := result.Data.(*ci.TerraformOutputData)
+	data := result.Data.(*plugin.TerraformOutputData)
 
 	// Check for errors.
 	if errors := ExtractErrors(output); len(errors) > 0 {
@@ -270,27 +270,27 @@ func ParsePlanOutput(output string) *ci.OutputResult {
 }
 
 // ParseApplyOutput parses terraform apply stdout.
-func ParseApplyOutput(output string) *ci.OutputResult {
+func ParseApplyOutput(output string) *plugin.OutputResult {
 	defer perf.Track(nil, "terraform.ParseApplyOutput")()
 
-	result := &ci.OutputResult{
+	result := &plugin.OutputResult{
 		ExitCode:   0,
 		HasChanges: false,
 		HasErrors:  false,
 		Errors:     nil,
-		Data: &ci.TerraformOutputData{
-			ResourceCounts:    ci.ResourceCounts{},
+		Data: &plugin.TerraformOutputData{
+			ResourceCounts:    plugin.ResourceCounts{},
 			CreatedResources:  []string{},
 			UpdatedResources:  []string{},
 			ReplacedResources: []string{},
 			DeletedResources:  []string{},
-			MovedResources:    []ci.MovedResource{},
+			MovedResources:    []plugin.MovedResource{},
 			ImportedResources: []string{},
-			Outputs:           make(map[string]ci.TerraformOutput),
+			Outputs:           make(map[string]plugin.TerraformOutput),
 		},
 	}
 
-	data := result.Data.(*ci.TerraformOutputData)
+	data := result.Data.(*plugin.TerraformOutputData)
 
 	// Check for errors.
 	if errors := ExtractErrors(output); len(errors) > 0 {
@@ -313,7 +313,7 @@ func ParseApplyOutput(output string) *ci.OutputResult {
 
 // ParseOutput parses terraform output for a given command (fallback when JSON not available).
 // Prefer ParsePlanJSON + ParseOutputJSON for structured data.
-func ParseOutput(output string, command string) *ci.OutputResult {
+func ParseOutput(output string, command string) *plugin.OutputResult {
 	defer perf.Track(nil, "terraform.ParseOutput")()
 
 	switch command {
@@ -323,27 +323,27 @@ func ParseOutput(output string, command string) *ci.OutputResult {
 		return ParseApplyOutput(output)
 	default:
 		// For unknown commands, return minimal result.
-		return &ci.OutputResult{
+		return &plugin.OutputResult{
 			ExitCode:   0,
 			HasChanges: false,
 			HasErrors:  false,
 			Errors:     nil,
-			Data: &ci.TerraformOutputData{
-				ResourceCounts:    ci.ResourceCounts{},
+			Data: &plugin.TerraformOutputData{
+				ResourceCounts:    plugin.ResourceCounts{},
 				CreatedResources:  []string{},
 				UpdatedResources:  []string{},
 				ReplacedResources: []string{},
 				DeletedResources:  []string{},
-				MovedResources:    []ci.MovedResource{},
+				MovedResources:    []plugin.MovedResource{},
 				ImportedResources: []string{},
-				Outputs:           make(map[string]ci.TerraformOutput),
+				Outputs:           make(map[string]plugin.TerraformOutput),
 			},
 		}
 	}
 }
 
 // buildChangeSummary builds a human-readable change summary string.
-func buildChangeSummary(counts ci.ResourceCounts) string {
+func buildChangeSummary(counts plugin.ResourceCounts) string {
 	var parts []string
 	if counts.Create > 0 {
 		parts = append(parts, resourceCount(counts.Create)+" to add")

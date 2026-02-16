@@ -11,7 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 )
 
 var regenerateGolden = flag.Bool("regenerate-golden", false, "Regenerate golden files")
@@ -30,18 +31,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "plan with creates only",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "vpc",
 					ComponentType: "terraform",
 					Stack:         "dev-us-east-1",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{Create: 3},
+				Resources: plugin.ResourceCounts{Create: 3},
 				CreatedResources: []string{
 					"aws_vpc.main",
 					"aws_subnet.a",
@@ -66,18 +67,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "plan with destroys shows warning",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "legacy",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources:        ci.ResourceCounts{Destroy: 5},
+				Resources:        plugin.ResourceCounts{Destroy: 5},
 				DeletedResources: []string{"aws_instance.old[0]"},
 				HasDestroy:       true,
 			},
@@ -92,18 +93,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "plan with errors",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "broken",
 					ComponentType: "terraform",
 					Stack:         "dev",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:  1,
 						HasErrors: true,
 						Errors:    []string{"Invalid provider configuration", "Missing required argument"},
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 			wantContains: []string{
 				"PLAN-FAILED-ff0000",
@@ -117,18 +118,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "plan no changes",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "stable",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: false,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 			wantContains: []string{
 				"NO_CHANGE-inactive",
@@ -144,18 +145,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "plan with mixed operations",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "app",
 					ComponentType: "terraform",
 					Stack:         "staging",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{
+				Resources: plugin.ResourceCounts{
 					Create:  2,
 					Change:  1,
 					Replace: 1,
@@ -183,18 +184,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "plan with imported resources",
 			templateName: "plan",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "imports",
 					ComponentType: "terraform",
 					Stack:         "dev",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: false,
 						HasErrors:  false,
 					},
 				},
-				Resources:         ci.ResourceCounts{},
+				Resources:         plugin.ResourceCounts{},
 				ImportedResources: []string{"aws_instance.imported"},
 			},
 			wantContains: []string{
@@ -208,18 +209,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "apply success",
 			templateName: "apply",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "bucket",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "apply",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{Create: 1},
+				Resources: plugin.ResourceCounts{Create: 1},
 			},
 			wantContains: []string{
 				"APPLY-SUCCESS-success",
@@ -234,19 +235,19 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "apply success with outputs",
 			templateName: "apply",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "bucket",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "apply",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{Create: 1},
-				Outputs: map[string]ci.TerraformOutput{
+				Resources: plugin.ResourceCounts{Create: 1},
+				Outputs: map[string]plugin.TerraformOutput{
 					"bucket_arn":  {Value: "arn:aws:s3:::prod-bucket", Sensitive: false},
 					"secret_key":  {Value: "", Sensitive: true},
 					"bucket_name": {Value: "prod-bucket", Sensitive: false},
@@ -265,18 +266,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "apply failure",
 			templateName: "apply",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "broken",
 					ComponentType: "terraform",
 					Stack:         "dev",
 					Command:       "apply",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:  1,
 						HasErrors: true,
 						Errors:    []string{"Error creating resource: permission denied"},
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 			wantContains: []string{
 				"APPLY-FAILED-critical",
@@ -288,18 +289,18 @@ func TestTemplateRendering(t *testing.T) {
 			name:         "apply no changes",
 			templateName: "apply",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "stable",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "apply",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: false,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 			wantContains: []string{
 				"APPLY-SUCCESS-success",
@@ -345,22 +346,22 @@ func TestTemplateWithCIContext(t *testing.T) {
 	fs := p.GetDefaultTemplates()
 
 	ctx := &TerraformTemplateContext{
-		TemplateContext: &ci.TemplateContext{
+		TemplateContext: &plugin.TemplateContext{
 			Component:     "vpc",
 			ComponentType: "terraform",
 			Stack:         "dev",
 			Command:       "plan",
-			CI: &ci.Context{
+			CI: &provider.Context{
 				SHA:        "abc123def456",
 				Repository: "owner/repo",
 				Actor:      "testuser",
 			},
-			Result: &ci.OutputResult{
+			Result: &plugin.OutputResult{
 				ExitCode:   0,
 				HasChanges: true,
 			},
 		},
-		Resources:        ci.ResourceCounts{Create: 1},
+		Resources:        plugin.ResourceCounts{Create: 1},
 		CreatedResources: []string{"aws_vpc.main"},
 	}
 
@@ -384,7 +385,7 @@ func TestTemplateWithCIContext(t *testing.T) {
 func TestTerraformTemplateContextHelpers(t *testing.T) {
 	t.Run("Target", func(t *testing.T) {
 		ctx := &TerraformTemplateContext{
-			TemplateContext: &ci.TemplateContext{
+			TemplateContext: &plugin.TemplateContext{
 				Stack:     "dev",
 				Component: "vpc",
 			},
@@ -400,15 +401,15 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 	t.Run("HasChanges", func(t *testing.T) {
 		tests := []struct {
 			name      string
-			resources ci.ResourceCounts
+			resources plugin.ResourceCounts
 			want      bool
 		}{
-			{"no changes", ci.ResourceCounts{}, false},
-			{"create only", ci.ResourceCounts{Create: 1}, true},
-			{"change only", ci.ResourceCounts{Change: 1}, true},
-			{"replace only", ci.ResourceCounts{Replace: 1}, true},
-			{"destroy only", ci.ResourceCounts{Destroy: 1}, true},
-			{"mixed", ci.ResourceCounts{Create: 1, Destroy: 1}, true},
+			{"no changes", plugin.ResourceCounts{}, false},
+			{"create only", plugin.ResourceCounts{Create: 1}, true},
+			{"change only", plugin.ResourceCounts{Change: 1}, true},
+			{"replace only", plugin.ResourceCounts{Replace: 1}, true},
+			{"destroy only", plugin.ResourceCounts{Destroy: 1}, true},
+			{"mixed", plugin.ResourceCounts{Create: 1, Destroy: 1}, true},
 		}
 
 		for _, tt := range tests {
@@ -421,7 +422,7 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 
 	t.Run("TotalChanges", func(t *testing.T) {
 		ctx := &TerraformTemplateContext{
-			Resources: ci.ResourceCounts{
+			Resources: plugin.ResourceCounts{
 				Create:  1,
 				Change:  2,
 				Replace: 3,
@@ -447,18 +448,18 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "plan",
 			goldenFile:   "plan_creates_only.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "vpc",
 					ComponentType: "terraform",
 					Stack:         "dev-us-east-1",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{Create: 3},
+				Resources: plugin.ResourceCounts{Create: 3},
 				CreatedResources: []string{
 					"aws_vpc.main",
 					"aws_subnet.a",
@@ -471,18 +472,18 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "plan",
 			goldenFile:   "plan_destroys_warning.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "legacy",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources:        ci.ResourceCounts{Destroy: 5},
+				Resources:        plugin.ResourceCounts{Destroy: 5},
 				DeletedResources: []string{"aws_instance.old[0]", "aws_instance.old[1]"},
 				HasDestroy:       true,
 			},
@@ -492,18 +493,18 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "plan",
 			goldenFile:   "plan_no_changes.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "stable",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: false,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 		},
 		{
@@ -511,18 +512,18 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "plan",
 			goldenFile:   "plan_failure.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "broken",
 					ComponentType: "terraform",
 					Stack:         "dev",
 					Command:       "plan",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:  1,
 						HasErrors: true,
 						Errors:    []string{"Invalid provider configuration", "Missing required argument"},
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 		},
 		{
@@ -530,19 +531,19 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "apply",
 			goldenFile:   "apply_success.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "bucket",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "apply",
 					Output:        "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{Create: 1},
+				Resources: plugin.ResourceCounts{Create: 1},
 			},
 		},
 		{
@@ -550,20 +551,20 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "apply",
 			goldenFile:   "apply_with_outputs.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "bucket",
 					ComponentType: "terraform",
 					Stack:         "prod",
 					Command:       "apply",
 					Output:        "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:   0,
 						HasChanges: true,
 						HasErrors:  false,
 					},
 				},
-				Resources: ci.ResourceCounts{Create: 1},
-				Outputs: map[string]ci.TerraformOutput{
+				Resources: plugin.ResourceCounts{Create: 1},
+				Outputs: map[string]plugin.TerraformOutput{
 					"bucket_arn":  {Value: "arn:aws:s3:::prod-bucket", Sensitive: false},
 					"bucket_name": {Value: "prod-bucket", Sensitive: false},
 					"secret_key":  {Value: "", Sensitive: true},
@@ -575,18 +576,18 @@ func TestTemplateGolden(t *testing.T) {
 			templateName: "apply",
 			goldenFile:   "apply_failure.md",
 			context: &TerraformTemplateContext{
-				TemplateContext: &ci.TemplateContext{
+				TemplateContext: &plugin.TemplateContext{
 					Component:     "broken",
 					ComponentType: "terraform",
 					Stack:         "dev",
 					Command:       "apply",
-					Result: &ci.OutputResult{
+					Result: &plugin.OutputResult{
 						ExitCode:  1,
 						HasErrors: true,
 						Errors:    []string{"Error creating resource: permission denied"},
 					},
 				},
-				Resources: ci.ResourceCounts{},
+				Resources: plugin.ResourceCounts{},
 			},
 		},
 	}

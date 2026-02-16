@@ -2,17 +2,17 @@
 package terraform
 
 import (
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // TerraformTemplateContext extends the base TemplateContext with terraform-specific fields.
 // Templates access fields directly (e.g., {{ .Resources.Create }}) instead of through Result.Data.
 type TerraformTemplateContext struct {
-	*ci.TemplateContext
+	*plugin.TemplateContext
 
 	// Resources contains resource change counts.
-	Resources ci.ResourceCounts
+	Resources plugin.ResourceCounts
 
 	// CreatedResources contains addresses of resources to be created.
 	CreatedResources []string
@@ -27,13 +27,13 @@ type TerraformTemplateContext struct {
 	DeletedResources []string
 
 	// MovedResources contains resources that have been moved.
-	MovedResources []ci.MovedResource
+	MovedResources []plugin.MovedResource
 
 	// ImportedResources contains addresses of resources to be imported.
 	ImportedResources []string
 
 	// Outputs contains terraform output values (after apply).
-	Outputs map[string]ci.TerraformOutput
+	Outputs map[string]plugin.TerraformOutput
 
 	// ChangedResult contains the plan summary text.
 	ChangedResult string
@@ -43,7 +43,7 @@ type TerraformTemplateContext struct {
 }
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.
-func NewTemplateContext(base *ci.TemplateContext, data *ci.TerraformOutputData) *TerraformTemplateContext {
+func NewTemplateContext(base *plugin.TemplateContext, data *plugin.TerraformOutputData) *TerraformTemplateContext {
 	defer perf.Track(nil, "terraform.NewTemplateContext")()
 
 	ctx := &TerraformTemplateContext{

@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -22,12 +22,12 @@ const (
 	defaultFilePermissions = 0o644
 )
 
-// Ensure Provider implements ci.Provider.
-var _ ci.Provider = (*Provider)(nil)
+// Ensure Provider implements provider.Provider.
+var _ provider.Provider = (*Provider)(nil)
 
 func init() {
 	// Self-register on package import.
-	ci.Register(NewProvider())
+	provider.Register(NewProvider())
 }
 
 // Provider is a fallback CI provider for when --ci flag is used
@@ -66,11 +66,11 @@ func (p *Provider) Detect() bool {
 }
 
 // Context returns CI metadata from environment variables.
-func (p *Provider) Context() (*ci.Context, error) {
+func (p *Provider) Context() (*provider.Context, error) {
 	defer perf.Track(nil, "generic.Provider.Context")()
 
 	// Try to populate context from common CI environment variables.
-	ctx := &ci.Context{
+	ctx := &provider.Context{
 		Provider:   ProviderName,
 		SHA:        getFirstEnv("ATMOS_CI_SHA", "GIT_COMMIT", "CI_COMMIT_SHA", "COMMIT_SHA"),
 		Branch:     getFirstEnv("ATMOS_CI_BRANCH", "GIT_BRANCH", "CI_COMMIT_REF_NAME", "BRANCH_NAME"),
@@ -91,7 +91,7 @@ func (p *Provider) Context() (*ci.Context, error) {
 }
 
 // GetStatus is not supported by the generic provider.
-func (p *Provider) GetStatus(_ context.Context, _ ci.StatusOptions) (*ci.Status, error) {
+func (p *Provider) GetStatus(_ context.Context, _ provider.StatusOptions) (*provider.Status, error) {
 	defer perf.Track(nil, "generic.Provider.GetStatus")()
 
 	log.Debug("GetStatus not supported by generic CI provider")
@@ -99,7 +99,7 @@ func (p *Provider) GetStatus(_ context.Context, _ ci.StatusOptions) (*ci.Status,
 }
 
 // CreateCheckRun is not supported by the generic provider.
-func (p *Provider) CreateCheckRun(_ context.Context, _ *ci.CreateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) CreateCheckRun(_ context.Context, _ *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.CreateCheckRun")()
 
 	log.Debug("CreateCheckRun not supported by generic CI provider")
@@ -107,7 +107,7 @@ func (p *Provider) CreateCheckRun(_ context.Context, _ *ci.CreateCheckRunOptions
 }
 
 // UpdateCheckRun is not supported by the generic provider.
-func (p *Provider) UpdateCheckRun(_ context.Context, _ *ci.UpdateCheckRunOptions) (*ci.CheckRun, error) {
+func (p *Provider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.UpdateCheckRun")()
 
 	log.Debug("UpdateCheckRun not supported by generic CI provider")
@@ -115,7 +115,7 @@ func (p *Provider) UpdateCheckRun(_ context.Context, _ *ci.UpdateCheckRunOptions
 }
 
 // OutputWriter returns an OutputWriter for the generic provider.
-func (p *Provider) OutputWriter() ci.OutputWriter {
+func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "generic.Provider.OutputWriter")()
 
 	return &OutputWriter{
