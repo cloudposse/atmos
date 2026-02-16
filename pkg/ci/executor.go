@@ -8,6 +8,8 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github" // Register github store.
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"  // Register local store.
@@ -44,12 +46,12 @@ type ExecuteOptions struct {
 // actionContext holds all context needed to execute a CI action.
 type actionContext struct {
 	Opts     ExecuteOptions
-	Plugin   Plugin
-	Platform Provider
+	Plugin   plugin.Plugin
+	Platform provider.Provider
 	CICtx    *Context
-	Binding  *HookBinding
+	Binding  *plugin.HookBinding
 	Command  string
-	Result   *OutputResult
+	Result   *plugin.OutputResult
 }
 
 // Execute runs all CI actions for a hook event.
@@ -77,7 +79,7 @@ func Execute(opts ExecuteOptions) error {
 }
 
 // detectPlatform detects the CI platform based on environment.
-func detectPlatform(forceCIMode bool) Provider {
+func detectPlatform(forceCIMode bool) provider.Provider {
 	if forceCIMode {
 		platform := Detect()
 		if platform == nil {
@@ -101,7 +103,7 @@ func detectPlatform(forceCIMode bool) Provider {
 }
 
 // getPluginAndBinding gets the CI plugin and hook binding for an event.
-func getPluginAndBinding(opts ExecuteOptions) (Plugin, *HookBinding) {
+func getPluginAndBinding(opts ExecuteOptions) (plugin.Plugin, *plugin.HookBinding) {
 	componentType := opts.ComponentType
 	if componentType == "" {
 		componentType = extractComponentType(opts.Event)
@@ -112,24 +114,24 @@ func getPluginAndBinding(opts ExecuteOptions) (Plugin, *HookBinding) {
 		return nil, nil
 	}
 
-	plugin, ok := GetPlugin(componentType)
+	pl, ok := GetPlugin(componentType)
 	if !ok {
 		log.Debug("No CI plugin registered for component type", "component_type", componentType)
 		return nil, nil
 	}
 
-	bindings := HookBindings(plugin.GetHookBindings())
+	bindings := plugin.HookBindings(pl.GetHookBindings())
 	binding := bindings.GetBindingForEvent(opts.Event)
 	if binding == nil {
 		log.Debug("Plugin does not handle this event", "event", opts.Event, "component_type", componentType)
 		return nil, nil
 	}
 
-	return plugin, binding
+	return pl, binding
 }
 
 // buildActionContext builds the action context for executing CI actions.
-func buildActionContext(opts ExecuteOptions, platform Provider, plugin Plugin, binding *HookBinding) *actionContext {
+func buildActionContext(opts ExecuteOptions, platform provider.Provider, pl plugin.Plugin, binding *plugin.HookBinding) *actionContext {
 	ciCtx, err := platform.Context()
 	if err != nil {
 		log.Warn("Failed to get CI context", "error", err)
@@ -138,15 +140,15 @@ func buildActionContext(opts ExecuteOptions, platform Provider, plugin Plugin, b
 
 	command := extractCommand(opts.Event)
 
-	result, err := plugin.ParseOutput(opts.Output, command)
+	result, err := pl.ParseOutput(opts.Output, command)
 	if err != nil {
 		log.Warn("Failed to parse command output", "error", err)
-		result = &OutputResult{}
+		result = &plugin.OutputResult{}
 	}
 
 	return &actionContext{
 		Opts:     opts,
-		Plugin:   plugin,
+		Plugin:   pl,
 		Platform: platform,
 		CICtx:    ciCtx,
 		Binding:  binding,
@@ -156,7 +158,7 @@ func buildActionContext(opts ExecuteOptions, platform Provider, plugin Plugin, b
 }
 
 // executeActions executes all actions in the binding.
-func executeActions(ctx *actionContext, actions []HookAction) {
+func executeActions(ctx *actionContext, actions []plugin.HookAction) {
 	for _, action := range actions {
 		// Check if action is enabled in config.
 		if !isActionEnabled(ctx.Opts.AtmosConfig, action) {
@@ -176,35 +178,35 @@ func executeActions(ctx *actionContext, actions []HookAction) {
 // - Output: enabled by default
 // - Checks: disabled by default (requires extra permissions)
 // - Upload/Download: always enabled (controlled by planfile config).
-func isActionEnabled(cfg *schema.AtmosConfiguration, action HookAction) bool {
+func isActionEnabled(cfg *schema.AtmosConfiguration, action plugin.HookAction) bool {
 	// No config means use defaults (enabled for most actions).
 	if cfg == nil {
-		return action != ActionCheck // Checks disabled by default.
+		return action != plugin.ActionCheck // Checks disabled by default.
 	}
 
 	switch action {
-	case ActionSummary:
+	case plugin.ActionSummary:
 		// Summary is enabled by default. Only skip if explicitly disabled.
 		// nil means "not set" = use default (enabled).
 		if cfg.CI.Summary.Enabled == nil {
 			return true
 		}
 		return *cfg.CI.Summary.Enabled
-	case ActionOutput:
+	case plugin.ActionOutput:
 		// Output is enabled by default. Only skip if explicitly disabled.
 		// nil means "not set" = use default (enabled).
 		if cfg.CI.Output.Enabled == nil {
 			return true
 		}
 		return *cfg.CI.Output.Enabled
-	case ActionCheck:
+	case plugin.ActionCheck:
 		// Checks are disabled by default (require extra permissions).
 		// nil means "not set" = use default (disabled).
 		if cfg.CI.Checks.Enabled == nil {
 			return false
 		}
 		return *cfg.CI.Checks.Enabled
-	case ActionUpload, ActionDownload:
+	case plugin.ActionUpload, plugin.ActionDownload:
 		// Upload/Download are always enabled (controlled by planfile config).
 		return true
 	default:
@@ -213,23 +215,23 @@ func isActionEnabled(cfg *schema.AtmosConfiguration, action HookAction) bool {
 }
 
 // executeAction executes a single CI action.
-func executeAction(action HookAction, ctx *actionContext) error {
+func executeAction(action plugin.HookAction, ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeAction")()
 
 	switch action {
-	case ActionSummary:
+	case plugin.ActionSummary:
 		return executeSummaryAction(ctx)
 
-	case ActionOutput:
+	case plugin.ActionOutput:
 		return executeOutputAction(ctx)
 
-	case ActionUpload:
+	case plugin.ActionUpload:
 		return executeUploadAction(ctx)
 
-	case ActionDownload:
+	case plugin.ActionDownload:
 		return executeDownloadAction(ctx)
 
-	case ActionCheck:
+	case plugin.ActionCheck:
 		return executeCheckAction(ctx)
 
 	default:
@@ -382,7 +384,7 @@ func executeUploadAction(ctx *actionContext) error {
 func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
 	if path == "" {
-		if resolver, ok := ctx.Plugin.(ComponentConfigurationResolver); ok {
+		if resolver, ok := ctx.Plugin.(plugin.ComponentConfigurationResolver); ok {
 			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
 			if err != nil {
 				log.Debug("Failed to resolve artifact path for upload", "error", err)
@@ -455,7 +457,7 @@ func executeDownloadAction(ctx *actionContext) error {
 func validateDownloadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
 	if path == "" {
-		if resolver, ok := ctx.Plugin.(ComponentConfigurationResolver); ok {
+		if resolver, ok := ctx.Plugin.(plugin.ComponentConfigurationResolver); ok {
 			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
 			if err != nil {
 				log.Debug("Failed to resolve artifact path for download", "error", err)
@@ -607,7 +609,7 @@ func buildPlanfileMetadata(ctx *actionContext) *planfile.Metadata {
 	// Add plan result data if available.
 	if ctx.Result != nil {
 		metadata.HasChanges = ctx.Result.HasChanges
-		if tfData, ok := ctx.Result.Data.(*TerraformOutputData); ok {
+		if tfData, ok := ctx.Result.Data.(*plugin.TerraformOutputData); ok {
 			metadata.Additions = tfData.ResourceCounts.Create
 			metadata.Changes = tfData.ResourceCounts.Change
 			metadata.Destructions = tfData.ResourceCounts.Destroy

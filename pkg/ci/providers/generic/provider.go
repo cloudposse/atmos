@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -27,7 +28,7 @@ var _ provider.Provider = (*Provider)(nil)
 
 func init() {
 	// Self-register on package import.
-	provider.Register(NewProvider())
+	ci.Register(NewProvider())
 }
 
 // Provider is a fallback CI provider for when --ci flag is used

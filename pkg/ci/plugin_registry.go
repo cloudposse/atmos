@@ -6,18 +6,18 @@ import (
 
 // RegisterPlugin registers a CI plugin for a component type.
 // Plugins should call this in their init() function for self-registration.
-func RegisterPlugin(p Plugin) error {
+func RegisterPlugin(p plugin.Plugin) error {
 	return plugin.RegisterPlugin(p)
 }
 
 // GetPlugin returns a CI plugin by component type.
-func GetPlugin(componentType string) (Plugin, bool) {
+func GetPlugin(componentType string) (plugin.Plugin, bool) {
 	return plugin.GetPlugin(componentType)
 }
 
 // GetPluginForEvent returns the plugin that handles a specific hook event.
 // Returns nil if no plugin handles the event.
-func GetPluginForEvent(event string) Plugin {
+func GetPluginForEvent(event string) plugin.Plugin {
 	return plugin.GetPluginForEvent(event)
 }
 

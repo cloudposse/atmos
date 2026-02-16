@@ -7,6 +7,3 @@ import (
 
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).
 type Provider = provider.Provider
-
-// OutputWriter writes CI outputs (environment variables, job summaries, etc.).
-type OutputWriter = provider.OutputWriter
