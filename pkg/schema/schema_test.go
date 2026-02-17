@@ -180,4 +180,43 @@ func TestGetCaseSensitiveMap(t *testing.T) {
 		result := atmosConfig.GetCaseSensitiveMap("env")
 		assert.Nil(t, result)
 	})
+
+	t.Run("returns templates.settings.env map when no CaseMaps", func(t *testing.T) {
+		atmosConfig := &AtmosConfiguration{
+			Templates: Templates{
+				Settings: TemplatesSettings{
+					Env: map[string]string{
+						"aws_profile": "my-profile",
+					},
+				},
+			},
+		}
+		result := atmosConfig.GetCaseSensitiveMap("templates.settings.env")
+		assert.Equal(t, map[string]string{"aws_profile": "my-profile"}, result)
+	})
+
+	t.Run("returns templates.settings.env with case restored", func(t *testing.T) {
+		cm := casemap.New()
+		cm.Set("templates.settings.env", casemap.CaseMap{
+			"aws_profile": "AWS_PROFILE",
+			"aws_region":  "AWS_REGION",
+		})
+
+		atmosConfig := &AtmosConfiguration{
+			Templates: Templates{
+				Settings: TemplatesSettings{
+					Env: map[string]string{
+						"aws_profile": "production",
+						"aws_region":  "us-east-1",
+					},
+				},
+			},
+			CaseMaps: cm,
+		}
+		result := atmosConfig.GetCaseSensitiveMap("templates.settings.env")
+		assert.Equal(t, map[string]string{
+			"AWS_PROFILE": "production",
+			"AWS_REGION":  "us-east-1",
+		}, result)
+	})
 }

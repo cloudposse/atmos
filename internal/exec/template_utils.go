@@ -96,6 +96,86 @@ func ProcessTmpl(
 	return res.String(), nil
 }
 
+// extractEnvFromRawMap extracts the env map from a raw settings map[string]any.
+// This is needed because mapstructure:"-" on TemplatesSettings.Env causes
+// mapstructure.Decode to silently drop the env field.
+// The path navigated is: templates -> settings -> env.
+func extractEnvFromRawMap(settingsMap map[string]any) map[string]string {
+	templates, ok := settingsMap["templates"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	settings, ok := templates["settings"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	envRaw, ok := settings["env"]
+	if !ok {
+		return nil
+	}
+
+	result := make(map[string]string)
+
+	switch env := envRaw.(type) {
+	case map[string]any:
+		for k, v := range env {
+			if s, ok := v.(string); ok {
+				result[k] = s
+			}
+		}
+	case map[string]string:
+		for k, v := range env {
+			result[k] = v
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	return result
+}
+
+// savedEnvVar stores the original state of an environment variable for restore.
+type savedEnvVar struct {
+	value   string
+	existed bool
+}
+
+// setEnvVarsWithRestore sets environment variables and returns a cleanup function
+// that restores the original values. This prevents env pollution across components.
+func setEnvVarsWithRestore(envVars map[string]string) (func(), error) {
+	saved := make(map[string]savedEnvVar, len(envVars))
+
+	for k := range envVars {
+		if original, existed := os.LookupEnv(k); existed {
+			saved[k] = savedEnvVar{value: original, existed: true}
+		} else {
+			saved[k] = savedEnvVar{existed: false}
+		}
+	}
+
+	for k, v := range envVars {
+		if err := os.Setenv(k, v); err != nil {
+			return nil, err
+		}
+	}
+
+	cleanup := func() {
+		for k, original := range saved {
+			if original.existed {
+				os.Setenv(k, original.value)
+			} else {
+				os.Unsetenv(k)
+			}
+		}
+	}
+
+	return cleanup, nil
+}
+
 // ProcessTmplWithDatasources parses and executes Go templates with datasources.
 func ProcessTmplWithDatasources(
 	atmosConfig *schema.AtmosConfiguration,
@@ -114,6 +194,12 @@ func ProcessTmplWithDatasources(
 	}
 
 	log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName)
+
+	// Preserve env vars before mapstructure drops them.
+	// mapstructure:"-" on TemplatesSettings.Env causes Decode to silently drop the field.
+	// We extract env from both sources directly before the encode/decode/merge pipeline.
+	cliEnv := atmosConfig.Templates.Settings.Env
+	stackEnv := settingsSection.Templates.Settings.Env
 
 	// Merge the template settings from `atmos.yaml` CLI config and from the stack manifests
 	var cliConfigTemplateSettingsMap map[string]any
@@ -138,6 +224,19 @@ func ProcessTmplWithDatasources(
 	err = mapstructure.Decode(templateSettingsMerged, &templateSettings)
 	if err != nil {
 		return "", err
+	}
+
+	// Restore env vars that mapstructure dropped.
+	// Stack manifest env overrides CLI config env (same precedence as the merge above).
+	mergedEnv := make(map[string]string)
+	for k, v := range cliEnv {
+		mergedEnv[k] = v
+	}
+	for k, v := range stackEnv {
+		mergedEnv[k] = v
+	}
+	if len(mergedEnv) > 0 {
+		templateSettings.Env = mergedEnv
 	}
 
 	// Add Atmos, Gomplate and Sprig functions and datasources
@@ -186,12 +285,13 @@ func ProcessTmplWithDatasources(
 		// Atmos functions
 		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
 
-		// Process and add environment variables
-		for k, v := range templateSettings.Env {
-			err = os.Setenv(k, v)
-			if err != nil {
-				return "", err
+		// Set environment variables for template processing and restore originals when done.
+		if len(templateSettings.Env) > 0 {
+			cleanup, envErr := setEnvVarsWithRestore(templateSettings.Env)
+			if envErr != nil {
+				return "", envErr
 			}
+			defer cleanup()
 		}
 
 		// Process the template
@@ -259,9 +359,30 @@ func ProcessTmplWithDatasources(
 		if resultMapSettings, ok := resultMap["settings"].(map[string]any); ok {
 			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[string]any); ok {
 				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[string]any); ok {
+					// Extract env before mapstructure drops it.
+					var resultEnv map[string]string
+					if envRaw, envOk := resultMapSettingsTemplatesSettings["env"]; envOk {
+						resultEnv = make(map[string]string)
+						switch env := envRaw.(type) {
+						case map[string]any:
+							for k, v := range env {
+								if s, ok := v.(string); ok {
+									resultEnv[k] = s
+								}
+							}
+						case map[string]string:
+							resultEnv = env
+						}
+					}
+
 					err = mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings)
 					if err != nil {
 						return "", err
+					}
+
+					// Restore env after mapstructure dropped it.
+					if len(resultEnv) > 0 {
+						templateSettings.Env = resultEnv
 					}
 				}
 			}
