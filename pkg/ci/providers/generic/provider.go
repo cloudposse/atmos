@@ -130,23 +130,25 @@ func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckR
 // UpdateCheckRun writes check run status to stderr and returns an updated CheckRun.
 func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.UpdateCheckRun")()
-
+	var uiMethod func(format string, a ...interface{})
 	switch opts.Status {
 	case provider.CheckRunStateSuccess:
-		ui.Successf("Check run completed: %s [%s]", opts.Name, opts.Status)
+		uiMethod = ui.Successf
 	case provider.CheckRunStateFailure, provider.CheckRunStateError:
-		ui.Errorf("Check run completed: %s [%s]", opts.Name, opts.Status)
+		uiMethod = ui.Errorf
 	case provider.CheckRunStateCancelled:
-		ui.Warningf("Check run completed: %s [%s]", opts.Name, opts.Status)
+		uiMethod = ui.Warningf
 	default:
-		ui.Infof("Check run updated: %s [%s]", opts.Name, opts.Status)
+		uiMethod = ui.Infof
 	}
 
+	uiMethod("Check run completed: %s [%s]", opts.Name, opts.Status)
+
 	if opts.Title != "" {
-		ui.Infof("  Title: %s", opts.Title)
+		uiMethod("  Title: %s", opts.Title)
 	}
 	if opts.Summary != "" {
-		ui.Infof("  Summary: %s", opts.Summary)
+		uiMethod("  Summary: %s", opts.Summary)
 	}
 
 	return &provider.CheckRun{

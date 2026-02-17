@@ -54,3 +54,23 @@ tests:
         - !not "Check run completed: atmos/plan: prod/mycomponent"
         - !not "Title: Running plan"
         - !not "Title: plan: no changes"
+
+  - name: "atmos terraform plan with ci failure"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent/failure -s prod --ci' and checks for summary output and two checks."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent/failure"
+      - "-s"
+      - "prod"
+      - "--ci"
+    expect:
+      exit_code: 1
+      stderr:
+        - "Check run created: atmos/plan: prod/mycomponent/failure"
+        - !not "Check run completed: atmos/plan: prod/mycomponent/failure"
+        - "Check run failed: atmos/plan: prod/mycomponent/failure"
