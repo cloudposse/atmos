@@ -20,8 +20,14 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
-	// Should have bindings for plan, apply, and before.apply (download).
-	require.Len(t, bindings, 3)
+	// Should have bindings for before.plan (check), after.plan, after.apply, and before.apply (download).
+	require.Len(t, bindings, 4)
+
+	// Check before.terraform.plan binding (check).
+	beforePlanBinding := findBinding(bindings, "before.terraform.plan")
+	require.NotNil(t, beforePlanBinding)
+	assert.Empty(t, beforePlanBinding.Template)
+	assert.True(t, beforePlanBinding.HasAction(plugin.ActionCheck))
 
 	// Check after.terraform.plan binding.
 	planBinding := findBinding(bindings, "after.terraform.plan")
@@ -30,6 +36,7 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	assert.True(t, planBinding.HasAction(plugin.ActionSummary))
 	assert.True(t, planBinding.HasAction(plugin.ActionOutput))
 	assert.True(t, planBinding.HasAction(plugin.ActionUpload))
+	assert.True(t, planBinding.HasAction(plugin.ActionCheck))
 
 	// Check after.terraform.apply binding.
 	applyBinding := findBinding(bindings, "after.terraform.apply")

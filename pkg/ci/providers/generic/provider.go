@@ -117,8 +117,6 @@ func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckR
 
 	id := p.nextCheckRunID.Add(1)
 
-	panic("CreateCheckRun must not be called for the generic CI provider")
-
 	return &provider.CheckRun{
 		ID:        id,
 		Name:      opts.Name,
