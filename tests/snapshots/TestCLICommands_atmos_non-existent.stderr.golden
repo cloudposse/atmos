@@ -8,6 +8,7 @@ Valid subcommands are:
   • atlantis
   • auth
   • aws
+  • ci
   • completion
   • describe
   • devcontainer

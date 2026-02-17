@@ -1,0 +1,82 @@
+---
+title: atmos terraform planfile delete
+sidebar_label: delete
+sidebar_class_name: command
+sidebar_position: 5
+id: delete
+description: Delete a Terraform planfile from remote storage.
+---
+import Intro from '@site/src/components/Intro'
+
+<Intro>
+Delete a planfile from a storage backend. Requires the `--force` flag to confirm deletion and prevent accidental data loss.
+</Intro>
+
+## Usage
+
+```shell
+atmos terraform planfile delete <key> [options]
+```
+
+## Arguments
+
+<dl>
+  <dt>`<key>`</dt>
+  <dd>Storage key of the planfile to delete (required). Format: `{stack}/{component}/{sha}.tfplan`</dd>
+</dl>
+
+## Flags
+
+<dl>
+  <dt>`--force` / `-f`</dt>
+  <dd>Required flag to confirm deletion. Without this flag, the command will fail with an error.</dd>
+
+  <dt>`--store`</dt>
+  <dd>Storage backend to use: `local`, `s3`, or `github-artifacts`. Auto-detected from environment.</dd>
+</dl>
+
+## Examples
+
+### Delete a planfile
+
+```shell
+atmos terraform planfile delete dev-us-east-1/vpc/abc123.tfplan --force
+```
+
+### Delete from specific store
+
+```shell
+atmos terraform planfile delete dev-us-east-1/vpc/abc123.tfplan \
+  --store s3 \
+  --force
+```
+
+### Attempting to delete without --force
+
+```shell
+atmos terraform planfile delete dev-us-east-1/vpc/abc123.tfplan
+# Error: planfile delete requires force flag: dev-us-east-1/vpc/abc123.tfplan
+# Hint: Use --force to confirm deletion
+```
+
+## Safety
+
+The `--force` flag is required to prevent accidental deletion. This is a destructive operation:
+- Deleted planfiles cannot be recovered
+- Any apply jobs depending on the planfile will fail
+
+## Cleanup Scripts
+
+To clean up old planfiles, combine with `list`:
+
+```shell
+# Delete planfiles older than 7 days (example script)
+atmos terraform planfile list --format json | \
+  jq -r '.[] | select(.last_modified < "'$(date -d '7 days ago' -Iseconds)'") | .key' | \
+  xargs -I {} atmos terraform planfile delete {} --force
+```
+
+## Related
+
+- [`atmos terraform planfile list`](/cli/commands/terraform/planfile/list) - List planfiles before deleting
+- [`atmos terraform planfile show`](/cli/commands/terraform/planfile/show) - View planfile details before deleting
