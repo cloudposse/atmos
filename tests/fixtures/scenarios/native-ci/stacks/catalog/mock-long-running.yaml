@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://atmos.tools/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json
+
+components:
+  terraform:
+    mycomponent/long-running:
+      metadata:
+        component: mock-long-running
+      vars:
+        foo: "foo catalog default"
+        bar: "bar catalog default"
+        baz: "baz catalog default"
