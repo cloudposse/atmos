@@ -62,6 +62,9 @@ func Execute(opts ExecuteOptions) error {
 	defer perf.Track(opts.AtmosConfig, "ci.Execute")()
 
 	// Detect CI platform.
+	// Only ForceCIMode (--ci flag) triggers the generic provider fallback.
+	// ci.enabled in config means "CI features are available" but requires
+	// an actual CI platform to be detected (or --ci flag) to activate.
 	platform := detectPlatform(opts.ForceCIMode)
 	if platform == nil {
 		return nil

@@ -1,10 +1,13 @@
 package ci
 
 import (
+	"context"
+	"embed"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
@@ -14,6 +17,429 @@ import (
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
+}
+
+// capturingProvider is a mock CI provider that records CreateCheckRun and UpdateCheckRun calls.
+type capturingProvider struct {
+	mockProvider
+	createCheckRunCalls []*provider.CreateCheckRunOptions
+	updateCheckRunCalls []*provider.UpdateCheckRunOptions
+	nextID              int64
+}
+
+func (c *capturingProvider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+	c.createCheckRunCalls = append(c.createCheckRunCalls, opts)
+	c.nextID++
+	return &provider.CheckRun{
+		ID:     c.nextID,
+		Name:   opts.Name,
+		Status: opts.Status,
+	}, nil
+}
+
+func (c *capturingProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	c.updateCheckRunCalls = append(c.updateCheckRunCalls, opts)
+	return &provider.CheckRun{
+		ID:     opts.CheckRunID,
+		Name:   opts.Name,
+		Status: opts.Status,
+	}, nil
+}
+
+func TestExecute_BeforeTerraformPlan_TriggersCheckCreate(t *testing.T) {
+	// Set up provider registry with a capturing provider.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	cp := &capturingProvider{
+		mockProvider: mockProvider{name: "generic", detected: false},
+	}
+	Register(cp)
+
+	// Set up plugin registry with a mock terraform plugin that has before.terraform.plan → ActionCheck.
+	ClearPlugins()
+	ctrl := gomock.NewController(t)
+	mockPlugin := NewMockPlugin(ctrl)
+	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
+	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
+		{
+			Event:   "before.terraform.plan",
+			Actions: []plugin.HookAction{plugin.ActionCheck},
+		},
+	}).AnyTimes()
+	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+	mockPlugin.EXPECT().ParseOutput("", "plan").Return(&plugin.OutputResult{}, nil).AnyTimes()
+	err := RegisterPlugin(mockPlugin)
+	require.NoError(t, err)
+
+	// Execute with CI forced, checks enabled.
+	err = Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Checks: schema.CIChecksConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev-us-east-1",
+			ComponentFromArg: "vpc",
+		},
+	})
+	require.NoError(t, err)
+
+	// Verify CreateCheckRun was called.
+	require.Len(t, cp.createCheckRunCalls, 1, "CreateCheckRun should have been called once")
+	assert.Equal(t, "atmos/plan: dev-us-east-1/vpc", cp.createCheckRunCalls[0].Name)
+	assert.Equal(t, provider.CheckRunStateInProgress, cp.createCheckRunCalls[0].Status)
+}
+
+func TestExecute_BeforeAfterPlan_CheckLifecycle(t *testing.T) {
+	// Set up provider registry with a capturing provider.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	cp := &capturingProvider{
+		mockProvider: mockProvider{name: "generic", detected: false},
+	}
+	Register(cp)
+
+	// Set up plugin registry with both before and after plan bindings.
+	ClearPlugins()
+	ctrl := gomock.NewController(t)
+	mockPlugin := NewMockPlugin(ctrl)
+	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
+	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
+		{
+			Event:   "before.terraform.plan",
+			Actions: []plugin.HookAction{plugin.ActionCheck},
+		},
+		{
+			Event:    "after.terraform.plan",
+			Actions:  []plugin.HookAction{plugin.ActionCheck},
+			Template: "plan",
+		},
+	}).AnyTimes()
+	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+	mockPlugin.EXPECT().ParseOutput(gomock.Any(), "plan").Return(&plugin.OutputResult{
+		HasChanges: true,
+		Data: &plugin.TerraformOutputData{
+			ChangedResult: "Plan: 1 to add, 0 to change, 0 to destroy.",
+		},
+	}, nil).AnyTimes()
+	err := RegisterPlugin(mockPlugin)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		CI: schema.CIConfig{
+			Checks: schema.CIChecksConfig{Enabled: boolPtr(true)},
+		},
+	}
+	info := &schema.ConfigAndStacksInfo{
+		Stack:            "dev-us-east-1",
+		ComponentFromArg: "vpc",
+	}
+
+	// 1. Execute "before.terraform.plan" — should create a check run.
+	err = Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: atmosConfig,
+		Info:        info,
+	})
+	require.NoError(t, err)
+	require.Len(t, cp.createCheckRunCalls, 1, "CreateCheckRun should have been called once after before event")
+	createdID := cp.createCheckRunCalls[0] // capture opts for verification.
+	assert.Equal(t, provider.CheckRunStateInProgress, createdID.Status)
+
+	// 2. Execute "after.terraform.plan" — should update the check run, not create a new one.
+	err = Execute(ExecuteOptions{
+		Event:       "after.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: atmosConfig,
+		Info:        info,
+		Output:      "Terraform will perform the following actions...",
+	})
+	require.NoError(t, err)
+
+	// Verify UpdateCheckRun was called (not a second CreateCheckRun).
+	require.Len(t, cp.updateCheckRunCalls, 1, "UpdateCheckRun should have been called once after after event")
+	assert.Equal(t, int64(1), cp.updateCheckRunCalls[0].CheckRunID, "UpdateCheckRun should use the ID from CreateCheckRun")
+	assert.Equal(t, provider.CheckRunStateSuccess, cp.updateCheckRunCalls[0].Status)
+	assert.Equal(t, "success", cp.updateCheckRunCalls[0].Conclusion)
+	assert.Equal(t, "Plan: 1 to add, 0 to change, 0 to destroy.", cp.updateCheckRunCalls[0].Title)
+
+	// CreateCheckRun should NOT have been called again.
+	assert.Len(t, cp.createCheckRunCalls, 1, "CreateCheckRun should not be called during after event when ID is stored")
+}
+
+func TestExecute_CIEnabledInConfig_NoForceFlag_NoActions(t *testing.T) {
+	// When CI.Enabled=true in atmos.yaml but --ci flag is NOT passed and
+	// no CI platform is detected, Execute should be a no-op.
+	// ci.enabled in config means "CI features are available" but requires
+	// either --ci flag or actual CI platform detection to activate.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	cp := &capturingProvider{
+		mockProvider: mockProvider{name: "generic", detected: false},
+	}
+	Register(cp)
+
+	ClearPlugins()
+	ctrl := gomock.NewController(t)
+	mockPlugin := NewMockPlugin(ctrl)
+	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
+	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
+		{
+			Event:   "before.terraform.plan",
+			Actions: []plugin.HookAction{plugin.ActionCheck},
+		},
+	}).AnyTimes()
+	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+	mockPlugin.EXPECT().ParseOutput("", "plan").Return(&plugin.OutputResult{}, nil).AnyTimes()
+	err := RegisterPlugin(mockPlugin)
+	require.NoError(t, err)
+
+	// Execute WITHOUT ForceCIMode — CI is enabled only via config.
+	err = Execute(ExecuteOptions{
+		Event:       "before.terraform.plan",
+		ForceCIMode: false,
+		AtmosConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Enabled: true,
+				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+			},
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev-us-east-1",
+			ComponentFromArg: "vpc",
+		},
+	})
+	require.NoError(t, err)
+
+	// No CI actions should run — ci.enabled alone does not trigger the generic fallback.
+	assert.Empty(t, cp.createCheckRunCalls, "CreateCheckRun should NOT be called without --ci flag even when CI.Enabled=true in config")
+}
+
+// capturingOutputWriter records all WriteSummary and WriteOutput calls.
+type capturingOutputWriter struct {
+	summaries []string
+	outputs   map[string]string
+}
+
+func newCapturingOutputWriter() *capturingOutputWriter {
+	return &capturingOutputWriter{outputs: make(map[string]string)}
+}
+
+func (w *capturingOutputWriter) WriteSummary(content string) error {
+	w.summaries = append(w.summaries, content)
+	return nil
+}
+
+func (w *capturingOutputWriter) WriteOutput(key, value string) error {
+	w.outputs[key] = value
+	return nil
+}
+
+// fullCapturingProvider captures all CI operations: check runs AND output writes.
+type fullCapturingProvider struct {
+	mockProvider
+	createCheckRunCalls []*provider.CreateCheckRunOptions
+	updateCheckRunCalls []*provider.UpdateCheckRunOptions
+	writer              *capturingOutputWriter
+	nextID              int64
+}
+
+func newFullCapturingProvider(name string, detected bool) *fullCapturingProvider {
+	return &fullCapturingProvider{
+		mockProvider: mockProvider{name: name, detected: detected},
+		writer:       newCapturingOutputWriter(),
+	}
+}
+
+func (c *fullCapturingProvider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+	c.createCheckRunCalls = append(c.createCheckRunCalls, opts)
+	c.nextID++
+	return &provider.CheckRun{ID: c.nextID, Name: opts.Name, Status: opts.Status}, nil
+}
+
+func (c *fullCapturingProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	c.updateCheckRunCalls = append(c.updateCheckRunCalls, opts)
+	return &provider.CheckRun{ID: opts.CheckRunID, Name: opts.Name, Status: opts.Status}, nil
+}
+
+func (c *fullCapturingProvider) OutputWriter() provider.OutputWriter {
+	return c.writer
+}
+
+func (c *fullCapturingProvider) totalCICalls() int {
+	return len(c.createCheckRunCalls) + len(c.updateCheckRunCalls) +
+		len(c.writer.summaries) + len(c.writer.outputs)
+}
+
+// TestExecute_LocalDev_NoCIFlag_NoActions verifies that CI functionality
+// (summaries, checks, outputs) is never triggered on a local developer
+// machine when the --ci flag is not set and CI is not enabled in config.
+func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
+	// allBindings registers a plugin with all action types so any
+	// accidental execution would be captured.
+	allBindings := []plugin.HookBinding{
+		{
+			Event:   "before.terraform.plan",
+			Actions: []plugin.HookAction{plugin.ActionCheck},
+		},
+		{
+			Event:    "after.terraform.plan",
+			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck},
+			Template: "plan",
+		},
+	}
+
+	events := []string{"before.terraform.plan", "after.terraform.plan"}
+
+	t.Run("no CI flag, no CI config — no actions executed", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		cp := newFullCapturingProvider("generic", false)
+		Register(cp)
+
+		ClearPlugins()
+		ctrl := gomock.NewController(t)
+		mp := NewMockPlugin(ctrl)
+		mp.EXPECT().GetType().Return("terraform").AnyTimes()
+		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
+		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
+		require.NoError(t, RegisterPlugin(mp))
+
+		for _, event := range events {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				ForceCIMode: false,
+				AtmosConfig: &schema.AtmosConfiguration{},
+				Info: &schema.ConfigAndStacksInfo{
+					Stack:            "dev-us-east-1",
+					ComponentFromArg: "vpc",
+				},
+			})
+			assert.NoError(t, err)
+		}
+
+		assert.Zero(t, cp.totalCICalls(),
+			"No CI actions should execute on local dev without --ci flag")
+	})
+
+	t.Run("no CI flag, CI.Enabled explicitly false — no actions executed", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		cp := newFullCapturingProvider("generic", false)
+		Register(cp)
+
+		ClearPlugins()
+		ctrl := gomock.NewController(t)
+		mp := NewMockPlugin(ctrl)
+		mp.EXPECT().GetType().Return("terraform").AnyTimes()
+		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
+		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
+		require.NoError(t, RegisterPlugin(mp))
+
+		for _, event := range events {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				ForceCIMode: false,
+				AtmosConfig: &schema.AtmosConfiguration{
+					CI: schema.CIConfig{Enabled: false},
+				},
+				Info: &schema.ConfigAndStacksInfo{
+					Stack:            "dev-us-east-1",
+					ComponentFromArg: "vpc",
+				},
+			})
+			assert.NoError(t, err)
+		}
+
+		assert.Zero(t, cp.totalCICalls(),
+			"No CI actions should execute when CI is explicitly disabled")
+	})
+
+	t.Run("no CI flag, nil AtmosConfig — no actions executed", func(t *testing.T) {
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		cp := newFullCapturingProvider("generic", false)
+		Register(cp)
+
+		ClearPlugins()
+		ctrl := gomock.NewController(t)
+		mp := NewMockPlugin(ctrl)
+		mp.EXPECT().GetType().Return("terraform").AnyTimes()
+		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
+		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
+		require.NoError(t, RegisterPlugin(mp))
+
+		for _, event := range events {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				ForceCIMode: false,
+				AtmosConfig: nil,
+				Info: &schema.ConfigAndStacksInfo{
+					Stack:            "dev-us-east-1",
+					ComponentFromArg: "vpc",
+				},
+			})
+			assert.NoError(t, err)
+		}
+
+		assert.Zero(t, cp.totalCICalls(),
+			"No CI actions should execute when AtmosConfig is nil")
+	})
+
+	t.Run("no CI flag, checks enabled but CI.Enabled false — no actions executed", func(t *testing.T) {
+		// A user might enable checks in config but not CI itself.
+		// Without --ci flag, nothing should run.
+		backup := testSaveAndClearRegistry()
+		defer testRestoreRegistry(backup)
+
+		cp := newFullCapturingProvider("generic", false)
+		Register(cp)
+
+		ClearPlugins()
+		ctrl := gomock.NewController(t)
+		mp := NewMockPlugin(ctrl)
+		mp.EXPECT().GetType().Return("terraform").AnyTimes()
+		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
+		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
+		require.NoError(t, RegisterPlugin(mp))
+
+		for _, event := range events {
+			err := Execute(ExecuteOptions{
+				Event:       event,
+				ForceCIMode: false,
+				AtmosConfig: &schema.AtmosConfiguration{
+					CI: schema.CIConfig{
+						Enabled: false,
+						Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
+						Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
+						Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
+					},
+				},
+				Info: &schema.ConfigAndStacksInfo{
+					Stack:            "dev-us-east-1",
+					ComponentFromArg: "vpc",
+				},
+			})
+			assert.NoError(t, err)
+		}
+
+		assert.Zero(t, cp.totalCICalls(),
+			"No CI actions should execute when CI.Enabled is false, even if individual actions are enabled")
+	})
 }
 
 func TestExecute(t *testing.T) {
