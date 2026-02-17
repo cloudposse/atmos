@@ -225,12 +225,14 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 
 // GetCaseSensitiveMap returns the specified map with original key casing restored.
 // This compensates for Viper lowercasing all YAML map keys.
-// Supported paths: "env".
+// Supported paths: "env", "templates.settings.env".
 func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
 	var source map[string]string
 	switch path {
 	case "env":
 		source = a.Env
+	case "templates.settings.env":
+		source = a.Templates.Settings.Env
 	default:
 		return nil
 	}
