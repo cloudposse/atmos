@@ -448,3 +448,300 @@ func TestAuthenticate_EmptyAccessToken_SkipsEmailFetch(t *testing.T) {
 	gcpCreds := creds.(*types.GCPCredentials)
 	assert.Empty(t, gcpCreds.ServiceAccountEmail)
 }
+
+// --- ADC Critical Path Tests ---
+//
+// These tests verify the ADC provider's stateless nature and realm-independence,
+// which is critical because:
+// 1. ADC relies on external credential sources (gcloud, env vars, metadata server).
+// 2. ADC does NOT store or manage any credential files.
+// 3. ADC must work with empty realm (no auth.realm configured).
+// 4. ADC works with both gcp/project (no SA) and gcp/service-account (impersonation).
+
+// TestADC_StatelessNoFileStorage verifies that ADC provider does not store any
+// credential files. This is critical because ADC delegates all credential management
+// to Google's SDK and external tools (gcloud, metadata server).
+func TestADC_StatelessNoFileStorage(t *testing.T) {
+	expiry := time.Now().Add(time.Hour)
+	p := &Provider{
+		spec: &types.GCPADCProviderSpec{ProjectID: "stateless-project"},
+		findCredentials: func(_ context.Context, _ ...string) (*google.Credentials, error) {
+			return &google.Credentials{
+				ProjectID: "stateless-project",
+				TokenSource: &staticTokenSource{
+					token: &oauth2.Token{
+						AccessToken: "stateless-token",
+						Expiry:      expiry,
+					},
+				},
+			}, nil
+		},
+		fetchTokenEmail: func(_ context.Context, _ string) (string, error) {
+			return "user@example.com", nil
+		},
+	}
+
+	// Authenticate successfully.
+	creds, err := p.Authenticate(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	// Verify Paths() is always empty — no credential files managed.
+	paths, err := p.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths, "ADC provider must not manage any credential files")
+
+	// Verify Logout() is a no-op — nothing to clean up.
+	err = p.Logout(context.Background())
+	require.NoError(t, err)
+
+	// Verify GetFilesDisplayPath() is empty — no files to display.
+	assert.Empty(t, p.GetFilesDisplayPath(), "ADC provider has no credential files to display")
+}
+
+// TestADC_RealmIndependentBehavior verifies that ADC provider behavior is completely
+// independent of the realm setting. Authentication, environment, and paths must all
+// work identically regardless of realm value (empty, explicit, or any string).
+func TestADC_RealmIndependentBehavior(t *testing.T) {
+	realms := []string{"", "test-realm", "customer-acme", "auto-a1b2c3d4"}
+
+	for _, realmValue := range realms {
+		t.Run(fmt.Sprintf("realm=%q", realmValue), func(t *testing.T) {
+			expiry := time.Now().Add(time.Hour)
+			p := &Provider{
+				spec: &types.GCPADCProviderSpec{ProjectID: "realm-test-project"},
+				findCredentials: func(_ context.Context, scopes ...string) (*google.Credentials, error) {
+					return &google.Credentials{
+						ProjectID: "realm-test-project",
+						TokenSource: &staticTokenSource{
+							token: &oauth2.Token{
+								AccessToken: "realm-test-token",
+								Expiry:      expiry,
+							},
+						},
+					}, nil
+				},
+				fetchTokenEmail: func(_ context.Context, _ string) (string, error) {
+					return "sa@realm-test-project.iam.gserviceaccount.com", nil
+				},
+			}
+
+			// Set realm — should not affect behavior.
+			p.SetRealm(realmValue)
+
+			// Authenticate must succeed regardless of realm.
+			creds, err := p.Authenticate(context.Background())
+			require.NoError(t, err)
+			require.NotNil(t, creds)
+
+			gcpCreds := creds.(*types.GCPCredentials)
+			assert.Equal(t, "realm-test-token", gcpCreds.AccessToken)
+			assert.Equal(t, "realm-test-project", gcpCreds.ProjectID)
+
+			// Paths always empty regardless of realm.
+			paths, err := p.Paths()
+			require.NoError(t, err)
+			assert.Empty(t, paths)
+
+			// Environment always the same regardless of realm.
+			env, err := p.Environment()
+			require.NoError(t, err)
+			assert.Equal(t, "realm-test-project", env["GOOGLE_CLOUD_PROJECT"])
+
+			// PrepareEnvironment always the same regardless of realm.
+			prepEnv, err := p.PrepareEnvironment(context.Background(), map[string]string{"PATH": "/usr/bin"})
+			require.NoError(t, err)
+			assert.Equal(t, "realm-test-project", prepEnv["GOOGLE_CLOUD_PROJECT"])
+			assert.Equal(t, "/usr/bin", prepEnv["PATH"])
+		})
+	}
+}
+
+// TestADC_AuthenticateReturnsUserEmail verifies that when ADC returns a user
+// email (not a service account), it is correctly captured. This is the case when
+// a developer runs `gcloud auth application-default login` — the token belongs
+// to their Google user account, not a service account.
+func TestADC_AuthenticateReturnsUserEmail(t *testing.T) {
+	expiry := time.Now().Add(time.Hour)
+	p := &Provider{
+		spec: &types.GCPADCProviderSpec{ProjectID: "user-project"},
+		findCredentials: func(_ context.Context, _ ...string) (*google.Credentials, error) {
+			return &google.Credentials{
+				ProjectID: "user-project",
+				TokenSource: &staticTokenSource{
+					token: &oauth2.Token{
+						AccessToken: "user-token",
+						Expiry:      expiry,
+					},
+				},
+			}, nil
+		},
+		fetchTokenEmail: func(_ context.Context, accessToken string) (string, error) {
+			assert.Equal(t, "user-token", accessToken)
+			return "developer@company.com", nil
+		},
+	}
+
+	creds, err := p.Authenticate(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	gcpCreds := creds.(*types.GCPCredentials)
+	assert.Equal(t, "developer@company.com", gcpCreds.ServiceAccountEmail,
+		"ADC should capture user email from tokeninfo API")
+	assert.Equal(t, "user-project", gcpCreds.ProjectID)
+	assert.Equal(t, "user-token", gcpCreds.AccessToken)
+}
+
+// TestADC_AuthenticateEmailFetchFailure verifies that authentication succeeds
+// even when the tokeninfo email fetch fails. Email is best-effort only.
+func TestADC_AuthenticateEmailFetchFailure(t *testing.T) {
+	expiry := time.Now().Add(time.Hour)
+	p := &Provider{
+		spec: &types.GCPADCProviderSpec{},
+		findCredentials: func(_ context.Context, _ ...string) (*google.Credentials, error) {
+			return &google.Credentials{
+				ProjectID: "resilient-project",
+				TokenSource: &staticTokenSource{
+					token: &oauth2.Token{
+						AccessToken: "resilient-token",
+						Expiry:      expiry,
+					},
+				},
+			}, nil
+		},
+		fetchTokenEmail: func(_ context.Context, _ string) (string, error) {
+			return "", fmt.Errorf("tokeninfo API unavailable")
+		},
+	}
+
+	creds, err := p.Authenticate(context.Background())
+	require.NoError(t, err, "Authentication must succeed even when email fetch fails")
+	require.NotNil(t, creds)
+
+	gcpCreds := creds.(*types.GCPCredentials)
+	assert.Equal(t, "resilient-token", gcpCreds.AccessToken)
+	assert.Equal(t, "resilient-project", gcpCreds.ProjectID)
+	assert.Empty(t, gcpCreds.ServiceAccountEmail,
+		"Email should be empty when tokeninfo fetch fails")
+}
+
+// TestADC_AuthenticateNoProjectID verifies ADC works when neither spec nor
+// ADC chain provides a project ID. This is valid when the developer's environment
+// doesn't have a default project configured.
+func TestADC_AuthenticateNoProjectID(t *testing.T) {
+	expiry := time.Now().Add(time.Hour)
+	p := &Provider{
+		spec: &types.GCPADCProviderSpec{}, // No ProjectID in spec.
+		findCredentials: func(_ context.Context, _ ...string) (*google.Credentials, error) {
+			return &google.Credentials{
+				ProjectID: "", // No project in ADC chain either.
+				TokenSource: &staticTokenSource{
+					token: &oauth2.Token{
+						AccessToken: "no-project-token",
+						Expiry:      expiry,
+					},
+				},
+			}, nil
+		},
+		fetchTokenEmail: func(_ context.Context, _ string) (string, error) {
+			return "dev@company.com", nil
+		},
+	}
+
+	creds, err := p.Authenticate(context.Background())
+	require.NoError(t, err, "ADC should authenticate even without project ID")
+	require.NotNil(t, creds)
+
+	gcpCreds := creds.(*types.GCPCredentials)
+	assert.Empty(t, gcpCreds.ProjectID, "Project ID should be empty when not available")
+	assert.Equal(t, "no-project-token", gcpCreds.AccessToken)
+	assert.Equal(t, "dev@company.com", gcpCreds.ServiceAccountEmail)
+}
+
+// TestADC_PrepareEnvironment_EmptyRealm verifies that PrepareEnvironment works
+// correctly with empty realm, which is the default when auth.realm is not configured.
+func TestADC_PrepareEnvironment_EmptyRealm(t *testing.T) {
+	p := &Provider{
+		spec: &types.GCPADCProviderSpec{ProjectID: "env-project"},
+	}
+	// Empty realm — the default.
+	p.SetRealm("")
+
+	env, err := p.PrepareEnvironment(context.Background(), map[string]string{
+		"PATH":                      "/usr/bin",
+		"GOOGLE_APPLICATION_CREDENTIALS": "/some/path/to/key.json",
+	})
+	require.NoError(t, err)
+
+	// Existing env vars preserved.
+	assert.Equal(t, "/usr/bin", env["PATH"])
+	// ADC does not clear GOOGLE_APPLICATION_CREDENTIALS — it's the external credential source.
+	assert.Equal(t, "/some/path/to/key.json", env["GOOGLE_APPLICATION_CREDENTIALS"])
+	// Project env vars set.
+	assert.Equal(t, "env-project", env["GOOGLE_CLOUD_PROJECT"])
+	assert.Equal(t, "env-project", env["GCLOUD_PROJECT"])
+	assert.Equal(t, "env-project", env["CLOUDSDK_CORE_PROJECT"])
+}
+
+// TestADC_FullAuthenticateLifecycle verifies the complete ADC lifecycle:
+// authenticate → get credentials → verify stateless (no files) → logout (no-op).
+func TestADC_FullAuthenticateLifecycle(t *testing.T) {
+	expiry := time.Now().Add(time.Hour)
+	p := &Provider{
+		spec: &types.GCPADCProviderSpec{
+			ProjectID: "lifecycle-project",
+			Scopes:    []string{"https://www.googleapis.com/auth/compute.readonly"},
+		},
+		findCredentials: func(_ context.Context, scopes ...string) (*google.Credentials, error) {
+			assert.Equal(t, []string{"https://www.googleapis.com/auth/compute.readonly"}, scopes)
+			return &google.Credentials{
+				ProjectID: "lifecycle-project",
+				TokenSource: &staticTokenSource{
+					token: &oauth2.Token{
+						AccessToken: "lifecycle-token",
+						Expiry:      expiry,
+					},
+				},
+			}, nil
+		},
+		fetchTokenEmail: func(_ context.Context, _ string) (string, error) {
+			return "sa@lifecycle-project.iam.gserviceaccount.com", nil
+		},
+	}
+
+	ctx := context.Background()
+
+	// Step 1: Authenticate.
+	creds, err := p.Authenticate(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	gcpCreds := creds.(*types.GCPCredentials)
+	assert.Equal(t, "lifecycle-token", gcpCreds.AccessToken)
+	assert.Equal(t, expiry, gcpCreds.TokenExpiry)
+	assert.Equal(t, "lifecycle-project", gcpCreds.ProjectID)
+	assert.Equal(t, "sa@lifecycle-project.iam.gserviceaccount.com", gcpCreds.ServiceAccountEmail)
+	assert.Equal(t, []string{"https://www.googleapis.com/auth/compute.readonly"}, gcpCreds.Scopes)
+
+	// Step 2: Verify no files stored.
+	paths, err := p.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths)
+
+	// Step 3: Verify environment variables.
+	env, err := p.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "lifecycle-project", env["GOOGLE_CLOUD_PROJECT"])
+
+	// Step 4: Logout (no-op).
+	err = p.Logout(ctx)
+	require.NoError(t, err)
+
+	// Step 5: Can authenticate again (stateless — no state to corrupt).
+	creds2, err := p.Authenticate(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, creds2)
+	gcpCreds2 := creds2.(*types.GCPCredentials)
+	assert.Equal(t, "lifecycle-token", gcpCreds2.AccessToken)
+}

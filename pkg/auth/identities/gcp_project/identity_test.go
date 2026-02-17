@@ -387,3 +387,198 @@ func TestPaths(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, paths)
 }
+
+// --- ADC + gcp/project Critical Path Tests ---
+//
+// These tests verify the gcp/project identity works with ADC provider credentials,
+// which is the primary flow for developers using `gcloud auth application-default login`
+// without service account impersonation. This flow is:
+//   1. ADC provider finds credentials → returns GCPCredentials with access token.
+//   2. gcp/project identity passes through token with project override → returns GCPCredentials.
+//   3. No credential files stored, no realm needed.
+
+// TestADC_ProjectIdentity_PassthroughCreds verifies that gcp/project identity
+// correctly passes through ADC provider credentials while overriding the project ID.
+func TestADC_ProjectIdentity_PassthroughCreds(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPProjectIdentityPrincipal{
+			ProjectID: "target-project",
+			Region:    "us-central1",
+		},
+	}
+	id.SetRealm("") // Empty realm — typical for ADC without explicit auth.realm.
+
+	// Simulate ADC provider returning credentials with a user email.
+	adcCreds := &types.GCPCredentials{
+		AccessToken:         "adc-user-token",
+		TokenExpiry:         time.Now().Add(1 * time.Hour),
+		ProjectID:           "adc-default-project",
+		ServiceAccountEmail: "developer@company.com",
+		Scopes:              []string{"https://www.googleapis.com/auth/cloud-platform"},
+	}
+
+	// Authenticate with base credentials from ADC.
+	creds, err := id.Authenticate(context.Background(), adcCreds)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	gcpCreds, ok := creds.(*types.GCPCredentials)
+	require.True(t, ok)
+
+	// Project ID should be overridden by the identity's principal.
+	assert.Equal(t, "target-project", gcpCreds.ProjectID)
+	// Access token should pass through from ADC.
+	assert.Equal(t, "adc-user-token", gcpCreds.AccessToken)
+	// SA email should pass through from ADC (user email in this case).
+	assert.Equal(t, "developer@company.com", gcpCreds.ServiceAccountEmail)
+	// Scopes should pass through from ADC.
+	assert.Equal(t, []string{"https://www.googleapis.com/auth/cloud-platform"}, gcpCreds.Scopes)
+}
+
+// TestADC_ProjectIdentity_NoBaseCreds verifies that gcp/project works even
+// without base credentials (standalone project context).
+func TestADC_ProjectIdentity_NoBaseCreds(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPProjectIdentityPrincipal{
+			ProjectID: "standalone-project",
+		},
+	}
+	id.SetRealm("") // Empty realm.
+
+	creds, err := id.Authenticate(context.Background(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, creds)
+
+	gcpCreds := creds.(*types.GCPCredentials)
+	assert.Equal(t, "standalone-project", gcpCreds.ProjectID)
+	assert.Empty(t, gcpCreds.AccessToken, "No access token without base creds")
+}
+
+// TestADC_ProjectIdentity_EmptyRealm_FullLifecycle verifies the complete lifecycle
+// of ADC + gcp/project with empty realm: authenticate → env → prepare → logout.
+func TestADC_ProjectIdentity_EmptyRealm_FullLifecycle(t *testing.T) {
+	// Clean up environment.
+	t.Setenv("GOOGLE_CLOUD_PROJECT", "")
+	t.Setenv("CLOUDSDK_CORE_PROJECT", "")
+	t.Setenv("GOOGLE_CLOUD_REGION", "")
+
+	id := &Identity{
+		principal: &types.GCPProjectIdentityPrincipal{
+			ProjectID: "lifecycle-project",
+			Region:    "europe-west1",
+			Zone:      "europe-west1-b",
+		},
+	}
+	id.SetRealm("") // Empty realm — should not affect behavior.
+
+	adcCreds := &types.GCPCredentials{
+		AccessToken: "lifecycle-adc-token",
+		TokenExpiry: time.Now().Add(1 * time.Hour),
+		ProjectID:   "adc-project",
+	}
+
+	ctx := context.Background()
+
+	// Step 1: Authenticate — project override works.
+	creds, err := id.Authenticate(ctx, adcCreds)
+	require.NoError(t, err)
+	gcpCreds := creds.(*types.GCPCredentials)
+	assert.Equal(t, "lifecycle-project", gcpCreds.ProjectID)
+	assert.Equal(t, "lifecycle-adc-token", gcpCreds.AccessToken)
+
+	// Step 2: Paths — always empty.
+	paths, err := id.Paths()
+	require.NoError(t, err)
+	assert.Empty(t, paths)
+
+	// Step 3: CredentialsExist — always true (no files to check).
+	exists, err := id.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists)
+
+	// Step 4: Environment — returns project/region/zone env vars.
+	env, err := id.Environment()
+	require.NoError(t, err)
+	assert.Equal(t, "lifecycle-project", env["GOOGLE_CLOUD_PROJECT"])
+	assert.Equal(t, "lifecycle-project", env["CLOUDSDK_CORE_PROJECT"])
+	assert.Equal(t, "europe-west1", env["GOOGLE_CLOUD_REGION"])
+	assert.Equal(t, "europe-west1", env["CLOUDSDK_COMPUTE_REGION"])
+	assert.Equal(t, "europe-west1-b", env["GOOGLE_CLOUD_ZONE"])
+
+	// Step 5: PrepareEnvironment — merges into existing env.
+	prepEnv, err := id.PrepareEnvironment(ctx, map[string]string{
+		"PATH":         "/usr/bin",
+		"EXISTING_VAR": "keep-me",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "/usr/bin", prepEnv["PATH"])
+	assert.Equal(t, "keep-me", prepEnv["EXISTING_VAR"])
+	assert.Equal(t, "lifecycle-project", prepEnv["GOOGLE_CLOUD_PROJECT"])
+	assert.Equal(t, "europe-west1", prepEnv["GOOGLE_CLOUD_REGION"])
+
+	// Step 6: PostAuthenticate — sets env vars and auth context.
+	authContext := &schema.AuthContext{}
+	err = id.PostAuthenticate(ctx, &types.PostAuthenticateParams{
+		AuthContext:  authContext,
+		Credentials:  creds,
+		ProviderName: "my-adc",
+		IdentityName: "my-project",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, authContext.GCP)
+	assert.Equal(t, "lifecycle-project", authContext.GCP.ProjectID)
+	assert.Equal(t, "europe-west1", authContext.GCP.Region)
+	assert.Equal(t, "lifecycle-adc-token", authContext.GCP.AccessToken)
+
+	// Step 7: Logout — no-op.
+	err = id.Logout(ctx)
+	require.NoError(t, err)
+
+	// Step 8: LoadCredentials — returns minimal creds with project only.
+	loadedCreds, err := id.LoadCredentials(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, loadedCreds)
+	loadedGCP := loadedCreds.(*types.GCPCredentials)
+	assert.Equal(t, "lifecycle-project", loadedGCP.ProjectID)
+	assert.Empty(t, loadedGCP.AccessToken, "LoadCredentials returns only project, no stored token")
+}
+
+// TestADC_ProjectIdentity_RealmIndependent verifies gcp/project behavior is
+// identical regardless of realm value — it never uses realm for anything.
+func TestADC_ProjectIdentity_RealmIndependent(t *testing.T) {
+	realms := []string{"", "test-realm", "customer-acme"}
+
+	for _, realmValue := range realms {
+		t.Run("realm="+realmValue, func(t *testing.T) {
+			id := &Identity{
+				principal: &types.GCPProjectIdentityPrincipal{
+					ProjectID: "realm-test-project",
+				},
+			}
+			id.SetRealm(realmValue)
+
+			adcCreds := &types.GCPCredentials{
+				AccessToken: "test-token",
+				ProjectID:   "adc-project",
+			}
+
+			creds, err := id.Authenticate(context.Background(), adcCreds)
+			require.NoError(t, err)
+			gcpCreds := creds.(*types.GCPCredentials)
+			assert.Equal(t, "realm-test-project", gcpCreds.ProjectID)
+			assert.Equal(t, "test-token", gcpCreds.AccessToken)
+
+			// All realm-independent operations work the same.
+			paths, err := id.Paths()
+			require.NoError(t, err)
+			assert.Empty(t, paths)
+
+			exists, err := id.CredentialsExist()
+			require.NoError(t, err)
+			assert.True(t, exists)
+
+			err = id.Logout(context.Background())
+			require.NoError(t, err)
+		})
+	}
+}
