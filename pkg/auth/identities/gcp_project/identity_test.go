@@ -449,7 +449,8 @@ func TestADC_ProjectIdentity_NoBaseCreds(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, creds)
 
-	gcpCreds := creds.(*types.GCPCredentials)
+	gcpCreds, ok := creds.(*types.GCPCredentials)
+	require.True(t, ok)
 	assert.Equal(t, "standalone-project", gcpCreds.ProjectID)
 	assert.Empty(t, gcpCreds.AccessToken, "No access token without base creds")
 }
@@ -482,7 +483,8 @@ func TestADC_ProjectIdentity_EmptyRealm_FullLifecycle(t *testing.T) {
 	// Step 1: Authenticate — project override works.
 	creds, err := id.Authenticate(ctx, adcCreds)
 	require.NoError(t, err)
-	gcpCreds := creds.(*types.GCPCredentials)
+	gcpCreds, ok := creds.(*types.GCPCredentials)
+	require.True(t, ok)
 	assert.Equal(t, "lifecycle-project", gcpCreds.ProjectID)
 	assert.Equal(t, "lifecycle-adc-token", gcpCreds.AccessToken)
 
@@ -538,7 +540,8 @@ func TestADC_ProjectIdentity_EmptyRealm_FullLifecycle(t *testing.T) {
 	loadedCreds, err := id.LoadCredentials(ctx)
 	require.NoError(t, err)
 	require.NotNil(t, loadedCreds)
-	loadedGCP := loadedCreds.(*types.GCPCredentials)
+	loadedGCP, ok := loadedCreds.(*types.GCPCredentials)
+	require.True(t, ok)
 	assert.Equal(t, "lifecycle-project", loadedGCP.ProjectID)
 	assert.Empty(t, loadedGCP.AccessToken, "LoadCredentials returns only project, no stored token")
 }
@@ -564,7 +567,8 @@ func TestADC_ProjectIdentity_RealmIndependent(t *testing.T) {
 
 			creds, err := id.Authenticate(context.Background(), adcCreds)
 			require.NoError(t, err)
-			gcpCreds := creds.(*types.GCPCredentials)
+			gcpCreds, ok := creds.(*types.GCPCredentials)
+			require.True(t, ok)
 			assert.Equal(t, "realm-test-project", gcpCreds.ProjectID)
 			assert.Equal(t, "test-token", gcpCreds.AccessToken)
 

@@ -573,6 +573,7 @@ func TestAuthenticate_ExplicitProjectID(t *testing.T) {
 	result, err := id.Authenticate(context.Background(), baseCreds)
 	require.NoError(t, err)
 
+	require.IsType(t, &types.GCPCredentials{}, result)
 	gcpCreds := result.(*types.GCPCredentials)
 	assert.Equal(t, "explicit-project", gcpCreds.ProjectID)
 }
@@ -992,6 +993,7 @@ func TestADC_ServiceAccount_AutoRealm_WithImpersonation(t *testing.T) {
 	loaded, err := id.LoadCredentials(context.Background())
 	require.NoError(t, err)
 	require.NotNil(t, loaded)
+	require.IsType(t, &types.GCPCredentials{}, loaded)
 	loadedGCP := loaded.(*types.GCPCredentials)
 	assert.Equal(t, "auto-realm-token", loadedGCP.AccessToken)
 
@@ -1076,10 +1078,12 @@ func TestADC_ServiceAccount_MultipleAccounts_IsolatedByAutoRealm(t *testing.T) {
 	// Load and verify each has its own token.
 	loaded1, err := id1.LoadCredentials(ctx)
 	require.NoError(t, err)
+	require.IsType(t, &types.GCPCredentials{}, loaded1)
 	assert.Equal(t, "dev-token", loaded1.(*types.GCPCredentials).AccessToken)
 
 	loaded2, err := id2.LoadCredentials(ctx)
 	require.NoError(t, err)
+	require.IsType(t, &types.GCPCredentials{}, loaded2)
 	assert.Equal(t, "prod-token", loaded2.(*types.GCPCredentials).AccessToken)
 
 	// Logout dev — should not affect prod.
