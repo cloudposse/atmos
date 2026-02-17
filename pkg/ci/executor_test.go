@@ -3,6 +3,7 @@ package ci
 import (
 	"context"
 	"embed"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -1008,12 +1009,26 @@ func TestBuildCheckSummary(t *testing.T) {
 }
 
 func TestResolveCheckResult(t *testing.T) {
-	ctx := &actionContext{
-		Result: &plugin.OutputResult{HasChanges: true},
-	}
-	status, conclusion := resolveCheckResult(ctx)
-	assert.Equal(t, provider.CheckRunStateSuccess, status)
-	assert.Equal(t, "success", conclusion)
+	t.Run("success when no command error", func(t *testing.T) {
+		ctx := &actionContext{
+			Result: &plugin.OutputResult{HasChanges: true},
+		}
+		status, conclusion := resolveCheckResult(ctx)
+		assert.Equal(t, provider.CheckRunStateSuccess, status)
+		assert.Equal(t, "success", conclusion)
+	})
+
+	t.Run("failure when command error is set", func(t *testing.T) {
+		ctx := &actionContext{
+			Opts: ExecuteOptions{
+				CommandError: fmt.Errorf("terraform plan failed"),
+			},
+			Result: &plugin.OutputResult{HasErrors: true},
+		}
+		status, conclusion := resolveCheckResult(ctx)
+		assert.Equal(t, provider.CheckRunStateFailure, status)
+		assert.Equal(t, "failure", conclusion)
+	})
 }
 
 func TestBuildCheckRunKey(t *testing.T) {

@@ -131,18 +131,23 @@ func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckR
 func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.UpdateCheckRun")()
 	var uiMethod func(format string, a ...interface{})
+	var verb string
 	switch opts.Status {
 	case provider.CheckRunStateSuccess:
 		uiMethod = ui.Successf
+		verb = "completed"
 	case provider.CheckRunStateFailure, provider.CheckRunStateError:
 		uiMethod = ui.Errorf
+		verb = "failed"
 	case provider.CheckRunStateCancelled:
 		uiMethod = ui.Warningf
+		verb = "cancelled"
 	default:
 		uiMethod = ui.Infof
+		verb = "updated"
 	}
 
-	uiMethod("Check run completed: %s [%s]", opts.Name, opts.Status)
+	uiMethod("Check run %s: %s [%s]", verb, opts.Name, opts.Status)
 
 	if opts.Title != "" {
 		uiMethod("  Title: %s", opts.Title)

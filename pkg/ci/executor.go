@@ -43,6 +43,10 @@ type ExecuteOptions struct {
 	// ForceCIMode forces CI mode even if environment detection fails.
 	// This is set when --ci flag is used.
 	ForceCIMode bool
+
+	// CommandError is the error from the command execution, if any.
+	// When set, check runs are updated with failure status.
+	CommandError error
 }
 
 // actionContext holds all context needed to execute a CI action.
@@ -663,7 +667,11 @@ func buildCheckRunKey(ctx *actionContext) string {
 
 // resolveCheckResult determines the check run status and conclusion from the action context.
 func resolveCheckResult(ctx *actionContext) (provider.CheckRunState, string) {
-	// If the after hook is being called, the command completed without a fatal error.
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.resolveCheckResult")()
+
+	if ctx.Opts.CommandError != nil {
+		return provider.CheckRunStateFailure, "failure"
+	}
 	return provider.CheckRunStateSuccess, "success"
 }
 
