@@ -26,7 +26,15 @@ For complete Terraform/OpenTofu documentation, see:
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		return runHooks(h.BeforeTerraformPlan, cmd, args)
 	},
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(cmd *cobra.Command, args []string) (runErr error) {
+		// On failure, run after hooks with error context so CI check runs
+		// are updated to failure status. Cobra skips PostRunE on error.
+		defer func() {
+			if runErr != nil {
+				runHooksOnError(h.AfterTerraformPlan, cmd, args, runErr)
+			}
+		}()
+
 		v := viper.GetViper()
 
 		// Bind both parent and subcommand parsers.

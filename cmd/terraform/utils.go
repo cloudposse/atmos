@@ -29,6 +29,32 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 	return runHooksWithOutput(event, cmd_, args, "")
 }
 
+// runHooksOnError runs CI hooks with command error context.
+// Used to update check runs to failure status when RunE fails
+// (Cobra skips PostRunE on error, so this must be called explicitly).
+func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error) {
+	finalArgs := append([]string{cmd_.Name()}, args...)
+
+	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
+	if err != nil {
+		return
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return
+	}
+
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	if err := h.RunCIHooks(event, &atmosConfig, &info, "", forceCIMode, cmdErr); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+	}
+}
+
 func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
 	// Build args for ProcessCommandLineArgs.
 	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
@@ -73,7 +99,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
-	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode); err != nil {
+	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, nil); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
 		// Don't fail the command on CI hook errors.
 	}
@@ -168,15 +194,7 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 // executeSingleComponent executes terraform for a single component.
 func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	err := e.ExecuteTerraform(*info)
-	if err != nil {
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			errUtils.CheckErrorAndPrint(err, "", "")
-			return err
-		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-	return nil
+	return e.ExecuteTerraform(*info)
 }
 
 // newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent

@@ -111,7 +111,8 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 // This is called automatically during command execution if CI is enabled.
 // The output parameter is the command output to process (e.g., terraform plan output).
 // The forceCIMode parameter forces CI mode even when environment detection fails (--ci flag).
-func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string, forceCIMode bool) error {
+// The cmdErr parameter is the error from the command execution (nil on success).
+func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string, forceCIMode bool, cmdErr error) error {
 	defer perf.Track(atmosConfig, "hooks.RunCIHooks")()
 
 	log.Debug("Running CI hooks", "event", event, "force_ci", forceCIMode)
@@ -124,10 +125,11 @@ func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *s
 
 	// Execute CI actions based on provider bindings.
 	return ci.Execute(ci.ExecuteOptions{
-		Event:       string(event),
-		AtmosConfig: atmosConfig,
-		Info:        info,
-		Output:      output,
-		ForceCIMode: forceCIMode,
+		Event:        string(event),
+		AtmosConfig:  atmosConfig,
+		Info:         info,
+		Output:       output,
+		ForceCIMode:  forceCIMode,
+		CommandError: cmdErr,
 	})
 }
