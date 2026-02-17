@@ -1,0 +1,212 @@
+package ai
+
+import (
+	"context"
+	"fmt"
+	"path/filepath"
+	"time"
+
+	"github.com/spf13/cobra"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ai"
+	"github.com/cloudposse/atmos/pkg/ai/memory"
+	"github.com/cloudposse/atmos/pkg/ai/session"
+	"github.com/cloudposse/atmos/pkg/ai/tools"
+	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
+	"github.com/cloudposse/atmos/pkg/ai/tui"
+	cfg "github.com/cloudposse/atmos/pkg/config"
+	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+// getProviderFromConfig returns the current provider from configuration.
+func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
+	if atmosConfig.Settings.AI.DefaultProvider != "" {
+		return atmosConfig.Settings.AI.DefaultProvider
+	}
+	return "anthropic"
+}
+
+// getModelFromConfig returns the model for the current provider from configuration.
+func getModelFromConfig(atmosConfig *schema.AtmosConfiguration) string {
+	provider := getProviderFromConfig(atmosConfig)
+	if providerConfig, err := ai.GetProviderConfig(atmosConfig, provider); err == nil {
+		return providerConfig.Model
+	}
+	return ""
+}
+
+// aiChatCmd represents the ai chat command.
+var chatCmd = &cobra.Command{
+	Use:   "chat",
+	Short: "Start interactive AI chat session",
+	Long: `Start an interactive chat session with the Atmos AI assistant.
+
+This opens a terminal-based chat interface where you can ask questions about your
+Atmos configuration, get help with infrastructure management, and receive guidance
+on best practices.
+
+The AI assistant has access to your current Atmos configuration and can help with:
+- Explaining Atmos concepts
+- Analyzing your specific components and stacks
+- Suggesting optimizations
+- Debugging configuration issues
+- Providing implementation guidance`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		// Initialize configuration.
+		configAndStacksInfo := schema.ConfigAndStacksInfo{}
+		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
+		if err != nil {
+			return err
+		}
+
+		// Check if AI is enabled.
+		if !isAIEnabled(&atmosConfig) {
+			return fmt.Errorf("%w: Set 'settings.ai.enabled: true' in your atmos.yaml configuration",
+				errUtils.ErrAINotEnabled)
+		}
+
+		log.Debug("Starting AI chat session")
+
+		// Create AI client using factory.
+		client, err := ai.NewClient(&atmosConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create AI client: %w", err)
+		}
+
+		// Initialize session management if enabled.
+		var manager *session.Manager
+		var sess *session.Session
+		var storage session.Storage
+
+		if atmosConfig.Settings.AI.Sessions.Enabled {
+			// Initialize session storage.
+			storagePath := getSessionStoragePath(&atmosConfig)
+			storage, err = session.NewSQLiteStorage(storagePath)
+			if err != nil {
+				return fmt.Errorf("failed to initialize session storage: %w", err)
+			}
+			defer storage.Close()
+
+			// Create session manager.
+			manager = session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions, &atmosConfig)
+
+			// Check for --session flag.
+			sessionName, _ := cmd.Flags().GetString("session")
+
+			ctx := context.Background()
+			if sessionName != "" {
+				// Try to resume existing session.
+				sess, err = manager.GetSessionByName(ctx, sessionName)
+				if err != nil {
+					// Session doesn't exist, create new one.
+					log.Debug(fmt.Sprintf("Session '%s' not found, creating new session", sessionName))
+					sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), "", nil)
+					if err != nil {
+						return fmt.Errorf("failed to create session: %w", err)
+					}
+					log.Debug(fmt.Sprintf("Created new session: %s", sessionName))
+				} else {
+					log.Debug(fmt.Sprintf("Resumed session: %s (%d messages)", sess.Name, 0))
+				}
+			} else {
+				// Create anonymous session with timestamp.
+				sessionName = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
+				sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), "", nil)
+				if err != nil {
+					return fmt.Errorf("failed to create session: %w", err)
+				}
+				log.Debug(fmt.Sprintf("Created new session: %s", sessionName))
+			}
+		}
+
+		// Initialize tool registry and executor if tools are enabled.
+		var executor *tools.Executor
+		if atmosConfig.Settings.AI.Tools.Enabled {
+			_, executor, err = initializeAIToolsAndExecutor(&atmosConfig)
+			if err != nil {
+				log.Warn(fmt.Sprintf("Failed to initialize AI tools: %v", err))
+			}
+		}
+
+		// Initialize project memory if enabled.
+		ctx := context.Background()
+		var memoryMgr *memory.Manager
+		if atmosConfig.Settings.AI.Memory.Enabled {
+			log.Debug("Initializing project memory")
+
+			// Create memory config.
+			memConfig := &memory.Config{
+				Enabled:      atmosConfig.Settings.AI.Memory.Enabled,
+				FilePath:     atmosConfig.Settings.AI.Memory.FilePath,
+				AutoUpdate:   atmosConfig.Settings.AI.Memory.AutoUpdate,
+				CreateIfMiss: atmosConfig.Settings.AI.Memory.CreateIfMiss,
+				Sections:     atmosConfig.Settings.AI.Memory.Sections,
+			}
+
+			// Create memory manager.
+			memoryMgr = memory.NewManager(atmosConfig.BasePath, memConfig)
+
+			// Load memory (creates default if missing and CreateIfMiss is true).
+			_, err := memoryMgr.Load(ctx)
+			if err != nil {
+				log.Warn(fmt.Sprintf("Failed to load project memory: %v", err))
+				memoryMgr = nil // Disable memory on error
+			} else {
+				log.Debug("Project memory loaded successfully")
+			}
+		}
+
+		// Start chat TUI with session, tools, and memory.
+		if err := tui.RunChat(client, &atmosConfig, manager, sess, executor, memoryMgr); err != nil {
+			return fmt.Errorf("chat session failed: %w", err)
+		}
+
+		return nil
+	},
+}
+
+func init() {
+	aiCmd.AddCommand(chatCmd)
+
+	// Add session flag.
+	chatCmd.Flags().String("session", "", "Resume or create a named session")
+}
+
+// getSessionStoragePath returns the path to the session storage file.
+func getSessionStoragePath(atmosConfig *schema.AtmosConfiguration) string {
+	sessionPath := atmosConfig.Settings.AI.Sessions.Path
+	if sessionPath == "" {
+		sessionPath = ".atmos/sessions"
+	}
+
+	// If path is relative, make it relative to base path.
+	if !filepath.IsAbs(sessionPath) {
+		sessionPath = filepath.Join(atmosConfig.BasePath, sessionPath)
+	}
+
+	return filepath.Join(sessionPath, "sessions.db")
+}
+
+// getPermissionMode returns the permission mode from configuration.
+func getPermissionMode(atmosConfig *schema.AtmosConfiguration) permission.Mode {
+	if atmosConfig.Settings.AI.Tools.YOLOMode {
+		return permission.ModeYOLO
+	}
+
+	// Default behavior: require confirmation (prompt user).
+	// Users can opt-out by setting require_confirmation: false.
+	if atmosConfig.Settings.AI.Tools.RequireConfirmation == nil {
+		// Not set - default to prompting for security.
+		return permission.ModePrompt
+	}
+
+	if *atmosConfig.Settings.AI.Tools.RequireConfirmation {
+		// Explicitly set to true - prompt.
+		return permission.ModePrompt
+	}
+
+	// Explicitly set to false - opt-out of prompting.
+	return permission.ModeAllow
+}

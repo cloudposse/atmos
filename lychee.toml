@@ -11,7 +11,7 @@ verbose = "info"
 no_progress = true
 
 # Timeout for each request (seconds)
-timeout = 30
+timeout = 60
 
 # Retry failed requests
 max_retries = 3
@@ -40,6 +40,8 @@ exclude = [
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)
   "gnu\\.org",
+  # Linux Foundation specs (slow response times)
+  "refspecs\\.linuxfoundation\\.org",
   # Kubernetes.io (rate limits and connection resets in CI)
   "kubernetes\\.io",
   # Cloudinary image resizing proxy
@@ -62,6 +64,11 @@ exclude = [
   "img\\.shields\\.io/github/release/",
   # Atmos Pro redirects to sign-in page for unauthenticated users
   "atmos-pro\\.com",
-  # Kubernetes.io (frequent connection failures/timeouts)
-  "kubernetes\\.io",
+  # LF AI Foundation blog links (may change or be unavailable)
+  "lfaidata\\.foundation",
+  # Test data placeholder URLs (intentional)
+  "github\\.com/test/",
+  # Planned documentation paths (not yet published)
+  "file://.*/ai/skills",
+  "file://.*/ai/skill-marketplace",
 ]

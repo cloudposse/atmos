@@ -369,8 +369,27 @@ type AtmosSettings struct {
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+	// AI settings
+	AI AISettings `yaml:"ai,omitempty" json:"ai,omitempty" mapstructure:"ai"`
+	// LSP settings
+	LSP LSPSettings `yaml:"lsp,omitempty" json:"lsp,omitempty" mapstructure:"lsp"`
 	// Provision contains global defaults for provisioning.
 	Provision ProvisionSettings `yaml:"provision,omitempty" json:"provision,omitempty" mapstructure:"provision"`
+}
+
+// LSPSettings contains configuration for Language Server Protocol integration.
+type LSPSettings struct {
+	Enabled bool                  `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	Servers map[string]*LSPServer `yaml:"servers,omitempty" json:"servers,omitempty" mapstructure:"servers"`
+}
+
+// LSPServer contains configuration for a single LSP server.
+type LSPServer struct {
+	Command               string                 `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`                                              // Command to run (e.g., "yaml-language-server")
+	Args                  []string               `yaml:"args,omitempty" json:"args,omitempty" mapstructure:"args"`                                                       // Command arguments (e.g., ["--stdio"])
+	FileTypes             []string               `yaml:"filetypes,omitempty" json:"filetypes,omitempty" mapstructure:"filetypes"`                                        // Supported file types (e.g., ["yaml", "yml"])
+	RootPatterns          []string               `yaml:"root_patterns,omitempty" json:"root_patterns,omitempty" mapstructure:"root_patterns"`                            // Workspace root patterns (e.g., ["atmos.yaml", ".git"])
+	InitializationOptions map[string]interface{} `yaml:"initialization_options,omitempty" json:"initialization_options,omitempty" mapstructure:"initialization_options"` // Custom initialization options
 }
 
 // TelemetrySettings contains configuration for telemetry collection.

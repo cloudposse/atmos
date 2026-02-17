@@ -1,0 +1,47 @@
+---
+title: IDE Integration
+sidebar_position: 1
+sidebar_label: IDE Integration
+sidebar_class_name: hidden
+description: IDE integration for Atmos using Language Server Protocol (LSP)
+id: lsp
+---
+import Experimental from '@site/src/components/Experimental'
+
+# IDE Integration
+
+<Experimental />
+
+Atmos provides a Language Server Protocol (LSP) server for seamless IDE integration, enabling real-time validation, intelligent autocomplete, and enhanced developer experience when working with Atmos configurations.
+
+## Features
+
+The **Atmos LSP Server** enables IDE and editor integration for Atmos stack files. Your IDE connects to Atmos to get:
+
+- **Real-time validation** - Syntax and schema errors as you type
+- **Intelligent autocomplete** - Component names, variables, imports
+- **Hover documentation** - Inline docs for configuration options
+- **Go to definition** - Navigate to component and import sources
+
+## Supported Editors
+
+- **VS Code** - Full support via extension
+- **Neovim** - Native LSP support
+- **Zed** - Built-in LSP support
+- **Any LSP-compatible editor** - Standard LSP protocol
+
+## Quick Start
+
+Start the LSP server for your IDE:
+
+```bash
+atmos lsp --stdio
+```
+
+Configure your editor to use Atmos LSP for `.yaml` files in your stacks directory.
+
+[Learn more about LSP Server configuration →](/lsp/lsp-server)
+
+:::tip Related: AI Validation
+Atmos AI uses an [LSP Client](/lsp/lsp-client) internally to connect to external language servers (yaml-ls, terraform-ls) for enhanced validation. This is an internal feature - see the [Atmos AI](/ai) documentation for more details.
+:::

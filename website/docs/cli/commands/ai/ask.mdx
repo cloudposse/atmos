@@ -1,0 +1,256 @@
+---
+title: atmos ai ask
+sidebar_label: ask
+sidebar_class_name: command
+id: ask
+description: Ask the AI assistant a question directly from the command line
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to ask the AI assistant a specific question and get an immediate response, without entering an interactive chat session.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos ai ask --help" slug="atmos-ai-ask--help" />
+
+## Description
+
+The `atmos ai ask` command allows you to ask questions directly from the command line. The AI assistant analyzes your question in the context of your Atmos configuration and provides a detailed response.
+
+This is ideal for:
+- Quick one-off questions
+- Scripting and automation
+- Getting specific information without interactive mode
+- CI/CD pipeline integration
+
+## Usage
+
+```shell
+atmos ai ask [question]
+```
+
+## Arguments
+
+<dl>
+  <dt>`question`</dt>
+  <dd>The question to ask the AI assistant (required). Use quotes for multi-word questions.</dd>
+</dl>
+
+## Configuration
+
+Configure one or more AI providers in your `atmos.yaml`. The `default_provider` is used for the `ask` command:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"  # Provider used for 'atmos ai ask'
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+      # Add other providers as needed
+```
+
+Set the appropriate environment variable for your chosen provider:
+
+```shell
+export ANTHROPIC_API_KEY="your-key"        # For Anthropic
+export OPENAI_API_KEY="your-key"           # For OpenAI
+export GEMINI_API_KEY="your-key"           # For Google Gemini
+export XAI_API_KEY="your-key"              # For xAI Grok
+export OLLAMA_API_KEY="your-key"           # For Ollama (optional for local)
+# AWS Bedrock uses AWS SDK default credentials (no separate API key)
+export AZURE_OPENAI_API_KEY="your-key"     # For Azure OpenAI
+```
+
+**Note:** The `ask` command uses the provider specified in `default_provider`. To use a different provider, either change the `default_provider` setting or use [`atmos ai chat`](/cli/commands/ai/chat) which allows switching providers with `Ctrl+P`.
+
+### Flags
+
+<dl>
+  <dt>`--include <pattern>`</dt>
+  <dd>Add glob patterns to include in context (can be repeated)</dd>
+
+  <dt>`--exclude <pattern>`</dt>
+  <dd>Add glob patterns to exclude from context (can be repeated)</dd>
+
+  <dt>`--no-auto-context`</dt>
+  <dd>Disable automatic context discovery</dd>
+
+  <dt>`--no-tools`</dt>
+  <dd>Disable tool execution for faster, simpler queries</dd>
+</dl>
+
+## Examples
+
+### General Atmos Questions
+
+<Terminal title="atmos ai ask">
+```console
+$ atmos ai ask "What are Atmos stacks?"
+
+👽 Thinking...
+
+Atmos stacks are configurations that define how components are deployed
+across different environments. A stack is essentially a YAML file that
+specifies:
+
+1. Which components to deploy
+2. Variable values for those components
+3. Environment-specific settings
+4. Stack inheritance relationships
+
+Stacks enable you to:
+- Manage multiple environments (dev, staging, prod)
+- Share common configurations across environments
+- Override settings for specific use cases
+- Organize infrastructure logically
+```
+</Terminal>
+
+### Configuration-Specific Questions
+
+<Terminal title="atmos ai ask">
+```console
+$ atmos ai ask "List all available components"
+
+👽 Thinking...
+
+Based on your configuration, here are the available components:
+
+1. vpc - Virtual Private Cloud networking
+2. eks - Elastic Kubernetes Service cluster
+3. rds - Relational Database Service
+4. s3-bucket - S3 storage bucket
+...
+```
+</Terminal>
+
+### Troubleshooting Questions
+
+<Terminal title="atmos ai ask">
+```console
+$ atmos ai ask "How do I validate my stack configuration?"
+
+👽 Thinking...
+
+To validate your stack configuration in Atmos:
+
+1. Validate all stacks:
+   atmos validate stacks
+
+2. Validate a specific component in a stack:
+   atmos validate component <component> -s <stack>
+
+3. Validate against a schema:
+   atmos validate schema
+
+The validation checks for:
+- YAML syntax errors
+- Missing required variables
+- Schema compliance
+- Component configuration correctness
+```
+</Terminal>
+
+### Component-Specific Questions
+
+```shell
+atmos ai ask "Describe the vpc component in the dev stack"
+atmos ai ask "What variables does the eks component require?"
+atmos ai ask "How is the rds component configured in production?"
+```
+
+### Best Practices Questions
+
+```shell
+atmos ai ask "What's the best way to organize my components?"
+atmos ai ask "How should I structure my stack inheritance?"
+atmos ai ask "What are the security best practices for Atmos?"
+```
+
+### Workflow Questions
+
+```shell
+atmos ai ask "How do I use workflows in Atmos?"
+atmos ai ask "What's the difference between terraform and helmfile components?"
+atmos ai ask "How do I vendor external components?"
+```
+
+## Advanced Usage
+
+### Using with Different Providers
+
+```shell
+# Anthropic Claude (advanced reasoning)
+export ANTHROPIC_API_KEY="your-key"
+atmos ai ask "Explain Atmos architecture in detail"
+
+# OpenAI GPT (strong general capabilities)
+export OPENAI_API_KEY="your-key"
+atmos ai ask "How do I optimize my stack structure?"
+
+# Google Gemini (fast, large context)
+export GEMINI_API_KEY="your-key"
+atmos ai ask "Review my entire configuration"
+
+# xAI Grok (real-time knowledge)
+export XAI_API_KEY="your-key"
+atmos ai ask "What are the latest Terraform best practices?"
+```
+
+### In Scripts and Automation
+
+```bash
+#!/bin/bash
+
+# Get AI assistance in a script
+response=$(atmos ai ask "What components are affected by changes to networking?")
+echo "$response"
+
+# Use in CI/CD
+if atmos validate stacks; then
+  atmos ai ask "What's the recommended deployment order for these stacks?"
+fi
+```
+
+### Complex Multi-Part Questions
+
+```shell
+# Use quotes for multi-word questions
+atmos ai ask "How do I migrate from one cloud provider to another using Atmos?"
+
+# Ask about specific error messages
+atmos ai ask "I'm getting error 'component not found'. What does this mean and how do I fix it?"
+```
+
+## Output Format
+
+The command outputs:
+1. **Thinking indicator** - Shows the AI is processing
+2. **AI response header** - Identifies the response source
+3. **Formatted response** - Markdown-formatted answer with code blocks, lists, and emphasis
+
+## Comparison with Other Commands
+
+| Command | Use Case |
+|---------|----------|
+| `atmos ai ask` | One-off questions, scripting, quick answers |
+| `atmos ai chat` | Extended conversations, learning, exploration |
+| `atmos ai help` | Topic-specific documentation and guides |
+
+## Related Commands
+
+- [`atmos ai chat`](/cli/commands/ai/chat) - Start an interactive chat session
+- [`atmos ai help`](/cli/commands/ai/ai-help) - Get detailed help on specific topics

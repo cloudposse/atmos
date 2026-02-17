@@ -294,7 +294,10 @@ terraform:
 		{
 			name: "valid import custom",
 			setup: func(t *testing.T, dir string, tc testCase) {
-				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports")
+				// Set up test adapters to enable import processing.
+				setupTestAdapters()
+				fixtureDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-cli-imports")
+				changeWorkingDir(t, fixtureDir)
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				require.NoError(t, err)
@@ -309,7 +312,9 @@ terraform:
 		{
 			name: "valid import custom override",
 			setup: func(t *testing.T, dir string, tc testCase) {
-				changeWorkingDir(t, "../../tests/fixtures/scenarios/atmos-cli-imports-override")
+				// Set up test adapters to enable import processing.
+				setupTestAdapters()
+				changeWorkingDir(t, filepath.Join("..", "..", "tests", "fixtures", "scenarios", "atmos-cli-imports-override"))
 			},
 			assertions: func(t *testing.T, tempDirPath string, cfg *schema.AtmosConfiguration, err error) {
 				assert.Equal(t, "foo", cfg.Commands[0].Name)

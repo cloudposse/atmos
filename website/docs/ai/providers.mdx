@@ -1,0 +1,2020 @@
+---
+title: AI Providers
+sidebar_position: 3
+sidebar_label: Providers
+description: Configure and use multiple AI providers with Atmos
+id: providers
+---
+import Terminal from '@site/src/components/Terminal'
+import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
+
+# AI Providers
+
+<Experimental />
+
+Atmos supports 7 AI providers, giving you flexibility to choose based on your needs: cloud services for convenience, local models for privacy, or enterprise solutions for compliance.
+
+## Supported Providers
+
+| Provider | Default Model | Authentication | Best For |
+|----------|---------------|----------------|----------|
+| **Anthropic (Claude)** | `claude-sonnet-4-5-20250929` | API Key | Advanced reasoning, default choice |
+| **OpenAI (GPT)** | `gpt-4o` | API Key | Widely available, strong general capabilities |
+| **Google (Gemini)** | `gemini-2.5-flash` | API Key | Fast responses, larger context window |
+| **xAI (Grok)** | `grok-4-latest` | API Key | OpenAI-compatible, real-time knowledge |
+| **Ollama (Local)** | `llama3.3:70b` | None (local) | Privacy, offline use, zero API costs |
+| **AWS Bedrock** | `anthropic.claude-sonnet-4-5-20250929-v1:0` | AWS Credentials | Enterprise security, AWS integration |
+| **Azure OpenAI** | `gpt-4o` | API Key / Azure AD | Enterprise compliance, Azure integration |
+
+## Feature Comparison
+
+Choose the right provider based on your requirements:
+
+| Feature | Cloud Providers<br/>(Claude, GPT, Gemini, Grok) | Ollama<br/>(Local) | Enterprise<br/>(Bedrock, Azure) |
+|---------|------------------------------------------|-------------------|------------------------------|
+| **Authentication** | API Key | None | AWS/Azure Credentials |
+| **Internet Required** | ✅ Yes | ❌ No | ✅ Yes |
+| **Cost** | Per-token pricing | Free | Per-token + cloud costs |
+| **Data Privacy** | Sent to provider | 100% local | Stays in your cloud |
+| **Rate Limits** | Yes | No | Yes (configurable) |
+| **Setup Complexity** | Easy | Medium | Complex |
+| **Offline Capable** | ❌ No | ✅ Yes | ❌ No |
+| **Compliance Certs** | Provider-dependent | N/A | SOC2, HIPAA, ISO |
+| **Private Network** | ❌ No | ✅ Yes | ✅ Yes (VPC/VNet) |
+| **Hardware Requirements** | None | 8-64GB+ RAM | None (cloud) |
+
+**Use Cases:**
+- **Cloud Providers**: Best for most users, easy setup, pay-as-you-go
+- **Ollama**: Ideal for sensitive data, offline work, unlimited queries
+- **Enterprise**: Required for compliance, data residency, private networks
+
+## Detailed Provider Comparison
+
+### Performance & Cost
+
+| Provider | Speed | Context Window | Approx. Cost (per 1M tokens) | Notes |
+|----------|-------|----------------|------------------------------|-------|
+| **Anthropic (Claude)** | Fast | 200K tokens | $3-$15 (input/output) | Best reasoning, longer responses |
+| **OpenAI (GPT)** | Very Fast | 128K tokens | $2.50-$10 (input/output) | Fast responses, strong general use |
+| **Google (Gemini)** | Very Fast | 2M tokens | $0.075-$0.30 (input/output) | Huge context, very economical |
+| **xAI (Grok)** | Fast | 128K tokens | Similar to GPT-4 | Real-time web knowledge |
+| **Ollama (Local)** | Varies | 128K tokens | $0 (hardware only) | Free, speed depends on hardware |
+| **AWS Bedrock** | Fast | 200K tokens | $3-$15 + AWS costs | Same models, AWS pricing |
+| **Azure OpenAI** | Fast | 128K tokens | $2.50-$10 + Azure costs | GPT models, enterprise features |
+
+:::tip Cost Optimization
+- **For budget**: Gemini (cheapest) or Ollama (free)
+- **For balanced cost/quality**: Claude Sonnet or GPT-4o
+- **For enterprise**: Bedrock or Azure OpenAI (with committed use discounts)
+- **Enable token caching**: Save up to 90% on repeated content (see below)
+:::
+
+### Token Caching (Prompt Caching)
+
+Token caching (also called "prompt caching") dramatically reduces costs by reusing frequently-sent content like system prompts and project memory. Instead of paying full price for the same tokens every message, cached tokens cost 90% less (Anthropic), 50% less (OpenAI/Azure), or are free (Gemini).
+
+**Cost Savings:**
+- **No caching**: Pay full price for system prompts and ATMOS.md content every message
+- **50% cache hit**: Save ~41% on total API costs
+- **90% cache hit**: Save ~74% on total API costs (typical with caching enabled)
+
+**Provider Support:**
+
+| Provider | Support | Implementation | Discount | Cache Duration | Configuration Required |
+|----------|---------|---------------|----------|----------------|----------------------|
+| **Anthropic** | ✅ YES | Manual markers | 90% | 5 minutes | ✅ Yes (see below) |
+| **OpenAI** | ✅ YES | **Automatic** | 50% | 5-10 minutes | ❌ **None** |
+| **Gemini** | ✅ YES | **Automatic** | Free (included) | Varies | ❌ **None** |
+| **Grok** | ✅ YES | **Automatic** (>90% hit rate) | 75% | Not specified | ❌ **None** |
+| **Bedrock** | ✅ YES | Simplified automatic | Up to 90% | 5 minutes | ❌ **None** |
+| **Azure OpenAI** | ✅ YES | **Automatic** | 50-100% | 5-10 minutes | ❌ **None** |
+| **Ollama** | N/A | Local (no API costs) | N/A | N/A | N/A |
+
+**6 of 7 providers support token caching!** Most providers implement caching automatically with no code changes required. Only Anthropic requires explicit cache configuration.
+
+#### Anthropic Configuration
+
+Anthropic requires explicit cache markers to indicate which content should be cached. By default, Atmos caches both the system prompt and your ATMOS.md project memory:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+
+        # Token caching (enabled by default)
+        cache:
+          enabled: true              # Enable prompt caching
+          cache_system_prompt: true  # Cache skill system prompt
+          cache_project_memory: true # Cache ATMOS.md content
+```
+</File>
+
+**How It Works:**
+1. First message: Creates cache entries for system prompt + ATMOS.md (normal cost)
+2. Subsequent messages: Reuses cached content (90% discount on cached tokens)
+3. Cache expires after 5 minutes of inactivity
+4. Cache automatically refreshes when you send another message
+
+**Cost Example:**
+- System prompt: 2,000 tokens
+- ATMOS.md content: 8,000 tokens
+- User message: 100 tokens
+- AI response: 500 tokens
+
+Without caching:
+- Input: 10,100 tokens × $3/1M = $0.0303
+- Output: 500 tokens × $15/1M = $0.0075
+- **Total: $0.0378 per message**
+
+With caching (90% cached):
+- Cached: 10,000 tokens × $0.30/1M = $0.0030 (90% discount)
+- Fresh: 100 tokens × $3/1M = $0.0003
+- Output: 500 tokens × $15/1M = $0.0075
+- **Total: $0.0108 per message (71% savings)**
+
+**Disabling Cache:**
+
+To disable caching completely:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        cache:
+          enabled: false  # Disable all caching
+```
+</File>
+
+To cache only system prompt (not project memory):
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        cache:
+          enabled: true
+          cache_system_prompt: true
+          cache_project_memory: false  # Don't cache ATMOS.md
+```
+</File>
+
+**When to Disable:**
+- Very short conversations (1-2 messages) where cache overhead exceeds savings
+- Rapidly changing system prompts or project memory
+- Cost monitoring during development
+
+#### Other Providers
+
+**OpenAI, Gemini, Grok, Azure OpenAI, Bedrock**: These providers implement automatic caching. Simply use them normally - caching happens transparently with no configuration required.
+
+For OpenAI specifically, caching activates automatically when:
+- Prompts exceed 1,024 tokens
+- Content is reused within 5-10 minutes
+
+**Ollama**: No caching configuration needed (local models have no API costs).
+
+:::tip Maximize Cache Savings
+For best results with Anthropic:
+- Enable both system prompt and project memory caching
+- Keep ATMOS.md content stable (avoid frequent updates during conversations)
+- Use named sessions for extended conversations on the same topic
+- Cache duration is 5 minutes - stay active to maintain cache
+
+For other providers, caching works automatically - just use the AI normally.
+:::
+
+### Privacy & Security
+
+| Provider | Data Location | Data Retention | Zero Data Retention Option | Compliance |
+|----------|---------------|----------------|---------------------------|------------|
+| **Anthropic** | US (cloud) | 30 days | ✅ Yes (opt-in) | SOC 2, GDPR |
+| **OpenAI** | US (cloud) | 30 days | ✅ Yes (opt-out required) | SOC 2, GDPR |
+| **Gemini** | US (cloud) | Per Google policy | ❌ Standard terms | SOC 2, GDPR |
+| **Grok** | US (cloud) | xAI policy | ❌ Standard terms | Standard |
+| **Ollama** | **Your machine** | **Never sent** | ✅ **100% local** | **Your control** |
+| **Bedrock** | **Your AWS region** | **Your control** | ✅ **Your VPC** | SOC 2, HIPAA, ISO |
+| **Azure OpenAI** | **Your Azure region** | **Your control** | ✅ **Your VNet** | SOC 2, HIPAA, ISO |
+
+:::warning Privacy Considerations
+- **Most private**: Ollama (never leaves your machine)
+- **Enterprise private**: Bedrock/Azure (stays in your cloud account)
+- **Cloud providers**: Data sent to third-party servers (check data retention policies)
+
+For sensitive infrastructure data, consider Ollama or enterprise providers.
+:::
+
+### Hardware Requirements
+
+| Provider | Local Hardware | Network | Best Environment |
+|----------|----------------|---------|------------------|
+| **Anthropic** | None | Internet required | Any |
+| **OpenAI** | None | Internet required | Any |
+| **Gemini** | None | Internet required | Any |
+| **Grok** | None | Internet required | Any |
+| **Ollama** | **8-64GB+ RAM**, CPU/GPU | **No internet needed** | Workstation/Server |
+| **Bedrock** | None | Internet + AWS access | Cloud/VPN to AWS |
+| **Azure OpenAI** | None | Internet + Azure access | Cloud/VPN to Azure |
+
+:::info Ollama Hardware Guide
+- **Small models** (8B params): 8GB RAM minimum
+- **Medium models** (13B-33B): 16-32GB RAM
+- **Large models** (70B): 64GB+ RAM, GPU recommended
+- **GPU acceleration**: 10-50x faster (NVIDIA/AMD/Metal)
+
+See [Ollama Setup](/ai/providers#ollama) for detailed requirements.
+:::
+
+## Quick Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"  # Provider for CLI commands
+
+    # Configure one or more providers
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+```
+</File>
+
+## Cloud Providers
+
+### Anthropic (Claude)
+
+**Best for**: Advanced reasoning, code generation, complex analysis, specialized agents
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  anthropic:
+    model: "claude-sonnet-4-5-20250929"  # Recommended (default)
+    # Alternatives:
+    # model: "claude-haiku-4-5-20251001"    # Fastest, most affordable
+    # model: "claude-opus-4-1-20250805"     # Most capable for specialized reasoning
+    # model: "claude-3-opus-20240229"       # Legacy model
+    # model: "claude-3-haiku-20240307"      # Legacy model
+    api_key_env: "ANTHROPIC_API_KEY"
+    max_tokens: 4096
+```
+</File>
+
+**Available Models (2025):**
+
+| Model | API ID | Context Window | Max Output | Pricing (per 1M tokens) | Best For |
+|-------|--------|----------------|------------|-------------------------|----------|
+| **Claude Sonnet 4.5** | `claude-sonnet-4-5-20250929` | 200K / 1M (beta) | 64K | $3 input / $15 output | Complex agents, coding, production (recommended) |
+| **Claude Haiku 4.5** | `claude-haiku-4-5-20251001` | 200K | 64K | $1 input / $5 output | Fast responses, high-volume tasks, budget-conscious |
+| **Claude Opus 4.1** | `claude-opus-4-1-20250805` | 200K | 32K | $15 input / $75 output | Specialized reasoning, critical tasks, highest accuracy |
+| **Claude 3 Opus** | `claude-3-opus-20240229` | 200K | 4K | $15 input / $75 output | Legacy model, still supported |
+| **Claude 3 Haiku** | `claude-3-haiku-20240307` | 200K | 4K | $0.25 input / $1.25 output | Legacy model, fastest |
+
+**Model Capabilities:**
+- ✅ Text and image input (multimodal)
+- ✅ Extended thinking for complex reasoning
+- ✅ Vision processing
+- ✅ Multilingual support
+- ✅ Code generation and analysis
+- ✅ Function calling and tool use
+
+**Aliases:** You can use short aliases like `claude-sonnet-4-5` instead of full model IDs.
+
+**Get API Key**: [console.anthropic.com](https://console.anthropic.com/)
+
+<Terminal title="shell">
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+</Terminal>
+
+:::tip Model Selection
+- **Production use**: Claude Sonnet 4.5 offers the best balance of performance, speed, and cost
+- **High-volume tasks**: Claude Haiku 4.5 provides near-frontier intelligence at lower cost
+- **Critical reasoning**: Claude Opus 4.1 delivers the highest accuracy for specialized tasks
+:::
+
+
+### OpenAI (GPT)
+
+**Best for**: General-purpose tasks, wide ecosystem support, logical and technical reasoning
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  openai:
+    model: "gpt-4o"  # Recommended (default)
+    # Reasoning models (best for complex, multi-step tasks):
+    # model: "o1"              # Flagship reasoning model
+    # model: "o1-mini"         # Faster, more affordable reasoning
+    # model: "o1-nano"         # Fastest reasoning model
+    # Multimodal models:
+    # model: "gpt-4o"          # Smartest multimodal model
+    # model: "gpt-4o-mini"     # Fast and affordable
+    # Legacy models:
+    # model: "gpt-4-turbo"     # Previous generation
+    # model: "gpt-3.5-turbo"   # Older, cheaper
+    api_key_env: "OPENAI_API_KEY"
+    max_tokens: 4096
+```
+</File>
+
+**Available Models (2025):**
+
+| Model Family | Model ID | Context Window | Best For | Notes |
+|--------------|----------|----------------|----------|-------|
+| **Reasoning Models** | | | | |
+| o1 | `o1` | 200K | Complex multi-step tasks, STEM, coding | Flagship reasoning model |
+| o1 mini | `o1-mini` | 200K | Faster reasoning tasks | Balance of power & performance |
+| o1 nano | `o1-nano` | - | Simple tasks, classification | Fastest & most affordable |
+| **Multimodal LLMs** | | | | |
+| GPT-4o | `gpt-4o` | 128K | General-purpose, multimodal tasks | Recommended (default) |
+| GPT-4o mini | `gpt-4o-mini` | - | Fast, simple queries | Affordable option |
+| **Legacy Models** | | | | |
+| GPT-4 Turbo | `gpt-4-turbo` | 128K | Previous generation | Still supported |
+| GPT-3.5 Turbo | `gpt-3.5-turbo` | 16K | Basic tasks | Cheapest option |
+
+**Model Selection Guide:**
+- **For everyday tasks**: GPT-4o or GPT-4o mini (multimodal LLMs)
+- **For complex reasoning**: o1 (large) or o1-mini (small) models
+- **For STEM use cases**: o1 reasoning models excel at math, code, and scientific tasks
+- **For budget**: GPT-3.5-turbo or o1-nano
+
+**Get API Key**: [platform.openai.com/api-keys](https://platform.openai.com/api-keys)
+
+<Terminal title="shell">
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+</Terminal>
+
+:::info Max Tokens Parameter
+OpenAI's newer models (o1, o1-mini, o1-nano, chatgpt-4o-latest) use `max_completion_tokens` instead of `max_tokens` in their API. Atmos automatically handles this difference based on the model you configure - just use `max_tokens` in your configuration and Atmos will use the correct parameter for your model.
+:::
+
+### Google (Gemini)
+
+**Best for**: Fast responses, large context windows, cost-effective AI at scale
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  gemini:
+    model: "gemini-2.5-flash"  # Recommended (default)
+    # Current generation (2.5 series - June 2025):
+    # model: "gemini-2.5-pro"          # Best reasoning, code, math, STEM
+    # model: "gemini-2.5-flash"        # Best price-performance (recommended)
+    # model: "gemini-2.5-flash-lite"   # Fastest, most cost-efficient
+    # Previous generation (2.0 series):
+    # model: "gemini-2.5-flash"    # Experimental flash model
+    # Legacy models (1.5 series):
+    # model: "gemini-1.5-pro"          # Previous pro model
+    # model: "gemini-1.5-flash"        # Previous flash model
+    api_key_env: "GEMINI_API_KEY"
+    max_tokens: 8192
+```
+</File>
+
+**Available Models (2025):**
+
+| Model | Model ID | Context Window | Max Output | Best For | Knowledge Cutoff |
+|-------|----------|----------------|------------|----------|------------------|
+| **Current Generation (2.5)** | | | | | |
+| Gemini 2.5 Pro | `gemini-2.5-pro` | 1M tokens | 8K tokens | Complex reasoning, code, math, STEM | Jan 2025 |
+| Gemini 2.5 Flash | `gemini-2.5-flash` | 1M tokens | 8K tokens | Best price-performance, large-scale processing (recommended) | Jan 2025 |
+| Gemini 2.5 Flash-Lite | `gemini-2.5-flash-lite` | 1M tokens | 8K tokens | Fastest, most cost-efficient, high throughput | Jan 2025 |
+| **Previous Generation (2.0)** | | | | | |
+| Gemini 2.0 Flash | `gemini-2.5-flash` | 1M tokens | 8K tokens | Experimental fast model | Nov 2024 |
+| **Legacy Models (1.5)** | | | | | |
+| Gemini 1.5 Pro | `gemini-1.5-pro` | 2M tokens | 8K tokens | Previous generation pro model | Earlier 2024 |
+| Gemini 1.5 Flash | `gemini-1.5-flash` | 1M tokens | 8K tokens | Previous generation flash model | Earlier 2024 |
+
+**Model Capabilities:**
+- ✅ Code execution
+- ✅ Function calling
+- ✅ Structured outputs
+- ✅ Search grounding
+- ✅ Batch API support
+- ✅ Caching for cost reduction
+
+**Model Selection Guide:**
+- **For best reasoning**: Gemini 2.5 Pro - state-of-the-art for complex problems
+- **For production use**: Gemini 2.5 Flash - best balance of cost and performance (recommended)
+- **For high throughput**: Gemini 2.5 Flash-Lite - fastest with lowest latency
+- **For massive contexts**: Gemini 1.5 Pro - supports up to 2M tokens
+
+**Get API Key**: [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+
+<Terminal title="shell">
+```bash
+export GEMINI_API_KEY="AI..."
+```
+</Terminal>
+
+:::tip Cost-Effective AI
+Gemini models offer the most economical pricing ($0.075-$0.30 per 1M tokens) while maintaining high quality. Gemini 2.5 Flash provides excellent performance at a fraction of the cost of comparable models from other providers.
+:::
+
+### xAI (Grok)
+
+**Best for**: OpenAI-compatible alternative, real-time information, reasoning tasks
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  grok:
+    model: "grok-4-latest"  # Currently the only working model via API
+    api_key_env: "XAI_API_KEY"
+    max_tokens: 4096
+    base_url: "https://api.x.ai/v1"
+```
+</File>
+
+**Available Models (2025):**
+
+| Model | API Model ID | Context Window | Features | Best For |
+|-------|--------------|----------------|----------|----------|
+| Grok 4 (Latest) | `grok-4-latest` | 2M tokens | Tool use, real-time search, auto-updates | Production use (currently only working model via API) |
+
+**Pricing:** Grok 4: $3 input / $15 output per 1M tokens | Cached tokens: $0.75 per 1M tokens
+
+**Model Capabilities:**
+- ✅ Native tool use (Grok 4)
+- ✅ Real-time search integration
+- ✅ 2M token context window (Grok 4, Grok 4 Fast)
+- ✅ Cached prompt tokens for cost reduction
+- ✅ OpenAI-compatible API
+- ✅ Text-to-image generation (Grok 2 Image)
+
+**Model Naming Convention:**
+- `grok-4-latest` - Auto-updated to latest stable version (currently the only working model via API)
+
+:::warning Model Availability
+As of 2025, only `grok-4-latest` is accessible via the xAI API. Other models like `grok-4-0709`, `grok-beta`, and `grok-vision-beta` are mentioned in xAI's documentation but return "Model not found" errors when used.
+:::
+
+**Key Features:**
+- **2M token context window** (Grok 4 models)
+- **Real-time search integration** - access to current information
+- **Prompt caching** - 75% cost reduction on cached tokens ($0.75 vs $3 per 1M)
+- **OpenAI-compatible API** - easy migration
+
+**Get API Key**: [console.x.ai](https://console.x.ai)
+
+<Terminal title="shell">
+```bash
+export XAI_API_KEY="xai-..."
+```
+</Terminal>
+
+:::tip Real-Time Knowledge
+Grok models have access to real-time information through integrated search capabilities, making them excellent for queries requiring current data and recent events.
+:::
+
+:::info Performance Considerations
+Grok 4 may exhibit slower response times (20+ seconds) with tool-heavy workloads compared to Anthropic, OpenAI, or Gemini. For interactive AI sessions requiring faster responses, consider using Claude Sonnet 4.5 or Gemini 2.5 Flash as your default provider.
+:::
+
+## Local Provider
+
+### Ollama
+
+**Best for**: Privacy, offline use, zero API costs, full data control
+
+Ollama runs AI models entirely on your machine - no data leaves your computer.
+
+**Benefits:**
+- **Complete Privacy**: All processing happens locally
+- **Offline Capable**: Works without internet connection
+- **Zero API Costs**: No usage fees after initial setup
+- **No Rate Limits**: Query as much as your hardware allows
+- **Customizable**: Use any Ollama-supported model
+
+#### Installation
+
+**macOS:**
+
+<Terminal title="shell">
+```bash
+# Download and install from ollama.com, or use Homebrew:
+brew install ollama
+
+# Start Ollama service
+ollama serve
+```
+</Terminal>
+
+**Linux:**
+
+<Terminal title="shell">
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Ollama starts automatically as a service
+# Check status: systemctl status ollama
+```
+</Terminal>
+
+**Windows:**
+
+Download the installer from [ollama.com/download](https://ollama.com/download) and run it. Ollama starts automatically.
+
+**Docker:**
+
+<Terminal title="shell">
+```bash
+# Run Ollama in Docker
+docker run -d \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  --name ollama \
+  ollama/ollama
+
+# For GPU support (NVIDIA):
+docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  --name ollama \
+  ollama/ollama
+```
+</Terminal>
+
+#### Model Selection
+
+Choose based on your hardware and quality needs:
+
+| Model | Model ID | Download Size | RAM Required | Performance | Quality | Best For |
+|-------|----------|---------------|--------------|-------------|---------|----------|
+| **Llama 3 Models** | | | | | | |
+| Llama 3.3 70B | `llama3.3:70b` | ~40GB | 64GB+ | Moderate | ⭐⭐⭐⭐⭐ Excellent | Production use, similar to llama3.1:405b (recommended) |
+| Llama 3.1 405B | `llama3.1:405b` | ~230GB | 256GB+ | Slow | ⭐⭐⭐⭐⭐ Excellent | Highest quality, large servers only |
+| Llama 3.1 70B | `llama3.1:70b` | ~40GB | 64GB+ | Moderate | ⭐⭐⭐⭐⭐ Excellent | Dialogue, instruction following, reasoning |
+| Llama 3.1 8B | `llama3.1:8b` | ~5GB | 8GB+ | Fast | ⭐⭐⭐ Good | Quick queries, limited hardware, laptops |
+| Llama 3.2 | `llama3.2` | ~2GB | 4GB+ | Very Fast | ⭐⭐ Fair | Simple tasks only |
+| **Code-Specialized** | | | | | | |
+| CodeLlama 34B | `codellama:34b` | ~19GB | 32GB+ | Moderate | ⭐⭐⭐⭐⭐ Excellent | Production-ready code, multi-file context |
+| CodeLlama 13B | `codellama:13b` | ~8GB | 16GB+ | Fast | ⭐⭐⭐⭐ Very Good | Code generation, development workflows |
+| **Mistral Models** | | | | | | |
+| Mixtral 8x7B | `mixtral:8x7b` | ~26GB | 32GB+ | Moderate | ⭐⭐⭐⭐ Very Good | Complex reasoning, balanced performance |
+| Mistral 7B v0.3 | `mistral:7b` | ~4GB | 8GB+ | Very Fast | ⭐⭐⭐ Good | Fast responses, consumer hardware, 45 tokens/sec |
+
+**Performance Benchmarks:**
+- **Mistral 7B**: 0.8s response time, 45 tokens/sec, 7GB memory
+- **CodeLlama 13B**: 1.8s response time, 28 tokens/sec, 12GB memory
+- **Llama 3.1 8B**: Best balance for beginners and production systems
+
+**Recommendations by Use Case:**
+- **Beginners**: Start with Mistral 7B (balanced performance & resources)
+- **Production**: Llama 3.1 8B (reliable, efficient)
+- **Development**: CodeLlama 13B (code-focused)
+- **High-end workstations**: Llama 3.3 70B (top quality)
+
+**Download a model:**
+
+<Terminal title="shell">
+```bash
+# Pull the recommended model
+ollama pull llama3.3:70b
+
+# Or choose a smaller model for limited hardware
+ollama pull llama3.1:8b
+
+# List available models
+ollama list
+
+# Remove a model
+ollama rm llama3.2:3b
+```
+</Terminal>
+
+:::tip Model Download Size
+Large models like `llama3.3:70b` are ~40GB downloads. Ensure you have sufficient disk space (~50GB free) and adequate RAM.
+:::
+
+#### Configuration
+
+Ollama can be deployed locally (on your workstation) or remotely (on a dedicated server) to save local disk space and computational resources.
+
+##### Local Deployment
+
+**Basic Local Setup (No API Key):**
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"
+    # base_url defaults to http://localhost:11434/v1
+    # No api_key_env needed for local instances
+```
+</File>
+
+**Custom Port:**
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"
+    base_url: "http://localhost:8080/v1"
+```
+</File>
+
+##### Remote Deployment
+
+Deploy Ollama on a remote server to offload storage and computation from your local machine.
+
+**Benefits of Remote Deployment:**
+- **Save Local Disk Space**: Models can be 40-200GB+ each
+- **Centralized Management**: One server, multiple users
+- **Better Hardware**: Use GPU servers optimized for AI
+- **Shared Models**: Avoid downloading models on every machine
+
+**Server Configuration:**
+
+Ollama by default only accepts connections from `localhost` (127.0.0.1). To enable remote access, configure the `OLLAMA_HOST` environment variable to listen on all interfaces:
+
+**Linux (systemd service):**
+
+<Terminal title="shell">
+```bash
+# Edit the service configuration
+sudo systemctl edit ollama.service
+
+# Add these lines in the editor:
+[Service]
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+
+# For production with CORS protection:
+Environment="OLLAMA_HOST=0.0.0.0:11434"
+Environment="OLLAMA_ORIGINS=https://trusted-domain.com,https://another-trusted.com"
+
+# Save and restart
+sudo systemctl daemon-reload
+sudo systemctl restart ollama.service
+
+# Verify it's listening on all interfaces
+sudo systemctl status ollama.service
+curl http://localhost:11434/api/version
+```
+</Terminal>
+
+**macOS:**
+
+<Terminal title="shell">
+```bash
+# Set environment variable for current session
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"
+
+# For production with CORS protection
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"
+launchctl setenv OLLAMA_ORIGINS "https://trusted-domain.com"
+
+# Restart Ollama application
+# (Quit and relaunch from Applications)
+
+# Verify
+curl http://localhost:11434/api/version
+```
+</Terminal>
+
+**Windows:**
+
+<Terminal title="shell">
+```powershell
+# Edit system environment variables
+# Open System Properties > Environment Variables
+
+# Add system variable:
+OLLAMA_HOST=0.0.0.0:11434
+
+# For production with CORS protection:
+OLLAMA_ORIGINS=https://trusted-domain.com,https://another-trusted.com
+
+# Restart Ollama application
+# Verify in PowerShell:
+curl http://localhost:11434/api/version
+```
+</Terminal>
+
+**Docker Deployment with Remote Access:**
+
+<Terminal title="shell">
+```bash
+# Basic remote server deployment
+docker run -d \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  --name ollama \
+  ollama/ollama
+
+# Production deployment with GPU and CORS
+docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  -e OLLAMA_ORIGINS=https://your-domain.com \
+  --restart unless-stopped \
+  --name ollama \
+  ollama/ollama
+
+# Verify the server is accessible
+curl http://<server-ip>:11434/api/version
+```
+</Terminal>
+
+##### Cloud Provider Deployment
+
+Deploy Ollama to AWS, Azure, or Google Cloud for scalable, managed infrastructure.
+
+###### AWS Deployment
+
+**Option 1: EC2 Instance (Recommended for GPU workloads)**
+
+Best for: GPU acceleration, full control, persistent workloads
+
+<Terminal title="shell">
+```bash
+# 1. Launch EC2 instance (choose GPU instance for better performance)
+# Instance types:
+#   - g5.xlarge (NVIDIA A10G, 24GB GPU, $1.006/hr) - Recommended for production
+#   - g4dn.xlarge (NVIDIA T4, 16GB GPU, $0.526/hr) - Cost-effective
+#   - t3.xlarge (4 vCPU, 16GB RAM, $0.1664/hr) - CPU-only, testing
+
+# 2. SSH into instance and install Ollama
+ssh -i your-key.pem ubuntu@<ec2-public-ip>
+
+# Install Docker
+sudo apt-get update
+sudo apt-get install -y docker.io
+
+# For GPU instances, install NVIDIA Docker runtime
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -s -L https://nvidia.github.io/nvidia-docker/gpgkey | sudo apt-key add -
+curl -s -L https://nvidia.github.io/nvidia-docker/$distribution/nvidia-docker.list | \
+  sudo tee /etc/apt/sources.list.d/nvidia-docker.list
+sudo apt-get update
+sudo apt-get install -y nvidia-docker2
+sudo systemctl restart docker
+
+# 3. Run Ollama with Docker
+sudo docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  --restart unless-stopped \
+  --name ollama \
+  ollama/ollama
+
+# 4. Configure security group to allow port 11434
+# AWS Console > EC2 > Security Groups > Add Inbound Rule:
+#   Type: Custom TCP
+#   Port: 11434
+#   Source: Your IP (for testing) or VPC CIDR (for production)
+
+# 5. Pull models
+sudo docker exec -it ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**Option 2: ECS/Fargate (Managed containers)**
+
+Best for: Serverless containers, automatic scaling, minimal ops
+
+<File title="task-definition.json">
+```json
+{
+  "family": "ollama-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "4096",
+  "memory": "16384",
+  "containerDefinitions": [
+    {
+      "name": "ollama",
+      "image": "ollama/ollama:latest",
+      "portMappings": [
+        {
+          "containerPort": 11434,
+          "protocol": "tcp"
+        }
+      ],
+      "environment": [
+        {
+          "name": "OLLAMA_HOST",
+          "value": "0.0.0.0:11434"
+        }
+      ],
+      "mountPoints": [
+        {
+          "sourceVolume": "ollama-data",
+          "containerPath": "/root/.ollama"
+        }
+      ]
+    }
+  ],
+  "volumes": [
+    {
+      "name": "ollama-data",
+      "efsVolumeConfiguration": {
+        "fileSystemId": "fs-xxxxx",
+        "transitEncryption": "ENABLED"
+      }
+    }
+  ]
+}
+```
+</File>
+
+<Terminal title="shell">
+```bash
+# Create EFS for persistent storage
+aws efs create-file-system --region us-east-1 --tags Key=Name,Value=ollama-storage
+
+# Register task definition
+aws ecs register-task-definition --cli-input-json file://task-definition.json
+
+# Create ECS service
+aws ecs create-service \
+  --cluster your-cluster \
+  --service-name ollama-service \
+  --task-definition ollama-task \
+  --desired-count 1 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={subnets=[subnet-xxx],securityGroups=[sg-xxx]}"
+```
+</Terminal>
+
+**Option 3: AWS Lightsail (Simplest setup)**
+
+Best for: Quick setup, fixed pricing, development/testing
+
+<Terminal title="shell">
+```bash
+# 1. Create Lightsail instance via AWS Console
+# Plan: 8 GB RAM, 2 vCPUs ($40/month) or higher
+
+# 2. SSH into instance
+ssh ubuntu@<lightsail-ip>
+
+# 3. Install and run Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+sudo systemctl edit ollama.service
+
+# Add environment configuration:
+# [Service]
+# Environment="OLLAMA_HOST=0.0.0.0:11434"
+
+sudo systemctl daemon-reload
+sudo systemctl restart ollama
+
+# 4. Open port 11434 in Lightsail firewall
+# Lightsail Console > Networking > Add rule: Custom TCP 11434
+```
+</Terminal>
+
+**AWS Cost Estimates:**
+- **EC2 g5.xlarge (GPU)**: ~$730/month (24/7)
+- **ECS Fargate (4vCPU/16GB)**: ~$180/month + EFS storage
+- **Lightsail (8GB)**: $40/month fixed
+
+###### Azure Deployment
+
+**Option 1: Virtual Machine (Recommended for GPU workloads)**
+
+Best for: GPU acceleration, full control, persistent workloads
+
+<Terminal title="shell">
+```bash
+# 1. Create VM with Azure CLI
+# VM sizes:
+#   - Standard_NC6s_v3 (NVIDIA V100, 112GB RAM, ~$3.06/hr) - High performance
+#   - Standard_NC4as_T4_v3 (NVIDIA T4, 28GB RAM, ~$0.526/hr) - Cost-effective
+#   - Standard_D4s_v3 (4 vCPU, 16GB RAM, ~$0.192/hr) - CPU-only
+
+az vm create \
+  --resource-group ollama-rg \
+  --name ollama-vm \
+  --image Ubuntu2204 \
+  --size Standard_NC4as_T4_v3 \
+  --admin-username azureuser \
+  --generate-ssh-keys
+
+# 2. Open port 11434
+az vm open-port --port 11434 --resource-group ollama-rg --name ollama-vm
+
+# 3. SSH and install
+ssh azureuser@<vm-public-ip>
+
+# Install Docker
+sudo apt-get update
+sudo apt-get install -y docker.io
+
+# For GPU VMs, install NVIDIA Docker
+distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+  sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' | \
+  sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+sudo apt-get update
+sudo apt-get install -y nvidia-container-toolkit
+sudo systemctl restart docker
+
+# 4. Run Ollama
+sudo docker run -d \
+  --gpus=all \
+  -v ollama:/root/.ollama \
+  -p 11434:11434 \
+  -e OLLAMA_HOST=0.0.0.0:11434 \
+  --restart unless-stopped \
+  --name ollama \
+  ollama/ollama
+
+# 5. Pull models
+sudo docker exec -it ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**Option 2: Container Instances (Managed containers)**
+
+Best for: Serverless containers, simple deployment, no cluster management
+
+<Terminal title="shell">
+```bash
+# Create container instance with Azure Files for persistence
+az container create \
+  --resource-group ollama-rg \
+  --name ollama-container \
+  --image ollama/ollama:latest \
+  --cpu 4 \
+  --memory 16 \
+  --ports 11434 \
+  --ip-address Public \
+  --environment-variables OLLAMA_HOST=0.0.0.0:11434 \
+  --azure-file-volume-account-name <storage-account> \
+  --azure-file-volume-account-key <key> \
+  --azure-file-volume-share-name ollama-data \
+  --azure-file-volume-mount-path /root/.ollama
+
+# Get public IP
+az container show --resource-group ollama-rg --name ollama-container --query ipAddress.ip --output tsv
+```
+</Terminal>
+
+**Option 3: Azure Kubernetes Service (AKS)**
+
+Best for: Production at scale, multi-tenant, advanced orchestration
+
+<File title="ollama-deployment.yaml">
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0:11434"
+        volumeMounts:
+        - name: ollama-storage
+          mountPath: /root/.ollama
+        resources:
+          requests:
+            memory: "16Gi"
+            cpu: "4"
+          limits:
+            nvidia.com/gpu: 1
+      volumes:
+      - name: ollama-storage
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-service
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 11434
+    targetPort: 11434
+  selector:
+    app: ollama
+```
+</File>
+
+<Terminal title="shell">
+```bash
+# Apply deployment
+kubectl apply -f ollama-deployment.yaml
+
+# Get external IP
+kubectl get service ollama-service
+```
+</Terminal>
+
+**Azure Cost Estimates:**
+- **VM Standard_NC4as_T4_v3 (GPU)**: ~$380/month (24/7)
+- **Container Instances (4vCPU/16GB)**: ~$175/month
+- **AKS**: Node costs + management (free control plane)
+
+###### Google Cloud Deployment
+
+**Option 1: Compute Engine (Recommended for GPU workloads)**
+
+Best for: GPU acceleration, full control, persistent workloads
+
+<Terminal title="shell">
+```bash
+# 1. Create VM instance with GPU
+# Machine types:
+#   - n1-standard-4 + NVIDIA T4 (~$0.35/hr GPU + $0.19/hr compute)
+#   - n1-standard-8 + NVIDIA V100 (~$2.48/hr GPU + $0.38/hr compute)
+#   - n2-standard-4 (4 vCPU, 16GB RAM, ~$0.19/hr) - CPU-only
+
+gcloud compute instances create ollama-instance \
+  --zone=us-central1-a \
+  --machine-type=n1-standard-4 \
+  --accelerator=type=nvidia-tesla-t4,count=1 \
+  --image-family=ubuntu-2004-lts \
+  --image-project=ubuntu-os-cloud \
+  --boot-disk-size=100GB \
+  --boot-disk-type=pd-ssd \
+  --maintenance-policy=TERMINATE \
+  --metadata=startup-script='#!/bin/bash
+    # Install NVIDIA drivers
+    curl https://raw.githubusercontent.com/GoogleCloudPlatform/compute-gpu-installation/main/linux/install_gpu_driver.py --output install_gpu_driver.py
+    sudo python3 install_gpu_driver.py
+
+    # Install Docker
+    curl -fsSL https://get.docker.com -o get-docker.sh
+    sudo sh get-docker.sh
+
+    # Install NVIDIA Container Toolkit
+    distribution=$(. /etc/os-release;echo $ID$VERSION_ID)
+    curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | sudo gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
+    curl -s -L https://nvidia.github.io/libnvidia-container/$distribution/libnvidia-container.list | \
+      sed "s#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g" | \
+      sudo tee /etc/apt/sources.list.d/nvidia-container-toolkit.list
+    sudo apt-get update
+    sudo apt-get install -y nvidia-container-toolkit
+    sudo systemctl restart docker
+
+    # Run Ollama
+    sudo docker run -d \
+      --gpus=all \
+      -v ollama:/root/.ollama \
+      -p 11434:11434 \
+      -e OLLAMA_HOST=0.0.0.0:11434 \
+      --restart unless-stopped \
+      --name ollama \
+      ollama/ollama
+  '
+
+# 2. Create firewall rule
+gcloud compute firewall-rules create allow-ollama \
+  --allow=tcp:11434 \
+  --source-ranges=0.0.0.0/0 \
+  --description="Allow Ollama API access"
+
+# 3. SSH into instance
+gcloud compute ssh ollama-instance --zone=us-central1-a
+
+# 4. Pull models
+sudo docker exec -it ollama ollama pull llama3.3:70b
+```
+</Terminal>
+
+**Option 2: Cloud Run (Serverless containers)**
+
+Best for: Serverless, auto-scaling, pay-per-use
+
+:::warning Cloud Run Limitations
+Cloud Run is best for stateless workloads. For Ollama, you'll need to:
+1. Pre-bake models into custom container image
+2. Use Cloud Storage for model persistence (slower startup)
+3. Consider cold start latency (30s-2min for large models)
+
+Not recommended for production Ollama deployments due to these limitations.
+:::
+
+<Terminal title="shell">
+```bash
+# Build custom image with pre-loaded model
+cat > Dockerfile <<EOF
+FROM ollama/ollama:latest
+RUN ollama serve & sleep 10 && ollama pull llama3.3:70b
+ENV OLLAMA_HOST=0.0.0.0:11434
+EXPOSE 11434
+CMD ["ollama", "serve"]
+EOF
+
+# Build and push to Container Registry
+docker build -t gcr.io/your-project/ollama:latest .
+docker push gcr.io/your-project/ollama:latest
+
+# Deploy to Cloud Run
+gcloud run deploy ollama \
+  --image gcr.io/your-project/ollama:latest \
+  --platform managed \
+  --region us-central1 \
+  --memory 16Gi \
+  --cpu 4 \
+  --port 11434 \
+  --allow-unauthenticated
+```
+</Terminal>
+
+**Option 3: Google Kubernetes Engine (GKE)**
+
+Best for: Production at scale, GPU workloads, advanced orchestration
+
+<Terminal title="shell">
+```bash
+# 1. Create GKE cluster with GPU node pool
+gcloud container clusters create ollama-cluster \
+  --zone=us-central1-a \
+  --machine-type=n1-standard-4 \
+  --num-nodes=1
+
+# Add GPU node pool
+gcloud container node-pools create gpu-pool \
+  --cluster=ollama-cluster \
+  --zone=us-central1-a \
+  --machine-type=n1-standard-4 \
+  --accelerator=type=nvidia-tesla-t4,count=1 \
+  --num-nodes=1
+
+# Install NVIDIA GPU driver DaemonSet
+kubectl apply -f https://raw.githubusercontent.com/GoogleCloudPlatform/container-engine-accelerators/master/nvidia-driver-installer/cos/daemonset-preloaded.yaml
+
+# 2. Deploy Ollama
+kubectl apply -f - <<EOF
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ollama
+  template:
+    metadata:
+      labels:
+        app: ollama
+    spec:
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        ports:
+        - containerPort: 11434
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0:11434"
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: ollama-storage
+          mountPath: /root/.ollama
+      volumes:
+      - name: ollama-storage
+        persistentVolumeClaim:
+          claimName: ollama-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 11434
+    targetPort: 11434
+  selector:
+    app: ollama
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+EOF
+
+# Get external IP
+kubectl get service ollama
+```
+</Terminal>
+
+**Google Cloud Cost Estimates:**
+- **Compute Engine n1-standard-4 + T4**: ~$400/month (24/7)
+- **Cloud Run (4vCPU/16GB)**: Pay-per-request (not recommended for Ollama)
+- **GKE**: Node costs + cluster management (~$75/month)
+
+##### Cloud Deployment Best Practices
+
+**Cost Optimization:**
+1. **Use spot/preemptible instances**: Save 60-90% for non-critical workloads
+   - AWS: Spot Instances
+   - Azure: Spot VMs
+   - GCP: Preemptible VMs
+
+2. **Right-size your instances**: Start small, scale up based on usage
+   - Monitor GPU utilization (should be &gt;70% for cost efficiency)
+   - CPU-only instances for small models (&lt;13B parameters)
+
+3. **Use auto-shutdown**: Stop instances during off-hours
+   - AWS: Instance Scheduler
+   - Azure: Auto-shutdown feature in VM settings
+   - GCP: Cloud Scheduler + Cloud Functions
+
+4. **Reserved capacity**: Save 30-70% with 1-3 year commitments
+
+**Performance Optimization:**
+1. **Choose regions close to users**: Minimize latency
+2. **Use SSD storage**: 3-5x faster model loading
+3. **Enable GPU acceleration**: 10-50x faster inference
+4. **Pre-pull models**: Avoid cold-start delays
+
+**Security Best Practices:**
+1. **Use private networking**: VPC/VNet peering, PrivateLink
+2. **Deploy behind API Gateway**: Rate limiting, authentication, monitoring
+3. **Enable encryption**: At-rest (disk encryption) and in-transit (TLS)
+4. **Use secrets management**: AWS Secrets Manager, Azure Key Vault, GCP Secret Manager
+5. **Implement IAM policies**: Least-privilege access control
+
+**Client Configuration:**
+
+Once your remote Ollama server is running, configure Atmos to use it:
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"
+    base_url: "http://<server-ip>:11434/v1"
+    # Or with domain name and HTTPS:
+    # base_url: "https://ollama.company.com/v1"
+
+    # Optional: If you've added authentication (recommended for production)
+    api_key_env: "OLLAMA_API_KEY"
+```
+</File>
+
+**Environment Variables Reference:**
+
+| Variable | Purpose | Example | Default |
+|----------|---------|---------|---------|
+| `OLLAMA_HOST` | Server bind address | `0.0.0.0:11434` | `127.0.0.1:11434` |
+| `OLLAMA_ORIGINS` | CORS allowed origins | `https://app.com` | `*` (allow all) |
+| `OLLAMA_MODELS` | Model storage path | `/data/models` | `~/.ollama/models` |
+
+:::warning Security Considerations for Remote Deployment
+
+**Production Security Requirements:**
+
+1. **Never use wildcard CORS origins in production**
+   - ❌ Bad: `OLLAMA_ORIGINS=*` (default, allows all)
+   - ✅ Good: `OLLAMA_ORIGINS=https://trusted.com,https://app.company.com`
+
+2. **Use HTTPS with valid certificates**
+   - Deploy behind reverse proxy (nginx, Caddy, Traefik)
+   - Use Let's Encrypt for free SSL certificates
+
+3. **Implement authentication**
+   - Ollama doesn't have built-in auth - use reverse proxy
+   - Add Basic Auth or OAuth at reverse proxy level
+   - Example with nginx: `auth_basic` + `htpasswd`
+
+4. **Network isolation**
+   - Use VPN or private network when possible
+   - Restrict access with firewall rules (iptables, AWS security groups)
+   - Never expose directly to public internet without authentication
+
+5. **Monitor and log**
+   - Enable access logs on reverse proxy
+   - Monitor for unusual query patterns
+   - Set up resource usage alerts
+
+**Example Secure Setup (nginx reverse proxy):**
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name ollama.company.com;
+
+    ssl_certificate /etc/letsencrypt/live/ollama.company.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/ollama.company.com/privkey.pem;
+
+    # Basic authentication
+    auth_basic "Ollama API";
+    auth_basic_user_file /etc/nginx/.htpasswd;
+
+    location / {
+        proxy_pass http://localhost:11434;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+For production deployments, always use HTTPS, authentication, and network restrictions.
+:::
+
+#### Performance Tips
+
+**1. Hardware Recommendations:**
+
+- **Mac M1/M2/M3**: Can handle `llama3.3:70b` well with unified memory
+- **16GB RAM**: Use `llama3.1:8b` or `mistral:7b`
+- **32GB+ RAM**: Use `llama3.3:70b` or `mixtral:8x7b`
+- **Limited RAM**: Use `llama3.2:3b`
+
+**2. GPU Acceleration:**
+
+Ollama automatically uses GPU if available (NVIDIA, AMD, Apple Silicon).
+
+<Terminal title="shell">
+```bash
+# Check GPU (NVIDIA)
+nvidia-smi
+
+# Check GPU (AMD)
+rocm-smi
+
+# Ollama will show GPU usage in logs
+```
+</Terminal>
+
+**3. Optimize Settings:**
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"
+    max_tokens: 4096  # Smaller = faster
+    timeout_seconds: 120  # Longer timeout for large models
+```
+</File>
+
+#### Troubleshooting
+
+**Connection Refused:**
+
+<Terminal title="shell">
+```bash
+# Check if Ollama is running
+curl http://localhost:11434/api/version
+
+# If not running, start it:
+ollama serve  # macOS/Linux
+
+# Verify port in atmos.yaml matches
+```
+</Terminal>
+
+**Model Not Found:**
+
+<Terminal title="shell">
+```bash
+# Pull the model first
+ollama pull llama3.3:70b
+
+# List available models
+ollama list
+
+# Verify model name matches exactly in atmos.yaml
+```
+</Terminal>
+
+**Slow Responses:**
+
+- Switch to smaller model (`llama3.1:8b`)
+- Reduce `max_tokens` in configuration
+- Check if GPU acceleration is working
+- Ensure no other heavy processes running
+
+**Out of Memory:**
+
+<Terminal title="shell">
+```bash
+# Use a smaller model
+ollama pull llama3.1:8b
+
+# Update atmos.yaml with smaller model
+```
+</Terminal>
+
+## Enterprise Providers
+
+For organizations with strict security, compliance, and data governance requirements.
+
+### AWS Bedrock
+
+Run Claude models via AWS Bedrock for enterprise security and compliance.
+
+**Security & Compliance Benefits:**
+- **Data Privacy**: Your data never leaves AWS infrastructure
+- **IAM-Based Access**: No API keys to manage - uses standard AWS credentials
+- **Audit Logging**: Complete audit trail via AWS CloudTrail
+- **Network Isolation**: Supports VPC endpoints and AWS PrivateLink for private connectivity
+- **Compliance**: Inherits AWS compliance certifications (SOC2, HIPAA, ISO, etc.)
+
+**Configuration:**
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+    # Alternatives:
+    # model: "anthropic.claude-3-opus-20240229-v1:0"
+    # model: "anthropic.claude-3-haiku-20240307-v1:0"
+    max_tokens: 4096
+    base_url: "us-east-1"  # AWS region
+```
+</File>
+
+**Authentication**: Uses standard AWS SDK credential chain (IAM roles, profiles, environment variables)
+
+<Terminal title="shell">
+```bash
+# Configure AWS credentials (one of):
+
+# Option 1: Environment variables
+export AWS_ACCESS_KEY_ID="AKIA..."
+export AWS_SECRET_ACCESS_KEY="..."
+
+# Option 2: AWS Profile
+export AWS_PROFILE="bedrock-profile"
+
+# Option 3: IAM role (automatic in EC2/ECS/EKS)
+```
+</Terminal>
+
+**Use Cases:**
+- AWS-native organizations
+- Compliance requirements (HIPAA, SOC2, ISO)
+- Data residency requirements
+- VPC isolation needs
+- Centralized AWS billing
+
+### Azure OpenAI
+
+Run GPT models via Azure OpenAI for enterprise integration.
+
+**Security & Compliance Benefits:**
+- **Data Residency**: Control exactly where your data is stored and processed
+- **Azure AD Integration**: Use managed identities instead of API keys
+- **Compliance Certifications**: SOC2, HIPAA, ISO 27001, and more
+- **Private Endpoints**: Azure Private Link for secure, private connections
+- **Customer-Managed Keys**: Bring your own encryption keys (BYOK)
+
+**Configuration:**
+
+<File title="atmos.yaml">
+```yaml
+providers:
+  azureopenai:
+    model: "gpt-4o"  # Your Azure deployment name (NOT the model name!)
+    # REQUIRED: Your Azure OpenAI resource endpoint
+    base_url: "https://<your-resource>.openai.azure.com"
+    # Replace <your-resource> with your actual Azure resource name
+
+    # REQUIRED: Azure OpenAI API version
+    api_version: "2024-02-15-preview"  # Current version (Feb 2024)
+
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    max_tokens: 4096
+```
+</File>
+
+:::warning Azure-Specific Configuration
+Azure OpenAI has unique requirements:
+- **model**: Use your **deployment name** from Azure Portal, not the OpenAI model name
+- **base_url**: Your Azure resource endpoint (required)
+- **api_version**: Azure API version string (required, default: `2024-02-15-preview`)
+
+See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for latest API versions.
+:::
+
+**Authentication:**
+
+<Terminal title="shell">
+```bash
+# API Key (from Azure Portal)
+export AZURE_OPENAI_API_KEY="..."
+
+# Or use Azure AD managed identity (in production)
+```
+</Terminal>
+
+:::info Max Tokens Parameter
+Azure OpenAI's newer model deployments (gpt-5, o1-preview, o1-mini) use `max_completion_tokens` instead of `max_tokens` in their API. Atmos automatically handles this difference based on your deployment model - just use `max_tokens` in your configuration and Atmos will use the correct parameter.
+:::
+
+**Use Cases:**
+- Azure-native organizations
+- Compliance requirements (healthcare, finance, government)
+- European data residency requirements
+- Azure AD/Entra integration
+- Centralized Azure billing
+
+**When to Use Enterprise Providers:**
+- Your organization has existing cloud infrastructure commitments
+- Compliance requirements mandate data residency controls
+- Need private network connectivity (no public internet)
+- Want centralized billing and governance
+- Require enhanced audit and logging capabilities
+
+## Multi-Provider Configuration
+
+Configure multiple providers and switch between them:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"  # For CLI commands
+
+    providers:
+      # Cloud providers
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+
+      openai:
+        model: "gpt-5"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+
+      # Local provider
+      ollama:
+        model: "llama3.3:70b"
+        # No API key needed
+
+      # Enterprise providers
+      bedrock:
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        base_url: "us-east-1"
+        # Uses AWS credentials
+
+      azureopenai:
+        model: "gpt-4o"  # Azure deployment name
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        base_url: "https://mycompany.openai.azure.com"
+        api_version: "2024-02-15-preview"  # Required
+```
+</File>
+
+**Switch providers in TUI:**
+
+Press `Ctrl+P` during a chat session to switch providers mid-conversation.
+
+**Use specific provider for CLI:**
+
+Change `default_provider` to your preferred provider for `atmos ai ask` commands.
+
+### Provider Isolation
+
+When you switch between providers in the AI chat, each provider maintains its own **completely isolated conversation history**. This ensures clean separation and prevents context confusion between different AI models.
+
+**How it works:**
+
+1. **Isolated Conversations**: Each provider only sees messages from its own conversation thread
+2. **Full History Preservation**: When you switch back to a previous provider, it remembers the entire conversation you had with it
+3. **No Cross-Contamination**: OpenAI messages are never sent to Anthropic, and vice versa
+4. **System Messages Excluded**: UI notifications (like "Switched to...") are never sent to any provider
+
+**Example Flow:**
+
+```
+Session with OpenAI:
+  You: "What is Atmos?"
+  OpenAI: "Atmos is a framework..."
+  You: "How do I configure it?"
+  OpenAI: "You configure it with..."
+
+Switch to Anthropic (Ctrl+P):
+  System: "🔄 Switched to Anthropic"
+  You: "List all stacks"
+  Anthropic: "Here are the stacks..."
+
+Switch back to OpenAI (Ctrl+P):
+  System: "🔄 Switched to OpenAI"
+  You: "Tell me more about configuration"
+  OpenAI: [Sees full OpenAI conversation history]
+```
+
+**What OpenAI sees in the last message:**
+- ✅ "What is Atmos?"
+- ✅ "How do I configure it?"
+- ✅ "Tell me more about configuration" (new)
+- ❌ The Anthropic conversation (completely filtered out)
+
+**Benefits:**
+- **Clean Context**: Each provider has clean, relevant context without noise from other models
+- **Token Efficiency**: No wasted tokens sending irrelevant history
+- **Consistent Responses**: Each provider maintains continuity in its own conversation
+- **Compare Providers**: Easily compare how different providers respond to the same query by maintaining separate conversations
+
+## Security & Privacy by Provider
+
+### Cloud Providers (Anthropic, OpenAI, Google, xAI)
+
+**Data Processing:**
+- Data sent to provider's API servers
+- Subject to provider's privacy policy
+- Processed in provider's data centers
+
+**Best Practices:**
+- Use environment variables for API keys (never commit to git)
+- Rotate API keys regularly
+- Monitor API usage and costs
+- Review provider's data retention policies
+
+### Local Provider (Ollama)
+
+**Data Processing:**
+- 100% local processing
+- No data leaves your machine
+- Works offline
+
+**Best Practices:**
+- Keep Ollama updated
+- Secure your machine appropriately
+- Use disk encryption if handling sensitive data
+
+### Enterprise Providers (Bedrock, Azure OpenAI)
+
+**Data Processing:**
+- Stays within cloud provider's infrastructure
+- Subject to enterprise agreements
+- Enhanced compliance certifications
+
+**Best Practices:**
+- Use IAM roles/managed identities instead of keys
+- Enable audit logging (CloudTrail/Azure Monitor)
+- Configure private endpoints for production
+- Implement network security groups
+- Use customer-managed encryption keys
+
+## Cost Considerations
+
+### Cloud Providers
+
+**Approximate Pricing** (check provider's website for current rates):
+
+- **Claude (Anthropic)**: ~$3/1M input tokens, ~$15/1M output tokens
+- **GPT-4o (OpenAI)**: ~$2.50/1M input tokens, ~$10/1M output tokens
+- **Gemini (Google)**: Varies by model and region
+- **Grok (xAI)**: Similar to OpenAI pricing
+
+**Cost Optimization:**
+- Use smaller models for simple queries (Haiku, GPT-3.5)
+- Configure `max_tokens` to limit response length
+- Monitor usage via provider dashboards
+- Set up billing alerts
+
+### Local Provider
+
+**Ollama**: Free after initial hardware investment
+- No ongoing API costs
+- Requires adequate RAM and storage
+- Optional: GPU for better performance
+
+### Enterprise Providers
+
+**AWS Bedrock & Azure OpenAI**:
+- Can leverage existing cloud commitments
+- Reserved capacity available for high volume
+- Pricing varies by region and model
+- Can be included in Enterprise Agreements
+
+## API Model IDs Reference
+
+This section lists the **exact API model IDs** to use when configuring Atmos AI providers. Use these exact strings in your `atmos.yaml` configuration.
+
+:::warning Important
+Use the exact model ID strings listed below, not marketing names. For example, use `grok-4-latest` not `grok-4`.
+:::
+
+### Quick Reference Table
+
+| Provider | Recommended Model ID | Alternative |
+|----------|---------------------|-------------|
+| **Anthropic** | `claude-sonnet-4-5-20250929` | `claude-haiku-4-5-20251001` |
+| **OpenAI** | `gpt-4o` | `gpt-5`, `o1` |
+| **Gemini** | `gemini-2.5-flash` | `gemini-2.5-pro` |
+| **Grok** | `grok-4-latest` | (only model available) |
+| **Ollama** | `llama3.3:70b` | `mistral:7b`, `codellama:13b` |
+| **Bedrock** | `anthropic.claude-haiku-4-5-20251001-v1:0` | Global variant |
+| **Azure OpenAI** | `<your-deployment-name>` | N/A |
+
+### Anthropic (Claude) API Model IDs
+
+**Current Models (Recommended):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Claude Sonnet 4.5 | `claude-sonnet-4-5-20250929` | Latest, best for complex agents and coding |
+| Claude Haiku 4.5 | `claude-haiku-4-5-20251001` | Fastest, near-frontier intelligence |
+| Claude Opus 4.1 | `claude-opus-4-1-20250805` | Exceptional for specialized reasoning |
+
+**Legacy Models:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Claude Sonnet 4 | `claude-sonnet-4-5-20250929` | Previous version |
+| Claude 3.7 Sonnet | `claude-3-7-sonnet-20250219` | Legacy |
+| Claude Opus 4 | `claude-opus-4-20250514` | Previous version |
+| Claude 3.5 Haiku | `claude-3-5-haiku-20241022` | Legacy |
+| Claude 3 Haiku | `claude-3-haiku-20240307` | Legacy |
+
+**Example:**
+```yaml
+providers:
+  anthropic:
+    model: "claude-sonnet-4-5-20250929"  # Use exact snapshot ID
+    api_key_env: "ANTHROPIC_API_KEY"
+```
+
+### OpenAI (GPT) API Model IDs
+
+**GPT-5 Models (Latest):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| GPT-5 | `gpt-5` | Latest flagship model |
+| GPT-5 Mini | `gpt-5-mini` | Faster, more affordable |
+| GPT-5 Nano | `gpt-5-nano` | Fastest, lightweight |
+
+**GPT-4o Models:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| GPT-4o | `gpt-4o` | Multimodal, current stable |
+| GPT-4o (dated) | `gpt-4o-2024-08-06` | Specific snapshot |
+| GPT-4o Mini | `gpt-4o-mini` | Fast and affordable |
+| ChatGPT-4o Latest | `chatgpt-4o-latest` | Auto-updated |
+
+**o1 Series (Reasoning Models):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| o1 | `o1` | Flagship reasoning model |
+| o1 Mini | `o1-mini` | Faster reasoning |
+| o3 | `o3` | Advanced reasoning |
+| o3 Mini | `o3-mini` | Faster advanced reasoning |
+
+**Example:**
+```yaml
+providers:
+  openai:
+    model: "gpt-4o"  # Or "gpt-5", "o1", etc.
+    api_key_env: "OPENAI_API_KEY"
+```
+
+### Google (Gemini) API Model IDs
+
+**Gemini 2.5 Series (Latest):**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Gemini 2.5 Pro | `gemini-2.5-pro` | Best reasoning, code, math |
+| Gemini 2.5 Flash | `gemini-2.5-flash` | Best price-performance (recommended) |
+| Gemini 2.5 Flash Lite | `gemini-2.5-flash-lite` | Fastest, most cost-efficient |
+| Gemini 2.5 Flash Image | `gemini-2.5-flash-image` | Image generation |
+
+**Gemini 2.0 Series:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Gemini 2.0 Flash | `gemini-2.0-flash` | Previous generation |
+| Gemini 2.0 Flash Lite | `gemini-2.0-flash-lite` | Previous lightweight |
+
+**Preview/Experimental:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Gemini 2.5 Flash (Preview) | `gemini-2.5-flash-preview-09-2025` | Latest features |
+| Gemini 2.5 Flash Lite (Preview) | `gemini-2.5-flash-lite-preview-09-2025` | Latest lite version |
+
+**Example:**
+```yaml
+providers:
+  gemini:
+    model: "gemini-2.5-flash"  # Stable recommended version
+    api_key_env: "GEMINI_API_KEY"
+```
+
+### xAI (Grok) API Model IDs
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Grok 4 (Latest) | `grok-4-latest` | Currently the only working model ✅ **REQUIRED** |
+
+:::warning Model Availability
+As of 2025, only `grok-4-latest` works via the xAI API. Models like `grok-4-0709`, `grok-beta`, and `grok-vision-beta` appear in documentation but return "Model not found" errors.
+:::
+
+**Example:**
+```yaml
+providers:
+  grok:
+    model: "grok-4-latest"  # Currently the only working model
+    api_key_env: "XAI_API_KEY"
+    base_url: "https://api.x.ai/v1"
+```
+
+### Ollama API Model IDs
+
+**Llama 3 Models:**
+
+| Model | API Model ID | Size | Notes |
+|-------|--------------|------|-------|
+| Llama 3.3 70B | `llama3.3:70b` | ~40GB | State-of-the-art, recommended |
+| Llama 3.3 (Latest) | `llama3.3` | ~40GB | Alias for :latest tag |
+| Llama 3.1 405B | `llama3.1:405b` | ~230GB | Highest quality |
+| Llama 3.1 70B | `llama3.1:70b` | ~40GB | Excellent quality |
+| Llama 3.1 8B | `llama3.1:8b` | ~5GB | Good for laptops |
+| Llama 3.2 | `llama3.2` | ~2GB | Lightweight |
+
+**Code-Specialized Models:**
+
+| Model | API Model ID | Size | Notes |
+|-------|--------------|------|-------|
+| CodeLlama 34B | `codellama:34b` | ~19GB | Best for coding |
+| CodeLlama 13B | `codellama:13b` | ~8GB | Good for coding |
+| CodeLlama 7B | `codellama:7b` | ~4GB | Lightweight coding |
+
+**Mistral Models:**
+
+| Model | API Model ID | Size | Notes |
+|-------|--------------|------|-------|
+| Mixtral 8x7B | `mixtral:8x7b` | ~26GB | Complex reasoning |
+| Mistral 7B | `mistral:7b` | ~4GB | Fast, efficient |
+| Mistral Small 3 | `mistral-small:latest` | Variable | Latest small model |
+
+:::info Ollama Tags
+- `:latest` = Most recent version (auto-updated)
+- `:70b`, `:8b`, etc. = Specific parameter size
+- `:instruct` = Instruction-tuned variant
+- `:q4_K_M` = Quantization level (affects size/quality)
+
+View all tags: `ollama list` or visit [ollama.com/library](https://ollama.com/library)
+:::
+
+**Example:**
+```yaml
+providers:
+  ollama:
+    model: "llama3.3:70b"  # Or "mistral:7b", "codellama:13b", etc.
+    base_url: "http://localhost:11434/v1"
+```
+
+### AWS Bedrock API Model IDs
+
+**Claude Models on Bedrock:**
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| Claude Sonnet 4.5 (Global) | `global.anthropic.claude-sonnet-4-5-20250929-v1:0` | Global endpoint |
+| Claude Haiku 4.5 | `anthropic.claude-haiku-4-5-20251001-v1:0` | Regional endpoint |
+| Claude 3.5 Sonnet V2 | `anthropic.claude-3-5-sonnet-20241022-v2:0` | Previous generation |
+| Claude 3 Haiku | `anthropic.claude-3-haiku-20240307-v1:0` | Legacy |
+| Claude 3 Sonnet | `anthropic.claude-3-sonnet-20240229-v1:0` | Legacy |
+
+:::warning Bedrock Endpoints
+- **Global endpoints**: Use `global.` prefix for dynamic routing
+- **Regional endpoints**: Use `anthropic.` prefix for specific regions
+- **Cross-region**: Use inference profile IDs like `us.anthropic.claude-3-5-sonnet-20241022-v2:0`
+:::
+
+**Example:**
+```yaml
+providers:
+  bedrock:
+    model: "anthropic.claude-haiku-4-5-20251001-v1:0"  # Regional
+    # OR
+    # model: "global.anthropic.claude-sonnet-4-5-20250929-v1:0"  # Global
+    base_url: "us-east-1"  # AWS region
+```
+
+### Azure OpenAI API Model IDs
+
+| Model | API Model ID | Notes |
+|-------|--------------|-------|
+| GPT-4o | `gpt-4o` | Your Azure deployment name |
+| GPT-5 | `gpt-5` | Your Azure deployment name |
+| o1 | `o1` | Your Azure deployment name |
+
+:::warning Azure Deployment Names
+Azure OpenAI uses **deployment names** you create in Azure Portal, not OpenAI model names directly.
+
+1. Create a deployment in Azure Portal (e.g., "my-gpt4o-deployment")
+2. Use YOUR deployment name in the configuration
+3. The deployment name can be different from the model name
+:::
+
+**Example:**
+```yaml
+providers:
+  azureopenai:
+    model: "my-gpt4o-deployment"  # YOUR deployment name from Azure Portal
+    api_key_env: "AZURE_OPENAI_API_KEY"
+    base_url: "https://your-resource.openai.azure.com"
+    api_version: "2024-02-15-preview"
+```
+
+### Finding Model IDs via API
+
+**Anthropic:**
+<Terminal title="shell">
+```bash
+curl https://api.anthropic.com/v1/models \
+  -H "x-api-key: $ANTHROPIC_API_KEY"
+```
+</Terminal>
+
+**OpenAI:**
+<Terminal title="shell">
+```bash
+curl https://api.openai.com/v1/models \
+  -H "Authorization: Bearer $OPENAI_API_KEY"
+```
+</Terminal>
+
+**xAI (Grok):**
+<Terminal title="shell">
+```bash
+curl https://api.x.ai/v1/models \
+  -H "Authorization: Bearer $XAI_API_KEY"
+```
+</Terminal>
+
+**Ollama:**
+<Terminal title="shell">
+```bash
+ollama list  # List locally available models
+ollama search <name>  # Search Ollama library
+```
+</Terminal>
+
+**AWS Bedrock:**
+<Terminal title="shell">
+```bash
+aws bedrock list-foundation-models --region us-east-1
+```
+</Terminal>
+
+## Related Documentation
+
+- [AI Assistant Overview](/ai/) - General AI features and capabilities
+- [Configuration](/ai/configuration) - Detailed configuration options
+- [AI Skills](/ai/skills) - Specialized skills for different tasks
+- [Sessions](/ai/sessions) - Persistent conversation management
+- [Tools](/ai/tools) - AI tool execution system
+- [MCP Server](/ai/mcp-server) - Universal MCP integration
+- [Claude Code Integration](/ai/claude-code-integration) - IDE integration with Claude Code

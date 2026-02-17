@@ -1,0 +1,361 @@
+---
+title: atmos ai help
+sidebar_label: help
+sidebar_class_name: command
+id: ai-help
+description: Get AI-powered help on specific Atmos topics
+---
+import Screengrab from '@site/src/components/Screengrab'
+import Terminal from '@site/src/components/Terminal'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+Use this command to get detailed, AI-powered explanations on specific Atmos topics, concepts, and workflows.
+</Intro>
+
+<Experimental />
+
+<Screengrab title="atmos ai help --help" slug="atmos-ai-help--help" />
+
+## Description
+
+The `atmos ai help` command provides in-depth, context-aware explanations of Atmos concepts and features. Unlike general questions with `atmos ai ask`, this command is optimized for learning and understanding specific topics.
+
+The AI provides:
+- Detailed concept explanations
+- Best practices and recommendations
+- Code examples and patterns
+- Common pitfalls and how to avoid them
+- Links to related topics
+
+## Usage
+
+```shell
+atmos ai help [topic]
+```
+
+If no topic is provided, the AI provides a comprehensive overview of Atmos.
+
+## Arguments
+
+<dl>
+  <dt>`topic`</dt>
+  <dd>The Atmos topic to get help on (optional). Use quotes for multi-word topics.</dd>
+</dl>
+
+## Common Topics
+
+The following topics have specialized explanations:
+
+### Core Concepts
+
+<dl>
+  <dt>`stacks`</dt>
+  <dd>Stack configuration and organization</dd>
+
+  <dt>`components`</dt>
+  <dd>Component architecture and best practices</dd>
+
+  <dt>`inheritance`</dt>
+  <dd>Configuration inheritance and precedence</dd>
+
+  <dt>`imports`</dt>
+  <dd>Stack imports and composition</dd>
+
+  <dt>`overrides`</dt>
+  <dd>Configuration overrides</dd>
+</dl>
+
+### Features
+
+<dl>
+  <dt>`templating` / `templates`</dt>
+  <dd>Go templating and functions</dd>
+
+  <dt>`workflows`</dt>
+  <dd>Workflow orchestration</dd>
+
+  <dt>`validation` / `validate`</dt>
+  <dd>Schema and policy validation</dd>
+
+  <dt>`vendoring` / `vendor`</dt>
+  <dd>Component vendoring and mixins</dd>
+
+  <dt>`affected`</dt>
+  <dd>Affected components detection</dd>
+
+  <dt>`catalogs` / `catalog`</dt>
+  <dd>Component catalogs</dd>
+
+  <dt>`schemas` / `schema`</dt>
+  <dd>JSON Schema validation</dd>
+
+  <dt>`opa` / `policies`</dt>
+  <dd>OPA policy validation</dd>
+
+  <dt>`settings`</dt>
+  <dd>Atmos settings configuration</dd>
+</dl>
+
+### Integrations
+
+<dl>
+  <dt>`terraform`</dt>
+  <dd>Terraform integration and best practices</dd>
+
+  <dt>`helmfile`</dt>
+  <dd>Helmfile integration</dd>
+
+  <dt>`atlantis`</dt>
+  <dd>Atlantis integration</dd>
+
+  <dt>`spacelift`</dt>
+  <dd>Spacelift integration</dd>
+
+  <dt>`backends` / `backend`</dt>
+  <dd>Terraform backend configuration</dd>
+</dl>
+
+### Other
+
+<dl>
+  <dt>`general`</dt>
+  <dd>Get a comprehensive overview of Atmos (default)</dd>
+</dl>
+
+## Configuration
+
+Configure an AI provider in your `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    enabled: true
+    provider: "anthropic"
+    api_key_env: "ANTHROPIC_API_KEY"
+```
+
+## Examples
+
+### Learning Core Concepts
+
+<Terminal title="atmos ai help stacks">
+```console
+$ atmos ai help stacks
+
+👽 Thinking...
+
+
+# Atmos Stacks
+
+Atmos stacks are the fundamental building blocks for organizing
+infrastructure configurations across environments...
+
+## Key Concepts
+
+1. **Stack Definition**: A YAML file that defines component configurations
+2. **Inheritance**: Stacks can inherit from other stacks
+3. **Overrides**: Environment-specific settings override base configurations
+
+## Best Practices
+
+- Use a hierarchical structure (globals → region → environment → stack)
+- Keep environment-specific values in dedicated stack files
+- Leverage imports for shared configurations
+...
+```
+</Terminal>
+
+### Understanding Components
+
+<Terminal title="atmos ai help components">
+```console
+$ atmos ai help components
+
+👽 Thinking...
+
+
+# Atmos Components
+
+Components are reusable infrastructure units that can be configured
+and deployed across multiple stacks...
+
+## Component Types
+
+1. **Terraform Components**: Infrastructure defined using Terraform
+2. **Helmfile Components**: Kubernetes resources via Helmfile
+3. **Custom Components**: User-defined component types
+
+## Creating Reusable Components
+
+Best practices for designing reusable components:
+- Use variables for all environment-specific values
+- Implement proper input validation
+- Document required and optional variables
+...
+```
+</Terminal>
+
+### Advanced Topics
+
+<Terminal title="atmos ai help templating">
+```console
+$ atmos ai help templating
+
+👽 Thinking...
+
+
+# Atmos Templating
+
+Atmos supports Go templating for dynamic configuration generation...
+
+## Available Template Functions
+
+### Built-in Functions
+- `atmos.Component(component, stack)` - Get component configuration
+- `terraform.output(component, stack, output)` - Get Terraform output
+
+### Gomplate Functions
+- String manipulation
+- File operations
+- Data source integration
+
+## Examples
+
+```yaml
+vars:
+  vpc_id: '{{ atmos.Component "vpc" "dev" | .outputs.vpc_id }}'
+```
+...
+```
+```
+</Terminal>
+
+### Workflow Orchestration
+
+```shell
+atmos ai help workflows
+```
+
+### Validation and Schema
+
+```shell
+atmos ai help validation
+```
+
+### Component Vendoring
+
+```shell
+atmos ai help vendoring
+```
+
+### Custom Topics
+
+```shell
+atmos ai help "terraform integration"
+atmos ai help "multi-account strategies"
+atmos ai help "disaster recovery"
+```
+
+### General Overview
+
+<Terminal title="atmos ai help">
+```console
+$ atmos ai help
+
+👽 Thinking...
+
+
+# Atmos Overview
+
+Atmos is a sophisticated CLI tool for managing complex cloud
+infrastructure using Terraform, Helmfile, and other tools...
+
+## Key Concepts
+
+1. **Components**: Reusable infrastructure units
+2. **Stacks**: Environment configurations
+3. **Workflows**: Automated deployment pipelines
+4. **Validation**: Configuration verification
+5. **Vendoring**: External component management
+
+## Architecture
+
+Atmos follows a hierarchical configuration model:
+- Global settings apply to all environments
+- Regional settings override globals
+- Stack settings override regional
+...
+```
+</Terminal>
+
+## Output Format
+
+The help command provides:
+
+1. **Preparation indicator** - Shows content is being prepared
+2. **Help header** - Indicates the topic being explained
+3. **Structured content** - Well-organized sections with:
+   - Concept definitions
+   - Code examples
+   - Best practices
+   - Common patterns
+   - Related topics
+
+## Comparison with Other Commands
+
+| Command | Purpose | Output Style |
+|---------|---------|--------------|
+| `atmos ai help [topic]` | In-depth topic explanations | Structured documentation |
+| `atmos ai ask [question]` | Specific questions | Direct answers |
+| `atmos ai chat` | Interactive learning | Conversational |
+
+## Advanced Usage
+
+### Learning Paths
+
+```shell
+# New user learning path
+atmos ai help general          # Start with overview
+atmos ai help stacks          # Learn about stacks
+atmos ai help components      # Understand components
+atmos ai help workflows       # Master workflows
+
+# Advanced user topics
+atmos ai help templating
+atmos ai help validation
+atmos ai help vendoring
+```
+
+### Provider-Specific Help
+
+Different AI providers may offer varying levels of detail:
+
+```shell
+# Claude (Anthropic) - detailed, structured explanations
+export ANTHROPIC_API_KEY="your-key"
+atmos ai help stacks
+
+# GPT (OpenAI) - practical examples and patterns
+export OPENAI_API_KEY="your-key"
+atmos ai help workflows
+
+# Gemini (Google) - comprehensive, fast responses
+export GEMINI_API_KEY="your-key"
+atmos ai help templating
+```
+
+### Integration with Documentation
+
+Use AI help to:
+- Get quick explanations before reading full docs
+- Understand concepts in your specific context
+- Get examples tailored to your configuration
+- Bridge gaps in official documentation
+
+## Related Commands
+
+- [`atmos ai ask`](/cli/commands/ai/ask) - Ask specific questions
+- [`atmos ai chat`](/cli/commands/ai/chat) - Interactive chat for extended learning
+- [`atmos help`](/cli/commands/help) - Built-in command help
