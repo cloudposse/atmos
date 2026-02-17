@@ -59,6 +59,12 @@ rosesecurity:
   url: https://github.com/rosesecurity
   image_url: https://github.com/rosesecurity.png
 
+shirkevich:
+  name: Mikhail Shirkov
+  title: Senior Engineer @ NXT:FWD
+  url: https://github.com/shirkevich
+  image_url: https://github.com/shirkevich.png
+
 gitbluf:
   name: Marko Petrovic
   title: Mission Critical Engineer @ SchubergPhilis

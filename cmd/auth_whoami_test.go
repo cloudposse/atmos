@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/data"
 	iolib "github.com/cloudposse/atmos/pkg/io"
@@ -298,4 +300,25 @@ func TestPrintWhoamiHuman_NoWarningWhenValid(t *testing.T) {
 	assert.NotPanics(t, func() {
 		printWhoamiHuman(whoamiInfo, true)
 	})
+}
+
+type notImplementedCreds struct{}
+
+func (c *notImplementedCreds) IsExpired() bool { return false }
+func (c *notImplementedCreds) GetExpiration() (*time.Time, error) {
+	return nil, nil
+}
+func (c *notImplementedCreds) BuildWhoamiInfo(*authTypes.WhoamiInfo) {}
+func (c *notImplementedCreds) Validate(context.Context) (*authTypes.ValidationInfo, error) {
+	return nil, errUtils.ErrNotImplemented
+}
+
+func TestValidateCredentials_FallsBackOnNotImplemented(t *testing.T) {
+	whoamiInfo := &authTypes.WhoamiInfo{
+		Identity:    "test-identity",
+		Credentials: &notImplementedCreds{},
+	}
+
+	isValid := validateCredentials(context.Background(), whoamiInfo)
+	assert.True(t, isValid, "should fall back to expiration check when validation is not implemented")
 }
