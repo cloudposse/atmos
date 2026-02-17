@@ -6,6 +6,7 @@ vars:
 import:
   - catalog/mock
   - catalog/mock-failure
+  - catalog/mock-long-running
 
 components:
   terraform:

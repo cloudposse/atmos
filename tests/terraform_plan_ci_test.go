@@ -13,6 +13,40 @@ import (
 	"github.com/cloudposse/atmos/tests/testhelpers"
 )
 
+// TestTerraformPlanCI verifies that `atmos terraform plan mycomponent -s prod --ci`
+// exits with code 0 and produces CI check run output on stderr.
+func TestTerraformPlanCI(t *testing.T) {
+	// Skip if terraform is not installed.
+	RequireTerraform(t)
+
+	// Build the atmos binary.
+	runner := testhelpers.NewAtmosRunner("")
+	require.NoError(t, runner.Build(), "Failed to build atmos binary")
+	t.Cleanup(runner.Cleanup)
+
+	// Resolve the fixture directory.
+	repoRoot, err := testhelpers.FindRepoRoot()
+	require.NoError(t, err)
+	fixtureDir := filepath.Join(repoRoot, "tests", "fixtures", "scenarios", "native-ci")
+
+	// Run `atmos terraform plan mycomponent -s prod --ci`.
+	cmd := runner.Command("terraform", "plan", "mycomponent", "-s", "prod", "--ci")
+	cmd.Dir = fixtureDir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err = cmd.Run()
+	require.NoError(t, err, "Expected exit code 0.\nStdout: %s\nStderr: %s", stdout.String(), stderr.String())
+
+	// Verify CI check run messages appear on stderr.
+	stderrOutput := stderr.String()
+	assert.Contains(t, stderrOutput, "Check run created: atmos/plan: prod/mycomponent",
+		"Expected check run creation message on stderr")
+	assert.Contains(t, stderrOutput, "Check run completed: atmos/plan: prod/mycomponent",
+		"Expected check run completion message on stderr")
+}
+
 // TestTerraformPlanCIUploadAndPlanfileList verifies that running
 // `atmos terraform plan mycomponent -s prod --ci` uploads the planfile
 // to the local store, and `atmos terraform planfile list` shows the record.
