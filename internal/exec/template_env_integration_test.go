@@ -17,8 +17,10 @@ import (
 // are properly propagated to template processing during ExecuteDescribeStacks.
 // This is an integration test for issue #2083.
 func TestDescribeStacks_TemplateEnvVarPropagation(t *testing.T) {
-	// Ensure test env vars don't leak from other tests.
+	// Use t.Setenv for automatic restore on test cleanup, then unset for clean state.
+	t.Setenv("TEST_TMPL_ENV_VAR", "")
 	os.Unsetenv("TEST_TMPL_ENV_VAR")
+	t.Setenv("TEST_TMPL_STACK_VAR", "")
 	os.Unsetenv("TEST_TMPL_STACK_VAR")
 
 	testDir := filepath.Join("..", "..", "tests", "fixtures", "scenarios", "template-env-vars")

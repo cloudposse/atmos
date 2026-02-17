@@ -174,7 +174,8 @@ func TestSetEnvVarsWithRestore(t *testing.T) {
 // TestProcessTmplWithDatasources_EnvVarsFromConfig tests that env vars configured
 // in atmosConfig.Templates.Settings.Env are properly set during template processing.
 func TestProcessTmplWithDatasources_EnvVarsFromConfig(t *testing.T) {
-	// Ensure the env var doesn't exist before the test.
+	// Use t.Setenv for automatic restore on test cleanup, then unset for clean state.
+	t.Setenv("TEST_GOMPLATE_AWS_PROFILE", "")
 	os.Unsetenv("TEST_GOMPLATE_AWS_PROFILE")
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -226,6 +227,7 @@ config:
 // TestProcessTmplWithDatasources_EnvVarsFromStackManifest tests that env vars from
 // stack manifest settings override those from CLI config.
 func TestProcessTmplWithDatasources_EnvVarsFromStackManifest(t *testing.T) {
+	t.Setenv("TEST_GOMPLATE_REGION", "")
 	os.Unsetenv("TEST_GOMPLATE_REGION")
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -332,6 +334,7 @@ config:
 // TestProcessTmplWithDatasources_DisabledTemplating tests that when templating is
 // disabled, env vars are not set and the template is returned unchanged.
 func TestProcessTmplWithDatasources_DisabledTemplating(t *testing.T) {
+	t.Setenv("TEST_GOMPLATE_DISABLED", "")
 	os.Unsetenv("TEST_GOMPLATE_DISABLED")
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -413,6 +416,7 @@ config:
 // TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop tests that env vars are
 // properly re-extracted when template settings are re-decoded in the evaluation loop.
 func TestProcessTmplWithDatasources_EnvVarsInEvaluationLoop(t *testing.T) {
+	t.Setenv("TEST_EVAL_LOOP_VAR", "")
 	os.Unsetenv("TEST_EVAL_LOOP_VAR")
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -464,6 +468,7 @@ config:
 // TestProcessTmplWithDatasources_EnvVarsCaseSensitive tests that env var keys
 // preserve their original case (e.g., AWS_PROFILE stays uppercase).
 func TestProcessTmplWithDatasources_EnvVarsCaseSensitive(t *testing.T) {
+	t.Setenv("AWS_TEST_CASE_KEY", "")
 	os.Unsetenv("AWS_TEST_CASE_KEY")
 
 	atmosConfig := &schema.AtmosConfiguration{

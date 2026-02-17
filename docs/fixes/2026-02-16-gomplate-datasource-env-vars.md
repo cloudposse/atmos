@@ -148,7 +148,7 @@ Applied at 4 call sites:
 
 All tests pass:
 
-```
+```text
 ok  github.com/cloudposse/atmos/internal/exec  1.207s
 ok  github.com/cloudposse/atmos/pkg/config     3.984s
 ok  github.com/cloudposse/atmos/pkg/schema     0.273s

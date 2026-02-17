@@ -96,23 +96,11 @@ func ProcessTmpl(
 	return res.String(), nil
 }
 
-// extractEnvFromRawMap extracts the env map from a raw settings map[string]any.
-// This is needed because mapstructure:"-" on TemplatesSettings.Env causes
-// mapstructure.Decode to silently drop the env field.
-// The path navigated is: templates -> settings -> env.
-func extractEnvFromRawMap(settingsMap map[string]any) map[string]string {
-	templates, ok := settingsMap["templates"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	settings, ok := templates["settings"].(map[string]any)
-	if !ok {
-		return nil
-	}
-
-	envRaw, ok := settings["env"]
-	if !ok {
+// convertRawEnvToStringMap converts a raw env value (any) to map[string]string.
+// Handles map[string]any (with non-string values skipped) and map[string]string.
+// Returns nil if the input is nil, an unsupported type, or produces an empty map.
+func convertRawEnvToStringMap(envRaw any) map[string]string {
+	if envRaw == nil {
 		return nil
 	}
 
@@ -136,6 +124,29 @@ func extractEnvFromRawMap(settingsMap map[string]any) map[string]string {
 	}
 
 	return result
+}
+
+// extractEnvFromRawMap extracts the env map from a raw settings map[string]any.
+// This is needed because mapstructure:"-" on TemplatesSettings.Env causes
+// mapstructure.Decode to silently drop the env field.
+// The path navigated is: templates -> settings -> env.
+func extractEnvFromRawMap(settingsMap map[string]any) map[string]string {
+	templates, ok := settingsMap["templates"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	settings, ok := templates["settings"].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	envRaw, ok := settings["env"]
+	if !ok {
+		return nil
+	}
+
+	return convertRawEnvToStringMap(envRaw)
 }
 
 // savedEnvVar stores the original state of an environment variable for restore.
@@ -246,6 +257,16 @@ func ProcessTmplWithDatasources(
 	evaluations, _ := lo.Coalesce(atmosConfig.Templates.Settings.Evaluations, 1)
 	result := tmplValue
 
+	// Set environment variables for template processing before the loop.
+	// Restore originals when the function returns.
+	if len(templateSettings.Env) > 0 {
+		cleanup, envErr := setEnvVarsWithRestore(templateSettings.Env)
+		if envErr != nil {
+			return "", envErr
+		}
+		defer cleanup()
+	}
+
 	for i := 0; i < evaluations; i++ {
 		log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName, "evaluation", i+1)
 
@@ -284,15 +305,6 @@ func ProcessTmplWithDatasources(
 
 		// Atmos functions
 		funcs = lo.Assign(funcs, FuncMap(atmosConfig, configAndStacksInfo, context.TODO(), &d))
-
-		// Set environment variables for template processing and restore originals when done.
-		if len(templateSettings.Env) > 0 {
-			cleanup, envErr := setEnvVarsWithRestore(templateSettings.Env)
-			if envErr != nil {
-				return "", envErr
-			}
-			defer cleanup()
-		}
 
 		// Process the template
 		t := template.New(tmplName).Funcs(funcs)
@@ -360,20 +372,7 @@ func ProcessTmplWithDatasources(
 			if resultMapSettingsTemplates, ok := resultMapSettings["templates"].(map[string]any); ok {
 				if resultMapSettingsTemplatesSettings, ok := resultMapSettingsTemplates["settings"].(map[string]any); ok {
 					// Extract env before mapstructure drops it.
-					var resultEnv map[string]string
-					if envRaw, envOk := resultMapSettingsTemplatesSettings["env"]; envOk {
-						resultEnv = make(map[string]string)
-						switch env := envRaw.(type) {
-						case map[string]any:
-							for k, v := range env {
-								if s, ok := v.(string); ok {
-									resultEnv[k] = s
-								}
-							}
-						case map[string]string:
-							resultEnv = env
-						}
-					}
+					resultEnv := convertRawEnvToStringMap(resultMapSettingsTemplatesSettings["env"])
 
 					err = mapstructure.Decode(resultMapSettingsTemplatesSettings, &templateSettings)
 					if err != nil {
@@ -381,8 +380,12 @@ func ProcessTmplWithDatasources(
 					}
 
 					// Restore env after mapstructure dropped it.
+					// Also update OS env vars for the next evaluation pass.
 					if len(resultEnv) > 0 {
 						templateSettings.Env = resultEnv
+						for k, v := range resultEnv {
+							os.Setenv(k, v)
+						}
 					}
 				}
 			}
