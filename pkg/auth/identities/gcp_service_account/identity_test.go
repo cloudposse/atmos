@@ -516,6 +516,8 @@ func TestPaths(t *testing.T) {
 	assert.Empty(t, paths)
 }
 
+// TestAuthenticate_Success verifies the service account identity exchanges
+// upstream credentials for impersonated credentials via IAM.
 func TestAuthenticate_Success(t *testing.T) {
 	principal := &types.GCPServiceAccountIdentityPrincipal{
 		ServiceAccountEmail: "sa@my-project.iam.gserviceaccount.com",
@@ -551,6 +553,8 @@ func TestAuthenticate_Success(t *testing.T) {
 	assert.Equal(t, "my-project", gcpCreds.ProjectID)
 }
 
+// TestAuthenticate_ExplicitProjectID verifies explicit project_id overrides
+// project extraction from the service account email during authentication.
 func TestAuthenticate_ExplicitProjectID(t *testing.T) {
 	principal := &types.GCPServiceAccountIdentityPrincipal{
 		ServiceAccountEmail: "sa@other-project.iam.gserviceaccount.com",
