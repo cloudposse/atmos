@@ -95,7 +95,7 @@ Sets environment variables and returns a cleanup function that restores original
 Prevents env pollution across components by saving and restoring the original state.
 
 ```go
-func setEnvVarsWithRestore(envVars map[string]string) (func (), error)
+func setEnvVarsWithRestore(envVars map[string]string) (func(), error)
 ```
 
 #### 3. Fix `ProcessTmplWithDatasources` (template_utils.go)
@@ -105,7 +105,7 @@ func setEnvVarsWithRestore(envVars map[string]string) (func (), error)
 - After the merge/decode pipeline, injects the merged env back into `templateSettings.Env`
   (stack manifest env overrides CLI config env)
 - Uses `setEnvVarsWithRestore` for deferred cleanup instead of raw `os.Setenv`
-- Also extracts env from the re-decoded template settings within the evaluation loop
+- Also extracts env from the re-decoded template settings within the evaluation loop.
 
 #### 4. Fix stack manifest env extraction (utils.go, describe_stacks.go)
 

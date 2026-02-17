@@ -138,7 +138,8 @@ func TestSetEnvVarsWithRestore(t *testing.T) {
 		// Set an existing var that will be overwritten.
 		t.Setenv("TEST_EXISTING_VAR", "original_value")
 
-		// Ensure a var that doesn't exist.
+		// Ensure a var that doesn't exist (register for cleanup first).
+		t.Setenv("TEST_NEW_VAR", "")
 		os.Unsetenv("TEST_NEW_VAR")
 
 		envVars := map[string]string{

@@ -168,12 +168,6 @@ func setEnvVarsWithRestore(envVars map[string]string) (func(), error) {
 		}
 	}
 
-	for k, v := range envVars {
-		if err := os.Setenv(k, v); err != nil {
-			return nil, err
-		}
-	}
-
 	cleanup := func() {
 		for k, original := range saved {
 			if original.existed {
@@ -181,6 +175,13 @@ func setEnvVarsWithRestore(envVars map[string]string) (func(), error) {
 			} else {
 				os.Unsetenv(k)
 			}
+		}
+	}
+
+	for k, v := range envVars {
+		if err := os.Setenv(k, v); err != nil {
+			// Return cleanup for vars already set before the failure.
+			return cleanup, err
 		}
 	}
 
@@ -266,6 +267,15 @@ func ProcessTmplWithDatasources(
 		}
 		defer cleanup()
 	}
+
+	// Track extra env keys introduced by the evaluation loop that weren't in the
+	// initial set, so we can clean them up when the function returns.
+	extraLoopKeys := make(map[string]struct{})
+	defer func() {
+		for k := range extraLoopKeys {
+			os.Unsetenv(k)
+		}
+	}()
 
 	for i := 0; i < evaluations; i++ {
 		log.Trace("ProcessTmplWithDatasources", logKeyTemplate, tmplName, "evaluation", i+1)
@@ -385,6 +395,10 @@ func ProcessTmplWithDatasources(
 						templateSettings.Env = resultEnv
 						for k, v := range resultEnv {
 							os.Setenv(k, v)
+							// Track keys not in the initial set for deferred cleanup.
+							if _, inInitial := mergedEnv[k]; !inInitial {
+								extraLoopKeys[k] = struct{}{}
+							}
 						}
 					}
 				}
