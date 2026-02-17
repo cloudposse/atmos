@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/go-github/v59/github"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -26,13 +27,11 @@ var (
 
 	// ErrNoArtifactForPlatform indicates no artifact exists for the current platform.
 	ErrNoArtifactForPlatform = errors.New("no artifact available for current platform")
-
-	// ErrUnsupportedPlatform indicates the current OS is not supported.
-	ErrUnsupportedPlatform = errors.New("unsupported platform")
 )
 
 const (
-	// WorkflowName is the name of the CI workflow that produces build artifacts.
+	// workflowName must match the "name:" field in .github/workflows/test.yml.
+	// PR/SHA artifact installation depends on this to find successful CI runs.
 	workflowName = "Tests"
 
 	// GitHub API pagination size.
@@ -224,6 +223,10 @@ func (f *ArtifactFetcher) getArtifactDownloadURL(ctx context.Context, owner, rep
 		return "", handleGitHubAPIError(err, resp)
 	}
 
+	if artifact == nil {
+		return "", fmt.Errorf("%w: API returned nil artifact for ID %d", ErrNoArtifactFound, artifactID)
+	}
+
 	return artifact.GetArchiveDownloadURL(), nil
 }
 
@@ -255,7 +258,7 @@ func getArtifactNameForPlatform() (string, error) {
 		}
 		return "", fmt.Errorf("%w: windows/%s (only windows/amd64 is built in CI)", ErrNoArtifactForPlatform, goarch)
 	default:
-		return "", fmt.Errorf("%w: %s/%s", ErrUnsupportedPlatform, goos, goarch)
+		return "", fmt.Errorf("%w: %s/%s", errUtils.ErrUnsupportedPlatform, goos, goarch)
 	}
 }
 
@@ -435,30 +438,24 @@ func (f *ArtifactFetcher) getSHAArtifactInfo(ctx context.Context, owner, repo, s
 	}, nil
 }
 
+// Error predicate functions are trivial one-liners — perf.Track omitted per guidelines.
+
 // IsNotFoundError checks if the error is a "not found" type error.
 func IsNotFoundError(err error) bool {
-	defer perf.Track(nil, "github.IsNotFoundError")()
-
 	return errors.Is(err, ErrPRNotFound)
 }
 
 // IsNoWorkflowError checks if the error is a "no workflow run" error.
 func IsNoWorkflowError(err error) bool {
-	defer perf.Track(nil, "github.IsNoWorkflowError")()
-
 	return errors.Is(err, ErrNoWorkflowRunFound)
 }
 
 // IsNoArtifactError checks if the error is a "no artifact" error.
 func IsNoArtifactError(err error) bool {
-	defer perf.Track(nil, "github.IsNoArtifactError")()
-
 	return errors.Is(err, ErrNoArtifactFound)
 }
 
 // IsPlatformError checks if the error is a platform-related error.
 func IsPlatformError(err error) bool {
-	defer perf.Track(nil, "github.IsPlatformError")()
-
-	return errors.Is(err, ErrNoArtifactForPlatform) || errors.Is(err, ErrUnsupportedPlatform)
+	return errors.Is(err, ErrNoArtifactForPlatform) || errors.Is(err, errUtils.ErrUnsupportedPlatform)
 }

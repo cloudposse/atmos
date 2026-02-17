@@ -159,7 +159,7 @@ func TestHandleSHAArtifactError(t *testing.T) {
 		},
 		{
 			name:         "unsupported platform error maps to ErrToolPlatformNotSupported",
-			inputErr:     fmt.Errorf("%w: plan9/amd64", github.ErrUnsupportedPlatform),
+			inputErr:     fmt.Errorf("%w: plan9/amd64", errUtils.ErrUnsupportedPlatform),
 			sha:          "abc1234def5678",
 			expectedType: errUtils.ErrToolPlatformNotSupported,
 		},
@@ -232,47 +232,6 @@ func TestIsNoArtifactError(t *testing.T) {
 func TestIsPlatformError(t *testing.T) {
 	assert.True(t, isPlatformError(github.ErrNoArtifactForPlatform))
 	assert.True(t, isPlatformError(fmt.Errorf("wrapped: %w", github.ErrNoArtifactForPlatform)))
-	assert.True(t, isPlatformError(github.ErrUnsupportedPlatform))
+	assert.True(t, isPlatformError(errUtils.ErrUnsupportedPlatform))
 	assert.False(t, isPlatformError(assert.AnError))
-}
-
-func TestJoinStrings(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    []string
-		sep      string
-		expected string
-	}{
-		{
-			name:     "empty slice",
-			input:    []string{},
-			sep:      ", ",
-			expected: "",
-		},
-		{
-			name:     "single element",
-			input:    []string{"hello"},
-			sep:      ", ",
-			expected: "hello",
-		},
-		{
-			name:     "multiple elements",
-			input:    []string{"linux/amd64", "darwin/arm64", "windows/amd64"},
-			sep:      ", ",
-			expected: "linux/amd64, darwin/arm64, windows/amd64",
-		},
-		{
-			name:     "different separator",
-			input:    []string{"a", "b", "c"},
-			sep:      " | ",
-			expected: "a | b | c",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := joinStrings(tt.input, tt.sep)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }

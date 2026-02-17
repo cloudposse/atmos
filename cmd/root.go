@@ -124,6 +124,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
+
 		// Check for --use-version=value format.
 		if strings.HasPrefix(arg, "--use-version=") {
 			return strings.TrimPrefix(arg, "--use-version=")
@@ -144,6 +149,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
 
 		// Check for --chdir=value format.
 		if strings.HasPrefix(arg, "--chdir=") {

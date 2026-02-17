@@ -49,10 +49,12 @@ func TestGetGitHubToken(t *testing.T) {
 			token := GetGitHubToken()
 
 			if tt.expectEmpty && tt.atmosToken == "" && tt.githubToken == "" {
-				// Token might be from gh CLI, so just check it's not our test values.
-				// If gh CLI is not installed, it will be empty.
-				assert.NotEqual(t, "atmos_token_123", token)
-				assert.NotEqual(t, "github_token_456", token)
+				// With no env vars set, token comes from gh CLI (if installed) or is empty.
+				// Either outcome is valid — we just verify it's not a test fixture value.
+				if token != "" {
+					assert.NotEqual(t, "atmos_token_123", token, "should not be a test fixture value")
+					assert.NotEqual(t, "github_token_456", token, "should not be a test fixture value")
+				}
 			} else if tt.expectedPrefix != "" {
 				assert.Equal(t, tt.expectedPrefix, token)
 			}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -17,7 +18,7 @@ import (
 )
 
 const (
-	// SHAVersionDirFormat is the format for SHA version directory names.
+	// shaVersionDirFormat is the format for SHA version directory names.
 	shaVersionDirFormat = "sha-%s"
 )
 
@@ -243,7 +244,7 @@ func buildPlatformNotSupportedError() error {
 	platforms := github.SupportedPRPlatforms()
 	return errUtils.Build(errUtils.ErrToolPlatformNotSupported).
 		WithExplanationf("No artifact available for %s/%s", runtime.GOOS, runtime.GOARCH).
-		WithHintf("Artifacts currently only support: %s", joinStrings(platforms, ", ")).
+		WithHintf("Artifacts currently only support: %s", strings.Join(platforms, ", ")).
 		WithHint("For unsupported platforms, try:").
 		WithHint("  - Download the release version: atmos --use-version <version>").
 		WithHint("  - Build from source: go install github.com/cloudposse/atmos@<branch>").
@@ -259,16 +260,4 @@ func buildGenericSHAError(shortSHA, commitURL string, err error) error {
 		WithHintf("Check commit: %s", commitURL).
 		WithExitCode(1).
 		Err()
-}
-
-// joinStrings joins strings with a separator.
-func joinStrings(strs []string, sep string) string {
-	result := ""
-	for i, s := range strs {
-		if i > 0 {
-			result += sep
-		}
-		result += s
-	}
-	return result
 }

@@ -12,6 +12,8 @@ import (
 	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestGetArtifactNameForPlatform(t *testing.T) {
@@ -47,7 +49,7 @@ func TestGetArtifactNameForPlatform(t *testing.T) {
 		}
 	default:
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, ErrUnsupportedPlatform)
+		assert.ErrorIs(t, err, errUtils.ErrUnsupportedPlatform)
 	}
 }
 
@@ -182,13 +184,13 @@ func TestIsPlatformError(t *testing.T) {
 			expected: true,
 		},
 		{
-			name:     "direct ErrUnsupportedPlatform",
-			err:      ErrUnsupportedPlatform,
+			name:     "direct errUtils.ErrUnsupportedPlatform",
+			err:      errUtils.ErrUnsupportedPlatform,
 			expected: true,
 		},
 		{
-			name:     "wrapped ErrUnsupportedPlatform",
-			err:      fmt.Errorf("context: %w", ErrUnsupportedPlatform),
+			name:     "wrapped errUtils.ErrUnsupportedPlatform",
+			err:      fmt.Errorf("context: %w", errUtils.ErrUnsupportedPlatform),
 			expected: true,
 		},
 		{
@@ -574,6 +576,25 @@ func TestArtifactFetcherGetArtifactDownloadURL_Success(t *testing.T) {
 	assert.Equal(t, "https://api.github.com/repos/owner/repo/actions/artifacts/555/zip", result)
 }
 
+func TestArtifactFetcherGetArtifactDownloadURL_NilArtifact(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	// API returns nil artifact without error.
+	mockActions.EXPECT().
+		GetArtifact(gomock.Any(), "owner", "repo", int64(555)).
+		Return(nil, nil, nil)
+
+	ctx := context.Background()
+	result, err := NewArtifactFetcher(nil, mockActions).GetArtifactDownloadURL(ctx, "owner", "repo", 555)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrNoArtifactFound)
+	assert.Empty(t, result)
+}
+
 func TestArtifactFetcherGetArtifactDownloadURL_APIError(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -914,6 +935,116 @@ func TestArtifactFetcherGetSHAArtifactInfo_NoArtifactError(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, result)
 	assert.ErrorIs(t, err, ErrNoArtifactFound)
+}
+
+func TestFindSuccessfulWorkflowRun_NilWorkflowRuns(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	// API returns nil WorkflowRuns.
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(nil, nil, nil)
+
+	ctx := context.Background()
+	result, err := findSuccessfulWorkflowRun(ctx, mockActions, "owner", "repo", "abc123")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrNoWorkflowRunFound)
+}
+
+func TestFindArtifactByName_NilArtifactList(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	// API returns nil ArtifactList.
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(nil, nil, nil)
+
+	ctx := context.Background()
+	result, err := findArtifactByName(ctx, mockActions, "owner", "repo", 12345, "build-artifacts-macos")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrNoArtifactFound)
+}
+
+func TestFindArtifactByName_NilArtifactsSlice(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	// API returns ArtifactList with nil Artifacts slice.
+	artifactList := &github.ArtifactList{
+		Artifacts: nil,
+	}
+
+	mockActions.EXPECT().
+		ListWorkflowRunArtifacts(gomock.Any(), "owner", "repo", int64(12345), gomock.Any()).
+		Return(artifactList, nil, nil)
+
+	ctx := context.Background()
+	result, err := findArtifactByName(ctx, mockActions, "owner", "repo", 12345, "build-artifacts-macos")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, ErrNoArtifactFound)
+}
+
+func TestArtifactFetcherGetSHAArtifactInfo_APIError(t *testing.T) {
+	skipIfUnsupportedPlatform(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockActions := NewMockActionsService(ctrl)
+
+	// Step 1 fails.
+	mockActions.EXPECT().
+		ListRepositoryWorkflowRuns(gomock.Any(), "owner", "repo", gomock.Any()).
+		Return(nil, nil, errors.New("API error"))
+
+	ctx := context.Background()
+	result, err := NewArtifactFetcher(nil, mockActions).GetSHAArtifactInfo(ctx, "owner", "repo", "abc123def456")
+
+	assert.Error(t, err)
+	assert.Nil(t, result)
+}
+
+func TestArtifactFetcherGetPRHeadSHA_NilResponse(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPRS := NewMockPullRequestService(ctrl)
+
+	// API returns error with nil response.
+	mockPRS.EXPECT().
+		Get(gomock.Any(), "owner", "repo", 42).
+		Return(nil, nil, errors.New("network error"))
+
+	ctx := context.Background()
+	result, err := NewArtifactFetcher(mockPRS, nil).GetPRHeadSHA(ctx, "owner", "repo", 42)
+
+	assert.Error(t, err)
+	assert.Empty(t, result)
+}
+
+func TestNewArtifactFetcher(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockPRS := NewMockPullRequestService(ctrl)
+	mockActions := NewMockActionsService(ctrl)
+
+	fetcher := NewArtifactFetcher(mockPRS, mockActions)
+	assert.NotNil(t, fetcher)
 }
 
 // Note: Full integration tests for GetPRArtifactInfo require a real GitHub token

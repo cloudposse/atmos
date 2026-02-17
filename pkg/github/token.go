@@ -1,13 +1,20 @@
 package github
 
 import (
+	"context"
 	"errors"
 	"os/exec"
 	"strings"
+	"time"
 
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+)
+
+const (
+	// ghCLITimeout is the maximum time to wait for `gh auth token` to respond.
+	ghCLITimeout = 5 * time.Second
 )
 
 // ErrGitHubTokenRequired indicates that a GitHub token is required but not found.
@@ -58,8 +65,10 @@ func GetGitHubTokenOrError() (string, error) {
 func getGitHubTokenFromCLI() string {
 	defer perf.Track(nil, "github.getGitHubTokenFromCLI")()
 
-	// Try to get token from gh CLI.
-	cmd := exec.Command("gh", "auth", "token")
+	// Try to get token from gh CLI with timeout to prevent hanging.
+	ctx, cancel := context.WithTimeout(context.Background(), ghCLITimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gh", "auth", "token")
 	output, err := cmd.Output()
 	if err != nil {
 		// gh not installed or not authenticated - this is expected.

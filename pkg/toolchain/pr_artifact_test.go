@@ -2,6 +2,8 @@ package toolchain
 
 import (
 	"archive/zip"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -361,6 +363,140 @@ func TestListFiles_EmptyDir(t *testing.T) {
 	// Should contain at least the root dir entry.
 	assert.Contains(t, files, ".")
 	assert.Len(t, files, 1)
+}
+
+func TestSavePRCacheMetadataAfterInstall(t *testing.T) {
+	tempDir := t.TempDir()
+	cleanup := setupTestInstallPath(t, tempDir)
+	defer cleanup()
+
+	// Create the PR directory structure.
+	prDir := filepath.Join(tempDir, "bin", "cloudposse", "atmos", "pr-2040")
+	require.NoError(t, os.MkdirAll(prDir, 0o755))
+
+	info := &github.PRArtifactInfo{
+		PRNumber:     2040,
+		HeadSHA:      "abc123def456789",
+		RunID:        99999,
+		ArtifactID:   12345,
+		ArtifactName: "build-artifacts-macos",
+		SizeInBytes:  1024,
+	}
+
+	SavePRCacheMetadataAfterInstall(2040, info)
+
+	// Verify file was created.
+	cacheFile := filepath.Join(prDir, cacheMetadataFile)
+	assert.FileExists(t, cacheFile)
+
+	// Read back and verify.
+	data, err := os.ReadFile(cacheFile)
+	require.NoError(t, err)
+
+	var loaded PRCacheMetadata
+	require.NoError(t, json.Unmarshal(data, &loaded))
+	assert.Equal(t, "abc123def456789", loaded.HeadSHA)
+	assert.Equal(t, int64(99999), loaded.RunID)
+}
+
+func TestCheckPRCacheAndUpdate_NoMetadata(t *testing.T) {
+	tempDir := t.TempDir()
+	cleanup := setupTestInstallPath(t, tempDir)
+	defer cleanup()
+
+	// No metadata exists for this PR.
+	ctx := context.Background()
+	needsReinstall, err := CheckPRCacheAndUpdate(ctx, 12345, false)
+
+	// When no metadata exists, it should return true (needs reinstall) with nil error.
+	assert.True(t, needsReinstall)
+	assert.NoError(t, err)
+}
+
+func TestExtractZipFile_WithDirectory(t *testing.T) {
+	tempDir := t.TempDir()
+	zipPath := filepath.Join(tempDir, "test.zip")
+	extractDir := filepath.Join(tempDir, "extract")
+	require.NoError(t, os.MkdirAll(extractDir, 0o755))
+
+	// Create a ZIP with a directory entry and a nested file.
+	f, err := os.Create(zipPath)
+	require.NoError(t, err)
+
+	w := zip.NewWriter(f)
+	// Add a directory entry.
+	_, err = w.Create("subdir/")
+	require.NoError(t, err)
+	// Add a file in the directory.
+	fw, err := w.Create("subdir/file.txt")
+	require.NoError(t, err)
+	_, err = fw.Write([]byte("nested content"))
+	require.NoError(t, err)
+	require.NoError(t, w.Close())
+	require.NoError(t, f.Close())
+
+	err = extractZipFile(zipPath, extractDir)
+	require.NoError(t, err)
+
+	// Verify the directory was created.
+	info, err := os.Stat(filepath.Join(extractDir, "subdir"))
+	require.NoError(t, err)
+	assert.True(t, info.IsDir())
+
+	// Verify the nested file was extracted.
+	content, err := os.ReadFile(filepath.Join(extractDir, "subdir", "file.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "nested content", string(content))
+}
+
+func TestCopyFile_DestDirNotFound(t *testing.T) {
+	tempDir := t.TempDir()
+	srcPath := filepath.Join(tempDir, "source.txt")
+	require.NoError(t, os.WriteFile(srcPath, []byte("content"), 0o644))
+
+	// Destination directory doesn't exist.
+	dstPath := filepath.Join(tempDir, "nonexistent", "dest.txt")
+	err := copyFile(srcPath, dstPath)
+	assert.Error(t, err)
+}
+
+func TestInstallArtifactBinaryToDir_InvalidZip(t *testing.T) {
+	tempDir := t.TempDir()
+	cleanup := setupTestInstallPath(t, tempDir)
+	defer cleanup()
+
+	// Create an invalid zip file.
+	zipDir := filepath.Join(tempDir, "zips")
+	require.NoError(t, os.MkdirAll(zipDir, 0o755))
+	zipPath := filepath.Join(zipDir, "bad.zip")
+	require.NoError(t, os.WriteFile(zipPath, []byte("not a zip"), 0o644))
+
+	_, err := installArtifactBinaryToDir("test-bad", zipPath)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+}
+
+func TestSanitizeZipPath_AbsoluteWindowsPath(t *testing.T) {
+	baseDir := t.TempDir()
+	destDir := filepath.Clean(baseDir) + string(os.PathSeparator)
+
+	// Backslash path should be rejected.
+	_, err := sanitizeZipPath("dir\\file.txt", destDir)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, ErrPRArtifactExtractFailed)
+}
+
+func TestHandlePRArtifactError_ContainsPRURL(t *testing.T) {
+	// Verify the error wraps the expected sentinel error.
+	err := handlePRArtifactError(assert.AnError, 2038)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+}
+
+func TestBuildTokenRequiredError_ContainsHints(t *testing.T) {
+	err := buildTokenRequiredError()
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 }
 
 // Note: Full integration tests for InstallFromPR require:

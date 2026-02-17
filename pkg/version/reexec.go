@@ -250,12 +250,12 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 	// Handle PR versions (pr:NNNN or just digits) - install from PR artifact.
 	if vType == toolchain.VersionTypePR {
 		prNumber, _ := toolchain.IsPRVersion(version)
-		return findOrInstallPRVersion(prNumber, cfg)
+		return findOrInstallPRVersion(prNumber)
 	}
 
 	// Handle SHA versions (sha:XXXXXXX or auto-detected hex strings) - install from SHA artifact.
 	if vType == toolchain.VersionTypeSHA {
-		return findOrInstallSHAVersion(normalizedVersion, cfg)
+		return findOrInstallSHAVersion(normalizedVersion)
 	}
 
 	// For semver versions, try to find existing installation.
@@ -295,7 +295,7 @@ func findOrInstallVersionWithConfig(version string, cfg *ReexecConfig) (string, 
 //   - If binary exists and cache is within TTL (1 min) -> use cached binary, no API call.
 //   - If binary exists but TTL expired -> check API for new commits.
 //   - If no binary exists -> fresh install.
-func findOrInstallPRVersion(prNumber int, _ *ReexecConfig) (string, error) {
+func findOrInstallPRVersion(prNumber int) (string, error) {
 	defer perf.Track(nil, "version.findOrInstallPRVersion")()
 
 	ctx := context.Background()
@@ -347,7 +347,7 @@ func findOrInstallPRVersion(prNumber int, _ *ReexecConfig) (string, error) {
 
 // findOrInstallSHAVersion finds the binary for a SHA version, installing if needed.
 // SHAs are immutable, so if a binary exists, it's always valid.
-func findOrInstallSHAVersion(sha string, _ *ReexecConfig) (string, error) {
+func findOrInstallSHAVersion(sha string) (string, error) {
 	defer perf.Track(nil, "version.findOrInstallSHAVersion")()
 
 	// Check if binary already exists (SHAs are immutable, no TTL check needed).
