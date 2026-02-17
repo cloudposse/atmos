@@ -62,8 +62,14 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	// Check for --ci flag or CI environment variable.
-	// The flag is registered via TerraformFlags() which includes CI env var binding.
-	forceCIMode := viper.GetBool("ci")
+	// Read directly from Cobra flag (not Viper) because pflags are only bound
+	// to Viper in RunE via BindFlagsToViper. During PreRunE, Viper doesn't
+	// yet see the Cobra flag value — only env vars and defaults.
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		// Fall back to Viper for env var support (ATMOS_CI, CI).
+		forceCIMode = viper.GetBool("ci")
+	}
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
