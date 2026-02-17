@@ -2,9 +2,11 @@ package ci
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -513,14 +515,189 @@ func logArtifactOperation(op, key, storeName, path string, info *schema.ConfigAn
 	log.Debug(op+" planfile", args...)
 }
 
-// executeCheckAction performs a validation/check.
+// checkRunIDs stores check run IDs keyed by "stack/component/command" for correlating
+// before/after hook events within the same process.
+var checkRunIDs sync.Map
+
+// executeCheckAction creates or updates a check run on the CI platform.
+// For "before" events it creates a check run with in_progress status.
+// For "after" events it updates the existing check run with the final result.
 func executeCheckAction(ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckAction")()
 
-	// Check actions are provider-specific.
-	// For now, this is a placeholder for future drift detection, etc.
-	log.Debug("Check action not yet implemented")
+	eventPrefix := extractEventPrefix(ctx.Opts.Event)
+
+	switch eventPrefix {
+	case "before":
+		return executeCheckCreate(ctx)
+	case "after":
+		return executeCheckUpdate(ctx)
+	default:
+		log.Debug("Unknown event prefix for check action", "prefix", eventPrefix, "event", ctx.Opts.Event)
+		return nil
+	}
+}
+
+// executeCheckCreate creates a new check run with in_progress status.
+func executeCheckCreate(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckCreate")()
+
+	name := provider.FormatCheckRunName(ctx.Command, ctx.Opts.Info.Stack, ctx.Opts.Info.ComponentFromArg)
+
+	opts := &provider.CreateCheckRunOptions{
+		Name:   name,
+		Status: provider.CheckRunStateInProgress,
+		Title:  fmt.Sprintf("Running %s...", ctx.Command),
+	}
+
+	if ctx.CICtx != nil {
+		opts.Owner = ctx.CICtx.RepoOwner
+		opts.Repo = ctx.CICtx.RepoName
+		opts.SHA = ctx.CICtx.SHA
+	}
+
+	checkRun, err := ctx.Platform.CreateCheckRun(context.Background(), opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
+			WithCause(err).
+			WithContext("name", name).
+			Err()
+	}
+
+	// Store check run ID for the corresponding "after" event.
+	key := buildCheckRunKey(ctx)
+	checkRunIDs.Store(key, checkRun.ID)
+
+	log.Debug("Created check run", "name", name, "id", checkRun.ID)
 	return nil
+}
+
+// executeCheckUpdate updates an existing check run with the final result.
+// If no stored check run ID is found (e.g., the before hook was skipped),
+// it falls back to creating a new completed check run.
+func executeCheckUpdate(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckUpdate")()
+
+	name := provider.FormatCheckRunName(ctx.Command, ctx.Opts.Info.Stack, ctx.Opts.Info.ComponentFromArg)
+	key := buildCheckRunKey(ctx)
+
+	// Look up stored check run ID from the "before" event.
+	idVal, ok := checkRunIDs.LoadAndDelete(key)
+	if !ok {
+		// No stored ID — create a new completed check run instead.
+		log.Debug("No check run ID found for update, creating new completed check run", "name", name)
+		return executeCheckCreateCompleted(ctx, name)
+	}
+
+	checkRunID, _ := idVal.(int64)
+	status, conclusion := resolveCheckResult(ctx)
+	now := time.Now()
+
+	opts := &provider.UpdateCheckRunOptions{
+		CheckRunID:  checkRunID,
+		Name:        name,
+		Status:      status,
+		Conclusion:  conclusion,
+		Title:       buildCheckTitle(ctx),
+		Summary:     buildCheckSummary(ctx),
+		CompletedAt: &now,
+	}
+
+	if ctx.CICtx != nil {
+		opts.Owner = ctx.CICtx.RepoOwner
+		opts.Repo = ctx.CICtx.RepoName
+	}
+
+	_, err := ctx.Platform.UpdateCheckRun(context.Background(), opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
+			WithCause(err).
+			WithContext("name", name).
+			WithContext("check_run_id", fmt.Sprintf("%d", checkRunID)).
+			Err()
+	}
+
+	log.Debug("Updated check run", "name", name, "id", checkRunID, "status", status)
+	return nil
+}
+
+// executeCheckCreateCompleted creates a new check run with the final result status.
+// Used when no "before" event was processed (e.g., checks were enabled mid-run).
+func executeCheckCreateCompleted(ctx *actionContext, name string) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckCreateCompleted")()
+
+	status, _ := resolveCheckResult(ctx)
+
+	opts := &provider.CreateCheckRunOptions{
+		Name:    name,
+		Status:  status,
+		Title:   buildCheckTitle(ctx),
+		Summary: buildCheckSummary(ctx),
+	}
+
+	if ctx.CICtx != nil {
+		opts.Owner = ctx.CICtx.RepoOwner
+		opts.Repo = ctx.CICtx.RepoName
+		opts.SHA = ctx.CICtx.SHA
+	}
+
+	_, err := ctx.Platform.CreateCheckRun(context.Background(), opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
+			WithCause(err).
+			WithContext("name", name).
+			Err()
+	}
+
+	log.Debug("Created completed check run", "name", name, "status", status)
+	return nil
+}
+
+// buildCheckRunKey creates a unique key for storing check run IDs between before/after events.
+func buildCheckRunKey(ctx *actionContext) string {
+	return ctx.Opts.Info.Stack + "/" + ctx.Opts.Info.ComponentFromArg + "/" + ctx.Command
+}
+
+// resolveCheckResult determines the check run status and conclusion from the action context.
+func resolveCheckResult(ctx *actionContext) (provider.CheckRunState, string) {
+	// If the after hook is being called, the command completed without a fatal error.
+	return provider.CheckRunStateSuccess, "success"
+}
+
+// buildCheckTitle creates a human-readable title for a completed check run.
+func buildCheckTitle(ctx *actionContext) string {
+	if ctx.Result != nil {
+		if tfData, ok := ctx.Result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
+			return tfData.ChangedResult
+		}
+
+		if ctx.Result.HasChanges {
+			return fmt.Sprintf("%s: changes detected", ctx.Command)
+		}
+	}
+
+	return fmt.Sprintf("%s: no changes", ctx.Command)
+}
+
+// buildCheckSummary creates a brief summary for a completed check run.
+func buildCheckSummary(ctx *actionContext) string {
+	if ctx.Result != nil {
+		if tfData, ok := ctx.Result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
+			return tfData.ChangedResult
+		}
+	}
+
+	return ""
+}
+
+// extractEventPrefix extracts the prefix from a hook event.
+// Example: "before.terraform.plan" → "before".
+func extractEventPrefix(event string) string {
+	parts := strings.Split(event, ".")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
 }
 
 // createPlanfileStore creates a planfile store from configuration.

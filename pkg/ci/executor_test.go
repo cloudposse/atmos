@@ -403,6 +403,206 @@ func TestIsActionEnabled(t *testing.T) {
 	}
 }
 
+func TestExtractEventPrefix(t *testing.T) {
+	tests := []struct {
+		event    string
+		expected string
+	}{
+		{"before.terraform.plan", "before"},
+		{"after.terraform.plan", "after"},
+		{"after.helmfile.diff", "after"},
+		{"single", "single"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.event, func(t *testing.T) {
+			result := extractEventPrefix(tt.event)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestExecuteCheckAction_BeforeEvent(t *testing.T) {
+	mp := &mockProvider{name: "test", detected: true}
+
+	ctx := &actionContext{
+		Opts: ExecuteOptions{
+			Event: "before.terraform.plan",
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev-us-east-1",
+				ComponentFromArg: "vpc",
+			},
+		},
+		Platform: mp,
+		CICtx: &provider.Context{
+			RepoOwner: "owner",
+			RepoName:  "repo",
+			SHA:       "abc123",
+		},
+		Command: "plan",
+	}
+
+	err := executeCheckAction(ctx)
+	require.NoError(t, err)
+
+	// Verify the check run ID was stored.
+	key := buildCheckRunKey(ctx)
+	idVal, ok := checkRunIDs.LoadAndDelete(key)
+	assert.True(t, ok)
+	assert.Equal(t, int64(1), idVal)
+}
+
+func TestExecuteCheckAction_AfterEvent_WithStoredID(t *testing.T) {
+	mp := &mockProvider{name: "test", detected: true}
+
+	ctx := &actionContext{
+		Opts: ExecuteOptions{
+			Event: "after.terraform.plan",
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev-us-east-1",
+				ComponentFromArg: "vpc",
+			},
+		},
+		Platform: mp,
+		CICtx: &provider.Context{
+			RepoOwner: "owner",
+			RepoName:  "repo",
+		},
+		Command: "plan",
+		Result: &plugin.OutputResult{
+			HasChanges: true,
+			Data: &plugin.TerraformOutputData{
+				ChangedResult: "Plan: 3 to add, 1 to change, 0 to destroy.",
+			},
+		},
+	}
+
+	// Pre-store a check run ID (simulating a "before" event).
+	key := buildCheckRunKey(ctx)
+	checkRunIDs.Store(key, int64(42))
+
+	err := executeCheckAction(ctx)
+	require.NoError(t, err)
+
+	// Verify the stored ID was consumed.
+	_, ok := checkRunIDs.Load(key)
+	assert.False(t, ok)
+}
+
+func TestExecuteCheckAction_AfterEvent_NoStoredID(t *testing.T) {
+	mp := &mockProvider{name: "test", detected: true}
+
+	ctx := &actionContext{
+		Opts: ExecuteOptions{
+			Event: "after.terraform.plan",
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "prod-us-west-2",
+				ComponentFromArg: "rds",
+			},
+		},
+		Platform: mp,
+		CICtx: &provider.Context{
+			RepoOwner: "owner",
+			RepoName:  "repo",
+			SHA:       "def456",
+		},
+		Command: "plan",
+		Result:  &plugin.OutputResult{},
+	}
+
+	// No pre-stored ID — should fall back to creating a completed check run.
+	err := executeCheckAction(ctx)
+	require.NoError(t, err)
+}
+
+func TestBuildCheckTitle(t *testing.T) {
+	t.Run("with terraform changed result", func(t *testing.T) {
+		ctx := &actionContext{
+			Command: "plan",
+			Result: &plugin.OutputResult{
+				HasChanges: true,
+				Data: &plugin.TerraformOutputData{
+					ChangedResult: "Plan: 5 to add, 2 to change, 1 to destroy.",
+				},
+			},
+		}
+		assert.Equal(t, "Plan: 5 to add, 2 to change, 1 to destroy.", buildCheckTitle(ctx))
+	})
+
+	t.Run("with changes but no terraform data", func(t *testing.T) {
+		ctx := &actionContext{
+			Command: "plan",
+			Result: &plugin.OutputResult{
+				HasChanges: true,
+			},
+		}
+		assert.Equal(t, "plan: changes detected", buildCheckTitle(ctx))
+	})
+
+	t.Run("no changes", func(t *testing.T) {
+		ctx := &actionContext{
+			Command: "plan",
+			Result:  &plugin.OutputResult{},
+		}
+		assert.Equal(t, "plan: no changes", buildCheckTitle(ctx))
+	})
+
+	t.Run("nil result", func(t *testing.T) {
+		ctx := &actionContext{
+			Command: "plan",
+		}
+		assert.Equal(t, "plan: no changes", buildCheckTitle(ctx))
+	})
+}
+
+func TestBuildCheckSummary(t *testing.T) {
+	t.Run("with terraform changed result", func(t *testing.T) {
+		ctx := &actionContext{
+			Result: &plugin.OutputResult{
+				Data: &plugin.TerraformOutputData{
+					ChangedResult: "Plan: 3 to add, 0 to change, 0 to destroy.",
+				},
+			},
+		}
+		assert.Equal(t, "Plan: 3 to add, 0 to change, 0 to destroy.", buildCheckSummary(ctx))
+	})
+
+	t.Run("nil result returns empty", func(t *testing.T) {
+		ctx := &actionContext{}
+		assert.Empty(t, buildCheckSummary(ctx))
+	})
+
+	t.Run("no terraform data returns empty", func(t *testing.T) {
+		ctx := &actionContext{
+			Result: &plugin.OutputResult{},
+		}
+		assert.Empty(t, buildCheckSummary(ctx))
+	})
+}
+
+func TestResolveCheckResult(t *testing.T) {
+	ctx := &actionContext{
+		Result: &plugin.OutputResult{HasChanges: true},
+	}
+	status, conclusion := resolveCheckResult(ctx)
+	assert.Equal(t, provider.CheckRunStateSuccess, status)
+	assert.Equal(t, "success", conclusion)
+}
+
+func TestBuildCheckRunKey(t *testing.T) {
+	ctx := &actionContext{
+		Opts: ExecuteOptions{
+			Info: &schema.ConfigAndStacksInfo{
+				Stack:            "dev-us-east-1",
+				ComponentFromArg: "vpc",
+			},
+		},
+		Command: "plan",
+	}
+	assert.Equal(t, "dev-us-east-1/vpc/plan", buildCheckRunKey(ctx))
+}
+
 func TestFilterVariables(t *testing.T) {
 	tests := []struct {
 		name     string
