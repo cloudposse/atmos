@@ -669,7 +669,7 @@ func TestADC_PrepareEnvironment_EmptyRealm(t *testing.T) {
 	p.SetRealm("")
 
 	env, err := p.PrepareEnvironment(context.Background(), map[string]string{
-		"PATH":                      "/usr/bin",
+		"PATH":                           "/usr/bin",
 		"GOOGLE_APPLICATION_CREDENTIALS": "/some/path/to/key.json",
 	})
 	require.NoError(t, err)
