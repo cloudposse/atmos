@@ -70,6 +70,36 @@ func TestNewProvider_Factory(t *testing.T) {
 			expectError:  false,
 		},
 		{
+			name:         "gcp-adc-valid",
+			providerName: "gcp-adc",
+			config: &schema.Provider{
+				Kind: "gcp/adc",
+				Spec: map[string]interface{}{
+					"project_id": "test-project",
+					"region":     "us-central1",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "gcp-wif-valid",
+			providerName: "gcp-wif",
+			config: &schema.Provider{
+				Kind: "gcp/workload-identity-federation",
+				Spec: map[string]interface{}{
+					"project_id":                    "wif-project",
+					"project_number":                "123456789",
+					"workload_identity_pool_id":     "my-pool",
+					"workload_identity_provider_id": "my-provider",
+					"token_source": map[string]interface{}{
+						"type":                 "environment",
+						"environment_variable": "OIDC_TOKEN",
+					},
+				},
+			},
+			expectError: false,
+		},
+		{
 			name:         "mock-provider",
 			providerName: "mock",
 			config:       &schema.Provider{Kind: "mock"},
@@ -167,6 +197,30 @@ func TestNewIdentity_Factory(t *testing.T) {
 				Kind: "azure/subscription",
 				Principal: map[string]interface{}{
 					"subscription_id": "test-subscription-id",
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "gcp-service-account-valid",
+			identityName: "gcp-sa",
+			config: &schema.Identity{
+				Kind: "gcp/service-account",
+				Principal: map[string]interface{}{
+					"service_account_email": "deployer@my-project.iam.gserviceaccount.com",
+					"scopes":                []interface{}{"https://www.googleapis.com/auth/cloud-platform"},
+				},
+			},
+			expectError: false,
+		},
+		{
+			name:         "gcp-project-valid",
+			identityName: "gcp-project",
+			config: &schema.Identity{
+				Kind: "gcp/project",
+				Principal: map[string]interface{}{
+					"project_id": "my-project",
+					"region":     "us-west1",
 				},
 			},
 			expectError: false,

@@ -98,6 +98,9 @@ tests:
     expect:
       diff:
         - 'github_token:'  # Varies by environment (present when GITHUB_TOKEN is set)
+      sanitize:
+        # Normalize realm hash which varies by environment (derived from config path)
+        "realm: [a-f0-9]+": "realm: <hash>"
       stdout:
         # Must see the scenario's unique values
         - "chdir-isolation-vendor"

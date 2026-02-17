@@ -18,6 +18,7 @@ import (
 func TestCreateAndAuthenticateManager_EmptyIdentity(t *testing.T) {
 	// When identity name is empty, function should return nil without error.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Identities: map[string]schema.Identity{
 			"test": {Kind: "aws/user"},
 		},
@@ -54,6 +55,7 @@ func TestCreateAndAuthenticateManager_EmptyIdentities(t *testing.T) {
 func TestCreateAndAuthenticateManager_NonExistentIdentity(t *testing.T) {
 	// When trying to authenticate with an identity that doesn't exist in config.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -89,6 +91,7 @@ func TestCreateAndAuthenticateManager_SelectValueWithSingleDefault(t *testing.T)
 	// the function should automatically use that default identity.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -146,6 +149,7 @@ func TestCreateAndAuthenticateManager_SelectValueInCIMode(t *testing.T) {
 	// should return an error since TTY is not available.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -198,6 +202,7 @@ func TestCreateAndAuthenticateManager_ManagerCreation(t *testing.T) {
 	// We verify this by checking that the manager structure is created correctly.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -249,6 +254,7 @@ func TestCreateAndAuthenticateManager_AuthContextPopulation(t *testing.T) {
 	// Test that AuthContext is properly initialized in stackInfo.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -294,6 +300,7 @@ func TestCreateAndAuthenticateManager_WithConflictingEnvVars(t *testing.T) {
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY")
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -376,6 +383,7 @@ func TestCreateAndAuthenticateManager_SelectValueParameter(t *testing.T) {
 	// Test that the selectValue parameter is used correctly for comparison.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -417,6 +425,7 @@ func TestCreateAndAuthenticateManager_AutoDetectSingleDefault(t *testing.T) {
 	// the function should automatically detect and use it.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -476,6 +485,7 @@ func TestCreateAndAuthenticateManager_AutoDetectNoDefault(t *testing.T) {
 	// the function should return nil (no authentication).
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -557,6 +567,7 @@ func TestCreateAndAuthenticateManager_AutoDetectMultipleDefaults(t *testing.T) {
 	// This test runs in CI-like environment (no TTY), so we expect nil.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -614,6 +625,7 @@ func TestCreateAndAuthenticateManager_ExplicitlyDisabled(t *testing.T) {
 	// This allows users to use external identity mechanisms like Leapp.
 
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -816,6 +828,7 @@ func TestResolveIdentityName(t *testing.T) {
 
 func TestCreateAuthManagerInstance(t *testing.T) {
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -882,6 +895,7 @@ func TestAutoDetectDefaultIdentity_UserAbortPropagation(t *testing.T) {
 func TestCreateAndAuthenticateManagerWithAtmosConfig_NilAtmosConfig(t *testing.T) {
 	// When atmosConfig is nil, should behave exactly like CreateAndAuthenticateManager.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -917,6 +931,7 @@ func TestCreateAndAuthenticateManagerWithAtmosConfig_SkipsWhenAtmosConfigDefault
 	// When an identity already has default: true in authConfig (from atmos.yaml),
 	// the stack loading should be skipped to avoid unnecessary file I/O.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -1052,6 +1067,7 @@ func TestAuthenticateWithIdentity_SelectValue(t *testing.T) {
 	// Test the forceSelect branch in authenticateWithIdentity.
 	// When identityName matches selectValue, it should call GetDefaultIdentity(true).
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -1093,6 +1109,7 @@ func TestResolveIdentityName_EmptyWithAuth(t *testing.T) {
 	// Test resolveIdentityName with empty identity but auth configured.
 	// Should attempt auto-detection.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind:     "aws/iam-identity-center",

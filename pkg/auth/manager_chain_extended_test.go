@@ -58,6 +58,7 @@ func TestManager_DetermineStartingIndex(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
 	}, credStore, validator, nil, "")
@@ -100,6 +101,7 @@ func TestManager_GetChainStepName(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
 	}, credStore, validator, nil, "")
@@ -160,6 +162,7 @@ func TestManager_IsCredentialValid(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
 	}, credStore, validator, nil, "")
@@ -242,6 +245,7 @@ func TestManager_BuildAuthenticationChain_AWSUserStandalone(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:     "test-realm",
 		Providers: map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{
 			"aws-user": {
@@ -263,6 +267,7 @@ func TestManager_BuildAuthenticationChain_WithProvider(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"my-provider": {
 				Kind: "mock",
@@ -291,6 +296,7 @@ func TestManager_BuildAuthenticationChain_MultipleIdentities(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"my-provider": {
 				Kind: "mock",

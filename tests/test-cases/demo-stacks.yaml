@@ -106,6 +106,9 @@ tests:
         - "yaml"
       diff:
         - "github_token"
+      sanitize:
+        # Normalize realm hash which varies by environment (derived from config path)
+        "realm: [a-f0-9]+": "realm: <hash>"
       stdout:
         - 'append_user_agent: Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)'
       exit_code: 0
@@ -127,6 +130,9 @@ tests:
       diff:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
         - "GithubToken"
+      sanitize:
+        # Normalize realm hash which varies by environment (derived from config path)
+        '"realm": "[a-f0-9]+"': '"realm": "<hash>"'
       stdout:
         - '"append_user_agent": "Atmos/(\d+\.\d+\.\d+|test) \(Cloud Posse; \+https:\/\/atmos\.tools\)"'
       exit_code: 0
