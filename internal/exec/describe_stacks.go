@@ -459,6 +459,11 @@ func ExecuteDescribeStacks(
 									return nil, err
 								}
 
+								// Restore env vars that mapstructure:"-" dropped during Decode.
+								if envMap := extractEnvFromRawMap(settingsSection); len(envMap) > 0 {
+									settingsSectionStruct.Templates.Settings.Env = envMap
+								}
+
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
 									atmosConfig,
 									&configAndStacksInfo,
@@ -708,6 +713,11 @@ func ExecuteDescribeStacks(
 									return nil, err
 								}
 
+								// Restore env vars that mapstructure:"-" dropped during Decode.
+								if envMap := extractEnvFromRawMap(settingsSection); len(envMap) > 0 {
+									settingsSectionStruct.Templates.Settings.Env = envMap
+								}
+
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
 									atmosConfig,
 									&configAndStacksInfo,
@@ -940,6 +950,11 @@ func ExecuteDescribeStacks(
 								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 								if err != nil {
 									return nil, err
+								}
+
+								// Restore env vars that mapstructure:"-" dropped during Decode.
+								if envMap := extractEnvFromRawMap(settingsSection); len(envMap) > 0 {
+									settingsSectionStruct.Templates.Settings.Env = envMap
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(

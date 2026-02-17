@@ -4,7 +4,7 @@ sidebar_position: 3
 sidebar_label: identities
 sidebar_class_name: command
 id: identities
-description: Configure authentication identities including AWS permission sets, assume roles, and IAM users in your `atmos.yaml`.
+description: Configure authentication identities including AWS permission sets, assume roles, Azure subscriptions, and GCP service accounts in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -216,6 +216,91 @@ auth:
 </dl>
 
 The Azure subscription identity inherits credentials from the provider and sets subscription-specific environment variables (`AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, etc.) for Terraform and other Azure tools.
+
+## GCP Service Account
+
+For impersonating a GCP service account using credentials from a GCP provider.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    terraform:
+      kind: gcp/service-account
+      default: true
+      via:
+        provider: gcp-adc             # Or gcp-wif for CI/CD
+      principal:
+        service_account_email: terraform@my-project.iam.gserviceaccount.com
+        project_id: my-project        # Optional: override project
+        scopes:                       # Optional: custom scopes
+          - https://www.googleapis.com/auth/cloud-platform
+        lifetime: 3600s               # Optional: token lifetime (default 1h)
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/service-account`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of a GCP provider (`gcp/adc` or `gcp/workload-identity-federation`).</dd>
+
+  <dt>`principal.service_account_email`</dt>
+  <dd>**Required.** Email of the service account to impersonate.</dd>
+
+  <dt>`principal.project_id`</dt>
+  <dd>Optional. GCP project ID. If not set, extracted from service account email.</dd>
+
+  <dt>`principal.scopes`</dt>
+  <dd>Optional. OAuth scopes for the impersonated token. Defaults to `https://www.googleapis.com/auth/cloud-platform`.</dd>
+
+  <dt>`principal.lifetime`</dt>
+  <dd>Optional. Token lifetime (e.g., `3600s`, `1h`). Default is 1 hour, maximum is 12 hours.</dd>
+
+  <dt>`principal.delegates`</dt>
+  <dd>Optional. Chain of service accounts for multi-hop impersonation.</dd>
+</dl>
+
+The service account identity uses the IAM Credentials API to generate access tokens. Requires the base identity to have `roles/iam.serviceAccountTokenCreator` on the target service account.
+
+## GCP Project
+
+For setting GCP project context without authentication. Useful for targeting a specific project when credentials come from a provider or parent identity.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    prod-project:
+      kind: gcp/project
+      via:
+        provider: gcp-adc
+      principal:
+        project_id: production-project
+        region: us-central1           # Optional: default region
+        zone: us-central1-a           # Optional: default zone
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/project`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>Optional. Name of a GCP provider to obtain credentials from.</dd>
+
+  <dt>`principal.project_id`</dt>
+  <dd>**Required.** GCP project ID to target.</dd>
+
+  <dt>`principal.region`</dt>
+  <dd>Optional. Default GCP region for resources.</dd>
+
+  <dt>`principal.zone`</dt>
+  <dd>Optional. Default GCP zone for resources.</dd>
+</dl>
+
+The project identity sets environment variables (`GOOGLE_CLOUD_PROJECT`, `CLOUDSDK_CORE_PROJECT`, `GOOGLE_CLOUD_REGION`, etc.) for Terraform and gcloud tools.
 
 ## Identity Chaining
 

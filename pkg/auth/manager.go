@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/auth/factory"
 	"github.com/cloudposse/atmos/pkg/auth/identities/aws"
 	_ "github.com/cloudposse/atmos/pkg/auth/integrations/aws" // Register aws/ecr integration.
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -72,6 +73,8 @@ type manager struct {
 	// chain holds the most recently constructed authentication chain.
 	// where index 0 is the provider name, followed by identities in order.
 	chain []string
+	// realm provides credential isolation between different repositories.
+	realm realm.RealmInfo
 }
 
 // resolveIdentityName performs case-insensitive identity name lookup.
@@ -99,11 +102,13 @@ func (m *manager) resolveIdentityName(inputName string) (string, bool) {
 }
 
 // NewAuthManager creates a new AuthManager instance.
+// The cliConfigPath parameter is used to compute the credential realm for isolation.
 func NewAuthManager(
 	config *schema.AuthConfig,
 	credentialStore types.CredentialStore,
 	validator types.Validator,
 	stackInfo *schema.ConfigAndStacksInfo,
+	cliConfigPath string,
 ) (types.AuthManager, error) {
 	if config == nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrNilParam, "Config", "auth config cannot be nil")
@@ -118,6 +123,22 @@ func NewAuthManager(
 		return nil, errUtils.ErrNilParam
 	}
 
+	// Compute the credential realm for isolation.
+	realmInfo, err := realm.GetRealm(config.Realm, cliConfigPath)
+	if err != nil {
+		wrappedErr := fmt.Errorf("failed to compute auth realm: %w", err)
+		errUtils.CheckErrorAndPrint(wrappedErr, "Compute Auth Realm", "")
+		return nil, wrappedErr
+	}
+
+	// Realm must be non-empty — identity types that manage credential files
+	// depend on it for path isolation and will fail fast on empty realm.
+	if realmInfo.Value == "" {
+		return nil, fmt.Errorf("%w: realm computation produced an empty value", errUtils.ErrEmptyRealm)
+	}
+
+	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
+
 	m := &manager{
 		config:          config,
 		providers:       make(map[string]types.Provider),
@@ -125,6 +146,7 @@ func NewAuthManager(
 		credentialStore: credentialStore,
 		validator:       validator,
 		stackInfo:       stackInfo,
+		realm:           realmInfo,
 	}
 
 	// Initialize providers.
@@ -134,11 +156,21 @@ func NewAuthManager(
 		return nil, wrappedErr
 	}
 
+	// Propagate realm to all providers for credential isolation.
+	for _, provider := range m.providers {
+		provider.SetRealm(m.realm.Value)
+	}
+
 	// Initialize identities.
 	if err := m.initializeIdentities(); err != nil {
 		wrappedErr := fmt.Errorf("failed to initialize identities: %w", err)
 		errUtils.CheckErrorAndPrint(wrappedErr, "Initialize Identities", "")
 		return nil, wrappedErr
+	}
+
+	// Propagate realm to all identities for credential isolation.
+	for _, identity := range m.identities {
+		identity.SetRealm(m.realm.Value)
 	}
 
 	return m, nil
@@ -149,6 +181,13 @@ func (m *manager) GetStackInfo() *schema.ConfigAndStacksInfo {
 	defer perf.Track(nil, "auth.GetStackInfo")()
 
 	return m.stackInfo
+}
+
+// GetRealm returns the computed realm information for this auth manager.
+func (m *manager) GetRealm() realm.RealmInfo {
+	defer perf.Track(nil, "auth.GetRealm")()
+
+	return m.realm
 }
 
 // Authenticate performs hierarchical authentication for the specified identity.
@@ -174,7 +213,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	chain, err := m.buildAuthenticationChain(identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("failed to build authentication chain for identity %q: %w", identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, buildAuthenticationChain, "")
+		}
 		return nil, wrappedErr
 	}
 	// Persist the chain for later retrieval by providers or callers.
@@ -185,7 +226,9 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 	finalCreds, err := m.authenticateChain(ctx, identityName)
 	if err != nil {
 		wrappedErr := fmt.Errorf("%w: failed to authenticate via credential chain for identity %q: %w", errUtils.ErrAuthenticationFailed, identityName, err)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Credential Chain", "")
+		}
 		return nil, wrappedErr
 	}
 
@@ -213,6 +256,7 @@ func (m *manager) Authenticate(ctx context.Context, identityName string) (*types
 			IdentityName: identityName,
 			Credentials:  finalCreds,
 			Manager:      m,
+			Realm:        m.realm.Value,
 		}); err != nil {
 			wrappedErr := fmt.Errorf("%w: post-authentication failed: %w", errUtils.ErrAuthenticationFailed, err)
 			errUtils.CheckErrorAndPrint(wrappedErr, "Post Authenticate", "")
@@ -353,6 +397,7 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 	// and can be used to derive the identity credentials without interactive prompts.
 	// Use a non-interactive context to prevent credential prompts during whoami.
 	nonInteractiveCtx := types.WithAllowPrompts(ctx, false)
+	nonInteractiveCtx = types.WithSuppressAuthErrors(nonInteractiveCtx, true)
 	authInfo, authErr := m.Authenticate(nonInteractiveCtx, identityName)
 	if authErr == nil {
 		log.Debug("Successfully authenticated through chain", logKeyIdentity, identityName)
@@ -361,8 +406,8 @@ func (m *manager) Whoami(ctx context.Context, identityName string) (*types.Whoam
 
 	log.Debug("Chain authentication failed", logKeyIdentity, identityName, "error", authErr)
 
-	// Return the original GetCachedCredentials error since chain auth also failed.
-	return nil, err
+	// Return the chain authentication error since it contains the most actionable context.
+	return nil, authErr
 }
 
 // Validate validates the entire auth configuration.
@@ -512,6 +557,9 @@ func (m *manager) initializeProviders() error {
 }
 
 // initializeIdentities creates identity instances from configuration.
+// Note: realm is propagated to all identities centrally after this method
+// returns (in NewAuthManager), using the fully-computed m.realm.Value which
+// accounts for env var, config, and auto-hash precedence.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)

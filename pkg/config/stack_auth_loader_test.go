@@ -52,8 +52,8 @@ auth:
 	assert.False(t, defaults["other-identity"]) // Not present or false.
 }
 
-func TestLoadStackAuthDefaults_MultipleFiles(t *testing.T) {
-	// Create a temporary directory with multiple stack files.
+func TestLoadStackAuthDefaults_MultipleFilesConflictingDefaults(t *testing.T) {
+	// Create a temporary directory with multiple stack files with DIFFERENT defaults.
 	tmpDir := t.TempDir()
 
 	// Create first stack file with one default identity.
@@ -66,7 +66,7 @@ auth:
 	err := os.WriteFile(filepath.Join(tmpDir, "stack1.yaml"), []byte(stack1Content), 0o644)
 	require.NoError(t, err)
 
-	// Create second stack file with another default identity.
+	// Create second stack file with a DIFFERENT default identity.
 	stack2Content := `
 auth:
   identities:
@@ -84,9 +84,44 @@ auth:
 	defaults, err := LoadStackAuthDefaults(atmosConfig)
 
 	require.NoError(t, err)
-	assert.Len(t, defaults, 2)
+	// Conflicting defaults from different files are discarded to avoid
+	// false "multiple default identities" errors. See issue #2072.
+	assert.Empty(t, defaults, "conflicting defaults from different files should be discarded")
+}
+
+func TestLoadStackAuthDefaults_MultipleFilesAgreeingDefaults(t *testing.T) {
+	// Create a temporary directory with multiple stack files with the SAME default.
+	tmpDir := t.TempDir()
+
+	stack1Content := `
+auth:
+  identities:
+    identity-a:
+      default: true
+`
+	err := os.WriteFile(filepath.Join(tmpDir, "stack1.yaml"), []byte(stack1Content), 0o644)
+	require.NoError(t, err)
+
+	stack2Content := `
+auth:
+  identities:
+    identity-a:
+      default: true
+`
+	err = os.WriteFile(filepath.Join(tmpDir, "stack2.yaml"), []byte(stack2Content), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		IncludeStackAbsolutePaths: []string{filepath.Join(tmpDir, "*.yaml")},
+		ExcludeStackAbsolutePaths: []string{},
+	}
+
+	defaults, err := LoadStackAuthDefaults(atmosConfig)
+
+	require.NoError(t, err)
+	// When all files agree on the same default, it is preserved.
+	assert.Len(t, defaults, 1)
 	assert.True(t, defaults["identity-a"])
-	assert.True(t, defaults["identity-b"])
 }
 
 func TestLoadStackAuthDefaults_ExcludePaths(t *testing.T) {

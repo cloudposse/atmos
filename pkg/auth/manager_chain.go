@@ -205,7 +205,7 @@ func (m *manager) determineStartingIndex(startIndex int) int {
 // accurate expiration times in whoami output.
 func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName string) (types.ICredentials, error) {
 	// Fast path: Try keyring cache first.
-	keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName)
+	keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName, m.realm.Value)
 	if keyringErr == nil {
 		log.Debug("Retrieved credentials from keyring", logKeyIdentity, identityName)
 
@@ -246,10 +246,12 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 	// Each identity type knows how to load its own credentials from storage.
 	loadedCreds, loadErr := identity.LoadCredentials(ctx)
 	if loadErr != nil {
+		m.emitRealmMismatchWarning(identityName)
 		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
 	}
 
 	if loadedCreds == nil {
+		m.emitRealmMismatchWarning(identityName)
 		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
 	}
 
@@ -302,14 +304,18 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	provider, exists := m.providers[providerName]
 	if !exists {
 		wrappedErr := fmt.Errorf("provider %q not registered: %w", providerName, errUtils.ErrInvalidAuthConfig)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate with Provider", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate with Provider", "")
+		}
 		return nil, wrappedErr
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(err, "Authenticate with Provider", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(err, "Authenticate with Provider", "")
+		}
 		return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
 	}
 
@@ -318,7 +324,7 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	if isSessionToken(credentials) {
 		log.Debug("Skipping keyring cache for session token provider credentials", logKeyProvider, providerName)
 	} else {
-		if err := m.credentialStore.Store(providerName, credentials); err != nil {
+		if err := m.credentialStore.Store(providerName, credentials, m.realm.Value); err != nil {
 			log.Debug("Failed to cache provider credentials", "error", err)
 		} else {
 			log.Debug("Cached provider credentials", "providerName", providerName)
@@ -470,7 +476,9 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identity, exists := m.identities[identityStep]
 		if !exists {
 			wrappedErr := fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Identity Chain", "")
+			if !types.SuppressAuthErrors(ctx) {
+				errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Identity Chain", "")
+			}
 			return nil, wrappedErr
 		}
 
@@ -492,7 +500,7 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		if isSessionToken(currentCreds) {
 			log.Debug("Skipping keyring cache for session tokens", "identityStep", identityStep)
 		} else {
-			if err := m.credentialStore.Store(identityStep, currentCreds); err != nil {
+			if err := m.credentialStore.Store(identityStep, currentCreds, m.realm.Value); err != nil {
 				log.Debug("Failed to cache credentials", "identityStep", identityStep, "error", err)
 			} else {
 				log.Debug("Cached credentials", "identityStep", identityStep)

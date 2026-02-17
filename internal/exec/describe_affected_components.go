@@ -18,13 +18,25 @@ const (
 	affectedReasonStackVars       = "stack.vars"
 	affectedReasonStackEnv        = "stack.env"
 	affectedReasonStackSettings   = "stack.settings"
+	affectedReasonStackSource     = "stack.source"
+	affectedReasonStackProvision  = "stack.provision"
+	affectedReasonDeleted         = "deleted"
+	affectedReasonDeletedStack    = "deleted.stack"
+)
+
+// Deletion type constants.
+const (
+	deletionTypeComponent = "component"
+	deletionTypeStack     = "stack"
 )
 
 // Section name constants for isEqual comparisons.
 const (
-	sectionNameMetadata = "metadata"
-	sectionNameVars     = "vars"
-	sectionNameEnv      = "env"
+	sectionNameMetadata  = "metadata"
+	sectionNameVars      = "vars"
+	sectionNameEnv       = "env"
+	sectionNameSource    = "source"
+	sectionNameProvision = "provision"
 )
 
 // shouldSkipComponent determines if a component should be skipped based on metadata.
@@ -184,6 +196,28 @@ func processTerraformComponentsIndexed(
 				return nil, err
 			}
 		}
+
+		// Check source section for changes (source vendoring configuration).
+		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, sourceSection, sectionNameSource) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
+					&componentSection, affectedReasonStackSource, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		// Check provision section for changes (workdir configuration).
+		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.TerraformComponentType, componentName, provisionSection, sectionNameProvision) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.TerraformComponentType,
+					&componentSection, affectedReasonStackProvision, includeSpaceliftAdminStacks, currentStacks, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	return affected, nil
@@ -272,6 +306,28 @@ func processHelmfileComponentsIndexed(
 				return nil, err
 			}
 		}
+
+		// Check source section for changes (source vendoring configuration).
+		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, sourceSection, sectionNameSource) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
+					&componentSection, affectedReasonStackSource, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		// Check provision section for changes (workdir configuration).
+		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.HelmfileComponentType, componentName, provisionSection, sectionNameProvision) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.HelmfileComponentType,
+					&componentSection, affectedReasonStackProvision, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
 	}
 
 	return affected, nil
@@ -358,6 +414,28 @@ func processPackerComponentsIndexed(
 			)
 			if err != nil {
 				return nil, err
+			}
+		}
+
+		// Check source section for changes (source vendoring configuration).
+		if sourceSection, ok := componentSection[sectionNameSource].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, sourceSection, sectionNameSource) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+					&componentSection, affectedReasonStackSource, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
+			}
+		}
+
+		// Check provision section for changes (workdir configuration).
+		if provisionSection, ok := componentSection[sectionNameProvision].(map[string]any); ok {
+			if !isEqual(remoteStacks, stackName, cfg.PackerComponentType, componentName, provisionSection, sectionNameProvision) {
+				err := addAffectedComponent(&affected, atmosConfig, componentName, stackName, cfg.PackerComponentType,
+					&componentSection, affectedReasonStackProvision, false, nil, includeSettings)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	}

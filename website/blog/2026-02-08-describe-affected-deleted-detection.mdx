@@ -1,0 +1,160 @@
+---
+slug: describe-affected-deleted-detection
+title: 'Describe Affected Now Detects Deleted Components and Stacks'
+authors:
+  - aknysh
+tags:
+  - feature
+date: 2026-02-08T00:00:00.000Z
+---
+
+Atmos now automatically detects components and stacks that have been deleted in your current branch compared to the target branch.
+This enables CI/CD pipelines to trigger `terraform destroy` workflows for removed infrastructure.
+
+<!--truncate-->
+
+## The Problem
+
+Previously, `atmos describe affected` only detected components that were **modified** between two Git commits.
+It worked by iterating over stacks in HEAD (current branch) and comparing them to BASE (target branch).
+This meant:
+
+- Components removed from a stack were invisible to the affected detection
+- Entire stacks that were deleted went unnoticed
+- CI/CD pipelines had no automated way to know which resources needed `terraform destroy`
+- Users had to manually identify and destroy removed components, risking resource leaks
+
+## The Solution
+
+The `describe affected` command now performs a second pass that iterates over BASE stacks to detect deletions:
+
+1. **Deleted components**: Components that exist in BASE but not in HEAD (within the same stack)
+2. **Deleted stacks**: Entire stacks that exist in BASE but not in HEAD
+
+Deleted components are marked with new fields in the output:
+
+```json
+{
+  "component": "monitoring",
+  "component_type": "terraform",
+  "stack": "prod-us-east-1",
+  "affected": "deleted",
+  "deleted": true,
+  "deletion_type": "component"
+}
+```
+
+## New Output Fields
+
+| Field           | Type    | Description                                                        |
+|-----------------|---------|--------------------------------------------------------------------|
+| `deleted`       | boolean | `true` if the component was deleted                                |
+| `deletion_type` | string  | `component` (removed from stack) or `stack` (entire stack deleted) |
+
+## New Affected Reasons
+
+| Reason          | Description                        |
+|-----------------|------------------------------------|
+| `deleted`       | Component was removed from a stack |
+| `deleted.stack` | Entire stack was deleted           |
+
+## Filtering Deleted vs Modified Components
+
+Use the `--query` flag or `jq` to separate deleted components from modified ones:
+
+```shell
+# Get only deleted components (for destruction)
+atmos describe affected --query '[.[] | select(.deleted == true)]'
+
+# Get only modified components (for apply)
+atmos describe affected --query '[.[] | select(.deleted != true)]'
+```
+
+## Using with List Affected
+
+The [`atmos list affected`](/cli/commands/list/affected) command also supports deleted detection, providing a human-readable table view:
+
+```shell
+# List all affected components including deleted ones
+atmos list affected
+
+# Filter deleted components in JSON format
+atmos list affected --format json | jq '[.[] | select(.deleted == true)]'
+
+# Custom columns showing deletion status
+atmos list affected --columns "Component={{ .component }},Stack={{ .stack }},Deleted={{ .deleted }}"
+```
+
+The `deleted` and `deletion_type` fields are available for custom column templates.
+
+## CI/CD Integration Example
+
+Here's how to separate apply and destroy workflows in GitHub Actions:
+
+:::warning
+**Review deletions carefully before destroying infrastructure.** The destroy job below uses `--auto-approve` for automation purposes. In production environments, consider adding a manual approval gate or requiring PR review before executing destroy operations to prevent accidental resource deletion.
+:::
+
+```yaml
+jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      modified: ${{ steps.affected.outputs.modified }}
+      deleted: ${{ steps.affected.outputs.deleted }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: cloudposse/github-action-setup-atmos@v2
+
+      - name: Detect affected
+        id: affected
+        run: |
+          atmos describe affected --format json > affected.json
+
+          # Separate modified and deleted components
+          jq '[.[] | select(.deleted != true)]' affected.json > modified.json
+          jq '[.[] | select(.deleted == true)]' affected.json > deleted.json
+
+          echo "modified=$(cat modified.json | jq -c)" >> $GITHUB_OUTPUT
+          echo "deleted=$(cat deleted.json | jq -c)" >> $GITHUB_OUTPUT
+
+  apply:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.modified != '[]'
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect-changes.outputs.modified) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform apply ${{ matrix.component }} -s ${{ matrix.stack }}
+
+  destroy:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.deleted != '[]'
+    environment: production  # Requires manual approval
+    strategy:
+      matrix:
+        include: ${{ fromJson(needs.detect-changes.outputs.deleted) }}
+    steps:
+      # Check out BASE branch - deleted component config only exists there
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.base_ref }}
+      - uses: cloudposse/github-action-setup-atmos@v2
+      - run: atmos terraform destroy ${{ matrix.component }} -s ${{ matrix.stack }} --auto-approve
+```
+
+## Edge Cases
+
+- **Abstract components** (`metadata.type: abstract`) are not reported as deleted since they are blueprints and not provisioned
+- **Component renames** appear as both a deletion (old name) and a new component (new name)
+
+## Related Documentation
+
+- [Describe Affected Command](/cli/commands/describe/affected) - Full command reference
+- [List Affected Command](/cli/commands/list/affected) - Human-readable table view
+- [Affected Stacks GitHub Action](/integrations/github-actions/affected-stacks) - CI/CD integration
+- [Component Inheritance](/design-patterns/inheritance-patterns/abstract-component) - Abstract component patterns

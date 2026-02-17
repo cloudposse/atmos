@@ -34,10 +34,14 @@ exclude = [
   "example\\.com",
   "cpco\\.io",
   "cloudposse\\.com.*utm_",
+  # Private GitHub org (not accessible to CI)
+  "github\\.com/cloudposse-corp",
   "slack\\.cloudposse\\.com",
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)
   "gnu\\.org",
+  # Kubernetes.io (rate limits and connection resets in CI)
+  "kubernetes\\.io",
   # Cloudinary image resizing proxy
   "img\\.cloudposse\\.com",
   # atmos.tools URLs (can't verify website links locally)

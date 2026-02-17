@@ -310,7 +310,7 @@ func TestSSOProvider_GetFilesDisplayPath(t *testing.T) {
 				Region:   testRegion,
 				StartURL: testStartURL,
 			},
-			expected: "atmos/aws", // XDG path contains atmos/aws
+			expected: "atmos", // XDG path contains atmos (aws is added in subdirectories).
 		},
 		{
 			name: "custom base_path",

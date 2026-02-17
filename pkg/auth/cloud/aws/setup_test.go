@@ -20,7 +20,7 @@ func TestSetupFiles_WritesCredentialsAndConfig(t *testing.T) {
 	homedir.Reset()                  // Clear homedir cache
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA123", SecretAccessKey: "secret", SessionToken: "token", Region: "us-east-2"}
-	err := SetupFiles("prov", "dev", creds, "")
+	err := SetupFiles("prov", "dev", creds, "", "")
 	require.NoError(t, err)
 
 	credPath := filepath.Join(tmp, "atmos", "aws", "prov", "credentials")
@@ -52,7 +52,7 @@ func TestSetupFiles_WithEmptyRegion(t *testing.T) {
 
 	// Credentials without region - should default to us-east-1.
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA456", SecretAccessKey: "secret2", SessionToken: "token2", Region: ""}
-	err := SetupFiles("test-prov", "test-id", creds, "")
+	err := SetupFiles("test-prov", "test-id", creds, "", "")
 	require.NoError(t, err)
 
 	cfgPath := filepath.Join(tmp, "atmos", "aws", "test-prov", "config")
@@ -66,7 +66,7 @@ func TestSetupFiles_WithEmptyRegion(t *testing.T) {
 
 func TestSetupFiles_NonAWSCredentials(t *testing.T) {
 	// Pass nil credentials (ICredentials interface).
-	err := SetupFiles("prov", "id", nil, "")
+	err := SetupFiles("prov", "id", nil, "", "")
 	require.NoError(t, err) // Should succeed without doing anything.
 }
 
@@ -76,12 +76,12 @@ func TestSetupFiles_WithBasePath(t *testing.T) {
 	basePath := filepath.Join(tmp, "custom-base")
 
 	creds := &types.AWSCredentials{AccessKeyID: "AKIA789", SecretAccessKey: "secret3", SessionToken: "token3", Region: "eu-west-1"}
-	err := SetupFiles("base-prov", "base-id", creds, basePath)
+	err := SetupFiles("base-prov", "base-id", creds, basePath, "")
 	require.NoError(t, err)
 
-	// Files are under basePath/base-prov/, not basePath/.aws/atmos/base-prov/.
-	credPath := filepath.Join(basePath, "base-prov", "credentials")
-	cfgPath := filepath.Join(basePath, "base-prov", "config")
+	// Files are under basePath/aws/base-prov/ with new path structure.
+	credPath := filepath.Join(basePath, "aws", "base-prov", "credentials")
+	cfgPath := filepath.Join(basePath, "aws", "base-prov", "config")
 
 	// Verify credentials file in custom base path.
 	cfg, err := ini.Load(credPath)
