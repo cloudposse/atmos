@@ -81,7 +81,7 @@ EKS follows the **integration pattern** established by ECR authentication (PR #1
 │  1. Authenticate with provider (SSO/SAML)                       │
 │  2. Get identity credentials (permission-set/assume-role)       │
 │  3. PostAuthenticate() → Setup AWS files                        │
-│  4. ExecuteIntegrations() → Run linked integrations             │
+│  4. triggerIntegrations() → Run linked integrations (non-fatal)  │
 └─────────────────────────────────┬───────────────────────────────┘
                                   │
                     ┌─────────────┴─────────────┐
@@ -102,17 +102,29 @@ EKS follows the **integration pattern** established by ECR authentication (PR #1
 EKS implements the same `Integration` interface as ECR:
 
 ```go
+// Integration interface (defined in pkg/auth/integrations/types.go).
 type Integration interface {
-    // Kind returns the integration type (e.g., "aws/eks")
+    // Kind returns the integration type (e.g., "aws/ecr", "aws/eks").
     Kind() string
 
-    // Identity returns the linked identity name
-    Identity() string
-
-    // Execute performs the integration action with provided credentials
+    // Execute performs the integration using the provided AWS credentials.
+    // Returns nil on success, error on failure.
     Execute(ctx context.Context, creds types.ICredentials) error
 }
+
+// IntegrationConfig wraps the schema.Integration with the integration name.
+type IntegrationConfig struct {
+    Name   string
+    Config *schema.Integration
+}
+
+// IntegrationFactory creates integrations from configuration.
+type IntegrationFactory func(config *IntegrationConfig) (Integration, error)
 ```
+
+**Note:** The `Integration` interface intentionally does not include an `Identity()` method.
+Identity linkage is handled via `IntegrationConfig.Config.Via.Identity` at construction time,
+and individual integrations may expose it via struct methods (e.g., `GetIdentity()`) if needed.
 
 ### Configuration Schema
 
@@ -218,18 +230,14 @@ github.com/aws/aws-sdk-go-v2/service/eks
 #### EKS API Usage
 
 ```go
-// DescribeCluster retrieves cluster information needed for kubeconfig
-func DescribeCluster(ctx context.Context, creds *types.AWSCredentials, clusterName, region string) (*EKSClusterInfo, error) {
-    cfg, err := config.LoadDefaultConfig(ctx,
-        config.WithRegion(region),
-        config.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(
-            creds.AccessKeyID,
-            creds.SecretAccessKey,
-            creds.SessionToken,
-        )),
-    )
+// DescribeCluster retrieves cluster information needed for kubeconfig.
+// Uses the existing buildAWSConfigFromCreds helper from pkg/auth/cloud/aws/ecr.go
+// (should be extracted to a shared location, e.g., pkg/auth/cloud/aws/config.go).
+func DescribeCluster(ctx context.Context, creds types.ICredentials, clusterName, region string) (*EKSClusterInfo, error) {
+    // Reuse the shared AWS config builder (currently in ecr.go, extract to config.go).
+    cfg, err := buildAWSConfigFromCreds(ctx, creds, region)
     if err != nil {
-        return nil, fmt.Errorf("failed to load AWS config: %w", err)
+        return nil, fmt.Errorf("%w: %w", errUtils.ErrEKSDescribeCluster, err)
     }
 
     client := eks.NewFromConfig(cfg)
@@ -238,7 +246,7 @@ func DescribeCluster(ctx context.Context, creds *types.AWSCredentials, clusterNa
         Name: aws.String(clusterName),
     })
     if err != nil {
-        return nil, fmt.Errorf("failed to describe cluster: %w", err)
+        return nil, fmt.Errorf("%w: %w", errUtils.ErrEKSDescribeCluster, err)
     }
 
     return &EKSClusterInfo{
@@ -250,6 +258,11 @@ func DescribeCluster(ctx context.Context, creds *types.AWSCredentials, clusterNa
     }, nil
 }
 ```
+
+**Implementation Note:** The `buildAWSConfigFromCreds` helper currently lives in
+`pkg/auth/cloud/aws/ecr.go` (unexported). Before implementing EKS, extract it to a
+shared file (e.g., `pkg/auth/cloud/aws/config.go`) and export it as `BuildAWSConfigFromCreds`
+so both ECR and EKS can reuse it.
 
 ### Kubeconfig Generation
 
@@ -410,24 +423,26 @@ var (
 pkg/auth/
   cloud/
     aws/
+      config.go           # NEW: Extract buildAWSConfigFromCreds from ecr.go (shared)
+      ecr.go              # MODIFY: Remove buildAWSConfigFromCreds (moved to config.go)
       eks.go              # NEW: EKS SDK wrapper (DescribeCluster)
       eks_test.go         # NEW: Unit tests
     kube/
       config.go           # NEW: Kubeconfig manager
       config_test.go      # NEW: Unit tests
   integrations/
-    registry.go           # MODIFY: Add KindAWSEKS constant
+    types.go              # EXISTS: KindAWSEKS = "aws/eks" already defined (remove "Future" comment)
     aws/
-      ecr.go              # (from PR #1859)
+      ecr.go              # EXISTS: ECR integration (reference implementation)
       eks.go              # NEW: EKS integration
       eks_test.go         # NEW: Unit tests
 
-cmd/
-  aws_eks_update_kubeconfig.go       # MODIFY: Use Go SDK, add --integration flag
-  aws_eks_update_kubeconfig_test.go  # MODIFY: Update tests
+cmd/aws/eks/
+  update_kubeconfig.go       # MODIFY: Use Go SDK, add --integration flag
+  update_kubeconfig_test.go  # MODIFY: Update tests
 
 internal/exec/
-  aws_eks_update_kubeconfig.go       # MODIFY: Use Go SDK instead of shelling out
+  aws_eks_update_kubeconfig.go  # MODIFY: Use Go SDK instead of shelling out
 ```
 
 ### Core Components
@@ -450,7 +465,7 @@ internal/exec/
 - `Execute()` - DescribeCluster + write kubeconfig
 - Validates configuration during construction
 
-#### 4. Enhanced CLI Command (`cmd/aws_eks_update_kubeconfig.go`)
+#### 4. Enhanced CLI Command (`cmd/aws/eks/update_kubeconfig.go`)
 
 - Existing component/stack mode (backward compatible)
 - New integration mode via `--integration` flag
@@ -484,7 +499,7 @@ internal/exec/
 - Test missing via.identity
 - Test Execute with mock credentials
 
-**CLI Command (`cmd/aws_eks_update_kubeconfig_test.go`):**
+**CLI Command (`cmd/aws/eks/update_kubeconfig_test.go`):**
 - Use `cmd.NewTestKit(t)` for command isolation
 - Test backward compatibility with component/stack mode
 - Test new `--integration` flag
@@ -619,9 +634,9 @@ auth:
 
 ## Dependencies
 
-- **ECR PR #1859**: Provides integration infrastructure (`pkg/auth/integrations/`)
-- **AWS SDK v2 EKS**: `github.com/aws/aws-sdk-go-v2/service/eks`
-- **XDG package**: `pkg/xdg/` for path resolution
+- **ECR integration** (merged via PR #1859): Provides integration infrastructure (`pkg/auth/integrations/`), including `Integration` interface, `IntegrationFactory`, registry pattern, and `KindAWSEKS` constant (already defined in `types.go`)
+- **AWS SDK v2 EKS**: `github.com/aws/aws-sdk-go-v2/service/eks` (new dependency, not yet in go.mod)
+- **XDG package**: `pkg/xdg/` for path resolution (already available)
 
 ## Future Enhancements
 
@@ -645,3 +660,4 @@ auth:
 |---------|------|--------|---------|
 | 1.0 | 2025-12-17 | AI Assistant | Initial PRD |
 | 1.1 | 2025-12-18 | AI Assistant | Updated based on review: CLI uses `atmos aws eks` namespace, improved kubeconfig schema structure, clarified exec plugin format |
+| 1.2 | 2026-02-17 | AI Assistant | Synced PRD with codebase after rebase: fixed Integration interface (removed non-existent `Identity()` method, added `IntegrationConfig`/`IntegrationFactory` types), corrected architecture diagram (`triggerIntegrations` not `ExecuteIntegrations`), updated file paths to match actual structure (`cmd/aws/eks/update_kubeconfig.go`), noted `buildAWSConfigFromCreds` reuse and extraction plan, updated `DescribeCluster` signature to use `types.ICredentials`, noted `KindAWSEKS` constant already exists in `types.go`, updated dependency status |
