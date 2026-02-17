@@ -236,6 +236,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.AnsibleDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
@@ -312,6 +314,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
+		atmosConfig.AnsibleDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,

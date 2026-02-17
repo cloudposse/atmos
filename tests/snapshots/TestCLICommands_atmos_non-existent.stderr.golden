@@ -6,6 +6,7 @@ Valid subcommands are:
 
   • about
   • ai
+  • ansible
   • atlantis
   • auth
   • aws
