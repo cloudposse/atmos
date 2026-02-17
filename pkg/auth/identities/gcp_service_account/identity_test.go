@@ -472,6 +472,7 @@ func TestRequireRealm_Deterministic(t *testing.T) {
 	require.NoError(t, err1)
 	require.NoError(t, err2)
 	assert.Equal(t, realm1, realm2, "same email should produce same realm")
+	assert.Equal(t, "auto-b21924d31a143eec", realm1, "golden value for canonical email")
 }
 
 func TestRequireRealm_DifferentEmails_DifferentRealms(t *testing.T) {
@@ -929,6 +930,7 @@ func TestADC_ServiceAccount_ImpersonationFlow(t *testing.T) {
 		AccessToken:         "adc-base-token",
 		TokenExpiry:         time.Now().Add(2 * time.Hour),
 		ProjectID:           "user-default-project",
+		// User ADC identity from `gcloud auth application-default login` (not a service account).
 		ServiceAccountEmail: "developer@company.com",
 	}
 

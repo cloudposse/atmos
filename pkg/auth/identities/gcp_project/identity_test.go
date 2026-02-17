@@ -552,7 +552,11 @@ func TestADC_ProjectIdentity_RealmIndependent(t *testing.T) {
 	realms := []string{"", "test-realm", "customer-acme"}
 
 	for _, realmValue := range realms {
-		t.Run("realm="+realmValue, func(t *testing.T) {
+		display := realmValue
+		if display == "" {
+			display = "empty"
+		}
+		t.Run("realm="+display, func(t *testing.T) {
 			id := &Identity{
 				principal: &types.GCPProjectIdentityPrincipal{
 					ProjectID: "realm-test-project",
