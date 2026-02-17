@@ -734,6 +734,11 @@ func ProcessStacks(
 			return configAndStacksInfo, err
 		}
 
+		// Restore env vars that mapstructure:"-" dropped during Decode.
+		if envMap := extractEnvFromRawMap(configAndStacksInfo.ComponentSettingsSection); len(envMap) > 0 {
+			settingsSectionStruct.Templates.Settings.Env = envMap
+		}
+
 		componentSectionProcessed, err := ProcessTmplWithDatasources(
 			atmosConfig,
 			&configAndStacksInfo,

@@ -342,6 +342,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// for identity names and environment variables.
 	preserveCaseSensitiveMaps(v, &atmosConfig)
 
+	// Restore original case for templates.settings.env keys (e.g., AWS_PROFILE).
+	// Viper lowercases all map keys, so we apply the case map after extraction.
+	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
+		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
+	}
+
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
 	if err := applyGitRootBasePath(&atmosConfig); err != nil {
@@ -1281,8 +1287,9 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 // caseSensitivePaths lists the YAML paths that need case preservation.
 // Viper lowercases all map keys, but these sections need original case.
 var caseSensitivePaths = []string{
-	"env",             // Environment variables (e.g., GITHUB_TOKEN)
-	"auth.identities", // Auth identity names (e.g., SuperAdmin)
+	"env",                    // Environment variables (e.g., GITHUB_TOKEN)
+	"templates.settings.env", // Template env variables (e.g., AWS_PROFILE)
+	"auth.identities",        // Auth identity names (e.g., SuperAdmin)
 }
 
 // collectConfigFilesForCasePreservation gathers all config files to process for case preservation.

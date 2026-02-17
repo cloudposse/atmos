@@ -48,7 +48,7 @@ type TerraformRunner interface {
 	// WorkspaceNew creates a new terraform workspace.
 	WorkspaceNew(ctx context.Context, workspace string, opts ...tfexec.WorkspaceNewCmdOption) error
 	// WorkspaceSelect selects an existing terraform workspace.
-	WorkspaceSelect(ctx context.Context, workspace string) error
+	WorkspaceSelect(ctx context.Context, workspace string, opts ...tfexec.WorkspaceSelectOption) error
 	// Output retrieves terraform outputs.
 	Output(ctx context.Context, opts ...tfexec.OutputOption) (map[string]tfexec.OutputMeta, error)
 	// SetStdout sets the stdout writer.
