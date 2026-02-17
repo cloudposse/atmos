@@ -42,12 +42,9 @@ type RealmInfo struct {
 // GetRealm computes the authentication realm with the following precedence:
 //  1. ATMOS_AUTH_REALM environment variable (highest priority)
 //  2. configRealm from atmos.yaml auth.realm configuration
-//  3. Empty realm (no isolation) for backward compatibility
-//
-// Realm isolation is opt-in: credentials are stored without realm subdirectory
-// unless explicitly configured via ATMOS_AUTH_REALM env var or auth.realm config.
-// This preserves backward-compatible credential paths for CI/CD environments.
-// See: https://github.com/cloudposse/atmos/issues/2071
+//  3. Empty realm — identity types that need isolation (e.g. GCP) generate
+//     a SHA-based fallback from their unique identifiers (service account email).
+//     AWS/Azure identities handle empty realm gracefully via filepath.Join.
 //
 // Returns an error if an explicit realm value (env var or config) contains invalid characters.
 func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
@@ -75,9 +72,9 @@ func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 		}, nil
 	}
 
-	// Priority 3: No realm configured - use empty realm for backward compatibility.
-	// Credential paths will be {baseDir}/aws/{provider}/credentials (no realm subdirectory).
-	// Users who want isolation should explicitly set auth.realm or ATMOS_AUTH_REALM.
+	// Priority 3: No realm configured — return empty.
+	// AWS/Azure: credential paths work without realm (filepath.Join strips empty segments).
+	// GCP: identity types generate a SHA-based fallback from service account email.
 	return RealmInfo{
 		Value:  "",
 		Source: SourceAuto,
@@ -161,7 +158,7 @@ func (r RealmInfo) SourceDescription(cliConfigPath string) string {
 	case SourceConfig:
 		return "atmos.yaml (auth.realm)"
 	case SourceAuto:
-		return "default (no realm isolation)"
+		return "auto (identity-derived isolation)"
 	default:
 		return r.Source
 	}

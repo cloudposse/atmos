@@ -131,11 +131,10 @@ func NewAuthManager(
 		return nil, wrappedErr
 	}
 
-	// Realm must be non-empty — identity types that manage credential files
-	// depend on it for path isolation and will fail fast on empty realm.
-	if realmInfo.Value == "" {
-		return nil, fmt.Errorf("%w: realm computation produced an empty value", errUtils.ErrEmptyRealm)
-	}
+	// Empty realm is allowed for backward compatibility with AWS/Azure identities
+	// that handle empty realm gracefully (filepath.Join strips empty segments).
+	// GCP identities that require filesystem isolation generate a SHA-based
+	// fallback realm from service account email when realm is not configured.
 
 	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
 
@@ -558,8 +557,9 @@ func (m *manager) initializeProviders() error {
 
 // initializeIdentities creates identity instances from configuration.
 // Note: realm is propagated to all identities centrally after this method
-// returns (in NewAuthManager), using the fully-computed m.realm.Value which
-// accounts for env var, config, and auto-hash precedence.
+// returns (in NewAuthManager), using the fully-computed m.realm.Value.
+// Identities that require non-empty realm (GCP) generate a SHA-based
+// fallback internally when the propagated realm is empty.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)

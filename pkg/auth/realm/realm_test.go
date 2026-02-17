@@ -30,11 +30,12 @@ func TestGetRealm_ConfigPrecedence(t *testing.T) {
 }
 
 func TestGetRealm_AutoEmpty(t *testing.T) {
-	// When no explicit realm is configured, empty realm is used for backward compatibility.
+	// When no explicit realm is configured, GetRealm returns empty.
+	// Identity types that need isolation (GCP) generate SHA-based fallback internally.
 	info, err := GetRealm("", "/path/to/config")
 	require.NoError(t, err)
 	assert.Equal(t, SourceAuto, info.Source)
-	assert.Empty(t, info.Value, "auto realm should be empty for backward compatibility")
+	assert.Empty(t, info.Value, "auto realm should be empty — identity types handle fallback")
 }
 
 func TestGetRealm_AutoEmptyConsistency(t *testing.T) {
@@ -185,13 +186,13 @@ func TestRealmInfo_SourceDescription(t *testing.T) {
 			name:          "auto source with path",
 			info:          RealmInfo{Value: "", Source: SourceAuto},
 			cliConfigPath: "/path/to/config",
-			contains:      "default (no realm isolation)",
+			contains:      "auto (identity-derived isolation)",
 		},
 		{
 			name:          "auto source without path",
 			info:          RealmInfo{Value: "", Source: SourceAuto},
 			cliConfigPath: "",
-			contains:      "default (no realm isolation)",
+			contains:      "auto (identity-derived isolation)",
 		},
 	}
 

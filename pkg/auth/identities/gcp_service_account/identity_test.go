@@ -3,6 +3,7 @@ package gcp_service_account
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -428,7 +429,7 @@ func TestSetRealm(t *testing.T) {
 	assert.Equal(t, "custom-realm", id.realm)
 }
 
-func TestRequireRealm_Empty(t *testing.T) {
+func TestRequireRealm_EmptyWithEmail_AutoGenerates(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
@@ -436,9 +437,60 @@ func TestRequireRealm_Empty(t *testing.T) {
 	}
 	id.realm = ""
 	realm, err := id.requireRealm()
+	require.NoError(t, err)
+	assert.NotEmpty(t, realm, "should auto-generate SHA-based realm from email")
+	assert.True(t, strings.HasPrefix(realm, "auto-"), "auto-generated realm should start with 'auto-'")
+}
+
+func TestRequireRealm_EmptyWithoutEmail_Errors(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "",
+		},
+	}
+	id.realm = ""
+	realm, err := id.requireRealm()
 	require.Error(t, err)
 	assert.Empty(t, realm)
 	assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+}
+
+func TestRequireRealm_Deterministic(t *testing.T) {
+	// Same email should always produce the same auto-generated realm.
+	id1 := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	id2 := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+	realm1, err1 := id1.requireRealm()
+	realm2, err2 := id2.requireRealm()
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+	assert.Equal(t, realm1, realm2, "same email should produce same realm")
+}
+
+func TestRequireRealm_DifferentEmails_DifferentRealms(t *testing.T) {
+	// Different emails should produce different realms.
+	id1 := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa1@proj-a.iam.gserviceaccount.com",
+		},
+	}
+	id2 := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa2@proj-b.iam.gserviceaccount.com",
+		},
+	}
+	realm1, err1 := id1.requireRealm()
+	realm2, err2 := id2.requireRealm()
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+	assert.NotEqual(t, realm1, realm2, "different emails should produce different realms")
 }
 
 func TestRequireRealm_Set(t *testing.T) {
@@ -695,15 +747,16 @@ func TestPrepareEnvironment_NoProviderName(t *testing.T) {
 	assert.Contains(t, err.Error(), "provider name is required")
 }
 
-// TestEmptyRealm_RejectedByFileOperations verifies that all credential file
-// operations fail fast with ErrEmptyRealm when realm has not been set.
-func TestEmptyRealm_RejectedByFileOperations(t *testing.T) {
+// TestEmptyRealm_NoEmail_RejectedByFileOperations verifies that credential file
+// operations fail with ErrEmptyRealm when realm is empty AND no service account
+// email is available for auto-generation.
+func TestEmptyRealm_NoEmail_RejectedByFileOperations(t *testing.T) {
 	makeIdentity := func() *Identity {
 		return &Identity{
 			name: "test-sa",
-			// realm intentionally left empty.
+			// realm intentionally left empty, no email for auto-generation.
 			principal: &types.GCPServiceAccountIdentityPrincipal{
-				ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+				ServiceAccountEmail: "",
 			},
 			config: &schema.Identity{
 				Via: &schema.IdentityVia{
