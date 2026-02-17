@@ -5,6 +5,7 @@ vars:
 
 import:
   - catalog/mock
+  - catalog/mock-failure
 
 components:
   terraform:
