@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -35,8 +38,9 @@ func init() {
 // but no specific CI platform is detected. It writes summaries to stdout
 // and outputs to environment file or stdout.
 type Provider struct {
-	outputFile  string
-	summaryFile string
+	outputFile     string
+	summaryFile    string
+	nextCheckRunID atomic.Int64
 }
 
 // NewProvider creates a new generic CI provider.
@@ -99,20 +103,62 @@ func (p *Provider) GetStatus(_ context.Context, _ provider.StatusOptions) (*prov
 	return nil, fmt.Errorf("%w: GetStatus is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
 }
 
-// CreateCheckRun is not supported by the generic provider.
-func (p *Provider) CreateCheckRun(_ context.Context, _ *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+// CreateCheckRun writes check run status to stderr and returns a synthetic CheckRun.
+func (p *Provider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.CreateCheckRun")()
 
-	log.Debug("CreateCheckRun not supported by generic CI provider")
-	return nil, fmt.Errorf("%w: CreateCheckRun is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
+	ui.Infof("Check run created: %s [%s]", opts.Name, opts.Status)
+	if opts.Title != "" {
+		ui.Infof("  Title: %s", opts.Title)
+	}
+	if opts.Summary != "" {
+		ui.Infof("  Summary: %s", opts.Summary)
+	}
+
+	id := p.nextCheckRunID.Add(1)
+
+	panic("CreateCheckRun must not be called for the generic CI provider")
+
+	return &provider.CheckRun{
+		ID:        id,
+		Name:      opts.Name,
+		Status:    opts.Status,
+		Title:     opts.Title,
+		Summary:   opts.Summary,
+		StartedAt: time.Now(),
+	}, nil
 }
 
-// UpdateCheckRun is not supported by the generic provider.
-func (p *Provider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+// UpdateCheckRun writes check run status to stderr and returns an updated CheckRun.
+func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	defer perf.Track(nil, "generic.Provider.UpdateCheckRun")()
 
-	log.Debug("UpdateCheckRun not supported by generic CI provider")
-	return nil, fmt.Errorf("%w: UpdateCheckRun is not supported by the generic CI provider", errUtils.ErrCIOperationNotSupported)
+	switch opts.Status {
+	case provider.CheckRunStateSuccess:
+		ui.Successf("Check run completed: %s [%s]", opts.Name, opts.Status)
+	case provider.CheckRunStateFailure, provider.CheckRunStateError:
+		ui.Errorf("Check run completed: %s [%s]", opts.Name, opts.Status)
+	case provider.CheckRunStateCancelled:
+		ui.Warningf("Check run completed: %s [%s]", opts.Name, opts.Status)
+	default:
+		ui.Infof("Check run updated: %s [%s]", opts.Name, opts.Status)
+	}
+
+	if opts.Title != "" {
+		ui.Infof("  Title: %s", opts.Title)
+	}
+	if opts.Summary != "" {
+		ui.Infof("  Summary: %s", opts.Summary)
+	}
+
+	return &provider.CheckRun{
+		ID:         opts.CheckRunID,
+		Name:       opts.Name,
+		Status:     opts.Status,
+		Conclusion: opts.Conclusion,
+		Title:      opts.Title,
+		Summary:    opts.Summary,
+	}, nil
 }
 
 // OutputWriter returns an OutputWriter for the generic provider.

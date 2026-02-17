@@ -23,6 +23,9 @@ This command shows what Terraform will do when you run 'apply'. It helps you ver
 For complete Terraform/OpenTofu documentation, see:
   https://developer.hashicorp.com/terraform/cli/commands/plan
   https://opentofu.org/docs/cli/commands/plan`,
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		return runHooks(h.BeforeTerraformPlan, cmd, args)
+	},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		v := viper.GetViper()
 
