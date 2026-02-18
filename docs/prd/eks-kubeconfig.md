@@ -165,7 +165,10 @@ type KubeconfigSettings struct {
     // Path is a custom kubeconfig file path (optional, defaults to XDG path).
     Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
 
-    // Mode is the file permission mode (optional, defaults to "0600").
+    // Mode is the file permission mode as an octal string (optional, defaults to "0600").
+    // Parsed via strconv.ParseUint(mode, 8, 32) at config-load time.
+    // Invalid values (e.g., "abc", "999") are rejected with a validation error
+    // referencing KubeconfigSettings.Mode.
     Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 
     // Update determines how to handle existing kubeconfig: "merge" (default), "replace", or "error".
@@ -309,16 +312,32 @@ users:
       - dev-cluster
       - --region
       - us-east-2
+      - --identity
+      - dev-admin
+      env:
+      - name: ATMOS_IDENTITY
+        value: dev-admin
+      interactiveMode: Never
 ```
 
 #### Exec Credential Plugin
 
 The kubeconfig uses `atmos auth eks-token` as the exec plugin for authentication:
 
-- **Command**: `atmos auth eks-token --cluster-name <name> --region <region>`
+- **Command**: `atmos auth eks-token --cluster-name <name> --region <region> --identity <name>`
 - **API Version**: `client.authentication.k8s.io/v1beta1`
 - **Token Lifetime**: ~15 minutes (refreshed automatically by kubectl on expiration)
-- **Credential Source**: Uses Atmos-managed AWS credentials
+- **Credential Source**: Uses Atmos-managed AWS credentials via the specified identity
+- **interactiveMode**: `Never` — token generation does not require a TTY
+
+**Identity resolution at exec time (precedence order):**
+1. `--identity` flag in exec args (embedded in kubeconfig at generation time)
+2. `ATMOS_IDENTITY` env var (set in exec env array as fallback)
+3. Default identity from `atmos.yaml` auth config
+
+The `--identity` flag ensures deterministic credential selection when multiple Atmos
+identities exist. Both the flag and the `env` array are populated at kubeconfig generation
+time from the integration's `via.identity` field.
 
 **Why `atmos` instead of `aws`:**
 1. No dependency on the AWS CLI being installed
@@ -329,6 +348,11 @@ The kubeconfig uses `atmos auth eks-token` as the exec plugin for authentication
 subcommand that outputs an `ExecCredential` JSON object compatible with
 `client.authentication.k8s.io/v1beta1`. It should use the AWS STS `GetCallerIdentity`
 pre-signed URL approach (same as `aws eks get-token`) to generate a bearer token.
+
+**Flags for `atmos auth eks-token`:**
+- `--cluster-name` (required) — EKS cluster name
+- `--region` (required) — AWS region
+- `--identity` (optional) — Atmos identity name for credential resolution
 
 ### File Path Management
 
@@ -347,10 +371,20 @@ kubeDir, err := xdg.GetXDGConfigDir("kube", 0o700)
 
 #### Environment Variable Integration
 
-The `KUBECONFIG` environment variable is automatically included in the auth environment. Users can export all auth environment variables at once:
+The EKS integration appends the Atmos kubeconfig path to the existing `KUBECONFIG` environment
+variable using colon-separated notation (standard kubectl behavior). The append is **idempotent** —
+if the Atmos path is already present, it will not be duplicated.
+
+```bash
+# Before: KUBECONFIG=~/.kube/config
+# After:  KUBECONFIG=~/.kube/config:~/.config/atmos/kube/config
+```
+
+Users can export all auth environment variables (including the updated `KUBECONFIG`) at once:
 
 ```bash
 eval $(atmos auth env --format=export)
+# KUBECONFIG now includes the Atmos kubeconfig path
 kubectl get pods
 ```
 
@@ -358,7 +392,7 @@ Or use `atmos auth shell` which sets all auth environment variables automaticall
 
 ```bash
 atmos auth shell
-# All auth environment variables set, including KUBECONFIG
+# All auth environment variables set, including KUBECONFIG with Atmos path appended
 kubectl get pods
 ```
 
@@ -452,9 +486,9 @@ pkg/auth/
       eks.go              # NEW: EKS integration
       eks_test.go         # NEW: Unit tests
 
-cmd/auth/
-  eks_token.go              # NEW: `atmos auth eks-token` exec credential plugin command
-  eks_token_test.go         # NEW: Unit tests
+cmd/
+  auth_eks_token.go         # NEW: `atmos auth eks-token` exec credential plugin subcommand
+  auth_eks_token_test.go    # NEW: Unit tests (follows existing auth subcommand pattern)
 
 cmd/aws/eks/
   update_kubeconfig.go       # MODIFY: Use Go SDK, add --integration flag
@@ -475,15 +509,16 @@ internal/exec/
 #### 2. Kubeconfig Manager (`pkg/auth/cloud/kube/config.go`)
 
 - `NewKubeconfigManager(customPath)` - Create manager with XDG default or custom path
-- `WriteClusterConfig(info, alias, merge)` - Generate and write kubeconfig
-- `MergeKubeconfig(existing, new)` - Merge cluster configs
-- Kubeconfig YAML types for marshaling
+- `WriteClusterConfig(info, alias, update)` - Generate and write kubeconfig
+- Merge via `k8s.io/client-go/tools/clientcmd` (`ClientConfigLoadingRules` with precedence) instead of custom merge logic — `k8s.io/client-go` is already an indirect dependency
 
-#### 3. EKS Token Command (`cmd/auth/eks_token.go`)
+#### 3. EKS Token Command (`cmd/auth_eks_token.go`)
 
-- Implements `atmos auth eks-token` — the exec credential plugin used by kubeconfig
+- Implements `atmos auth eks-token` as a subcommand of `authCmd`
+- Follows the existing auth subcommand pattern (see `cmd/auth_ecr_login.go` for reference)
 - Outputs `ExecCredential` JSON (`client.authentication.k8s.io/v1beta1`)
 - Generates EKS bearer token using STS pre-signed `GetCallerIdentity` URL
+- Accepts `--identity`, `--cluster-name`, `--region` flags
 - Uses Atmos-managed AWS credentials (no AWS CLI dependency)
 
 #### 4. EKS Integration (`pkg/auth/integrations/aws/eks.go`)
@@ -514,13 +549,14 @@ internal/exec/
 **Kubeconfig Manager (`pkg/auth/cloud/kube/config_test.go`):**
 - Test kubeconfig YAML generation
 - Test XDG path resolution
-- Test merge with empty existing config
-- Test merge with existing clusters (update)
-- Test merge with existing clusters (add new)
-- Test file permissions (0600)
+- Test clientcmd merge with empty existing config
+- Test clientcmd merge with existing clusters (update)
+- Test clientcmd merge with existing clusters (add new)
+- Test file permissions (0600 default, custom mode via octal string)
 - Test directory creation
+- Test Mode parsing (valid octal, invalid string, empty defaults to 0600)
 
-**EKS Token Command (`cmd/auth/eks_token_test.go`):**
+**EKS Token Command (`cmd/auth_eks_token_test.go`):**
 - Test ExecCredential JSON output format
 - Test token generation with mock STS client
 - Test missing credentials error
@@ -693,4 +729,5 @@ auth:
 | 1.0 | 2025-12-17 | AI Assistant | Initial PRD |
 | 1.1 | 2025-12-18 | AI Assistant | Updated based on review: CLI uses `atmos aws eks` namespace, improved kubeconfig schema structure, clarified exec plugin format |
 | 1.2 | 2026-02-17 | AI Assistant | Synced PRD with codebase after rebase: fixed Integration interface, corrected architecture diagram, updated file paths, noted `buildAWSConfigFromCreds` reuse, updated dependency status |
-| 1.3 | 2026-02-17 | AI Assistant | Changed exec credential plugin from `aws` to `atmos auth eks-token` (eliminates AWS CLI dependency), added `cmd/auth/eks_token.go` and `GetToken()` to package structure, simplified XDG path section (use `GetXDGConfigDir` directly), moved "Atmos as exec plugin" from Future Enhancements to core design |
+| 1.3 | 2026-02-17 | AI Assistant | Changed exec credential plugin from `aws` to `atmos auth eks-token` (eliminates AWS CLI dependency), added `GetToken()` to package structure, simplified XDG path section, moved "Atmos as exec plugin" from Future Enhancements to core design |
+| 1.4 | 2026-02-18 | AI Assistant | Added identity flag and `interactiveMode: Never` to exec plugin spec, specified KUBECONFIG colon-separated append semantics (idempotent), fixed command path to `cmd/auth_eks_token.go` (follows existing auth subcommand pattern), specified `KubeconfigSettings.Mode` octal parsing with `strconv.ParseUint`, replaced custom `MergeKubeconfig` with `k8s.io/client-go/tools/clientcmd` merge |
