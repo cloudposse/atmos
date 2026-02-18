@@ -87,14 +87,26 @@ EKS follows the **integration pattern** established by ECR authentication (PR #1
                     ┌─────────────┴─────────────┐
                     │                           │
                     ▼                           ▼
-          ┌─────────────────┐         ┌─────────────────┐
-          │ ECR Integration │         │ EKS Integration │
-          │ (aws/ecr)       │         │ (aws/eks)       │
-          │                 │         │                 │
-          │ GetAuthToken()  │         │ DescribeCluster │
-          │ Write Docker    │         │ Write Kubeconfig│
-          │ config.json     │         │                 │
-          └─────────────────┘         └─────────────────┘
+          ┌─────────────────┐         ┌──────────────────┐
+          │ ECR Integration │         │ EKS Integration  │
+          │ (aws/ecr)       │         │ (aws/eks)        │
+          │                 │         │                  │
+          │ GetAuthToken()  │         │ DescribeCluster()│
+          │ Write Docker    │         │ Write Kubeconfig │
+          │ config.json     │         │ (exec: atmos)    │
+          └─────────────────┘         └──────────────────┘
+                                               │
+                                      (later, at kubectl time)
+                                               │
+                                               ▼
+                                      ┌──────────────────┐
+                                      │ kubectl exec     │
+                                      │ → atmos auth     │
+                                      │   eks-token      │
+                                      │                  │
+                                      │ STS GetCallerID  │
+                                      │ → Bearer token   │
+                                      └──────────────────┘
 ```
 
 ### Integration Interface
