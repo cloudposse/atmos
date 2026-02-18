@@ -920,14 +920,17 @@ var (
 )
 
 // RetryConfig represents the retry configuration.
+// Pointer types are used to distinguish between "not specified" (nil) and "explicitly set to zero".
+// - nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).
+// - Explicitly setting a value to zero is invalid and will cause a validation error.
 type RetryConfig struct {
-	MaxAttempts     int             `yaml:"max_attempts" json:"max_attempts" mapstructure:"max_attempts"`
-	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy" json:"backoff_strategy" mapstructure:"backoff_strategy"`
-	InitialDelay    time.Duration   `yaml:"initial_delay" json:"initial_delay" mapstructure:"initial_delay"`
-	MaxDelay        time.Duration   `yaml:"max_delay" json:"max_delay" mapstructure:"max_delay"`
-	RandomJitter    float64         `yaml:"random_jitter" json:"random_jitter" mapstructure:"random_jitter"`
-	Multiplier      float64         `yaml:"multiplier" json:"multiplier" mapstructure:"multiplier"`
-	MaxElapsedTime  time.Duration   `yaml:"max_elapsed_time" json:"max_elapsed_time" mapstructure:"max_elapsed_time"`
+	MaxAttempts     *int            `yaml:"max_attempts,omitempty" json:"max_attempts,omitempty" mapstructure:"max_attempts"`
+	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy,omitempty" json:"backoff_strategy,omitempty" mapstructure:"backoff_strategy"`
+	InitialDelay    *time.Duration  `yaml:"initial_delay,omitempty" json:"initial_delay,omitempty" mapstructure:"initial_delay"`
+	MaxDelay        *time.Duration  `yaml:"max_delay,omitempty" json:"max_delay,omitempty" mapstructure:"max_delay"`
+	RandomJitter    *float64        `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
+	Multiplier      *float64        `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
+	MaxElapsedTime  *time.Duration  `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
 }
 
 // EKS update-kubeconfig
