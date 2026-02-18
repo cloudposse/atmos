@@ -75,6 +75,8 @@ ci:
       - has_changes
       - has_additions
       - has_destructions
+      - has_errors
+      - exit_code
       - artifact_key
       - plan_summary
 

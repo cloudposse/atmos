@@ -57,6 +57,10 @@ tests:
         - !not "Check run completed: atmos/plan: prod/mycomponent"
         - !not "Title: Running plan"
         - !not "Title: plan: no changes"
+        - !not "has_changes=false"
+        - !not "has_errors=false"
+        - !not "exit_code=0"
+
 
   - name: "atmos terraform plan with ci failure"
     enabled: true
@@ -77,3 +81,6 @@ tests:
         - "Check run created: atmos/plan: prod/mycomponent/failure"
         - !not "Check run completed: atmos/plan: prod/mycomponent/failure"
         - "Check run failed: atmos/plan: prod/mycomponent/failure"
+        - "has_changes=false"
+        - "has_errors=true"
+        - "exit_code=1"
