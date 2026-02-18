@@ -9,6 +9,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 // GitHub API status values.
@@ -175,4 +176,18 @@ func getCheckRunOutputSummary(cr *github.CheckRun) string {
 		return cr.Output.GetSummary()
 	}
 	return ""
+}
+
+// CreateCheckRun creates a new check run on a commit.
+func (p *Provider) CreateCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+	defer perf.Track(nil, "github.Provider.CreateCheckRun")()
+
+	return p.createCheckRun(ctx, opts)
+}
+
+// UpdateCheckRun updates an existing check run.
+func (p *Provider) UpdateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	defer perf.Track(nil, "github.Provider.UpdateCheckRun")()
+
+	return p.updateCheckRun(ctx, opts)
 }

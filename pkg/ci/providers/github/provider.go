@@ -145,20 +145,6 @@ func (p *Provider) GetStatus(ctx context.Context, opts provider.StatusOptions) (
 	return p.getStatus(ctx, opts)
 }
 
-// CreateCheckRun creates a new check run on a commit.
-func (p *Provider) CreateCheckRun(ctx context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
-	defer perf.Track(nil, "github.Provider.CreateCheckRun")()
-
-	return p.createCheckRun(ctx, opts)
-}
-
-// UpdateCheckRun updates an existing check run.
-func (p *Provider) UpdateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
-	defer perf.Track(nil, "github.Provider.UpdateCheckRun")()
-
-	return p.updateCheckRun(ctx, opts)
-}
-
 // OutputWriter returns an OutputWriter for GitHub Actions.
 func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "github.Provider.OutputWriter")()

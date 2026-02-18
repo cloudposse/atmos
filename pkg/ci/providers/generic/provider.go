@@ -139,7 +139,8 @@ func (w *OutputWriter) WriteOutput(key, value string) error {
 	}
 
 	// No output file configured - log the output.
-	log.Debug("CI output", "key", key, "value", value)
+	// log.Debug("CI output", "key", key, "value", value)
+	fmt.Fprintln(os.Stderr, fmt.Sprintf("%s=%s", key, value))
 	return nil
 }
 
