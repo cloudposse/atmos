@@ -38,13 +38,14 @@ func TestGetProviderDir(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestGetProviderDir_RequiresRealm(t *testing.T) {
+func TestGetProviderDir_EmptyRealm_UsesLegacyPath(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 
-	_, err := GetProviderDir("", "gcp-adc")
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "realm is required")
+	dir, err := GetProviderDir("", "gcp-adc")
+	require.NoError(t, err)
+	expected := filepath.Join(tmp, "atmos", GCPSubdir, "gcp-adc")
+	assert.Equal(t, filepath.ToSlash(expected), filepath.ToSlash(dir))
 }
 
 func TestGetProviderDir_InvalidName(t *testing.T) {

@@ -3,7 +3,6 @@ package gcp_service_account
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -429,7 +428,7 @@ func TestSetRealm(t *testing.T) {
 	assert.Equal(t, "custom-realm", id.realm)
 }
 
-func TestRequireRealm_EmptyWithEmail_AutoGenerates(t *testing.T) {
+func TestRequireRealm_EmptyWithEmail_ReturnsEmpty(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
@@ -438,11 +437,10 @@ func TestRequireRealm_EmptyWithEmail_AutoGenerates(t *testing.T) {
 	id.realm = ""
 	realm, err := id.requireRealm()
 	require.NoError(t, err)
-	assert.NotEmpty(t, realm, "should auto-generate SHA-based realm from email")
-	assert.True(t, strings.HasPrefix(realm, "auto-"), "auto-generated realm should start with 'auto-'")
+	assert.Equal(t, "", realm)
 }
 
-func TestRequireRealm_EmptyWithoutEmail_Errors(t *testing.T) {
+func TestRequireRealm_EmptyWithoutEmail_ReturnsEmpty(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "",
@@ -450,33 +448,11 @@ func TestRequireRealm_EmptyWithoutEmail_Errors(t *testing.T) {
 	}
 	id.realm = ""
 	realm, err := id.requireRealm()
-	require.Error(t, err)
-	assert.Empty(t, realm)
-	assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	require.NoError(t, err)
+	assert.Equal(t, "", realm)
 }
 
-func TestRequireRealm_Deterministic(t *testing.T) {
-	// Same email should always produce the same auto-generated realm.
-	id1 := &Identity{
-		principal: &types.GCPServiceAccountIdentityPrincipal{
-			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
-		},
-	}
-	id2 := &Identity{
-		principal: &types.GCPServiceAccountIdentityPrincipal{
-			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
-		},
-	}
-	realm1, err1 := id1.requireRealm()
-	realm2, err2 := id2.requireRealm()
-	require.NoError(t, err1)
-	require.NoError(t, err2)
-	assert.Equal(t, realm1, realm2, "same email should produce same realm")
-	assert.Equal(t, "auto-b21924d31a143eec", realm1, "golden value for canonical email")
-}
-
-func TestRequireRealm_DifferentEmails_DifferentRealms(t *testing.T) {
-	// Different emails should produce different realms.
+func TestRequireRealm_EmptyRealmConsistentAcrossEmails(t *testing.T) {
 	id1 := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa1@proj-a.iam.gserviceaccount.com",
@@ -491,7 +467,8 @@ func TestRequireRealm_DifferentEmails_DifferentRealms(t *testing.T) {
 	realm2, err2 := id2.requireRealm()
 	require.NoError(t, err1)
 	require.NoError(t, err2)
-	assert.NotEqual(t, realm1, realm2, "different emails should produce different realms")
+	assert.Equal(t, "", realm1)
+	assert.Equal(t, "", realm2)
 }
 
 func TestRequireRealm_Set(t *testing.T) {
@@ -753,10 +730,9 @@ func TestPrepareEnvironment_NoProviderName(t *testing.T) {
 	assert.Contains(t, err.Error(), "provider name is required")
 }
 
-// TestEmptyRealm_NoEmail_RejectedByFileOperations verifies that credential file
-// operations fail with ErrEmptyRealm when realm is empty AND no service account
-// email is available for auto-generation.
-func TestEmptyRealm_NoEmail_RejectedByFileOperations(t *testing.T) {
+// TestEmptyRealm_NoEmail_DoesNotFailForRealm verifies that empty realm does not
+// fail file operations due to realm resolution, even when email is empty.
+func TestEmptyRealm_NoEmail_DoesNotFailForRealm(t *testing.T) {
 	makeIdentity := func() *Identity {
 		return &Identity{
 			name: "test-sa",
@@ -776,38 +752,39 @@ func TestEmptyRealm_NoEmail_RejectedByFileOperations(t *testing.T) {
 		id := makeIdentity()
 		_, err := id.PrepareEnvironment(context.Background(), nil)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		assert.NotErrorIs(t, err, errUtils.ErrEmptyRealm)
 	})
 
 	t.Run("PostAuthenticate", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tmp)
+		t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 		id := makeIdentity()
 		err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 			Credentials:  &types.GCPCredentials{AccessToken: "tok"},
 			ProviderName: "gcp-adc",
 		})
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		require.NoError(t, err)
 	})
 
 	t.Run("Logout", func(t *testing.T) {
 		id := makeIdentity()
 		err := id.Logout(context.Background())
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		require.NoError(t, err)
 	})
 
 	t.Run("CredentialsExist", func(t *testing.T) {
 		id := makeIdentity()
-		_, err := id.CredentialsExist()
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		exists, err := id.CredentialsExist()
+		require.NoError(t, err)
+		assert.False(t, exists)
 	})
 
 	t.Run("LoadCredentials", func(t *testing.T) {
 		id := makeIdentity()
 		_, err := id.LoadCredentials(context.Background())
 		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		assert.NotErrorIs(t, err, errUtils.ErrEmptyRealm)
 	})
 }
 
@@ -895,7 +872,7 @@ func TestNewIdentity_NoDefaultRealm(t *testing.T) {
 //   1. ADC provider finds base credentials → GCPCredentials with access token.
 //   2. gcp/service-account identity uses base token to impersonate target SA.
 //   3. Impersonated credentials are stored in files (requires realm).
-//   4. Auto-generated SHA-based realm from service account email when no explicit realm.
+//   4. Empty realm uses backward-compatible paths with no realm subdirectory.
 
 // TestADC_ServiceAccount_ImpersonationFlow verifies the full impersonation
 // flow where ADC provides base credentials and the service account identity
@@ -910,7 +887,7 @@ func TestADC_ServiceAccount_ImpersonationFlow(t *testing.T) {
 	require.NoError(t, err)
 	id.SetName("prod-deployer")
 
-	// Empty realm — auto-generation should kick in for file operations.
+	// Empty realm uses backward-compatible paths.
 	id.SetRealm("")
 
 	expiry := time.Now().Add(time.Hour).UTC()
@@ -948,10 +925,9 @@ func TestADC_ServiceAccount_ImpersonationFlow(t *testing.T) {
 	assert.Equal(t, []string{"https://www.googleapis.com/auth/cloud-platform"}, gcpCreds.Scopes)
 }
 
-// TestADC_ServiceAccount_AutoRealm_WithImpersonation verifies that the complete
-// ADC + service-account flow works end-to-end with auto-generated realm,
-// including PostAuthenticate file storage.
-func TestADC_ServiceAccount_AutoRealm_WithImpersonation(t *testing.T) {
+// TestADC_ServiceAccount_EmptyRealm_WithImpersonation verifies that the complete
+// ADC + service-account flow works end-to-end with empty realm using legacy paths.
+func TestADC_ServiceAccount_EmptyRealm_WithImpersonation(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
@@ -962,19 +938,18 @@ func TestADC_ServiceAccount_AutoRealm_WithImpersonation(t *testing.T) {
 	id, err := New(principal)
 	require.NoError(t, err)
 	id.SetName("auto-realm-sa")
-	id.SetRealm("") // Empty — auto-realm from email.
+	id.SetRealm("") // Empty realm should use legacy paths.
 	id.SetConfig(&schema.Identity{
 		Kind: "gcp/service-account",
 		Via:  &schema.IdentityVia{Provider: "my-adc"},
 	})
 
-	// Verify auto-realm is generated.
+	// Verify empty realm is preserved.
 	realm, err := id.requireRealm()
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(realm, "auto-"))
-	assert.Len(t, realm, 5+16, "auto- (5 chars) + 16 hex chars = 21")
+	assert.Empty(t, realm)
 
-	// PostAuthenticate with auto-generated realm.
+	// PostAuthenticate with empty realm.
 	creds := &types.GCPCredentials{
 		AccessToken: "auto-realm-token",
 		TokenExpiry: time.Now().Add(time.Hour),
@@ -993,7 +968,7 @@ func TestADC_ServiceAccount_AutoRealm_WithImpersonation(t *testing.T) {
 	// Verify credentials were stored.
 	exists, err := id.CredentialsExist()
 	require.NoError(t, err)
-	assert.True(t, exists, "credentials should exist after PostAuthenticate with auto-realm")
+	assert.True(t, exists, "credentials should exist after PostAuthenticate with empty realm")
 
 	// Load credentials back.
 	loaded, err := id.LoadCredentials(context.Background())
@@ -1013,18 +988,18 @@ func TestADC_ServiceAccount_AutoRealm_WithImpersonation(t *testing.T) {
 	assert.False(t, exists, "credentials should not exist after logout")
 }
 
-// TestADC_ServiceAccount_MultipleAccounts_IsolatedByAutoRealm verifies that
+// TestADC_ServiceAccount_MultipleAccounts_IsolatedByIdentityName verifies that
 // two different service accounts (same config file) get isolated credential
-// storage via auto-generated realms derived from their unique emails.
-func TestADC_ServiceAccount_MultipleAccounts_IsolatedByAutoRealm(t *testing.T) {
+// storage via identity names even when realm is empty.
+func TestADC_ServiceAccount_MultipleAccounts_IsolatedByIdentityName(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 
 	makeIdentity := func(name, email string) *Identity {
-		return &Identity{
-			name:  name,
-			realm: "", // Auto-realm from email.
+			return &Identity{
+				name:  name,
+				realm: "",
 			principal: &types.GCPServiceAccountIdentityPrincipal{
 				ServiceAccountEmail: email,
 			},
@@ -1038,12 +1013,13 @@ func TestADC_ServiceAccount_MultipleAccounts_IsolatedByAutoRealm(t *testing.T) {
 	id1 := makeIdentity("dev-sa", "dev@project-a.iam.gserviceaccount.com")
 	id2 := makeIdentity("prod-sa", "prod@project-b.iam.gserviceaccount.com")
 
-	// Verify different auto-realms.
+	// Verify both use empty realm (legacy mode).
 	realm1, err := id1.requireRealm()
 	require.NoError(t, err)
 	realm2, err := id2.requireRealm()
 	require.NoError(t, err)
-	assert.NotEqual(t, realm1, realm2, "different emails should produce different auto-realms")
+	assert.Empty(t, realm1)
+	assert.Empty(t, realm2)
 
 	// Store credentials for both.
 	creds1 := &types.GCPCredentials{
@@ -1105,9 +1081,9 @@ func TestADC_ServiceAccount_MultipleAccounts_IsolatedByAutoRealm(t *testing.T) {
 	assert.True(t, exists2After, "prod credentials should survive dev logout")
 }
 
-// TestADC_ServiceAccount_ExplicitRealmOverridesAutoRealm verifies that when
-// auth.realm is explicitly configured, it takes precedence over auto-generation.
-func TestADC_ServiceAccount_ExplicitRealmOverridesAutoRealm(t *testing.T) {
+// TestADC_ServiceAccount_ExplicitRealmOverridesEmpty verifies that when
+// auth.realm is explicitly configured, it takes precedence over empty realm.
+func TestADC_ServiceAccount_ExplicitRealmOverridesEmpty(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
@@ -1118,14 +1094,13 @@ func TestADC_ServiceAccount_ExplicitRealmOverridesAutoRealm(t *testing.T) {
 	id.SetRealm("customer-acme")
 	realm, err := id.requireRealm()
 	require.NoError(t, err)
-	assert.Equal(t, "customer-acme", realm, "explicit realm should be used as-is, not auto-generated")
+	assert.Equal(t, "customer-acme", realm, "explicit realm should be used as-is")
 
-	// Empty realm — falls back to auto-generation.
+	// Empty realm — falls back to legacy mode.
 	id.SetRealm("")
 	realm, err = id.requireRealm()
 	require.NoError(t, err)
-	assert.True(t, strings.HasPrefix(realm, "auto-"), "empty realm should trigger auto-generation")
-	assert.NotEqual(t, "customer-acme", realm)
+	assert.Equal(t, "", realm)
 }
 
 // TestADC_ServiceAccount_DelegateChain verifies impersonation with a delegate chain

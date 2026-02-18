@@ -132,8 +132,8 @@ func NewAuthManager(
 	}
 
 	// Empty realm is allowed for backward compatibility with existing configs.
-	// Identity types that require filesystem isolation should generate a
-	// deterministic fallback realm internally when realm is not configured.
+	// When realm is empty, credential paths use the legacy layout without a
+	// realm subdirectory.
 
 	log.Debug("Auth realm computed", "realm", realmInfo.Value, "source", realmInfo.Source)
 
@@ -557,8 +557,8 @@ func (m *manager) initializeProviders() error {
 // initializeIdentities creates identity instances from configuration.
 // Note: realm is propagated to all identities centrally after this method
 // returns (in NewAuthManager), using the fully-computed m.realm.Value.
-// Identity types that require non-empty realm for filesystem isolation should
-// generate a deterministic fallback internally when the propagated realm is empty.
+// Identity implementations receive the computed realm as-is. Empty realm means
+// legacy path behavior with no realm subdirectory.
 func (m *manager) initializeIdentities() error {
 	for name, identityConfig := range m.config.Identities {
 		identity, err := factory.NewIdentity(name, &identityConfig)

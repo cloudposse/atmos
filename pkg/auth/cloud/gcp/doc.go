@@ -2,12 +2,12 @@
 // setup for the Atmos authentication system.
 //
 // This package implements the XDG-compliant file isolation pattern, storing
-// GCP credentials in ~/.config/atmos/<realm>/gcp/<provider-name>/ to avoid conflicts
+// GCP credentials in ~/.config/atmos/[<realm>/]gcp/<provider-name>/ to avoid conflicts
 // with the user's existing gcloud configuration.
 //
 // Directory Structure:
 //
-//	~/.config/atmos/<realm>/gcp/<provider-name>/
+//	~/.config/atmos/[<realm>/]gcp/<provider-name>/
 //	├── adc/
 //	│   └── <identity-name>/
 //	│       └── application_default_credentials.json

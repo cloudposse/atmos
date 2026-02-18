@@ -42,9 +42,7 @@ type RealmInfo struct {
 // GetRealm computes the authentication realm with the following precedence:
 //  1. ATMOS_AUTH_REALM environment variable (highest priority)
 //  2. configRealm from atmos.yaml auth.realm configuration
-//  3. Empty realm — identity types that need isolation (e.g. GCP) generate
-//     a SHA-based fallback from their unique identifiers (service account email).
-//     AWS/Azure identities handle empty realm gracefully via filepath.Join.
+//  3. Empty realm — legacy credential paths are used without a realm subdirectory.
 //
 // Returns an error if an explicit realm value (env var or config) contains invalid characters.
 func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
@@ -72,9 +70,7 @@ func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 		}, nil
 	}
 
-	// Priority 3: No realm configured — return empty.
-	// AWS/Azure: credential paths work without realm (filepath.Join strips empty segments).
-	// GCP: identity types generate a SHA-based fallback from service account email.
+	// Priority 3: No realm configured — return empty for legacy credential paths.
 	return RealmInfo{
 		Value:  "",
 		Source: SourceAuto,
@@ -158,7 +154,7 @@ func (r RealmInfo) SourceDescription(cliConfigPath string) string {
 	case SourceConfig:
 		return "atmos.yaml (auth.realm)"
 	case SourceAuto:
-		return "auto (identity-derived isolation)"
+		return "default (no realm isolation)"
 	default:
 		return r.Source
 	}

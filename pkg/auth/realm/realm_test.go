@@ -31,7 +31,6 @@ func TestGetRealm_ConfigPrecedence(t *testing.T) {
 
 func TestGetRealm_AutoEmpty(t *testing.T) {
 	// When no explicit realm is configured, GetRealm returns empty.
-	// Identity types that need isolation (GCP) generate SHA-based fallback internally.
 	info, err := GetRealm("", "/path/to/config")
 	require.NoError(t, err)
 	assert.Equal(t, SourceAuto, info.Source)
@@ -182,18 +181,18 @@ func TestRealmInfo_SourceDescription(t *testing.T) {
 			info:     RealmInfo{Value: "test", Source: SourceConfig},
 			contains: "atmos.yaml",
 		},
-		{
-			name:          "auto source with path",
-			info:          RealmInfo{Value: "", Source: SourceAuto},
-			cliConfigPath: "/path/to/config",
-			contains:      "auto (identity-derived isolation)",
-		},
-		{
-			name:          "auto source without path",
-			info:          RealmInfo{Value: "", Source: SourceAuto},
-			cliConfigPath: "",
-			contains:      "auto (identity-derived isolation)",
-		},
+			{
+				name:          "auto source with path",
+				info:          RealmInfo{Value: "", Source: SourceAuto},
+				cliConfigPath: "/path/to/config",
+				contains:      "default (no realm isolation)",
+			},
+			{
+				name:          "auto source without path",
+				info:          RealmInfo{Value: "", Source: SourceAuto},
+				cliConfigPath: "",
+				contains:      "default (no realm isolation)",
+			},
 	}
 
 	for _, tc := range tests {

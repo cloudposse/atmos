@@ -2,7 +2,6 @@ package gcp_service_account
 
 import (
 	"context"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"strings"
@@ -57,36 +56,15 @@ func (i *Identity) SetName(name string) {
 // SetRealm sets the credential realm for filesystem isolation.
 // When set explicitly (via auth.realm config or ATMOS_AUTH_REALM env var),
 // this realm is used directly for credential file paths.
-// When empty, requireRealm() generates a SHA-based fallback from the
-// service account email to ensure isolation between different accounts.
+// When empty, legacy paths are used without a realm subdirectory.
 func (i *Identity) SetRealm(realm string) {
 	i.realm = realm
 }
 
 // requireRealm returns the realm for credential file operations.
-// If realm was explicitly set, it is returned as-is.
-// If realm is empty (no auth.realm config or ATMOS_AUTH_REALM), a deterministic
-// SHA-based realm is generated from the service account email. This ensures
-// each GCP service account gets its own isolated credential directory without
-// requiring users to explicitly configure auth.realm.
+// Empty realm is allowed to preserve backward-compatible credential paths.
 func (i *Identity) requireRealm() (string, error) {
-	if i.realm != "" {
-		return i.realm, nil
-	}
-
-	// Generate a deterministic realm from the service account email.
-	// This ensures unique credential paths per account without explicit config.
-	email := ""
-	if i.principal != nil {
-		email = i.principal.ServiceAccountEmail
-	}
-	if email == "" {
-		return "", fmt.Errorf("%w: identity %q has no realm and no service account email for auto-generation",
-			errUtils.ErrEmptyRealm, i.Name())
-	}
-
-	hash := sha256.Sum256([]byte(email))
-	return fmt.Sprintf("auto-%x", hash[:8]), nil
+	return i.realm, nil
 }
 
 // Kind returns the identity kind.
