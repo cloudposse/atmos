@@ -177,7 +177,7 @@ auth:
 
 ### Interactive Flow (Browser Available)
 
-```
+```text
 $ atmos auth login --identity my-user
 
 No stored credentials found for 'my-user'.
@@ -206,7 +206,7 @@ Starting browser authentication...
 
 When running in a non-TTY environment or with `--remote` flag:
 
-```
+```text
 $ atmos auth login --identity my-user --remote
 
 No stored credentials found for 'my-user'.
@@ -228,7 +228,7 @@ Authorization code: █
 
 ### Credential Resolution Flow
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────┐
 │                    aws/user Identity                         │
 ├─────────────────────────────────────────────────────────────┤
@@ -248,7 +248,9 @@ Authorization code: █
 
 ### User Requirements
 
-1. **IAM Permissions**: Principal must have `SignInLocalDevelopmentAccess` managed policy or equivalent:
+#### IAM Users
+
+1. **IAM Permissions**: IAM principals must have the `SignInLocalDevelopmentAccess` managed policy or equivalent:
    ```json
    {
      "Version": "2012-10-17",
@@ -265,12 +267,19 @@ Authorization code: █
    }
    ```
 2. **Console Access**: IAM user must have console sign-in enabled
-3. **Browser Access**: Default browser must be available (or use remote mode for headless)
+
+#### Root Users
+
+1. **No additional IAM permissions required**: The `SignInLocalDevelopmentAccess` policy and `signin:AuthorizeOAuth2Access`/`signin:CreateOAuth2Token` actions are not needed for the AWS root account. Root users authenticate directly via the console sign-in flow.
+2. **Console Access**: Root user must have a password configured for the account.
+
+#### All Users
+
+1. **Browser Access**: Default browser must be available (or use remote mode for headless)
 
 ### Organizational Controls
 
-- Organizations can deny these actions via SCPs to prevent usage
-- Centralized root access management can prevent root login on member accounts
+- Organizations can deny `signin:AuthorizeOAuth2Access` and `signin:CreateOAuth2Token` via SCPs to prevent IAM user browser authentication. Note that SCPs do not apply to root users in the same way; centralized root access management should be used to control root login on member accounts.
 
 ## Implementation Approach
 
@@ -301,11 +310,11 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 
 **Technical Implementation (in `webflow.go`):**
 
-1. Start local HTTP server on `http://127.0.0.1:<port>/oauth/callback`
+1. Start local HTTP server by binding to `127.0.0.1:0` to let the OS assign an ephemeral port. Read back the assigned port from the listener and interpolate it into the `redirect_uri`. The `redirect_uri` (including port) must match what AWS accepts for the `arn:aws:signin:::devtools/same-device` client. If ephemeral binding fails, surface a clear error with a hint to check for port conflicts.
 2. Generate PKCE code verifier (random 32-byte string, base64url encoded)
 3. Generate code challenge (SHA-256 hash of verifier, base64url encoded)
 4. Open browser to authorization URL:
-   ```
+   ```text
    https://{region}.signin.aws.amazon.com/authorize?
      client_id=arn:aws:signin:::devtools/same-device
      &redirect_uri=http://127.0.0.1:{port}/oauth/callback
@@ -377,15 +386,18 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 2. **Error Rate**: Authentication failures due to implementation issues
 3. **User Feedback**: GitHub issues and community feedback
 
+## Design Decisions
+
+1. **Credential Caching**: After successful browser authentication, webflow credentials will be stored in the keychain. This ensures the keychain check (tier 2) satisfies subsequent `atmos` invocations without re-triggering the browser flow, preserving the intended three-tier resolution behavior (see US-2). Cached credentials follow the same expiration and refresh lifecycle as other keychain-stored credentials.
+2. **Disable Option**: A `webflow_enabled: false` setting under the identity's `credentials` block will allow security-conscious organizations to disable browser fallback entirely. When disabled, the identity falls back only to YAML config and keychain, and returns an error if neither is available.
+
 ## Open Questions
 
-1. **Auto-Detection**: Should we auto-detect non-TTY and switch to remote mode automatically?
-2. **Credential Caching**: Should webflow credentials be cached in keychain after successful auth?
-3. **Disable Option**: Should there be a config option to disable webflow fallback (for security-conscious orgs)?
+1. **Auto-Detection Scope**: FR-7 specifies auto-detecting non-TTY and switching to remote mode. Should this also detect CI environments (e.g., `CI=true`) and skip the browser flow entirely rather than falling back to remote mode?
 
 ## References
 
 - [AWS Blog: Simplified developer access to AWS with 'aws login'](https://aws.amazon.com/blogs/security/simplified-developer-access-to-aws-with-aws-login/)
 - [AWS CLI Login Documentation](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sign-in.html)
-- [AWS CLI IAM Identity Center Configuration](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-sso.html)
+- [AWS Signin Service Authorization Reference](https://docs.aws.amazon.com/service-authorization/latest/reference/list_awssignin.html)
 - [Beyond IAM access keys: Modern authentication approaches for AWS](https://aws.amazon.com/blogs/security/beyond-iam-access-keys-modern-authentication-approaches-for-aws/)
