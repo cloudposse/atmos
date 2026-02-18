@@ -397,7 +397,7 @@ export const roadmapConfig = {
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
-      progress: 85,
+      progress: 88,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
@@ -406,6 +406,7 @@ export const roadmapConfig = {
         { label: 'CodeRabbit review integration', status: 'shipped', quarter: 'q3-2025', description: 'Automated code reviews with AI-powered suggestions and security analysis.', benefits: 'PRs get immediate feedback. Security issues are caught before human review.' },
         { label: 'Nightly releases (RC candidates)', status: 'shipped', quarter: 'q4-2025', description: 'Automated nightly builds for testing upcoming features before stable release.', category: 'featured', priority: 'high', benefits: 'Test new features before they ship. Report issues while fixes are still easy.' },
         { label: 'PR feature releases', status: 'shipped', quarter: 'q4-2025', description: 'Every PR gets a pre-release version for easy testing before merge.', benefits: 'Test the exact changes in a PR without building locally. Validate fixes before they merge.' },
+        { label: 'PR and SHA artifact installation via --use-version', status: 'shipped', quarter: 'q1-2026', pr: 2040, changelog: 'pr-artifact-installation', description: 'Test features from any PR or commit SHA with --use-version (e.g., --use-version 2040 or --use-version sha:ceb7526). Automatically downloads the correct platform binary from GitHub Actions, caches it locally, and re-executes.', benefits: 'Test PR features or specific commits without compiling from source. One command to switch to any PR or commit build.' },
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },
