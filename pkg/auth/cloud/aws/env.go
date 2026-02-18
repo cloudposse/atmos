@@ -182,7 +182,6 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 	// Load config (respects AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE).
 	log.Debug("Loading AWS SDK config with Atmos-managed credentials")
 	cfg, err = config.LoadDefaultConfig(ctx, optFns...)
-
 	if err != nil {
 		log.Debug("Failed to load AWS SDK config", "error", err)
 		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
