@@ -463,6 +463,141 @@ func TestGetVersionsToUninstall(t *testing.T) {
 	}
 }
 
+func TestHandleToolNotFound(t *testing.T) {
+	tests := []struct {
+		name            string
+		err             error
+		showProgressBar bool
+		expectNil       bool
+	}{
+		{
+			name:            "ErrToolNotFound with progress bar returns nil",
+			err:             ErrToolNotFound,
+			showProgressBar: true,
+			expectNil:       true,
+		},
+		{
+			name:            "ErrToolNotFound without progress bar returns nil",
+			err:             ErrToolNotFound,
+			showProgressBar: false,
+			expectNil:       true,
+		},
+		{
+			name:            "os.IsNotExist error with progress bar returns nil",
+			err:             os.ErrNotExist,
+			showProgressBar: true,
+			expectNil:       true,
+		},
+		{
+			name:            "os.IsNotExist error without progress bar returns nil",
+			err:             os.ErrNotExist,
+			showProgressBar: false,
+			expectNil:       true,
+		},
+		{
+			name:            "other error is returned as-is",
+			err:             errors.New("permission denied"),
+			showProgressBar: true,
+			expectNil:       false,
+		},
+		{
+			name:            "other error without progress bar is returned as-is",
+			err:             errors.New("permission denied"),
+			showProgressBar: false,
+			expectNil:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handleToolNotFound("hashicorp", "terraform", "1.0.0", tt.err, tt.showProgressBar)
+			if tt.expectNil {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+				assert.Equal(t, tt.err, err)
+			}
+		})
+	}
+}
+
+func TestHandleUninstallError(t *testing.T) {
+	tests := []struct {
+		name            string
+		err             error
+		showProgressBar bool
+		expectNil       bool
+	}{
+		{
+			name:            "ErrToolNotFound with progress bar returns nil",
+			err:             ErrToolNotFound,
+			showProgressBar: true,
+			expectNil:       true,
+		},
+		{
+			name:            "ErrToolNotFound without progress bar returns nil",
+			err:             ErrToolNotFound,
+			showProgressBar: false,
+			expectNil:       true,
+		},
+		{
+			name:            "os.IsNotExist error with progress bar returns nil",
+			err:             os.ErrNotExist,
+			showProgressBar: true,
+			expectNil:       true,
+		},
+		{
+			name:            "other error with progress bar returns error",
+			err:             errors.New("uninstall failed"),
+			showProgressBar: true,
+			expectNil:       false,
+		},
+		{
+			name:            "other error without progress bar returns error",
+			err:             errors.New("uninstall failed"),
+			showProgressBar: false,
+			expectNil:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := handleUninstallError("hashicorp", "terraform", "1.0.0", tt.err, tt.showProgressBar)
+			if tt.expectNil {
+				assert.NoError(t, err)
+			} else {
+				assert.Error(t, err)
+			}
+		})
+	}
+}
+
+func TestParseToolSpecLenient(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+
+	mockResolver := &mockToolResolver{
+		mapping: map[string][2]string{
+			"terraform":           {"hashicorp", "terraform"},
+			"hashicorp/terraform": {"hashicorp", "terraform"},
+		},
+	}
+	binDir := filepath.Join(tempDir, ".atmos", "tools", "bin")
+	installer := NewInstallerWithResolver(mockResolver, binDir)
+
+	t.Run("valid tool spec resolves correctly", func(t *testing.T) {
+		owner, repo := parseToolSpecLenient(installer, "terraform")
+		assert.Equal(t, "hashicorp", owner)
+		assert.Equal(t, "terraform", repo)
+	})
+
+	t.Run("invalid tool spec falls back to tool name for both", func(t *testing.T) {
+		owner, repo := parseToolSpecLenient(installer, "unknown-tool")
+		assert.Equal(t, "unknown-tool", owner)
+		assert.Equal(t, "unknown-tool", repo)
+	})
+}
+
 func TestUninstallAllVersionsOfTool(t *testing.T) {
 	tests := []struct {
 		name        string

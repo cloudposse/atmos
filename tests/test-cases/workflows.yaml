@@ -302,3 +302,62 @@ tests:
       stdout:
         - "PATH="
       exit_code: 0
+
+  - name: atmos workflow retry success
+    enabled: true
+    snapshot: false
+    description: "Ensure workflow with retry config succeeds on first attempt"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-success"
+      - "--file"
+      - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "Success on first try"
+      exit_code: 0
+
+  - name: atmos workflow retry full config
+    enabled: true
+    snapshot: false
+    description: "Ensure workflow with full retry config works"
+    workdir: "fixtures/scenarios/workflows/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-full-config"
+      - "--file"
+      - "test"
+    skip:
+      # echo is a shell built-in on Windows, not an executable in PATH.
+      os: !not windows
+    expect:
+      diff: []
+      stdout:
+        - "Testing full retry config"
+      exit_code: 0
+
+  - name: workflow retries example
+    enabled: true
+    snapshot: true
+    description: "Verify workflow-retries example retries and shows max attempts exceeded"
+    workdir: "../examples/workflow-retries/"
+    command: "atmos"
+    args:
+      - "workflow"
+      - "retry-demo"
+      - "-f"
+      - "retries"
+    expect:
+      diff: []
+      stdout:
+        - "Attempting deployment"
+      stderr:
+        - "max attempts"
+      exit_code: 1
