@@ -155,6 +155,19 @@ func buildActionContext(opts ExecuteOptions, platform provider.Provider, pl plug
 		result = &plugin.OutputResult{}
 	}
 
+	// If the command had an error, ensure the result reflects that.
+	// This handles the case where RunE fails and the output is empty
+	// (Cobra skips PostRunE on error, so we get called via defer with no output).
+	if opts.CommandError != nil {
+		result.HasErrors = true
+		if result.ExitCode == 0 {
+			result.ExitCode = 1
+		}
+		if len(result.Errors) == 0 {
+			result.Errors = []string{opts.CommandError.Error()}
+		}
+	}
+
 	return &actionContext{
 		Opts:     opts,
 		Plugin:   pl,
