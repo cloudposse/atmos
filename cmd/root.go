@@ -124,6 +124,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
+
 		// Check for --use-version=value format.
 		if strings.HasPrefix(arg, "--use-version=") {
 			return strings.TrimPrefix(arg, "--use-version=")
@@ -144,6 +149,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
 
 		// Check for --chdir=value format.
 		if strings.HasPrefix(arg, "--chdir=") {
@@ -438,26 +448,42 @@ var RootCmd = &cobra.Command{
 
 		// Check for version.use configuration and re-exec with specified version if needed.
 		// This runs after profiles are loaded, so version.use can be set via profiles.
-		// Skip re-exec for help commands and version management commands to avoid loops.
-		if !isHelpRequested && !isVersionManagementCommand(cmd) && err == nil {
-			// Set ATMOS_VERSION_USE env var from --use-version flag if specified.
-			// This allows CheckAndReexec to pick up the flag value.
+		if !isHelpRequested && err == nil {
+			// Check if explicit --use-version flag was provided.
+			var explicitVersionRequested bool
+			var explicitVersion string
+
 			// First try Cobra's parsed flag (works when DisableFlagParsing=false).
 			if cmd.Flags().Changed("use-version") {
 				if useVersion, flagErr := cmd.Flags().GetString("use-version"); flagErr == nil && useVersion != "" {
-					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
-				}
-			} else {
-				// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
-				// manually parse --use-version from os.Args.
-				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
-					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+					explicitVersion = useVersion
+					explicitVersionRequested = true
 				}
 			}
-			// CheckAndReexec returns true only on successful syscall.Exec, which replaces
-			// the current process entirely. This means true is never returned in practice
-			// since exec doesn't return. We call it for its side effects.
-			_ = pkgversion.CheckAndReexec(&tmpConfig)
+
+			// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+			// manually parse --use-version from os.Args.
+			if !explicitVersionRequested {
+				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
+					explicitVersion = useVersion
+					explicitVersionRequested = true
+				}
+			}
+
+			// Set ATMOS_VERSION_USE env var if explicit flag was provided.
+			if explicitVersionRequested {
+				_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
+			}
+
+			// Skip re-exec for version management commands (to avoid loops),
+			// unless an explicit --use-version flag was provided.
+			shouldReexec := explicitVersionRequested || !isVersionManagementCommand(cmd)
+			if shouldReexec {
+				// CheckAndReexec returns true only on successful syscall.Exec, which replaces
+				// the current process entirely. This means true is never returned in practice
+				// since exec doesn't return. We call it for its side effects.
+				_ = pkgversion.CheckAndReexec(&tmpConfig)
+			}
 		}
 
 		// Setup profiler before command execution (but skip for help commands).
