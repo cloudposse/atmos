@@ -92,8 +92,8 @@ func WithIsolatedAWSEnv(fn func() error) error {
 // environment variables AND shared config files don't interfere with the configuration loading process.
 //
 // The AWS SDK by default loads from ~/.aws/config and ~/.aws/credentials even when
-// AWS_PROFILE is not set. We disable shared config loading to prevent profile-based
-// configuration from interfering with Atmos auth.
+// AWS_PROFILE is not set. We provide empty file lists to completely prevent the SDK from
+// reading any shared config or credentials files from the filesystem.
 //
 // Use this for initial authentication (SSO device flow, etc.) when you want complete isolation.
 // Use LoadAtmosManagedAWSConfig when you want to use Atmos-managed credential files.
@@ -101,10 +101,14 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 	var cfg aws.Config
 	var err error
 
-	// Prepend config.WithSharedConfigProfile("") to disable loading from shared config files.
-	// This prevents the SDK from loading user's ~/.aws/config and ~/.aws/credentials files.
-	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns)+1)
-	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigProfile(""))
+	// Prepend isolation options to completely prevent loading from shared config files.
+	// config.WithSharedConfigFiles([]string{}) prevents loading from ~/.aws/config (or AWS_CONFIG_FILE).
+	// config.WithSharedCredentialsFiles([]string{}) prevents loading from ~/.aws/credentials (or AWS_SHARED_CREDENTIALS_FILE).
+	// Note: config.WithSharedConfigProfile("") is NOT sufficient - it means "use the default profile",
+	// which still loads from ~/.aws/config and can conflict with user's [default] profile settings.
+	isolatedOptFns := make([]func(*config.LoadOptions) error, 0, len(optFns)+2)
+	isolatedOptFns = append(isolatedOptFns, config.WithSharedConfigFiles([]string{}))
+	isolatedOptFns = append(isolatedOptFns, config.WithSharedCredentialsFiles([]string{}))
 	isolatedOptFns = append(isolatedOptFns, optFns...)
 
 	isolateErr := WithIsolatedAWSEnv(func() error {
@@ -266,4 +270,38 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 
 	log.Debug("Prepared AWS environment", "profile", profile)
 	return result
+}
+
+// WarnIfAWSProfileSet checks if external AWS configuration could interfere with
+// Atmos authentication and logs warnings to help users diagnose issues.
+//
+// This function checks for:
+// - AWS_PROFILE environment variable being set (most common interference source).
+// - AWS_CONFIG_FILE or AWS_SHARED_CREDENTIALS_FILE pointing to custom locations.
+//
+// Atmos auth operates in an isolated AWS environment, so these variables are
+// temporarily cleared during authentication. This warning helps users understand
+// why their external AWS configuration is being ignored.
+func WarnIfAWSProfileSet() {
+	if profile, exists := os.LookupEnv("AWS_PROFILE"); exists && profile != "" {
+		log.Warn("AWS_PROFILE is set in the environment",
+			"profile", profile,
+			"action", "Atmos auth will ignore this during authentication to avoid conflicts",
+			"recommendation", "If authentication fails, try unsetting AWS_PROFILE: unset AWS_PROFILE",
+		)
+	}
+
+	if configFile, exists := os.LookupEnv("AWS_CONFIG_FILE"); exists && configFile != "" {
+		log.Debug("AWS_CONFIG_FILE is set in the environment",
+			"config_file", configFile,
+			"action", "Atmos auth will ignore this during authentication",
+		)
+	}
+
+	if credsFile, exists := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE"); exists && credsFile != "" {
+		log.Debug("AWS_SHARED_CREDENTIALS_FILE is set in the environment",
+			"credentials_file", credsFile,
+			"action", "Atmos auth will ignore this during authentication",
+		)
+	}
 }

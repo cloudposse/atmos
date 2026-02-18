@@ -1473,9 +1473,61 @@ func Execute() error {
 	return err
 }
 
+// optionalValueFlags lists double-dash Atmos flags that use NoOptDefVal (optional value).
+//
+// When pflag encounters these flags without "=", it uses NoOptDefVal instead of consuming
+// the next argument as the value. This breaks the standard CLI convention of "--flag value"
+// (space-separated). For example, "--identity admin" would set identity to "__SELECT__" and
+// leave "admin" as an orphaned positional arg that gets passed through to terraform.
+//
+// This map is used by normalizeOptionalValueFlags to convert "--flag value" to "--flag=value"
+// before Cobra parses, ensuring both "--flag=value" and "--flag value" work correctly.
+var optionalValueFlags = map[string]bool{
+	"--identity": true,
+}
+
+// normalizeOptionalValueFlags converts "--flag value" to "--flag=value" for flags
+// registered with NoOptDefVal (optional value).
+//
+// pflag's NoOptDefVal feature treats flags like booleans: "--flag" without "=" uses
+// the NoOptDefVal instead of consuming the next argument. This breaks the standard
+// CLI convention where "--flag value" passes "value" as the flag's value.
+//
+// This function runs BEFORE Cobra parsing to ensure both forms work correctly:
+//   - "--identity admin"  → "--identity=admin" (normalized).
+//   - "--identity=admin"  → "--identity=admin" (unchanged).
+//   - "--identity"        → "--identity"        (unchanged, triggers interactive selection).
+//   - "--identity --help" → "--identity --help"  (unchanged, next arg is a flag).
+func normalizeOptionalValueFlags(args []string) []string {
+	result := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		// Stop normalizing after "--" (end of options marker per POSIX convention).
+		if arg == "--" {
+			result = append(result, args[i:]...)
+			break
+		}
+
+		// Check if this is an optional-value flag without "=".
+		if optionalValueFlags[arg] && i+1 < len(args) && !strings.HasPrefix(args[i+1], "-") {
+			// Join flag and value: "--identity admin" → "--identity=admin".
+			result = append(result, arg+"="+args[i+1])
+			i++ // Skip the value arg.
+			continue
+		}
+
+		result = append(result, arg)
+	}
+	return result
+}
+
 // preprocessCompatibilityFlags separates Atmos flags from pass-through flags.
 // This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
 // native flags that would otherwise be dropped by FParseErrWhitelist.
+//
+// It also normalizes flags with NoOptDefVal (like --identity) to ensure both
+// "--flag value" and "--flag=value" syntax work correctly.
 //
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
@@ -1485,9 +1537,18 @@ func preprocessCompatibilityFlags() {
 		return
 	}
 
+	// Normalize flags with NoOptDefVal before any further processing.
+	// This converts "--identity value" to "--identity=value" so pflag correctly
+	// captures the value instead of using NoOptDefVal and orphaning the value arg.
+	osArgs = normalizeOptionalValueFlags(osArgs)
+
 	// Find target command without parsing flags.
 	targetCmd, _, _ := RootCmd.Find(osArgs)
 	if targetCmd == nil {
+		// Even if we can't find the command, apply normalization.
+		if len(osArgs) != len(os.Args[1:]) {
+			RootCmd.SetArgs(osArgs)
+		}
 		return
 	}
 
@@ -1498,12 +1559,20 @@ func preprocessCompatibilityFlags() {
 		cmdName = c.Name()
 	}
 	if cmdName == "" {
+		// Apply normalization even if we can't determine the command.
+		if len(osArgs) != len(os.Args[1:]) {
+			RootCmd.SetArgs(osArgs)
+		}
 		return
 	}
 
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
+		// No compat flags, but still apply normalization if args changed.
+		if len(osArgs) != len(os.Args[1:]) {
+			RootCmd.SetArgs(osArgs)
+		}
 		return
 	}
 
