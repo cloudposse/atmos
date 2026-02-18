@@ -4,7 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/cloudposse/atmos/pkg/perf"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // installCmd represents the `atmos version install` command.
@@ -40,5 +40,6 @@ func runInstall(cmd *cobra.Command, args []string) error {
 
 	// Delegate to toolchain installer.
 	// The built-in alias "atmos" -> "cloudposse/atmos" handles the resolution.
-	return toolchain.RunInstall(toolSpec, false, false)
+	// Show PATH hint and progress bar when installing versions directly.
+	return toolchain.RunInstall(toolSpec, false, false, true, true)
 }

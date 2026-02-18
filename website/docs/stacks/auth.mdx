@@ -1,6 +1,5 @@
 ---
 title: Configure Authentication
-sidebar_position: 14
 sidebar_label: auth
 sidebar_class_name: command
 description: Use the auth section to configure credential management for cloud providers and external services.
@@ -320,6 +319,76 @@ auth:
 </File>
 
 When using this identity, the specified environment variables are automatically set.
+
+## Credential Realm Isolation
+
+By default, Atmos stores credentials in a shared location that all Atmos projects on the same machine can access.
+If you work with multiple repositories that define identities with the same name but for different AWS accounts,
+you can use **realms** to isolate credentials between projects.
+
+### Configuration
+
+Set a realm in your `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  realm: my-project
+```
+</File>
+
+Or use the `ATMOS_AUTH_REALM` environment variable:
+
+```bash
+export ATMOS_AUTH_REALM=my-project
+```
+
+### Precedence
+
+Realm is resolved in this order (highest to lowest priority):
+
+1. `ATMOS_AUTH_REALM` environment variable
+2. `auth.realm` in `atmos.yaml` configuration
+3. Empty (no realm isolation)
+
+### Credential Storage Paths
+
+Without a realm, credentials are stored at:
+
+```
+~/.config/atmos/aws/{provider}/credentials
+```
+
+With a realm configured, credentials are stored at:
+
+```
+~/.config/atmos/{realm}/aws/{provider}/credentials
+```
+
+### Realm Naming Rules
+
+Realm values must follow these rules:
+- Only lowercase letters (`a-z`), digits (`0-9`), hyphens (`-`), and underscores (`_`)
+- Maximum 64 characters
+- Cannot start or end with a hyphen or underscore
+- Cannot contain consecutive hyphens or underscores
+- Cannot contain path traversal characters (`/`, `\`, `..`)
+
+:::caution
+
+Changing the realm (adding, removing, or modifying `auth.realm` or `ATMOS_AUTH_REALM`) makes
+previously cached credentials inaccessible. You must run `atmos auth login` to re-authenticate
+under the new realm. Atmos will warn you if it detects credentials stored under a different realm.
+
+:::
+
+### Checking Your Current Realm
+
+Use `atmos auth whoami` to see the current realm and credential status:
+
+```bash
+atmos auth whoami --identity my-identity
+```
 
 ## CLI Commands
 

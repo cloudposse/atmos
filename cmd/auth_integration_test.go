@@ -23,6 +23,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 	// Create test auth configuration
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-aws-provider": {
 				Kind:     "aws/iam-identity-center",
@@ -55,6 +56,9 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 	t.Run("AuthManager Integration", func(t *testing.T) {
 		// Create auth manager with all dependencies
+		authStackInfo := &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{},
+		}
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
 
@@ -62,7 +66,8 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 			authConfig,
 			credStore,
 			validator,
-			nil,
+			authStackInfo,
+			"",
 		)
 		require.NoError(t, err)
 		assert.NotNil(t, authManager)
@@ -190,11 +195,8 @@ func TestAuthCommandCompletion(t *testing.T) {
 		// Call the completion function.
 		completions, directive := completionFunc(authEnvCmd, []string{}, "")
 
-		// Verify we get the expected formats.
-		assert.Equal(t, 3, len(completions))
-		assert.Contains(t, completions, "json")
-		assert.Contains(t, completions, "bash")
-		assert.Contains(t, completions, "dotenv")
+		// Verify we get the expected formats (must match SupportedFormats in auth_env.go).
+		assert.ElementsMatch(t, SupportedFormats, completions)
 		assert.Equal(t, 4, int(directive)) // ShellCompDirectiveNoFileComp
 	})
 

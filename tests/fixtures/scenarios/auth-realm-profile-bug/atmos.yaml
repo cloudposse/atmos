@@ -1,0 +1,27 @@
+# Test fixture for issue #2071: Profile incorrectly required for default identity.
+# When a default identity is defined in .atmos.d/auth.yaml, atmos should not
+# require a matching profile directory.
+
+base_path: "./"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "**/*"
+  excluded_paths: []
+  name_pattern: "{tenant}-{environment}-{stage}"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+    apply_auto_approve: false
+    deploy_run_init: true
+    init_run_reconfigure: true
+    auto_generate_backend_file: false
+
+auth:
+  providers:
+    org-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://test.awsapps.com/start

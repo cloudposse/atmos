@@ -9,12 +9,12 @@ import (
 )
 
 // listCmd commands list stacks and components.
+// Args validator is auto-applied by the command registry for parent commands with subcommands.
 var listCmd = &cobra.Command{
 	Use:                "list",
 	Short:              "List available stacks and components",
 	Long:               `Display a list of all available stacks and components defined in your project.`,
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
-	Args:               cobra.NoArgs,
 }
 
 func init() {
@@ -32,6 +32,7 @@ func init() {
 
 	// Attach all subcommands
 	listCmd.AddCommand(affectedCmd)
+	listCmd.AddCommand(aliasesCmd)
 	listCmd.AddCommand(componentsCmd)
 	listCmd.AddCommand(stacksCmd)
 	listCmd.AddCommand(themesCmd)
@@ -42,6 +43,7 @@ func init() {
 	listCmd.AddCommand(settingsCmd)
 	listCmd.AddCommand(valuesCmd)
 	listCmd.AddCommand(varsCmd)
+	listCmd.AddCommand(sourcesCmd)
 
 	// Register with registry
 	internal.Register(&ListCommandProvider{})
@@ -74,7 +76,31 @@ func (l *ListCommandProvider) GetCompatibilityFlags() map[string]compat.Compatib
 	return nil
 }
 
-// GetAliases returns command aliases (none for list command).
+// GetAliases returns command aliases for list subcommands.
+// Creates "atmos vendor list" as an alias for "atmos list vendor".
+// Creates "atmos workflow list" as an alias for "atmos list workflows".
 func (l *ListCommandProvider) GetAliases() []internal.CommandAlias {
-	return nil
+	return []internal.CommandAlias{
+		{
+			Subcommand:    "vendor",
+			ParentCommand: "vendor",
+			Name:          "list",
+			Short:         "List all vendor configurations (alias for 'atmos list vendor')",
+			Long:          `List Atmos vendor configurations including component and vendor manifests with support for filtering, custom column selection, sorting, and multiple output formats. This is an alias for "atmos list vendor".`,
+			Example:       "atmos vendor list\natmos vendor list --format json",
+		},
+		{
+			Subcommand:    "workflows",
+			ParentCommand: "workflow",
+			Name:          "list",
+			Short:         "List all Atmos workflows (alias for 'atmos list workflows')",
+			Long:          `List Atmos workflows with support for filtering by file, custom column selection, sorting, and multiple output formats. This is an alias for "atmos list workflows".`,
+			Example:       "atmos workflow list\natmos workflow list --format json",
+		},
+	}
+}
+
+// IsExperimental returns whether this command is experimental.
+func (l *ListCommandProvider) IsExperimental() bool {
+	return false
 }

@@ -41,6 +41,9 @@ const (
 
 var defaultHomeDirProvider = filesystem.NewOSHomeDirProvider()
 
+// osGetwd wraps os.Getwd, allowing tests to simulate CWD errors.
+var osGetwd = os.Getwd
+
 // mergedConfigFiles tracks all config files merged during a LoadConfig call.
 // This is used to extract case-sensitive map keys from all sources, not just the main config.
 // The slice is reset at the start of each LoadConfig call.
@@ -67,6 +70,8 @@ const (
 	profileDelimiter = ","
 	// AtmosCliConfigPathEnvVar is the environment variable name for CLI config path.
 	AtmosCliConfigPathEnvVar = "ATMOS_CLI_CONFIG_PATH"
+	// CwdKey is the log key for current working directory.
+	cwdKey = "cwd"
 )
 
 // parseProfilesFromOsArgs parses --profile flags from os.Args using pflag.
@@ -337,6 +342,12 @@ func LoadConfig(configAndStacksInfo *schema.ConfigAndStacksInfo) (schema.AtmosCo
 	// for identity names and environment variables.
 	preserveCaseSensitiveMaps(v, &atmosConfig)
 
+	// Restore original case for templates.settings.env keys (e.g., AWS_PROFILE).
+	// Viper lowercases all map keys, so we apply the case map after extraction.
+	if caseSensitiveEnv := atmosConfig.GetCaseSensitiveMap("templates.settings.env"); len(caseSensitiveEnv) > 0 {
+		atmosConfig.Templates.Settings.Env = caseSensitiveEnv
+	}
+
 	// Apply git root discovery for default base path.
 	// This enables running Atmos from any subdirectory, similar to Git.
 	if err := applyGitRootBasePath(&atmosConfig); err != nil {
@@ -374,6 +385,9 @@ func setEnv(v *viper.Viper) {
 	bindEnv(v, "settings.terminal.no_color", "ATMOS_NO_COLOR", "NO_COLOR")
 	bindEnv(v, "settings.terminal.force_color", "ATMOS_FORCE_COLOR")
 	bindEnv(v, "settings.terminal.theme", "ATMOS_THEME", "THEME")
+
+	// Experimental feature handling
+	bindEnv(v, "settings.experimental", "ATMOS_EXPERIMENTAL")
 
 	// Atmos Pro settings
 	bindEnv(v, "settings.pro.base_url", AtmosProBaseUrlEnvVarName)
@@ -426,6 +440,7 @@ func setDefaultConfiguration(v *viper.Viper) {
 	v.SetDefault("settings.terminal.color", true)
 	v.SetDefault("settings.terminal.no_color", false)
 	v.SetDefault("settings.terminal.pager", "false") // String value to match the field type
+	v.SetDefault("settings.experimental", "warn")    // Experimental feature handling: silence, disable, warn, error
 	// Note: force_color is ENV-only (ATMOS_FORCE_COLOR), no config default
 	v.SetDefault("docs.generate.readme.output", "./README.md")
 
@@ -557,6 +572,7 @@ func readWorkDirConfigOnly(v *viper.Viper) error {
 }
 
 // readGitRootConfig tries to load atmos.yaml from the git repository root.
+// This is a fallback search - it only runs when CWD does NOT have local Atmos config.
 func readGitRootConfig(v *viper.Viper) error {
 	// Check if git root discovery is disabled.
 	//nolint:forbidigo // ATMOS_GIT_ROOT_BASEPATH is bootstrap config, not application configuration.
@@ -569,6 +585,20 @@ func readGitRootConfig(v *viper.Viper) error {
 	//nolint:forbidigo // ATMOS_CLI_CONFIG_PATH controls config loading behavior itself.
 	if os.Getenv(AtmosCliConfigPathEnvVar) != "" {
 		return nil
+	}
+
+	// Skip git root search if CWD has local Atmos config.
+	// This ensures --chdir to a directory with its own config uses only that config.
+	cwd, err := osGetwd()
+	if err != nil {
+		log.Debug("Failed to get CWD for local config check", "error", err)
+	} else {
+		log.Debug("readGitRootConfig checking CWD for local config", cwdKey, cwd)
+		if hasLocalAtmosConfig(cwd) {
+			log.Debug("Skipping git root search (local config exists)", "path", cwd)
+			return nil
+		}
+		log.Debug("No local config found, will search git root", cwdKey, cwd)
 	}
 
 	gitRoot, err := u.ProcessTagGitRoot("!repo-root")
@@ -604,6 +634,7 @@ func readGitRootConfig(v *viper.Viper) error {
 }
 
 // readParentDirConfig searches parent directories for atmos.yaml (fallback).
+// This is a fallback search - it only runs when CWD does NOT have local Atmos config.
 func readParentDirConfig(v *viper.Viper) error {
 	// If ATMOS_CLI_CONFIG_PATH is set, don't search parent directories.
 	// This allows tests and users to explicitly control config discovery.
@@ -616,6 +647,16 @@ func readParentDirConfig(v *viper.Viper) error {
 	if err != nil {
 		return err
 	}
+
+	log.Debug("readParentDirConfig checking CWD for local config", cwdKey, wd)
+
+	// Skip parent search if CWD has local Atmos config.
+	// This ensures --chdir to a directory with its own config uses only that config.
+	if hasLocalAtmosConfig(wd) {
+		log.Debug("Skipping parent directory search (local config exists)", "path", wd)
+		return nil
+	}
+	log.Debug("No local config found, will search parent directories", cwdKey, wd)
 
 	// Search parent directories for atmos.yaml.
 	configDir := findAtmosConfigInParentDirs(wd)
@@ -1035,19 +1076,31 @@ func loadAtmosDFromGitRoot(dirPath string, dst *viper.Viper) {
 // and loads their configurations into the destination viper instance.
 func loadAtmosDFromDirectory(dirPath string, dst *viper.Viper) {
 	// Search for `atmos.d/` configurations.
-	searchPattern := filepath.Join(filepath.FromSlash(dirPath), filepath.Join("atmos.d", "**", "*"))
-	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
-		log.Trace("Failed to load atmos.d configs", "error", err, "path", dirPath)
-		// Don't return error - just log and continue.
-		// This maintains existing behavior where .atmos.d loading is optional.
+	atmosDPath := filepath.Join(filepath.FromSlash(dirPath), "atmos.d")
+	if stat, err := os.Stat(atmosDPath); err == nil && stat.IsDir() {
+		log.Debug("Found atmos.d directory, loading configurations", "path", atmosDPath)
+		searchPattern := filepath.Join(atmosDPath, "**", "*")
+		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, "atmos.d"); err != nil {
+			log.Debug("Failed to load atmos.d configs", "error", err, "path", atmosDPath)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat atmos.d directory", "path", atmosDPath, "error", err)
+	} else {
+		log.Trace("No atmos.d directory found", "path", atmosDPath)
 	}
 
 	// Search for `.atmos.d` configurations.
-	searchPattern = filepath.Join(filepath.FromSlash(dirPath), filepath.Join(".atmos.d", "**", "*"))
-	if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
-		log.Trace("Failed to load .atmos.d configs", "error", err, "path", dirPath)
-		// Don't return error - just log and continue.
-		// This maintains existing behavior where .atmos.d loading is optional.
+	dotAtmosDPath := filepath.Join(filepath.FromSlash(dirPath), ".atmos.d")
+	if stat, err := os.Stat(dotAtmosDPath); err == nil && stat.IsDir() {
+		log.Debug("Found .atmos.d directory, loading configurations", "path", dotAtmosDPath)
+		searchPattern := filepath.Join(dotAtmosDPath, "**", "*")
+		if err := loadAtmosConfigsFromDirectory(searchPattern, dst, ".atmos.d"); err != nil {
+			log.Debug("Failed to load .atmos.d configs", "error", err, "path", dotAtmosDPath)
+		}
+	} else if err != nil && !os.IsNotExist(err) {
+		log.Debug("Failed to stat .atmos.d directory", "path", dotAtmosDPath, "error", err)
+	} else {
+		log.Trace("No .atmos.d directory found", "path", dotAtmosDPath)
 	}
 }
 
@@ -1234,8 +1287,9 @@ func loadEmbeddedConfig(v *viper.Viper) error {
 // caseSensitivePaths lists the YAML paths that need case preservation.
 // Viper lowercases all map keys, but these sections need original case.
 var caseSensitivePaths = []string{
-	"env",             // Environment variables (e.g., GITHUB_TOKEN)
-	"auth.identities", // Auth identity names (e.g., SuperAdmin)
+	"env",                    // Environment variables (e.g., GITHUB_TOKEN)
+	"templates.settings.env", // Template env variables (e.g., AWS_PROFILE)
+	"auth.identities",        // Auth identity names (e.g., SuperAdmin)
 }
 
 // collectConfigFilesForCasePreservation gathers all config files to process for case preservation.

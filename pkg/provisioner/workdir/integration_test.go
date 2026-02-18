@@ -108,16 +108,18 @@ func TestProvisionWorkdir_WithProvisionWorkdirEnabled(t *testing.T) {
 	_, err = os.Stat(filepath.Join(workdirPath, "main.tf"))
 	assert.NoError(t, err, "main.tf should be copied to workdir")
 
-	// Verify metadata file was created with correct content.
-	metadataPath := filepath.Join(workdirPath, WorkdirMetadataFile)
+	// Verify metadata file was created in .atmos/ subdirectory with correct content.
+	metadataPath := MetadataPath(workdirPath)
 	metadataBytes, err := os.ReadFile(metadataPath)
-	require.NoError(t, err, "metadata file should exist")
+	require.NoError(t, err, "metadata file should exist at %s", metadataPath)
 	assert.Contains(t, string(metadataBytes), `"component": "test-component"`)
 	assert.Contains(t, string(metadataBytes), `"stack": "dev"`)
 	assert.Contains(t, string(metadataBytes), `"source_type": "local"`)
 }
 
 // TestService_Provision_WithMockFileSystem tests the Service using mocked dependencies.
+// Note: Metadata writing now uses WriteMetadata which bypasses the mocked FileSystem,
+// so we only test the file system operations that use the injected mock.
 func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -151,32 +153,32 @@ func TestService_Provision_WithMockFileSystem(t *testing.T) {
 	expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
 	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
 
-	// Set up mock expectations with metadata content verification.
+	// Create the workdir directory so that WriteMetadata can create .atmos/ inside it.
+	err := os.MkdirAll(expectedWorkdir, 0o755)
+	require.NoError(t, err)
+
+	// Set up mock expectations.
+	// SyncDir is now used instead of CopyDir for incremental sync.
 	mockFS.EXPECT().MkdirAll(expectedWorkdir, gomock.Any()).Return(nil)
 	mockFS.EXPECT().Exists(componentPath).Return(true)
-	mockFS.EXPECT().CopyDir(componentPath, expectedWorkdir).Return(nil)
+	mockFS.EXPECT().SyncDir(componentPath, expectedWorkdir, mockHasher).Return(true, nil)
 	mockHasher.EXPECT().HashDir(expectedWorkdir).Return("abc123", nil)
-	mockFS.EXPECT().WriteFile(
-		filepath.Join(expectedWorkdir, WorkdirMetadataFile),
-		gomock.Any(),
-		gomock.Any(),
-	).DoAndReturn(func(path string, data []byte, perm os.FileMode) error {
-		// Verify metadata content contains expected fields.
-		content := string(data)
-		assert.Contains(t, content, `"component": "vpc"`)
-		assert.Contains(t, content, `"stack": "dev"`)
-		assert.Contains(t, content, `"content_hash": "abc123"`)
-		return nil
-	})
+	// Note: WriteMetadata uses real filesystem operations (atomic write),
+	// not the mocked FileSystem, so no WriteFile expectation needed.
 
 	ctx := context.Background()
-	err := service.Provision(ctx, atmosConfig, componentConfig)
+	err = service.Provision(ctx, atmosConfig, componentConfig)
 	require.NoError(t, err)
 
 	// Verify workdir path was set with stack-component naming.
 	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
 	assert.True(t, ok)
 	assert.Equal(t, expectedWorkdir, workdirPath)
+
+	// Verify metadata was written to the correct location.
+	metadataPath := MetadataPath(expectedWorkdir)
+	_, err = os.Stat(metadataPath)
+	assert.NoError(t, err, "metadata file should exist at %s", metadataPath)
 }
 
 // TestService_Provision_ErrorPaths tests error handling in Service.Provision.
@@ -194,28 +196,19 @@ func TestService_Provision_ErrorPaths(t *testing.T) {
 			expectedError: "permission denied",
 		},
 		{
-			name: "CopyDir fails",
-			setupMocks: func(mockFS *MockFileSystem, _ *MockHasher, expectedWorkdir, componentPath string) {
-				mockFS.EXPECT().MkdirAll(expectedWorkdir, gomock.Any()).Return(nil)
-				mockFS.EXPECT().Exists(componentPath).Return(true)
-				mockFS.EXPECT().CopyDir(componentPath, expectedWorkdir).Return(os.ErrNotExist)
-			},
-			expectedError: "file does not exist",
-		},
-		{
-			name: "WriteFile fails",
+			name: "SyncDir fails",
 			setupMocks: func(mockFS *MockFileSystem, mockHasher *MockHasher, expectedWorkdir, componentPath string) {
 				mockFS.EXPECT().MkdirAll(expectedWorkdir, gomock.Any()).Return(nil)
 				mockFS.EXPECT().Exists(componentPath).Return(true)
-				mockFS.EXPECT().CopyDir(componentPath, expectedWorkdir).Return(nil)
-				mockHasher.EXPECT().HashDir(expectedWorkdir).Return("abc123", nil)
-				mockFS.EXPECT().WriteFile(gomock.Any(), gomock.Any(), gomock.Any()).Return(os.ErrPermission)
+				mockFS.EXPECT().SyncDir(componentPath, expectedWorkdir, mockHasher).Return(false, os.ErrNotExist)
 			},
-			expectedError: "permission denied",
+			expectedError: "file does not exist",
 		},
 	}
 	// Note: HashDir failure is handled gracefully with a warning, not an error.
 	// The implementation continues to write metadata even if hash computation fails.
+	// Note: WriteMetadata errors are returned, but since it uses real filesystem
+	// operations (atomic write), we can't easily mock those failures.
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

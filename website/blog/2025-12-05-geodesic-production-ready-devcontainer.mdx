@@ -127,9 +127,8 @@ Make it even easier with shell aliases in your `atmos.yaml`:
 
 ```yaml
 # atmos.yaml
-cli:
-  aliases:
-    shell: "devcontainer shell geodesic"
+aliases:
+  shell: "devcontainer shell geodesic"
 ```
 
 Now you can just type:
@@ -220,42 +219,6 @@ devcontainer:
 ```
 
 Each project gets the right tool versions automatically.
-
-## Real-World Workflows
-
-### Onboarding a New Team Member
-
-**Old way:**
-1. Install Homebrew
-2. Install Docker
-3. Install Terraform (with tfenv or version manager)
-4. Install kubectl
-5. Install AWS CLI
-6. Configure AWS credentials
-7. Install Helm
-8. Install Helmfile
-9. Install jq, yq, and other tools
-10. Debug version conflicts
-11. Maybe productive by end of day?
-
-**New way with Geodesic:**
-```bash
-brew install atmos
-cd team-infrastructure
-atmos devcontainer shell geodesic
-# Productive in 2 minutes
-```
-
-### Working on Multiple Projects
-
-**Old way:**
-- Project A uses one set of tool versions
-- Project B uses different tool versions
-- Use version managers (tfenv, etc.) to switch constantly
-- Hope you remember to switch before running commands
-
-**New way with Geodesic:**
-Each project defines its Geodesic version in `atmos.yaml`, and you automatically get the right tools when you launch the devcontainer for that project.
 
 ## Integration with Atmos Auth
 

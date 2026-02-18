@@ -1,0 +1,55 @@
+# yaml-language-server: $schema=schema.json
+
+# Tests for provenance output.
+# These tests capture the expected provenance output format from the initial release.
+# Regression: Current output is missing the vars section and has incorrect line numbers.
+
+tests:
+  - name: describe component provenance basic
+    enabled: true
+    snapshot: true
+    description: "Test provenance output with YAML format (default)"
+    workdir: "fixtures/scenarios/provenance"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "mock"
+      - "-s"
+      - "acme-dev-us-east-1"
+      - "--provenance"
+    expect:
+      exit_code: 0
+      stdout:
+        - "# Provenance Legend:"
+        - "● \\[1\\]"  # Defined in parent stack (escaped for regex)
+        - "○ \\[2\\]"  # Inherited from depth 2 (escaped for regex)
+        - "○ \\[3\\]"  # Inherited from depth 3 (escaped for regex)
+        - "vars:"  # Should have vars section with provenance
+        - "enabled: true"
+        - "region: us-east-1"
+
+  - name: describe component provenance advanced
+    enabled: true
+    snapshot: true
+    description: "Test provenance output with complex multi-level imports (quick-start-advanced)"
+    workdir: "../examples/quick-start-advanced"
+    command: "atmos"
+    args:
+      - "describe"
+      - "component"
+      - "vpc-flow-logs-bucket"
+      - "-s"
+      - "plat-ue2-dev"
+      - "--provenance"
+    expect:
+      exit_code: 0
+      stdout:
+        - "# Provenance Legend:"
+        - "● \\[1\\]"  # Defined in parent stack
+        - "○ \\[2\\]"  # Inherited from depth 2
+        - "vars:"  # Should have vars section
+        - "enabled: true"
+      diff:
+        # Ignore lines with variable whitespace alignment in provenance comments
+        - "provisioned_by_user:.*#"

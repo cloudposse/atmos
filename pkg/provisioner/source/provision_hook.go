@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
@@ -13,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/ui/spinner"
 )
 
 // HookEventBeforeTerraformInit is the hook event for before terraform init.
@@ -74,17 +77,30 @@ func AutoProvisionSource(
 		return nil // No source configured - skip.
 	}
 
+	stack, _ := componentConfig["atmos_stack"].(string)
+
 	targetDir, isWorkdir, err := determineSourceTargetDirectory(atmosConfig, componentType, component, componentConfig)
 	if err != nil {
 		return wrapProvisionError(err, "Failed to determine target directory", component)
 	}
 
-	// Skip if target exists - set workdir path if needed and return.
-	if !needsProvisioning(targetDir) {
+	// Check if provisioning is needed (version change, URI change, or fresh workdir).
+	needs, reason := needsProvisioning(targetDir, sourceSpec, isWorkdir)
+	if !needs {
+		// No provisioning needed - touch LastAccessed and return.
 		if isWorkdir {
+			if err := workdir.UpdateLastAccessed(targetDir); err != nil {
+				// Non-critical error - log and continue.
+				ui.Warning(fmt.Sprintf("Failed to update workdir last accessed time: %s", err))
+			}
 			componentConfig[workdir.WorkdirPathKey] = targetDir
 		}
 		return nil
+	}
+
+	// Log reason for re-provisioning.
+	if reason != "" {
+		ui.Info(reason)
 	}
 
 	// Vendor the source to target directory.
@@ -92,8 +108,12 @@ func AutoProvisionSource(
 		return err
 	}
 
-	// Set workdir path for terraform execution if applicable.
+	// Write workdir metadata (when workdir is enabled).
 	if isWorkdir {
+		if err := writeWorkdirMetadata(targetDir, component, stack, sourceSpec); err != nil {
+			// Non-critical error - log and continue.
+			ui.Warning(fmt.Sprintf("Failed to write workdir metadata: %s", err))
+		}
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 	}
 	return nil
@@ -123,29 +143,31 @@ func extractSourceAndComponent(componentConfig map[string]any) (*schema.VendorCo
 
 // vendorToTarget creates the target directory and vendors the source.
 func vendorToTarget(ctx context.Context, atmosConfig *schema.AtmosConfiguration, sourceSpec *schema.VendorComponentSource, targetDir, component string) error {
-	_ = ui.Info(fmt.Sprintf("Auto-provisioning source for component '%s'", component))
+	progressMsg := fmt.Sprintf("Auto-provisioning source for '%s'", component)
+	completedMsg := fmt.Sprintf("Auto-provisioned source to %s", targetDir)
 
-	if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to create target directory").
-			WithContext("path", targetDir).
-			Err()
-	}
+	return spinner.ExecWithSpinner(progressMsg, completedMsg, func() error {
+		if err := os.MkdirAll(targetDir, DirPermissions); err != nil {
+			return errUtils.Build(errUtils.ErrSourceProvision).
+				WithCause(err).
+				WithExplanation("Failed to create target directory").
+				WithContext("path", targetDir).
+				Err()
+		}
 
-	if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
-		return errUtils.Build(errUtils.ErrSourceProvision).
-			WithCause(err).
-			WithExplanation("Failed to auto-provision component source").
-			WithContext("component", component).
-			WithContext("source", sourceSpec.Uri).
-			WithContext("target", targetDir).
-			WithHint("Verify source URI is accessible and credentials are valid").
-			Err()
-	}
+		if err := VendorSource(ctx, atmosConfig, sourceSpec, targetDir); err != nil {
+			return errUtils.Build(errUtils.ErrSourceProvision).
+				WithCause(err).
+				WithExplanation("Failed to auto-provision component source").
+				WithContext("component", component).
+				WithContext("source", sourceSpec.Uri).
+				WithContext("target", targetDir).
+				WithHint("Verify source URI is accessible and credentials are valid").
+				Err()
+		}
 
-	_ = ui.Success(fmt.Sprintf("Auto-provisioned source to %s", targetDir))
-	return nil
+		return nil
+	})
 }
 
 // wrapProvisionError wraps an error with provision context.
@@ -216,25 +238,149 @@ func isWorkdirEnabled(componentConfig map[string]any) bool {
 }
 
 // needsProvisioning checks if the target directory needs provisioning.
-// Returns true if directory doesn't exist or is empty.
-func needsProvisioning(targetDir string) bool {
-	info, err := os.Stat(targetDir)
-	if os.IsNotExist(err) {
-		return true
-	}
-	if err != nil {
-		return true // Error accessing, assume needs provisioning.
-	}
-	if !info.IsDir() {
-		return true // Not a directory, needs provisioning.
+// Returns (true, reason) if:
+//   - Directory doesn't exist or is empty.
+//   - Version has changed from what's in metadata.
+//   - URI has changed from what's in metadata.
+//   - No metadata exists (fresh workdir).
+//
+// Returns (false, "") if the existing workdir is up-to-date.
+func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSource, isWorkdir bool) (bool, string) {
+	// Check if directory exists and has content.
+	if !isNonEmptyDir(targetDir) {
+		return true, ""
 	}
 
-	// Check if directory is empty.
-	entries, err := os.ReadDir(targetDir)
+	// For non-workdir targets, existence is sufficient - no metadata tracking.
+	if !isWorkdir {
+		return false, ""
+	}
+
+	// Directory exists and has content - check metadata for version/URI changes.
+	metadata, err := workdir.ReadMetadata(targetDir)
+	if err != nil || metadata == nil {
+		return true, "No metadata found, re-provisioning"
+	}
+
+	// Check for version/URI changes.
+	return checkMetadataChanges(metadata, sourceSpec)
+}
+
+// isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry
+// (excluding the .atmos metadata directory).
+func isNonEmptyDir(path string) bool {
+	info, err := os.Stat(path)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+
+	entries, err := os.ReadDir(path)
 	if err != nil {
+		return false
+	}
+
+	// Count entries excluding .atmos metadata directory.
+	for _, entry := range entries {
+		if entry.Name() != workdir.AtmosDir {
+			return true
+		}
+	}
+	return false
+}
+
+// checkMetadataChanges compares metadata with source spec for version/URI changes.
+// Returns (true, reason) if changes detected, (false, "") if up-to-date.
+func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.VendorComponentSource) (bool, string) {
+	// Check for version changes (including version removal).
+	if sourceSpec.Version != metadata.SourceVersion {
+		oldVer := metadata.SourceVersion
+		newVer := sourceSpec.Version
+		if oldVer == "" {
+			oldVer = "(none)"
+		}
+		if newVer == "" {
+			newVer = "(none)"
+		}
+		return true, fmt.Sprintf("Source version changed (%s → %s)", oldVer, newVer)
+	}
+
+	if sourceSpec.Uri != metadata.SourceURI {
+		return true, fmt.Sprintf("Source URI changed (%s → %s)", metadata.SourceURI, sourceSpec.Uri)
+	}
+
+	return false, ""
+}
+
+// isLocalSource determines if a source URI refers to a local path.
+// Local sources start with ".", absolute paths (OS-specific), or are relative paths without remote indicators.
+func isLocalSource(uri string) bool {
+	// Relative paths starting with . or ..
+	if strings.HasPrefix(uri, ".") {
 		return true
 	}
-	return len(entries) == 0
+	// Absolute paths (OS-specific, including Windows paths like C:\...).
+	if filepath.IsAbs(uri) {
+		return true
+	}
+	// File scheme.
+	if strings.HasPrefix(uri, "file://") {
+		return true
+	}
+	// Remote indicators - if any of these are present, it's remote.
+	remoteIndicators := []string{
+		"://",        // Any URL scheme (https://, git://, s3://, etc.).
+		"github.com", // GitHub.
+		"gitlab.com", // GitLab.
+		"bitbucket.", // Bitbucket.
+		"git::",      // Git getter prefix.
+		"s3::",       // S3 getter prefix.
+		"gcs::",      // GCS getter prefix.
+	}
+	for _, indicator := range remoteIndicators {
+		if strings.Contains(uri, indicator) {
+			return false
+		}
+	}
+	// Default: paths without remote indicators are local.
+	return true
+}
+
+// writeWorkdirMetadata writes workdir metadata based on source type (local or remote).
+func writeWorkdirMetadata(workdirPath, component, stack string, sourceSpec *schema.VendorComponentSource) error {
+	now := time.Now()
+
+	// Read existing metadata to preserve CreatedAt if it exists.
+	existingMetadata, _ := workdir.ReadMetadata(workdirPath)
+
+	// Determine source type based on URI.
+	sourceType := workdir.SourceTypeRemote
+	if isLocalSource(sourceSpec.Uri) {
+		sourceType = workdir.SourceTypeLocal
+	}
+
+	metadata := &workdir.WorkdirMetadata{
+		Component:     component,
+		Stack:         stack,
+		SourceType:    sourceType,
+		Source:        sourceSpec.Uri, // Keep source field for backward compatibility.
+		SourceURI:     sourceSpec.Uri,
+		SourceVersion: sourceSpec.Version,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+		LastAccessed:  now,
+		ContentHash:   "", // Content hash is computed separately for local sources.
+	}
+
+	// Preserve original CreatedAt and ContentHash if metadata already existed.
+	if existingMetadata != nil {
+		metadata.CreatedAt = existingMetadata.CreatedAt
+		// Preserve content hash for local sources (may have been computed by workdir provisioner).
+		if sourceType == workdir.SourceTypeLocal && existingMetadata.ContentHash != "" {
+			metadata.ContentHash = existingMetadata.ContentHash
+		}
+	}
+
+	return workdir.WriteMetadata(workdirPath, metadata)
 }
 
 // extractComponentName extracts the component name from config.

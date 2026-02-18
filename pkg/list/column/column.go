@@ -237,6 +237,9 @@ func buildTemplateContext(data map[string]any) any {
 	if v, ok := data["name"]; ok {
 		ctx["name"] = v
 	}
+	if v, ok := data["workflow"]; ok {
+		ctx["workflow"] = v
+	}
 	if v, ok := data["description"]; ok {
 		ctx["description"] = v
 	}

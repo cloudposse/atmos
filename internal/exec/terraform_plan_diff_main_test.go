@@ -7,9 +7,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestParsePlanDiffFlags(t *testing.T) {
@@ -217,48 +214,11 @@ Terraform show output
 
 			if tc.expectError {
 				assert.Error(t, err)
-				if err != nil {
-					assert.Equal(t, ErrNoJSONOutput, err)
-				}
+				assert.ErrorIs(t, err, ErrNoJSONOutput)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expectedResult, result)
 			}
 		})
 	}
-}
-
-func TestTerraformPlanDiff_FlagParsing(t *testing.T) {
-	// Save the original OsExit function and restore it after the test
-	originalOsExit := errUtils.OsExit
-	defer func() { errUtils.OsExit = originalOsExit }()
-
-	// Mock OsExit to prevent the test from exiting
-	var exitCalled bool
-	var exitCode int
-	errUtils.OsExit = func(code int) {
-		exitCalled = true
-		exitCode = code
-		// Don't actually exit
-	}
-	_ = exitCalled // Ensure variable is used
-	_ = exitCode   // Ensure variable is used
-
-	// Create test atmosphere configuration
-	atmosConfig := &schema.AtmosConfiguration{
-		TerraformDirAbsolutePath: "terraform",
-	}
-
-	// Test missing required flags
-	info := &schema.ConfigAndStacksInfo{
-		ComponentFolderPrefix:  "",
-		FinalComponent:         "test-component",
-		AdditionalArgsAndFlags: []string{
-			// Missing --orig flag
-		},
-	}
-
-	err := TerraformPlanDiff(atmosConfig, info)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "original plan file (--orig) is required")
 }

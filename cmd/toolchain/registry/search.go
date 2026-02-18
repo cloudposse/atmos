@@ -16,10 +16,10 @@ import (
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
 	"github.com/cloudposse/atmos/pkg/perf"
+	"github.com/cloudposse/atmos/pkg/toolchain"
+	toolchainregistry "github.com/cloudposse/atmos/pkg/toolchain/registry"
 	"github.com/cloudposse/atmos/pkg/ui"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
-	"github.com/cloudposse/atmos/toolchain"
-	toolchainregistry "github.com/cloudposse/atmos/toolchain/registry"
 )
 
 const (
@@ -108,18 +108,18 @@ func displaySearchTable(results []*toolchainregistry.Tool, query string, searchL
 	// Display results with info toast showing range vs total.
 	if searchLimit <= 0 || totalMatches <= searchLimit {
 		// Showing all results (no limit or within limit).
-		_ = ui.Infof("Found **%d tools** matching `%s`:", totalMatches, query)
+		ui.Infof("Found **%d tools** matching `%s`:", totalMatches, query)
 	} else {
 		// Showing subset of results.
-		_ = ui.Infof("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
+		ui.Infof("Showing **%d** of **%d tools** matching `%s`:", len(displayResults), totalMatches, query)
 	}
-	_ = ui.Writeln("") // Blank line after toast.
+	ui.Writeln("") // Blank line after toast.
 	displaySearchResults(displayResults)
 
 	// Show helpful hints after table.
-	_ = ui.Writeln("")
-	_ = ui.Hintf("Use `atmos toolchain info <tool>` for details")
-	_ = ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
+	ui.Writeln("")
+	ui.Hintf("Use `atmos toolchain info <tool>` for details")
+	ui.Hintf("Use `atmos toolchain install <tool>@<version>` to install")
 }
 
 // searchFlags holds parsed search command flags.
@@ -216,7 +216,7 @@ Try:
   - Using a different search term
   - Checking 'atmos toolchain registry list' for available tools
 `, query)
-		_ = ui.Info(message)
+		ui.Info(message)
 		return nil
 	}
 
@@ -255,7 +255,7 @@ func displaySearchResults(tools []*toolchainregistry.Tool) {
 	toolVersions, installer := loadSearchToolVersions()
 	rows, widths := buildSearchRows(tools, toolVersions, installer)
 	styled := renderSearchTable(rows, widths)
-	_ = ui.Writeln(styled)
+	ui.Writeln(styled)
 }
 
 // loadSearchToolVersions loads tool versions and creates an installer for search.
@@ -264,7 +264,7 @@ func loadSearchToolVersions() (*toolchain.ToolVersions, *toolchain.Installer) {
 	toolVersionsFile := toolchain.GetToolVersionsFilePath()
 	toolVersions, err := toolchain.LoadToolVersions(toolVersionsFile)
 	if err != nil && !os.IsNotExist(err) {
-		_ = ui.Warningf("Could not load .tool-versions: %v", err)
+		ui.Warningf("Could not load .tool-versions: %v", err)
 	}
 	return toolVersions, installer
 }

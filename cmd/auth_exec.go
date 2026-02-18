@@ -61,7 +61,7 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create auth manager
-	authManager, err := createAuthManager(&atmosConfig.Auth)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -252,9 +252,9 @@ func extractIdentityFlag(args []string) (identityValue string, commandArgs []str
 
 // printAuthExecTip prints a helpful tip when auth exec fails.
 func printAuthExecTip(identityName string) {
-	_ = ui.Writeln("")
-	_ = ui.Info("Tip: If credentials are expired, refresh with:")
-	_ = ui.Writef("     atmos auth login --identity %s\n", identityName)
+	ui.Writeln("")
+	ui.Info("Tip: If credentials are expired, refresh with:")
+	ui.Writef("     atmos auth login --identity %s\n", identityName)
 }
 
 func init() {

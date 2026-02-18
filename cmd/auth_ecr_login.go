@@ -73,7 +73,7 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cases 2 & 3 require auth manager.
-	authManager, err := createECRAuthManager(&atmosConfig.Auth)
+	authManager, err := createECRAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -127,7 +127,7 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 
 		// Log success with actual expiration time from ECR token.
 		expiresIn := time.Until(result.ExpiresAt).Round(time.Minute)
-		_ = ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
+		ui.Success(fmt.Sprintf("ECR login: %s (expires in %s)", registry, expiresIn))
 	}
 
 	// Set DOCKER_CONFIG so downstream Docker commands use the same config location.
@@ -138,11 +138,14 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 }
 
 // createECRAuthManager creates a new auth manager for ECR operations.
-func createECRAuthManager(authConfig *schema.AuthConfig) (auth.AuthManager, error) {
+func createECRAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-
-	return auth.NewAuthManager(authConfig, credStore, validator, nil)
+	return auth.NewAuthManager(authConfig, credStore, validator, authStackInfo, cliConfigPath)
 }
 
 func init() {

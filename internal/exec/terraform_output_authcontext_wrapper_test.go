@@ -52,3 +52,49 @@ func TestAuthContextWrapperGetStackInfo(t *testing.T) {
 	assert.Equal(t, "test-identity", stackInfo.AuthContext.AWS.Profile)
 	assert.Equal(t, "us-west-2", stackInfo.AuthContext.AWS.Region)
 }
+
+// TestAuthContextWrapperResolvePrincipalSetting verifies ResolvePrincipalSetting returns nil, false.
+// The wrapper doesn't have access to identity/provider configuration, only auth context.
+func TestAuthContextWrapperResolvePrincipalSetting(t *testing.T) {
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "test-identity",
+			Region:  "us-west-2",
+		},
+	}
+
+	wrapper := newAuthContextWrapper(authContext)
+
+	// ResolvePrincipalSetting should always return nil, false for the wrapper.
+	// It only propagates existing auth context, not full identity configuration.
+	val, found := wrapper.ResolvePrincipalSetting("any-identity", "region")
+	assert.Nil(t, val, "ResolvePrincipalSetting should return nil")
+	assert.False(t, found, "ResolvePrincipalSetting should return false")
+
+	val, found = wrapper.ResolvePrincipalSetting("test-identity", "any-key")
+	assert.Nil(t, val, "ResolvePrincipalSetting should return nil for any key")
+	assert.False(t, found, "ResolvePrincipalSetting should return false for any key")
+}
+
+// TestAuthContextWrapperResolveProviderConfig verifies ResolveProviderConfig returns nil, false.
+// The wrapper doesn't have access to provider configuration.
+func TestAuthContextWrapperResolveProviderConfig(t *testing.T) {
+	authContext := &schema.AuthContext{
+		AWS: &schema.AWSAuthContext{
+			Profile: "test-identity",
+			Region:  "us-west-2",
+		},
+	}
+
+	wrapper := newAuthContextWrapper(authContext)
+
+	// ResolveProviderConfig should always return nil, false for the wrapper.
+	// It only propagates existing auth context, not provider configuration.
+	provider, found := wrapper.ResolveProviderConfig("any-identity")
+	assert.Nil(t, provider, "ResolveProviderConfig should return nil")
+	assert.False(t, found, "ResolveProviderConfig should return false")
+
+	provider, found = wrapper.ResolveProviderConfig("test-identity")
+	assert.Nil(t, provider, "ResolveProviderConfig should return nil for any identity")
+	assert.False(t, found, "ResolveProviderConfig should return false for any identity")
+}

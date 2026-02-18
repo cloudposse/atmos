@@ -33,7 +33,6 @@ Profiles are discovered from multiple locations in precedence order:
 
 The output includes:
 - Profile name
-- Profile type (inline or directory)
 - Source location
 - Description (if available)
 
@@ -60,14 +59,14 @@ atmos profile list
 **Example output:**
 
 ```
-┌────────────┬───────────┬────────────────────────────┬─────────────────────────────────┐
-│ NAME       │ TYPE      │ SOURCE                     │ DESCRIPTION                     │
-├────────────┼───────────┼────────────────────────────┼─────────────────────────────────┤
-│ developer  │ directory │ profiles/developer         │ Development environment         │
-│ ci         │ directory │ profiles/ci                │ CI/CD pipeline settings         │
-│ production │ inline    │ atmos.yaml                 │ Production configuration        │
-│ debug      │ directory │ ~/.config/atmos/profiles   │ Debug logging enabled           │
-└────────────┴───────────┴────────────────────────────┴─────────────────────────────────┘
+┌────────────┬────────────────────────────────┬─────────────────────────────────┐
+│ NAME       │ SOURCE                         │ DESCRIPTION                     │
+├────────────┼────────────────────────────────┼─────────────────────────────────┤
+│ developer  │ profiles/developer             │ Development environment         │
+│ ci         │ profiles/ci                    │ CI/CD pipeline settings         │
+│ production │ profiles/production            │ Production configuration        │
+│ debug      │ ~/.config/atmos/profiles/debug │ Debug logging enabled           │
+└────────────┴────────────────────────────────┴─────────────────────────────────┘
 ```
 
 ### Output as JSON
@@ -83,13 +82,11 @@ atmos profile list --format json
 [
   {
     "name": "developer",
-    "type": "directory",
     "source": "profiles/developer",
     "description": "Development environment"
   },
   {
     "name": "ci",
-    "type": "directory",
     "source": "profiles/ci",
     "description": "CI/CD pipeline settings"
   }
@@ -107,11 +104,9 @@ atmos profile list --format yaml
 
 ```yaml
 - name: developer
-  type: directory
   source: profiles/developer
   description: Development environment
 - name: ci
-  type: directory
   source: profiles/ci
   description: CI/CD pipeline settings
 ```

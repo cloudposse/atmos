@@ -13,6 +13,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config"
+	envpkg "github.com/cloudposse/atmos/pkg/env"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -22,23 +23,50 @@ import (
 // workflowErrorTitle is the standard title for workflow errors.
 const workflowErrorTitle = "Workflow Error"
 
+// toolchainDocsURL is the documentation URL for toolchain configuration.
+const toolchainDocsURL = "https://atmos.tools/cli/commands/toolchain/"
+
+// mergeWorkflowEnv merges workflow and step environment variables.
+// Step env overrides workflow env for same keys.
+func mergeWorkflowEnv(workflowEnv, stepEnv map[string]string) map[string]string {
+	if len(workflowEnv) == 0 && len(stepEnv) == 0 {
+		return nil
+	}
+	merged := make(map[string]string, len(workflowEnv)+len(stepEnv))
+	for k, v := range workflowEnv {
+		merged[k] = v
+	}
+	for k, v := range stepEnv {
+		merged[k] = v
+	}
+	return merged
+}
+
 // Executor handles workflow execution with dependency injection for testing.
 type Executor struct {
 	runner       CommandRunner
 	authProvider AuthProvider
 	ui           UIProvider
+	depProvider  DependencyProvider
 }
 
 // NewExecutor creates a new Executor with the given dependencies.
 // Nil dependencies are handled gracefully: runner is required for command execution,
-// authProvider can be nil if no authentication is needed, and ui can be nil to
-// disable user-facing output (messages and errors will be silently skipped).
+// authProvider can be nil if no authentication is needed, ui can be nil to
+// disable user-facing output, and depProvider can be nil to skip toolchain integration.
 func NewExecutor(runner CommandRunner, authProvider AuthProvider, ui UIProvider) *Executor {
 	return &Executor{
 		runner:       runner,
 		authProvider: authProvider,
 		ui:           ui,
+		depProvider:  nil, // Will be set per-execute based on AtmosConfig.
 	}
+}
+
+// WithDependencyProvider sets a custom DependencyProvider (primarily for testing).
+func (e *Executor) WithDependencyProvider(provider DependencyProvider) *Executor {
+	e.depProvider = provider
+	return e
 }
 
 // Execute runs a workflow with the given options.
@@ -76,6 +104,14 @@ func (e *Executor) Execute(params *WorkflowParams) (*ExecutionResult, error) {
 	// Handle --from-step flag.
 	steps, err := e.handleFromStep(steps, params.WorkflowDefinition, params.Workflow, params.Opts.FromStep, result)
 	if err != nil {
+		return result, err
+	}
+
+	// Ensure toolchain dependencies are installed and PATH is updated.
+	if err := e.ensureToolchainDependencies(params); err != nil {
+		e.printError(err)
+		result.Success = false
+		result.Error = err
 		return result, err
 	}
 
@@ -161,8 +197,12 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 		commandType = "atmos"
 	}
 
-	// Prepare environment with authentication if needed.
-	stepEnv, err := e.prepareStepEnvironment(params.Ctx, stepIdentity, step.Name)
+	// Prepare environment: workflow + step env vars, plus auth if needed.
+	// Note: The runners merge with system env + global env from atmos.yaml.
+	stepEnv, err := e.prepareStepEnvironment(
+		params.Ctx, stepIdentity, step.Name,
+		params.WorkflowDefinition.Env, step.Env,
+	)
 	if err != nil {
 		return stepResultInternal{
 			StepResult: StepResult{
@@ -204,12 +244,86 @@ func (e *Executor) executeStep(params *WorkflowParams, step *schema.WorkflowStep
 	}
 }
 
-// prepareStepEnvironment prepares the environment for a step, handling authentication if needed.
-func (e *Executor) prepareStepEnvironment(ctx context.Context, stepIdentity, stepName string) ([]string, error) {
+// prepareStepEnvironment prepares the environment for a step.
+// Returns only workflow/step/auth specific env vars - the runners handle system env merging.
+// If identity is specified, also handles authentication.
+func (e *Executor) prepareStepEnvironment(
+	ctx context.Context,
+	stepIdentity, stepName string,
+	workflowEnv, stepEnv map[string]string,
+) ([]string, error) {
+	// Merge workflow and step env vars (step overrides workflow for same keys).
+	// This returns only the workflow/step specific vars - runners merge with system env.
+	mergedEnv := mergeWorkflowEnv(workflowEnv, stepEnv)
+	envSlice := envpkg.ConvertMapToSlice(mergedEnv)
+
+	// No identity specified, return just the workflow/step env vars.
 	if stepIdentity == "" || e.authProvider == nil {
-		return []string{}, nil
+		return envSlice, nil
 	}
-	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName)
+
+	return e.prepareAuthenticatedEnvironment(ctx, stepIdentity, stepName, envSlice)
+}
+
+// ensureToolchainDependencies resolves and installs workflow dependencies and .tool-versions tools.
+// This ensures tools are available in PATH before workflow steps execute.
+func (e *Executor) ensureToolchainDependencies(params *WorkflowParams) error {
+	defer perf.Track(params.AtmosConfig, "workflow.Executor.ensureToolchainDependencies")()
+
+	// Use injected provider or create default.
+	provider := e.depProvider
+	if provider == nil {
+		provider = NewDefaultDependencyProvider(params.AtmosConfig)
+	}
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := provider.LoadToolVersionsDependencies()
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
+			WithExplanation("Failed to load .tool-versions file").
+			WithHint("Check that .tool-versions file exists and is readable").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
+	}
+
+	// Get workflow-specific dependencies.
+	workflowDeps, err := provider.ResolveWorkflowDependencies(params.WorkflowDefinition)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
+			WithExplanationf("Failed to resolve dependencies for workflow '%s'", params.Workflow).
+			WithHint("Check the workflow's dependencies section for valid tool specifications").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
+	}
+
+	// Merge: .tool-versions as base, workflow deps override.
+	deps, err := provider.MergeDependencies(toolVersionsDeps, workflowDeps)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
+			WithExplanationf("Failed to merge dependencies for workflow '%s'", params.Workflow).
+			WithHint("Check that workflow dependency versions satisfy constraints from .tool-versions").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
+	}
+
+	if len(deps) == 0 {
+		return nil
+	}
+	log.Debug("Installing workflow dependencies", "workflow", params.Workflow, "tools", deps)
+
+	// Install missing tools.
+	if err := provider.EnsureTools(deps); err != nil {
+		return errUtils.Build(errUtils.ErrToolInstall).WithCause(err).
+			WithExplanationf("Failed to install dependencies for workflow '%s'", params.Workflow).
+			Err()
+	}
+
+	// Update PATH to include installed tools.
+	if err := provider.UpdatePathForTools(deps); err != nil {
+		return errUtils.Build(errUtils.ErrDependencyResolution).WithCause(err).
+			WithExplanationf("Failed to update PATH for workflow '%s'", params.Workflow).
+			WithHint("Check that toolchain install_path is writable").
+			WithHintf("See %s for toolchain configuration", toolchainDocsURL).Err()
+	}
+
+	return nil
 }
 
 // runCommandParams holds parameters for command execution.
@@ -299,7 +413,8 @@ func (e *Executor) handleStepError(params *WorkflowParams, stepName string, cmdP
 }
 
 // prepareAuthenticatedEnvironment prepares environment variables with authentication.
-func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string) ([]string, error) {
+// baseEnv contains workflow/step env vars that should be preserved alongside auth vars.
+func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity, stepName string, baseEnv []string) ([]string, error) {
 	if e.authProvider == nil {
 		return nil, fmt.Errorf("%w: identity %q specified for step %q", errUtils.ErrAuthProviderNotAvailable, identity, stepName)
 	}
@@ -317,8 +432,8 @@ func (e *Executor) prepareAuthenticatedEnvironment(ctx context.Context, identity
 		}
 	}
 
-	// Prepare environment.
-	stepEnv, err := e.authProvider.PrepareEnvironment(ctx, identity, nil)
+	// Prepare environment with authentication credentials on top of baseEnv.
+	stepEnv, err := e.authProvider.PrepareEnvironment(ctx, identity, baseEnv)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to prepare shell environment for identity %q in step %q: %w", errUtils.ErrAuthenticationFailed, identity, stepName, err)
 	}

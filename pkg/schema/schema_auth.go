@@ -2,6 +2,11 @@ package schema
 
 // AuthConfig defines the authentication configuration structure.
 type AuthConfig struct {
+	// Realm provides credential isolation between different repositories or customer environments.
+	// Different repositories with the same identity names will have isolated credentials.
+	// If not set, defaults to a SHA256 hash of the CLI config path (first 8 characters).
+	// Can also be set via ATMOS_AUTH_REALM environment variable (highest precedence).
+	Realm        string                 `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
 	Logs         Logs                   `yaml:"logs,omitempty" json:"logs,omitempty" mapstructure:"logs"`
 	Keyring      KeyringConfig          `yaml:"keyring,omitempty" json:"keyring,omitempty" mapstructure:"keyring"`
 	Providers    map[string]Provider    `yaml:"providers" json:"providers" mapstructure:"providers"`
@@ -10,6 +15,9 @@ type AuthConfig struct {
 	// IdentityCaseMap maps lowercase identity names to their original case.
 	// This is populated during config loading to work around Viper's case-insensitive behavior.
 	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// RealmSource indicates how the realm was resolved (env/config/config-path/default).
+	// This is set during config loading and is not user-configurable.
+	RealmSource string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // KeyringConfig defines keyring backend configuration for credential storage.

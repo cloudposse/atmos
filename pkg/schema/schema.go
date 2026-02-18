@@ -75,6 +75,7 @@ type AtmosConfiguration struct {
 	TerraformDirAbsolutePath      string             `yaml:"terraformDirAbsolutePath,omitempty" json:"terraformDirAbsolutePath,omitempty" mapstructure:"terraformDirAbsolutePath"`
 	HelmfileDirAbsolutePath       string             `yaml:"helmfileDirAbsolutePath,omitempty" json:"helmfileDirAbsolutePath,omitempty" mapstructure:"helmfileDirAbsolutePath"`
 	PackerDirAbsolutePath         string             `yaml:"packerDirAbsolutePath,omitempty" json:"packerDirAbsolutePath,omitempty" mapstructure:"packerDirAbsolutePath"`
+	AnsibleDirAbsolutePath        string             `yaml:"ansibleDirAbsolutePath,omitempty" json:"ansibleDirAbsolutePath,omitempty" mapstructure:"ansibleDirAbsolutePath"`
 	StackConfigFilesRelativePaths []string           `yaml:"stackConfigFilesRelativePaths,omitempty" json:"stackConfigFilesRelativePaths,omitempty" mapstructure:"stackConfigFilesRelativePaths"`
 	StackConfigFilesAbsolutePaths []string           `yaml:"stackConfigFilesAbsolutePaths,omitempty" json:"stackConfigFilesAbsolutePaths,omitempty" mapstructure:"stackConfigFilesAbsolutePaths"`
 	StackType                     string             `yaml:"stackType,omitempty" json:"StackType,omitempty" mapstructure:"stackType"`
@@ -97,6 +98,8 @@ type AtmosConfiguration struct {
 	Devcontainer    map[string]any      `yaml:"devcontainer,omitempty" json:"devcontainer,omitempty" mapstructure:"devcontainer"`
 	Profiles        ProfilesConfig      `yaml:"profiles,omitempty" json:"profiles,omitempty" mapstructure:"profiles"`
 	Metadata        ConfigMetadata      `yaml:"metadata,omitempty" json:"metadata,omitempty" mapstructure:"metadata"`
+	// List holds command-specific list configurations (list.components, list.instances, list.stacks).
+	List TopLevelListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
 }
 
 func (m *AtmosConfiguration) GetSchemaRegistry(key string) SchemaRegistry {
@@ -222,12 +225,14 @@ func (a *AtmosConfiguration) processResourceSchema(key string) {
 
 // GetCaseSensitiveMap returns the specified map with original key casing restored.
 // This compensates for Viper lowercasing all YAML map keys.
-// Supported paths: "env".
+// Supported paths: "env", "templates.settings.env".
 func (a *AtmosConfiguration) GetCaseSensitiveMap(path string) map[string]string {
 	var source map[string]string
 	switch path {
 	case "env":
 		source = a.Env
+	case "templates.settings.env":
+		source = a.Templates.Settings.Env
 	default:
 		return nil
 	}
@@ -345,6 +350,9 @@ type SyntaxHighlighting struct {
 type AtmosSettings struct {
 	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
 	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	// Experimental controls how experimental features are handled.
+	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
+	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`
 	// Deprecated: this was moved to top-level Atmos config
 	Docs                 Docs             `yaml:"docs,omitempty" json:"docs,omitempty" mapstructure:"docs"`
 	Markdown             MarkdownSettings `yaml:"markdown,omitempty" json:"markdown,omitempty" mapstructure:"markdown"`
@@ -363,6 +371,8 @@ type AtmosSettings struct {
 	Pro ProSettings `yaml:"pro,omitempty" json:"pro,omitempty" mapstructure:"pro"`
 	// Telemetry settings
 	Telemetry TelemetrySettings `yaml:"telemetry,omitempty" json:"telemetry,omitempty" mapstructure:"telemetry"`
+	// Provision contains global defaults for provisioning.
+	Provision ProvisionSettings `yaml:"provision,omitempty" json:"provision,omitempty" mapstructure:"provision"`
 }
 
 // TelemetrySettings contains configuration for telemetry collection.
@@ -371,6 +381,20 @@ type TelemetrySettings struct {
 	Endpoint string `yaml:"endpoint,omitempty" json:"endpoint,omitempty" mapstructure:"endpoint"`
 	Token    string `yaml:"token,omitempty" json:"token,omitempty" mapstructure:"token"`
 	Logging  bool   `yaml:"logging" json:"logging" mapstructure:"logging"`
+}
+
+// ProvisionSettings contains global defaults for provisioning.
+type ProvisionSettings struct {
+	Workdir ProvisionWorkdirSettings `yaml:"workdir,omitempty" json:"workdir,omitempty" mapstructure:"workdir"`
+}
+
+// ProvisionWorkdirSettings contains default settings for workdir provisioning.
+type ProvisionWorkdirSettings struct {
+	// Enabled sets the default enabled state for workdir provisioning.
+	Enabled bool `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
+	// TTL is the default time-to-live for workdirs (e.g., "7d", "24h", "weekly").
+	// Workdirs not accessed within this duration can be cleaned up.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
 }
 
 type Docs struct {
@@ -450,14 +474,34 @@ type Helmfile struct {
 	BasePath              string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	UseEKS                bool   `yaml:"use_eks" json:"use_eks" mapstructure:"use_eks"`
 	KubeconfigPath        string `yaml:"kubeconfig_path" json:"kubeconfig_path" mapstructure:"kubeconfig_path"`
-	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"`
-	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`
+	HelmAwsProfilePattern string `yaml:"helm_aws_profile_pattern" json:"helm_aws_profile_pattern" mapstructure:"helm_aws_profile_pattern"` // Deprecated: use --identity flag instead.
+	ClusterNamePattern    string `yaml:"cluster_name_pattern" json:"cluster_name_pattern" mapstructure:"cluster_name_pattern"`             // Deprecated: use ClusterNameTemplate with Go template syntax.
+	ClusterNameTemplate   string `yaml:"cluster_name_template" json:"cluster_name_template" mapstructure:"cluster_name_template"`
+	ClusterName           string `yaml:"cluster_name" json:"cluster_name" mapstructure:"cluster_name"`
 	Command               string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Helmfile operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
 type Packer struct {
 	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Packer operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
+}
+
+// Ansible defines configuration for Ansible components.
+type Ansible struct {
+	BasePath string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
+	Command  string `yaml:"command" json:"command" mapstructure:"command"`
+	// AutoGenerateFiles enables automatic generation of auxiliary configuration files
+	// during Ansible operations when set to true.
+	// Generated files are defined in the component's generate section.
+	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 }
 
 type Components struct {
@@ -465,6 +509,7 @@ type Components struct {
 	Terraform Terraform `yaml:"terraform" json:"terraform" mapstructure:"terraform"`
 	Helmfile  Helmfile  `yaml:"helmfile" json:"helmfile" mapstructure:"helmfile"`
 	Packer    Packer    `yaml:"packer" json:"packer" mapstructure:"packer"`
+	Ansible   Ansible   `yaml:"ansible" json:"ansible" mapstructure:"ansible"`
 
 	// List configuration for component listing.
 	List ListConfig `yaml:"list,omitempty" json:"list,omitempty" mapstructure:"list"`
@@ -488,6 +533,8 @@ func (c *Components) GetComponentConfig(componentType string) (any, bool) {
 		return c.Helmfile, true
 	case "packer":
 		return c.Packer, true
+	case "ansible":
+		return c.Ansible, true
 	default:
 		// Check plugin types.
 		if config, ok := c.Plugins[componentType]; ok {
@@ -619,6 +666,8 @@ type ArgsAndFlagsInfo struct {
 	HelmfileDir               string
 	PackerCommand             string
 	PackerDir                 string
+	AnsibleCommand            string
+	AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -647,7 +696,8 @@ type ArgsAndFlagsInfo struct {
 	Affected                  bool
 	All                       bool
 	Identity                  string
-	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+	ClusterName               string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
 }
 
 // AuthContext holds active authentication credentials for multiple providers.
@@ -667,8 +717,10 @@ type AuthContext struct {
 	// Azure holds Azure credentials if an Azure identity is active.
 	Azure *AzureAuthContext `json:"azure,omitempty" yaml:"azure,omitempty"`
 
+	// GCP holds GCP credentials if a GCP identity is active.
+	GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty" mapstructure:"gcp"`
+
 	// Future: Add other cloud providers as needed
-	// GCP *GCPAuthContext `json:"gcp,omitempty" yaml:"gcp,omitempty"`
 	// GitHub *GitHubAuthContext `json:"github,omitempty" yaml:"github,omitempty"`
 }
 
@@ -724,6 +776,29 @@ type AzureAuthContext struct {
 	TokenFilePath string `json:"token_file_path,omitempty" yaml:"token_file_path,omitempty"`
 }
 
+// GCPAuthContext holds GCP-specific authentication context.
+// This is populated by the GCP auth system and consumed by GCP SDK calls.
+type GCPAuthContext struct {
+	// ProjectID is the GCP project ID.
+	ProjectID string `json:"project_id,omitempty" yaml:"project_id,omitempty" mapstructure:"project_id"`
+	// ProjectName is a human-readable project name (optional).
+	ProjectName string `json:"project_name,omitempty" yaml:"project_name,omitempty" mapstructure:"project_name"`
+	// ServiceAccountEmail is the service account being used (when impersonating).
+	ServiceAccountEmail string `json:"service_account_email,omitempty" yaml:"service_account_email,omitempty" mapstructure:"service_account_email"`
+	// AccessToken is the OAuth2 access token.
+	AccessToken string `json:"access_token,omitempty" yaml:"access_token,omitempty" mapstructure:"access_token"`
+	// TokenExpiry is when the token expires.
+	TokenExpiry time.Time `json:"token_expiry,omitempty" yaml:"token_expiry,omitempty" mapstructure:"token_expiry"`
+	// Region is the GCP region (optional).
+	Region string `json:"region,omitempty" yaml:"region,omitempty" mapstructure:"region"`
+	// Location is the GCP location (optional, e.g., multi-region or zone).
+	Location string `json:"location,omitempty" yaml:"location,omitempty" mapstructure:"location"`
+	// ConfigDir is the directory for GCP config isolation.
+	ConfigDir string `json:"config_dir,omitempty" yaml:"config_dir,omitempty" mapstructure:"config_dir"`
+	// CredentialsFile is the path to the credentials file managed by Atmos.
+	CredentialsFile string `json:"credentials_file,omitempty" yaml:"credentials_file,omitempty" mapstructure:"credentials_file"`
+}
+
 type ConfigAndStacksInfo struct {
 	StackFromArg                  string
 	Stack                         string
@@ -776,6 +851,8 @@ type ConfigAndStacksInfo struct {
 	HelmfileDir               string
 	PackerCommand             string
 	PackerDir                 string
+	AnsibleCommand            string
+	AnsibleDir                string
 	ConfigDir                 string
 	StacksDir                 string
 	WorkflowsDir              string
@@ -820,7 +897,8 @@ type ConfigAndStacksInfo struct {
 	All                       bool
 	Components                []string
 	Identity                  string
-	NeedsPathResolution       bool // True if ComponentFromArg is a path that needs resolution.
+	ClusterName               string // EKS cluster name from --cluster-name flag.
+	NeedsPathResolution       bool   // True if ComponentFromArg is a path that needs resolution.
 }
 
 // GetComponentEnvSection returns the component's env section map.
@@ -842,14 +920,17 @@ var (
 )
 
 // RetryConfig represents the retry configuration.
+// Pointer types are used to distinguish between "not specified" (nil) and "explicitly set to zero".
+// - nil means the feature is disabled or unlimited (e.g., nil MaxAttempts = unlimited retries).
+// - Explicitly setting a value to zero is invalid and will cause a validation error.
 type RetryConfig struct {
-	MaxAttempts     int             `yaml:"max_attempts" json:"max_attempts" mapstructure:"max_attempts"`
-	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy" json:"backoff_strategy" mapstructure:"backoff_strategy"`
-	InitialDelay    time.Duration   `yaml:"initial_delay" json:"initial_delay" mapstructure:"initial_delay"`
-	MaxDelay        time.Duration   `yaml:"max_delay" json:"max_delay" mapstructure:"max_delay"`
-	RandomJitter    float64         `yaml:"random_jitter" json:"random_jitter" mapstructure:"random_jitter"`
-	Multiplier      float64         `yaml:"multiplier" json:"multiplier" mapstructure:"multiplier"`
-	MaxElapsedTime  time.Duration   `yaml:"max_elapsed_time" json:"max_elapsed_time" mapstructure:"max_elapsed_time"`
+	MaxAttempts     *int            `yaml:"max_attempts,omitempty" json:"max_attempts,omitempty" mapstructure:"max_attempts"`
+	BackoffStrategy BackoffStrategy `yaml:"backoff_strategy,omitempty" json:"backoff_strategy,omitempty" mapstructure:"backoff_strategy"`
+	InitialDelay    *time.Duration  `yaml:"initial_delay,omitempty" json:"initial_delay,omitempty" mapstructure:"initial_delay"`
+	MaxDelay        *time.Duration  `yaml:"max_delay,omitempty" json:"max_delay,omitempty" mapstructure:"max_delay"`
+	RandomJitter    *float64        `yaml:"random_jitter,omitempty" json:"random_jitter,omitempty" mapstructure:"random_jitter"`
+	Multiplier      *float64        `yaml:"multiplier,omitempty" json:"multiplier,omitempty" mapstructure:"multiplier"`
+	MaxElapsedTime  *time.Duration  `yaml:"max_elapsed_time,omitempty" json:"max_elapsed_time,omitempty" mapstructure:"max_elapsed_time"`
 }
 
 // EKS update-kubeconfig
@@ -923,6 +1004,8 @@ type Affected struct {
 	Dependents           []Dependent         `yaml:"dependents" json:"dependents" mapstructure:"dependents"`
 	IncludedInDependents bool                `yaml:"included_in_dependents" json:"included_in_dependents" mapstructure:"included_in_dependents"`
 	Settings             AtmosSectionMapType `yaml:"settings" json:"settings" mapstructure:"settings"`
+	Deleted              bool                `yaml:"deleted,omitempty" json:"deleted,omitempty" mapstructure:"deleted"`
+	DeletionType         string              `yaml:"deletion_type,omitempty" json:"deletion_type,omitempty" mapstructure:"deletion_type"`
 }
 
 type BaseComponentConfig struct {
@@ -931,6 +1014,7 @@ type BaseComponentConfig struct {
 	BaseComponentEnv          AtmosSectionMapType
 	BaseComponentAuth         AtmosSectionMapType
 	BaseComponentDependencies AtmosSectionMapType
+	BaseComponentLocals       AtmosSectionMapType // Component-level locals for template processing.
 	BaseComponentMetadata     AtmosSectionMapType
 	BaseComponentProviders    AtmosSectionMapType
 	BaseComponentHooks        AtmosSectionMapType
@@ -944,6 +1028,7 @@ type BaseComponentConfig struct {
 	BaseComponentRemoteStateBackendType    string
 	BaseComponentRemoteStateBackendSection AtmosSectionMapType
 	BaseComponentSourceSection             AtmosSectionMapType
+	BaseComponentProvisionSection          AtmosSectionMapType
 	ComponentInheritanceChain              []string
 }
 
@@ -1071,4 +1156,19 @@ type ListColumnConfig struct {
 	Name  string `yaml:"name" json:"name" mapstructure:"name"`
 	Value string `yaml:"value" json:"value" mapstructure:"value"`
 	Width int    `yaml:"width,omitempty" json:"width,omitempty" mapstructure:"width"`
+}
+
+// TopLevelListConfig holds command-specific list configurations.
+// This is a top-level configuration that separates settings for different list commands.
+type TopLevelListConfig struct {
+	// Components configures the "atmos list components" command output.
+	// Shows unique component definitions (deduplicated across stacks).
+	Components ListConfig `yaml:"components,omitempty" json:"components,omitempty" mapstructure:"components"`
+
+	// Instances configures the "atmos list instances" command output.
+	// Shows component instances (one entry per component+stack pair).
+	Instances ListConfig `yaml:"instances,omitempty" json:"instances,omitempty" mapstructure:"instances"`
+
+	// Stacks configures the "atmos list stacks" command output.
+	Stacks ListConfig `yaml:"stacks,omitempty" json:"stacks,omitempty" mapstructure:"stacks"`
 }

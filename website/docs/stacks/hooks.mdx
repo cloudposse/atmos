@@ -1,6 +1,5 @@
 ---
 title: Manage Lifecycle Events with Hooks
-sidebar_position: 6
 sidebar_label: hooks
 sidebar_class_name: command
 description: Use lifecycle hooks to take action at various points in the lifecycle of your components.
@@ -91,20 +90,21 @@ Before using the `store` function, you must define stores in your `atmos.yaml`:
 stores:
   # AWS SSM Parameter Store
   prod/ssm:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-east-1
 
   dev/ssm:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-west-2
 
-  # HashiCorp Vault
-  vault/secrets:
-    backend: vault
-    config:
-      address: https://vault.example.com
+  # Artifactory
+  artifacts:
+    type: artifactory
+    options:
+      url: https://artifactory.example.com
+      repo_name: infra-state
 ```
 </File>
 
@@ -113,20 +113,20 @@ The store `name` in your hook configuration (e.g., `prod/ssm`) must match one of
 #### Supported Store Backends
 
 <dl>
-  <dt>`aws/ssm`</dt>
+  <dt>`aws-ssm-parameter-store`</dt>
   <dd>AWS Systems Manager Parameter Store.</dd>
 
-  <dt>`aws/secretsmanager`</dt>
-  <dd>AWS Secrets Manager.</dd>
+  <dt>`azure-key-vault`</dt>
+  <dd>Azure Key Vault for secrets management.</dd>
 
-  <dt>`vault`</dt>
-  <dd>HashiCorp Vault.</dd>
+  <dt>`google-secret-manager` (or `gsm`)</dt>
+  <dd>Google Cloud Secret Manager.</dd>
 
   <dt>`redis`</dt>
   <dd>Redis key-value store.</dd>
 
   <dt>`artifactory`</dt>
-  <dd>JFrog Artifactory.</dd>
+  <dd>JFrog Artifactory. Use a Generic repository type.</dd>
 </dl>
 
 #### Store Function Reference
@@ -163,8 +163,8 @@ This example shows the full workflow: configuring stores, setting up hooks, and 
 ```yaml
 stores:
   prod/ssm:
-    backend: aws/ssm
-    config:
+    type: aws-ssm-parameter-store
+    options:
       region: us-east-1
 ```
 </File>

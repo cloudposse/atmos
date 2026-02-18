@@ -1,12 +1,17 @@
 package cmd
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"os"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -14,49 +19,8 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/profiler"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/terminal"
 )
-
-// TestGetInvalidCommandName tests extraction of command names from error messages.
-func TestGetInvalidCommandName(t *testing.T) {
-	tests := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "standard error format",
-			input:    `unknown command "foobar" for "atmos"`,
-			expected: "foobar",
-		},
-		{
-			name:     "command with hyphens",
-			input:    `unknown command "my-custom-cmd" for "atmos"`,
-			expected: "my-custom-cmd",
-		},
-		{
-			name:     "empty quotes",
-			input:    `unknown command "" for "atmos"`,
-			expected: "",
-		},
-		{
-			name:     "no match",
-			input:    "some other error message",
-			expected: "",
-		},
-		{
-			name:     "multiple quoted strings (should extract first)",
-			input:    `unknown command "first" and "second"`,
-			expected: "first",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := getInvalidCommandName(tt.input)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
 
 // TestCleanupLogFile tests log file cleanup functionality.
 func TestCleanupLogFile(t *testing.T) {
@@ -840,4 +804,712 @@ func TestRootCmd_RunE(t *testing.T) {
 	// Note: This is a minimal test - the actual RunE behavior is tested
 	// through integration tests in the tests/ directory.
 	assert.NotNil(t, RootCmd.RunE, "RootCmd should have a RunE function")
+}
+
+// TestConvertToTermenvProfile tests terminal color profile conversion.
+func TestConvertToTermenvProfile(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    terminal.ColorProfile
+		expected termenv.Profile
+	}{
+		{
+			name:     "ColorNone maps to Ascii",
+			input:    terminal.ColorNone,
+			expected: termenv.Ascii,
+		},
+		{
+			name:     "Color16 maps to ANSI",
+			input:    terminal.Color16,
+			expected: termenv.ANSI,
+		},
+		{
+			name:     "Color256 maps to ANSI256",
+			input:    terminal.Color256,
+			expected: termenv.ANSI256,
+		},
+		{
+			name:     "ColorTrue maps to TrueColor",
+			input:    terminal.ColorTrue,
+			expected: termenv.TrueColor,
+		},
+		{
+			name:     "Unknown profile defaults to Ascii",
+			input:    terminal.ColorProfile(99),
+			expected: termenv.Ascii,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := convertToTermenvProfile(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestFindExperimentalParent tests finding experimental parent commands.
+// This function uses a two-pass approach:
+// - First pass: Look for registry-based experimental commands (top-level like devcontainer, toolchain)
+// - Second pass: Look for annotation-based experimental subcommands (terraform backend, etc.)
+// This ensures that when running "devcontainer list", it returns "devcontainer" not "list".
+func TestFindExperimentalParent(t *testing.T) {
+	tests := []struct {
+		name     string
+		setup    func() *cobra.Command
+		expected string
+	}{
+		{
+			name: "nil command returns empty",
+			setup: func() *cobra.Command {
+				return nil
+			},
+			expected: "",
+		},
+		{
+			name: "non-experimental command returns empty",
+			setup: func() *cobra.Command {
+				return &cobra.Command{Use: "regular"}
+			},
+			expected: "",
+		},
+		{
+			name: "command with experimental annotation returns name",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "experimental-cmd",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				return cmd
+			},
+			expected: "experimental-cmd",
+		},
+		{
+			name: "subcommand of experimental parent returns parent name",
+			setup: func() *cobra.Command {
+				parent := &cobra.Command{
+					Use:         "parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				child := &cobra.Command{Use: "child"}
+				parent.AddCommand(child)
+				return child
+			},
+			expected: "parent",
+		},
+		{
+			name: "deeply nested subcommand returns nearest experimental parent",
+			setup: func() *cobra.Command {
+				grandparent := &cobra.Command{
+					Use:         "grandparent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				parent := &cobra.Command{
+					Use:         "parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				child := &cobra.Command{Use: "child"}
+				parent.AddCommand(child)
+				grandparent.AddCommand(parent)
+				return child
+			},
+			// The function finds the nearest experimental parent (first match going up the tree).
+			expected: "parent",
+		},
+		{
+			name: "mixed: non-experimental grandparent with experimental parent",
+			setup: func() *cobra.Command {
+				grandparent := &cobra.Command{Use: "grandparent"}
+				parent := &cobra.Command{
+					Use:         "parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				child := &cobra.Command{Use: "child"}
+				parent.AddCommand(child)
+				grandparent.AddCommand(parent)
+				return child
+			},
+			expected: "parent",
+		},
+		{
+			name: "subcommand without annotation under experimental parent",
+			setup: func() *cobra.Command {
+				parent := &cobra.Command{
+					Use:         "experimental-parent",
+					Annotations: map[string]string{"experimental": "true"},
+				}
+				// Child has no annotation but parent does.
+				child := &cobra.Command{Use: "subcommand"}
+				parent.AddCommand(child)
+				return child
+			},
+			expected: "experimental-parent",
+		},
+		{
+			name: "command with non-true experimental annotation returns empty",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "cmd",
+					Annotations: map[string]string{"experimental": "false"},
+				}
+				return cmd
+			},
+			expected: "",
+		},
+		{
+			name: "command with empty annotations map returns empty",
+			setup: func() *cobra.Command {
+				cmd := &cobra.Command{
+					Use:         "cmd",
+					Annotations: map[string]string{},
+				}
+				return cmd
+			},
+			expected: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := tt.setup()
+			result := findExperimentalParent(cmd)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestParseUseVersionFromArgsInternal tests --use-version flag parsing.
+func TestParseUseVersionFromArgsInternal(t *testing.T) {
+	tests := []struct {
+		name     string
+		args     []string
+		expected string
+	}{
+		{
+			name:     "no args returns empty",
+			args:     []string{},
+			expected: "",
+		},
+		{
+			name:     "no use-version flag returns empty",
+			args:     []string{"terraform", "plan"},
+			expected: "",
+		},
+		{
+			name:     "use-version=value format",
+			args:     []string{"terraform", "--use-version=1.2.3", "plan"},
+			expected: "1.2.3",
+		},
+		{
+			name:     "use-version value format",
+			args:     []string{"terraform", "--use-version", "1.2.3", "plan"},
+			expected: "1.2.3",
+		},
+		{
+			name:     "use-version at end without value returns empty",
+			args:     []string{"terraform", "--use-version"},
+			expected: "",
+		},
+		{
+			name:     "use-version after bare -- is ignored",
+			args:     []string{"terraform", "--", "--use-version=1.2.3"},
+			expected: "",
+		},
+		{
+			name:     "use-version before bare -- is found",
+			args:     []string{"terraform", "--use-version=1.2.3", "--", "plan"},
+			expected: "1.2.3",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseUseVersionFromArgsInternal(tt.args)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestBuildFlagDescription tests flag description building.
+func TestBuildFlagDescription(t *testing.T) {
+	tests := []struct {
+		name     string
+		flag     *pflag.Flag
+		contains string
+	}{
+		{
+			name: "flag with no default",
+			flag: &pflag.Flag{
+				Name:     "test",
+				Usage:    "Test flag",
+				DefValue: "",
+			},
+			contains: "Test flag",
+		},
+		{
+			name: "flag with string default",
+			flag: &pflag.Flag{
+				Name:     "format",
+				Usage:    "Output format",
+				DefValue: "json",
+			},
+			contains: "(default `json`)",
+		},
+		{
+			name: "flag with false default",
+			flag: &pflag.Flag{
+				Name:     "verbose",
+				Usage:    "Verbose output",
+				DefValue: "false",
+			},
+			contains: "Verbose output",
+		},
+		{
+			name: "flag with zero default",
+			flag: &pflag.Flag{
+				Name:     "count",
+				Usage:    "Item count",
+				DefValue: "0",
+			},
+			contains: "Item count",
+		},
+		{
+			name: "flag with empty array default",
+			flag: &pflag.Flag{
+				Name:     "items",
+				Usage:    "Item list",
+				DefValue: "[]",
+			},
+			contains: "Item list",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := buildFlagDescription(tt.flag)
+			assert.Contains(t, result, tt.contains)
+		})
+	}
+}
+
+// TestRenderWrappedLines tests wrapped line rendering.
+func TestRenderWrappedLines(t *testing.T) {
+	tests := []struct {
+		name     string
+		lines    []string
+		indent   int
+		expected string
+	}{
+		{
+			name:     "empty lines",
+			lines:    []string{},
+			indent:   4,
+			expected: "",
+		},
+		{
+			name:     "single line",
+			lines:    []string{"Hello world"},
+			indent:   4,
+			expected: "Hello world\n",
+		},
+		{
+			name:     "multiple lines",
+			lines:    []string{"Line one", "Line two"},
+			indent:   2,
+			expected: "Line one\n  Line two\n",
+		},
+	}
+
+	descStyle := lipgloss.NewStyle()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			renderWrappedLines(&buf, tt.lines, tt.indent, &descStyle)
+			assert.Equal(t, tt.expected, buf.String())
+		})
+	}
+}
+
+// TestSyncGlobalFlagsToViper tests syncing global flags to viper.
+func TestSyncGlobalFlagsToViper(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupCmd   func(*cobra.Command)
+		checkViper func(t *testing.T)
+	}{
+		{
+			name: "profile flag synced",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().StringSlice("profile", []string{}, "")
+				cmd.Flags().Set("profile", "dev")
+			},
+			checkViper: func(t *testing.T) {
+				profiles := viper.GetStringSlice("profile")
+				assert.Contains(t, profiles, "dev")
+			},
+		},
+		{
+			name: "identity flag synced",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("identity", "", "")
+				cmd.Flags().Set("identity", "test-user")
+			},
+			checkViper: func(t *testing.T) {
+				identity := viper.GetString("identity")
+				assert.Equal(t, "test-user", identity)
+			},
+		},
+		{
+			name: "unchanged flags not synced",
+			setupCmd: func(cmd *cobra.Command) {
+				cmd.Flags().String("identity", "default", "")
+				// Don't set/change the flag
+			},
+			checkViper: func(t *testing.T) {
+				// Just verify it doesn't panic
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Reset viper for each test
+			viper.Reset()
+
+			cmd := &cobra.Command{Use: "test"}
+			tt.setupCmd(cmd)
+
+			syncGlobalFlagsToViper(cmd)
+			tt.checkViper(t)
+		})
+	}
+}
+
+// TestConfigureEarlyColorProfile tests early color profile configuration.
+func TestConfigureEarlyColorProfile(t *testing.T) {
+	tests := []struct {
+		name       string
+		setupEnv   func(t *testing.T)
+		setupFlags func(*cobra.Command)
+	}{
+		{
+			name: "NO_COLOR env disables colors",
+			setupEnv: func(t *testing.T) {
+				t.Setenv("NO_COLOR", "1")
+			},
+			setupFlags: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("no-color", false, "")
+				cmd.Flags().Bool("force-color", false, "")
+			},
+		},
+		{
+			name: "no-color flag disables colors",
+			setupEnv: func(t *testing.T) {
+				// NO_COLOR not set
+			},
+			setupFlags: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("no-color", false, "")
+				cmd.Flags().Bool("force-color", false, "")
+				cmd.Flags().Set("no-color", "true")
+			},
+		},
+		{
+			name: "force-color flag enables colors",
+			setupEnv: func(t *testing.T) {
+				// NO_COLOR not set
+			},
+			setupFlags: func(cmd *cobra.Command) {
+				cmd.Flags().Bool("no-color", false, "")
+				cmd.Flags().Bool("force-color", false, "")
+				cmd.Flags().Set("force-color", "true")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setupEnv(t)
+
+			cmd := &cobra.Command{Use: "test"}
+			tt.setupFlags(cmd)
+
+			// Should not panic.
+			assert.NotPanics(t, func() {
+				configureEarlyColorProfile(cmd)
+			})
+		})
+	}
+}
+
+// TestFormatFlagNameParts tests flag name formatting for different flag types.
+func TestFormatFlagNameParts(t *testing.T) {
+	tests := []struct {
+		name              string
+		flagName          string
+		shorthand         string
+		flagType          string
+		expectedName      string
+		expectedType      string
+		expectedTypeEmpty bool
+	}{
+		{
+			name:              "bool flag with shorthand returns no type",
+			flagName:          "verbose",
+			shorthand:         "v",
+			flagType:          "bool",
+			expectedName:      "-v, --verbose",
+			expectedTypeEmpty: true,
+		},
+		{
+			name:              "bool flag without shorthand returns no type",
+			flagName:          "help",
+			shorthand:         "",
+			flagType:          "bool",
+			expectedName:      "    --help",
+			expectedTypeEmpty: true,
+		},
+		{
+			name:         "string flag with shorthand",
+			flagName:     "output",
+			shorthand:    "o",
+			flagType:     "string",
+			expectedName: "-o, --output",
+			expectedType: "string",
+		},
+		{
+			name:         "int flag without shorthand",
+			flagName:     "count",
+			shorthand:    "",
+			flagType:     "int",
+			expectedName: "    --count",
+			expectedType: "int",
+		},
+		{
+			name:         "stringSlice flag becomes strings",
+			flagName:     "profiles",
+			shorthand:    "p",
+			flagType:     "stringSlice",
+			expectedName: "-p, --profiles",
+			expectedType: "strings",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cmd := &cobra.Command{Use: "test"}
+
+			// Add the flag based on type.
+			switch tt.flagType {
+			case "bool":
+				if tt.shorthand != "" {
+					cmd.Flags().BoolP(tt.flagName, tt.shorthand, false, "test")
+				} else {
+					cmd.Flags().Bool(tt.flagName, false, "test")
+				}
+			case "string":
+				if tt.shorthand != "" {
+					cmd.Flags().StringP(tt.flagName, tt.shorthand, "", "test")
+				} else {
+					cmd.Flags().String(tt.flagName, "", "test")
+				}
+			case "int":
+				if tt.shorthand != "" {
+					cmd.Flags().IntP(tt.flagName, tt.shorthand, 0, "test")
+				} else {
+					cmd.Flags().Int(tt.flagName, 0, "test")
+				}
+			case "stringSlice":
+				if tt.shorthand != "" {
+					cmd.Flags().StringSliceP(tt.flagName, tt.shorthand, nil, "test")
+				} else {
+					cmd.Flags().StringSlice(tt.flagName, nil, "test")
+				}
+			}
+
+			flag := cmd.Flags().Lookup(tt.flagName)
+			assert.NotNil(t, flag)
+
+			name, flagType := formatFlagNameParts(flag)
+			assert.Equal(t, tt.expectedName, name)
+			if tt.expectedTypeEmpty {
+				assert.Empty(t, flagType)
+			} else {
+				assert.Equal(t, tt.expectedType, flagType)
+			}
+		})
+	}
+}
+
+// TestGetTerminalWidth tests terminal width detection.
+func TestGetTerminalWidth(t *testing.T) {
+	// getTerminalWidth should return a positive integer.
+	// In test environment (non-TTY), it returns the default width.
+	width := getTerminalWidth()
+	assert.Greater(t, width, 0)
+	assert.LessOrEqual(t, width, 120) // Max width is 120
+}
+
+// TestCalculateMaxFlagWidth tests flag width calculation.
+func TestCalculateMaxFlagWidth(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().BoolP("verbose", "v", false, "verbose output")
+	cmd.Flags().String("long-flag-name", "", "a flag with a long name")
+	cmd.Flags().Bool("hidden", false, "hidden flag")
+	cmd.Flags().Lookup("hidden").Hidden = true
+
+	maxWidth := calculateMaxFlagWidth(cmd.Flags())
+	// Should not include hidden flag.
+	// Long flag: "    --long-flag-name string" is longest.
+	assert.Greater(t, maxWidth, 0)
+}
+
+// TestRenderFlags tests flag rendering.
+func TestRenderFlags(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().BoolP("verbose", "v", false, "verbose output")
+	cmd.Flags().String("format", "json", "output format")
+
+	var buf bytes.Buffer
+	flagStyle := lipgloss.NewStyle()
+	argTypeStyle := lipgloss.NewStyle()
+	descStyle := lipgloss.NewStyle()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Should not panic.
+	assert.NotPanics(t, func() {
+		renderFlags(&buf, cmd.Flags(), flagStyle, argTypeStyle, descStyle, 80, atmosConfig)
+	})
+
+	output := buf.String()
+	assert.Contains(t, output, "verbose")
+	assert.Contains(t, output, "format")
+}
+
+// TestRenderFlagsNilFlagSet tests renderFlags with nil flag set.
+func TestRenderFlagsNilFlagSet(t *testing.T) {
+	var buf bytes.Buffer
+	flagStyle := lipgloss.NewStyle()
+	argTypeStyle := lipgloss.NewStyle()
+	descStyle := lipgloss.NewStyle()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Should not panic with nil flags.
+	assert.NotPanics(t, func() {
+		renderFlags(&buf, nil, flagStyle, argTypeStyle, descStyle, 80, atmosConfig)
+	})
+
+	// Output should be empty.
+	assert.Empty(t, buf.String())
+}
+
+// TestExperimentalModeHandling tests the experimental command mode switch cases.
+// This tests the different behaviors based on settings.experimental configuration.
+func TestExperimentalModeHandling(t *testing.T) {
+	tests := []struct {
+		name             string
+		experimentalMode string
+		expectExit       bool
+		expectedExitCode int
+	}{
+		{
+			name:             "silence mode - no output or exit",
+			experimentalMode: "silence",
+			expectExit:       false,
+		},
+		{
+			name:             "disable mode - command disabled with exit",
+			experimentalMode: "disable",
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name:             "warn mode - warning shown but no exit",
+			experimentalMode: "warn",
+			expectExit:       false,
+		},
+		{
+			name:             "error mode - warning and exit",
+			experimentalMode: "error",
+			expectExit:       true,
+			expectedExitCode: 1,
+		},
+		{
+			name:             "empty mode defaults to warn - no exit",
+			experimentalMode: "",
+			expectExit:       false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use NewTestKit to isolate RootCmd state.
+			_ = NewTestKit(t)
+
+			// Save and restore os.Exit.
+			originalOsExit := errUtils.OsExit
+			defer func() {
+				errUtils.OsExit = originalOsExit
+			}()
+
+			// Track if exit was called and with what code.
+			var exitCalled bool
+			var exitCode int
+			errUtils.OsExit = func(code int) {
+				exitCalled = true
+				exitCode = code
+				// Don't actually exit in tests - panic to stop execution.
+				panic(fmt.Sprintf("os.Exit(%d) called", code))
+			}
+
+			// Create a test command marked as experimental.
+			testCmd := &cobra.Command{
+				Use:   "test-experimental",
+				Short: "Test experimental command",
+				Annotations: map[string]string{
+					"experimental": "true",
+				},
+				Run: func(cmd *cobra.Command, args []string) {
+					// Command executed successfully.
+				},
+			}
+
+			// Add the test command to RootCmd.
+			RootCmd.AddCommand(testCmd)
+			defer func() {
+				RootCmd.RemoveCommand(testCmd)
+			}()
+
+			// Set up environment for the test.
+			stacksPath := "../tests/fixtures/scenarios/complete"
+			t.Setenv("ATMOS_CLI_CONFIG_PATH", stacksPath)
+			t.Setenv("ATMOS_BASE_PATH", stacksPath)
+
+			// Set the experimental mode via environment variable.
+			// This will be read during config initialization.
+			// The env var is ATMOS_EXPERIMENTAL (not ATMOS_SETTINGS_EXPERIMENTAL).
+			if tt.experimentalMode != "" {
+				t.Setenv("ATMOS_EXPERIMENTAL", tt.experimentalMode)
+			}
+
+			// Set args to run our test experimental command.
+			RootCmd.SetArgs([]string{"test-experimental"})
+
+			// Execute and check for panic (which we use to simulate exit).
+			if tt.expectExit {
+				assert.Panics(t, func() {
+					_ = Execute()
+				}, "Expected os.Exit to be called")
+				assert.True(t, exitCalled, "Expected exit to be called")
+				assert.Equal(t, tt.expectedExitCode, exitCode, "Expected exit code %d, got %d", tt.expectedExitCode, exitCode)
+			} else {
+				assert.NotPanics(t, func() {
+					_ = Execute()
+				}, "Expected no os.Exit call")
+				assert.False(t, exitCalled, "Expected exit not to be called")
+			}
+		})
+	}
 }

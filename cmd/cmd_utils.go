@@ -112,8 +112,115 @@ func processCustomCommands(
 			customCommand.PersistentFlags().String("identity", "", "Identity to use for authentication (overrides identity in command config)")
 			AddIdentityCompletion(customCommand)
 
-			// Process and add flags to the command.
+			// Validate flags for duplicates and type conflicts.
+			// Custom commands can declare flags that already exist (globally or on parent),
+			// but only if the types match (inheritance). Type mismatches are errors.
+			seen := make(map[string]bool)
 			for _, flag := range commandConfig.Flags {
+				// Detect duplicates within the same command config early.
+				if seen[flag.Name] {
+					return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
+						WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag '--%s'", commandConfig.Name, flag.Name)).
+						WithHint("Remove or rename the duplicate flag in your atmos.yaml").
+						WithContext("command", commandConfig.Name).
+						WithContext("flag", flag.Name).
+						Err()
+				}
+				seen[flag.Name] = true
+
+				// Check if this flag already exists on parent or globally.
+				// If it exists, verify types match (inheritance allowed).
+				// If types don't match, error (can't redefine with different type).
+				// Only check PersistentFlags() and InheritedFlags() - NOT Flags().
+				// Local flags (Flags()) on the parent are NOT inherited by subcommands,
+				// so they shouldn't block subcommands from defining the same flag.
+				existingFlag := parentCommand.PersistentFlags().Lookup(flag.Name)
+				if existingFlag == nil {
+					existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
+				}
+
+				if existingFlag != nil {
+					// Flag exists - check type compatibility.
+					customFlagType := flag.Type
+					if customFlagType == "" || customFlagType == "string" {
+						customFlagType = "string"
+					}
+
+					existingFlagType := existingFlag.Value.Type()
+					// Normalize type names for comparison.
+					// pflag types: "string", "bool", "int", etc.
+					if existingFlagType != customFlagType {
+						return errUtils.Build(errUtils.ErrReservedFlagName).
+							WithExplanation(fmt.Sprintf("Custom command '%s' in atmos.yaml declares flag '--%s' with type '%s', but it already exists with type '%s'",
+								commandConfig.Name, flag.Name, customFlagType, existingFlagType)).
+							WithHint("Check the 'commands' section in atmos.yaml").
+							WithHint("Either use the existing flag type, or rename your flag to avoid conflicts").
+							WithContext("command", commandConfig.Name).
+							WithContext("flag", flag.Name).
+							WithContext("declared_type", customFlagType).
+							WithContext("existing_type", existingFlagType).
+							WithContext("config_path", fmt.Sprintf("commands.%s.flags", commandConfig.Name)).
+							Err()
+					}
+					// Types match - this flag will be inherited, skip further validation.
+					continue
+				}
+
+				// Flag doesn't exist yet - validate shorthand for new flags only.
+				if flag.Shorthand != "" {
+					if seen[flag.Shorthand] {
+						return errUtils.Build(errUtils.ErrDuplicateFlagRegistration).
+							WithExplanation(fmt.Sprintf("Custom command '%s' defines duplicate flag shorthand '-%s'", commandConfig.Name, flag.Shorthand)).
+							WithHint("Remove or change the duplicate shorthand in your atmos.yaml").
+							WithContext("command", commandConfig.Name).
+							WithContext("shorthand", flag.Shorthand).
+							Err()
+					}
+					seen[flag.Shorthand] = true
+
+					// Check if shorthand conflicts with existing persistent/inherited flags.
+					// Only check PersistentFlags() and InheritedFlags() - NOT Flags().
+					// Local flags (Flags()) on the parent are NOT inherited by subcommands.
+					existingByShorthand := parentCommand.PersistentFlags().ShorthandLookup(flag.Shorthand)
+					if existingByShorthand == nil {
+						existingByShorthand = parentCommand.InheritedFlags().ShorthandLookup(flag.Shorthand)
+					}
+					if existingByShorthand != nil {
+						return errUtils.Build(errUtils.ErrReservedFlagName).
+							WithExplanation(fmt.Sprintf("Custom command '%s' in atmos.yaml defines flag shorthand '-%s' which conflicts with existing flag '--%s'",
+								commandConfig.Name, flag.Shorthand, existingByShorthand.Name)).
+							WithHint("Check the 'commands' section in atmos.yaml").
+							WithHint("Change the shorthand to avoid conflicts").
+							WithContext("command", commandConfig.Name).
+							WithContext("shorthand", flag.Shorthand).
+							WithContext("existing_flag", existingByShorthand.Name).
+							WithContext("config_path", fmt.Sprintf("commands.%s.flags", commandConfig.Name)).
+							Err()
+					}
+				}
+			}
+
+			// Process and add flags to the command.
+			// Skip flags that are inherited from parent command chain.
+			for _, flag := range commandConfig.Flags {
+				// Skip flags that already exist as persistent/inherited (not local).
+				// Local flags (Flags()) on the parent are NOT inherited by subcommands,
+				// so we should register the flag even if a local flag with the same name exists.
+				existingFlag := parentCommand.PersistentFlags().Lookup(flag.Name)
+				if existingFlag == nil {
+					existingFlag = parentCommand.InheritedFlags().Lookup(flag.Name)
+				}
+				if existingFlag != nil {
+					// Flag exists and type was validated above - skip registration (inherit).
+					continue
+				}
+
+				// Get flag description, preferring Description over Usage for backward compatibility.
+				flagUsage := flag.Description
+				if flagUsage == "" {
+					flagUsage = flag.Usage
+				}
+
 				if flag.Type == "bool" {
 					defaultVal := false
 					if flag.Default != nil {
@@ -122,9 +229,9 @@ func processCustomCommands(
 						}
 					}
 					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().BoolP(flag.Name, flag.Shorthand, defaultVal, flagUsage)
 					} else {
-						customCommand.PersistentFlags().Bool(flag.Name, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().Bool(flag.Name, defaultVal, flagUsage)
 					}
 				} else {
 					defaultVal := ""
@@ -134,9 +241,9 @@ func processCustomCommands(
 						}
 					}
 					if flag.Shorthand != "" {
-						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().StringP(flag.Name, flag.Shorthand, defaultVal, flagUsage)
 					} else {
-						customCommand.PersistentFlags().String(flag.Name, defaultVal, flag.Usage)
+						customCommand.PersistentFlags().String(flag.Name, defaultVal, flagUsage)
 					}
 				}
 
@@ -431,23 +538,67 @@ func executeCustomCommand(
 		finalArgs = args
 	}
 
-	// Resolve and install command dependencies
+	// Resolve and install command dependencies.
+	// First, load tools from .tool-versions (project-wide defaults).
+	// Then merge with command-specific dependencies (command deps override .tool-versions).
 	resolver := dependencies.NewResolver(&atmosConfig)
-	deps, err := resolver.ResolveCommandDependencies(commandConfig)
+
+	// Load project-wide tools from .tool-versions.
+	toolVersionsDeps, err := dependencies.LoadToolVersionsDependencies(&atmosConfig)
 	if err != nil {
-		errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to resolve dependencies for command '%s'", commandConfig.Name))
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to load .tool-versions for command '%s'", commandConfig.Name).
+			WithHint("Check that .tool-versions file exists and is readable").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Get command-specific dependencies.
+	commandDeps, err := resolver.ResolveCommandDependencies(commandConfig)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to resolve dependencies for command '%s'", commandConfig.Name).
+			WithHint("Check the command's dependencies section for valid tool specifications").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+
+	// Merge: .tool-versions as base, command deps override.
+	deps, err := dependencies.MergeDependencies(toolVersionsDeps, commandDeps)
+	if err != nil {
+		err = errUtils.Build(errUtils.ErrDependencyResolution).
+			WithCause(err).
+			WithExplanationf("Failed to merge dependencies for command '%s'", commandConfig.Name).
+			WithHint("Check that command dependency versions satisfy constraints from .tool-versions").
+			WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+			Err()
+		errUtils.CheckErrorPrintAndExit(err, "", "")
 	}
 
 	if len(deps) > 0 {
 		log.Debug("Installing command dependencies", "command", commandConfig.Name, "tools", deps)
 		installer := dependencies.NewInstaller(&atmosConfig)
 		if err := installer.EnsureTools(deps); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to install dependencies for command '%s'", commandConfig.Name))
+			err = errUtils.Build(errUtils.ErrToolInstall).
+				WithCause(err).
+				WithExplanationf("Failed to install dependencies for command '%s'", commandConfig.Name).
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 
-		// Update PATH to include installed tools
+		// Update PATH to include installed tools.
 		if err := dependencies.UpdatePathForTools(&atmosConfig, deps); err != nil {
-			errUtils.CheckErrorPrintAndExit(err, "", fmt.Sprintf("Failed to update PATH for command '%s'", commandConfig.Name))
+			err = errUtils.Build(errUtils.ErrDependencyResolution).
+				WithCause(err).
+				WithExplanationf("Failed to update PATH for command '%s'", commandConfig.Name).
+				WithHint("Check that toolchain install_path is writable").
+				WithHint("See https://atmos.tools/cli/commands/toolchain/ for toolchain configuration").
+				Err()
+			errUtils.CheckErrorPrintAndExit(err, "", "")
 		}
 	}
 
@@ -471,7 +622,7 @@ func executeCustomCommand(
 
 		credStore := credentials.NewCredentialStore()
 		validator := validation.NewValidator()
-		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo)
+		authManager, err = auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 		if err != nil {
 			errUtils.CheckErrorPrintAndExit(fmt.Errorf("%w: %w", errUtils.ErrFailedToInitializeAuthManager, err), "", "")
 		}

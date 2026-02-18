@@ -308,6 +308,8 @@ export function getTagColorClass(tagLabel: string): string {
       return 'tagCore';
     case 'deprecation':
       return 'tagDeprecation';
+    case 'experimental':
+      return 'tagExperimental';
     default:
       return 'tagDefault';
   }

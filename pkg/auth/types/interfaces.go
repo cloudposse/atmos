@@ -6,6 +6,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cloudposse/atmos/pkg/auth/realm"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -95,6 +96,11 @@ type Provider interface {
 	// Returns the configured path if set, otherwise a default path.
 	// For display purposes only (may use ~ for home directory).
 	GetFilesDisplayPath() string
+
+	// SetRealm sets the credential isolation realm for this provider.
+	// Called by the auth manager after provider construction to propagate the realm
+	// to all providers. The realm is used for credential file paths.
+	SetRealm(realm string)
 }
 
 // Provisioner is an optional interface that providers can implement
@@ -114,7 +120,8 @@ type PostAuthenticateParams struct {
 	ProviderName string
 	IdentityName string
 	Credentials  ICredentials
-	Manager      AuthManager // Auth manager for resolving provider chains
+	Manager      AuthManager // Auth manager for resolving provider chains.
+	Realm        string      // Credential isolation realm for file storage.
 }
 
 // Identity defines the interface that all authentication identities must implement.
@@ -167,6 +174,12 @@ type Identity interface {
 	// Used with noop keyring to enable credential validation in whoami.
 	// Returns nil, nil if identity doesn't support loading credentials from storage.
 	LoadCredentials(ctx context.Context) (ICredentials, error)
+
+	// SetRealm sets the credential isolation realm for this identity.
+	// Called by the auth manager after identity construction to propagate the realm
+	// to all identities in the authentication chain.
+	// The realm is used for all credential storage and file operations.
+	SetRealm(realm string)
 }
 
 // AuthManager manages the overall authentication process.
@@ -241,6 +254,10 @@ type AuthManager interface {
 	// GetStackInfo returns the current stack info pointer associated with this manager.
 	GetStackInfo() *schema.ConfigAndStacksInfo
 
+	// GetRealm returns the computed realm information for this auth manager.
+	// The realm provides credential isolation between different repositories.
+	GetRealm() realm.RealmInfo
+
 	// ListProviders returns all available provider names.
 	ListProviders() []string
 
@@ -292,24 +309,44 @@ type AuthManager interface {
 
 	// GetIntegration returns the integration config by name.
 	GetIntegration(integrationName string) (*schema.Integration, error)
+
+	// ResolvePrincipalSetting traverses the identity chain and returns the first
+	// non-empty value for the given key in Principal configuration.
+	// The chain is traversed from the target identity backwards through parent identities.
+	// This is a provider-agnostic mechanism for inheriting settings through the chain.
+	// Returns the value and true if found, nil and false otherwise.
+	ResolvePrincipalSetting(identityName, key string) (interface{}, bool)
+
+	// ResolveProviderConfig returns the provider configuration at the root of
+	// the identity's authentication chain.
+	// This allows identities to access provider-level settings without knowing
+	// the specific provider name.
+	// Returns the provider config and true if found, nil and false otherwise.
+	ResolveProviderConfig(identityName string) (*schema.Provider, bool)
 }
 
 // CredentialStore defines the interface for storing and retrieving credentials.
+// All methods that operate on credentials require a realm parameter to ensure
+// complete isolation between different repositories or customer environments.
 type CredentialStore interface {
-	// Store stores credentials for the given alias.
-	Store(alias string, creds ICredentials) error
+	// Store stores credentials for the given alias within the specified realm.
+	// The realm provides credential isolation - the same alias in different realms
+	// refers to completely separate credentials.
+	Store(alias string, creds ICredentials, realm string) error
 
-	// Retrieve retrieves credentials for the given alias.
-	Retrieve(alias string) (ICredentials, error)
+	// Retrieve retrieves credentials for the given alias within the specified realm.
+	// Returns error if no credentials exist for the alias in the given realm.
+	Retrieve(alias string, realm string) (ICredentials, error)
 
-	// Delete deletes credentials for the given alias.
-	Delete(alias string) error
+	// Delete deletes credentials for the given alias within the specified realm.
+	Delete(alias string, realm string) error
 
-	// List returns all stored credential aliases.
-	List() ([]string, error)
+	// List returns all stored credential aliases within the specified realm.
+	// Returns only aliases that belong to the given realm.
+	List(realm string) ([]string, error)
 
-	// IsExpired checks if credentials for the given alias are expired.
-	IsExpired(alias string) (bool, error)
+	// IsExpired checks if credentials for the given alias are expired within the specified realm.
+	IsExpired(alias string, realm string) (bool, error)
 
 	// Type returns the type of credential store (e.g., "system-keyring", "noop").
 	Type() string

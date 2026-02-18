@@ -15,7 +15,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, and static user credentials with a unified configuration model.
+The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, GCP Workload Identity Federation, Azure, and static user credentials with a unified configuration model.
 </Intro>
 
 ## Quick Start
@@ -179,57 +179,69 @@ auth:
 
 ## Using Profiles
 
-Use [Atmos profiles](/cli/configuration/profiles) to define different authentication configurations for various use cases:
+Use [Atmos profiles](/cli/configuration/profiles) to define different authentication configurations for various use cases. Each profile is a **directory** containing YAML files.
 
-<File title="atmos.yaml">
+**Profile structure:**
+```
+profiles/
+├── developer/
+│   └── auth.yaml      # Developer auth config
+├── ci/
+│   └── auth.yaml      # CI/CD auth config
+└── platform/
+    └── auth.yaml      # Platform engineer auth config
+```
+
+<File title="profiles/developer/auth.yaml">
 ```yaml
-profiles:
-  # Profile for developers
-  dev:
-    auth:
-      identities:
-        dev-access:
-          kind: aws/permission-set
-          default: true
-          via:
-            provider: company-sso
-          principal:
-            name: DeveloperAccess
-            account:
-              name: development
+auth:
+  identities:
+    dev-access:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: DeveloperAccess
+        account:
+          name: development
+```
+</File>
 
-  # Profile for CI/CD
-  ci:
-    auth:
-      providers:
-        github-oidc:
-          kind: github/oidc
-          region: us-east-1
-      identities:
-        deploy:
-          kind: aws/assume-role
-          default: true
-          via:
-            provider: github-oidc
-          principal:
-            assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+<File title="profiles/ci/auth.yaml">
+```yaml
+auth:
+  providers:
+    github-oidc:
+      kind: github/oidc
+      region: us-east-1
+  identities:
+    deploy:
+      kind: aws/assume-role
+      default: true
+      via:
+        provider: github-oidc
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/GitHubActionsRole
+```
+</File>
 
-  # Profile for platform engineers
-  platform:
-    auth:
-      providers:
-        company-sso:
-          kind: aws/iam-identity-center
-          region: us-east-1
-          start_url: https://company.awsapps.com/start
-          session:
-            duration: 8h
+<File title="profiles/platform/auth.yaml">
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+      session:
+        duration: 8h
 ```
 </File>
 
 ```bash
 # Activate a profile
-atmos --profile dev terraform plan myapp -s dev
+atmos --profile developer terraform plan myapp -s dev
 ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
 ```
 

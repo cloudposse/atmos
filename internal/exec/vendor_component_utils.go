@@ -148,6 +148,17 @@ func copyComponentToDestination(tempDir, componentPath string, vendorComponentSp
 		OnSymlink: func(src string) cp.SymlinkAction {
 			return cp.Deep
 		},
+
+		// OnDirExists handles existing directories at the destination.
+		// We skip .git directories from source, but if the destination already has a .git directory
+		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
+		// on git packfiles which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
+		},
 	}
 
 	componentPath2 := componentPath
@@ -171,19 +182,24 @@ func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorC
 
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
-		// Exclude the files that match the 'excluded_paths' patterns
-		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported)
+		// Check excludes first - if file matches any excluded pattern, skip it immediately.
+		// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
 		// https://en.wikipedia.org/wiki/Glob_(programming)
 		// https://github.com/bmatcuk/doublestar#patterns
 		if len(vendorComponentSpec.Source.ExcludedPaths) > 0 {
-			return checkComponentExcludes(vendorComponentSpec.Source.ExcludedPaths, src, trimmedSrc)
+			excluded, err := checkComponentExcludes(vendorComponentSpec.Source.ExcludedPaths, src, trimmedSrc)
+			if err != nil || excluded {
+				return excluded, err
+			}
 		}
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+
+		// Then check includes - if specified, file must match to be included.
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified).
 		if len(vendorComponentSpec.Source.IncludedPaths) > 0 {
 			return checkComponentIncludes(vendorComponentSpec.Source.IncludedPaths, src, trimmedSrc)
 		}
 
-		// If 'included_paths' is not provided, include all files that were not excluded
+		// If 'included_paths' is not provided, include all files that were not excluded.
 		log.Debug("Including", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
@@ -192,11 +208,13 @@ func createComponentSkipFunc(tempDir string, vendorComponentSpec *schema.VendorC
 func checkComponentExcludes(excludePaths []string, src, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludePaths {
 		excludePath := filepath.Clean(excludePath)
-		excludeMatch, err := u.PathMatch(excludePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
+		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file.
 			log.Debug("Excluding the file since it matches the '%s' pattern from 'excluded_paths'", "path", trimmedSrc, "excluded_paths", excludePath)
 			return true, nil
 		}
@@ -208,11 +226,13 @@ func checkComponentIncludes(includePaths []string, src, trimmedSrc string) (bool
 	anyMatches := false
 	for _, includePath := range includePaths {
 		includePath := filepath.Clean(includePath)
-		includeMatch, err := u.PathMatch(includePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows patterns to match correctly without needing to account for temp directory paths.
+		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
+			// If the file matches ANY of the 'included_paths' patterns, include the file.
 			log.Debug("Including path since it matches the pattern from 'included_paths'\n", "path", trimmedSrc, "included_paths", includePath)
 			anyMatches = true
 			break
@@ -565,6 +585,17 @@ func installMixin(p *pkgComponentVendor, atmosConfig *schema.AtmosConfiguration)
 		// symlink components/terraform/mixins/context.tf components/terraform/infra/vpc-flow-logs-bucket/context.tf: file exists
 		OnSymlink: func(src string) cp.SymlinkAction {
 			return cp.Deep
+		},
+
+		// OnDirExists handles existing directories at the destination.
+		// If the destination already has a .git directory (from a previous vendor run),
+		// we need to leave it untouched to avoid permission errors on git packfiles
+		// which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
 		},
 	}
 

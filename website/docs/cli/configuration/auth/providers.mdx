@@ -4,17 +4,20 @@ sidebar_position: 2
 sidebar_label: providers
 sidebar_class_name: command
 id: providers
-description: Configure authentication providers for AWS SSO, SAML, and GitHub OIDC in your `atmos.yaml`.
+description: Configure authentication providers for AWS SSO, SAML, GitHub OIDC, and GCP Workload Identity Federation in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
 import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
 Providers are the upstream systems that Atmos uses to obtain initial credentials. Configure providers in the `auth.providers` section of your `atmos.yaml`.
 </Intro>
+
+<Experimental />
 
 ## AWS IAM Identity Center (SSO)
 
@@ -31,9 +34,6 @@ auth:
 
       # Automatically discover all accounts and permission sets
       auto_provision_identities: true
-
-      # Optional: include AWS tags from permission sets as labels
-      include_tags: true
 
       # Optional session configuration
       session:
@@ -56,9 +56,6 @@ auth:
 
   <dt>`auto_provision_identities`</dt>
   <dd>Optional. When `true`, Atmos automatically discovers all AWS accounts and permission sets assigned to the user and creates identities for them. This eliminates the need to manually configure each identity. Default: `false`.</dd>
-
-  <dt>`include_tags`</dt>
-  <dd>Optional. When `true` (and `auto_provision_identities` is enabled), Atmos retrieves AWS tags from permission sets and includes them as labels on the auto-provisioned identities. Requires additional IAM permissions. Default: `false`.</dd>
 
   <dt>`session.duration`</dt>
   <dd>Optional. Session duration for CLI credentials (e.g., `1h`, `4h`). Default varies by provider.</dd>
@@ -98,42 +95,6 @@ These permissions are required for automatic identity provisioning to work:
 - `sso:ListAccounts` - Enumerates all AWS accounts the user can access
 - `sso:ListAccountRoles` - Lists available permission sets (roles) for each account
 
-#### Tag/Label Support (Optional)
-
-If you enable tag discovery (`include_tags: true` in provider configuration), additional permissions are required:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListAccounts",
-        "sso:ListAccountRoles"
-      ],
-      "Resource": "*"
-    },
-    {
-      "Effect": "Allow",
-      "Action": [
-        "sso:ListInstances",
-        "sso:DescribePermissionSet",
-        "sso:ListPermissionSets",
-        "sso:ListTagsForResource"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
-**Additional APIs Used:**
-- `sso:ListInstances` - Finds the SSO instance ARN
-- `sso:DescribePermissionSet` - Gets permission set details
-- `sso:ListPermissionSets` - Finds permission set ARNs
-- `sso:ListTagsForResource` - Retrieves AWS tags from permission sets
-
 #### How to Apply Permissions
 
 These permissions should be attached to the IAM Identity Center permission set that users authenticate with, or to the IAM user/role if using static credentials. Without these permissions, identity provisioning will fail gracefully and fall back to manually configured identities.
@@ -152,7 +113,6 @@ auth:
       kind: aws/saml
       region: us-east-1
       url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
-      idp_arn: arn:aws:iam::123456789012:saml-provider/okta-saml
       driver: Browser              # Browser, GoogleApps, Okta, or ADFS
 ```
 </File>
@@ -166,9 +126,6 @@ auth:
 
   <dt>`url`</dt>
   <dd>**Required.** SAML SSO URL from your identity provider.</dd>
-
-  <dt>`idp_arn`</dt>
-  <dd>**Required.** ARN of the SAML provider in IAM.</dd>
 
   <dt>`driver`</dt>
   <dd>Optional. Authentication method: `Browser` (default, requires Playwright), `GoogleApps`, `Okta`, or `ADFS`.</dd>
@@ -205,31 +162,151 @@ auth:
   <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
 </dl>
 
-## Multiple Providers
+## GCP Application Default Credentials
 
-You can configure multiple providers for different use cases:
+For local development using existing `gcloud` authentication.
 
 <File title="atmos.yaml">
 ```yaml
 auth:
   providers:
-    # Primary SSO for interactive use
+    gcp-adc:
+      kind: gcp/adc
+      project_id: my-gcp-project      # Optional: override default project
+      region: us-central1             # Optional: default region
+      scopes:                         # Optional: custom OAuth scopes
+        - https://www.googleapis.com/auth/cloud-platform
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/adc`.</dd>
+
+  <dt>`project_id`</dt>
+  <dd>Optional. GCP project ID. If not set, uses the project from `gcloud config`.</dd>
+
+  <dt>`region`</dt>
+  <dd>Optional. Default GCP region for resources.</dd>
+
+  <dt>`scopes`</dt>
+  <dd>Optional. OAuth scopes for the access token. Defaults to `https://www.googleapis.com/auth/cloud-platform`.</dd>
+</dl>
+
+:::note
+The `gcp/adc` provider requires existing Application Default Credentials. Run `gcloud auth application-default login` first.
+:::
+
+## GCP Workload Identity Federation
+
+For CI/CD pipelines using OIDC tokens (e.g., GitHub Actions).
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    gcp-wif:
+      kind: gcp/workload-identity-federation
+      project_id: my-gcp-project
+      project_number: "123456789012"
+      workload_identity_pool_id: github-pool
+      workload_identity_provider_id: github-provider
+      service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+      token_source:
+        type: url                     # GitHub Actions OIDC
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `gcp/workload-identity-federation`.</dd>
+
+  <dt>`project_id`</dt>
+  <dd>Optional. GCP project ID for the resulting credentials.</dd>
+
+  <dt>`project_number`</dt>
+  <dd>**Required.** GCP project number (numeric) where WIF is configured.</dd>
+
+  <dt>`workload_identity_pool_id`</dt>
+  <dd>**Required.** Workload Identity Pool ID.</dd>
+
+  <dt>`workload_identity_provider_id`</dt>
+  <dd>**Required.** Workload Identity Provider ID within the pool.</dd>
+
+  <dt>`service_account_email`</dt>
+  <dd>Optional. Service account to impersonate after federation. If not set, uses the federated token directly.</dd>
+
+  <dt>`token_source.type`</dt>
+  <dd>**Required.** Token source type: `url` (GitHub Actions), `file`, or `environment`.</dd>
+
+  <dt>`token_source.environment_variable`</dt>
+  <dd>For `type: environment`. Environment variable containing the OIDC token.</dd>
+
+  <dt>`token_source.file_path`</dt>
+  <dd>For `type: file`. Path to file containing the OIDC token.</dd>
+
+  <dt>`token_source.url`</dt>
+  <dd>For `type: url`. URL to fetch OIDC token. Defaults to GitHub Actions OIDC endpoint.</dd>
+
+  <dt>`token_source.request_token`</dt>
+  <dd>For `type: url`. Bearer token for authenticating to the OIDC token endpoint. For GitHub Actions, this is automatically populated from `ACTIONS_ID_TOKEN_REQUEST_TOKEN`. Required for non-GitHub OIDC providers.</dd>
+
+  <dt>`token_source.audience`</dt>
+  <dd>Optional. Audience for the OIDC token request.</dd>
+
+  <dt>`scopes`</dt>
+  <dd>Optional. OAuth scopes for the access token.</dd>
+</dl>
+
+### GitHub Actions Setup
+
+For GitHub Actions, use `type: url` which automatically uses the `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variables:
+
+<File title=".github/workflows/deploy.yaml">
+```yaml
+jobs:
+  deploy:
+    permissions:
+      id-token: write    # Required for OIDC
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy with Atmos
+        run: atmos terraform apply mycomponent -s prod
+```
+</File>
+
+## Multiple Providers
+
+You can configure multiple providers for different use cases and cloud platforms:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    # AWS SSO for interactive use
     company-sso:
       kind: aws/iam-identity-center
       region: us-east-1
       start_url: https://company.awsapps.com/start
 
-    # SAML for legacy systems
-    okta-saml:
-      kind: aws/saml
-      region: us-east-1
-      url: https://company.okta.com/app/amazon_aws/abc123/sso/saml
-      idp_arn: arn:aws:iam::123456789012:saml-provider/okta
-
-    # GitHub OIDC for CI/CD
-    github-oidc:
+    # AWS GitHub OIDC for CI/CD
+    aws-github-oidc:
       kind: github/oidc
       region: us-east-1
+
+    # GCP local development
+    gcp-adc:
+      kind: gcp/adc
+
+    # GCP GitHub Actions
+    gcp-wif:
+      kind: gcp/workload-identity-federation
+      project_number: "123456789012"
+      workload_identity_pool_id: github-pool
+      workload_identity_provider_id: github-provider
+      token_source:
+        type: url
 ```
 </File>
 

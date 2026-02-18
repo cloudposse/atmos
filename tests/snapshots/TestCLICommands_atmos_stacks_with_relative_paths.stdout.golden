@@ -11,6 +11,9 @@ acme-platform-dev:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -45,6 +48,9 @@ acme-platform-prod:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}
@@ -79,6 +85,9 @@ acme-platform-staging:
         backend_type: ""
         command: terraform
         component: mock
+        component_info:
+          component_path: ../../components/terraform/mock
+          component_type: terraform
         env: {}
         generate: {}
         hooks: {}

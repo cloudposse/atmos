@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"syscall"
 
@@ -27,9 +26,16 @@ import (
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/internal/tui/templates"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
+	atmosansi "github.com/cloudposse/atmos/pkg/ansi"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
+
+	// Import component providers to register them with the component registry.
+	// The init() function in each package registers the provider.
+	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/mock"
+
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -52,8 +58,11 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/ansible"
+	_ "github.com/cloudposse/atmos/cmd/aws"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"
@@ -62,9 +71,10 @@ import (
 	"github.com/cloudposse/atmos/cmd/terraform/workdir"
 	themeCmd "github.com/cloudposse/atmos/cmd/theme"
 	toolchainCmd "github.com/cloudposse/atmos/cmd/toolchain"
+	_ "github.com/cloudposse/atmos/cmd/vendor"
 	"github.com/cloudposse/atmos/cmd/version"
 	_ "github.com/cloudposse/atmos/cmd/workflow"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 const (
@@ -114,6 +124,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
+
 		// Check for --use-version=value format.
 		if strings.HasPrefix(arg, "--use-version=") {
 			return strings.TrimPrefix(arg, "--use-version=")
@@ -134,6 +149,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
 
 		// Check for --chdir=value format.
 		if strings.HasPrefix(arg, "--chdir=") {
@@ -428,26 +448,42 @@ var RootCmd = &cobra.Command{
 
 		// Check for version.use configuration and re-exec with specified version if needed.
 		// This runs after profiles are loaded, so version.use can be set via profiles.
-		// Skip re-exec for help commands and version management commands to avoid loops.
-		if !isHelpRequested && !isVersionManagementCommand(cmd) && err == nil {
-			// Set ATMOS_VERSION_USE env var from --use-version flag if specified.
-			// This allows CheckAndReexec to pick up the flag value.
+		if !isHelpRequested && err == nil {
+			// Check if explicit --use-version flag was provided.
+			var explicitVersionRequested bool
+			var explicitVersion string
+
 			// First try Cobra's parsed flag (works when DisableFlagParsing=false).
 			if cmd.Flags().Changed("use-version") {
 				if useVersion, flagErr := cmd.Flags().GetString("use-version"); flagErr == nil && useVersion != "" {
-					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
-				}
-			} else {
-				// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
-				// manually parse --use-version from os.Args.
-				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
-					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+					explicitVersion = useVersion
+					explicitVersionRequested = true
 				}
 			}
-			// CheckAndReexec returns true only on successful syscall.Exec, which replaces
-			// the current process entirely. This means true is never returned in practice
-			// since exec doesn't return. We call it for its side effects.
-			_ = pkgversion.CheckAndReexec(&tmpConfig)
+
+			// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+			// manually parse --use-version from os.Args.
+			if !explicitVersionRequested {
+				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
+					explicitVersion = useVersion
+					explicitVersionRequested = true
+				}
+			}
+
+			// Set ATMOS_VERSION_USE env var if explicit flag was provided.
+			if explicitVersionRequested {
+				_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
+			}
+
+			// Skip re-exec for version management commands (to avoid loops),
+			// unless an explicit --use-version flag was provided.
+			shouldReexec := explicitVersionRequested || !isVersionManagementCommand(cmd)
+			if shouldReexec {
+				// CheckAndReexec returns true only on successful syscall.Exec, which replaces
+				// the current process entirely. This means true is never returned in practice
+				// since exec doesn't return. We call it for its side effects.
+				_ = pkgversion.CheckAndReexec(&tmpConfig)
+			}
 		}
 
 		// Setup profiler before command execution (but skip for help commands).
@@ -482,6 +518,43 @@ var RootCmd = &cobra.Command{
 		ui.InitFormatter(ioCtx)
 		data.InitWriter(ioCtx)
 		data.SetMarkdownRenderer(ui.Format) // Connect markdown rendering to data channel
+
+		// Check if running an experimental command.
+		// This happens after I/O init so ui.Experimental() can output properly.
+		// Walk up the command tree to find if any parent is experimental.
+		// For example, "atmos devcontainer list" should trigger the devcontainer warning.
+		experimentalCmd := findExperimentalParent(cmd)
+		if experimentalCmd != "" {
+			experimentalMode := tmpConfig.Settings.Experimental
+			if experimentalMode == "" {
+				experimentalMode = "warn" // Default
+			}
+
+			switch experimentalMode {
+			case "silence":
+				// Do nothing - completely silent.
+			case "disable":
+				// Command is registered but disabled at runtime.
+				errUtils.CheckErrorPrintAndExit(
+					errUtils.Build(errUtils.ErrExperimentalDisabled).
+						WithContext("command", experimentalCmd).
+						WithHint("Enable with settings.experimental: warn").
+						Err(),
+					"", "",
+				)
+			case "warn":
+				ui.Experimental(experimentalCmd)
+			case "error":
+				ui.Experimental(experimentalCmd)
+				errUtils.CheckErrorPrintAndExit(
+					errUtils.Build(errUtils.ErrExperimentalRequiresIn).
+						WithContext("command", experimentalCmd).
+						WithHint("Enable with settings.experimental: warn").
+						Err(),
+					"", "",
+				)
+			}
+		}
 
 		// Configure lipgloss color profile based on terminal capabilities.
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
@@ -564,9 +637,9 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 
 		switch atmosConfig.Logs.File {
 		case "/dev/stderr":
-			output = os.Stderr
+			output = iolib.MaskWriter(os.Stderr)
 		case "/dev/stdout":
-			output = os.Stdout
+			output = iolib.MaskWriter(os.Stdout)
 		case "/dev/null":
 			output = io.Discard // More efficient than opening os.DevNull
 		default:
@@ -574,7 +647,7 @@ func SetupLogger(atmosConfig *schema.AtmosConfiguration) {
 			errUtils.CheckErrorPrintAndExit(err, "Failed to open log file", "")
 			// Store the file handle for later cleanup instead of deferring close.
 			logFileHandle = logFile
-			output = logFile
+			output = iolib.MaskWriter(logFile)
 		}
 
 		log.SetOutput(output)
@@ -792,6 +865,39 @@ func isCompletionCommand(cmd *cobra.Command) bool {
 	return false
 }
 
+// findExperimentalParent walks up the command tree to find if any command in the
+// chain is experimental. Returns the name of the experimental command, or empty
+// string if none found. This allows subcommands to inherit experimental status
+// from their parent (e.g., "atmos devcontainer list" triggers the devcontainer warning).
+//
+// The function uses a two-pass approach:
+//  1. First, check for registry-based experimental commands (top-level like devcontainer, toolchain).
+//     These are the "original" experimental commands and should be preferred.
+//  2. Second, check for annotation-based experimental subcommands (like terraform backend).
+//     This handles explicit subcommand-level experimental status.
+//
+// This ordering ensures that "devcontainer list" returns "devcontainer" (the registered
+// experimental parent) rather than "list" (which inherited the annotation).
+func findExperimentalParent(cmd *cobra.Command) string {
+	// First pass: Look for registry-based experimental commands.
+	// These are top-level commands like devcontainer, toolchain.
+	for c := cmd; c != nil; c = c.Parent() {
+		if internal.IsCommandExperimental(c.Name()) {
+			return c.Name()
+		}
+	}
+
+	// Second pass: Look for annotation-based experimental subcommands.
+	// These are subcommands explicitly marked experimental like "terraform backend".
+	for c := cmd; c != nil; c = c.Parent() {
+		if c.Annotations != nil && c.Annotations["experimental"] == "true" {
+			return c.Name()
+		}
+	}
+
+	return ""
+}
+
 // flagStyles holds the lipgloss styles for flag rendering.
 type flagStyles struct {
 	flagStyle    lipgloss.Style
@@ -827,7 +933,7 @@ func renderSingleFlag(w io.Writer, f *pflag.Flag, layout flagRenderLayout, style
 	if renderer != nil {
 		rendered, err := renderer.RenderWithoutWordWrap(wrapped)
 		if err == nil {
-			wrapped = ui.TrimLinesRight(rendered)
+			wrapped = atmosansi.TrimLinesRight(rendered)
 		}
 	}
 
@@ -1353,12 +1459,14 @@ func Execute() error {
 
 	// Cobra for some reason handles root command in such a way that custom usage and help command don't work as per expectations.
 	RootCmd.SilenceErrors = true
-	cmd, err := RootCmd.ExecuteC()
+	cmd, err := internal.Execute(RootCmd)
 
 	telemetry.CaptureCmd(cmd, err)
+
+	// Handle sentinel errors with errors.Is().
 	if err != nil {
-		if strings.Contains(err.Error(), "unknown command") {
-			command := getInvalidCommandName(err.Error())
+		if errors.Is(err, errUtils.ErrCommandNotFound) {
+			command, _ := errUtils.GetContext(err, "command")
 			showUsageAndExit(RootCmd, []string{command})
 		}
 	}
@@ -1408,22 +1516,6 @@ func preprocessCompatibilityFlags() {
 
 	// Store separated args globally via compat package.
 	compat.SetSeparated(separatedArgs)
-}
-
-// getInvalidCommandName extracts the invalid command name from an error message.
-func getInvalidCommandName(input string) string {
-	// Regular expression to match the command name inside quotes.
-	re := regexp.MustCompile(`unknown command "([^"]+)"`)
-
-	// Find the match.
-	match := re.FindStringSubmatch(input)
-
-	// Check if a match is found.
-	if len(match) > 1 {
-		command := match[1] // The first capturing group contains the command
-		return command
-	}
-	return ""
 }
 
 // displayPerformanceHeatmap shows the performance heatmap visualization.
@@ -1497,6 +1589,12 @@ func init() {
 		log.Error("Failed to bind global flags to viper", "error", err)
 	}
 
+	// Register --version as a LOCAL flag (not inherited by subcommands).
+	// This allows custom commands to define their own --version flag (e.g., for tool versions).
+	// The flag is only meaningful on the root command and is handled specially in main.go
+	// before Execute() is called.
+	RootCmd.Flags().Bool("version", false, "Display the Atmos CLI version")
+
 	// Register built-in commands from the registry.
 	// This must happen AFTER persistent flags are registered so commands inherit them.
 	// Commands register themselves via init() functions when their packages
@@ -1509,7 +1607,8 @@ func init() {
 	cobra.AddTemplateFunc("wrappedFlagUsages", templates.WrappedFlagUsages)
 
 	// Special handling for version flag: clear DefValue for cleaner --help output.
-	if versionFlag := RootCmd.PersistentFlags().Lookup("version"); versionFlag != nil {
+	// Note: --version is a LOCAL flag (not persistent), so use Flags() not PersistentFlags().
+	if versionFlag := RootCmd.Flags().Lookup("version"); versionFlag != nil {
 		versionFlag.DefValue = ""
 	}
 	// Configure viper for automatic environment variable binding.

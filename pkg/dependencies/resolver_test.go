@@ -1,12 +1,15 @@
 package dependencies
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 func TestResolveWorkflowDependencies(t *testing.T) {
@@ -373,4 +376,127 @@ func TestExtractDependenciesFromConfig(t *testing.T) {
 			assert.Equal(t, tt.want, got)
 		})
 	}
+}
+
+func TestLoadToolVersionsDependencies(t *testing.T) {
+	tests := []struct {
+		name            string
+		toolVersions    string
+		want            map[string]string
+		wantErr         bool
+		skipFileCreated bool
+	}{
+		{
+			name:            "no .tool-versions file returns empty map",
+			skipFileCreated: true,
+			want:            map[string]string{},
+		},
+		{
+			name:         "empty .tool-versions file returns empty map",
+			toolVersions: "",
+			want:         map[string]string{},
+		},
+		{
+			name:         "single tool with single version",
+			toolVersions: "terraform 1.10.0\n",
+			want: map[string]string{
+				"terraform": "1.10.0",
+			},
+		},
+		{
+			name:         "multiple tools",
+			toolVersions: "terraform 1.10.0\nkubectl 1.32.0\nhelm 3.16.0\n",
+			want: map[string]string{
+				"terraform": "1.10.0",
+				"kubectl":   "1.32.0",
+				"helm":      "3.16.0",
+			},
+		},
+		{
+			name:         "tool with multiple versions uses first as default",
+			toolVersions: "terraform 1.10.0 1.9.0 1.8.0\n",
+			want: map[string]string{
+				"terraform": "1.10.0",
+			},
+		},
+		{
+			name:         "comments and empty lines are ignored",
+			toolVersions: "# This is a comment\nterraform 1.10.0\n\nkubectl 1.32.0\n",
+			want: map[string]string{
+				"terraform": "1.10.0",
+				"kubectl":   "1.32.0",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temp directory for test.
+			tmpDir := t.TempDir()
+			toolVersionsPath := filepath.Join(tmpDir, ".tool-versions")
+
+			// Save original toolchain config and restore after test.
+			origConfig := toolchain.GetAtmosConfig()
+			t.Cleanup(func() {
+				toolchain.SetAtmosConfig(origConfig)
+			})
+
+			if !tt.skipFileCreated {
+				// Create .tool-versions file.
+				err := os.WriteFile(toolVersionsPath, []byte(tt.toolVersions), 0o644)
+				require.NoError(t, err)
+			} else {
+				// Point to a path that doesn't exist.
+				toolVersionsPath = filepath.Join(tmpDir, "nonexistent", ".tool-versions")
+			}
+
+			// Configure toolchain to use our test file path.
+			testConfig := &schema.AtmosConfiguration{
+				Toolchain: schema.Toolchain{
+					VersionsFile: toolVersionsPath,
+				},
+			}
+			toolchain.SetAtmosConfig(testConfig)
+
+			got, err := LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+			if tt.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+				assert.Equal(t, tt.want, got)
+			}
+		})
+	}
+}
+
+// TestLoadToolVersionsDependencies_DirectoryError tests that a directory at the
+// .tool-versions path returns an error (not os.IsNotExist, but still an error).
+func TestLoadToolVersionsDependencies_DirectoryError(t *testing.T) {
+	// Create temp directory for test.
+	tmpDir := t.TempDir()
+	toolVersionsPath := filepath.Join(tmpDir, ".tool-versions")
+
+	// Save original toolchain config and restore after test.
+	origConfig := toolchain.GetAtmosConfig()
+	t.Cleanup(func() {
+		toolchain.SetAtmosConfig(origConfig)
+	})
+
+	// Create a directory instead of a file - this will cause a read error
+	// that is NOT os.IsNotExist, triggering the error return path.
+	err := os.MkdirAll(toolVersionsPath, 0o755)
+	require.NoError(t, err)
+
+	// Configure toolchain to use our test path.
+	testConfig := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			VersionsFile: toolVersionsPath,
+		},
+	}
+	toolchain.SetAtmosConfig(testConfig)
+
+	// Should return an error because we can't read a directory as a file.
+	_, err = LoadToolVersionsDependencies(&schema.AtmosConfiguration{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to load .tool-versions")
 }

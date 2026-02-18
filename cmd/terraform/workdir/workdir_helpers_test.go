@@ -313,10 +313,12 @@ func TestDefaultWorkdirManager_DescribeWorkdir_NotFound(t *testing.T) {
 	assert.Empty(t, manifest)
 }
 
-// Test readWorkdirMetadata function directly.
+// Test provWorkdir.ReadMetadata function through the package API.
 
 func TestReadWorkdirMetadata(t *testing.T) {
+	// Create a workdir with metadata in the expected .atmos/metadata.json location.
 	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "dev-vpc")
 
 	metadata := provWorkdir.WorkdirMetadata{
 		Component:   "test-component",
@@ -331,10 +333,13 @@ func TestReadWorkdirMetadata(t *testing.T) {
 	metadataBytes, err := json.Marshal(metadata)
 	require.NoError(t, err)
 
-	metadataPath := filepath.Join(tmpDir, "metadata.json")
+	// Create the .atmos directory and metadata file.
+	atmosDir := filepath.Join(workdirPath, provWorkdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	metadataPath := provWorkdir.MetadataPath(workdirPath)
 	require.NoError(t, os.WriteFile(metadataPath, metadataBytes, 0o644))
 
-	result, err := readWorkdirMetadata(metadataPath)
+	result, err := provWorkdir.ReadMetadata(workdirPath)
 	require.NoError(t, err)
 	assert.Equal(t, "test-component", result.Component)
 	assert.Equal(t, "test-stack", result.Stack)
@@ -342,18 +347,24 @@ func TestReadWorkdirMetadata(t *testing.T) {
 }
 
 func TestReadWorkdirMetadata_FileNotFound(t *testing.T) {
-	result, err := readWorkdirMetadata("/nonexistent/path/metadata.json")
-	assert.Error(t, err)
+	result, err := provWorkdir.ReadMetadata("/nonexistent/path")
+	// ReadMetadata returns nil, nil when metadata file doesn't exist (not an error).
+	assert.NoError(t, err)
 	assert.Nil(t, result)
 }
 
 func TestReadWorkdirMetadata_InvalidJSON(t *testing.T) {
+	// Create a workdir with invalid metadata.
 	tmpDir := t.TempDir()
+	workdirPath := filepath.Join(tmpDir, "dev-vpc")
 
-	metadataPath := filepath.Join(tmpDir, "metadata.json")
+	// Create the .atmos directory and invalid metadata file.
+	atmosDir := filepath.Join(workdirPath, provWorkdir.AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	metadataPath := provWorkdir.MetadataPath(workdirPath)
 	require.NoError(t, os.WriteFile(metadataPath, []byte("{invalid json"), 0o644))
 
-	result, err := readWorkdirMetadata(metadataPath)
+	result, err := provWorkdir.ReadMetadata(workdirPath)
 	assert.Error(t, err)
 	assert.Nil(t, result)
 }
@@ -515,4 +526,59 @@ func TestDefaultWorkdirManager_DescribeWorkdir_ValidOutput(t *testing.T) {
 	assert.Contains(t, manifest, "content_hash: sha256:abc123")
 	assert.Contains(t, manifest, "2024-06-15")
 	assert.Contains(t, manifest, "2024-06-16")
+}
+
+// Test DefaultWorkdirManager.CleanExpiredWorkdirs.
+
+func TestDefaultWorkdirManager_CleanExpiredWorkdirs_NoWorkdirs(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Should succeed when no workdirs exist.
+	err := manager.CleanExpiredWorkdirs(atmosConfig, "7d", false)
+	assert.NoError(t, err)
+}
+
+func TestDefaultWorkdirManager_CleanExpiredWorkdirs_DryRun(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a workdir with old metadata.
+	workdirBase := filepath.Join(tmpDir, provWorkdir.WorkdirPath, "terraform")
+	workdirPath := filepath.Join(workdirBase, "dev-vpc")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	oldTime := time.Now().Add(-30 * 24 * time.Hour)
+	metadata := provWorkdir.WorkdirMetadata{
+		Component:    "vpc",
+		Stack:        "dev",
+		SourceType:   provWorkdir.SourceTypeLocal,
+		Source:       "components/terraform/vpc",
+		CreatedAt:    oldTime,
+		UpdatedAt:    oldTime,
+		LastAccessed: oldTime,
+	}
+	require.NoError(t, provWorkdir.WriteMetadata(workdirPath, &metadata))
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	// Dry run should not remove workdirs.
+	err := manager.CleanExpiredWorkdirs(atmosConfig, "7d", true)
+	assert.NoError(t, err)
+
+	// Workdir should still exist.
+	_, err = os.Stat(workdirPath)
+	assert.NoError(t, err)
+}
+
+func TestDefaultWorkdirManager_CleanExpiredWorkdirs_InvalidTTL(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	manager := NewDefaultWorkdirManager()
+	atmosConfig := &schema.AtmosConfiguration{BasePath: tmpDir}
+
+	err := manager.CleanExpiredWorkdirs(atmosConfig, "invalid", false)
+	assert.Error(t, err)
 }

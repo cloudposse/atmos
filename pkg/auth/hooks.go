@@ -58,7 +58,7 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 		return nil
 	}
 
-	authManager, err := newAuthManager(&authConfig, stackInfo)
+	authManager, err := newAuthManager(&authConfig, stackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		errUtils.CheckErrorAndPrint(errUtils.ErrAuthManager, hookOpTerraformPreHook, "failed to create auth manager")
 		return errUtils.ErrAuthManager
@@ -155,7 +155,7 @@ func componentEnvSectionToList(envSection map[string]any) []string {
 	return envList
 }
 
-func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo) (types.AuthManager, error) {
+func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndStacksInfo, cliConfigPath string) (types.AuthManager, error) {
 	// Create auth manager components.
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
@@ -166,6 +166,7 @@ func newAuthManager(authConfig *schema.AuthConfig, stackInfo *schema.ConfigAndSt
 		credStore,
 		validator,
 		stackInfo,
+		cliConfigPath,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("%v: failed to create auth manager: %w", errUtils.ErrAuthManager, err)

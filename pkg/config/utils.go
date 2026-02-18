@@ -106,7 +106,7 @@ func FindAllStackConfigsInPathsForStack(
 	}
 
 	if len(absolutePaths) == 0 {
-		return nil, nil, false, fmt.Errorf("no matches found for the provided stack '%s' in the paths %v", stack, includeStackPaths)
+		return nil, nil, false, fmt.Errorf("%w for the provided stack '%s' in the paths %v", errUtils.ErrNoStackManifestsFound, stack, includeStackPaths)
 	}
 
 	return absolutePaths, relativePaths, false, nil
@@ -478,13 +478,13 @@ func buildVersionConstraintError(constraint schema.VersionConstraint) error {
 
 // warnVersionConstraint logs a warning for unsatisfied version constraint.
 func warnVersionConstraint(constraint schema.VersionConstraint) {
-	_ = ui.Warning(fmt.Sprintf(
+	ui.Warning(fmt.Sprintf(
 		"Atmos version constraint not satisfied\n  Required: %s\n  Current:  %s",
 		constraint.Require,
 		version.Version,
 	))
 	if constraint.Message != "" {
-		_ = ui.Warning(constraint.Message)
+		ui.Warning(constraint.Message)
 	}
 }
 

@@ -567,6 +567,16 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 		PreserveTimes: false,
 		PreserveOwner: false,
 		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
+		// OnDirExists handles existing directories at the destination.
+		// We skip .git directories from source, but if the destination already has a .git directory
+		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
+		// on git packfiles which often have restrictive permissions.
+		OnDirExists: func(src, dest string) cp.DirExistsAction {
+			if filepath.Base(dest) == ".git" {
+				return cp.Untouchable
+			}
+			return cp.Merge
+		},
 	}
 
 	// Adjust the target path if it's a local file with no extension
@@ -591,27 +601,31 @@ func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourc
 // Returns a function that determines if a file should be skipped during copying.
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
 	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		// Skip .git directories
+		// Skip .git directories.
 		if filepath.Base(src) == ".git" {
 			return true, nil
 		}
 
-		// Normalize paths
+		// Normalize paths.
 		tempDir = filepath.ToSlash(tempDir)
 		src = filepath.ToSlash(src)
 		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
 
-		// Check if the file should be excluded
+		// Check excludes first - if file matches any excluded pattern, skip it immediately.
 		if len(s.ExcludedPaths) > 0 {
-			return shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+			excluded, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
+			if err != nil || excluded {
+				return excluded, err
+			}
 		}
 
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified)
+		// Then check includes - if specified, file must match to be included.
+		// Only include the files that match the 'included_paths' patterns (if any pattern is specified).
 		if len(s.IncludedPaths) > 0 {
 			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
 		}
 
-		// If 'included_paths' is not provided, include all files that were not excluded
+		// If 'included_paths' is not provided, include all files that were not excluded.
 		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
 		return false, nil
 	}
@@ -623,11 +637,13 @@ func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.F
 // https://github.com/bmatcuk/doublestar#pattern.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
-		excludeMatch, err := u.PathMatch(excludePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
+		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file
+			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file.
 			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
 			return true, nil
 		}
@@ -639,11 +655,13 @@ func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (b
 func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
 	anyMatches := false
 	for _, includePath := range includedPaths {
-		includeMatch, err := u.PathMatch(includePath, src)
+		// Match against trimmedSrc (relative path) instead of src (absolute path).
+		// This allows patterns to match correctly without needing to account for temp directory paths.
+		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
 		if err != nil {
 			return true, err
 		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file
+			// If the file matches ANY of the 'included_paths' patterns, include the file.
 			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
 
 			anyMatches = true

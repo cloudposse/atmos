@@ -8,10 +8,13 @@ description: Open cloud provider web console in your default browser using authe
 import Screengrab from '@site/src/components/Screengrab'
 import Intro from '@site/src/components/Intro'
 import Terminal from '@site/src/components/Terminal'
+import DemoVideo from '@site/src/components/Video/DemoVideo'
 
 <Intro>
 Use this command to quickly access your cloud provider's web console (AWS, Azure, GCP) using your authenticated Atmos identity credentials, eliminating the need to manually copy credentials or log in separately.
 </Intro>
+
+<DemoVideo id="auth-console" title="atmos auth console" showCaption={false} />
 
 <Screengrab title="atmos auth console --help" slug="atmos-auth-console--help" />
 
@@ -231,9 +234,9 @@ For AWS identities, Atmos uses the [AWS Federation Endpoint](https://docs.aws.am
 Console signin tokens are valid for 15 minutes and should be treated as sensitive. Never share console URLs or paste them in logs or chat applications.
 :::
 
-### Azure and GCP (Coming Soon)
+### GCP (Coming Soon)
 
-Support for Azure Portal and Google Cloud Console is planned for future releases. The command structure will remain the same across all providers.
+Support for Google Cloud Console is planned for future releases. The command structure will remain the same across all providers.
 
 ## Provider Support
 
@@ -241,7 +244,7 @@ Support for Azure Portal and Google Cloud Console is planned for future releases
 |----------|--------|-------|
 | AWS (IAM Identity Center) | ✅ Supported | Full support with federation endpoint |
 | AWS (SAML) | ✅ Supported | Full support with federation endpoint |
-| Azure | 🚧 Planned | Coming in future release |
+| Azure | ✅ Supported | Opens Azure Portal with configured subscription |
 | GCP | 🚧 Planned | Coming in future release |
 
 ## Common Use Cases
@@ -300,7 +303,7 @@ atmos auth console --print-only | xclip   # Linux
 
 **Problem**: The authenticated identity's provider doesn't support console access yet.
 
-**Solution**: Check the Provider Support table above. Azure and GCP support is coming soon.
+**Solution**: Check the Provider Support table above. Azure is supported; GCP support is planned for a future release.
 
 ## Configuration
 

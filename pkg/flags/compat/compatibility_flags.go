@@ -27,6 +27,8 @@ const (
 const (
 	// FlagPrefix is the single dash prefix for flags.
 	flagPrefix = "-"
+	// EndOfOptionsMarker is the POSIX standard "--" that separates options from positional arguments.
+	endOfOptionsMarker = "--"
 )
 
 // CompatibilityFlag defines how a single compatibility flag should be handled.
@@ -87,7 +89,7 @@ func (t *CompatibilityFlagTranslator) ValidateNoConflicts(cmd *cobra.Command) er
 
 	for compatFlag := range t.flagMap {
 		// Only check single-dash flags (potential shorthands).
-		if !strings.HasPrefix(compatFlag, flagPrefix) || strings.HasPrefix(compatFlag, "--") {
+		if !strings.HasPrefix(compatFlag, flagPrefix) || strings.HasPrefix(compatFlag, endOfOptionsMarker) {
 			continue
 		}
 
@@ -125,7 +127,7 @@ func (t *CompatibilityFlagTranslator) ValidateTargetsInArgs(cmd *cobra.Command, 
 		}
 
 		// Skip already-modern flags (--).
-		if strings.HasPrefix(arg, "--") {
+		if strings.HasPrefix(arg, endOfOptionsMarker) {
 			continue
 		}
 
@@ -177,26 +179,40 @@ func (t *CompatibilityFlagTranslator) Translate(args []string) (atmosArgs []stri
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
-		// Not a flag - it's a positional arg
+		// Not a flag - it's a positional arg.
 		if !strings.HasPrefix(arg, flagPrefix) {
 			atmosArgs = append(atmosArgs, arg)
 			continue
 		}
 
-		// Already modern format (--flag) - pass to Atmos
-		if strings.HasPrefix(arg, "--") {
+		// Handle "--" end-of-options marker per POSIX convention.
+		// Everything after "--" is passed through to the subprocess, not parsed by Cobra.
+		// This fixes issue #1967 where args like "-consolidate-warnings=false" after "--"
+		// were incorrectly parsed by Cobra/pflag.
+		// We include the "--" in atmosArgs so Cobra knows to stop parsing flags,
+		// but everything after it goes to separatedArgs to bypass Cobra completely.
+		if arg == endOfOptionsMarker {
+			atmosArgs = append(atmosArgs, endOfOptionsMarker)
+			if i+1 < len(args) {
+				separatedArgs = append(separatedArgs, args[i+1:]...)
+			}
+			break
+		}
+
+		// Already modern format (--flag) - pass to Atmos.
+		if strings.HasPrefix(arg, endOfOptionsMarker) {
 			atmosArgs = append(atmosArgs, arg)
 			continue
 		}
 
-		// Single-dash flag - check for compatibility flag
+		// Single-dash flag - check for compatibility flag.
 		translated, consumed := t.translateSingleDashFlag(args, i)
 
-		// Add translated args to appropriate destination
+		// Add translated args to appropriate destination.
 		atmosArgs = append(atmosArgs, translated.atmosArgs...)
 		separatedArgs = append(separatedArgs, translated.separatedArgs...)
 
-		// Skip consumed args
+		// Skip consumed args.
 		i += consumed
 	}
 

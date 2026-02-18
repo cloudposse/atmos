@@ -51,6 +51,28 @@ make lint                    # golangci-lint on changed files
 
 **Templates and YAML functions**: Go templates + Gomplate with `atmos.Component()`, `!terraform.state`, `!terraform.output`, store integration.
 
+## Working with Atmos Agents (RECOMMENDED)
+
+Atmos has **specialized domain experts** in `.claude/agents/` for focused subsystems. **Use agents instead of inline work** for their areas of expertise.
+
+**Available Agents:**
+- **`@agent-developer`** - Creating/maintaining agents, agent architecture
+- **`@tui-expert`** - Terminal UI, theme system, output formatting
+- **`@atmos-errors`** - Error handling patterns, error builder usage
+- **`@flag-handler`** - CLI commands, flag parsing, CommandProvider pattern
+- **`@example-creator`** - Creating examples, mock components, test cases, EmbedFile docs
+
+**When to delegate:**
+- TUI/theme changes → `@tui-expert`
+- New CLI commands → `@flag-handler`
+- Error handling refactoring → `@atmos-errors`
+- Creating new agents → `@agent-developer`
+- Creating examples/demos → `@example-creator`
+
+**Benefits:** Agents are domain experts with deep knowledge of patterns, PRDs, and subsystem architecture. They ensure consistency and best practices.
+
+See `.claude/agents/README.md` for full list and `docs/prd/claude-agent-architecture.md` for architecture.
+
 ## Architectural Patterns (MANDATORY)
 
 ### Registry Pattern (MANDATORY)
@@ -310,7 +332,7 @@ Reply to threads: Use `gh api graphql` with `addPullRequestReviewThreadReply`
 - Use definition lists `<dl>` instead of tables for arguments and flags
 - Follow Docusaurus conventions from existing files
 - File location: `website/docs/cli/commands/<command>/<subcommand>.mdx`
-- Link to core concepts using `/core-concepts/` paths
+- Link to documentation using current URL paths (e.g., `/stacks`, `/components`, `/cli/configuration`)
 - Include purpose note and help screengrab
 - Use consistent section ordering: Usage → Examples → Arguments → Flags
 
@@ -358,7 +380,17 @@ New configs support Go templating with `FuncMap()` from `internal/exec/template_
 Search `internal/exec/` and `pkg/` before implementing. Extend, don't duplicate.
 
 ### Cross-Platform (MANDATORY)
-Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()`, not hardcoded separators.
+Linux/macOS/Windows compatible. Use SDKs over binaries. Use `filepath.Join()` instead of hardcoded path separators.
+
+**Path handling in tests:**
+- **NEVER use forward slash concatenation** like `tempDir + "/components/terraform/vpc"`
+- **ALWAYS use `filepath.Join()`** with separate arguments: `filepath.Join(tempDir, "components", "terraform", "vpc")`
+- **NEVER use forward slashes in `filepath.Join()`** like `filepath.Join(dir, "a/b/c")` - use `filepath.Join(dir, "a", "b", "c")`
+- **NEVER hardcode Unix paths in expected values** like `assert.Equal(t, "/project/components/vpc", path)` - build expected paths with `filepath.Join()`
+- **For path suffix checks**, use `filepath.ToSlash()` to normalize: `strings.HasSuffix(filepath.ToSlash(path), "expected/suffix")`
+- **NEVER use bash/shell commands in tests** - use Go stdlib (`os`, `filepath`, `io`) for file operations
+
+**Why:** Windows uses backslash (`\`) as path separator, Unix uses forward slash (`/`). Hardcoded paths fail on Windows CI.
 
 ### Multi-Provider Registry (MANDATORY)
 Follow registry pattern: define interface, implement per provider, register implementations, generate mocks. Example: `pkg/store/`

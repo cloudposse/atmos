@@ -44,7 +44,7 @@ func DeleteS3Backend(
 		return err
 	}
 
-	_ = ui.Info(fmt.Sprintf("Deleting S3 backend: bucket=%s region=%s", config.bucket, config.region))
+	ui.Info(fmt.Sprintf("Deleting S3 backend: bucket=%s region=%s", config.bucket, config.region))
 
 	client, err := createS3ClientForDeletion(ctx, config, authContext)
 	if err != nil {
@@ -59,7 +59,7 @@ func DeleteS3Backend(
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
+	ui.Success(fmt.Sprintf("✓ Backend deleted: bucket '%s' and all contents removed", config.bucket))
 	return nil
 }
 
@@ -82,7 +82,7 @@ func createS3ClientForDeletion(ctx context.Context, config *s3Config, authContex
 			WithHint("Check AWS credentials and region configuration").
 			Err()
 	}
-	return s3.NewFromConfig(awsConfig), nil
+	return getS3ClientFactory()(awsConfig), nil
 }
 
 // validateBucketExistsForDeletion checks if the bucket exists before deletion.
@@ -130,7 +130,7 @@ func deleteBackendContents(ctx context.Context, client S3ClientAPI, bucket strin
 		return err
 	}
 
-	_ = ui.Success(fmt.Sprintf("Deleted %d object(s) from bucket '%s'", objectCount, bucket))
+	ui.Success(fmt.Sprintf("Deleted %d object(s) from bucket '%s'", objectCount, bucket))
 	return nil
 }
 
@@ -141,8 +141,8 @@ func showDeletionWarning(bucket string, objectCount, stateFileCount int) {
 	if stateFileCount > 0 {
 		msg += fmt.Sprintf(" (including %d Terraform state file(s))", stateFileCount)
 	}
-	_ = ui.Warning(msg)
-	_ = ui.Warning("This action cannot be undone")
+	ui.Warning(msg)
+	ui.Warning("This action cannot be undone")
 }
 
 // listAllObjects lists all objects and versions in a bucket, returning counts.

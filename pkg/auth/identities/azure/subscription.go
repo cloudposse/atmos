@@ -20,6 +20,7 @@ type subscriptionIdentity struct {
 	subscriptionID string
 	resourceGroup  string
 	location       string
+	realm          string // Credential isolation realm set by auth manager.
 }
 
 // NewSubscriptionIdentity creates a new Azure subscription identity.
@@ -65,6 +66,11 @@ func NewSubscriptionIdentity(name string, config *schema.Identity) (*subscriptio
 // Kind returns the identity kind.
 func (i *subscriptionIdentity) Kind() string {
 	return "azure/subscription"
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *subscriptionIdentity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // GetProviderName returns the provider name for this identity.
@@ -184,7 +190,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 	)
 
 	// Setup Azure files (credentials.json).
-	if err := azureCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+	if err := azureCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", i.realm); err != nil {
 		return fmt.Errorf("failed to setup Azure files: %w", err)
 	}
 
@@ -206,6 +212,7 @@ func (i *subscriptionIdentity) PostAuthenticate(ctx context.Context, params *aut
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "", // Use default path.
+		Realm:        i.realm,
 	}
 	if err := azureCloud.SetAuthContext(setupParams); err != nil {
 		return fmt.Errorf("failed to set Azure auth context: %w", err)
@@ -239,7 +246,7 @@ func (i *subscriptionIdentity) CredentialsExist() (bool, error) {
 		return false, err
 	}
 
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -256,7 +263,7 @@ func (i *subscriptionIdentity) Paths() ([]authTypes.Path, error) {
 	}
 
 	// Create file manager to get provider-namespaced paths.
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", i.realm)
 	if err != nil {
 		return nil, err
 	}
@@ -282,7 +289,7 @@ func (i *subscriptionIdentity) LoadCredentials(ctx context.Context) (authTypes.I
 		return nil, err
 	}
 
-	fileManager, err := azureCloud.NewAzureFileManager("")
+	fileManager, err := azureCloud.NewAzureFileManager("", i.realm)
 	if err != nil {
 		return nil, err
 	}

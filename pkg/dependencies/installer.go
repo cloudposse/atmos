@@ -9,18 +9,32 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // InstallFunc is the function signature for installing a tool.
-type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag bool) error
+// The showHint parameter controls whether to show the PATH export hint message.
+// The showProgressBar parameter controls whether to show spinner and success messages.
+type InstallFunc func(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error
+
+// BatchInstallFunc is the function signature for batch installing multiple tools.
+// Shows status messages scrolling up with a single progress bar at bottom.
+type BatchInstallFunc func(toolSpecs []string, reinstallFlag bool) error
+
+// BinaryPathFinder finds installed tool binaries.
+// This interface allows testing without the full toolchain installer.
+type BinaryPathFinder interface {
+	FindBinaryPath(owner, repo, version string, binaryName ...string) (string, error)
+}
 
 // Installer handles automatic tool installation.
 type Installer struct {
-	atmosConfig    *schema.AtmosConfiguration
-	resolver       toolchain.ToolResolver
-	installFunc    InstallFunc
-	fileExistsFunc func(path string) bool
+	atmosConfig      *schema.AtmosConfiguration
+	resolver         toolchain.ToolResolver
+	installFunc      InstallFunc
+	batchInstallFunc BatchInstallFunc
+	fileExistsFunc   func(path string) bool
+	binaryPathFinder BinaryPathFinder
 }
 
 // InstallerOption is a functional option for configuring Installer.
@@ -44,6 +58,15 @@ func WithInstallFunc(fn InstallFunc) InstallerOption {
 	}
 }
 
+// WithBatchInstallFunc sets a custom batch install function (for testing).
+func WithBatchInstallFunc(fn BatchInstallFunc) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithBatchInstallFunc")()
+
+	return func(i *Installer) {
+		i.batchInstallFunc = fn
+	}
+}
+
 // WithFileExistsFunc sets a custom file exists function (for testing).
 func WithFileExistsFunc(fn func(path string) bool) InstallerOption {
 	defer perf.Track(nil, "dependencies.WithFileExistsFunc")()
@@ -53,18 +76,38 @@ func WithFileExistsFunc(fn func(path string) bool) InstallerOption {
 	}
 }
 
+// WithBinaryPathFinder sets a custom binary path finder (for testing).
+func WithBinaryPathFinder(finder BinaryPathFinder) InstallerOption {
+	defer perf.Track(nil, "dependencies.WithBinaryPathFinder")()
+
+	return func(i *Installer) {
+		i.binaryPathFinder = finder
+	}
+}
+
 // NewInstaller creates a new tool installer.
 func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOption) *Installer {
 	defer perf.Track(nil, "dependencies.NewInstaller")()
 
-	// Get the resolver from toolchain package for alias and registry resolution.
-	tcInstaller := toolchain.NewInstaller()
+	// Use the same path logic as toolchain installation to ensure binary detection
+	// uses the same directory where tools are actually installed.
+	// Honor explicit InstallPath from passed config; otherwise use toolchain's default path.
+	toolsDir := toolchain.GetInstallPath()
+	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
+		toolsDir = atmosConfig.Toolchain.InstallPath
+	}
+	binDir := filepath.Join(toolsDir, "bin")
+
+	// Create toolchain installer with correct binDir for binary path detection.
+	tcInstaller := toolchain.NewInstallerWithBinDir(binDir)
 
 	inst := &Installer{
-		atmosConfig:    atmosConfig,
-		resolver:       tcInstaller.GetResolver(),
-		installFunc:    toolchain.RunInstall,
-		fileExistsFunc: fileExists,
+		atmosConfig:      atmosConfig,
+		resolver:         tcInstaller.GetResolver(),
+		installFunc:      toolchain.RunInstall,
+		batchInstallFunc: toolchain.RunInstallBatch,
+		fileExistsFunc:   fileExists,
+		binaryPathFinder: tcInstaller, // Uses FindBinaryPath() for proper binary detection.
 	}
 
 	// Apply options.
@@ -76,7 +119,7 @@ func NewInstaller(atmosConfig *schema.AtmosConfiguration, opts ...InstallerOptio
 }
 
 // EnsureTools ensures all required tools are installed.
-// Installs missing tools automatically.
+// Installs missing tools automatically using batch install with progress bar.
 func (i *Installer) EnsureTools(dependencies map[string]string) error {
 	defer perf.Track(i.atmosConfig, "dependencies.EnsureTools")()
 
@@ -84,10 +127,24 @@ func (i *Installer) EnsureTools(dependencies map[string]string) error {
 		return nil
 	}
 
+	// Collect missing tools.
+	var missingTools []string
 	for tool, version := range dependencies {
-		if err := i.ensureTool(tool, version); err != nil {
-			return err
+		if !i.isToolInstalled(tool, version) {
+			missingTools = append(missingTools, fmt.Sprintf("%s@%s", tool, version))
 		}
+	}
+
+	if len(missingTools) == 0 {
+		return nil
+	}
+
+	// Batch install all missing tools with progress bar.
+	if err := i.batchInstallFunc(missingTools, false); err != nil {
+		return errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanation("Failed to install dependencies").
+			Err()
 	}
 
 	return nil
@@ -102,24 +159,25 @@ func (i *Installer) ensureTool(tool string, version string) error {
 		return nil
 	}
 
-	// Install missing tool.
+	// Install missing tool. Pass showHint=false to suppress PATH hint, showProgressBar=true for spinner.
 	toolSpec := fmt.Sprintf("%s@%s", tool, version)
-	if err := i.installFunc(toolSpec, false, false); err != nil {
-		return fmt.Errorf("%w: failed to install %s: %w", errUtils.ErrToolInstall, toolSpec, err)
+	if err := i.installFunc(toolSpec, false, false, false, true); err != nil {
+		return errUtils.Build(errUtils.ErrToolInstall).
+			WithCause(err).
+			WithExplanationf("Failed to install %s", toolSpec).
+			Err()
 	}
 
 	return nil
 }
 
 // isToolInstalled checks if a tool version is already installed.
+// Uses FindBinaryPath for proper binary detection, which handles:
+// - Binaries with different names than the repo (e.g., opentofu -> tofu)
+// - Files[0].Name from registry configuration
+// - Auto-detection of executables in the version directory.
 func (i *Installer) isToolInstalled(tool string, version string) bool {
 	defer perf.Track(i.atmosConfig, "dependencies.Installer.isToolInstalled")()
-
-	// Get tools directory.
-	toolsDir := ".tools"
-	if i.atmosConfig != nil && i.atmosConfig.Toolchain.InstallPath != "" {
-		toolsDir = i.atmosConfig.Toolchain.InstallPath
-	}
 
 	// Resolve tool to owner/repo using the shared resolver.
 	owner, repo, err := i.resolver.Resolve(tool)
@@ -127,9 +185,10 @@ func (i *Installer) isToolInstalled(tool string, version string) bool {
 		return false
 	}
 
-	// Check if binary exists.
-	binaryPath := filepath.Join(toolsDir, "bin", owner, repo, version, repo)
-	return i.fileExistsFunc(binaryPath)
+	// Use FindBinaryPath for proper binary detection.
+	// This handles tools where binary name differs from repo name.
+	_, err = i.binaryPathFinder.FindBinaryPath(owner, repo, version)
+	return err == nil
 }
 
 // fileExists checks if a file exists.
@@ -153,8 +212,10 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 		return getPathFromEnv(), nil
 	}
 
-	// Guard against nil atmosConfig.
-	toolsDir := ".tools"
+	// Use the same path logic as toolchain installation to ensure PATH points
+	// to where tools are actually installed (XDG by default, or configured path).
+	// Honor explicit InstallPath from passed config; otherwise use toolchain's default path.
+	toolsDir := toolchain.GetInstallPath()
 	if atmosConfig != nil && atmosConfig.Toolchain.InstallPath != "" {
 		toolsDir = atmosConfig.Toolchain.InstallPath
 	}

@@ -17,6 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 	"github.com/cloudposse/atmos/pkg/version"
@@ -353,50 +354,51 @@ func formatReleaseListYAML(releases []*github.RepositoryRelease) error {
 //
 //nolint:unparam // error return kept for API consistency with other format functions
 func formatReleaseDetailText(release *github.RepositoryRelease) error {
-	fmt.Fprintf(os.Stderr, "Version: %s\n", release.GetTagName())
-	fmt.Fprintf(os.Stderr, "Name: %s\n", release.GetName())
-	fmt.Fprintf(os.Stderr, "Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
+	maskedStderr := ioLayer.MaskWriter(os.Stderr)
+	fmt.Fprintf(maskedStderr, "Version: %s\n", release.GetTagName())
+	fmt.Fprintf(maskedStderr, "Name: %s\n", release.GetName())
+	fmt.Fprintf(maskedStderr, "Published: %s\n", release.GetPublishedAt().Format("2006-01-02 15:04:05 MST"))
 
 	if release.GetPrerelease() {
-		fmt.Fprintln(os.Stderr, "Type: Pre-release")
+		fmt.Fprintln(maskedStderr, "Type: Pre-release")
 	} else {
-		fmt.Fprintln(os.Stderr, "Type: Stable")
+		fmt.Fprintln(maskedStderr, "Type: Stable")
 	}
 
 	if isCurrentVersion(release.GetTagName()) {
-		fmt.Fprintln(os.Stderr, currentVersionStyle.Render("Current: ● Yes (installed)"))
+		fmt.Fprintln(maskedStderr, currentVersionStyle.Render("Current: ● Yes (installed)"))
 	}
 
-	fmt.Fprintf(os.Stderr, "URL: %s\n", release.GetHTMLURL())
-	fmt.Fprintln(os.Stderr)
+	fmt.Fprintf(maskedStderr, "URL: %s\n", release.GetHTMLURL())
+	fmt.Fprintln(maskedStderr)
 
 	// Release notes (rendered as markdown).
 	if body := release.GetBody(); body != "" {
-		fmt.Fprintln(os.Stderr, "Release Notes:")
-		fmt.Fprintln(os.Stderr, "─────────────────────────────────────────────────────────────────")
+		fmt.Fprintln(maskedStderr, "Release Notes:")
+		fmt.Fprintln(maskedStderr, "─────────────────────────────────────────────────────────────────")
 		u.PrintfMarkdownToTUI("%s", body)
-		fmt.Fprintln(os.Stderr, "─────────────────────────────────────────────────────────────────")
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(maskedStderr, "─────────────────────────────────────────────────────────────────")
+		fmt.Fprintln(maskedStderr)
 	}
 
 	// Assets (filtered by current OS and architecture).
 	filteredAssets := filterAssetsByPlatform(release.Assets)
 	if len(filteredAssets) > 0 {
-		fmt.Fprintf(os.Stderr, "\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Fprintf(maskedStderr, "\nAssets for %s/%s:\n", runtime.GOOS, runtime.GOARCH)
 		for _, asset := range filteredAssets {
 			sizeMB := float64(asset.GetSize()) / float64(bytesPerMB)
 			// Style the filename without the size, then show size in muted color.
 			filename := asset.GetName()
 			sizeText := fmt.Sprintf("(%.2f MB)", sizeMB)
 
-			fmt.Fprintf(os.Stderr, "  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
+			fmt.Fprintf(maskedStderr, "  %s %s\n", filename, lipgloss.NewStyle().Foreground(lipgloss.Color("8")).Render(sizeText))
 
 			// Render the URL as a link.
 			linkStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Underline(true)
-			fmt.Fprintf(os.Stderr, "  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
+			fmt.Fprintf(maskedStderr, "  %s\n", linkStyle.Render(asset.GetBrowserDownloadURL()))
 		}
 	} else if len(release.Assets) > 0 {
-		fmt.Fprintf(os.Stderr, "\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
+		fmt.Fprintf(maskedStderr, "\nNo assets found for %s/%s\n", runtime.GOOS, runtime.GOARCH)
 	}
 
 	return nil

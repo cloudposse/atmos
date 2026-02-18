@@ -9,6 +9,7 @@ slug: /workflows
 import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import EmbedExample from '@site/src/components/EmbedExample'
 
 <Intro>
 Workflows are a way of combining multiple commands into one executable unit of work.
@@ -33,19 +34,64 @@ workflows:
 
 ## Retry Configuration
 
-The `command` section of the workflow schema has been updated to allow for retrying of failed commands. The `retry` section
-accepts the following parameters:
+The `retry` section accepts the following parameters. **All parameters are optional** - omit any
+parameter to disable that feature or use unlimited behavior.
 
-* `max_attempts`: The maximum number of times the command will be retried. The default is `1`.
-* `delay`: The amount of time to delay between retries. The default is `5s`.
-* `backoff_strategy`: The backoff strategy to use. The default is `constant`. The other options are `exponential` and `linear`.
-* `initial_delay`: The initial delay to use when retrying. The default is `5s`.
-* `random_jitter`: the random jitter number to the delay between retries. The default is `0.0`.
-* `multiplier`: The multiplier to use when retrying. The default is `2`.
-* `max_elapsed_time`: The maximum time allocated to the command before the retry fails. The default is 30 minutes.
+<dl>
+  <dt>`max_attempts`</dt>
+  <dd>Maximum number of retry attempts. Omit for unlimited retries. Must be greater than zero if specified.</dd>
 
-Here is an example of a workflow with retry configuration:
+  <dt>`max_elapsed_time`</dt>
+  <dd>Total time budget for all attempts combined (e.g., `10m`, `1h`). This is the cumulative time across all retry attempts plus backoff delays, not a per-attempt timeout. Omit for no time limit. Must be greater than zero if specified.</dd>
+
+  <dt>`backoff_strategy`</dt>
+  <dd>The backoff strategy between retries: `constant`, `linear`, or `exponential`. Default: `constant`.</dd>
+
+  <dt>`initial_delay`</dt>
+  <dd>Delay before the first retry (e.g., `5s`, `100ms`). Omit for no delay. Cannot be negative.</dd>
+
+  <dt>`max_delay`</dt>
+  <dd>Maximum delay between retries, caps exponential/linear growth (e.g., `30s`). Omit for no cap. Must be greater than zero if specified.</dd>
+
+  <dt>`multiplier`</dt>
+  <dd>Multiplier for exponential or linear backoff (e.g., `2.0`). Omit to use the default multiplier (2.0). Must be greater than zero if specified.</dd>
+
+  <dt>`random_jitter`</dt>
+  <dd>Jitter factor between 0.0 and 1.0 to add randomness to delays. Omit for no jitter.</dd>
+</dl>
+
+:::note Configuration Philosophy
+
+- **Omitting a parameter** disables that feature or makes it unlimited
+- **Explicitly setting a parameter to zero** is an error (invalid configuration)
+- This allows minimal configs like `retry: { max_attempts: 3 }` to work without surprises
+
+:::
+
+### Example: Retry Indefinitely
+
+To retry indefinitely until success, omit both `max_attempts` and `max_elapsed_time`:
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - command: terraform apply vpc -auto-approve
+        retry:
+          initial_delay: 5s
+          backoff_strategy: exponential
+          max_delay: 60s
+          # max_attempts: omitted = unlimited retries
+          # max_elapsed_time: omitted = no time limit
 ```
+
+This will keep retrying with exponential backoff (capped at 60s between attempts) until either:
+- The command succeeds
+- The workflow is cancelled (e.g., Ctrl+C)
+
+### Example: Limited Retries, No Time Limit
+
+```yaml
 workflows:
   eks-up:
     description: Bring up the eks cluster
@@ -53,13 +99,22 @@ workflows:
       - command: terraform apply vpc -auto-approve
         retry:
           max_attempts: 3
-          backoff_strategy: exponential # could be exponential, constant and linear
-          initial_delay: 3s # the time used by the backoff_strategy
-          random_jitter: 0.0 # the random jitter to be added while retrying.
-          multiplier: 2 # used during exponential strategy as multiplier that would be raised by configuration
-          max_elapsed_time: 4m # Default (30 min for all commands). This sets the total duration alloated to the command before the retry fails.
+          backoff_strategy: exponential
+          initial_delay: 3s
+          multiplier: 2
+          # max_elapsed_time: omitted = no time limit
       - command: terraform apply eks/cluster -auto-approve
       - command: terraform apply eks/alb-controller -auto-approve
+```
+
+### Example: Time-Limited Retries
+
+```yaml
+retry:
+  max_elapsed_time: 10m  # Stop after 10 minutes total
+  initial_delay: 5s
+  backoff_strategy: exponential
+  # max_attempts: omitted = unlimited attempts within time budget
 ```
 
 :::note
@@ -631,3 +686,96 @@ Running `atmos workflow deploy-mixed -f workflows --identity superadmin` will:
 - Execute `plan-vpc` step as `superadmin`
 - Execute `apply-app` step as `developer` (step-level identity overrides)
 - Execute `apply-monitoring` step as `superadmin`
+
+## Using Toolchain Tools
+
+Workflows automatically have access to tools defined in your project's `.tool-versions` file. The toolchain ensures the correct versions are installed and available in PATH when your workflow executes.
+
+### Automatic Tool Access
+
+If your project has a `.tool-versions` file:
+
+```
+terraform 1.10.0
+kubectl 1.32.0
+helm 3.16.0
+```
+
+Workflow steps can use these tools directly:
+
+```yaml title="stacks/workflows/deploy.yaml"
+workflows:
+  deploy:
+    description: Deploy infrastructure
+    steps:
+      # Atmos commands (type: atmos is implicit)
+      - name: plan-vpc
+        command: terraform plan vpc
+      - name: apply-vpc
+        command: terraform apply vpc -auto-approve
+
+      # Shell commands for non-Atmos tools
+      - name: apply-k8s
+        command: kubectl apply -f manifests/
+        type: shell
+```
+
+When the workflow runs:
+1. Atmos reads `.tool-versions` to identify required tools
+2. Missing tools are automatically installed
+3. PATH is updated to include toolchain binaries
+4. Workflow steps execute with the correct tool versions
+
+### Declaring Workflow Dependencies
+
+Use the `dependencies` field at the workflow level to require additional tools or override versions from `.tool-versions`:
+
+```yaml title="stacks/workflows/validate.yaml"
+workflows:
+  validate:
+    description: Validate infrastructure
+    dependencies:
+      tools:
+        tflint: "^0.54.0"
+        checkov: "latest"
+    steps:
+      # Atmos command (type: atmos is implicit)
+      - name: validate
+        command: terraform validate vpc
+
+      # Shell commands for toolchain tools
+      - name: lint
+        command: tflint --recursive
+        type: shell
+      - name: security
+        command: checkov -d .
+        type: shell
+```
+
+Dependencies declared in the workflow take precedence over `.tool-versions`.
+
+### Version Constraints
+
+Dependencies support SemVer constraints:
+
+| Constraint | Meaning | Example |
+|------------|---------|---------|
+| `1.10.3` | Exact version | Only version 1.10.3 |
+| `~> 1.10.0` | Pessimistic (patch) | Includes 1.10.x but not 1.11.0 |
+| `^1.10.0` | Compatible (minor) | Includes 1.x.x but not 2.0.0 |
+| `latest` | Latest available | Most recent version |
+
+:::tip
+Use `.tool-versions` for project-wide tool defaults and workflow `dependencies` for workflow-specific version requirements. This gives you flexibility while maintaining consistency across your team.
+:::
+
+### Related Documentation
+
+- [Toolchain Configuration](/cli/configuration/toolchain) - Configure tool version management
+- [Custom Commands](/cli/configuration/commands) - Custom commands also support toolchain integration
+
+## Try It
+
+Explore a working example that demonstrates workflows in action.
+
+<EmbedExample example="demo-workflows" />

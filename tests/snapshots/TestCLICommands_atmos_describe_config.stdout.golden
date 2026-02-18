@@ -27,11 +27,20 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
-      "command": ""
+      "cluster_name_template": "",
+      "cluster_name": "",
+      "command": "",
+      "auto_generate_files": false
     },
     "packer": {
       "base_path": "",
-      "command": ""
+      "command": "",
+      "auto_generate_files": false
+    },
+    "ansible": {
+      "base_path": "",
+      "command": "",
+      "auto_generate_files": false
     },
     "list": {
       "format": "",
@@ -109,6 +118,7 @@
         "enabled": false
       }
     },
+    "experimental": "warn",
     "docs": {
       "max_width": 0,
       "pagination": false
@@ -164,6 +174,9 @@
       "endpoint": "https://us.i.posthog.com",
       "token": "phc_TEST_TOKEN_PLACEHOLDER",
       "logging": false
+    },
+    "provision": {
+      "workdir": {}
     }
   },
   "describe": {
@@ -188,6 +201,7 @@
   "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},
@@ -209,6 +223,7 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""
@@ -233,5 +248,19 @@
     "use_lock_file": false
   },
   "profiles": {},
-  "metadata": {}
+  "metadata": {},
+  "list": {
+    "components": {
+      "format": "",
+      "columns": null
+    },
+    "instances": {
+      "format": "",
+      "columns": null
+    },
+    "stacks": {
+      "format": "",
+      "columns": null
+    }
+  }
 }

@@ -44,9 +44,13 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return err
 		}
 
+		// Get stack early so we can use it to filter component selection.
+		stack := v.GetString("stack")
+
 		// Prompt for component if missing.
+		// If stack is already provided (via --stack flag), filter components to that stack.
 		if component == "" {
-			prompted, err := promptForComponent(cmd)
+			prompted, err := promptForComponent(cmd, stack)
 			if err = handlePromptError(err, "component"); err != nil {
 				return err
 			}
@@ -58,12 +62,12 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			return errUtils.ErrMissingComponent
 		}
 
-		// Get flag values from Viper
-		stack := v.GetString("stack")
+		// Get remaining flag values from Viper.
 		processTemplates := v.GetBool("process-templates")
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
 		dryRun := v.GetBool("dry-run")
+		identity := v.GetString("identity")
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -100,6 +104,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			Component: component,
 			Stack:     stack,
 			DryRun:    dryRun,
+			Identity:  identity,
 			ProcessingOptions: e.ProcessingOptions{
 				ProcessTemplates: processTemplates,
 				ProcessFunctions: processFunctions,

@@ -33,7 +33,8 @@ func testProviderLogoutWithFilesystemVerification(
 	basePath := awsCloud.GetFilesBasePath(providerCfg)
 
 	// Create file manager to determine the provider directory path.
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	// Use empty realm for test helpers (backward compatibility).
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, "")
 	require.NoError(t, err)
 
 	// Construct provider directory path.

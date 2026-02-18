@@ -6,7 +6,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/compat"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 var duCmd = &cobra.Command{
@@ -60,6 +60,11 @@ func (d *DuCommandProvider) GetCompatibilityFlags() map[string]compat.Compatibil
 // GetAliases returns command aliases (none for du command).
 func (d *DuCommandProvider) GetAliases() []internal.CommandAlias {
 	return nil
+}
+
+// IsExperimental returns whether this command is experimental.
+func (d *DuCommandProvider) IsExperimental() bool {
+	return false
 }
 
 // Compile-time check that DuCommandProvider implements CommandProvider.

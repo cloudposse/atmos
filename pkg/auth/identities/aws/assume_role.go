@@ -38,6 +38,7 @@ type assumeRoleIdentity struct {
 	roleArn          string
 	manager          types.AuthManager // Auth manager for resolving root provider
 	rootProviderName string            // Cached root provider name from PostAuthenticate
+	realm            string            // Credential isolation realm set by auth manager.
 }
 
 // newSTSClient creates an STS client using the base credentials and configured region.
@@ -137,6 +138,11 @@ func NewAssumeRoleIdentity(name string, config *schema.Identity) (types.Identity
 // Kind returns the identity kind.
 func (i *assumeRoleIdentity) Kind() string {
 	return "aws/assume-role"
+}
+
+// SetRealm sets the credential isolation realm for this identity.
+func (i *assumeRoleIdentity) SetRealm(realm string) {
+	i.realm = realm
 }
 
 // Authenticate performs authentication using assume role.
@@ -368,7 +374,7 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	}
 
 	// Get AWS file environment variables.
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return nil, errors.Join(errUtils.ErrAuthAwsFileManagerFailed, err)
 	}
@@ -377,6 +383,13 @@ func (i *assumeRoleIdentity) Environment() (map[string]string, error) {
 	// Convert to map format.
 	for _, envVar := range awsEnvVars {
 		env[envVar.Key] = envVar.Value
+	}
+
+	// Resolve region through identity chain inheritance.
+	// First checks identity principal, then parent identities, then provider.
+	if region := i.resolveRegion(); region != "" {
+		env["AWS_REGION"] = region
+		env["AWS_DEFAULT_REGION"] = region
 	}
 
 	// Add environment variables from identity config.
@@ -405,7 +418,7 @@ func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map
 		return environ, fmt.Errorf("failed to get provider name: %w", err)
 	}
 
-	awsFileManager, err := awsCloud.NewAWSFileManager("")
+	awsFileManager, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return environ, fmt.Errorf("failed to create AWS file manager: %w", err)
 	}
@@ -413,8 +426,8 @@ func (i *assumeRoleIdentity) PrepareEnvironment(ctx context.Context, environ map
 	credentialsFile := awsFileManager.GetCredentialsPath(providerName)
 	configFile := awsFileManager.GetConfigPath(providerName)
 
-	// Get region from identity if available.
-	region := i.region
+	// Resolve region through identity chain inheritance.
+	region := i.resolveRegion()
 
 	// Use shared AWS environment preparation helper.
 	return awsCloud.PrepareEnvironment(environ, i.name, credentialsFile, configFile, region), nil
@@ -467,6 +480,36 @@ func (i *assumeRoleIdentity) getRootProviderFromVia() (string, error) {
 	return "", fmt.Errorf("%w: cannot determine root provider for identity %q before authentication", errUtils.ErrInvalidAuthConfig, i.name)
 }
 
+// resolveRegion resolves the AWS region by traversing the identity chain.
+// First checks identity chain for region setting, then falls back to provider's region.
+// This uses the manager's generic chain resolution methods to support inheritance.
+func (i *assumeRoleIdentity) resolveRegion() string {
+	// If manager is not available, fall back to direct config check or cached region.
+	if i.manager == nil {
+		if i.region != "" {
+			return i.region
+		}
+		if region, ok := i.config.Principal["region"].(string); ok && region != "" {
+			return region
+		}
+		return ""
+	}
+
+	// First check identity chain for region setting.
+	if val, ok := i.manager.ResolvePrincipalSetting(i.name, "region"); ok {
+		if region, ok := val.(string); ok && region != "" {
+			return region
+		}
+	}
+
+	// Fall back to provider's region.
+	if provider, ok := i.manager.ResolveProviderConfig(i.name); ok {
+		return provider.Region
+	}
+
+	return ""
+}
+
 // SetManagerAndProvider sets the manager and root provider name on the identity.
 // This is used when loading cached credentials to allow the identity to resolve provider information.
 func (i *assumeRoleIdentity) SetManagerAndProvider(manager types.AuthManager, rootProviderName string) {
@@ -489,7 +532,8 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 	i.rootProviderName = params.ProviderName
 
 	// Setup AWS files using shared AWS cloud package.
-	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, ""); err != nil {
+	// Use realm from params for credential isolation.
+	if err := awsCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
 
@@ -501,6 +545,7 @@ func (i *assumeRoleIdentity) PostAuthenticate(ctx context.Context, params *types
 		IdentityName: params.IdentityName,
 		Credentials:  params.Credentials,
 		BasePath:     "",
+		Realm:        params.Realm,
 	}); err != nil {
 		return errors.Join(errUtils.ErrAwsAuth, err)
 	}
@@ -564,7 +609,7 @@ func (i *assumeRoleIdentity) CredentialsExist() (bool, error) {
 		return false, err
 	}
 
-	mgr, err := awsCloud.NewAWSFileManager("")
+	mgr, err := awsCloud.NewAWSFileManager("", i.realm)
 	if err != nil {
 		return false, err
 	}
@@ -623,9 +668,10 @@ func (i *assumeRoleIdentity) Logout(ctx context.Context) error {
 
 	// Get base_path from provider spec if configured (requires manager to lookup provider config).
 	// For now, use empty string (default XDG path) since SetupFiles uses empty string too.
+	// Uses realm for credential isolation between different repositories.
 	basePath := ""
 
-	fileManager, err := awsCloud.NewAWSFileManager(basePath)
+	fileManager, err := awsCloud.NewAWSFileManager(basePath, i.realm)
 	if err != nil {
 		log.Debug("Failed to create file manager for logout", "identity", i.name, "error", err)
 		return fmt.Errorf("failed to create AWS file manager: %w", err)
