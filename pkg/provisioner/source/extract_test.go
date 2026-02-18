@@ -532,5 +532,143 @@ func TestParseFloat64Ptr(t *testing.T) {
 	}
 }
 
+func TestHasSource_NonStringNonMapType(t *testing.T) {
+	// A source that is neither string nor map should return false.
+	componentConfig := map[string]any{
+		"source": 12345,
+	}
+	result := HasSource(componentConfig)
+	assert.False(t, result)
+}
+
+func TestHasSource_NilSource(t *testing.T) {
+	// Explicitly nil source value.
+	componentConfig := map[string]any{
+		"source": nil,
+	}
+	result := HasSource(componentConfig)
+	assert.False(t, result)
+}
+
+func TestHasSource_MapWithEmptyURI(t *testing.T) {
+	// Map source with empty uri should return false.
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri": "",
+		},
+	}
+	result := HasSource(componentConfig)
+	assert.False(t, result)
+}
+
+func TestHasSource_MapWithoutURI(t *testing.T) {
+	// Map source without uri field should return false.
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"version": "v1.0.0",
+		},
+	}
+	result := HasSource(componentConfig)
+	assert.False(t, result)
+}
+
+func TestToStringSlice(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    []any
+		expected []string
+	}{
+		{
+			name:     "all strings",
+			input:    []any{"a", "b", "c"},
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "mixed types skips non-strings",
+			input:    []any{"a", 123, "b", true, "c"},
+			expected: []string{"a", "b", "c"},
+		},
+		{
+			name:     "empty slice",
+			input:    []any{},
+			expected: []string{},
+		},
+		{
+			name:     "no strings",
+			input:    []any{1, 2, 3},
+			expected: []string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := toStringSlice(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestParseRetryConfig_FloatTypes(t *testing.T) {
+	// Test parseFloat64Ptr with various numeric types via parseRetryConfig.
+	tests := []struct {
+		name             string
+		input            map[string]any
+		expectedJitter   *float64
+		expectedMultiply *float64
+	}{
+		{
+			name:             "float32 values",
+			input:            map[string]any{"random_jitter": float32(0.5), "multiplier": float32(3.0)},
+			expectedJitter:   float64Ptr(0.5),
+			expectedMultiply: float64Ptr(3.0),
+		},
+		{
+			name:             "int64 values",
+			input:            map[string]any{"random_jitter": int64(1), "multiplier": int64(4)},
+			expectedJitter:   float64Ptr(1.0),
+			expectedMultiply: float64Ptr(4.0),
+		},
+		{
+			name:             "uint values",
+			input:            map[string]any{"random_jitter": uint(1), "multiplier": uint(2)},
+			expectedJitter:   float64Ptr(1.0),
+			expectedMultiply: float64Ptr(2.0),
+		},
+		{
+			name:             "uint64 values",
+			input:            map[string]any{"random_jitter": uint64(1), "multiplier": uint64(5)},
+			expectedJitter:   float64Ptr(1.0),
+			expectedMultiply: float64Ptr(5.0),
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := parseRetryConfig(tt.input)
+			require.NotNil(t, cfg)
+			if tt.expectedJitter != nil {
+				require.NotNil(t, cfg.RandomJitter)
+				assert.InDelta(t, *tt.expectedJitter, *cfg.RandomJitter, 0.01)
+			}
+			if tt.expectedMultiply != nil {
+				require.NotNil(t, cfg.Multiplier)
+				assert.InDelta(t, *tt.expectedMultiply, *cfg.Multiplier, 0.01)
+			}
+		})
+	}
+}
+
+func TestExtractSource_MapWithEmptyURI(t *testing.T) {
+	// Map with empty uri should return nil (no source configured).
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri": "",
+		},
+	}
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	assert.Nil(t, result)
+}
+
 func intPtr(i int) *int             { return &i }
 func float64Ptr(f float64) *float64 { return &f }

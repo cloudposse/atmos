@@ -778,6 +778,173 @@ func TestExecutor_CalculateDelay_NegativeDelayClamped(t *testing.T) {
 }
 
 // =============================================================================
+// With7Params tests
+// =============================================================================
+
+func TestWith7Params_Success(t *testing.T) {
+	config := &schema.RetryConfig{
+		MaxAttempts:     intPtr(3),
+		BackoffStrategy: schema.BackoffConstant,
+		InitialDelay:    durationPtr(1 * time.Millisecond),
+	}
+
+	attempts := 0
+	fn := func(a string, b int, c bool, d float64, e string, f int, g string) error {
+		attempts++
+		if attempts < 2 {
+			return errors.New("temporary error")
+		}
+		// Verify all params passed through correctly.
+		if a != "hello" || b != 42 || !c || d != 3.14 || e != "world" || f != 7 || g != "!" {
+			return errors.New("params not passed correctly")
+		}
+		return nil
+	}
+
+	err := With7Params(context.Background(), config, fn, "hello", 42, true, 3.14, "world", 7, "!")
+	if err != nil {
+		t.Errorf("Expected success, got error: %v", err)
+	}
+	if attempts != 2 {
+		t.Errorf("Expected 2 attempts, got %d", attempts)
+	}
+}
+
+func TestWith7Params_NilConfig_RunsOnce(t *testing.T) {
+	attempts := 0
+	fn := func(a, b, c, d, e, f, g string) error {
+		attempts++
+		return errors.New("always fails")
+	}
+
+	err := With7Params(context.Background(), nil, fn, "a", "b", "c", "d", "e", "f", "g")
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+	if attempts != 1 {
+		t.Errorf("Expected 1 attempt with nil config, got %d", attempts)
+	}
+}
+
+func TestWith7Params_InvalidConfig_ReturnsValidationError(t *testing.T) {
+	config := &schema.RetryConfig{
+		MaxAttempts: intPtr(0), // Invalid: zero.
+	}
+
+	fn := func(a, b, c, d, e, f, g int) error {
+		t.Error("Function should not be called with invalid config")
+		return nil
+	}
+
+	err := With7Params(context.Background(), config, fn, 1, 2, 3, 4, 5, 6, 7)
+	if err == nil {
+		t.Error("Expected validation error, got nil")
+	}
+	if !errors.Is(err, ErrMaxAttemptsMustBePositive) {
+		t.Errorf("Expected ErrMaxAttemptsMustBePositive, got: %v", err)
+	}
+}
+
+func TestWith7Params_MaxAttemptsExceeded(t *testing.T) {
+	config := &schema.RetryConfig{
+		MaxAttempts:     intPtr(2),
+		BackoffStrategy: schema.BackoffConstant,
+		InitialDelay:    durationPtr(1 * time.Millisecond),
+	}
+
+	attempts := 0
+	fn := func(a, b, c, d, e, f, g int) error {
+		attempts++
+		return errors.New("persistent failure")
+	}
+
+	err := With7Params(context.Background(), config, fn, 1, 2, 3, 4, 5, 6, 7)
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+	if attempts != 2 {
+		t.Errorf("Expected 2 attempts, got %d", attempts)
+	}
+	if !strings.Contains(err.Error(), "max attempts (2) exceeded") {
+		t.Errorf("Expected max attempts error, got: %v", err)
+	}
+}
+
+// =============================================================================
+// WithPredicate success path test
+// =============================================================================
+
+func TestWithPredicate_NilConfig_Success(t *testing.T) {
+	// nil config with successful function should return nil.
+	fn := func() error {
+		return nil
+	}
+
+	err := WithPredicate(context.Background(), nil, fn, func(error) bool { return true })
+	if err != nil {
+		t.Errorf("Expected nil error for successful function with nil config, got: %v", err)
+	}
+}
+
+// =============================================================================
+// Edge case: zero initial delay validation
+// =============================================================================
+
+func TestValidate_ZeroInitialDelay_IsValid(t *testing.T) {
+	// Zero initial delay is valid (means "no delay"), unlike zero max_attempts.
+	config := &schema.RetryConfig{
+		InitialDelay: durationPtr(0),
+	}
+	err := Validate(config)
+	if err != nil {
+		t.Errorf("Expected zero initial_delay to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_AllNilFields_IsValid(t *testing.T) {
+	// All-nil config is valid (everything disabled/unlimited).
+	config := &schema.RetryConfig{}
+	err := Validate(config)
+	if err != nil {
+		t.Errorf("Expected all-nil config to be valid, got: %v", err)
+	}
+}
+
+func TestValidate_BoundaryJitter(t *testing.T) {
+	// Jitter at exact boundaries (0.0 and 1.0) should be valid.
+	tests := []struct {
+		name   string
+		jitter float64
+	}{
+		{"zero jitter", 0.0},
+		{"max jitter", 1.0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			config := &schema.RetryConfig{RandomJitter: float64Ptr(tt.jitter)}
+			err := Validate(config)
+			if err != nil {
+				t.Errorf("Expected jitter %v to be valid, got: %v", tt.jitter, err)
+			}
+		})
+	}
+}
+
+// =============================================================================
+// Do convenience function edge cases
+// =============================================================================
+
+func TestDo_NilConfig_Success(t *testing.T) {
+	// nil config with successful function.
+	err := Do(context.Background(), nil, func() error {
+		return nil
+	})
+	if err != nil {
+		t.Errorf("Expected nil for successful function with nil config, got: %v", err)
+	}
+}
+
+// =============================================================================
 // Benchmark
 // =============================================================================
 
