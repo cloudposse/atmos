@@ -26,7 +26,7 @@ the next argument as the value.
 
 ## Symptoms
 
-```
+```text
 $ atmos terraform plan tfstate-backend -s core-usw2-root --identity my-identity
 
 Error: Too many command line arguments
@@ -35,7 +35,7 @@ Expected at most 1 positional argument(s), got 2
 ```
 
 The workaround was to use `=` syntax or the environment variable:
-```
+```shell
 # Workaround 1: Use = syntax
 $ atmos terraform plan tfstate-backend -s core-usw2-root --identity=my-identity
 

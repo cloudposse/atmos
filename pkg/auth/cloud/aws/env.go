@@ -168,6 +168,13 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 		}
 	}
 
+	// Restore credential variables even if LoadDefaultConfig panics.
+	defer func() {
+		for key, value := range originalValues {
+			os.Setenv(key, value)
+		}
+	}()
+
 	if len(clearedVars) > 0 {
 		log.Debug("Cleared credential environment variables", "variables", clearedVars)
 	}
@@ -175,11 +182,6 @@ func LoadAtmosManagedAWSConfig(ctx context.Context, optFns ...func(*config.LoadO
 	// Load config (respects AWS_PROFILE, AWS_SHARED_CREDENTIALS_FILE, AWS_CONFIG_FILE).
 	log.Debug("Loading AWS SDK config with Atmos-managed credentials")
 	cfg, err = config.LoadDefaultConfig(ctx, optFns...)
-
-	// Restore credential variables.
-	for key, value := range originalValues {
-		os.Setenv(key, value)
-	}
 
 	if err != nil {
 		log.Debug("Failed to load AWS SDK config", "error", err)

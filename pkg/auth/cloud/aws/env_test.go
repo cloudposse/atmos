@@ -498,11 +498,9 @@ func TestLoadAtmosManagedAWSConfig_DoesNotClearProfileVar(t *testing.T) {
 	// Verify that AWS_PROFILE is NOT cleared during managed config loading.
 	t.Setenv("AWS_PROFILE", "managed-profile")
 
-	var profileDuringLoad string
 	// We can't directly check env during load, but verify it's preserved after.
 	ctx := context.Background()
 	_, _ = LoadAtmosManagedAWSConfig(ctx, config.WithRegion("us-east-1"))
-	_ = profileDuringLoad
 
 	assert.Equal(t, "managed-profile", os.Getenv("AWS_PROFILE"), "AWS_PROFILE should be preserved during managed config loading")
 }
