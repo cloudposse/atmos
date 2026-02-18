@@ -52,6 +52,8 @@ var problematicAWSEnvVars = []string{
 //	    return err
 //	})
 func WithIsolatedAWSEnv(fn func() error) error {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.WithIsolatedAWSEnv")()
+
 	// Save original values and track which variables are being ignored.
 	originalValues := make(map[string]string)
 	ignoredVars := make([]string, 0)
@@ -72,17 +74,16 @@ func WithIsolatedAWSEnv(fn func() error) error {
 		os.Unsetenv(key)
 	}
 
-	// Execute the function.
-	err := fn()
-
-	// Restore original values.
-	for _, key := range problematicAWSEnvVars {
-		if value, exists := originalValues[key]; exists {
-			os.Setenv(key, value)
+	// Restore original values even if fn panics.
+	defer func() {
+		for _, key := range problematicAWSEnvVars {
+			if value, exists := originalValues[key]; exists {
+				os.Setenv(key, value)
+			}
 		}
-	}
+	}()
 
-	return err
+	return fn()
 }
 
 // LoadIsolatedAWSConfig loads AWS configuration with problematic environment variables
@@ -98,6 +99,8 @@ func WithIsolatedAWSEnv(fn func() error) error {
 // Use this for initial authentication (SSO device flow, etc.) when you want complete isolation.
 // Use LoadAtmosManagedAWSConfig when you want to use Atmos-managed credential files.
 func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error) {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.LoadIsolatedAWSConfig")()
+
 	var cfg aws.Config
 	var err error
 
@@ -118,10 +121,6 @@ func LoadIsolatedAWSConfig(ctx context.Context, optFns ...func(*config.LoadOptio
 
 	if isolateErr != nil {
 		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, isolateErr)
-	}
-
-	if err != nil {
-		return aws.Config{}, fmt.Errorf("%w: %w", errUtils.ErrLoadAWSConfig, err)
 	}
 
 	return cfg, nil
@@ -283,6 +282,8 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 // temporarily cleared during authentication. This warning helps users understand
 // why their external AWS configuration is being ignored.
 func WarnIfAWSProfileSet() {
+	defer perf.Track(nil, "pkg/auth/cloud/aws.WarnIfAWSProfileSet")()
+
 	if profile, exists := os.LookupEnv("AWS_PROFILE"); exists && profile != "" {
 		log.Warn("AWS_PROFILE is set in the environment",
 			"profile", profile,

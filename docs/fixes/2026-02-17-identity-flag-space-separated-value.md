@@ -79,31 +79,47 @@ pflag handles correctly.
 
 ### Implementation
 
-#### 1. Add `normalizeOptionalValueFlags` function (`cmd/root.go`)
+Uses the existing `FlagRegistry.PreprocessNoOptDefValArgs` method (`pkg/flags/registry.go`)
+which is the same normalization used by `AtmosFlagParser.Parse()` for commands that have adopted
+the new `StandardParser` pattern.
 
-New function that normalizes `--flag value` to `--flag=value` for flags registered with `NoOptDefVal`.
-Currently applies to `--identity`.
+#### 1. Register flag registry in command registry (`cmd/internal/registry.go`)
 
-#### 2. Call normalization in `preprocessCompatibilityFlags` (`cmd/root.go`)
+Added `RegisterCommandFlagRegistry` / `GetCommandFlagRegistry` functions that allow commands
+to register their `FlagRegistry` for use in `preprocessCompatibilityFlags`. This follows the
+same pattern as `RegisterCommandCompatFlags` / `GetCompatFlagsForCommand`.
 
-The normalization runs before the compat flag translator, ensuring the args are correct for both
-Cobra parsing and compat flag separation.
+#### 2. Register terraform flag registry (`cmd/terraform/terraform.go`)
+
+Call `internal.RegisterCommandFlagRegistry("terraform", terraformParser.Registry())` during init,
+making the terraform parser's flag registry (which includes `--identity` with `NoOptDefVal`)
+available to `preprocessCompatibilityFlags`.
+
+#### 3. Use registry in `preprocessCompatibilityFlags` (`cmd/root.go`)
+
+Instead of a hardcoded flag map, `preprocessCompatibilityFlags` now calls
+`flagRegistry.PreprocessNoOptDefValArgs(osArgs)` using the command's registered flag registry.
+This is the same method used by `AtmosFlagParser.Parse()` (Step 2.6 in `pkg/flags/flag_parser.go`).
 
 ### Files changed
 
 | File                         | Change                                                                |
 |------------------------------|-----------------------------------------------------------------------|
-| `cmd/root.go`                | Add `normalizeOptionalValueFlags`; call from `preprocessCompatibilityFlags` |
-| `cmd/root_test.go`           | Tests for normalization function                                       |
+| `cmd/root.go`                | Use `FlagRegistry.PreprocessNoOptDefValArgs` in `preprocessCompatibilityFlags` |
+| `cmd/internal/registry.go`   | Add `RegisterCommandFlagRegistry` / `GetCommandFlagRegistry`           |
+| `cmd/terraform/terraform.go` | Register terraform flag registry during init                           |
 
 ### Tests
 
-| Test                                                              | What it verifies                                                    |
-|-------------------------------------------------------------------|---------------------------------------------------------------------|
-| `TestNormalizeOptionalValueFlags_IdentityWithValue`                | `--identity value` becomes `--identity=value`                        |
-| `TestNormalizeOptionalValueFlags_IdentityWithEquals`               | `--identity=value` is unchanged                                     |
-| `TestNormalizeOptionalValueFlags_IdentityWithoutValue`             | `--identity` alone is unchanged (interactive selection)              |
-| `TestNormalizeOptionalValueFlags_IdentityFollowedByFlag`           | `--identity --stack` leaves identity without value                   |
-| `TestNormalizeOptionalValueFlags_IdentityAfterEndOfOptions`        | `-- --identity value` is not normalized (after --)                   |
-| `TestNormalizeOptionalValueFlags_NoOptionalValueFlags`             | Args without optional-value flags are unchanged                      |
-| `TestNormalizeOptionalValueFlags_MultipleOptionalValueFlags`       | Multiple flags are each normalized correctly                         |
+Normalization is tested by the existing `TestFlagRegistry_PreprocessNoOptDefValArgs` tests
+in `pkg/flags/registry_preprocess_test.go` which cover all scenarios including:
+
+| Test case                                            | What it verifies                                                    |
+|------------------------------------------------------|---------------------------------------------------------------------|
+| `identity flag with space syntax`                    | `--identity value` becomes `--identity=value`                        |
+| `identity flag with equals syntax`                   | `--identity=value` is unchanged                                     |
+| `identity at end of args`                            | `--identity` alone is unchanged (interactive selection)              |
+| `identity flag followed by another flag`             | `--identity --dry-run` leaves identity without value                 |
+| `double dash prefix`                                 | `--identity -- plan` is not normalized (next arg is `--`)            |
+| `empty registry`                                     | Args without NoOptDefVal flags are unchanged                         |
+| `multiple NoOptDefVal flags`                         | Multiple flags are each normalized correctly                         |

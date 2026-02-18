@@ -29,7 +29,7 @@ credential processes, or other non-trivial settings, the SDK attempts to resolve
 
 ## Symptoms
 
-```
+```text
 Error: failed to load AWS config
 
 ## Explanation

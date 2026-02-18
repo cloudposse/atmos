@@ -230,6 +230,8 @@ func TestWithIsolatedAWSEnv_RestoresOnlySetVars(t *testing.T) {
 	// Only set a subset of problematic vars.
 	t.Setenv("AWS_PROFILE", "my-profile")
 	// Ensure AWS_ACCESS_KEY_ID is NOT set.
+	// Use t.Setenv first to register cleanup, then unset.
+	t.Setenv("AWS_ACCESS_KEY_ID", "")
 	os.Unsetenv("AWS_ACCESS_KEY_ID")
 
 	err := WithIsolatedAWSEnv(func() error {
@@ -286,6 +288,11 @@ aws_secret_access_key = secret_should_not_be_loaded
 	t.Setenv("AWS_CONFIG_FILE", configPath)
 	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", credsPath)
 	t.Setenv("AWS_PROFILE", "default")
+	// Clear region env vars so they don't leak from CI environment.
+	// AWS_REGION is intentionally NOT in problematicAWSEnvVars (safe to inherit),
+	// but this test specifically checks that shared config files are ignored.
+	t.Setenv("AWS_REGION", "")
+	t.Setenv("AWS_DEFAULT_REGION", "")
 
 	ctx := context.Background()
 	// LoadIsolatedAWSConfig should succeed because it ignores all shared config files.
@@ -294,19 +301,17 @@ aws_secret_access_key = secret_should_not_be_loaded
 	require.NoError(t, err, "LoadIsolatedAWSConfig should succeed even with a problematic default profile")
 
 	// The config should have been loaded without any profile settings.
-	// Region should be empty since we didn't pass config.WithRegion().
+	// Region should be empty since we cleared AWS_REGION and didn't pass config.WithRegion().
 	assert.Empty(t, cfg.Region, "region should be empty when no region option is provided")
 }
 
-func TestLoadIsolatedAWSConfig_WithRegionOption(t *testing.T) {
-	// Verify that explicit options are still respected.
+func TestLoadIsolatedAWSConfig_SucceedsWithExternalVarsSet(t *testing.T) {
+	// Verify that LoadIsolatedAWSConfig succeeds even when AWS_PROFILE and
+	// credential env vars are set in the environment (they are cleared internally).
 	t.Setenv("AWS_PROFILE", "some-profile")
 	t.Setenv("AWS_ACCESS_KEY_ID", "AKIA_SHOULD_BE_IGNORED")
 
 	ctx := context.Background()
-
-	// We can't import config in the test directly since we're in the same package.
-	// But we can verify the function works with the region option.
 	cfg, err := LoadIsolatedAWSConfig(ctx)
 	require.NoError(t, err)
 	assert.NotNil(t, cfg)
@@ -336,9 +341,13 @@ func TestWarnIfAWSProfileSet_WithProfileSet(t *testing.T) {
 }
 
 func TestWarnIfAWSProfileSet_WithoutProfileSet(t *testing.T) {
-	// Unset AWS_PROFILE to verify no warning path.
+	// Unset AWS vars to verify no warning path.
+	// Use t.Setenv to register cleanup, then unset.
+	t.Setenv("AWS_PROFILE", "")
 	os.Unsetenv("AWS_PROFILE")
+	t.Setenv("AWS_CONFIG_FILE", "")
 	os.Unsetenv("AWS_CONFIG_FILE")
+	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "")
 	os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE")
 	assert.NotPanics(t, func() {
 		WarnIfAWSProfileSet()
@@ -500,7 +509,9 @@ func TestLoadAtmosManagedAWSConfig_DoesNotClearProfileVar(t *testing.T) {
 
 func TestWithIsolatedAWSEnv_NoVarsSetToRestore(t *testing.T) {
 	// Unset all problematic vars to test the path where no vars need restoration.
+	// Use t.Setenv to register cleanup, then unset.
 	for _, key := range problematicAWSEnvVars {
+		t.Setenv(key, "")
 		os.Unsetenv(key)
 	}
 
@@ -519,7 +530,7 @@ func TestWithIsolatedAWSEnv_NoVarsSetToRestore(t *testing.T) {
 }
 
 func TestWithIsolatedAWSEnv_RestoresAfterPanic(t *testing.T) {
-	// Verify behavior when the function panics.
+	// Verify that env vars are restored even when the function panics.
 	t.Setenv("AWS_PROFILE", "panic-test")
 
 	assert.Panics(t, func() {
@@ -528,9 +539,10 @@ func TestWithIsolatedAWSEnv_RestoresAfterPanic(t *testing.T) {
 		})
 	})
 
-	// Note: After a panic, env vars may not be restored because
-	// WithIsolatedAWSEnv doesn't use defer for restoration.
-	// This test documents the current behavior.
+	// Env vars should be restored because WithIsolatedAWSEnv uses defer for restoration.
+	val, exists := os.LookupEnv("AWS_PROFILE")
+	assert.True(t, exists, "AWS_PROFILE should be restored after panic")
+	assert.Equal(t, "panic-test", val, "AWS_PROFILE should have its original value after panic")
 }
 
 func TestEnvironmentVarsToClear_ContainsExpectedVars(t *testing.T) {

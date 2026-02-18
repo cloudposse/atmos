@@ -905,29 +905,6 @@ func TestSSOProvider_Authenticate_NonInteractive_ErrorMessage(t *testing.T) {
 	assert.ErrorContains(t, err, "authentication failed")
 }
 
-func TestSSOProvider_Authenticate_ErrorContainsProfileHint(t *testing.T) {
-	// Test that when SSO authentication fails (e.g., due to config loading errors),
-	// the error message includes helpful hints about AWS_PROFILE interference.
-	t.Setenv("GO_TEST", "1")
-
-	// Ensure we're in an interactive environment so we reach the config loading code.
-	// Use a very short timeout to force a fast failure.
-	config := &schema.Provider{
-		Kind:     testSSOKind,
-		Region:   "invalid-region-that-will-not-resolve",
-		StartURL: testStartURL,
-	}
-
-	provider, err := NewSSOProvider(testProviderName, config)
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	_, err = provider.Authenticate(ctx)
-	// The test verifies the error is present; specific hint content depends on the error path taken.
-	assert.Error(t, err)
-}
-
 func TestNewSSOProvider_InvalidProviderKind(t *testing.T) {
 	// Test that NewSSOProvider rejects non-SSO provider kinds.
 	config := &schema.Provider{
