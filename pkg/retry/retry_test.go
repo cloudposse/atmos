@@ -298,7 +298,7 @@ func TestDo_ConvenienceFunction(t *testing.T) {
 }
 
 func TestWithPredicate_RetryOnSpecificErrors(t *testing.T) {
-	config := schema.RetryConfig{
+	config := &schema.RetryConfig{
 		MaxAttempts:     intPtr(3),
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    durationPtr(1 * time.Millisecond),
@@ -315,39 +315,50 @@ func TestWithPredicate_RetryOnSpecificErrors(t *testing.T) {
 		return err.Error() == "retryable error"
 	}
 
-	// Test retryable error.
-	attempts := 0
-	fn := func() error {
-		attempts++
-		if attempts < 2 {
-			return retryableError
-		}
-		return nil
+	tests := []struct {
+		name         string
+		fn           func(*int) func() error
+		wantErr      bool
+		wantAttempts int
+	}{
+		{
+			name: "retryable error succeeds on second attempt",
+			fn: func(attempts *int) func() error {
+				return func() error {
+					*attempts++
+					if *attempts < 2 {
+						return retryableError
+					}
+					return nil
+				}
+			},
+			wantErr:      false,
+			wantAttempts: 2,
+		},
+		{
+			name: "non-retryable error stops immediately",
+			fn: func(attempts *int) func() error {
+				return func() error {
+					*attempts++
+					return nonRetryableError
+				}
+			},
+			wantErr:      true,
+			wantAttempts: 1,
+		},
 	}
 
-	err := WithPredicate(context.Background(), &config, fn, shouldRetry)
-	if err != nil {
-		t.Errorf("Expected success, got error: %v", err)
-	}
-
-	if attempts != 2 {
-		t.Errorf("Expected 2 attempts, got %d", attempts)
-	}
-
-	// Test non-retryable error.
-	attempts = 0
-	fn = func() error {
-		attempts++
-		return nonRetryableError
-	}
-	err = WithPredicate(context.Background(), &config, fn, shouldRetry)
-
-	if err == nil {
-		t.Error("Expected error, got nil")
-	}
-
-	if attempts != 1 {
-		t.Errorf("Expected 1 attempt, got %d", attempts)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			attempts := 0
+			err := WithPredicate(context.Background(), config, tt.fn(&attempts), shouldRetry)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("wantErr=%v, got err=%v", tt.wantErr, err)
+			}
+			if attempts != tt.wantAttempts {
+				t.Errorf("Expected %d attempts, got %d", tt.wantAttempts, attempts)
+			}
+		})
 	}
 }
 
@@ -496,7 +507,7 @@ func TestExecutor_NilMaxElapsedTime_NoTimeout(t *testing.T) {
 	config := schema.RetryConfig{
 		MaxAttempts:  intPtr(3),
 		InitialDelay: durationPtr(10 * time.Millisecond),
-		// MaxElapsedTime: nil = no timeout
+		// MaxElapsedTime: nil = no timeout.
 	}
 
 	executor := New(config)
@@ -549,7 +560,7 @@ func TestExecutor_NilInitialDelay_NoDelay(t *testing.T) {
 	// nil InitialDelay = no delay between retries.
 	config := schema.RetryConfig{
 		MaxAttempts: intPtr(3),
-		// InitialDelay: nil = no delay
+		// InitialDelay: nil = no delay.
 	}
 
 	executor := New(config)
@@ -566,7 +577,7 @@ func TestExecutor_NilMaxDelay_NoCap(t *testing.T) {
 		BackoffStrategy: schema.BackoffExponential,
 		InitialDelay:    durationPtr(100 * time.Millisecond),
 		Multiplier:      float64Ptr(2.0),
-		// MaxDelay: nil = no cap
+		// MaxDelay: nil = no cap.
 	}
 
 	executor := New(config)
@@ -585,7 +596,7 @@ func TestExecutor_NilMultiplier_UsesDefault(t *testing.T) {
 	config := schema.RetryConfig{
 		BackoffStrategy: schema.BackoffExponential,
 		InitialDelay:    durationPtr(100 * time.Millisecond),
-		// Multiplier: nil = use default 2.0
+		// Multiplier: nil = use default 2.0.
 	}
 
 	executor := New(config)
@@ -604,7 +615,7 @@ func TestExecutor_NilRandomJitter_NoJitter(t *testing.T) {
 	config := schema.RetryConfig{
 		BackoffStrategy: schema.BackoffConstant,
 		InitialDelay:    durationPtr(100 * time.Millisecond),
-		// RandomJitter: nil = no jitter
+		// RandomJitter: nil = no jitter.
 	}
 
 	executor := New(config)
