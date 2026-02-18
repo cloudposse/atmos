@@ -34,6 +34,9 @@ tests:
         - "Check run completed: atmos/plan: prod/mycomponent"
         - "Title: Running plan"
         - "Title: plan: no changes"
+        - "has_changes=false"
+        - "has_errors=false"
+        - "exit_code=0"
 
   - name: "atmos terraform plan without ci"
     enabled: true
