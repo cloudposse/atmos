@@ -1,0 +1,24 @@
+base_path: "./"
+
+components:
+  terraform:
+    base_path: "components/terraform"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{ .vars.stage }}"
+
+templates:
+  settings:
+    enabled: true
+    sprig:
+      enabled: true
+    gomplate:
+      enabled: true
+      datasources: {}
+    env:
+      TEST_TMPL_ENV_VAR: "from-atmos-yaml"

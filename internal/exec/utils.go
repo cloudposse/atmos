@@ -236,6 +236,8 @@ func getFindStacksMapCacheKey(atmosConfig *schema.AtmosConfiguration, ignoreMiss
 	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(atmosConfig.PackerDirAbsolutePath)
 	keyBuilder.WriteString(cacheKeyDelimiter)
+	keyBuilder.WriteString(atmosConfig.AnsibleDirAbsolutePath)
+	keyBuilder.WriteString(cacheKeyDelimiter)
 	keyBuilder.WriteString(fmt.Sprintf("%v", ignoreMissingFiles))
 	keyBuilder.WriteString(cacheKeyDelimiter)
 
@@ -312,6 +314,7 @@ func FindStacksMap(atmosConfig *schema.AtmosConfiguration, ignoreMissingFiles bo
 		atmosConfig.TerraformDirAbsolutePath,
 		atmosConfig.HelmfileDirAbsolutePath,
 		atmosConfig.PackerDirAbsolutePath,
+		atmosConfig.AnsibleDirAbsolutePath,
 		atmosConfig.StackConfigFilesAbsolutePaths,
 		false,
 		true,
@@ -729,6 +732,11 @@ func ProcessStacks(
 		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
 		if err != nil {
 			return configAndStacksInfo, err
+		}
+
+		// Restore env vars that mapstructure:"-" dropped during Decode.
+		if envMap := extractEnvFromRawMap(configAndStacksInfo.ComponentSettingsSection); len(envMap) > 0 {
+			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(

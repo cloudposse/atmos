@@ -38,6 +38,12 @@ type stackAuthSection struct {
 // This function is used to resolve stack-level default identities before full stack processing,
 // solving the chicken-and-egg problem where we need to know the default identity to authenticate,
 // but stack configs are only loaded after authentication is configured.
+//
+// When multiple stack files define DIFFERENT default identities, it means each stack has its own
+// default that only applies when that stack is targeted. Since this function runs before stack
+// resolution (we don't know the target stack yet), conflicting defaults are discarded to avoid
+// false "multiple default identities" errors. The per-stack default will be resolved after full
+// stack processing. See https://github.com/cloudposse/atmos/issues/2072.
 func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]bool, error) {
 	defer perf.Track(atmosConfig, "config.LoadStackAuthDefaults")()
 
@@ -54,6 +60,13 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 
 	log.Debug("Loading stack files for auth defaults", "count", len(stackFiles))
 
+	// Collect all defaults with their source files for conflict detection.
+	type defaultSource struct {
+		identity string
+		file     string
+	}
+	var allDefaults []defaultSource
+
 	// Load each file for auth defaults.
 	for _, filePath := range stackFiles {
 		fileDefaults, err := loadFileForAuthDefaults(filePath)
@@ -62,13 +75,41 @@ func LoadStackAuthDefaults(atmosConfig *schema.AtmosConfiguration) (map[string]b
 			continue // Non-fatal: skip this file.
 		}
 
-		// Merge found defaults (later files can override earlier ones).
 		for identity, isDefault := range fileDefaults {
 			if isDefault {
-				defaults[identity] = true
+				allDefaults = append(allDefaults, defaultSource{identity: identity, file: filePath})
 				log.Debug("Found default identity in stack config", logKeyIdentity, identity, "file", filePath)
 			}
 		}
+	}
+
+	// If no defaults found, return empty.
+	if len(allDefaults) == 0 {
+		return defaults, nil
+	}
+
+	// Check if all defaults agree on the same identity name.
+	// If they do, it's a global default. If they conflict, it means different stacks
+	// define different defaults - discard them to avoid false "multiple defaults" errors.
+	firstIdentity := allDefaults[0].identity
+	allAgree := true
+	for _, d := range allDefaults[1:] {
+		if d.identity != firstIdentity {
+			allAgree = false
+			break
+		}
+	}
+
+	if allAgree {
+		// All stack files agree on the same default identity - use it.
+		defaults[firstIdentity] = true
+		log.Debug("All stack files agree on default identity", logKeyIdentity, firstIdentity, "files", len(allDefaults))
+	} else {
+		// Conflicting defaults from different stack files.
+		// This means each stack has its own default - cannot resolve globally.
+		// Return empty so the per-stack default is resolved after full stack processing.
+		log.Debug("Conflicting default identities found across stack files, skipping global default resolution",
+			"count", len(allDefaults))
 	}
 
 	return defaults, nil

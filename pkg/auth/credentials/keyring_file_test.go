@@ -117,7 +117,7 @@ func TestFileKeyring_MissingPassword(t *testing.T) {
 		SecretAccessKey: "test-secret",
 		Region:          "us-east-1",
 	}
-	err = store.Store("test", testCreds)
+	err = store.Store("test", testCreds, "test-realm")
 	require.Error(t, err, "Expected error when storing without password in non-TTY environment")
 	assert.Contains(t, err.Error(), "keyring password required")
 }
@@ -149,11 +149,11 @@ func TestFileKeyring_StoreRetrieve_AWS(t *testing.T) {
 	}
 
 	// Store credentials.
-	err = store.Store(alias, creds)
+	err = store.Store(alias, creds, "test-realm")
 	require.NoError(t, err)
 
 	// Retrieve credentials.
-	retrieved, err := store.Retrieve(alias)
+	retrieved, err := store.Retrieve(alias, "test-realm")
 	require.NoError(t, err)
 
 	awsCreds, ok := retrieved.(*types.AWSCredentials)
@@ -189,11 +189,11 @@ func TestFileKeyring_StoreRetrieve_OIDC(t *testing.T) {
 	}
 
 	// Store credentials.
-	err = store.Store(alias, creds)
+	err = store.Store(alias, creds, "test-realm")
 	require.NoError(t, err)
 
 	// Retrieve credentials.
-	retrieved, err := store.Retrieve(alias)
+	retrieved, err := store.Retrieve(alias, "test-realm")
 	require.NoError(t, err)
 
 	oidcCreds, ok := retrieved.(*types.OIDCCredentials)
@@ -223,11 +223,11 @@ func TestFileKeyring_Delete(t *testing.T) {
 	creds := &types.OIDCCredentials{Token: "test-token"}
 
 	// Store then delete.
-	require.NoError(t, store.Store(alias, creds))
-	require.NoError(t, store.Delete(alias))
+	require.NoError(t, store.Store(alias, creds, "test-realm"))
+	require.NoError(t, store.Delete(alias, "test-realm"))
 
 	// Verify it's gone.
-	_, err = store.Retrieve(alias)
+	_, err = store.Retrieve(alias, "test-realm")
 	assert.Error(t, err)
 }
 
@@ -248,17 +248,17 @@ func TestFileKeyring_List(t *testing.T) {
 	require.NoError(t, err)
 
 	// Initially empty.
-	aliases, err := store.List()
+	aliases, err := store.List("test-realm")
 	require.NoError(t, err)
 	assert.Empty(t, aliases)
 
 	// Store multiple credentials.
-	require.NoError(t, store.Store("alias1", &types.OIDCCredentials{Token: "token1"}))
-	require.NoError(t, store.Store("alias2", &types.OIDCCredentials{Token: "token2"}))
-	require.NoError(t, store.Store("alias3", &types.OIDCCredentials{Token: "token3"}))
+	require.NoError(t, store.Store("alias1", &types.OIDCCredentials{Token: "token1"}, "test-realm"))
+	require.NoError(t, store.Store("alias2", &types.OIDCCredentials{Token: "token2"}, "test-realm"))
+	require.NoError(t, store.Store("alias3", &types.OIDCCredentials{Token: "token3"}, "test-realm"))
 
 	// List should return all aliases.
-	aliases, err = store.List()
+	aliases, err = store.List("test-realm")
 	require.NoError(t, err)
 	assert.Len(t, aliases, 3)
 	assert.Contains(t, aliases, "alias1")
@@ -266,13 +266,51 @@ func TestFileKeyring_List(t *testing.T) {
 	assert.Contains(t, aliases, "alias3")
 
 	// Delete one.
-	require.NoError(t, store.Delete("alias2"))
+	require.NoError(t, store.Delete("alias2", "test-realm"))
 
 	// List should reflect deletion.
-	aliases, err = store.List()
+	aliases, err = store.List("test-realm")
 	require.NoError(t, err)
 	assert.Len(t, aliases, 2)
 	assert.NotContains(t, aliases, "alias2")
+}
+
+func TestFileKeyring_ListEmptyRealm(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{
+			Type: "file",
+			Spec: map[string]interface{}{
+				"path": filepath.Join(tempDir, "test-keyring"),
+			},
+		},
+	}
+
+	store, err := newFileKeyringStore(authConfig)
+	require.NoError(t, err)
+
+	// Store credentials in different realms.
+	require.NoError(t, store.Store("alias1", &types.OIDCCredentials{Token: "token1"}, "realm1"))
+	require.NoError(t, store.Store("alias2", &types.OIDCCredentials{Token: "token2"}, "realm2"))
+	require.NoError(t, store.Store("alias3", &types.OIDCCredentials{Token: "token3"}, "realm1"))
+
+	// List with empty realm should return all aliases with prefix stripped.
+	aliases, err := store.List("")
+	require.NoError(t, err)
+	assert.Len(t, aliases, 3)
+	// Verify prefix is stripped - should have format "realm_alias".
+	assert.Contains(t, aliases, "realm1_alias1")
+	assert.Contains(t, aliases, "realm2_alias2")
+	assert.Contains(t, aliases, "realm1_alias3")
+
+	// List with specific realm should only return that realm's aliases.
+	aliases, err = store.List("realm1")
+	require.NoError(t, err)
+	assert.Len(t, aliases, 2)
+	assert.Contains(t, aliases, "alias1")
+	assert.Contains(t, aliases, "alias3")
 }
 
 func TestFileKeyring_IsExpired(t *testing.T) {
@@ -298,21 +336,21 @@ func TestFileKeyring_IsExpired(t *testing.T) {
 		Expiration: time.Now().UTC().Add(30 * time.Minute).Format(time.RFC3339),
 	}
 
-	require.NoError(t, store.Store("expired", expiredCreds))
-	require.NoError(t, store.Store("fresh", freshCreds))
+	require.NoError(t, store.Store("expired", expiredCreds, "test-realm"))
+	require.NoError(t, store.Store("fresh", freshCreds, "test-realm"))
 
 	// Check expired credentials.
-	isExpired, err := store.IsExpired("expired")
+	isExpired, err := store.IsExpired("expired", "test-realm")
 	require.NoError(t, err)
 	assert.True(t, isExpired)
 
 	// Check fresh credentials.
-	isExpired, err = store.IsExpired("fresh")
+	isExpired, err = store.IsExpired("fresh", "test-realm")
 	require.NoError(t, err)
 	assert.False(t, isExpired)
 
 	// Missing alias returns true with error.
-	isExpired, err = store.IsExpired("missing")
+	isExpired, err = store.IsExpired("missing", "test-realm")
 	assert.Error(t, err)
 	assert.True(t, isExpired)
 }
@@ -378,13 +416,13 @@ func TestFileKeyring_Persistence(t *testing.T) {
 		Region:          "us-west-2",
 	}
 
-	require.NoError(t, store1.Store("persistent-alias", creds))
+	require.NoError(t, store1.Store("persistent-alias", creds, "test-realm"))
 
 	// Create second store (simulating new process) and verify credentials persist.
 	store2, err := newFileKeyringStore(authConfig)
 	require.NoError(t, err)
 
-	retrieved, err := store2.Retrieve("persistent-alias")
+	retrieved, err := store2.Retrieve("persistent-alias", "test-realm")
 	require.NoError(t, err)
 
 	awsCreds, ok := retrieved.(*types.AWSCredentials)
@@ -420,22 +458,22 @@ func TestFileKeyring_MultipleAliases(t *testing.T) {
 		Provider: "github",
 	}
 
-	require.NoError(t, store.Store("aws-creds", awsCreds))
-	require.NoError(t, store.Store("oidc-creds", oidcCreds))
+	require.NoError(t, store.Store("aws-creds", awsCreds, "test-realm"))
+	require.NoError(t, store.Store("oidc-creds", oidcCreds, "test-realm"))
 
 	// Retrieve and verify each.
-	retrieved1, err := store.Retrieve("aws-creds")
+	retrieved1, err := store.Retrieve("aws-creds", "test-realm")
 	require.NoError(t, err)
 	_, ok := retrieved1.(*types.AWSCredentials)
 	assert.True(t, ok)
 
-	retrieved2, err := store.Retrieve("oidc-creds")
+	retrieved2, err := store.Retrieve("oidc-creds", "test-realm")
 	require.NoError(t, err)
 	_, ok = retrieved2.(*types.OIDCCredentials)
 	assert.True(t, ok)
 
 	// List should show both.
-	aliases, err := store.List()
+	aliases, err := store.List("test-realm")
 	require.NoError(t, err)
 	assert.Len(t, aliases, 2)
 	assert.Contains(t, aliases, "aws-creds")
@@ -465,17 +503,17 @@ func TestFileKeyring_UpdateCredentials(t *testing.T) {
 		AccessKeyID: "AKIA_OLD",
 		Region:      "us-east-1",
 	}
-	require.NoError(t, store.Store(alias, creds1))
+	require.NoError(t, store.Store(alias, creds1, "test-realm"))
 
 	// Update with new credentials.
 	creds2 := &types.AWSCredentials{
 		AccessKeyID: "AKIA_NEW",
 		Region:      "us-west-2",
 	}
-	require.NoError(t, store.Store(alias, creds2))
+	require.NoError(t, store.Store(alias, creds2, "test-realm"))
 
 	// Retrieve should return updated credentials.
-	retrieved, err := store.Retrieve(alias)
+	retrieved, err := store.Retrieve(alias, "test-realm")
 	require.NoError(t, err)
 
 	awsCreds, ok := retrieved.(*types.AWSCredentials)
@@ -501,12 +539,12 @@ func TestFileKeyring_ErrorHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Retrieve non-existent alias.
-	_, err = store.Retrieve("non-existent")
+	_, err = store.Retrieve("non-existent", "test-realm")
 	assert.Error(t, err)
 
-	// Delete non-existent alias.
-	err = store.Delete("non-existent")
-	assert.Error(t, err)
+	// Delete non-existent alias (should be idempotent - no error).
+	err = store.Delete("non-existent", "test-realm")
+	assert.NoError(t, err)
 }
 
 func TestCreatePasswordPrompt_EnvironmentVariable(t *testing.T) {
@@ -549,7 +587,7 @@ func TestFileKeyring_StoreUnsupportedType(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to store unsupported credential type.
-	err = store.Store("test", &unsupportedCreds{})
+	err = store.Store("test", &unsupportedCreds{}, "test-realm")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unsupported credential type")
 }
@@ -572,7 +610,7 @@ func TestFileKeyring_CorruptedData(t *testing.T) {
 
 	// Store valid credentials first.
 	creds := &types.AWSCredentials{AccessKeyID: "TEST"}
-	require.NoError(t, store.Store("test-alias", creds))
+	require.NoError(t, store.Store("test-alias", creds, "test-realm"))
 
 	// Now manually corrupt the data by storing invalid JSON.
 	_ = store.ring.Set(keyring.Item{
@@ -581,7 +619,7 @@ func TestFileKeyring_CorruptedData(t *testing.T) {
 	})
 
 	// Attempting to retrieve should error.
-	_, err = store.Retrieve("corrupted")
+	_, err = store.Retrieve("corrupted", "test-realm")
 	assert.Error(t, err)
 }
 
@@ -649,16 +687,18 @@ func TestFileKeyring_RetrieveUnknownType(t *testing.T) {
 	require.NoError(t, err)
 
 	// Store data with an unknown credential type by directly marshaling the envelope.
+	// Use buildKeyringKey to create the realm-scoped key that Retrieve will look for.
 	data := []byte(`{"type":"unknown-type","data":{}}`)
+	realmKey := buildKeyringKey("test-alias", "test-realm")
 
 	err = store.ring.Set(keyring.Item{
-		Key:  "test-alias",
+		Key:  realmKey,
 		Data: data,
 	})
 	require.NoError(t, err)
 
 	// Attempting to retrieve should error with unknown type.
-	_, err = store.Retrieve("test-alias")
+	_, err = store.Retrieve("test-alias", "test-realm")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown credential type")
 }
@@ -716,11 +756,11 @@ func TestFileKeyring_StoreRetrieveOIDC(t *testing.T) {
 		Audience: "test-audience",
 	}
 
-	err = store.Store("oidc-test", creds)
+	err = store.Store("oidc-test", creds, "test-realm")
 	assert.NoError(t, err)
 
 	// Retrieve and verify.
-	retrieved, err := store.Retrieve("oidc-test")
+	retrieved, err := store.Retrieve("oidc-test", "test-realm")
 	assert.NoError(t, err)
 	assert.NotNil(t, retrieved)
 
@@ -749,10 +789,10 @@ func TestFileKeyring_ListError(t *testing.T) {
 
 	// Store some credentials first.
 	creds := &types.AWSCredentials{AccessKeyID: "TEST"}
-	require.NoError(t, store.Store("test1", creds))
+	require.NoError(t, store.Store("test1", creds, "test-realm"))
 
 	// List should work normally.
-	aliases, err := store.List()
+	aliases, err := store.List("test-realm")
 	assert.NoError(t, err)
 	assert.Contains(t, aliases, "test1")
 }
@@ -774,7 +814,7 @@ func TestFileKeyring_NonexistentRetrieval(t *testing.T) {
 	require.NoError(t, err)
 
 	// Try to retrieve non-existent credentials.
-	_, err = store.Retrieve("nonexistent-alias")
+	_, err = store.Retrieve("nonexistent-alias", "test-realm")
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, ErrCredentialsNotFound)
 }
@@ -796,7 +836,27 @@ func TestFileKeyring_IsExpiredNonexistent(t *testing.T) {
 	require.NoError(t, err)
 
 	// Check expiration on non-existent alias.
-	expired, err := store.IsExpired("nonexistent-alias")
+	expired, err := store.IsExpired("nonexistent-alias", "test-realm")
 	assert.Error(t, err)
 	assert.True(t, expired) // Should be considered expired if retrieval fails.
+}
+
+func TestFileKeyring_Type(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("ATMOS_KEYRING_PASSWORD", "test-password-12345")
+
+	authConfig := &schema.AuthConfig{
+		Keyring: schema.KeyringConfig{
+			Type: "file",
+			Spec: map[string]interface{}{
+				"path": filepath.Join(tempDir, "test-keyring"),
+			},
+		},
+	}
+
+	store, err := newFileKeyringStore(authConfig)
+	require.NoError(t, err)
+
+	// Verify Type returns the correct store type constant.
+	assert.Equal(t, types.CredentialStoreTypeFile, store.Type())
 }

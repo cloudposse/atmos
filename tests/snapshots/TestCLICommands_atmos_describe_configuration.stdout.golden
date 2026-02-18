@@ -22,9 +22,15 @@ components:
     kubeconfig_path: /dev/shm
     helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
     cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+    cluster_name_template: ""
+    cluster_name: ""
     command: ""
     auto_generate_files: false
   packer:
+    base_path: ""
+    command: ""
+    auto_generate_files: false
+  ansible:
     base_path: ""
     command: ""
     auto_generate_files: false
@@ -90,6 +96,7 @@ excludeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration/components/helmfile
 packerDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
+ansibleDirAbsolutePath: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 default: false
 cli_config_path: /absolute/path/to/repo/tests/fixtures/scenarios/atmos-configuration
 import: []
@@ -99,4 +106,8 @@ docs:
   generate:
     readme:
       output: ./README.md
+auth:
+  realm: <hash>
+  providers: {}
+  identities: {}
 

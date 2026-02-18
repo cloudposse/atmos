@@ -30,6 +30,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
+
+	// Import component providers to register them with the component registry.
+	// The init() function in each package registers the provider.
+	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/mock"
+
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -52,8 +58,11 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/ansible"
+	_ "github.com/cloudposse/atmos/cmd/aws"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
+	_ "github.com/cloudposse/atmos/cmd/helmfile"
 	"github.com/cloudposse/atmos/cmd/internal"
 	_ "github.com/cloudposse/atmos/cmd/list"
 	_ "github.com/cloudposse/atmos/cmd/profile"

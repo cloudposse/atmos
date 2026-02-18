@@ -106,7 +106,7 @@ func ExecutePacker(
 			}
 
 			// Generate files before path validation.
-			if genErr := generateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
+			if genErr := GenerateFilesForComponent(&atmosConfig, info, componentPath); genErr != nil {
 				return errors.Join(errUtils.ErrFileOperation, genErr)
 			}
 		}

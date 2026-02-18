@@ -18,15 +18,16 @@ import (
 
 // SetupFiles sets up Azure credentials files for the given identity.
 // BasePath specifies the base directory for Azure files (from provider's files.base_path).
-// If empty, uses the default ~/.azure/atmos path.
-func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath string) error {
+// If empty, uses the default ~/.azure/atmos/{realm} path.
+// The realm parameter provides credential isolation between different repositories.
+func SetupFiles(providerName, identityName string, creds types.ICredentials, basePath string, realm string) error {
 	azureCreds, ok := creds.(*types.AzureCredentials)
 	if !ok {
 		return nil // No Azure credentials to setup.
 	}
 
 	// Create Azure file manager with configured or default path.
-	fileManager, err := NewAzureFileManager(basePath)
+	fileManager, err := NewAzureFileManager(basePath, realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}
@@ -47,6 +48,7 @@ type SetAuthContextParams struct {
 	IdentityName string
 	Credentials  types.ICredentials
 	BasePath     string
+	Realm        string
 }
 
 // SetAuthContext populates the Azure auth context with Atmos-managed credential paths.
@@ -71,7 +73,7 @@ func SetAuthContext(params *SetAuthContextParams) error {
 		return fmt.Errorf("%w: Azure credentials are expired", errUtils.ErrAuthenticationFailed)
 	}
 
-	m, err := NewAzureFileManager(params.BasePath)
+	m, err := NewAzureFileManager(params.BasePath, params.Realm)
 	if err != nil {
 		return errors.Join(errUtils.ErrAuthenticationFailed, err)
 	}

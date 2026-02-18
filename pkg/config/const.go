@@ -27,6 +27,8 @@ const (
 	HelmfileDirFlag             = "--helmfile-dir"
 	PackerCommandFlag           = "--packer-command"
 	PackerDirFlag               = "--packer-dir"
+	AnsibleCommandFlag          = "--ansible-command"
+	AnsibleDirFlag              = "--ansible-dir"
 	CliConfigDirFlag            = "--config-dir"
 	StackDirFlag                = "--stacks-dir"
 	BasePathFlag                = "--base-path"
@@ -57,6 +59,7 @@ const (
 	TerraformComponentType = "terraform"
 	HelmfileComponentType  = "helmfile"
 	PackerComponentType    = "packer"
+	AnsibleComponentType   = "ansible"
 
 	ComponentVendorConfigFileName = "component.yaml"
 	AtmosVendorConfigFileName     = "vendor"
@@ -84,6 +87,9 @@ const (
 	HelmfileSectionName               = "helmfile"
 	PackerSectionName                 = "packer"
 	PackerTemplateSectionName         = "template"
+	AnsibleSectionName                = "ansible"
+	AnsiblePlaybookSectionName        = "playbook"
+	AnsibleInventorySectionName       = "inventory"
 	WorkspaceSectionName              = "workspace"
 	AuthSectionName                   = "auth"
 	GenerateSectionName               = "generate"
@@ -141,6 +147,10 @@ const (
 	IdentityFlag              = "--identity"
 	IdentityFlagSelectValue   = "__SELECT__"   // Special value when --identity is used without argument.
 	IdentityFlagDisabledValue = "__DISABLED__" // Special value when --identity=false (skip authentication).
+
+	// EKS/Helmfile flags.
+	ClusterNameFlagName = "cluster-name" // Flag name without prefix.
+	ClusterNameFlag     = "--cluster-name"
 
 	// Performance profiling flags.
 	ProfilerEnabledFlag = "--profiler-enabled"

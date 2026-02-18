@@ -201,6 +201,7 @@ type DescribeComponentResult struct {
 
 // ExecuteDescribeComponentParams contains parameters for ExecuteDescribeComponent.
 type ExecuteDescribeComponentParams struct {
+	AtmosConfig          *schema.AtmosConfiguration // Optional: Use provided config instead of initializing new one.
 	Component            string
 	Stack                string
 	ProcessTemplates     bool
@@ -211,10 +212,10 @@ type ExecuteDescribeComponentParams struct {
 
 // ExecuteDescribeComponent describes component config.
 func ExecuteDescribeComponent(params *ExecuteDescribeComponentParams) (map[string]any, error) {
-	defer perf.Track(nil, "exec.ExecuteDescribeComponent")()
+	defer perf.Track(params.AtmosConfig, "exec.ExecuteDescribeComponent")()
 
 	result, err := ExecuteDescribeComponentWithContext(DescribeComponentContextParams{
-		AtmosConfig:          nil,
+		AtmosConfig:          params.AtmosConfig,
 		Component:            params.Component,
 		Stack:                params.Stack,
 		ProcessTemplates:     params.ProcessTemplates,

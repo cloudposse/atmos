@@ -27,10 +27,17 @@
       "kubeconfig_path": "",
       "helm_aws_profile_pattern": "",
       "cluster_name_pattern": "",
+      "cluster_name_template": "",
+      "cluster_name": "",
       "command": "",
       "auto_generate_files": false
     },
     "packer": {
+      "base_path": "",
+      "command": "",
+      "auto_generate_files": false
+    },
+    "ansible": {
       "base_path": "",
       "command": "",
       "auto_generate_files": false
@@ -194,6 +201,7 @@
   "terraformDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks/components/terraform",
   "helmfileDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "packerDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
+  "ansibleDirAbsolutePath": "/absolute/path/to/repo/examples/demo-stacks",
   "default": false,
   "version": {
     "check": {},
@@ -215,6 +223,7 @@
     }
   },
   "auth": {
+    "realm": "<hash>",
     "logs": {
       "file": "",
       "level": ""
