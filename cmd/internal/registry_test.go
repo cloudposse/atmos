@@ -587,17 +587,17 @@ func resetFlagRegistries() {
 func TestRegisterCommandFlagRegistry(t *testing.T) {
 	resetFlagRegistries()
 
-	registry := flags.NewFlagRegistry()
-	registry.Register(&flags.StringFlag{
+	flagReg := flags.NewFlagRegistry()
+	flagReg.Register(&flags.StringFlag{
 		Name:        "identity",
 		NoOptDefVal: "__SELECT__",
 	})
 
-	RegisterCommandFlagRegistry("terraform", registry)
+	RegisterCommandFlagRegistry("terraform", flagReg)
 
 	got := GetCommandFlagRegistry("terraform")
 	require.NotNil(t, got, "registered flag registry should be retrievable")
-	assert.Same(t, registry, got, "should return the exact same registry instance")
+	assert.Same(t, flagReg, got, "should return the exact same registry instance")
 }
 
 func TestGetCommandFlagRegistry_NotFound(t *testing.T) {

@@ -63,7 +63,7 @@ When pflag encounters `--identity my-identity` (space-separated):
 4. The orphaned arg passes through to Terraform/OpenTofu as `terraform plan my-identity`.
 5. Terraform reports "Too many command line arguments".
 
-The manual identity extraction in `processArgsAndFlags` (line 743) correctly handles `--identity <value>`,
+The manual identity extraction in `processArgsAndFlags` correctly handles `--identity <value>`,
 but it never fires because Cobra/pflag already consumed `--identity` before the manual parsing runs.
 
 ## Fix
@@ -111,15 +111,9 @@ This is the same method used by `AtmosFlagParser.Parse()` (Step 2.6 in `pkg/flag
 
 ### Tests
 
-Normalization is tested by the existing `TestFlagRegistry_PreprocessNoOptDefValArgs` tests
-in `pkg/flags/registry_preprocess_test.go` which cover all scenarios including:
+Normalization is tested by the existing tests in `pkg/flags/registry_preprocess_test.go`:
 
-| Test case                                            | What it verifies                                                    |
-|------------------------------------------------------|---------------------------------------------------------------------|
-| `identity flag with space syntax`                    | `--identity value` becomes `--identity=value`                        |
-| `identity flag with equals syntax`                   | `--identity=value` is unchanged                                     |
-| `identity at end of args`                            | `--identity` alone is unchanged (interactive selection)              |
-| `identity flag followed by another flag`             | `--identity --dry-run` leaves identity without value                 |
-| `double dash prefix`                                 | `--identity -- plan` is not normalized (next arg is `--`)            |
-| `empty registry`                                     | Args without NoOptDefVal flags are unchanged                         |
-| `multiple NoOptDefVal flags`                         | Multiple flags are each normalized correctly                         |
+- `TestFlagRegistry_PreprocessNoOptDefValArgs` (table-driven, 11 subtests)
+- `TestFlagRegistry_PreprocessNoOptDefValArgs_EdgeCases` (3 subtests)
+
+Run with: `go test ./pkg/flags/ -run TestFlagRegistry_PreprocessNoOptDefValArgs -v`

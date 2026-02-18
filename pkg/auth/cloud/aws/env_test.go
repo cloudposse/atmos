@@ -140,22 +140,6 @@ func TestPrepareEnvironment(t *testing.T) {
 
 			// Verify result matches expected environment.
 			assert.Equal(t, tt.expectedEnv, result, "environment should match expected")
-
-			// Verify input environment was not mutated.
-			for key, value := range tt.inputEnv {
-				// Check that original values are still there (unless they should be cleared).
-				shouldBeCleared := false
-				for _, clearVar := range environmentVarsToClear {
-					if key == clearVar {
-						shouldBeCleared = true
-						break
-					}
-				}
-				if !shouldBeCleared {
-					// Non-cleared variables should remain in input.
-					assert.Equal(t, value, tt.inputEnv[key], "input environment should not be mutated for %s", key)
-				}
-			}
 		})
 	}
 }
