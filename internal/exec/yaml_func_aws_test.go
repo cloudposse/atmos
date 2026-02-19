@@ -433,32 +433,33 @@ func TestProcessSimpleTagsSkipsAWSFunctions(t *testing.T) {
 	stackInfo := &schema.ConfigAndStacksInfo{}
 
 	// Test that skipping works for aws.account_id.
+	// When a function is skipped, it returns (input, true, nil) meaning "handled but not processed".
 	skip := []string{"aws.account_id"}
 	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsAccountID, "", skip, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsAccountID, result)
 
 	// Test that skipping works for aws.caller_identity_arn.
 	skip = []string{"aws.caller_identity_arn"}
 	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityArn, "", skip, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsCallerIdentityArn, result)
 
 	// Test that skipping works for aws.caller_identity_user_id.
 	skip = []string{"aws.caller_identity_user_id"}
 	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsCallerIdentityUserID, "", skip, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsCallerIdentityUserID, result)
 
 	// Test that skipping works for aws.region.
 	skip = []string{"aws.region"}
 	result, handled, err = processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsRegion, "", skip, stackInfo)
 	assert.NoError(t, err)
-	assert.False(t, handled)
-	assert.Nil(t, result)
+	assert.True(t, handled)
+	assert.Equal(t, u.AtmosYamlFuncAwsRegion, result)
 }
 
 // TestAWSYamlFunctionConstants verifies the constants are defined correctly.

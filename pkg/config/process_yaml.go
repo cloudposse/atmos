@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/viper"
 	"go.yaml.in/yaml/v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -328,6 +329,11 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		return nil
 	}
 
+	// Check if the tag is a standard YAML tag (starts with !!)
+	if strings.HasPrefix(node.Tag, "!!") {
+		return nil
+	}
+
 	switch {
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncEnv):
 		return handleEnv(node, v, currentPath)
@@ -341,8 +347,18 @@ func processScalarNode(node *yaml.Node, v *viper.Viper, currentPath string) erro
 		return handleCwd(node, v, currentPath)
 	case strings.HasPrefix(node.Tag, u.AtmosYamlFuncRandom):
 		return handleRandom(node, v, currentPath)
+	default:
+		// If we have a non-standard tag that's not supported, return an error.
+		supportedTags := strings.Join([]string{
+			u.AtmosYamlFuncEnv,
+			u.AtmosYamlFuncExec,
+			u.AtmosYamlFuncInclude,
+			u.AtmosYamlFuncGitRoot,
+			u.AtmosYamlFuncRandom,
+		}, ", ")
+		return fmt.Errorf("%w: '%s' at path '%s'. Supported tags for atmos.yaml are: %s",
+			errUtils.ErrUnsupportedYamlTag, node.Tag, currentPath, supportedTags)
 	}
-	return nil
 }
 
 // handleEnv processes a YAML node with an !env tag and sets the value in Viper, returns an error if the processing fails, warns if the value is empty.

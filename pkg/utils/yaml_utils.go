@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"os"
 	"sort"
 	"strings"
@@ -12,7 +13,9 @@ import (
 
 	yaml "gopkg.in/yaml.v3"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/config/homedir"
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -46,43 +49,6 @@ const (
 )
 
 var (
-	AtmosYamlTags = []string{
-		AtmosYamlFuncExec,
-		AtmosYamlFuncStore,
-		AtmosYamlFuncStoreGet,
-		AtmosYamlFuncTemplate,
-		AtmosYamlFuncTerraformOutput,
-		AtmosYamlFuncTerraformState,
-		AtmosYamlFuncEnv,
-		AtmosYamlFuncCwd,
-		AtmosYamlFuncRandom,
-		AtmosYamlFuncLiteral,
-		AtmosYamlFuncAwsAccountID,
-		AtmosYamlFuncAwsCallerIdentityArn,
-		AtmosYamlFuncAwsCallerIdentityUserID,
-		AtmosYamlFuncAwsRegion,
-	}
-
-	// AtmosYamlTagsMap provides O(1) lookup for custom tag checking.
-	// This optimization replaces the O(n) SliceContainsString calls that were previously
-	// called 75M+ times, causing significant performance overhead.
-	atmosYamlTagsMap = map[string]bool{
-		AtmosYamlFuncExec:                    true,
-		AtmosYamlFuncStore:                   true,
-		AtmosYamlFuncStoreGet:                true,
-		AtmosYamlFuncTemplate:                true,
-		AtmosYamlFuncTerraformOutput:         true,
-		AtmosYamlFuncTerraformState:          true,
-		AtmosYamlFuncEnv:                     true,
-		AtmosYamlFuncCwd:                     true,
-		AtmosYamlFuncRandom:                  true,
-		AtmosYamlFuncLiteral:                 true,
-		AtmosYamlFuncAwsAccountID:            true,
-		AtmosYamlFuncAwsCallerIdentityArn:    true,
-		AtmosYamlFuncAwsCallerIdentityUserID: true,
-		AtmosYamlFuncAwsRegion:               true,
-	}
-
 	// ParsedYAMLCache stores parsed yaml.Node objects and their position information
 	// to avoid re-parsing the same files multiple times.
 	// Cache key: file path + content hash.
@@ -666,9 +632,20 @@ func processCustomTags(atmosConfig *schema.AtmosConfiguration, node *yaml.Node, 
 			continue
 		}
 
-		// Use O(1) map lookup instead of O(n) slice search for performance.
-		// This optimization reduces 75M+ linear searches to constant-time lookups.
-		if atmosYamlTagsMap[tag] {
+		// Check if a tag is present and if it's unsupported.
+		// Standard YAML tags (!!str, !!int, etc.) are allowed.
+		// Use the fntag package as the single source of truth for supported tags.
+		if tag != "" && !strings.HasPrefix(tag, "!!") {
+			if !fntag.IsValidYAML(tag) {
+				supportedTags := strings.Join(fntag.AllYAML(), ", ")
+				return fmt.Errorf("%w: '%s' found in file '%s'. Supported tags are: %s",
+					errUtils.ErrUnsupportedYamlTag, tag, file, supportedTags)
+			}
+		}
+
+		// Use fntag package O(1) lookup instead of local map.
+		// This ensures we use the fntag package as the single source of truth.
+		if fntag.IsValidYAML(tag) {
 			n.Value = getValueWithTag(n)
 			// Clear the custom tag to prevent the YAML decoder from processing it again.
 			// We keep the value as is since it will be processed later by processCustomTags.
@@ -707,17 +684,18 @@ func getValueWithTag(n *yaml.Node) string {
 	return strings.TrimSpace(tag + " " + val)
 }
 
-// hasCustomTags performs a fast scan to check if a node or any of its children contain custom Atmos tags.
-// This enables early exit optimization in processCustomTags, avoiding expensive recursive processing
-// for YAML subtrees that don't use custom tags (which is the majority of YAML content).
+// hasCustomTags performs a fast scan to check if a node or any of its children contain custom tags.
+// This includes both supported Atmos tags and potentially unsupported tags that need validation.
+// This enables the processCustomTags function to perform unsupported tag detection.
 func hasCustomTags(node *yaml.Node) bool {
 	if node == nil {
 		return false
 	}
 
-	// Check if this node has a custom tag.
+	// Check if this node has a custom tag (any non-standard tag starting with !).
+	// Standard YAML tags start with !! (e.g., !!str, !!int).
 	tag := strings.TrimSpace(node.Tag)
-	if atmosYamlTagsMap[tag] || tag == AtmosYamlFuncInclude || tag == AtmosYamlFuncIncludeRaw {
+	if tag != "" && !strings.HasPrefix(tag, "!!") {
 		return true
 	}
 
