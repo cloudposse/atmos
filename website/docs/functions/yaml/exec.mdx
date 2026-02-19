@@ -41,7 +41,7 @@ You can execute inline shell scripts, scripts defined in external files, or even
 :::warning
 `!exec atmos terraform output` is just as examples to show that you can get the outputs of an Atmos component using
 the `!exec` YAML function, but it's not recommended to use.
-Instead, use the [`!terraform.output`](/functions/yaml/terraform.output)
+Instead, use the [`!terraform.output`](/functions/yaml/terraform-output)
 YAML function. It produces the same results, correctly handles complex types (lists and maps),
 has a much simpler syntax, and automatically caches the results for the same component and stack (so if you are calling
 it many times on the same component in the same stack, it will execute `terraform output` only once and the stack
