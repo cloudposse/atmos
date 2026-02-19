@@ -67,6 +67,12 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		return err
 	}
 
+	// Validate Atmos config first to provide specific error messages
+	// (e.g., stacks directory does not exist) before full initialization.
+	if err := internal.ValidateAtmosConfig(); err != nil {
+		return err
+	}
+
 	// Initialize the CLI config.
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
@@ -85,7 +91,7 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	// Run user-defined hooks from stack configuration.
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
-		return errors.Join(errUtils.ErrGetHooks, err)
+		return err
 	}
 
 	if hooks != nil && hooks.HasHooks() {
@@ -203,15 +209,7 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 // executeSingleComponent executes terraform for a single component.
 func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	err := e.ExecuteTerraform(*info)
-	if err != nil {
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			errUtils.CheckErrorAndPrint(err, "", "")
-			return err
-		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-	return nil
+	return e.ExecuteTerraform(*info)
 }
 
 // newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
