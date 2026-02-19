@@ -4,12 +4,13 @@
 
 This document describes the credential realm isolation feature that prevents credential collisions when the same identity names are used across different repositories. This is critical for consultants and engineers who work with multiple customers that use identical identity names (e.g., `core-root/terraform`).
 
-**Status:** 📋 **Proposed** - Ready for implementation.
+**Status:** ✅ **Implemented** — See [Auth Realm Architecture PRD](./auth-realm-architecture.md) for the architecture and implementation details.
 
 **Key Problem:** AWS credentials are cached globally based only on identity name, causing credential cross-contamination between different repositories with the same identity names.
 
 **Implementation Scope:**
-- **AWS:** Will be implemented with this PRD (AWS authentication is currently implemented)
+- **AWS:** ✅ Implemented — realm isolation for file paths and keyring keys
+- **GCP:** ✅ Implemented — GCP service account identity enforces non-empty realm
 - **Azure:** Will be implemented when Azure authentication is built (Azure auth is documented but not yet implemented—see [Azure Authentication File Isolation PRD](./azure-auth-file-isolation.md))
 
 ## Problem Statement
