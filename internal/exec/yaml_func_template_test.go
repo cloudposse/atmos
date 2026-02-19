@@ -166,7 +166,7 @@ func TestProcessTagTemplate_UnitTests(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagTemplate(tt.input)
+			result, _ := processTagTemplate(tt.input)
 			assert.Equal(t, tt.expected, result, "Result should match expected value")
 		})
 	}
@@ -235,7 +235,7 @@ func TestProcessTagTemplate_TypePreservation(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagTemplate(tt.input)
+			result, _ := processTagTemplate(tt.input)
 			tt.validator(t, result)
 		})
 	}
@@ -283,12 +283,61 @@ func TestProcessTagTemplate_ErrorHandling(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagTemplate(tt.input)
+			result, _ := processTagTemplate(tt.input)
 			str, ok := result.(string)
 			assert.True(t, ok, "Result should be a string (graceful degradation)")
 			assert.Equal(t, tt.expectStr, str, tt.description)
 		})
 	}
+}
+
+// TestProcessTagTemplate_EmptyInput tests that empty input after the tag returns an error.
+func TestProcessTagTemplate_EmptyInput(t *testing.T) {
+	tests := []struct {
+		name        string
+		input       string
+		wantErr     bool
+		errContains string
+	}{
+		{
+			name:        "empty input after tag",
+			input:       "!template",
+			wantErr:     true,
+			errContains: "invalid Atmos YAML function",
+		},
+		{
+			name:        "only whitespace after tag",
+			input:       "!template   ",
+			wantErr:     true,
+			errContains: "invalid Atmos YAML function",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result, err := processTagTemplate(tt.input)
+			if tt.wantErr {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errContains)
+				assert.Nil(t, result)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestProcessTemplateTagsOnly_ErrorPath tests that ProcessTemplateTagsOnly handles errors gracefully.
+func TestProcessTemplateTagsOnly_ErrorPath(t *testing.T) {
+	// Test that an error in processTagTemplate returns the original string.
+	input := map[string]any{
+		"key": "!template", // Empty after tag - would return error from processTagTemplate.
+	}
+
+	result := ProcessTemplateTagsOnly(input)
+
+	// On error, the original string should be preserved.
+	assert.Equal(t, "!template", result["key"])
 }
 
 // TestYamlFuncTemplate_Integration tests the !template function in a real stack context.
@@ -566,7 +615,7 @@ func TestYamlFuncTemplate_ReturnTypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := processTagTemplate(tt.input)
+			result, _ := processTagTemplate(tt.input)
 			tt.validate(t, result)
 		})
 	}
@@ -577,7 +626,7 @@ func TestYamlFuncTemplate_ReturnTypes(t *testing.T) {
 func TestYamlFuncTemplate_WithSkip(t *testing.T) {
 	// This test verifies that the !template function works when called directly
 	t.Run("direct function call", func(t *testing.T) {
-		result := processTagTemplate(`!template ["a", "b", "c"]`)
+		result, _ := processTagTemplate(`!template ["a", "b", "c"]`)
 		list, ok := result.([]interface{})
 		assert.True(t, ok, "Should be a list")
 		assert.Len(t, list, 3, "List should have 3 items")
@@ -592,7 +641,7 @@ func TestYamlFuncTemplate_Documentation(t *testing.T) {
 	// Test the exact example from the documentation
 	t.Run("documentation example - list output", func(t *testing.T) {
 		input := `!template ["item-1", "item-2", "item-3"]`
-		result := processTagTemplate(input)
+		result, _ := processTagTemplate(input)
 
 		list, ok := result.([]interface{})
 		assert.True(t, ok, "Should decode to list")
@@ -604,7 +653,7 @@ func TestYamlFuncTemplate_Documentation(t *testing.T) {
 
 	t.Run("documentation example - map output", func(t *testing.T) {
 		input := `!template {"key": "value"}`
-		result := processTagTemplate(input)
+		result, _ := processTagTemplate(input)
 
 		m, ok := result.(map[string]interface{})
 		assert.True(t, ok, "Should decode to map")
@@ -616,7 +665,7 @@ func TestYamlFuncTemplate_Documentation(t *testing.T) {
 	t.Run("documentation pattern - simulated result", func(t *testing.T) {
 		// Simulate the result after toJson from atmos.Component() output
 		input := `!template ["subnet-abc", "subnet-def", "subnet-ghi"]`
-		result := processTagTemplate(input)
+		result, _ := processTagTemplate(input)
 
 		// Verify we get a native list, not a JSON string
 		subnetIDs, ok := result.([]interface{})
@@ -633,14 +682,14 @@ func TestYamlFuncTemplate_Regression(t *testing.T) {
 	t.Run("empty JSON string edge case", func(t *testing.T) {
 		// Regression test: Empty JSON string should decode to empty string, not error
 		input := `!template ""`
-		result := processTagTemplate(input)
+		result, _ := processTagTemplate(input)
 		assert.Equal(t, "", result)
 	})
 
 	t.Run("large JSON structure", func(t *testing.T) {
 		// Regression test: Large nested structures should work
 		input := `!template {"a":{"b":{"c":{"d":{"e":{"f":{"g":"deep"}}}}}}}`
-		result := processTagTemplate(input)
+		result, _ := processTagTemplate(input)
 
 		m, ok := result.(map[string]interface{})
 		assert.True(t, ok, "Should decode deep structure")
@@ -676,7 +725,7 @@ func TestYamlFuncTemplate_Regression(t *testing.T) {
 		}
 
 		for _, tt := range tests {
-			result := processTagTemplate(tt.input)
+			result, _ := processTagTemplate(tt.input)
 			num, ok := result.(float64)
 			assert.True(t, ok, "Should decode to number")
 			assert.Equal(t, tt.expected, num)
@@ -686,7 +735,7 @@ func TestYamlFuncTemplate_Regression(t *testing.T) {
 	t.Run("special characters in strings", func(t *testing.T) {
 		// Regression test: Special characters should be preserved
 		input := `!template {"special": "!@#$%^&*()_+-=[]{}|;:',.<>?/~"}`
-		result := processTagTemplate(input)
+		result, _ := processTagTemplate(input)
 
 		m, ok := result.(map[string]interface{})
 		assert.True(t, ok)

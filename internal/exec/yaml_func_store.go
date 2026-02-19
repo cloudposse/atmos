@@ -20,30 +20,32 @@ type params struct {
 	defaultValue *string
 }
 
-func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) any {
+func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, currentStack string) (any, error) {
 	defer perf.Track(atmosConfig, "exec.processTagStore")()
 
 	log.Debug("Executing Atmos YAML function", "function", input)
 
 	str, err := getStringAfterTag(input, u.AtmosYamlFuncStore)
-	errUtils.CheckErrorPrintAndExit(err, "", "")
+	if err != nil {
+		return nil, err
+	}
 
-	// Split the input on the pipe symbol to separate the store parameters and default value
+	// Split the input on the pipe symbol to separate the store parameters and default value.
 	parts := strings.Split(str, "|")
 	storePart := strings.TrimSpace(parts[0])
 
-	// Default value and query
+	// Default value and query.
 	var defaultValue *string
 	var query string
 	if len(parts) > 1 {
-		// Expecting the format: default <value> or query <yq-expression>
+		// Expecting the format: default <value> or query <yq-expression>.
 		for _, p := range parts[1:] {
 			pipeParts := strings.Fields(strings.TrimSpace(p))
 			if len(pipeParts) != 2 {
 				log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters after the pipe", len(pipeParts))
-				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+				return nil, fmt.Errorf("%w: %s: invalid number of parameters after the pipe: %d", errUtils.ErrYamlFuncInvalidArguments, input, len(pipeParts))
 			}
-			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present
+			v1 := strings.Trim(pipeParts[0], `"'`) // Remove surrounding quotes if present.
 			v2 := strings.Trim(pipeParts[1], `"'`)
 			switch v1 {
 			case "default":
@@ -52,17 +54,17 @@ func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, curre
 				query = v2
 			default:
 				log.Error(invalidYamlFuncMsg, function, input, "invalid identifier after the pipe", v1)
-				return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+				return nil, fmt.Errorf("%w: %s: invalid identifier after the pipe: %s", errUtils.ErrYamlFuncInvalidArguments, input, v1)
 			}
 		}
 	}
 
-	// Process the main store part
+	// Process the main store part.
 	storeParts := strings.Fields(storePart)
 	partsLength := len(storeParts)
 	if partsLength != 3 && partsLength != 4 {
 		log.Error(invalidYamlFuncMsg, function, input, "invalid number of parameters", partsLength)
-		return fmt.Sprintf("%s: %s", invalidYamlFuncMsg, input)
+		return nil, fmt.Errorf("%w: %s: invalid number of parameters: %d", errUtils.ErrYamlFuncInvalidArguments, input, partsLength)
 	}
 
 	retParams := params{
@@ -81,31 +83,31 @@ func processTagStore(atmosConfig *schema.AtmosConfiguration, input string, curre
 		retParams.key = strings.TrimSpace(storeParts[2])
 	}
 
-	// Retrieve the store from atmosConfig
+	// Retrieve the store from atmosConfig.
 	store := atmosConfig.Stores[retParams.storeName]
 
 	if store == nil {
-		er := fmt.Errorf("failed to execute YAML function %s. Store %s not found", input, retParams.storeName)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("%w: store %s not found in function %s", ErrStoreNotFound, retParams.storeName, input)
 	}
 
-	// Retrieve the value from the store
+	// Retrieve the value from the store.
 	value, err := store.Get(retParams.stack, retParams.component, retParams.key)
 	if err != nil {
 		if retParams.defaultValue != nil {
-			return *retParams.defaultValue
+			return *retParams.defaultValue, nil
 		}
-		er := fmt.Errorf("error executing YAML function %s. Failed to get key %s. Error: %w", input, retParams.key, err)
-		errUtils.CheckErrorPrintAndExit(er, "", "")
+		return nil, fmt.Errorf("error executing YAML function %s: failed to get key %s: %w", input, retParams.key, err)
 	}
 
-	// Execute the YQ expression if provided
+	// Execute the YQ expression if provided.
 	res := value
 
 	if retParams.query != "" {
 		res, err = u.EvaluateYqExpression(atmosConfig, value, retParams.query)
-		errUtils.CheckErrorPrintAndExit(err, "", "")
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	return res
+	return res, nil
 }
