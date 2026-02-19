@@ -235,7 +235,7 @@ jobs:
       - name: Check out code
         uses: actions/checkout@v4
 
-      - uses: hadolint/hadolint-action@v3.1.0
+      - uses: hadolint/hadolint-action@v3.3.0
         id: hadolint
         with:
           dockerfile: Dockerfile
