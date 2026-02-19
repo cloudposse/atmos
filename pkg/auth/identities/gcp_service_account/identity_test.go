@@ -904,9 +904,9 @@ func TestADC_ServiceAccount_ImpersonationFlow(t *testing.T) {
 
 	// Simulate ADC credentials (from user's gcloud login).
 	adcBaseCreds := &types.GCPCredentials{
-		AccessToken:         "adc-base-token",
-		TokenExpiry:         time.Now().Add(2 * time.Hour),
-		ProjectID:           "user-default-project",
+		AccessToken: "adc-base-token",
+		TokenExpiry: time.Now().Add(2 * time.Hour),
+		ProjectID:   "user-default-project",
 		// User ADC identity from `gcloud auth application-default login` (not a service account).
 		ServiceAccountEmail: "developer@company.com",
 	}
@@ -997,9 +997,9 @@ func TestADC_ServiceAccount_MultipleAccounts_IsolatedByIdentityName(t *testing.T
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 
 	makeIdentity := func(name, email string) *Identity {
-			return &Identity{
-				name:  name,
-				realm: "",
+		return &Identity{
+			name:  name,
+			realm: "",
 			principal: &types.GCPServiceAccountIdentityPrincipal{
 				ServiceAccountEmail: email,
 			},

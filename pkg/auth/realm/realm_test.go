@@ -181,18 +181,18 @@ func TestRealmInfo_SourceDescription(t *testing.T) {
 			info:     RealmInfo{Value: "test", Source: SourceConfig},
 			contains: "atmos.yaml",
 		},
-			{
-				name:          "auto source with path",
-				info:          RealmInfo{Value: "", Source: SourceAuto},
-				cliConfigPath: "/path/to/config",
-				contains:      "default (no realm isolation)",
-			},
-			{
-				name:          "auto source without path",
-				info:          RealmInfo{Value: "", Source: SourceAuto},
-				cliConfigPath: "",
-				contains:      "default (no realm isolation)",
-			},
+		{
+			name:          "auto source with path",
+			info:          RealmInfo{Value: "", Source: SourceAuto},
+			cliConfigPath: "/path/to/config",
+			contains:      "default (no realm isolation)",
+		},
+		{
+			name:          "auto source without path",
+			info:          RealmInfo{Value: "", Source: SourceAuto},
+			cliConfigPath: "",
+			contains:      "default (no realm isolation)",
+		},
 	}
 
 	for _, tc := range tests {
