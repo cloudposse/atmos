@@ -43,7 +43,7 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		AuthManager:          nil,
 	})
 	if err != nil {
-		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
+		return &Hooks{}, err
 	}
 
 	hooksSection, ok := sections["hooks"].(map[string]any)
