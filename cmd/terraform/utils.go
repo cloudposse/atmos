@@ -73,6 +73,15 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 
+	// Resolve path-based component arguments before getting hooks.
+	// Path resolution must happen before GetHooks because GetHooks calls
+	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		if err := resolveComponentPath(&info, cfg.TerraformComponentType); err != nil {
+			return err
+		}
+	}
+
 	// Run user-defined hooks from stack configuration.
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
@@ -194,7 +203,15 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 // executeSingleComponent executes terraform for a single component.
 func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	return e.ExecuteTerraform(*info)
+	err := e.ExecuteTerraform(*info)
+	if err != nil {
+		if errors.Is(err, errUtils.ErrPlanHasDiff) {
+			errUtils.CheckErrorAndPrint(err, "", "")
+			return err
+		}
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+	}
+	return nil
 }
 
 // newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
