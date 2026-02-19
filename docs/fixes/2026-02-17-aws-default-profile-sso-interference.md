@@ -2,30 +2,24 @@
 
 **Date:** 2026-02-17
 
-**Related Issue:** Misleading error when `AWS_PROFILE` or `[default]` profile in `~/.aws/config` interferes
-with SSO device authorization flow.
+**Related Issue:** Misleading error when `[default]` profile in `~/.aws/config` interferes with SSO
+device authorization flow.
 
 **Affected Atmos Version:** v1.160.0+ (introduced with Atmos Auth)
 
-**Severity:** Medium — SSO authentication fails with a misleading error message when a user has a default AWS
-profile configured, making the root cause difficult to diagnose.
+**Severity:** Medium — SSO authentication fails with a confusing error when a user has a `[default]`
+profile with non-trivial settings in `~/.aws/config`.
 
 ## Background
 
-When running `atmos auth login`, the SSO provider loads an AWS config to initialize the OIDC client for
-device authorization. The `LoadIsolatedAWSConfig` function was intended to completely isolate this config
-loading from the user's existing AWS environment. However, the implementation had a gap:
+When running `atmos auth login`, the SSO provider calls `LoadIsolatedAWSConfig` to load a clean AWS
+config for the OIDC client. This function was intended to completely isolate config loading from the
+user's environment. The sanitization had two layers:
 
-- `WithIsolatedAWSEnv` correctly unsets `AWS_PROFILE`, `AWS_CONFIG_FILE`, `AWS_SHARED_CREDENTIALS_FILE`,
-  and credential env vars during config loading.
-- `config.WithSharedConfigProfile("")` was used with the intent to "disable shared config loading," but
-  in the AWS SDK v2, an empty string means "use the default profile."
-- The AWS SDK still loads `~/.aws/config` and `~/.aws/credentials` from their default filesystem paths
-  even when the corresponding env vars are unset.
-
-This means if the user has a `[default]` profile in `~/.aws/config` that references SSO configuration,
-credential processes, or other non-trivial settings, the SDK attempts to resolve those during
-`LoadDefaultConfig` and may fail with a confusing error.
+1. **Env var isolation** (`WithIsolatedAWSEnv`) — Clears `AWS_PROFILE`, `AWS_CONFIG_FILE`,
+   `AWS_SHARED_CREDENTIALS_FILE`, and credential env vars during config loading. This worked correctly.
+2. **Shared config file isolation** (`config.WithSharedConfigProfile("")`) — Intended to prevent loading
+   from `~/.aws/config`. This did **not** work as expected.
 
 ## Symptoms
 
@@ -40,75 +34,143 @@ Failed to load AWS configuration for SSO authentication in region 'us-west-2'
 💡 Check your network connectivity and AWS service availability
 ```
 
-The hints suggest region/network issues, but the actual cause is the `[default]` profile in
-`~/.aws/config` (or `AWS_PROFILE` env var) interfering with config loading.
+The error suggests region/network issues, but the actual cause is the `[default]` profile in
+`~/.aws/config` being loaded and failing to resolve (e.g., `credential_process` pointing to a
+missing binary, or SSO settings that conflict with the Atmos-managed flow).
 
 ## Root Cause
 
-Two issues:
+The root cause is a gap in the sanitization process: `WithIsolatedAWSEnv` correctly sanitized
+environment variables, but the AWS SDK v2 has **two independent mechanisms** to find `~/.aws/config`:
 
-### 1. Incomplete isolation in `LoadIsolatedAWSConfig`
+1. **`AWS_CONFIG_FILE` env var** — Sanitized correctly by `WithIsolatedAWSEnv`.
+2. **Hardcoded `$HOME/.aws/config` default** — Was **not** blocked by env var cleanup.
 
-`config.WithSharedConfigProfile("")` does **not** disable shared config file loading. In the AWS SDK v2,
-an empty profile name resolves to the default profile (`[default]`). The SDK still reads `~/.aws/config`
-and `~/.aws/credentials` from their default paths (`$HOME/.aws/config` and `$HOME/.aws/credentials`).
+The original code attempted to block mechanism #2 with `config.WithSharedConfigProfile("")`, but this
+is ineffective due to how the AWS SDK v2 processes these options internally.
 
-The correct approach is to use `config.WithSharedConfigFiles([]string{})` and
-`config.WithSharedCredentialsFiles([]string{})` to provide empty file lists, which prevents the SDK
-from loading any shared config files.
+### Detailed SDK trace
 
-### 2. Misleading error message
+The following traces through the AWS SDK v2 source code (github.com/aws/aws-sdk-go-v2/config) to show
+exactly how `~/.aws/config` leaked through.
 
-The error at `sso.go:153-161` only hints at region/network issues. It does not mention:
-- The `AWS_PROFILE` environment variable as a potential cause.
-- The `~/.aws/config` default profile as a potential cause.
-- That Atmos auth isolates from external AWS configuration (so the user knows this was attempted).
+#### Step 1: `WithSharedConfigProfile("")` is a no-op
+
+```go
+// load_options.go:426-431
+func (o LoadOptions) getSharedConfigProfile(ctx context.Context) (string, bool, error) {
+    if len(o.SharedConfigProfile) == 0 {
+        return "", false, nil     // empty string → found=false
+    }
+    return o.SharedConfigProfile, true, nil
+}
+```
+
+Setting `SharedConfigProfile` to `""` causes the getter to return `found=false`, which means
+"no profile was specified." The SDK then falls back to the default profile:
+
+```go
+// shared_config.go:584-586
+profile, ok, err = getSharedConfigProfile(ctx, configs)
+if !ok {
+    profile = defaultSharedConfigProfile  // falls back to "default"
+}
+```
+
+So `WithSharedConfigProfile("")` effectively means **"use the `[default]` profile"**, the opposite
+of the intent to disable profile loading.
+
+#### Step 2: `SharedConfigFiles` was never set (remains `nil`)
+
+The original code did not call `WithSharedConfigFiles(...)`, so `LoadOptions.SharedConfigFiles`
+remained `nil`. The SDK's getter treats `nil` as "not specified":
+
+```go
+// load_options.go:448-454
+func (o LoadOptions) getSharedConfigFiles(ctx context.Context) ([]string, bool, error) {
+    if o.SharedConfigFiles == nil {
+        return nil, false, nil    // nil → found=false
+    }
+    return o.SharedConfigFiles, true, nil
+}
+```
+
+When `found=false`, the SDK falls back to hardcoded defaults:
+
+```go
+// shared_config.go:656-658
+if option.ConfigFiles == nil {
+    option.ConfigFiles = DefaultSharedConfigFiles  // → []string{"~/.aws/config"}
+}
+```
+
+`DefaultSharedConfigFiles` is `[]string{filepath.Join(home, ".aws", "config")}`. This path is
+resolved from `$HOME`, not from `AWS_CONFIG_FILE`. Unsetting `AWS_CONFIG_FILE` has no effect.
+
+#### Step 3: SDK loads `~/.aws/config` with `[default]` profile
+
+With `profile = "default"` and `configFiles = ["~/.aws/config"]`, the SDK calls `loadIniFiles`
+and `setFromIniSections`, which parses the `[default]` profile and attempts to resolve any
+settings it contains (credential processes, SSO configuration, etc.).
+
+If the `[default]` profile contains settings that fail to resolve (e.g., `credential_process`
+pointing to a missing binary), the SDK returns an error that propagates up as
+"failed to load AWS config" with no indication that it came from the user's shared config file.
+
+### Summary
+
+The env var sanitization in `WithIsolatedAWSEnv` was correct but insufficient. The AWS SDK v2
+resolves shared config files through a hardcoded `$HOME/.aws/config` path that is independent of
+the `AWS_CONFIG_FILE` env var. The only way to prevent this is to explicitly provide an empty
+file list via `WithSharedConfigFiles([]string{})`.
 
 ## Fix
 
 ### Approach
 
-1. Replace `config.WithSharedConfigProfile("")` with `config.WithSharedConfigFiles([]string{})` and
-   `config.WithSharedCredentialsFiles([]string{})` for complete filesystem isolation.
-2. Add a warning log when `AWS_PROFILE` is set or `~/.aws/config` exists with a default profile,
-   informing the user that these will be ignored during SSO auth.
-3. Improve the error message in the SSO provider to include hints about `AWS_PROFILE` and default
-   profiles in `~/.aws/config`.
+Replace `config.WithSharedConfigProfile("")` with `config.WithSharedConfigFiles([]string{})` and
+`config.WithSharedCredentialsFiles([]string{})` for complete filesystem isolation.
+
+### Why this works
+
+`WithSharedConfigFiles([]string{})` sets `LoadOptions.SharedConfigFiles` to a non-nil empty slice.
+The SDK's getter returns `found=true` with an empty list:
+
+```go
+func (o LoadOptions) getSharedConfigFiles(ctx context.Context) ([]string, bool, error) {
+    if o.SharedConfigFiles == nil {   // []string{} is NOT nil
+        return nil, false, nil
+    }
+    return o.SharedConfigFiles, true, nil  // returns empty slice, found=true
+}
+```
+
+Since `found=true`, the SDK uses the provided (empty) list instead of falling back to defaults:
+
+```go
+if option.ConfigFiles == nil {          // NOT nil (it's []string{})
+    option.ConfigFiles = DefaultSharedConfigFiles  // SKIPPED
+}
+```
+
+`loadIniFiles([]string{})` loads nothing. Combined with `WithIsolatedAWSEnv` clearing env vars,
+this achieves complete isolation from both environment variables and filesystem config files.
 
 ### Implementation
 
-#### 1. Fix `LoadIsolatedAWSConfig` (`pkg/auth/cloud/aws/env.go`)
+#### Fix `LoadIsolatedAWSConfig` (`pkg/auth/cloud/aws/env.go`)
 
 Replace `config.WithSharedConfigProfile("")` with:
 - `config.WithSharedConfigFiles([]string{})`
 - `config.WithSharedCredentialsFiles([]string{})`
 
-This completely prevents the AWS SDK from reading any shared config files during isolated operations.
-
-#### 2. Add `WarnIfAWSProfileSet` helper (`pkg/auth/cloud/aws/env.go`)
-
-New function that logs a warning when `AWS_PROFILE` is set, informing the user that it will be
-ignored during Atmos auth.
-
-#### 3. Improve SSO error message (`pkg/auth/providers/aws/sso.go`)
-
-Add hints about:
-- Checking if `AWS_PROFILE` environment variable is set.
-- Checking for a `[default]` profile in `~/.aws/config`.
-- The fact that Atmos auth operates in an isolated AWS environment.
-
-#### 4. Call warning from SSO `Authenticate` method
-
-Before loading the isolated config, call `WarnIfAWSProfileSet` to emit a debug-level warning.
-
 ### Files changed
 
 | File                                         | Change                                                               |
 |----------------------------------------------|----------------------------------------------------------------------|
-| `pkg/auth/cloud/aws/env.go`                  | Fix `LoadIsolatedAWSConfig` isolation; add `WarnIfAWSProfileSet`     |
-| `pkg/auth/providers/aws/sso.go`              | Improve error hints; call `WarnIfAWSProfileSet` before config load   |
-| `pkg/auth/cloud/aws/env_test.go`             | Tests for isolation fix and warning detection                        |
-| `pkg/auth/providers/aws/sso_test.go`         | Tests for improved error messages                                    |
+| `pkg/auth/cloud/aws/env.go`                  | Fix `LoadIsolatedAWSConfig` shared config file isolation             |
+| `pkg/auth/cloud/aws/env_test.go`             | Tests for isolation fix                                              |
+| `pkg/auth/providers/aws/sso.go`              | Remove misleading error hints now that isolation is complete         |
 
 ### Tests
 
@@ -116,6 +178,4 @@ Before loading the isolated config, call `WarnIfAWSProfileSet` to emit a debug-l
 |---------------------------------------------------------|-------------------------------------------------------------------|
 | `TestWithIsolatedAWSEnv_ClearsAllProblematicVars`       | All problematic vars are cleared during execution and restored    |
 | `TestLoadIsolatedAWSConfig_IgnoresDefaultProfile`       | Default profile in ~/.aws/config does not affect isolated config  |
-| `TestWarnIfAWSProfileSet_LogsWarning`                   | Warning is logged when AWS_PROFILE is set                         |
-| `TestWarnIfAWSProfileSet_NoWarningWhenUnset`            | No warning when AWS_PROFILE is not set                            |
-| `TestSSOProvider_Authenticate_ErrorIncludesProfileHint` | Error message includes hint about AWS_PROFILE                     |
+| `TestLoadIsolatedAWSConfig_DoesNotLoadSharedFiles`      | Shared config file settings do not leak into isolated config      |

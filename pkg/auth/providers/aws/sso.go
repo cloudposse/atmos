@@ -145,10 +145,6 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 		configOpts = append(configOpts, resolverOpt)
 	}
 
-	// Warn if external AWS configuration (AWS_PROFILE, etc.) is set.
-	// These are ignored during SSO auth, but can confuse users when debugging.
-	awsCloud.WarnIfAWSProfileSet()
-
 	log.Debug("Loading AWS config for SSO authentication", "region", p.region)
 	// Initialize AWS config for the SSO region with isolated environment
 	// to avoid conflicts with external AWS env vars and shared config files.
@@ -156,8 +152,6 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).
 			WithExplanationf("Failed to load AWS configuration for SSO authentication in region '%s'", p.region).
-			WithHint("Check if AWS_PROFILE is set in your environment — it can interfere with SSO config loading. Try: unset AWS_PROFILE").
-			WithHint("Check if your ~/.aws/config has a [default] profile with SSO settings that could conflict").
 			WithHint("Verify that the AWS region is valid and accessible").
 			WithHint("Check your network connectivity and AWS service availability").
 			WithContext("provider", p.name).

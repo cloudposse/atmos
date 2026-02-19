@@ -315,46 +315,6 @@ func TestLoadIsolatedAWSConfig_EnvVarsRestoredAfterCall(t *testing.T) {
 	assert.Equal(t, "AKIA_RESTORE", os.Getenv("AWS_ACCESS_KEY_ID"), "AWS_ACCESS_KEY_ID should be restored after LoadIsolatedAWSConfig")
 }
 
-func TestWarnIfAWSProfileSet_WithProfileSet(t *testing.T) {
-	// This test verifies the function doesn't panic and runs correctly.
-	// We can't easily capture log output, but we verify no errors occur.
-	t.Setenv("AWS_PROFILE", "test-profile")
-	assert.NotPanics(t, func() {
-		WarnIfAWSProfileSet()
-	})
-}
-
-func TestWarnIfAWSProfileSet_WithoutProfileSet(t *testing.T) {
-	// Unset AWS vars to verify no warning path.
-	// Use t.Setenv to register cleanup, then unset.
-	t.Setenv("AWS_PROFILE", "")
-	os.Unsetenv("AWS_PROFILE")
-	t.Setenv("AWS_CONFIG_FILE", "")
-	os.Unsetenv("AWS_CONFIG_FILE")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "")
-	os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE")
-	assert.NotPanics(t, func() {
-		WarnIfAWSProfileSet()
-	})
-}
-
-func TestWarnIfAWSProfileSet_WithEmptyProfile(t *testing.T) {
-	// Empty AWS_PROFILE should not trigger a warning.
-	t.Setenv("AWS_PROFILE", "")
-	assert.NotPanics(t, func() {
-		WarnIfAWSProfileSet()
-	})
-}
-
-func TestWarnIfAWSProfileSet_WithConfigAndCredsFiles(t *testing.T) {
-	// Verify debug logging path for AWS_CONFIG_FILE and AWS_SHARED_CREDENTIALS_FILE.
-	t.Setenv("AWS_CONFIG_FILE", "/custom/config")
-	t.Setenv("AWS_SHARED_CREDENTIALS_FILE", "/custom/credentials")
-	assert.NotPanics(t, func() {
-		WarnIfAWSProfileSet()
-	})
-}
-
 func TestLoadAtmosManagedAWSConfig_ClearsCredentialVarsOnly(t *testing.T) {
 	// Verify that LoadAtmosManagedAWSConfig only clears credential vars,
 	// not profile or file path vars.

@@ -271,39 +271,3 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 	log.Debug("Prepared AWS environment", "profile", profile)
 	return result
 }
-
-// WarnIfAWSProfileSet checks if external AWS configuration could interfere with
-// Atmos authentication and logs warnings to help users diagnose issues.
-//
-// This function checks for:
-// - AWS_PROFILE environment variable being set (most common interference source).
-// - AWS_CONFIG_FILE or AWS_SHARED_CREDENTIALS_FILE pointing to custom locations.
-//
-// Atmos auth operates in an isolated AWS environment, so these variables are
-// temporarily cleared during authentication. This warning helps users understand
-// why their external AWS configuration is being ignored.
-func WarnIfAWSProfileSet() {
-	defer perf.Track(nil, "pkg/auth/cloud/aws.WarnIfAWSProfileSet")()
-
-	if profile, exists := os.LookupEnv("AWS_PROFILE"); exists && profile != "" {
-		log.Warn("AWS_PROFILE is set in the environment",
-			"profile", profile,
-			"action", "Atmos auth will ignore this during authentication to avoid conflicts",
-			"recommendation", "If authentication fails, try unsetting AWS_PROFILE: unset AWS_PROFILE",
-		)
-	}
-
-	if configFile, exists := os.LookupEnv("AWS_CONFIG_FILE"); exists && configFile != "" {
-		log.Debug("AWS_CONFIG_FILE is set in the environment",
-			"config_file", configFile,
-			"action", "Atmos auth will ignore this during authentication",
-		)
-	}
-
-	if credsFile, exists := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE"); exists && credsFile != "" {
-		log.Debug("AWS_SHARED_CREDENTIALS_FILE is set in the environment",
-			"credentials_file", credsFile,
-			"action", "Atmos auth will ignore this during authentication",
-		)
-	}
-}
