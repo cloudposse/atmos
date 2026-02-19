@@ -78,6 +78,11 @@ func init() {
 	// This enables the COMPATIBILITY FLAGS section in help output.
 	internal.RegisterCommandCompatFlags("terraform", "terraform", TerraformGlobalCompatFlags())
 
+	// Register the flag registry for NoOptDefVal preprocessing in preprocessCompatibilityFlags.
+	// This enables the existing FlagRegistry.PreprocessNoOptDefValArgs to normalize
+	// flags like --identity before Cobra parsing.
+	internal.RegisterCommandFlagRegistry("terraform", terraformParser.Registry())
+
 	// Register this command with the registry.
 	internal.Register(&TerraformCommandProvider{})
 }

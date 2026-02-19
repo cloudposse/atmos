@@ -535,9 +535,11 @@ This implementation follows the [Universal Identity Provider File Isolation Patt
 ## Related Documents
 
 1. **[Universal Identity Provider File Isolation Pattern](./auth-file-isolation-pattern.md)** - Canonical pattern all providers follow
-2. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
-3. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
-4. **[Azure Authentication File Isolation](./azure-auth-file-isolation.md)** - Azure implementation of pattern
+2. **[Auth Realm Architecture PRD](./auth-realm-architecture.md)** - Realm-based credential isolation between repositories/customers
+3. **[Auth Credential Realm Isolation PRD](./auth-user-credential-realm-isolation.md)** - Original problem statement for realm isolation
+4. **[XDG Base Directory Specification PRD](./xdg-base-directory-specification.md)** - XDG compliance patterns
+5. **[Auth Context and Multi-Identity Support PRD](./auth-context-multi-identity.md)** - AuthContext design and usage
+6. **[Azure Authentication File Isolation](./azure-auth-file-isolation.md)** - Azure implementation of pattern
 
 ## Success Metrics
 
