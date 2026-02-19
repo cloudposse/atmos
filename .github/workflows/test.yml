@@ -214,8 +214,6 @@ jobs:
           PACKER_GITHUB_API_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Skip precondition checks in CI to ensure tests run and maintain coverage
           ATMOS_TEST_SKIP_PRECONDITION_CHECKS: true
-          # Avoid using the GitHub Actions provider for atmos CI hooks
-          GITHUB_ACTIONS: false
         run: make testacc-cover
 
       - name: Upload coverage report to Codecov
