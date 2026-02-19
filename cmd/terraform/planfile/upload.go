@@ -270,6 +270,7 @@ func detectS3FromEnv() *planfile.StoreOptions {
 
 // detectGitHubFromEnv checks if running in GitHub Actions.
 func detectGitHubFromEnv() *planfile.StoreOptions {
+	fmt.Println("GITHUB_ACTIONS=" + os.Getenv("GITHUB_ACTIONS"))
 	if os.Getenv("GITHUB_ACTIONS") != "true" {
 		return nil
 	}
