@@ -1,0 +1,104 @@
+---
+slug: terraform-required-providers
+title: 'Pin Terraform and Provider Versions in Stack Configuration'
+authors:
+  - osterman
+tags:
+  - feature
+  - dx
+date: 2025-12-16T00:00:00.000Z
+---
+
+You can now pin Terraform and provider versions directly in your stack configuration. Atmos generates `terraform_override.tf.json` files with `required_version` and `required_providers` blocks, giving you centralized control over infrastructure versioning.
+
+<!--truncate-->
+
+## What Changed
+
+Previously, pinning Terraform and provider versions required modifying component source code or maintaining separate override files. Now you can declare versions in your stack YAML:
+
+```yaml
+components:
+  terraform:
+    vpc:
+      metadata:
+        component: vpc
+      vars:
+        name: main-vpc
+      terraform:
+        required_version: ">= 1.10.1"
+        required_providers:
+          aws:
+            source: "hashicorp/aws"
+            version: "~> 5.0"
+          random:
+            source: "hashicorp/random"
+            version: ">= 3.0"
+```
+
+## How It Works
+
+When you run `atmos terraform generate required-providers`, Atmos creates a `terraform_override.tf.json` file in your component directory:
+
+```json
+{
+  "terraform": {
+    "required_version": ">= 1.10.1",
+    "required_providers": {
+      "aws": {
+        "source": "hashicorp/aws",
+        "version": "~> 5.0"
+      },
+      "random": {
+        "source": "hashicorp/random",
+        "version": ">= 3.0"
+      }
+    }
+  }
+}
+```
+
+This override file merges with your component's existing Terraform configuration, allowing you to pin versions without modifying component source code.
+
+## Stack Inheritance
+
+Version constraints follow Atmos's standard inheritance model. Define base versions in a catalog and override per-environment:
+
+```yaml
+# stacks/catalog/terraform.yaml
+terraform:
+  required_version: ">= 1.9.0"
+  required_providers:
+    aws:
+      source: "hashicorp/aws"
+      version: "~> 5.0"
+
+# stacks/deploy/prod.yaml
+import:
+  - catalog/terraform
+
+terraform:
+  required_version: ">= 1.10.1"  # Override for prod
+```
+
+## CLI Usage
+
+Generate the override file for a specific component and stack:
+
+```bash
+atmos terraform generate required-providers vpc --stack dev-us-east-1
+```
+
+Or specify a custom output path:
+
+```bash
+atmos terraform generate required-providers vpc --stack dev-us-east-1 \
+  --file /custom/path/terraform_override.tf.json
+```
+
+## Why This Matters
+
+- **Centralized version management** - Control versions across all components from stack configuration
+- **Environment-specific versions** - Pin stricter versions in production while allowing flexibility in development
+- **No component modification** - Override files work without changing component source code
+- **Inheritance support** - Define base versions in catalogs and override where needed

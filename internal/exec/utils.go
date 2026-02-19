@@ -30,6 +30,29 @@ const (
 	terraformConfigKey = "terraform_config"
 )
 
+// extractRequiredProviders extracts required_providers from a component section.
+// It handles both map[string]map[string]any and map[string]any formats.
+func extractRequiredProviders(componentSection map[string]any) map[string]map[string]any {
+	// Try direct type assertion first.
+	if section, ok := componentSection[cfg.RequiredProvidersSectionName].(map[string]map[string]any); ok {
+		return section
+	}
+
+	// Try map[string]any and convert each value.
+	rawProviders, ok := componentSection[cfg.RequiredProvidersSectionName].(map[string]any)
+	if !ok {
+		return nil
+	}
+
+	result := make(map[string]map[string]any)
+	for k, v := range rawProviders {
+		if providerConfig, ok := v.(map[string]any); ok {
+			result[k] = providerConfig
+		}
+	}
+	return result
+}
+
 // getStackManifestName extracts the manifest-level 'name' field from a stack section.
 // Returns empty string if the section is not a map or doesn't have a name field.
 func getStackManifestName(stackSection any) string {
@@ -61,6 +84,8 @@ func ProcessComponentConfig(
 	var componentSettingsSection map[string]any
 	var componentOverridesSection map[string]any
 	var componentProvidersSection map[string]any
+	var componentRequiredProvidersSection map[string]map[string]any
+	var componentRequiredVersion string
 	var componentHooksSection map[string]any
 	var componentImportsSection []string
 	var componentEnvSection map[string]any
@@ -105,6 +130,14 @@ func ProcessComponentConfig(
 
 	if componentProvidersSection, ok = componentSection[cfg.ProvidersSectionName].(map[string]any); !ok {
 		componentProvidersSection = map[string]any{}
+	}
+
+	// Extract required_providers section (DEV-3124: pin provider versions).
+	componentRequiredProvidersSection = extractRequiredProviders(componentSection)
+
+	// Extract required_version section (DEV-3124: pin Terraform version).
+	if componentRequiredVersion, ok = componentSection[cfg.RequiredVersionSectionName].(string); !ok {
+		componentRequiredVersion = ""
 	}
 
 	if componentHooksSection, ok = componentSection[cfg.HooksSectionName].(map[string]any); !ok {
@@ -174,6 +207,8 @@ func ProcessComponentConfig(
 	configAndStacksInfo.ComponentSettingsSection = componentSettingsSection
 	configAndStacksInfo.ComponentOverridesSection = componentOverridesSection
 	configAndStacksInfo.ComponentProvidersSection = componentProvidersSection
+	configAndStacksInfo.RequiredProviders = componentRequiredProvidersSection
+	configAndStacksInfo.RequiredVersion = componentRequiredVersion
 	configAndStacksInfo.StackSection = stackSection
 	configAndStacksInfo.ComponentHooksSection = componentHooksSection
 	configAndStacksInfo.ComponentEnvSection = componentEnvSectionFiltered
@@ -1066,6 +1101,21 @@ func FindComponentDependencies(currentStack string, sources schema.ConfigSources
 func postProcessTemplatesAndYamlFunctions(configAndStacksInfo *schema.ConfigAndStacksInfo) {
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.ProvidersSectionName].(map[string]any); ok {
 		configAndStacksInfo.ComponentProvidersSection = i
+	}
+
+	// Restore required_providers section (DEV-3124).
+	if rawRequiredProviders, ok := configAndStacksInfo.ComponentSection[cfg.RequiredProvidersSectionName].(map[string]any); ok {
+		configAndStacksInfo.RequiredProviders = make(map[string]map[string]any)
+		for k, v := range rawRequiredProviders {
+			if providerConfig, ok2 := v.(map[string]any); ok2 {
+				configAndStacksInfo.RequiredProviders[k] = providerConfig
+			}
+		}
+	}
+
+	// Restore required_version section (DEV-3124).
+	if i, ok := configAndStacksInfo.ComponentSection[cfg.RequiredVersionSectionName].(string); ok {
+		configAndStacksInfo.RequiredVersion = i
 	}
 
 	if i, ok := configAndStacksInfo.ComponentSection[cfg.AuthSectionName].(map[string]any); ok {
