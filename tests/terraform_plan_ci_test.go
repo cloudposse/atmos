@@ -99,7 +99,7 @@ func TestTerraformPlanCIUploadAndPlanfileList(t *testing.T) {
 	assert.NoError(t, err, "Planfile should exist in the component working directory: %s", planfilePattern)
 
 	// Step 3: Check if planfile was uploaded to the store by listing.
-	listCmd := runner.Command("terraform", "planfile", "list")
+	listCmd := runner.Command("terraform", "planfile", "list", "--store", "local")
 	listCmd.Dir = fixtureDir
 	for k, v := range sandboxEnv {
 		listCmd.Env = append(listCmd.Env, k+"="+v)
