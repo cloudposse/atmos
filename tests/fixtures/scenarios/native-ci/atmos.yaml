@@ -47,7 +47,6 @@ components:
           options:
             path: ".atmos/planfiles"
 
-
 stacks:
   base_path: "stacks"
   included_paths:
