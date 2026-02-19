@@ -12,7 +12,7 @@ func init() {
 // Analyzer is a standalone analyzer for CLI usage.
 var Analyzer = &analysis.Analyzer{
 	Name: "lintroller",
-	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/perf.Track checks)",
+	Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/perf.Track/TestKit checks)",
 	Run:  standaloneRun,
 }
 
@@ -26,6 +26,7 @@ func standaloneRun(pass *analysis.Pass) (interface{}, error) {
 		&OsChdirInTestRule{},
 		&OsArgsInTestRule{},
 		&PerfTrackRule{},
+		&TestKitRule{},
 	}
 
 	for _, file := range pass.Files {
@@ -47,6 +48,7 @@ type Settings struct {
 	OsChdirInTest     bool `json:"os-chdir-in-test" yaml:"os-chdir-in-test"`
 	OsArgsInTest      bool `json:"os-args-in-test" yaml:"os-args-in-test"`
 	PerfTrack         bool `json:"perf-track" yaml:"perf-track"`
+	TestKitRequired   bool `json:"testkit-required" yaml:"testkit-required"`
 }
 
 // LintrollerPlugin implements the register.LinterPlugin interface.
@@ -62,13 +64,14 @@ func New(settings any) (register.LinterPlugin, error) {
 	}
 
 	// Default to enabling all rules if no settings provided.
-	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest && !s.PerfTrack {
+	if !s.TSetenvInDefer && !s.OsSetenvInTest && !s.OsMkdirTempInTest && !s.OsChdirInTest && !s.OsArgsInTest && !s.PerfTrack && !s.TestKitRequired {
 		s.TSetenvInDefer = true
 		s.OsSetenvInTest = true
 		s.OsMkdirTempInTest = true
 		s.OsChdirInTest = true
 		s.OsArgsInTest = true
 		s.PerfTrack = true
+		s.TestKitRequired = true
 	}
 
 	return &LintrollerPlugin{settings: s}, nil
@@ -79,7 +82,7 @@ func (p *LintrollerPlugin) BuildAnalyzers() ([]*analysis.Analyzer, error) {
 	return []*analysis.Analyzer{
 		{
 			Name: "lintroller",
-			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/perf.Track checks)",
+			Doc:  "Atmos project-specific linting rules (t.Setenv/os.Setenv/t.TempDir/t.Chdir/os.Args/perf.Track/TestKit checks)",
 			Run:  p.run,
 		},
 	}, nil
@@ -111,6 +114,9 @@ func (p *LintrollerPlugin) run(pass *analysis.Pass) (interface{}, error) {
 	}
 	if p.settings.PerfTrack {
 		rules = append(rules, &PerfTrackRule{})
+	}
+	if p.settings.TestKitRequired {
+		rules = append(rules, &TestKitRule{})
 	}
 
 	// Run all enabled rules.
