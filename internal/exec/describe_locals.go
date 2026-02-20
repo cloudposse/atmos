@@ -250,7 +250,7 @@ func getLocalsForComponentType(stackLocals map[string]any, componentType string)
 
 // stackFileLocalsResult holds the result of processing a stack file for locals.
 type stackFileLocalsResult struct {
-	StackName   string         // Derived stack name (empty if filtered out or unparseable).
+	StackName   string         // Derived stack name (empty if filtered out or unparsable).
 	StackLocals map[string]any // Locals extracted from the stack file.
 	Found       bool           // Whether the stack matched the filter (even if no locals).
 }
