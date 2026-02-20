@@ -33,6 +33,11 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 // Used to update check runs to failure status when RunE fails
 // (Cobra skips PostRunE on error, so this must be called explicitly).
 func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error) {
+	runHooksOnErrorWithOutput(event, cmd_, args, cmdErr, "")
+}
+
+// runHooksOnErrorWithOutput runs CI hooks with command error context and captured output.
+func runHooksOnErrorWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error, output string) {
 	finalArgs := append([]string{cmd_.Name()}, args...)
 
 	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
@@ -50,7 +55,7 @@ func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdE
 		forceCIMode = viper.GetBool("ci")
 	}
 
-	if err := h.RunCIHooks(event, &atmosConfig, &info, "", forceCIMode, cmdErr); err != nil {
+	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, cmdErr); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
 	}
 }
@@ -207,9 +212,9 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // executeSingleComponent executes terraform for a single component.
-func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
+func executeSingleComponent(info *schema.ConfigAndStacksInfo, shellOpts ...e.ShellCommandOption) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	return e.ExecuteTerraform(*info)
+	return e.ExecuteTerraform(*info, shellOpts...)
 }
 
 // newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
@@ -283,7 +288,8 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
 // Commands with their own parsers (plan, apply, deploy) bind their parsers in RunE.
-func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions) error {
+// Optional ShellCommandOption values are forwarded to ExecuteTerraform for stdout capture, etc.
+func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions, shellOpts ...e.ShellCommandOption) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
 
@@ -334,7 +340,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
-	return executeSingleComponent(&info)
+	return executeSingleComponent(&info, shellOpts...)
 }
 
 // hasMultiComponentFlags checks if any multi-component flags are set.

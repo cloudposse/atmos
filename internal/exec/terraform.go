@@ -86,7 +86,8 @@ func resolveAndInstallToolchainDeps(atmosConfig *schema.AtmosConfiguration, info
 }
 
 // ExecuteTerraform executes terraform commands.
-func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
+// Optional ShellCommandOption values are forwarded to the final ExecuteShellCommand call.
+func ExecuteTerraform(info schema.ConfigAndStacksInfo, opts ...ShellCommandOption) error {
 	defer perf.Track(nil, "exec.ExecuteTerraform")()
 
 	log.Debug("ExecuteTerraform entry", "SubCommand", info.SubCommand, "ComponentFromArg", info.ComponentFromArg, "FinalComponent", info.FinalComponent, "Stack", info.Stack, "StackFromArg", info.StackFromArg)
@@ -730,6 +731,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
+			opts...,
 		)
 		// Compute exitCode for upload, whether or not err is set.
 		var exitCode int
