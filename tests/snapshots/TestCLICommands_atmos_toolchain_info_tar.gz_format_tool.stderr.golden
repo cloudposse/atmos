@@ -11,6 +11,7 @@ Available Versions (latest 10):
 ────────────────────────────────────────────────────────────────────────
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  X.X.X                                         
+    X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  When the result list is updated, move the      
                          cursor to the item with the best score         
     X.X.X   YYYY-MM-DD  X.X.X                                         
@@ -19,6 +20,5 @@ Available Versions (latest 10):
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  X.X.X                                         
     X.X.X   YYYY-MM-DD  Screenshot                                     
-    X.X.X   YYYY-MM-DD  X.X.X                                         
 
 💡 Use atmos toolchain install junegunn/fzf@<version> to install
