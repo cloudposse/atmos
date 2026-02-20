@@ -10,7 +10,7 @@ import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `metadata` section configures how Atmos interprets and manages a component. Unlike other sections, `metadata` is only valid within component definitions (`components.terraform.<name>.metadata`), not at the global or component-type level.
+The `metadata` section configures how Atmos interprets and manages a component. Metadata can be set at the global level (under `terraform:`, `helmfile:`, or `packer:`) to provide defaults for all components of that type, or within component definitions (`components.terraform.<name>.metadata`) for component-specific settings.
 </Intro>
 
 ## Use Cases
@@ -22,7 +22,25 @@ The `metadata` section configures how Atmos interprets and manages a component. 
 
 ## Configuration Scope
 
-The `metadata` section is **only valid inside component definitions**:
+The `metadata` section can be used in two places:
+
+**1. Global Level (Defaults for All Components):**
+
+```yaml
+terraform:
+  metadata:
+    terraform_workspace_pattern: "{component}"
+    locked: false
+
+components:
+  terraform:
+    vpc:
+      # Inherits global metadata
+      vars:
+        cidr: "10.0.0.0/16"
+```
+
+**2. Component Level (Component-Specific Settings):**
 
 ```yaml
 components:
@@ -30,11 +48,18 @@ components:
     vpc:
       metadata:
         component: vpc/network
+        terraform_workspace_pattern: "{tenant}-{stage}-{component}"
         inherits:
           - vpc/defaults
 ```
 
-It cannot be used at the global level or under `terraform:` / `helmfile:` / `packer:` defaults.
+### Metadata Precedence
+
+When metadata is defined at multiple levels, the following precedence applies (lowest to highest priority):
+
+1. **Global metadata** (from `terraform.metadata`, `helmfile.metadata`, or `packer.metadata`)
+2. **Base component metadata** (from `metadata.inherits`)
+3. **Component metadata** (highest priority)
 
 ## Metadata Fields
 
@@ -344,6 +369,98 @@ components:
       vars:
         enable_nat_gateway: true
         multi_az: true
+```
+</File>
+
+## Global Metadata Examples
+
+### Setting Default Workspace Pattern
+
+Set a default `terraform_workspace_pattern` for all Terraform components in a stack:
+
+<File title="stacks/prod.yaml">
+```yaml
+terraform:
+  metadata:
+    terraform_workspace_pattern: "{component}"
+
+components:
+  terraform:
+    vpc:
+      # Inherits terraform_workspace_pattern: "{component}"
+      vars:
+        cidr: "10.0.0.0/16"
+    
+    eks:
+      # Also inherits terraform_workspace_pattern: "{component}"
+      vars:
+        cluster_name: "prod"
+```
+</File>
+
+This eliminates the need to set `terraform_workspace_pattern` in every component's metadata.
+
+### Combining Global and Component Metadata
+
+Global metadata provides defaults, which can be overridden at the component level:
+
+<File title="stacks/mixed.yaml">
+```yaml
+terraform:
+  metadata:
+    terraform_workspace_pattern: "{component}"
+    locked: false
+
+components:
+  terraform:
+    vpc:
+      # Uses global workspace pattern and locked setting
+      vars:
+        cidr: "10.0.0.0/16"
+    
+    critical-db:
+      metadata:
+        locked: true  # Overrides global locked: false
+      # Still uses global workspace pattern
+      vars:
+        instance_class: "db.r5.xlarge"
+```
+</File>
+
+### Using Global Metadata with Inheritance
+
+Global metadata has the lowest priority, so base components and component-specific settings override it:
+
+<File title="stacks/catalog/vpc-defaults.yaml">
+```yaml
+terraform:
+  metadata:
+    terraform_workspace_pattern: "{component}"  # Stack-wide default
+
+components:
+  terraform:
+    vpc/defaults:
+      metadata:
+        type: abstract
+        terraform_workspace_pattern: "{tenant}-{stage}"  # Overrides global
+        component: vpc/v2
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+import:
+  - catalog/vpc-defaults
+
+components:
+  terraform:
+    vpc-prod:
+      metadata:
+        inherits:
+          - vpc/defaults
+        # Inherits "{tenant}-{stage}" pattern from vpc/defaults, not global
+      vars:
+        cidr: "10.0.0.0/16"
 ```
 </File>
 

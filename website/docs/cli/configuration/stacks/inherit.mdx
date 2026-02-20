@@ -121,6 +121,38 @@ components:
 
 All components inheriting from `critical/defaults` automatically get the governance settings.
 
+### Global Metadata Defaults
+
+Set default metadata for all components of a type using global `terraform.metadata`, `helmfile.metadata`, or `packer.metadata`:
+
+<File title="stacks/prod.yaml">
+```yaml
+terraform:
+  metadata:
+    terraform_workspace_pattern: "{component}"
+    locked: false
+
+components:
+  terraform:
+    vpc:
+      # Inherits global metadata
+      vars:
+        cidr: "10.0.0.0/16"
+    
+    eks:
+      # Also inherits global metadata
+      vars:
+        cluster_name: "prod"
+```
+</File>
+
+**Precedence:** Global metadata has the lowest priority:
+1. Global metadata (lowest)
+2. Base component metadata (from `metadata.inherits`)
+3. Component metadata (highest)
+
+This allows you to set stack-wide defaults while still allowing inheritance and component-specific overrides.
+
 ## Backwards Compatibility
 
 If metadata inheritance causes issues with existing configurations, disable it:
