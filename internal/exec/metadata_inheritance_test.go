@@ -1382,8 +1382,6 @@ func TestFilterBaseMetadata(t *testing.T) {
 // TestGlobalMetadataMerging tests that metadata from global terraform/helmfile/packer section
 // is merged with base component and component metadata with correct precedence.
 func TestGlobalMetadataMerging(t *testing.T) {
-trueVal := true
-
 tests := []struct {
 name                  string
 globalMetadata        map[string]any
@@ -1496,6 +1494,7 @@ description: "Custom metadata maps should be deep-merged with component values t
 for _, tt := range tests {
 t.Run(tt.name, func(t *testing.T) {
 atmosConfig := &schema.AtmosConfiguration{
+			trueVal := true
 Stacks: schema.Stacks{
 Inherit: schema.StacksInherit{
 Metadata: &trueVal,
