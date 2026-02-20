@@ -409,6 +409,118 @@ func TestConcurrentProvisioning(t *testing.T) {
 	}
 }
 
+// TestComponentInstancesWithSameBaseComponent tests that multiple component instances
+// sharing the same base component (metadata.component) get unique workdirs.
+// This test validates the fix for parallel apply of component instances.
+func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a single elasticache component directory that will be shared by all instances.
+	elasticacheDir := filepath.Join(tempDir, "components", "terraform", "elasticache")
+	err := os.MkdirAll(elasticacheDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(elasticacheDir, "main.tf"), []byte("# elasticache component"), 0o644)
+	require.NoError(t, err)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Create component configs for multiple instances, all sharing metadata.component: elasticache
+	// but with different atmos_component values (the full instance paths).
+	componentInstances := []struct {
+		atmosComponent string
+		baseComponent  string
+	}{
+		{
+			atmosComponent: "elasticache-redis-cluster-1",
+			baseComponent:  "elasticache",
+		},
+		{
+			atmosComponent: "elasticache-redis-cluster-2",
+			baseComponent:  "elasticache",
+		},
+		{
+			atmosComponent: "elasticache-redis-cluster-3",
+			baseComponent:  "elasticache",
+		},
+	}
+
+	ctx := context.Background()
+	workdirPaths := make(map[string]string)
+
+	// Provision workdirs for all instances.
+	for _, instance := range componentInstances {
+		componentConfig := map[string]any{
+			"atmos_component": instance.atmosComponent,
+			"component":       instance.baseComponent,
+			"atmos_stack":     "dev",
+			"metadata": map[string]any{
+				"component": instance.baseComponent,
+			},
+			"provision": map[string]any{
+				"workdir": map[string]any{
+					"enabled": true,
+				},
+			},
+			// Point to the shared elasticache component path.
+			"component_path": elasticacheDir,
+		}
+
+		err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
+		require.NoError(t, err, "provisioning should succeed for %s", instance.atmosComponent)
+
+		// Verify workdir path was set.
+		workdirPath, ok := componentConfig[WorkdirPathKey].(string)
+		require.True(t, ok, "workdir path should be set for %s", instance.atmosComponent)
+
+		// Store the workdir path for later verification.
+		workdirPaths[instance.atmosComponent] = workdirPath
+
+		// Verify the workdir uses the atmos_component name (instance name), not the base component.
+		expectedName := "dev-" + instance.atmosComponent
+		assert.Contains(t, workdirPath, expectedName,
+			"workdir path should contain %s, got %s", expectedName, workdirPath)
+
+		// Verify the workdir was created.
+		_, err = os.Stat(workdirPath)
+		assert.NoError(t, err, "workdir should exist for %s", instance.atmosComponent)
+
+		// Verify the main.tf was copied.
+		_, err = os.Stat(filepath.Join(workdirPath, "main.tf"))
+		assert.NoError(t, err, "main.tf should be copied to workdir for %s", instance.atmosComponent)
+	}
+
+	// Verify all workdirs are unique (no collisions).
+	uniquePaths := make(map[string]bool)
+	for _, path := range workdirPaths {
+		require.False(t, uniquePaths[path], "workdir paths must be unique, found duplicate: %s", path)
+		uniquePaths[path] = true
+	}
+
+	// Verify we got exactly 3 unique workdirs.
+	assert.Len(t, uniquePaths, 3, "should have 3 unique workdir paths")
+
+	// Verify all expected workdirs exist.
+	for _, instance := range componentInstances {
+		expectedWorkdir := filepath.Join(tempDir, ".workdir", "terraform", "dev-"+instance.atmosComponent)
+		_, err := os.Stat(expectedWorkdir)
+		assert.NoError(t, err, "expected workdir should exist at %s", expectedWorkdir)
+
+		// Verify metadata contains the correct component instance name.
+		metadataPath := MetadataPath(expectedWorkdir)
+		metadataBytes, err := os.ReadFile(metadataPath)
+		require.NoError(t, err, "metadata file should exist")
+		assert.Contains(t, string(metadataBytes), fmt.Sprintf(`"component": "%s"`, instance.atmosComponent),
+			"metadata should contain the component instance name")
+	}
+}
+
 // TestCleanWorkdir tests the CleanWorkdir function with stack-component naming.
 func TestCleanWorkdir(t *testing.T) {
 	tempDir := t.TempDir()

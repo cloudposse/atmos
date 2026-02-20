@@ -92,9 +92,12 @@ func (s *Service) Provision(
 		return nil
 	}
 
-	// Get component name.
-	component, ok := componentConfig[ComponentKey].(string)
-	if !ok {
+	// Get component instance name for workdir path isolation.
+	// Use atmos_component (full component instance path) instead of metadata.component
+	// to ensure each component instance gets its own workdir.
+	component, ok := componentConfig["atmos_component"].(string)
+	if !ok || component == "" {
+		// Fallback to extractComponentName for backward compatibility
 		component = extractComponentName(componentConfig)
 	}
 	if component == "" {
