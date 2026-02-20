@@ -13,6 +13,16 @@ variable "baz" {
   default = "baz"
 }
 
+resource "null_resource" "test" {
+  triggers = {
+    test = "test"
+  }
+
+  provisioner "local-exec" {
+    command = "exit 0"
+  }
+}
+
 output "foo" {
   value = var.foo
 }
