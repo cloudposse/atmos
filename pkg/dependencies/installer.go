@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	log "github.com/charmbracelet/log"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -239,7 +241,11 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 		// Go 1.19+ rejects executables found via relative PATH entries.
 		absBinPath, err := filepath.Abs(binPath)
 		if err != nil {
-			// If we can't get absolute path, skip this tool.
+			// If we can't get absolute path, log warning and skip this tool.
+			log.Warn("Failed to resolve absolute path for tool, skipping",
+				"tool", fmt.Sprintf("%s/%s", owner, repo),
+				"version", version,
+				"error", err)
 			continue
 		}
 

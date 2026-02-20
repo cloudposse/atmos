@@ -856,7 +856,7 @@ func TestBuildToolchainPATH_ConvertsRelativeToAbsolute(t *testing.T) {
 	pathEntries := strings.Split(result, string(os.PathListSeparator))
 	for _, entry := range pathEntries {
 		if strings.Contains(entry, "hashicorp/terraform") {
-			assert.True(t, filepath.IsAbs(entry),
+			assert.Truef(t, filepath.IsAbs(entry),
 				"PATH entry for terraform should be absolute, got: %s", entry)
 		}
 	}
