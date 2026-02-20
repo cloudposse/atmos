@@ -49,6 +49,15 @@ func ExecuteWorkflowCmd(cmd *cobra.Command, args []string) error {
 
 	// If the `workflow` argument is not passed, start the workflow UI
 	if len(args) != 1 {
+		// Check if we're in an interactive environment before launching the UI.
+		if !term.IsTTYSupportForStdin() || telemetry.IsCI() {
+			return errUtils.Build(errUtils.ErrWorkflowNameRequired).
+				WithHintf("Workflow name is required when running in non-interactive mode").
+				WithHintf("Usage: atmos workflow <name> [flags]").
+				WithHintf("List available workflows: atmos workflow list").
+				WithExitCode(1).
+				Err()
+		}
 		workflowFile, workflowName, fromStep, err = ExecuteWorkflowUI(atmosConfig)
 		if err != nil {
 			return err
