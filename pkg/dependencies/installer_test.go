@@ -821,3 +821,43 @@ func TestBuildToolchainPATH_MatchesToolchainInstallPath(t *testing.T) {
 		"PATH should contain the toolchain install path (%s), not a hardcoded default like '.tools'",
 		expectedInstallPath)
 }
+
+// TestBuildToolchainPATH_ConvertsRelativeToAbsolute verifies that BuildToolchainPATH
+// converts relative install paths to absolute paths to avoid Go 1.19+ exec.LookPath issues.
+func TestBuildToolchainPATH_ConvertsRelativeToAbsolute(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Use a relative path in config (simulating .tools).
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: ".tools",
+		},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	// Get the current working directory to construct expected absolute path.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Expected absolute path for the tool.
+	expectedPathComponent := filepath.Join(cwd, ".tools", "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify that the PATH contains the absolute path, not the relative path.
+	assert.Contains(t, result, expectedPathComponent,
+		"PATH should contain absolute path (%s), not relative path (.tools/bin/...)",
+		expectedPathComponent)
+
+	// Verify that the path does NOT start with a relative path component.
+	pathEntries := strings.Split(result, string(os.PathListSeparator))
+	for _, entry := range pathEntries {
+		if strings.Contains(entry, "hashicorp/terraform") {
+			assert.True(t, filepath.IsAbs(entry),
+				"PATH entry for terraform should be absolute, got: %s", entry)
+		}
+	}
+}
