@@ -245,6 +245,7 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 			log.Warn("Failed to resolve absolute path for tool, skipping",
 				"tool", fmt.Sprintf("%s/%s", owner, repo),
 				"version", version,
+				"path", binPath,
 				"error", err)
 			continue
 		}
