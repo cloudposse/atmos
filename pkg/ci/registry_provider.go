@@ -5,6 +5,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -46,6 +47,7 @@ func Detect() provider.Provider {
 
 	for _, p := range providers {
 		if p.Detect() {
+			log.Debug("CI provider detected", "provider", p.Name())
 			return p
 		}
 	}

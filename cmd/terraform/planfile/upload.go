@@ -6,6 +6,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -240,15 +241,18 @@ func getStoreOptions(atmosConfig *schema.AtmosConfiguration, storeName string) (
 
 	// Try environment-based detection in order of precedence.
 	if opts := detectS3FromEnv(); opts != nil {
+		log.Debug("Storage provider: S3 from environment")
 		opts.AtmosConfig = atmosConfig
 		return *opts, nil
 	}
 	if opts := detectGitHubFromEnv(); opts != nil {
+		log.Debug("Storage provider: GitHub from environment")
 		opts.AtmosConfig = atmosConfig
 		return *opts, nil
 	}
 
 	// Default to local storage.
+	log.Debug("Storage provider: Local from environment")
 	return defaultLocalStore(atmosConfig), nil
 }
 
@@ -270,7 +274,6 @@ func detectS3FromEnv() *planfile.StoreOptions {
 
 // detectGitHubFromEnv checks if running in GitHub Actions.
 func detectGitHubFromEnv() *planfile.StoreOptions {
-	fmt.Println("GITHUB_ACTIONS=" + os.Getenv("GITHUB_ACTIONS"))
 	if os.Getenv("GITHUB_ACTIONS") != "true" {
 		return nil
 	}
