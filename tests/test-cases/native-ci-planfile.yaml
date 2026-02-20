@@ -33,8 +33,8 @@ tests:
         - "Check run created: atmos/plan: prod/mycomponent"
         - "Check run completed: atmos/plan: prod/mycomponent"
         - "Title: Running plan"
-        - "Title: plan: no changes"
-        - "has_changes=false"
+        - "Title: 1 resource to add"
+        - "has_changes=true"
         - "has_errors=false"
         - "exit_code=0"
 
@@ -56,8 +56,8 @@ tests:
         - !not "Check run created: atmos/plan: prod/mycomponent"
         - !not "Check run completed: atmos/plan: prod/mycomponent"
         - !not "Title: Running plan"
-        - !not "Title: plan: no changes"
-        - !not "has_changes=false"
+        - !not "Title: 1 resource to add"
+        - !not "has_changes=true"
         - !not "has_errors=false"
         - !not "exit_code=0"
 
