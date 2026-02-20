@@ -193,15 +193,19 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 	}
 
 	// Merge metadata when inheritance is enabled.
-	// Base component metadata is merged with component metadata.
+	// Merge order (lowest to highest priority):
+	// 1. Global metadata (from stack-level terraform.metadata, helmfile.metadata, or packer.metadata)
+	// 2. Base component metadata (from metadata.inherits)
+	// 3. Component metadata (component-specific metadata section)
 	// Excluded from inheritance: 'inherits' and 'type' (already excluded during collection).
 	finalComponentMetadata := result.ComponentMetadata
-	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && len(result.BaseComponentMetadata) > 0 {
+	if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && (len(opts.GlobalMetadata) > 0 || len(result.BaseComponentMetadata) > 0) {
 		// Create a copy of base metadata excluding 'inherits' and 'type' (already excluded during collection).
-		// Then merge with component metadata (component metadata wins on conflicts).
+		// Then merge global metadata, base metadata, and component metadata (component metadata wins on conflicts).
 		finalComponentMetadata, err = m.Merge(
 			atmosConfig,
 			[]map[string]any{
+				opts.GlobalMetadata,
 				result.BaseComponentMetadata,
 				result.ComponentMetadata,
 			})

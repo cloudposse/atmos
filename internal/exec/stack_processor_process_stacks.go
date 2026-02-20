@@ -78,18 +78,21 @@ func ProcessStackConfig(
 	terraformHooks := map[string]any{}
 	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
+	terraformMetadata := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
 	helmfileAuth := map[string]any{}
+	helmfileMetadata := map[string]any{}
 
 	packerVars := map[string]any{}
 	packerSettings := map[string]any{}
 	packerEnv := map[string]any{}
 	packerCommand := ""
 	packerAuth := map[string]any{}
+	packerMetadata := map[string]any{}
 
 	ansibleVars := map[string]any{}
 	ansibleSettings := map[string]any{}
@@ -270,6 +273,13 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalTerraformSection[cfg.MetadataSectionName]; ok {
+		terraformMetadata, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformMetadata, stackName)
+		}
+	}
+
 	// Global backend.
 	globalBackendType := ""
 	globalBackendSection := map[string]any{}
@@ -383,6 +393,13 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	if i, ok := globalHelmfileSection[cfg.MetadataSectionName]; ok {
+		helmfileMetadata, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileMetadata, stackName)
+		}
+	}
+
 	// Packer section.
 	if i, ok := globalPackerSection[cfg.CommandSectionName]; ok {
 		packerCommand, ok = i.(string)
@@ -438,6 +455,13 @@ func ProcessStackConfig(
 	globalAndPackerAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, packerAuth})
 	if err != nil {
 		return nil, err
+	}
+
+	if i, ok := globalPackerSection[cfg.MetadataSectionName]; ok {
+		packerMetadata, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerMetadata, stackName)
+		}
 	}
 
 	// Ansible section.
@@ -536,6 +560,7 @@ func ProcessStackConfig(
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
+					GlobalMetadata:                  terraformMetadata,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
@@ -582,6 +607,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
+					GlobalMetadata:           helmfileMetadata,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -619,6 +645,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
+					GlobalMetadata:           packerMetadata,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,

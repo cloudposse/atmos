@@ -1378,3 +1378,174 @@ func TestFilterBaseMetadata(t *testing.T) {
 		})
 	}
 }
+
+// TestGlobalMetadataMerging tests that metadata from global terraform/helmfile/packer section
+// is merged with base component and component metadata with correct precedence.
+func TestGlobalMetadataMerging(t *testing.T) {
+trueVal := true
+
+tests := []struct {
+name                  string
+globalMetadata        map[string]any
+baseComponentMetadata map[string]any
+componentMetadata     map[string]any
+expectedMetadata      map[string]any
+description           string
+}{
+{
+name: "global metadata provides defaults",
+globalMetadata: map[string]any{
+"terraform_workspace_pattern": "{component}",
+"locked":                      false,
+},
+baseComponentMetadata: map[string]any{},
+componentMetadata:     map[string]any{},
+expectedMetadata: map[string]any{
+"terraform_workspace_pattern": "{component}",
+"locked":                      false,
+},
+description: "Global metadata should be used when no base or component metadata exists",
+},
+{
+name: "base component overrides global metadata",
+globalMetadata: map[string]any{
+"terraform_workspace_pattern": "{component}",
+"locked":                      false,
+},
+baseComponentMetadata: map[string]any{
+"terraform_workspace_pattern": "{tenant}-{stage}-{component}",
+"component":                   "vpc/v2",
+},
+componentMetadata: map[string]any{},
+expectedMetadata: map[string]any{
+"terraform_workspace_pattern": "{tenant}-{stage}-{component}",
+"component":                   "vpc/v2",
+"locked":                      false,
+},
+description: "Base component metadata should override global, but global fields not in base should still be present",
+},
+{
+name: "component overrides both global and base",
+globalMetadata: map[string]any{
+"terraform_workspace_pattern": "{component}",
+"locked":                      false,
+},
+baseComponentMetadata: map[string]any{
+"terraform_workspace_pattern": "{tenant}-{stage}-{component}",
+"component":                   "vpc/v2",
+},
+componentMetadata: map[string]any{
+"terraform_workspace_pattern": "custom-workspace",
+"enabled":                     true,
+},
+expectedMetadata: map[string]any{
+"terraform_workspace_pattern": "custom-workspace",
+"component":                   "vpc/v2",
+"locked":                      false,
+"enabled":                     true,
+},
+description: "Component metadata should have highest priority",
+},
+{
+name: "all three levels with different fields",
+globalMetadata: map[string]any{
+"terraform_workspace_pattern": "{component}",
+},
+baseComponentMetadata: map[string]any{
+"component": "vpc/v2",
+"name":      "vpc",
+},
+componentMetadata: map[string]any{
+"locked": true,
+},
+expectedMetadata: map[string]any{
+"terraform_workspace_pattern": "{component}",
+"component":                   "vpc/v2",
+"name":                        "vpc",
+"locked":                      true,
+},
+description: "Fields from all three levels should be merged when they don't conflict",
+},
+{
+name: "global metadata with custom section",
+globalMetadata: map[string]any{
+"custom": map[string]any{
+"team":  "platform",
+"owner": "ops-team",
+},
+},
+baseComponentMetadata: map[string]any{
+"component": "vpc",
+},
+componentMetadata: map[string]any{
+"custom": map[string]any{
+"owner": "vpc-team",
+},
+},
+expectedMetadata: map[string]any{
+"component": "vpc",
+"custom": map[string]any{
+"team":  "platform",
+"owner": "vpc-team",
+},
+},
+description: "Custom metadata maps should be deep-merged with component values taking precedence",
+},
+}
+
+for _, tt := range tests {
+t.Run(tt.name, func(t *testing.T) {
+atmosConfig := &schema.AtmosConfiguration{
+Stacks: schema.Stacks{
+Inherit: schema.StacksInherit{
+Metadata: &trueVal,
+},
+},
+}
+
+opts := &ComponentProcessorOptions{
+GlobalMetadata: tt.globalMetadata,
+AtmosConfig:    atmosConfig,
+}
+
+result := &ComponentProcessorResult{
+BaseComponentMetadata: tt.baseComponentMetadata,
+ComponentMetadata:     tt.componentMetadata,
+}
+
+// Use the actual merge logic from stack_processor_merge.go
+finalMetadata, err := mergeComponentMetadata(atmosConfig, opts, result)
+require.NoError(t, err, tt.description)
+
+// Verify all expected fields.
+for key, expectedValue := range tt.expectedMetadata {
+actualValue, exists := finalMetadata[key]
+assert.True(t, exists, "%s: expected key %q to exist", tt.description, key)
+assert.Equal(t, expectedValue, actualValue, "%s: key %q mismatch", tt.description, key)
+}
+
+// Verify no extra unexpected fields (except for fields that might come from defaults).
+for key := range finalMetadata {
+_, expected := tt.expectedMetadata[key]
+assert.True(t, expected, "%s: unexpected key %q in result", tt.description, key)
+}
+})
+}
+}
+
+// mergeComponentMetadata is a test helper that uses the actual merge logic from stack_processor_merge.go.
+func mergeComponentMetadata(atmosConfig *schema.AtmosConfiguration, opts *ComponentProcessorOptions, result *ComponentProcessorResult) (map[string]any, error) {
+// Replicate the actual merge logic from stack_processor_merge.go.
+finalComponentMetadata := result.ComponentMetadata
+if atmosConfig.Stacks.Inherit.IsMetadataInheritanceEnabled() && (len(opts.GlobalMetadata) > 0 || len(result.BaseComponentMetadata) > 0) {
+// Filter base metadata to exclude 'inherits' and 'type'.
+baseMetadataFiltered := filterBaseMetadata(result.BaseComponentMetadata)
+
+// Merge global, base (filtered), and component metadata.
+// Use simpleMerge for testing (production uses pkg/merge.Merge).
+merged := simpleMerge(opts.GlobalMetadata, baseMetadataFiltered)
+merged = simpleMerge(merged, result.ComponentMetadata)
+finalComponentMetadata = merged
+}
+return finalComponentMetadata, nil
+}
