@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci"
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI plugin.
 	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"  // Register GitHub Actions CI provider.
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )

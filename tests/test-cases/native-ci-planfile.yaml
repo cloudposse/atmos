@@ -84,3 +84,40 @@ tests:
         - "has_changes=false"
         - "has_errors=true"
         - "exit_code=1"
+
+  - name: "atmos terraform plan with github actions env"
+    enabled: true
+    sandbox: true
+    clean: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent -s prod' without --ci flag but with GITHUB_ACTIONS=true to verify automatic GitHub provider detection."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+    expect:
+      exit_code: 0
+      stderr:
+        - "CI action failed"
+      file_contains:
+        "github-output.txt":
+          - "has_changes=false"
+          - "has_errors=false"
+          - "exit_code=0"
+        "github-step-summary.txt":
+          - "No Changes for"
+          - "mycomponent"
+          - "prod"

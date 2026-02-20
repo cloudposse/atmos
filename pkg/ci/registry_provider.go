@@ -49,6 +49,8 @@ func Detect() provider.Provider {
 		if p.Detect() {
 			log.Debug("CI provider detected", "provider", p.Name())
 			return p
+		} else {
+			log.Debug("CI provider not detected", "provider", p.Name())
 		}
 	}
 	return nil
