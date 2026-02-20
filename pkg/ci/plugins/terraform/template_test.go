@@ -51,11 +51,12 @@ func TestTemplateRendering(t *testing.T) {
 			},
 			wantContains: []string{
 				"Changes Found",
-				"CREATE-3-success",
+				"PLAN-CREATE-success",
 				"vpc",
 				"dev-us-east-1",
 				"aws_vpc.main",
 				"+ aws_subnet",
+				"cloudposse.com",
 			},
 			wantNotContains: []string{
 				"DESTROY",
@@ -83,7 +84,7 @@ func TestTemplateRendering(t *testing.T) {
 				HasDestroy:       true,
 			},
 			wantContains: []string{
-				"DESTROY-5-critical",
+				"PLAN-DESTROY-critical",
 				"CAUTION",
 				"Terraform will delete resources",
 				"- aws_instance.old",
@@ -169,10 +170,10 @@ func TestTemplateRendering(t *testing.T) {
 				HasDestroy:        true,
 			},
 			wantContains: []string{
-				"CREATE-2",
-				"CHANGE-1",
-				"REPLACE-1",
-				"DESTROY-1",
+				"PLAN-CREATE",
+				"PLAN-CHANGE",
+				"PLAN-REPLACE",
+				"PLAN-DESTROY",
 				"CAUTION",
 				"+ aws_instance.new",
 				"~ aws_instance.updated",
@@ -377,8 +378,10 @@ func TestTemplateWithCIContext(t *testing.T) {
 
 	rendered := buf.String()
 
-	// Verify CI context is in metadata.
-	assert.Contains(t, rendered, "abc123def456")
+	// Verify basic rendering works with CI context present.
+	assert.Contains(t, rendered, "vpc")
+	assert.Contains(t, rendered, "dev")
+	assert.Contains(t, rendered, "Changes Found")
 }
 
 // TestTerraformTemplateContextHelpers tests helper methods.
@@ -391,6 +394,16 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 			},
 		}
 		assert.Equal(t, "dev-vpc", ctx.Target())
+	})
+
+	t.Run("Target with slashes", func(t *testing.T) {
+		ctx := &TerraformTemplateContext{
+			TemplateContext: &plugin.TemplateContext{
+				Stack:     "plat-ue2-sandbox",
+				Component: "foobar/changes",
+			},
+		}
+		assert.Equal(t, "plat-ue2-sandbox-foobar_changes", ctx.Target())
 	})
 
 	t.Run("Target with nil base", func(t *testing.T) {

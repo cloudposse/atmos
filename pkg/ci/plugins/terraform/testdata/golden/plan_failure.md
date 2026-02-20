@@ -1,7 +1,9 @@
 
 ## Plan Failed for `broken` in `dev`
+
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-dev-broken)
-<details><summary><a id="user-content-result-dev-broken" />:warning: Error summary</summary>
+<details><summary><a id="result-dev-broken" />:warning: Error summary</summary>
 
 <br/>
 To reproduce this locally, run:<br/><br/>
@@ -18,15 +20,4 @@ atmos terraform plan broken -s dev
 
 > [!CAUTION]
 > :warning: Missing required argument
-</details>
-
-<details><summary>Metadata</summary>
-
-```json
-{
-  "component": "broken",
-  "stack": "dev",
-  "commitSHA": ""
-}
-```
 </details>

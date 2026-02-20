@@ -140,6 +140,9 @@ type TerraformOutputData struct {
 
 	// ChangedResult contains the plan summary text.
 	ChangedResult string
+
+	// Warnings contains full warning block text extracted from terraform output.
+	Warnings []string
 }
 
 // TerraformOutput represents a single terraform output value.

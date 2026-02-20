@@ -2,6 +2,8 @@
 package terraform
 
 import (
+	"strings"
+
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -40,6 +42,9 @@ type TerraformTemplateContext struct {
 
 	// HasDestroy indicates if there are resources to be destroyed.
 	HasDestroy bool
+
+	// Warnings contains full warning block text extracted from terraform output.
+	Warnings []string
 }
 
 // NewTemplateContext creates a TerraformTemplateContext from a base context and parsed output.
@@ -61,19 +66,23 @@ func NewTemplateContext(base *plugin.TemplateContext, data *plugin.TerraformOutp
 		ctx.Outputs = data.Outputs
 		ctx.ChangedResult = data.ChangedResult
 		ctx.HasDestroy = data.ResourceCounts.Destroy > 0
+		ctx.Warnings = data.Warnings
 	}
 
 	return ctx
 }
 
 // Target returns the stack-component slug for anchor IDs.
+// Slashes in component names are replaced with underscores for valid HTML anchor IDs.
 func (c *TerraformTemplateContext) Target() string {
 	defer perf.Track(nil, "terraform.TerraformTemplateContext.Target")()
 
 	if c.TemplateContext == nil {
 		return ""
 	}
-	return c.Stack + "-" + c.Component
+	// Sanitize component name: replace "/" with "_" for valid HTML anchor IDs.
+	sanitized := strings.ReplaceAll(c.Component, "/", "_")
+	return c.Stack + "-" + sanitized
 }
 
 // HasChanges returns true if there are any resource changes.
