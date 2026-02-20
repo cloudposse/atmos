@@ -30,6 +30,12 @@ import (
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	// Import adapters to register them with the config package.
 	_ "github.com/cloudposse/atmos/pkg/config/adapters"
+
+	// Import component providers to register them with the component registry.
+	// The init() function in each package registers the provider.
+	_ "github.com/cloudposse/atmos/pkg/component/ansible"
+	_ "github.com/cloudposse/atmos/pkg/component/mock"
+
 	"github.com/cloudposse/atmos/pkg/data"
 	"github.com/cloudposse/atmos/pkg/filesystem"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -52,6 +58,7 @@ import (
 	// Import built-in command packages for side-effect registration.
 	// The init() function in each package registers the command with the registry.
 	_ "github.com/cloudposse/atmos/cmd/about"
+	_ "github.com/cloudposse/atmos/cmd/ansible"
 	_ "github.com/cloudposse/atmos/cmd/aws"
 	"github.com/cloudposse/atmos/cmd/devcontainer"
 	_ "github.com/cloudposse/atmos/cmd/env"
@@ -117,6 +124,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
+
 		// Check for --use-version=value format.
 		if strings.HasPrefix(arg, "--use-version=") {
 			return strings.TrimPrefix(arg, "--use-version=")
@@ -137,6 +149,11 @@ func parseUseVersionFromArgsInternal(args []string) string {
 func parseChdirFromArgsInternal(args []string) string {
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
+
+		// Stop scanning after bare "--" (end-of-flags delimiter).
+		if arg == "--" {
+			break
+		}
 
 		// Check for --chdir=value format.
 		if strings.HasPrefix(arg, "--chdir=") {
@@ -431,26 +448,42 @@ var RootCmd = &cobra.Command{
 
 		// Check for version.use configuration and re-exec with specified version if needed.
 		// This runs after profiles are loaded, so version.use can be set via profiles.
-		// Skip re-exec for help commands and version management commands to avoid loops.
-		if !isHelpRequested && !isVersionManagementCommand(cmd) && err == nil {
-			// Set ATMOS_VERSION_USE env var from --use-version flag if specified.
-			// This allows CheckAndReexec to pick up the flag value.
+		if !isHelpRequested && err == nil {
+			// Check if explicit --use-version flag was provided.
+			var explicitVersionRequested bool
+			var explicitVersion string
+
 			// First try Cobra's parsed flag (works when DisableFlagParsing=false).
 			if cmd.Flags().Changed("use-version") {
 				if useVersion, flagErr := cmd.Flags().GetString("use-version"); flagErr == nil && useVersion != "" {
-					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
-				}
-			} else {
-				// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
-				// manually parse --use-version from os.Args.
-				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
-					_ = os.Setenv(pkgversion.VersionUseEnvVar, useVersion)
+					explicitVersion = useVersion
+					explicitVersionRequested = true
 				}
 			}
-			// CheckAndReexec returns true only on successful syscall.Exec, which replaces
-			// the current process entirely. This means true is never returned in practice
-			// since exec doesn't return. We call it for its side effects.
-			_ = pkgversion.CheckAndReexec(&tmpConfig)
+
+			// For commands with DisableFlagParsing=true (terraform, helmfile, packer),
+			// manually parse --use-version from os.Args.
+			if !explicitVersionRequested {
+				if useVersion := parseUseVersionFromArgs(); useVersion != "" {
+					explicitVersion = useVersion
+					explicitVersionRequested = true
+				}
+			}
+
+			// Set ATMOS_VERSION_USE env var if explicit flag was provided.
+			if explicitVersionRequested {
+				_ = os.Setenv(pkgversion.VersionUseEnvVar, explicitVersion)
+			}
+
+			// Skip re-exec for version management commands (to avoid loops),
+			// unless an explicit --use-version flag was provided.
+			shouldReexec := explicitVersionRequested || !isVersionManagementCommand(cmd)
+			if shouldReexec {
+				// CheckAndReexec returns true only on successful syscall.Exec, which replaces
+				// the current process entirely. This means true is never returned in practice
+				// since exec doesn't return. We call it for its side effects.
+				_ = pkgversion.CheckAndReexec(&tmpConfig)
+			}
 		}
 
 		// Setup profiler before command execution (but skip for help commands).
@@ -1444,6 +1477,10 @@ func Execute() error {
 // This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
 // native flags that would otherwise be dropped by FParseErrWhitelist.
 //
+// It also normalizes flags with NoOptDefVal (like --identity) to ensure both
+// "--flag value" and "--flag=value" syntax work correctly, using the existing
+// FlagRegistry.PreprocessNoOptDefValArgs from the command's registered flag registry.
+//
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
 func preprocessCompatibilityFlags() {
@@ -1468,9 +1505,27 @@ func preprocessCompatibilityFlags() {
 		return
 	}
 
+	// Normalize flags with NoOptDefVal using the command's registered flag registry.
+	// This converts "--identity value" to "--identity=value" so pflag correctly
+	// captures the value instead of using NoOptDefVal and orphaning the value arg.
+	// Uses the same PreprocessNoOptDefValArgs that AtmosFlagParser.Parse() uses,
+	// driven by the flag registry rather than a hardcoded flag map.
+	argsChanged := false
+	if flagRegistry := internal.GetCommandFlagRegistry(cmdName); flagRegistry != nil {
+		normalized := flagRegistry.PreprocessNoOptDefValArgs(osArgs)
+		if len(normalized) != len(osArgs) {
+			osArgs = normalized
+			argsChanged = true
+		}
+	}
+
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
+		// No compat flags, but still apply normalization if args changed.
+		if argsChanged {
+			RootCmd.SetArgs(osArgs)
+		}
 		return
 	}
 

@@ -15,6 +15,9 @@ type AuthConfig struct {
 	// IdentityCaseMap maps lowercase identity names to their original case.
 	// This is populated during config loading to work around Viper's case-insensitive behavior.
 	IdentityCaseMap map[string]string `yaml:"-" json:"-" mapstructure:"-"`
+	// RealmSource indicates how the realm was resolved (env/config/config-path/default).
+	// This is set during config loading and is not user-configurable.
+	RealmSource string `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // KeyringConfig defines keyring backend configuration for credential storage.

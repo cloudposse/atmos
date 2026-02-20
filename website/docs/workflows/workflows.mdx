@@ -34,19 +34,64 @@ workflows:
 
 ## Retry Configuration
 
-The `command` section of the workflow schema has been updated to allow for retrying of failed commands. The `retry` section
-accepts the following parameters:
+The `retry` section accepts the following parameters. **All parameters are optional** - omit any
+parameter to disable that feature or use unlimited behavior.
 
-* `max_attempts`: The maximum number of times the command will be retried. The default is `1`.
-* `delay`: The amount of time to delay between retries. The default is `5s`.
-* `backoff_strategy`: The backoff strategy to use. The default is `constant`. The other options are `exponential` and `linear`.
-* `initial_delay`: The initial delay to use when retrying. The default is `5s`.
-* `random_jitter`: the random jitter number to the delay between retries. The default is `0.0`.
-* `multiplier`: The multiplier to use when retrying. The default is `2`.
-* `max_elapsed_time`: The maximum time allocated to the command before the retry fails. The default is 30 minutes.
+<dl>
+  <dt>`max_attempts`</dt>
+  <dd>Maximum number of retry attempts. Omit for unlimited retries. Must be greater than zero if specified.</dd>
 
-Here is an example of a workflow with retry configuration:
+  <dt>`max_elapsed_time`</dt>
+  <dd>Total time budget for all attempts combined (e.g., `10m`, `1h`). This is the cumulative time across all retry attempts plus backoff delays, not a per-attempt timeout. Omit for no time limit. Must be greater than zero if specified.</dd>
+
+  <dt>`backoff_strategy`</dt>
+  <dd>The backoff strategy between retries: `constant`, `linear`, or `exponential`. Default: `constant`.</dd>
+
+  <dt>`initial_delay`</dt>
+  <dd>Delay before the first retry (e.g., `5s`, `100ms`). Omit for no delay. Cannot be negative.</dd>
+
+  <dt>`max_delay`</dt>
+  <dd>Maximum delay between retries, caps exponential/linear growth (e.g., `30s`). Omit for no cap. Must be greater than zero if specified.</dd>
+
+  <dt>`multiplier`</dt>
+  <dd>Multiplier for exponential or linear backoff (e.g., `2.0`). Omit to use the default multiplier (2.0). Must be greater than zero if specified.</dd>
+
+  <dt>`random_jitter`</dt>
+  <dd>Jitter factor between 0.0 and 1.0 to add randomness to delays. Omit for no jitter.</dd>
+</dl>
+
+:::note Configuration Philosophy
+
+- **Omitting a parameter** disables that feature or makes it unlimited
+- **Explicitly setting a parameter to zero** is an error (invalid configuration)
+- This allows minimal configs like `retry: { max_attempts: 3 }` to work without surprises
+
+:::
+
+### Example: Retry Indefinitely
+
+To retry indefinitely until success, omit both `max_attempts` and `max_elapsed_time`:
+
+```yaml
+workflows:
+  deploy:
+    steps:
+      - command: terraform apply vpc -auto-approve
+        retry:
+          initial_delay: 5s
+          backoff_strategy: exponential
+          max_delay: 60s
+          # max_attempts: omitted = unlimited retries
+          # max_elapsed_time: omitted = no time limit
 ```
+
+This will keep retrying with exponential backoff (capped at 60s between attempts) until either:
+- The command succeeds
+- The workflow is cancelled (e.g., Ctrl+C)
+
+### Example: Limited Retries, No Time Limit
+
+```yaml
 workflows:
   eks-up:
     description: Bring up the eks cluster
@@ -54,13 +99,22 @@ workflows:
       - command: terraform apply vpc -auto-approve
         retry:
           max_attempts: 3
-          backoff_strategy: exponential # could be exponential, constant and linear
-          initial_delay: 3s # the time used by the backoff_strategy
-          random_jitter: 0.0 # the random jitter to be added while retrying.
-          multiplier: 2 # used during exponential strategy as multiplier that would be raised by configuration
-          max_elapsed_time: 4m # Default (30 min for all commands). This sets the total duration alloated to the command before the retry fails.
+          backoff_strategy: exponential
+          initial_delay: 3s
+          multiplier: 2
+          # max_elapsed_time: omitted = no time limit
       - command: terraform apply eks/cluster -auto-approve
       - command: terraform apply eks/alb-controller -auto-approve
+```
+
+### Example: Time-Limited Retries
+
+```yaml
+retry:
+  max_elapsed_time: 10m  # Stop after 10 minutes total
+  initial_delay: 5s
+  backoff_strategy: exponential
+  # max_attempts: omitted = unlimited attempts within time budget
 ```
 
 :::note

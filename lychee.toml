@@ -34,6 +34,8 @@ exclude = [
   "example\\.com",
   "cpco\\.io",
   "cloudposse\\.com.*utm_",
+  # Private GitHub org (not accessible to CI)
+  "github\\.com/cloudposse-corp",
   "slack\\.cloudposse\\.com",
   "wttr\\.in",
   # GNU.org (rate limits and connection resets)

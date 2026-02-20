@@ -4,6 +4,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestAWSFileManager_Cleanup(t *testing.T) {
@@ -93,104 +96,71 @@ func TestAWSFileManager_Cleanup(t *testing.T) {
 }
 
 func TestAWSFileManager_CleanupAll(t *testing.T) {
-	tests := []struct {
-		name      string
-		setupFunc func(t *testing.T, baseDir string) string
-		wantErr   bool
-	}{
-		{
-			name: "cleanup all providers",
-			setupFunc: func(t *testing.T, baseDir string) string {
-				// Create multiple provider directories.
-				providers := []string{"provider1", "provider2", "provider3"}
-				for _, provider := range providers {
-					providerDir := filepath.Join(baseDir, provider)
-					if err := os.MkdirAll(providerDir, 0o700); err != nil {
-						t.Fatalf("failed to create provider directory: %v", err)
-					}
-					// Create test files.
-					credFile := filepath.Join(providerDir, "credentials")
-					if err := os.WriteFile(credFile, []byte("test"), 0o600); err != nil {
-						t.Fatalf("failed to create credentials file: %v", err)
-					}
-				}
-				return baseDir
-			},
-			wantErr: false,
-		},
-		{
-			name: "cleanup empty base directory",
-			setupFunc: func(t *testing.T, baseDir string) string {
-				// Create empty base directory.
-				if err := os.MkdirAll(baseDir, 0o700); err != nil {
-					t.Fatalf("failed to create base directory: %v", err)
-				}
-				return baseDir
-			},
-			wantErr: false,
-		},
-		{
-			name: "cleanup non-existent base directory",
-			setupFunc: func(t *testing.T, baseDir string) string {
-				// Don't create the base directory.
-				return baseDir
-			},
-			wantErr: false, // Should not error on missing directory
-		},
-		{
-			name: "cleanup with complex nested structure",
-			setupFunc: func(t *testing.T, baseDir string) string {
-				// Create complex directory structure.
-				dirs := []string{
-					"provider1/nested/deep",
-					"provider2/another/path",
-					"provider3",
-				}
-				for _, dir := range dirs {
-					fullDir := filepath.Join(baseDir, dir)
-					if err := os.MkdirAll(fullDir, 0o700); err != nil {
-						t.Fatalf("failed to create directory: %v", err)
-					}
-					// Create test files.
-					testFile := filepath.Join(fullDir, "test.txt")
-					if err := os.WriteFile(testFile, []byte("test"), 0o600); err != nil {
-						t.Fatalf("failed to create test file: %v", err)
-					}
-				}
-				return baseDir
-			},
-			wantErr: false,
-		},
-	}
+	t.Run("cleanup with realm removes realm directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		realmDir := filepath.Join(tempDir, "test-realm", "aws")
+		require.NoError(t, os.MkdirAll(filepath.Join(realmDir, "provider1"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(realmDir, "provider1", "credentials"), []byte("test"), 0o600))
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Create temp directory for test.
-			tempDir := t.TempDir()
-			baseDir := tt.setupFunc(t, tempDir)
+		fm := &AWSFileManager{baseDir: tempDir, realm: "test-realm"}
+		err := fm.CleanupAll()
+		require.NoError(t, err)
 
-			// Create file manager with test base directory.
-			fm := &AWSFileManager{
-				baseDir: baseDir,
-			}
+		// Realm directory should be removed.
+		_, err = os.Stat(filepath.Join(tempDir, "test-realm"))
+		assert.True(t, os.IsNotExist(err), "realm directory should be removed")
+		// Base directory should still exist.
+		_, err = os.Stat(tempDir)
+		assert.NoError(t, err, "base directory should still exist")
+	})
 
-			// Perform cleanup.
-			err := fm.CleanupAll()
+	t.Run("cleanup without realm removes aws directory", func(t *testing.T) {
+		tempDir := t.TempDir()
+		awsDir := filepath.Join(tempDir, "aws")
+		require.NoError(t, os.MkdirAll(filepath.Join(awsDir, "provider1"), 0o700))
+		require.NoError(t, os.WriteFile(filepath.Join(awsDir, "provider1", "credentials"), []byte("test"), 0o600))
 
-			// Check error expectation.
-			if (err != nil) != tt.wantErr {
-				t.Errorf("CleanupAll() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+		fm := &AWSFileManager{baseDir: tempDir, realm: ""}
+		err := fm.CleanupAll()
+		require.NoError(t, err)
 
-			// Verify base directory was removed.
-			if !tt.wantErr {
-				if _, err := os.Stat(baseDir); !os.IsNotExist(err) {
-					t.Errorf("base directory still exists after cleanup: %s", baseDir)
-				}
-			}
-		})
-	}
+		// AWS directory should be removed.
+		_, err = os.Stat(awsDir)
+		assert.True(t, os.IsNotExist(err), "aws directory should be removed")
+		// Base directory should still exist (not accidentally deleted).
+		_, err = os.Stat(tempDir)
+		assert.NoError(t, err, "base directory should still exist when realm is empty")
+	})
+
+	t.Run("cleanup non-existent directory does not error", func(t *testing.T) {
+		tempDir := t.TempDir()
+		fm := &AWSFileManager{baseDir: tempDir, realm: "nonexistent"}
+		err := fm.CleanupAll()
+		require.NoError(t, err, "should not error on missing directory")
+	})
+
+	t.Run("cleanup with complex nested structure", func(t *testing.T) {
+		tempDir := t.TempDir()
+		realmDir := filepath.Join(tempDir, "my-realm")
+		dirs := []string{
+			filepath.Join("aws", "provider1", "nested", "deep"),
+			filepath.Join("aws", "provider2", "another", "path"),
+			filepath.Join("aws", "provider3"),
+		}
+		for _, dir := range dirs {
+			fullDir := filepath.Join(realmDir, dir)
+			require.NoError(t, os.MkdirAll(fullDir, 0o700))
+			require.NoError(t, os.WriteFile(filepath.Join(fullDir, "test.txt"), []byte("test"), 0o600))
+		}
+
+		fm := &AWSFileManager{baseDir: tempDir, realm: "my-realm"}
+		err := fm.CleanupAll()
+		require.NoError(t, err)
+
+		// Realm directory should be removed.
+		_, err = os.Stat(realmDir)
+		assert.True(t, os.IsNotExist(err), "realm directory should be removed")
+	})
 }
 
 func TestAWSFileManager_Cleanup_Idempotency(t *testing.T) {
@@ -238,32 +208,27 @@ func TestAWSFileManager_CleanupAll_IdempotencyTest(t *testing.T) {
 	// Create temp directory for test.
 	tempDir := t.TempDir()
 
-	// Create multiple provider directories.
+	// Create provider directories under realm.
+	realmDir := filepath.Join(tempDir, "test-realm")
 	providers := []string{"provider1", "provider2"}
 	for _, provider := range providers {
-		providerDir := filepath.Join(tempDir, provider)
-		if err := os.MkdirAll(providerDir, 0o700); err != nil {
-			t.Fatalf("failed to create provider directory: %v", err)
-		}
+		providerDir := filepath.Join(realmDir, "aws", provider)
+		require.NoError(t, os.MkdirAll(providerDir, 0o700))
 	}
 
-	// Create file manager.
+	// Create file manager with realm.
 	fm := &AWSFileManager{
 		baseDir: tempDir,
+		realm:   "test-realm",
 	}
 
 	// First cleanup should succeed.
-	if err := fm.CleanupAll(); err != nil {
-		t.Errorf("First CleanupAll() failed: %v", err)
-	}
+	require.NoError(t, fm.CleanupAll(), "First CleanupAll() failed")
 
-	// Verify base directory was removed.
-	if _, err := os.Stat(tempDir); !os.IsNotExist(err) {
-		t.Errorf("base directory still exists after first cleanup")
-	}
+	// Verify realm directory was removed.
+	_, err := os.Stat(realmDir)
+	assert.True(t, os.IsNotExist(err), "realm directory should be removed after first cleanup")
 
 	// Second cleanup should also succeed (idempotent).
-	if err := fm.CleanupAll(); err != nil {
-		t.Errorf("Second CleanupAll() failed (should be idempotent): %v", err)
-	}
+	require.NoError(t, fm.CleanupAll(), "Second CleanupAll() should be idempotent")
 }
