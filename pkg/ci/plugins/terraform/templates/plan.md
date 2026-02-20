@@ -1,4 +1,4 @@
-{{- $target := printf "%s-%s" .Stack .Component -}}
+{{- $target := .Target -}}
 {{- if .Result.HasErrors }}
 ## Plan Failed for `{{.Component}}` in `{{.Stack}}`
 {{- else if .HasChanges }}
@@ -7,14 +7,26 @@
 ## No Changes for `{{.Component}}` in `{{.Stack}}`
 {{- end }}
 
+<a href="https://cloudposse.com/"><img src="https://cloudposse.com/logo-300x69.svg" width="100px" align="right"/></a>
+
 {{- if .Result.HasErrors }}
 [![failed](https://shields.io/badge/PLAN-FAILED-ff0000?style=for-the-badge)](#user-content-result-{{$target}})
 {{- else }}
-{{- if gt .Resources.Create 0 }}[![create](https://shields.io/badge/CREATE-{{.Resources.Create}}-success?style=for-the-badge)](#user-content-create-{{$target}}){{ end }}
-{{- if gt .Resources.Change 0 }} [![change](https://shields.io/badge/CHANGE-{{.Resources.Change}}-important?style=for-the-badge)](#user-content-change-{{$target}}){{ end }}
-{{- if gt .Resources.Replace 0 }} [![replace](https://shields.io/badge/REPLACE-{{.Resources.Replace}}-critical?style=for-the-badge)](#user-content-replace-{{$target}}){{ end }}
-{{- if gt .Resources.Destroy 0 }} [![destroy](https://shields.io/badge/DESTROY-{{.Resources.Destroy}}-critical?style=for-the-badge)](#user-content-destroy-{{$target}}){{ end }}
-{{- if not .HasChanges }} [![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}}){{ end }}
+{{- if gt .Resources.Create 0 }}
+[![create](https://shields.io/badge/PLAN-CREATE-success?style=for-the-badge)](#user-content-create-{{$target}})
+{{- end }}
+{{- if gt .Resources.Change 0 }}
+[![change](https://shields.io/badge/PLAN-CHANGE-important?style=for-the-badge)](#user-content-change-{{$target}})
+{{- end }}
+{{- if gt .Resources.Replace 0 }}
+[![replace](https://shields.io/badge/PLAN-REPLACE-critical?style=for-the-badge)](#user-content-replace-{{$target}})
+{{- end }}
+{{- if gt .Resources.Destroy 0 }}
+[![destroy](https://shields.io/badge/PLAN-DESTROY-critical?style=for-the-badge)](#user-content-destroy-{{$target}})
+{{- end }}
+{{- if not .HasChanges }}
+[![no changes](https://shields.io/badge/-NO_CHANGE-inactive?style=for-the-badge)](#user-content-result-{{$target}})
+{{- end }}
 {{- end }}
 
 {{- if .HasDestroy }}
@@ -25,9 +37,9 @@
 {{- end }}
 
 {{- if .Result.HasErrors }}
-<details><summary><a id="user-content-result-{{$target}}" />:warning: Error summary</summary>
+<details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
 {{- else }}
-<details><summary><a id="user-content-result-{{$target}}" />{{if .ChangedResult}}{{ .ChangedResult }}{{else}}Plan details{{end}}</summary>
+<details><summary><a id="result-{{$target}}" />{{if .ChangedResult}}{{ .ChangedResult }}{{else}}Plan details{{end}}</summary>
 {{- end }}
 
 <br/>
@@ -52,8 +64,9 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 
 {{- if not .Result.HasErrors }}
 {{- if gt (len .CreatedResources) 0 }}
+
 ---
-### <a id="user-content-create-{{$target}}" />Create
+### <a id="create-{{$target}}" />Create
 ```diff
 {{- range .CreatedResources }}
 + {{ . }}
@@ -61,7 +74,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .UpdatedResources) 0 }}
-### <a id="user-content-change-{{$target}}" />Change
+### <a id="change-{{$target}}" />Change
 ```diff
 {{- range .UpdatedResources }}
 ~ {{ . }}
@@ -69,7 +82,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .ReplacedResources) 0 }}
-### <a id="user-content-replace-{{$target}}" />Replace
+### <a id="replace-{{$target}}" />Replace
 ```diff
 {{- range .ReplacedResources }}
 -/+ {{ . }}
@@ -77,7 +90,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .DeletedResources) 0 }}
-### <a id="user-content-destroy-{{$target}}" />Destroy
+### <a id="destroy-{{$target}}" />Destroy
 ```diff
 {{- range .DeletedResources }}
 - {{ . }}
@@ -85,7 +98,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 {{- end }}
 {{- if gt (len .ImportedResources) 0 }}
-### <a id="user-content-import-{{$target}}" />Import
+### <a id="import-{{$target}}" />Import
 ```diff
 {{- range .ImportedResources }}
 <= {{ . }}
@@ -97,7 +110,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 
 {{- if gt (len .Output) 0 }}
 
-<details><summary>Terraform <strong>Plan</strong> Output</summary>
+<details><summary>Terraform <strong>Plan</strong> Summary</summary>
 
 ```hcl
 {{ .Output }}
@@ -106,13 +119,12 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 </details>
 {{- end }}
 
-<details><summary>Metadata</summary>
+{{- if gt (len .Warnings) 0 }}
+{{ range .Warnings }}
 
-```json
-{
-  "component": "{{.Component}}",
-  "stack": "{{.Stack}}",
-  "commitSHA": "{{if .CI}}{{.CI.SHA}}{{end}}"
-}
-```
-</details>
+> [!WARNING]
+> ```
+> {{ . }}
+> ```
+{{- end }}
+{{- end }}

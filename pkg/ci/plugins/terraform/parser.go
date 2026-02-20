@@ -216,6 +216,60 @@ func ExtractWarnings(stdout string) []string {
 	return warnings
 }
 
+// ExtractWarningBlocks extracts full warning blocks from terraform stdout.
+// Unlike ExtractWarnings which returns only summary lines, this returns the entire
+// warning block text (with box-drawing characters stripped) for display in CI summaries.
+func ExtractWarningBlocks(stdout string) []string {
+	defer perf.Track(nil, "terraform.ExtractWarningBlocks")()
+
+	var blocks []string
+	lines := strings.Split(stdout, "\n")
+	var current []string
+	inWarningBlock := false
+
+	for _, line := range lines {
+		// Strip box-drawing prefix (│ or |) from the line for content checking.
+		stripped := strings.TrimPrefix(line, "│ ")
+		if stripped == line {
+			stripped = strings.TrimPrefix(line, "| ")
+		}
+
+		// Detect warning start.
+		if strings.HasPrefix(stripped, "Warning: ") && !inWarningBlock {
+			inWarningBlock = true
+			current = []string{stripped}
+			continue
+		}
+
+		if inWarningBlock {
+			// End of block: empty line without box prefix, or a new section marker.
+			trimmed := strings.TrimSpace(line)
+			if trimmed == "" || trimmed == "╵" {
+				if len(current) > 0 {
+					blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
+				}
+				current = nil
+				inWarningBlock = false
+				continue
+			}
+			// Detect start of a new block (error or another warning) without closing the previous one.
+			if strings.HasPrefix(stripped, "Error: ") || (strings.HasPrefix(stripped, "Warning: ") && len(current) > 0) {
+				blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
+				current = []string{stripped}
+				continue
+			}
+			current = append(current, stripped)
+		}
+	}
+
+	// Handle block that extends to end of output.
+	if inWarningBlock && len(current) > 0 {
+		blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
+	}
+
+	return blocks
+}
+
 // ParsePlanOutput parses terraform plan stdout (fallback when JSON not available).
 // Prefer ParsePlanJSON when a planfile is available.
 func ParsePlanOutput(output string) *plugin.OutputResult {
@@ -265,6 +319,9 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 			data.ChangedResult = buildChangeSummary(data.ResourceCounts)
 		}
 	}
+
+	// Extract full warning blocks for CI summary display.
+	data.Warnings = ExtractWarningBlocks(output)
 
 	return result
 }
