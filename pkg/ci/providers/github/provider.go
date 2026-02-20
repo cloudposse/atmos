@@ -149,6 +149,8 @@ func (p *Provider) GetStatus(ctx context.Context, opts provider.StatusOptions) (
 func (p *Provider) OutputWriter() provider.OutputWriter {
 	defer perf.Track(nil, "github.Provider.OutputWriter")()
 
+	log.Debug("OutputWriter", "GITHUB_OUTPUT", os.Getenv("GITHUB_OUTPUT"), "GITHUB_STEP_SUMMARY", os.Getenv("GITHUB_STEP_SUMMARY"))
+
 	return provider.NewFileOutputWriter(
 		os.Getenv("GITHUB_OUTPUT"),
 		os.Getenv("GITHUB_STEP_SUMMARY"),
