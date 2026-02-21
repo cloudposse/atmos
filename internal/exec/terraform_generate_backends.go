@@ -237,7 +237,7 @@ func ExecuteTerraformGenerateBackends(
 				configAndStacksInfo.Stack = stackName
 
 				// Process `Go` templates
-				componentSectionStr, err := u.ConvertToYAML(componentSection)
+				componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 				if err != nil {
 					return err
 				}

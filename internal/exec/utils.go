@@ -722,7 +722,13 @@ func ProcessStacks(
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
-		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		// Use delimiter-safe YAML encoding when custom delimiters are configured.
+		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
+		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
+		componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(
+			configAndStacksInfo.ComponentSection,
+			atmosConfig.Templates.Settings.Delimiters,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}

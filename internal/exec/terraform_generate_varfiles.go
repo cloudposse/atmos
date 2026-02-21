@@ -202,7 +202,7 @@ func ExecuteTerraformGenerateVarfiles(
 				componentSection["atmos_manifest"] = stackFileName
 
 				// Process `Go` templates
-				componentSectionStr, err := u.ConvertToYAML(componentSection)
+				componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 				if err != nil {
 					return err
 				}

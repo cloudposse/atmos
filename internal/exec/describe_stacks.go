@@ -448,7 +448,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -702,7 +702,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -941,7 +941,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
