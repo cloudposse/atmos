@@ -25,7 +25,7 @@ func TestDelimiterConflictsWithYAMLQuoting(t *testing.T) {
 		},
 		{
 			name:       "left delimiter with single quote conflicts",
-			delimiters: []string{"'{{", "}}'"},
+			delimiters: []string{"'{{", "}}"},
 			expected:   true,
 		},
 		{

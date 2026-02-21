@@ -83,6 +83,12 @@ func DelimiterConflictsWithYAMLQuoting(delimiters []string) bool {
 func EnsureDoubleQuotedForDelimiterSafety(node *goyaml.Node) {
 	defer perf.Track(nil, "yaml.EnsureDoubleQuotedForDelimiterSafety")()
 
+	ensureDoubleQuotedRecursive(node)
+}
+
+// ensureDoubleQuotedRecursive is the recursive implementation that walks the node tree.
+// Separated from the public entry point so perf.Track fires only once.
+func ensureDoubleQuotedRecursive(node *goyaml.Node) {
 	if node == nil {
 		return
 	}
@@ -97,7 +103,7 @@ func EnsureDoubleQuotedForDelimiterSafety(node *goyaml.Node) {
 		}
 	case goyaml.DocumentNode, goyaml.MappingNode, goyaml.SequenceNode:
 		for _, child := range node.Content {
-			EnsureDoubleQuotedForDelimiterSafety(child)
+			ensureDoubleQuotedRecursive(child)
 		}
 	}
 }
