@@ -92,7 +92,7 @@ This same escaping happens for ALL YAML functions since they all start with `!`:
 ```yaml
 # All of these get single-quoted with '' escaping:
 test: '!terraform.output vpc ''{{ .stack }}'' vpc_id'
-data: '!store my-store ''{{ .stack }}' key''
+data: '!store my-store ''{{ .stack }}'' key'
 cmd: '!exec echo ''{{ .stack }}'''
 ```
 
@@ -169,15 +169,15 @@ YAML functions will also be automatically protected.
 
 | File | Change |
 |------|--------|
-| `pkg/utils/yaml_utils.go` | Add `ConvertToYAMLPreservingDelimiters`, `delimiterConflictsWithYAMLQuoting`, `ensureDoubleQuotedForDelimiterSafety` |
-| `internal/exec/utils.go` | Use `ConvertToYAMLPreservingDelimiters` in template processing pipeline |
-| `internal/exec/describe_stacks.go` | Use `ConvertToYAMLPreservingDelimiters` in all 3 template processing sections |
-| `internal/exec/terraform_generate_varfiles.go` | Use `ConvertToYAMLPreservingDelimiters` in template processing |
-| `internal/exec/terraform_generate_backends.go` | Use `ConvertToYAMLPreservingDelimiters` in template processing |
+| `pkg/yaml/delimiter.go` | Add `ConvertToYAMLPreservingDelimiters`, `DelimiterConflictsWithYAMLQuoting`, `EnsureDoubleQuotedForDelimiterSafety` |
+| `internal/exec/utils.go` | Use `atmosYaml.ConvertToYAMLPreservingDelimiters` in template processing pipeline |
+| `internal/exec/describe_stacks.go` | Use `atmosYaml.ConvertToYAMLPreservingDelimiters` in all 3 template processing sections |
+| `internal/exec/terraform_generate_varfiles.go` | Use `atmosYaml.ConvertToYAMLPreservingDelimiters` in template processing |
+| `internal/exec/terraform_generate_backends.go` | Use `atmosYaml.ConvertToYAMLPreservingDelimiters` in template processing |
 
 ### Tests
 
-**Unit tests** (`pkg/utils/yaml_utils_delimiter_test.go`):
+**Unit tests** (`pkg/yaml/delimiter_test.go`):
 - `TestDelimiterConflictsWithYAMLQuoting` — 8 subtests for delimiter conflict detection
 - `TestEnsureDoubleQuotedForDelimiterSafety` — 6 subtests for node style modification
 - `TestConvertToYAMLPreservingDelimiters` — 10 subtests including:
@@ -196,19 +196,16 @@ YAML functions will also be automatically protected.
   proving both that standard encoding breaks AND delimiter-safe encoding works for each function
 
 **Integration tests** (`tests/yaml_functions_custom_delimiters_test.go`):
-- `TestTerraformStateWithCustomDelimiters` — 3 subtests:
-  - Regular templates with custom delimiters
-  - `!terraform.state` with static arguments
-  - `!terraform.state` with templated stack argument (core issue #2052)
-- `TestCustomDelimitersTemplateProcessing` — 1 subtest for settings template resolution
+- `TestYAMLFunctionsWithCustomDelimiters` — 2 subtests:
+  - Regular templates with custom delimiters (component-1)
+  - Static and templated `!terraform.state` args in a single test (component-2, core issue #2052)
 
 Run with:
 ```bash
-go test ./pkg/utils/ -run TestConvertToYAMLPreserving -v
-go test ./pkg/utils/ -run TestDelimiterConflicts -v
-go test ./pkg/utils/ -run TestEnsureDoubleQuoted -v
-go test ./pkg/utils/ -run TestAllYAMLFunctions -v
-go test ./pkg/utils/ -run TestStandardEncodingBreaksAll -v
-go test ./tests/ -run TestTerraformStateWithCustomDelimiters -v
-go test ./tests/ -run TestCustomDelimitersTemplateProcessing -v
+go test ./pkg/yaml/ -run TestConvertToYAMLPreserving -v
+go test ./pkg/yaml/ -run TestDelimiterConflicts -v
+go test ./pkg/yaml/ -run TestEnsureDoubleQuoted -v
+go test ./pkg/yaml/ -run TestAllYAMLFunctions -v
+go test ./pkg/yaml/ -run TestStandardEncodingBreaksAll -v
+go test ./tests/ -run TestYAMLFunctionsWithCustomDelimiters -v
 ```

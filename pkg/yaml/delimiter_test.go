@@ -1,4 +1,4 @@
-package utils
+package yaml
 
 import (
 	"strings"
@@ -6,7 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	yaml "gopkg.in/yaml.v3"
+	goyaml "gopkg.in/yaml.v3"
+
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 // TestDelimiterConflictsWithYAMLQuoting tests the detection of delimiter/YAML quoting conflicts.
@@ -60,7 +62,7 @@ func TestDelimiterConflictsWithYAMLQuoting(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := delimiterConflictsWithYAMLQuoting(tt.delimiters)
+			result := DelimiterConflictsWithYAMLQuoting(tt.delimiters)
 			assert.Equal(t, tt.expected, result)
 		})
 	}
@@ -69,88 +71,88 @@ func TestDelimiterConflictsWithYAMLQuoting(t *testing.T) {
 // TestEnsureDoubleQuotedForDelimiterSafety tests the node style modification logic.
 func TestEnsureDoubleQuotedForDelimiterSafety(t *testing.T) {
 	t.Run("changes single-quote-containing scalars to double-quoted", func(t *testing.T) {
-		node := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		node := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "!terraform.state vpc '{{ .stack }}' vpc_id",
 		}
 
-		ensureDoubleQuotedForDelimiterSafety(node)
-		assert.Equal(t, yaml.DoubleQuotedStyle, node.Style)
+		EnsureDoubleQuotedForDelimiterSafety(node)
+		assert.Equal(t, goyaml.DoubleQuotedStyle, node.Style)
 	})
 
 	t.Run("does not change scalars without single quotes", func(t *testing.T) {
-		node := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		node := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "!terraform.state vpc {{ .stack }} vpc_id",
 		}
 
-		ensureDoubleQuotedForDelimiterSafety(node)
-		assert.Equal(t, yaml.Style(0), node.Style)
+		EnsureDoubleQuotedForDelimiterSafety(node)
+		assert.Equal(t, goyaml.Style(0), node.Style)
 	})
 
 	t.Run("recursively processes mapping nodes", func(t *testing.T) {
-		keyNode := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		keyNode := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "test",
 		}
-		valueNode := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		valueNode := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "!terraform.state component '{{ .stack }}' output",
 		}
-		mappingNode := &yaml.Node{
-			Kind:    yaml.MappingNode,
-			Content: []*yaml.Node{keyNode, valueNode},
+		mappingNode := &goyaml.Node{
+			Kind:    goyaml.MappingNode,
+			Content: []*goyaml.Node{keyNode, valueNode},
 		}
 
-		ensureDoubleQuotedForDelimiterSafety(mappingNode)
-		assert.Equal(t, yaml.Style(0), keyNode.Style)
-		assert.Equal(t, yaml.DoubleQuotedStyle, valueNode.Style)
+		EnsureDoubleQuotedForDelimiterSafety(mappingNode)
+		assert.Equal(t, goyaml.Style(0), keyNode.Style)
+		assert.Equal(t, goyaml.DoubleQuotedStyle, valueNode.Style)
 	})
 
 	t.Run("recursively processes sequence nodes", func(t *testing.T) {
-		item1 := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		item1 := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "no quotes here",
 		}
-		item2 := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		item2 := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "has 'quotes' inside",
 		}
-		seqNode := &yaml.Node{
-			Kind:    yaml.SequenceNode,
-			Content: []*yaml.Node{item1, item2},
+		seqNode := &goyaml.Node{
+			Kind:    goyaml.SequenceNode,
+			Content: []*goyaml.Node{item1, item2},
 		}
 
-		ensureDoubleQuotedForDelimiterSafety(seqNode)
-		assert.Equal(t, yaml.Style(0), item1.Style)
-		assert.Equal(t, yaml.DoubleQuotedStyle, item2.Style)
+		EnsureDoubleQuotedForDelimiterSafety(seqNode)
+		assert.Equal(t, goyaml.Style(0), item1.Style)
+		assert.Equal(t, goyaml.DoubleQuotedStyle, item2.Style)
 	})
 
 	t.Run("handles nil node gracefully", func(t *testing.T) {
 		assert.NotPanics(t, func() {
-			ensureDoubleQuotedForDelimiterSafety(nil)
+			EnsureDoubleQuotedForDelimiterSafety(nil)
 		})
 	})
 
 	t.Run("handles document node", func(t *testing.T) {
-		valueNode := &yaml.Node{
-			Kind:  yaml.ScalarNode,
+		valueNode := &goyaml.Node{
+			Kind:  goyaml.ScalarNode,
 			Tag:   "!!str",
 			Value: "value with 'quotes'",
 		}
-		docNode := &yaml.Node{
-			Kind:    yaml.DocumentNode,
-			Content: []*yaml.Node{valueNode},
+		docNode := &goyaml.Node{
+			Kind:    goyaml.DocumentNode,
+			Content: []*goyaml.Node{valueNode},
 		}
 
-		ensureDoubleQuotedForDelimiterSafety(docNode)
-		assert.Equal(t, yaml.DoubleQuotedStyle, valueNode.Style)
+		EnsureDoubleQuotedForDelimiterSafety(docNode)
+		assert.Equal(t, goyaml.DoubleQuotedStyle, valueNode.Style)
 	})
 }
 
@@ -159,7 +161,7 @@ func TestEnsureDoubleQuotedForDelimiterSafety(t *testing.T) {
 func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 	t.Run("preserves single-quote delimiters in YAML function values", func(t *testing.T) {
 		// This is the core test for GitHub issue #2052.
-		// When custom delimiters contain single quotes (e.g., ["'{{", "}}''"]),
+		// When custom delimiters contain single quotes (e.g., ["'{{", "}}'"]),
 		// YAML function values like "!terraform.state vpc '{{ .stack }}' vpc_id"
 		// must be serialized with double-quoted style to prevent single-quote
 		// escaping from breaking the template delimiters.
@@ -193,7 +195,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 
 		// Verify it's valid YAML.
 		var parsed map[string]interface{}
-		err = yaml.Unmarshal([]byte(result), &parsed)
+		err = goyaml.Unmarshal([]byte(result), &parsed)
 		require.NoError(t, err)
 	})
 
@@ -225,7 +227,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 
 		// Parse the result back and verify values are preserved.
 		var parsed map[string]interface{}
-		err = yaml.Unmarshal([]byte(result), &parsed)
+		err = goyaml.Unmarshal([]byte(result), &parsed)
 		require.NoError(t, err)
 
 		vars := parsed["vars"].(map[string]interface{})
@@ -255,7 +257,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 
 		// The result should be valid YAML.
 		var parsed map[string]interface{}
-		err = yaml.Unmarshal([]byte(processed), &parsed)
+		err = goyaml.Unmarshal([]byte(processed), &parsed)
 		require.NoError(t, err, "YAML should be valid after template replacement, got: %s", processed)
 
 		vars := parsed["vars"].(map[string]interface{})
@@ -271,7 +273,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 			},
 		}
 
-		yamlStr, err := ConvertToYAML(data)
+		yamlStr, err := u.ConvertToYAML(data)
 		require.NoError(t, err)
 
 		// Standard encoding uses single quotes for strings starting with '!',
@@ -285,7 +287,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 
 		// The result should be INVALID YAML because single-quote escaping is broken.
 		var parsed map[string]interface{}
-		err = yaml.Unmarshal([]byte(processed), &parsed)
+		err = goyaml.Unmarshal([]byte(processed), &parsed)
 		assert.Error(t, err, "standard encoding should produce invalid YAML after template replacement with custom delimiters")
 	})
 
@@ -325,7 +327,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 
 		// Parse back and verify.
 		var parsed map[string]interface{}
-		err = yaml.Unmarshal([]byte(result), &parsed)
+		err = goyaml.Unmarshal([]byte(result), &parsed)
 		require.NoError(t, err)
 	})
 
@@ -337,7 +339,7 @@ func TestConvertToYAMLPreservingDelimiters(t *testing.T) {
 		}
 
 		delimiters := []string{"'{{", "}}'"}
-		result, err := ConvertToYAMLPreservingDelimiters(data, delimiters, YAMLOptions{Indent: 4})
+		result, err := ConvertToYAMLPreservingDelimiters(data, delimiters, u.YAMLOptions{Indent: 4})
 		require.NoError(t, err)
 
 		// Verify the indentation is 4 spaces.
@@ -435,7 +437,7 @@ func TestAllYAMLFunctionsPreservedWithCustomDelimiters(t *testing.T) {
 
 				// Verify the value is preserved by parsing back.
 				var parsed map[string]interface{}
-				err = yaml.Unmarshal([]byte(result), &parsed)
+				err = goyaml.Unmarshal([]byte(result), &parsed)
 				require.NoError(t, err)
 
 				vars := parsed["vars"].(map[string]interface{})
@@ -527,7 +529,7 @@ func TestAllYAMLFunctionsTemplateReplacementWithCustomDelimiters(t *testing.T) {
 
 			// Step 3: Parse the result back as YAML — it must be valid.
 			var parsed map[string]interface{}
-			err = yaml.Unmarshal([]byte(processed), &parsed)
+			err = goyaml.Unmarshal([]byte(processed), &parsed)
 			require.NoError(t, err, "YAML should be valid after template replacement for %s, got: %s", tt.name, processed)
 
 			vars := parsed["vars"].(map[string]interface{})
@@ -567,7 +569,7 @@ func TestStandardEncodingBreaksAllYAMLFunctionsWithCustomDelimiters(t *testing.T
 			}
 
 			// Standard encoding will use single-quoted style for strings starting with '!'.
-			yamlStr, err := ConvertToYAML(data)
+			yamlStr, err := u.ConvertToYAML(data)
 			require.NoError(t, err)
 
 			// Should contain '' (escaped single quotes).
@@ -577,7 +579,7 @@ func TestStandardEncodingBreaksAllYAMLFunctionsWithCustomDelimiters(t *testing.T
 			// After template replacement, the YAML should be INVALID.
 			processed := strings.ReplaceAll(yamlStr, "'{{ .stack }}'", "nonprod")
 			var parsed map[string]interface{}
-			err = yaml.Unmarshal([]byte(processed), &parsed)
+			err = goyaml.Unmarshal([]byte(processed), &parsed)
 			assert.Error(t, err,
 				"standard encoding should produce invalid YAML after template replacement for %s", fn.name)
 		})
@@ -600,7 +602,7 @@ func TestStandardEncodingBreaksAllYAMLFunctionsWithCustomDelimiters(t *testing.T
 			// After template replacement, the YAML should be VALID.
 			processed := strings.ReplaceAll(yamlStr, "'{{ .stack }}'", "nonprod")
 			var parsed map[string]interface{}
-			err = yaml.Unmarshal([]byte(processed), &parsed)
+			err = goyaml.Unmarshal([]byte(processed), &parsed)
 			require.NoError(t, err,
 				"delimiter-safe encoding should produce valid YAML after template replacement for %s", fn.name)
 		})

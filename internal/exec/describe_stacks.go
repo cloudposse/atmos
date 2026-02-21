@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 // componentInfoKey is the key used for component info in stack sections.
@@ -448,7 +449,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
+								componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -702,7 +703,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
+								componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -941,7 +942,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
+								componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}

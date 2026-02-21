@@ -11,15 +11,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// TestTerraformStateWithCustomDelimiters tests that !terraform.state works correctly
+// TestYAMLFunctionsWithCustomDelimiters tests that YAML functions work correctly
 // when custom template delimiters containing single quotes are configured.
 // This is the regression test for GitHub issue #2052.
-func TestTerraformStateWithCustomDelimiters(t *testing.T) {
+func TestYAMLFunctionsWithCustomDelimiters(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/atmos-terraform-state-custom-delimiters")
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
-	require.NotNil(t, atmosConfig)
+	require.True(t, atmosConfig.Initialized, "atmos config should be initialized")
 
 	// Verify custom delimiters are configured.
 	require.Len(t, atmosConfig.Templates.Settings.Delimiters, 2)
@@ -50,31 +50,10 @@ func TestTerraformStateWithCustomDelimiters(t *testing.T) {
 		assert.Equal(t, "component-1-c", vars["baz"], "template '{{ .settings.config.c }}' should resolve to 'component-1-c'")
 	})
 
-	t.Run("component-2 with terraform.state static args", func(t *testing.T) {
-		// component-2 uses !terraform.state with static args (no template).
-		// This should work regardless of delimiter configuration.
-		componentSection, err := e.ExecuteDescribeComponent(
-			&e.ExecuteDescribeComponentParams{
-				Component:            "component-2",
-				Stack:                "test",
-				ProcessTemplates:     true,
-				ProcessYamlFunctions: true,
-			},
-		)
-
-		require.NoError(t, err, "component-2 with static terraform.state args should load without errors")
-		require.NotNil(t, componentSection)
-
-		vars, ok := componentSection["vars"].(map[string]interface{})
-		require.True(t, ok, "vars should be a map")
-
-		// Static arg: !terraform.state component-1 foo
-		assert.Equal(t, "foo-from-state", vars["foo"], "static terraform.state should resolve from state file")
-	})
-
-	t.Run("component-2 with terraform.state templated stack arg", func(t *testing.T) {
-		// This is the core test for GitHub issue #2052:
-		// !terraform.state component-1 '{{ .stack }}' bar
+	t.Run("component-2 with static and templated terraform.state args (issue #2052)", func(t *testing.T) {
+		// component-2 uses !terraform.state with both static and templated args.
+		// The templated case is the core regression test for GitHub issue #2052:
+		//   !terraform.state component-1 '{{ .stack }}' bar
 		// With custom delimiters ["'{{", "}}'"], the template '{{ .stack }}'
 		// should be processed first, then terraform.state should execute.
 		componentSection, err := e.ExecuteDescribeComponent(
@@ -86,47 +65,16 @@ func TestTerraformStateWithCustomDelimiters(t *testing.T) {
 			},
 		)
 
-		require.NoError(t, err, "component-2 with templated terraform.state args should NOT fail with 'did not find expected key' (issue #2052)")
+		require.NoError(t, err, "component-2 should NOT fail with 'did not find expected key' (issue #2052)")
 		require.NotNil(t, componentSection)
 
 		vars, ok := componentSection["vars"].(map[string]interface{})
 		require.True(t, ok, "vars should be a map")
 
-		// Templated arg: !terraform.state component-1 '{{ .stack }}' bar
-		// '{{ .stack }}' should resolve to 'test', then terraform.state reads bar output.
+		// Static arg: !terraform.state component-1 foo
+		assert.Equal(t, "foo-from-state", vars["foo"], "static terraform.state should resolve from state file")
+		// Templated arg: !terraform.state component-1 '{{ .stack }}' bar/baz
 		assert.Equal(t, "bar-from-state", vars["bar"], "templated terraform.state with custom delimiters should resolve correctly")
 		assert.Equal(t, "baz-from-state", vars["baz"], "templated terraform.state with custom delimiters should resolve correctly")
-	})
-}
-
-// TestCustomDelimitersTemplateProcessing tests that regular template expressions
-// work correctly with custom delimiters containing single quotes.
-func TestCustomDelimitersTemplateProcessing(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/atmos-terraform-state-custom-delimiters")
-
-	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
-	require.NoError(t, err)
-	require.NotNil(t, atmosConfig)
-
-	t.Run("settings templates resolve with custom delimiters", func(t *testing.T) {
-		componentSection, err := e.ExecuteDescribeComponent(
-			&e.ExecuteDescribeComponentParams{
-				Component:            "component-1",
-				Stack:                "test",
-				ProcessTemplates:     true,
-				ProcessYamlFunctions: true,
-			},
-		)
-
-		require.NoError(t, err)
-		require.NotNil(t, componentSection)
-
-		vars, ok := componentSection["vars"].(map[string]interface{})
-		require.True(t, ok)
-
-		// All three template expressions should resolve.
-		assert.Equal(t, "component-1-a", vars["foo"])
-		assert.Equal(t, "component-1-b", vars["bar"])
-		assert.Equal(t, "component-1-c", vars["baz"])
 	})
 }

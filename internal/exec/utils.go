@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 const (
@@ -725,7 +726,7 @@ func ProcessStacks(
 		// Use delimiter-safe YAML encoding when custom delimiters are configured.
 		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
 		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
-		componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
 			configAndStacksInfo.ComponentSection,
 			atmosConfig.Templates.Settings.Delimiters,
 		)

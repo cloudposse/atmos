@@ -14,6 +14,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 // backendConfig holds extracted backend configuration from a component section.
@@ -237,7 +238,7 @@ func ExecuteTerraformGenerateBackends(
 				configAndStacksInfo.Stack = stackName
 
 				// Process `Go` templates
-				componentSectionStr, err := u.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
+				componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 				if err != nil {
 					return err
 				}
