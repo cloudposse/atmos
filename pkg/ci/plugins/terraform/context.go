@@ -66,7 +66,7 @@ func NewTemplateContext(base *plugin.TemplateContext, data *plugin.TerraformOutp
 		ctx.Outputs = data.Outputs
 		ctx.ChangedResult = data.ChangedResult
 		ctx.HasDestroy = data.ResourceCounts.Destroy > 0
-		ctx.Warnings = data.Warnings
+		ctx.Warnings = blockquoteWarnings(data.Warnings)
 	}
 
 	return ctx
@@ -100,4 +100,18 @@ func (c *TerraformTemplateContext) TotalChanges() int {
 	defer perf.Track(nil, "terraform.TerraformTemplateContext.TotalChanges")()
 
 	return c.Resources.Create + c.Resources.Change + c.Resources.Replace + c.Resources.Destroy
+}
+
+// blockquoteWarnings formats each warning for markdown blockquote rendering.
+// Each line of the warning is prefixed with "> " so it renders correctly inside a blockquote block.
+func blockquoteWarnings(warnings []string) []string {
+	result := make([]string, len(warnings))
+	for i, w := range warnings {
+		lines := strings.Split(w, "\n")
+		for j, line := range lines {
+			lines[j] = "> " + line
+		}
+		result[i] = strings.Join(lines, "\n")
+	}
+	return result
 }
