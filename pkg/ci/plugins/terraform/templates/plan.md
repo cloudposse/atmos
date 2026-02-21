@@ -39,7 +39,7 @@
 {{- if .Result.HasErrors }}
 <details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
 {{- else }}
-<details><summary><a id="result-{{$target}}" />{{if .ChangedResult}}{{ .ChangedResult }}{{else}}Plan details{{end}}</summary>
+<details><summary><a id="result-{{$target}}" />Plan: {{.Resources.Create}} to add, {{.Resources.Change}} to change, {{.Resources.Destroy}} to destroy.</summary>
 {{- end }}
 
 <br/>
@@ -49,8 +49,9 @@ To reproduce this locally, run:<br/><br/>
 atmos terraform plan {{.Component}} -s {{.Stack}}
 ```
 
-{{- if .Result.HasErrors }}
 ---
+
+{{- if .Result.HasErrors }}
 {{- $first := true }}
 {{- range .Result.Errors }}
 {{ if not $first }}
@@ -65,7 +66,6 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 {{- if not .Result.HasErrors }}
 {{- if gt (len .CreatedResources) 0 }}
 
----
 ### <a id="create-{{$target}}" />Create
 ```diff
 {{- range .CreatedResources }}
@@ -124,7 +124,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 
 > [!WARNING]
 > ```
-> {{ . }}
+{{ . }}
 > ```
 {{- end }}
 {{- end }}

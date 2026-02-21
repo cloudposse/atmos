@@ -433,6 +433,16 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 		}
 	})
 
+	t.Run("blockquoteWarnings", func(t *testing.T) {
+		input := []string{
+			"Warning: Something\n\nDetails here\nMore details",
+			"Warning: Another",
+		}
+		result := blockquoteWarnings(input)
+		assert.Equal(t, "> Warning: Something\n> \n> Details here\n> More details", result[0])
+		assert.Equal(t, "> Warning: Another", result[1])
+	})
+
 	t.Run("TotalChanges", func(t *testing.T) {
 		ctx := &TerraformTemplateContext{
 			Resources: plugin.ResourceCounts{
@@ -537,6 +547,30 @@ func TestTemplateGolden(t *testing.T) {
 					},
 				},
 				Resources: plugin.ResourceCounts{},
+			},
+		},
+		{
+			name:         "plan with warnings",
+			templateName: "plan",
+			goldenFile:   "plan_with_warnings.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "mycomponent",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "plan",
+					Output:        "Plan: 1 to add, 0 to change, 0 to destroy.",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"random_id.foo[0]"},
+				Warnings: []string{
+					"> Warning: Value for undeclared variable\n> \n> The root module does not declare a variable named \"stage\".\n> To silence these warnings, use TF_VAR_... environment variables.",
+				},
 			},
 		},
 		{

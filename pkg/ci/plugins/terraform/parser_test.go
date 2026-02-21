@@ -329,13 +329,16 @@ func TestExtractWarnings(t *testing.T) {
 // Legacy tests for stdout parsing (fallback behavior).
 func TestParsePlanOutput(t *testing.T) {
 	tests := []struct {
-		name       string
-		output     string
-		hasChanges bool
-		hasErrors  bool
-		create     int
-		change     int
-		destroy    int
+		name           string
+		output         string
+		hasChanges     bool
+		hasErrors      bool
+		create         int
+		change         int
+		destroy        int
+		wantCreatedRes []string
+		wantUpdatedRes []string
+		wantDeletedRes []string
 	}{
 		{
 			name: "plan with changes",
@@ -348,12 +351,25 @@ Terraform will perform the following actions:
       + instance_type = "t2.micro"
     }
 
+  # aws_instance.other will be created
+  + resource "aws_instance" "other" {
+      + ami           = "ami-12345678"
+      + instance_type = "t2.micro"
+    }
+
+  # aws_security_group.main will be updated in-place
+  ~ resource "aws_security_group" "main" {
+      ~ ingress = []
+    }
+
 Plan: 2 to add, 1 to change, 0 to destroy.
 `,
-			hasChanges: true,
-			create:     2,
-			change:     1,
-			destroy:    0,
+			hasChanges:     true,
+			create:         2,
+			change:         1,
+			destroy:        0,
+			wantCreatedRes: []string{"aws_instance.example", "aws_instance.other"},
+			wantUpdatedRes: []string{"aws_security_group.main"},
 		},
 		{
 			name: "plan no changes",
@@ -371,12 +387,23 @@ and found no differences, so no changes are needed.
 		{
 			name: "plan with destroy",
 			output: `
+Terraform will perform the following actions:
+
+  # aws_instance.old[0] will be destroyed
+  - resource "aws_instance" "old" {
+    }
+
+  # aws_instance.old[1] will be destroyed
+  - resource "aws_instance" "old" {
+    }
+
 Plan: 0 to add, 0 to change, 5 to destroy.
 `,
-			hasChanges: true,
-			create:     0,
-			change:     0,
-			destroy:    5,
+			hasChanges:     true,
+			create:         0,
+			change:         0,
+			destroy:        5,
+			wantDeletedRes: []string{"aws_instance.old[0]", "aws_instance.old[1]"},
 		},
 		{
 			name: "plan with errors",
@@ -404,6 +431,16 @@ Error: Reference to undeclared resource
 				assert.Equal(t, tt.create, data.ResourceCounts.Create, "Create count mismatch")
 				assert.Equal(t, tt.change, data.ResourceCounts.Change, "Change count mismatch")
 				assert.Equal(t, tt.destroy, data.ResourceCounts.Destroy, "Destroy count mismatch")
+
+				if len(tt.wantCreatedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantCreatedRes, data.CreatedResources, "CreatedResources mismatch")
+				}
+				if len(tt.wantUpdatedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantUpdatedRes, data.UpdatedResources, "UpdatedResources mismatch")
+				}
+				if len(tt.wantDeletedRes) > 0 {
+					assert.ElementsMatch(t, tt.wantDeletedRes, data.DeletedResources, "DeletedResources mismatch")
+				}
 			}
 		})
 	}

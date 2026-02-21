@@ -35,6 +35,15 @@ var (
 
 	// NoChangesRe matches "No changes. Your infrastructure matches the configuration.".
 	noChangesRe = regexp.MustCompile(`No changes\.|Your infrastructure matches the configuration`)
+
+	// Matches resource action lines in terraform plan output:
+	//   # resource_type.name will be created
+	//   # resource_type.name will be updated in-place
+	//   # resource_type.name will be destroyed
+	//   # resource_type.name must be replaced
+	//   # resource_type.name will be read during apply
+	resourceActionRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+will be (created|destroyed|updated in-place|read during apply)`)
+	resourceReplaceRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+must be replaced`)
 )
 
 // ParsePlanJSON parses terraform plan JSON from `terraform show -json <planfile>`.
@@ -306,6 +315,9 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 		return result
 	}
 
+	// Extract individual resource addresses from plan output.
+	extractResourceAddresses(output, data)
+
 	// Try to parse plan summary (fallback regex parsing).
 	if matches := planSummaryRe.FindStringSubmatch(output); len(matches) == 4 {
 		data.ResourceCounts.Create = parseIntOrZero(matches[1])
@@ -396,6 +408,29 @@ func ParseOutput(output string, command string) *plugin.OutputResult {
 				Outputs:           make(map[string]plugin.TerraformOutput),
 			},
 		}
+	}
+}
+
+// extractResourceAddresses extracts individual resource addresses from terraform plan stdout.
+// It parses lines like "# aws_instance.example will be created" to populate resource lists.
+func extractResourceAddresses(output string, data *plugin.TerraformOutputData) {
+	// Extract create/update/destroy resources.
+	for _, match := range resourceActionRe.FindAllStringSubmatch(output, -1) {
+		addr := match[1]
+		action := match[2]
+		switch action {
+		case "created":
+			data.CreatedResources = append(data.CreatedResources, addr)
+		case "destroyed":
+			data.DeletedResources = append(data.DeletedResources, addr)
+		case "updated in-place":
+			data.UpdatedResources = append(data.UpdatedResources, addr)
+		}
+	}
+
+	// Extract replaced resources.
+	for _, match := range resourceReplaceRe.FindAllStringSubmatch(output, -1) {
+		data.ReplacedResources = append(data.ReplacedResources, match[1])
 	}
 }
 
