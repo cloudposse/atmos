@@ -150,12 +150,13 @@ func (s *AzureKeyVaultStore) initIdentityClient() error {
 }
 
 // ensureClient lazily initializes the Azure client if it hasn't been initialized yet.
+// The client-nil check is inside initOnce.Do to avoid a data race between the
+// unsynchronized read and the write that happens inside Do on another goroutine.
 func (s *AzureKeyVaultStore) ensureClient() error {
-	if s.client != nil {
-		return nil
-	}
-
 	s.initOnce.Do(func() {
+		if s.client != nil {
+			return // Already initialized (eager init path).
+		}
 		if s.identityName == "" {
 			s.initErr = s.initDefaultClient()
 		} else {

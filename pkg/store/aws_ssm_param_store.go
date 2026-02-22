@@ -181,13 +181,13 @@ func (s *SSMStore) buildAuthConfigOpts(authContext *AWSAuthConfig) []func(*confi
 
 // ensureClient lazily initializes the AWS client if it hasn't been initialized yet.
 // For identity-based stores, this resolves credentials via the auth resolver.
+// The client-nil check is inside initOnce.Do to avoid a data race between the
+// unsynchronized read and the write that happens inside Do on another goroutine.
 func (s *SSMStore) ensureClient() error {
-	// If client is already initialized (eager init path), nothing to do.
-	if s.client != nil {
-		return nil
-	}
-
 	s.initOnce.Do(func() {
+		if s.client != nil {
+			return // Already initialized (eager init path).
+		}
 		if s.identityName == "" {
 			s.initErr = s.initDefaultClient()
 		} else {
