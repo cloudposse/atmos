@@ -408,7 +408,7 @@ func checkGitVersion(ctx context.Context, min string) error {
 	if runtime.GOOS == "windows" && strings.Contains(v, ".windows.") {
 		// on windows, git version will return for example:
 		// git version 2.20.1.windows.1
-		// Which does not follow the semantic versionning specs
+		// Which does not follow the semantic versioning specs
 		// https://semver.org. We remove that part in order for
 		// go-version to not error.
 		if idx := strings.Index(v, ".windows."); idx != -1 {
