@@ -326,19 +326,84 @@ func TestExtractWarnings(t *testing.T) {
 	assert.Contains(t, warnings[1], "Applied changes may be incomplete")
 }
 
+func TestExtractWarningBlocks(t *testing.T) {
+	t.Run("plain format", func(t *testing.T) {
+		output := `
+Plan: 1 to add, 0 to change, 0 to destroy.
+
+Warning: Test warning summary
+
+  with data.validation_warning.warn[0],
+  on main.tf line 20, in data "validation_warning" "warn":
+  20: data "validation_warning" "warn" {
+
+Test warning details
+`
+		blocks := ExtractWarningBlocks(output)
+		require.Len(t, blocks, 1)
+		assert.Contains(t, blocks[0], "Warning: Test warning summary")
+		assert.Contains(t, blocks[0], "with data.validation_warning.warn[0],")
+		assert.Contains(t, blocks[0], "Test warning details")
+	})
+
+	t.Run("box-drawing format", func(t *testing.T) {
+		output := `
+│ Warning: Argument is deprecated
+│
+│   with aws_s3_bucket.example,
+│   on main.tf line 10, in resource "aws_s3_bucket" "example":
+│   10:   acl = "private"
+│
+│ Use the aws_s3_bucket_acl resource instead
+╵
+`
+		blocks := ExtractWarningBlocks(output)
+		require.Len(t, blocks, 1)
+		assert.Contains(t, blocks[0], "Warning: Argument is deprecated")
+		assert.Contains(t, blocks[0], "with aws_s3_bucket.example,")
+		assert.Contains(t, blocks[0], "Use the aws_s3_bucket_acl resource instead")
+	})
+
+	t.Run("multiple warnings plain format", func(t *testing.T) {
+		output := `
+Warning: First warning
+
+  with resource.one,
+  on main.tf line 1
+
+First details
+
+Warning: Second warning
+
+  with resource.two,
+  on main.tf line 2
+
+Second details
+`
+		blocks := ExtractWarningBlocks(output)
+		require.Len(t, blocks, 2)
+		assert.Contains(t, blocks[0], "Warning: First warning")
+		assert.Contains(t, blocks[0], "First details")
+		assert.Contains(t, blocks[1], "Warning: Second warning")
+		assert.Contains(t, blocks[1], "Second details")
+	})
+}
+
 // Legacy tests for stdout parsing (fallback behavior).
 func TestParsePlanOutput(t *testing.T) {
 	tests := []struct {
-		name           string
-		output         string
-		hasChanges     bool
-		hasErrors      bool
-		create         int
-		change         int
-		destroy        int
-		wantCreatedRes []string
-		wantUpdatedRes []string
-		wantDeletedRes []string
+		name            string
+		output          string
+		hasChanges      bool
+		hasErrors       bool
+		create          int
+		change          int
+		destroy         int
+		wantCreatedRes  []string
+		wantUpdatedRes  []string
+		wantDeletedRes  []string
+		wantWarnings    int
+		wantWarningText []string
 	}{
 		{
 			name: "plan with changes",
@@ -406,6 +471,49 @@ Plan: 0 to add, 0 to change, 5 to destroy.
 			wantDeletedRes: []string{"aws_instance.old[0]", "aws_instance.old[1]"},
 		},
 		{
+			name: "plan with create and warning",
+			output: `plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # random_id.foo[0] will be created
+  + resource "random_id" "foo" {
+      + b64_std     = (known after apply)
+      + b64_url     = (known after apply)
+      + byte_length = 8
+      + dec         = (known after apply)
+      + hex         = (known after apply)
+      + id          = (known after apply)
+      + keepers     = {
+          + "seed" = "foo-plat-ue2-sandbox-blue"
+        }
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.
+
+Warning: Test warning summary
+
+  with data.validation_warning.warn[0],
+  on main.tf line 20, in data "validation_warning" "warn":
+  20: data "validation_warning" "warn" {
+
+Test warning details
+`,
+			hasChanges:     true,
+			create:         1,
+			change:         0,
+			destroy:        0,
+			wantCreatedRes: []string{"random_id.foo[0]"},
+			wantWarnings:   1,
+			wantWarningText: []string{
+				"Warning: Test warning summary",
+				"with data.validation_warning.warn[0],",
+				"on main.tf line 20",
+				"Test warning details",
+			},
+		},
+		{
 			name: "plan with errors",
 			output: `
 Error: Invalid provider configuration
@@ -440,6 +548,12 @@ Error: Reference to undeclared resource
 				}
 				if len(tt.wantDeletedRes) > 0 {
 					assert.ElementsMatch(t, tt.wantDeletedRes, data.DeletedResources, "DeletedResources mismatch")
+				}
+				if tt.wantWarnings > 0 {
+					assert.Len(t, data.Warnings, tt.wantWarnings, "Warnings count mismatch")
+					for _, text := range tt.wantWarningText {
+						assert.Contains(t, data.Warnings[0], text, "Warning should contain: %s", text)
+					}
 				}
 			}
 		})

@@ -251,9 +251,9 @@ func ExtractWarningBlocks(stdout string) []string {
 		}
 
 		if inWarningBlock {
-			// End of block: empty line without box prefix, or a new section marker.
 			trimmed := strings.TrimSpace(line)
-			if trimmed == "" || trimmed == "╵" {
+			// End of block on box-drawing end marker.
+			if trimmed == "╵" {
 				if len(current) > 0 {
 					blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
 				}
@@ -261,12 +261,13 @@ func ExtractWarningBlocks(stdout string) []string {
 				inWarningBlock = false
 				continue
 			}
-			// Detect start of a new block (error or another warning) without closing the previous one.
+			// Detect start of a new block (error or another warning).
 			if strings.HasPrefix(stripped, "Error: ") || (strings.HasPrefix(stripped, "Warning: ") && len(current) > 0) {
 				blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
 				current = []string{stripped}
 				continue
 			}
+			// Empty lines are preserved as part of the warning block content.
 			current = append(current, stripped)
 		}
 	}
