@@ -439,7 +439,7 @@ func TestTerraformTemplateContextHelpers(t *testing.T) {
 			"Warning: Another",
 		}
 		result := blockquoteWarnings(input)
-		assert.Equal(t, "> Warning: Something\n> \n> Details here\n> More details", result[0])
+		assert.Equal(t, "> Warning: Something\n>\n> Details here\n> More details", result[0])
 		assert.Equal(t, "> Warning: Another", result[1])
 	})
 
