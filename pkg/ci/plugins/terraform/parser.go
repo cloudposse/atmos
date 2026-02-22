@@ -42,7 +42,7 @@ var (
 	//   # resource_type.name will be destroyed
 	//   # resource_type.name must be replaced
 	//   # resource_type.name will be read during apply
-	resourceActionRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+will be (created|destroyed|updated in-place|read during apply)`)
+	resourceActionRe  = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+will be (created|destroyed|updated in-place|read during apply)`)
 	resourceReplaceRe = regexp.MustCompile(`(?m)^\s*#\s+(\S+)\s+must be replaced`)
 )
 
