@@ -791,6 +791,60 @@ func TestProcessCommandLineArgs_IdentityFlagParsing(t *testing.T) {
 	}
 }
 
+// TestProcessCommandLineArgs_IdentityFromCobraParsedFlags verifies that the --identity
+// flag value is preserved when Cobra pre-parses it before ProcessCommandLineArgs.
+// This simulates the real terraform command flow:
+// 1. Plan.go RunE receives full args including --identity.
+// 2. Cobra parses flags (identity is consumed and stored in cmd.Flags())
+// 3. RunE calls terraformRunWithOptions with only positional args (flags removed)
+// 4. ProcessCommandLineArgs receives stripped args, reads identity from Cobra flag storage.
+func TestProcessCommandLineArgs_IdentityFromCobraParsedFlags(t *testing.T) {
+	tests := []struct {
+		name           string
+		fullArgs       []string // What Cobra initially sees
+		strippedArgs   []string // What ProcessCommandLineArgs receives after Cobra consumed flags
+		expectedResult string
+	}{
+		{
+			name:           "identity flag with equals syntax consumed by Cobra",
+			fullArgs:       []string{"plan", "eks", "--stack", "test", "--identity=staging-admin"},
+			strippedArgs:   []string{"plan", "eks"},
+			expectedResult: "staging-admin",
+		},
+		{
+			name:           "identity without value consumed by Cobra",
+			fullArgs:       []string{"plan", "eks", "--stack", "test", "--identity"},
+			strippedArgs:   []string{"plan", "eks"},
+			expectedResult: "__SELECT__", // NoOptDefVal
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create command with identity flag (matching terraform setup).
+			cmd := newTestCommandWithGlobalFlags("terraform")
+			cmd.Flags().String("stack", "", "stack name")
+			identityFlag := cmd.Flags().String("identity", "", "identity name")
+			cmd.Flags().Lookup("identity").NoOptDefVal = "__SELECT__"
+
+			// Step 1: Cobra parses the full args (simulating plan.go RunE entry).
+			err := cmd.ParseFlags(tt.fullArgs)
+			require.NoError(t, err)
+
+			// Verify Cobra parsed it correctly.
+			require.Equal(t, tt.expectedResult, *identityFlag, "Cobra should have parsed identity")
+
+			// Step 2: ProcessCommandLineArgs receives stripped args (simulating terraformRunWithOptions).
+			result, err := ProcessCommandLineArgs("terraform", cmd, tt.strippedArgs, []string{})
+
+			// Verify results.
+			require.NoError(t, err)
+			// Identity preserved from Cobra-parsed flags.
+			assert.Equal(t, tt.expectedResult, result.Identity, "Identity should be preserved from Cobra's parsed flags")
+		})
+	}
+}
+
 func TestProcessCommandLineArgs_ProfileFromEnvironmentVariable(t *testing.T) {
 	tests := []struct {
 		name           string
