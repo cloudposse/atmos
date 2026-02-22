@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/Azure/azure-sdk-for-go/sdk/azcore"
 	"github.com/Azure/azure-sdk-for-go/sdk/azidentity"
@@ -35,6 +36,12 @@ type AzureKeyVaultStore struct {
 	vaultURL       string
 	prefix         string
 	stackDelimiter *string
+
+	// Identity-based authentication fields.
+	identityName string
+	authResolver AuthContextResolver
+	initOnce     sync.Once
+	initErr      error
 }
 
 type AzureKeyVaultStoreOptions struct {
@@ -43,24 +50,17 @@ type AzureKeyVaultStoreOptions struct {
 	StackDelimiter *string `mapstructure:"stack_delimiter"`
 }
 
-// Ensure AzureKeyVaultStore implements the store.Store interface.
-var _ Store = (*AzureKeyVaultStore)(nil)
+// Ensure AzureKeyVaultStore implements the store.Store and IdentityAwareStore interfaces.
+var (
+	_ Store              = (*AzureKeyVaultStore)(nil)
+	_ IdentityAwareStore = (*AzureKeyVaultStore)(nil)
+)
 
-func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions) (Store, error) {
+// NewAzureKeyVaultStore creates a new Azure Key Vault store.
+// If identityName is non-empty, client initialization is deferred until first use (lazy init).
+func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions, identityName string) (Store, error) {
 	if options.VaultURL == "" {
 		return nil, ErrVaultURLRequired
-	}
-
-	// Create a credential using the default Azure credential chain.
-	cred, err := azidentity.NewDefaultAzureCredential(nil)
-	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
-	}
-
-	// Create the Key Vault client.
-	client, err := azsecrets.NewClient(options.VaultURL, cred, nil)
-	if err != nil {
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
 	}
 
 	stackDelimiter := AzureKeyVaultHyphen
@@ -73,12 +73,97 @@ func NewAzureKeyVaultStore(options AzureKeyVaultStoreOptions) (Store, error) {
 		prefix = *options.Prefix
 	}
 
-	return &AzureKeyVaultStore{
-		client:         client,
+	store := &AzureKeyVaultStore{
 		vaultURL:       options.VaultURL,
 		prefix:         prefix,
 		stackDelimiter: &stackDelimiter,
-	}, nil
+		identityName:   identityName,
+	}
+
+	// If no identity is configured, initialize the client eagerly (backward compatible behavior).
+	if identityName == "" {
+		if err := store.initDefaultClient(); err != nil {
+			return nil, err
+		}
+	}
+
+	return store, nil
+}
+
+// SetAuthContext implements IdentityAwareStore.
+// If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
+func (s *AzureKeyVaultStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+	s.authResolver = resolver
+	if identityName != "" {
+		s.identityName = identityName
+	}
+}
+
+// initDefaultClient initializes the Azure client using the default credential chain.
+func (s *AzureKeyVaultStore) initDefaultClient() error {
+	cred, err := azidentity.NewDefaultAzureCredential(nil)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	s.client = client
+
+	return nil
+}
+
+// initIdentityClient initializes the Azure client using identity-based credentials.
+func (s *AzureKeyVaultStore) initIdentityClient() error {
+	if s.authResolver == nil {
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+	}
+
+	ctx := context.TODO()
+	authContext, err := s.authResolver.ResolveAzureAuthContext(ctx, s.identityName)
+	if err != nil {
+		return fmt.Errorf("%w: failed to resolve Azure auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+	}
+
+	// Create credentials from the Azure auth context with tenant hint if available.
+	options := &azidentity.DefaultAzureCredentialOptions{}
+	if authContext.TenantID != "" {
+		options.TenantID = authContext.TenantID
+	}
+
+	cred, err := azidentity.NewDefaultAzureCredential(options)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	client, err := azsecrets.NewClient(s.vaultURL, cred, nil)
+	if err != nil {
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	s.client = client
+
+	return nil
+}
+
+// ensureClient lazily initializes the Azure client if it hasn't been initialized yet.
+func (s *AzureKeyVaultStore) ensureClient() error {
+	if s.client != nil {
+		return nil
+	}
+
+	s.initOnce.Do(func() {
+		if s.identityName == "" {
+			s.initErr = s.initDefaultClient()
+		} else {
+			s.initErr = s.initIdentityClient()
+		}
+	})
+
+	return s.initErr
 }
 
 // normalizeSecretName converts a key path to a valid Azure Key Vault secret name.
@@ -125,6 +210,10 @@ func (s *AzureKeyVaultStore) Set(stack string, component string, key string, val
 		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
 	}
 
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
 		return fmt.Errorf(errWrapFormat, ErrGetKey, err)
@@ -164,6 +253,10 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 		return nil, ErrEmptyKey
 	}
 
+	if err := s.ensureClient(); err != nil {
+		return nil, err
+	}
+
 	secretName, err := s.getKey(stack, component, key)
 	if err != nil {
 		return nil, fmt.Errorf(errWrapFormat, ErrGetKey, err)
@@ -199,6 +292,10 @@ func (s *AzureKeyVaultStore) Get(stack string, component string, key string) (in
 func (s *AzureKeyVaultStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
 		return nil, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
 	}
 
 	// Normalize the key to comply with Azure Key Vault naming restrictions.

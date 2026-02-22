@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	secretmanager "cloud.google.com/go/secretmanager/apiv1"
@@ -37,6 +38,13 @@ type GSMStore struct {
 	prefix         string
 	stackDelimiter *string
 	replication    *secretmanagerpb.Replication
+	credentials    *string // Store-level credentials (from options).
+
+	// Identity-based authentication fields.
+	identityName string
+	authResolver AuthContextResolver
+	initOnce     sync.Once
+	initErr      error
 }
 
 // GSMStoreOptions defines the configuration options for Google Secret Manager store.
@@ -48,36 +56,23 @@ type GSMStoreOptions struct {
 	Locations      *[]string `mapstructure:"locations"`   // Optional replication locations
 }
 
-// Verify that GSMStore implements the Store interface.
-var _ Store = (*GSMStore)(nil)
+// Verify that GSMStore implements the Store and IdentityAwareStore interfaces.
+var (
+	_ Store              = (*GSMStore)(nil)
+	_ IdentityAwareStore = (*GSMStore)(nil)
+)
 
 // NewGSMStore initializes a new Google Secret Manager Store.
-func NewGSMStore(options GSMStoreOptions) (Store, error) {
+// If identityName is non-empty, client initialization is deferred until first use (lazy init).
+func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	if options.ProjectID == "" {
 		return nil, ErrProjectIDRequired
 	}
 
-	ctx := context.Background()
-
-	// Use unified GCP authentication
-	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-		Credentials: gcp.GetCredentialsFromStore(options.Credentials),
-	})
-
-	client, err := secretmanager.NewClient(ctx, clientOpts...)
-	if err != nil {
-		// Close the client to prevent resource leaks
-		if client != nil {
-			if closeErr := client.Close(); closeErr != nil {
-				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
-			}
-		}
-		return nil, fmt.Errorf(errWrapFormat, ErrCreateClient, err)
-	}
-
 	store := &GSMStore{
-		client:    client,
-		projectID: options.ProjectID,
+		projectID:    options.ProjectID,
+		credentials:  options.Credentials,
+		identityName: identityName,
 	}
 
 	if options.Prefix != nil {
@@ -93,7 +88,97 @@ func NewGSMStore(options GSMStoreOptions) (Store, error) {
 
 	store.replication = createReplicationFromLocations(options.Locations)
 
+	// If no identity is configured, initialize the client eagerly (backward compatible behavior).
+	if identityName == "" {
+		if err := store.initDefaultClient(); err != nil {
+			return nil, err
+		}
+	}
+
 	return store, nil
+}
+
+// SetAuthContext implements IdentityAwareStore.
+// If identityName is non-empty, it overrides the store's identity. Otherwise, the existing identity is preserved.
+func (s *GSMStore) SetAuthContext(resolver AuthContextResolver, identityName string) {
+	s.authResolver = resolver
+	if identityName != "" {
+		s.identityName = identityName
+	}
+}
+
+// initDefaultClient initializes the GCP client using store-level credentials or default credential chain.
+func (s *GSMStore) initDefaultClient() error {
+	ctx := context.Background()
+
+	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
+		Credentials: gcp.GetCredentialsFromStore(s.credentials),
+	})
+
+	client, err := secretmanager.NewClient(ctx, clientOpts...)
+	if err != nil {
+		if client != nil {
+			if closeErr := client.Close(); closeErr != nil {
+				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
+			}
+		}
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	s.client = client
+
+	return nil
+}
+
+// ensureClient lazily initializes the GCP client if it hasn't been initialized yet.
+func (s *GSMStore) ensureClient() error {
+	if s.client != nil {
+		return nil
+	}
+
+	s.initOnce.Do(func() {
+		if s.identityName == "" {
+			s.initErr = s.initDefaultClient()
+			return
+		}
+
+		if s.authResolver == nil {
+			s.initErr = fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+			return
+		}
+
+		ctx := context.Background()
+		authContext, err := s.authResolver.ResolveGCPAuthContext(ctx, s.identityName)
+		if err != nil {
+			s.initErr = fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+			return
+		}
+
+		// Use credentials file from GCP auth context if available, otherwise fall back to store credentials.
+		credentials := gcp.GetCredentialsFromStore(s.credentials)
+		if authContext.CredentialsFile != "" {
+			credentials = authContext.CredentialsFile
+		}
+
+		clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
+			Credentials: credentials,
+		})
+
+		client, err := secretmanager.NewClient(ctx, clientOpts...)
+		if err != nil {
+			if client != nil {
+				if closeErr := client.Close(); closeErr != nil {
+					log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
+				}
+			}
+			s.initErr = fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+			return
+		}
+
+		s.client = client
+	})
+
+	return s.initErr
 }
 
 func createReplicationFromLocations(locations *[]string) *secretmanagerpb.Replication {
@@ -209,6 +294,10 @@ func (s *GSMStore) Set(stack string, component string, key string, value any) er
 		return fmt.Errorf("%w for key %s in stack %s component %s", ErrNilValue, key, stack, component)
 	}
 
+	if err := s.ensureClient(); err != nil {
+		return err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
 	defer cancel()
 
@@ -247,6 +336,10 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	}
 	if key == "" {
 		return nil, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), gsmOperationTimeout)
@@ -290,6 +383,10 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
 		return nil, ErrEmptyKey
+	}
+
+	if err := s.ensureClient(); err != nil {
+		return nil, err
 	}
 
 	// Use the key directly as the secret name

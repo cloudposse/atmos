@@ -11,6 +11,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	provWorkdir "github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -85,6 +86,10 @@ func ExecuteTerraformShell(opts *ShellOptions, atmosConfig *schema.AtmosConfigur
 	// Store AuthManager in configAndStacksInfo for YAML functions.
 	if authManager != nil {
 		info.AuthManager = authManager
+
+		// Inject auth resolver into identity-aware stores.
+		resolver := authbridge.NewResolver(authManager, &info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
 	}
 
 	info, err = ProcessStacks(atmosConfig, info, true, opts.ProcessTemplates, opts.ProcessFunctions, opts.Skip, authManager)
