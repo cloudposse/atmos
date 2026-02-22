@@ -109,7 +109,11 @@ func blockquoteWarnings(warnings []string) []string {
 	for i, w := range warnings {
 		lines := strings.Split(w, "\n")
 		for j, line := range lines {
-			lines[j] = "> " + line
+			if line == "" {
+				lines[j] = ">"
+			} else {
+				lines[j] = "> " + line
+			}
 		}
 		result[i] = strings.Join(lines, "\n")
 	}
