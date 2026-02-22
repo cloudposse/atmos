@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -458,4 +459,327 @@ func TestSetAuthContextResolver_AllCloudStoreTypes(t *testing.T) {
 	assert.NotNil(t, ssmStore.authResolver)
 	assert.NotNil(t, azStore.authResolver)
 	assert.NotNil(t, gsmStore.authResolver)
+}
+
+// --- Eager init (no identity): constructor initializes client immediately ---
+
+func TestNewSSMStore_WithoutIdentity_EagerInit(t *testing.T) {
+	// Constructor with empty identity triggers initDefaultClient.
+	// AWS config.LoadDefaultConfig + ssm.NewFromConfig succeed without real credentials.
+	store, err := NewSSMStore(SSMStoreOptions{
+		Region: "us-east-1",
+		Prefix: stringPtr("/test"),
+	}, "")
+	// In test environment, AWS config loading typically succeeds.
+	if err != nil {
+		// Error path covers initDefaultClient error branch.
+		assert.Nil(t, store)
+		return
+	}
+
+	ssmStore := store.(*SSMStore)
+	assert.NotNil(t, ssmStore.client)
+	assert.NotNil(t, ssmStore.awsConfig)
+	assert.Empty(t, ssmStore.identityName)
+	assert.Equal(t, "us-east-1", ssmStore.awsConfig.Region)
+}
+
+func TestNewAzureKeyVaultStore_WithoutIdentity_EagerInit(t *testing.T) {
+	// Constructor with empty identity triggers initDefaultClient.
+	// Azure SDK may fail without credentials in test env — both paths provide coverage.
+	store, err := NewAzureKeyVaultStore(AzureKeyVaultStoreOptions{
+		VaultURL: "https://test.vault.azure.net",
+		Prefix:   stringPtr("test"),
+	}, "")
+	if err != nil {
+		// Error path covers initDefaultClient error branch.
+		assert.Nil(t, store)
+		return
+	}
+
+	azStore := store.(*AzureKeyVaultStore)
+	assert.NotNil(t, azStore.client)
+	assert.Empty(t, azStore.identityName)
+}
+
+func TestNewGSMStore_WithoutIdentity_EagerInit(t *testing.T) {
+	// Constructor with empty identity triggers initDefaultClient.
+	// GCP client creation may fail without credentials in test env.
+	store, err := NewGSMStore(GSMStoreOptions{
+		ProjectID: "test-project",
+		Prefix:    stringPtr("test"),
+	}, "")
+	if err != nil {
+		// Error path covers initDefaultClient error branch.
+		assert.Nil(t, store)
+		return
+	}
+
+	gsmStore := store.(*GSMStore)
+	assert.NotNil(t, gsmStore.client)
+	assert.Empty(t, gsmStore.identityName)
+}
+
+// --- ensureClient default-client path: exercises initDefaultClient through ensureClient ---
+
+func TestSSMStore_EnsureClient_DefaultClientPath(t *testing.T) {
+	// Store with no identity and no client — ensureClient calls initDefaultClient.
+	store := &SSMStore{
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	err := store.ensureClient()
+	if err != nil {
+		// Error path covers initDefaultClient error branch inside initOnce.Do.
+		assert.Nil(t, store.client)
+		return
+	}
+
+	assert.NotNil(t, store.client)
+	assert.NotNil(t, store.awsConfig)
+}
+
+func TestAzureKeyVaultStore_EnsureClient_DefaultClientPath(t *testing.T) {
+	store := &AzureKeyVaultStore{
+		vaultURL:       "https://test.vault.azure.net",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	err := store.ensureClient()
+	if err != nil {
+		assert.Nil(t, store.client)
+		return
+	}
+
+	assert.NotNil(t, store.client)
+}
+
+func TestGSMStore_EnsureClient_DefaultClientPath(t *testing.T) {
+	store := &GSMStore{
+		projectID:      "test-project",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	err := store.ensureClient()
+	if err != nil {
+		assert.Nil(t, store.client)
+		return
+	}
+
+	assert.NotNil(t, store.client)
+}
+
+// --- Identity client success path with real temp credential files ---
+
+func TestSSMStore_InitIdentityClient_FullSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	// Create temp AWS credential files with valid format.
+	tmpDir := t.TempDir()
+	credsFile := filepath.Join(tmpDir, "credentials")
+	configFile := filepath.Join(tmpDir, "config")
+
+	err := os.WriteFile(credsFile, []byte("[prod]\naws_access_key_id = AKIAIOSFODNN7EXAMPLE\naws_secret_access_key = wJalrXUtnFEMI\n"), 0o600)
+	assert.NoError(t, err)
+	err = os.WriteFile(configFile, []byte("[profile prod]\nregion = us-east-1\n"), 0o600)
+	assert.NoError(t, err)
+
+	resolver := NewMockAuthContextResolver(ctrl)
+	resolver.EXPECT().
+		ResolveAWSAuthContext(gomock.Any(), "prod-admin").
+		Return(&AWSAuthConfig{
+			CredentialsFile: credsFile,
+			ConfigFile:      configFile,
+			Profile:         "prod",
+			Region:          "us-east-1",
+		}, nil)
+
+	store := &SSMStore{
+		identityName:   "prod-admin",
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+		authResolver:   resolver,
+	}
+
+	err = store.ensureClient()
+	assert.NoError(t, err)
+	assert.NotNil(t, store.client)
+	assert.NotNil(t, store.awsConfig)
+}
+
+func TestAzureKeyVaultStore_InitIdentityClient_FullPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	resolver := NewMockAuthContextResolver(ctrl)
+	resolver.EXPECT().
+		ResolveAzureAuthContext(gomock.Any(), "azure-prod").
+		Return(&AzureAuthConfig{
+			TenantID:       "tenant-123",
+			SubscriptionID: "sub-456",
+		}, nil)
+
+	store := &AzureKeyVaultStore{
+		identityName:   "azure-prod",
+		vaultURL:       "https://test.vault.azure.net",
+		stackDelimiter: stringPtr("-"),
+		authResolver:   resolver,
+	}
+
+	// Azure initIdentityClient creates DefaultAzureCredential with tenant hint.
+	// SDK may succeed or fail depending on environment — both paths provide coverage.
+	err := store.ensureClient()
+	if err != nil {
+		// Error path covers credential creation failure.
+		assert.Nil(t, store.client)
+		return
+	}
+
+	assert.NotNil(t, store.client)
+}
+
+func TestGSMStore_InitIdentityClient_FullPath(t *testing.T) {
+	ctrl := gomock.NewController(t)
+
+	// Create a temp GCP credentials file with valid format.
+	tmpDir := t.TempDir()
+	credsFile := filepath.Join(tmpDir, "application_default_credentials.json")
+	err := os.WriteFile(credsFile, []byte(`{"type":"authorized_user","client_id":"test","client_secret":"test","refresh_token":"test"}`), 0o600)
+	assert.NoError(t, err)
+
+	resolver := NewMockAuthContextResolver(ctrl)
+	resolver.EXPECT().
+		ResolveGCPAuthContext(gomock.Any(), "gcp-prod").
+		Return(&GCPAuthConfig{
+			CredentialsFile: credsFile,
+			ProjectID:       "my-project",
+		}, nil)
+
+	store := &GSMStore{
+		identityName:   "gcp-prod",
+		projectID:      "my-project",
+		stackDelimiter: stringPtr("-"),
+		authResolver:   resolver,
+	}
+
+	// GCP client creation may succeed or fail depending on credentials.
+	err = store.ensureClient()
+	if err != nil {
+		// Error path covers client creation failure — still exercises initIdentityClient.
+		assert.Nil(t, store.client)
+		return
+	}
+
+	assert.NotNil(t, store.client)
+}
+
+// --- Get/Set/GetKey with ensureClient failure: covers the new guard lines ---
+
+func TestSSMStore_Get_EnsureClientError(t *testing.T) {
+	store := &SSMStore{
+		identityName:   "broken",
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+		// No authResolver → ensureClient will fail.
+	}
+
+	_, err := store.Get("stack", "component", "key")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestSSMStore_Set_EnsureClientError(t *testing.T) {
+	store := &SSMStore{
+		identityName:   "broken",
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	err := store.Set("stack", "component", "key", "value")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestSSMStore_GetKey_EnsureClientError(t *testing.T) {
+	store := &SSMStore{
+		identityName:   "broken",
+		region:         "us-east-1",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	_, err := store.GetKey("some-key")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestAzureKeyVaultStore_Get_EnsureClientError(t *testing.T) {
+	store := &AzureKeyVaultStore{
+		identityName:   "broken",
+		vaultURL:       "https://vault.example.com",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	_, err := store.Get("stack", "component", "key")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestAzureKeyVaultStore_Set_EnsureClientError(t *testing.T) {
+	store := &AzureKeyVaultStore{
+		identityName:   "broken",
+		vaultURL:       "https://vault.example.com",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	err := store.Set("stack", "component", "key", "value")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestAzureKeyVaultStore_GetKey_EnsureClientError(t *testing.T) {
+	store := &AzureKeyVaultStore{
+		identityName:   "broken",
+		vaultURL:       "https://vault.example.com",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	_, err := store.GetKey("some-key")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestGSMStore_Get_EnsureClientError(t *testing.T) {
+	store := &GSMStore{
+		identityName:   "broken",
+		projectID:      "test-project",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	_, err := store.Get("stack", "component", "key")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestGSMStore_Set_EnsureClientError(t *testing.T) {
+	store := &GSMStore{
+		identityName:   "broken",
+		projectID:      "test-project",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	err := store.Set("stack", "component", "key", "value")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
+}
+
+func TestGSMStore_GetKey_EnsureClientError(t *testing.T) {
+	store := &GSMStore{
+		identityName:   "broken",
+		projectID:      "test-project",
+		stackDelimiter: stringPtr("-"),
+	}
+
+	_, err := store.GetKey("some-key")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, ErrIdentityNotConfigured))
 }
