@@ -130,6 +130,43 @@ func (s *GSMStore) initDefaultClient() error {
 	return nil
 }
 
+// initIdentityClient initializes the GCP client using identity-based credentials.
+func (s *GSMStore) initIdentityClient() error {
+	if s.authResolver == nil {
+		return fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
+	}
+
+	ctx := context.Background()
+	authContext, err := s.authResolver.ResolveGCPAuthContext(ctx, s.identityName)
+	if err != nil {
+		return fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
+	}
+
+	// Use credentials file from GCP auth context if available, otherwise fall back to store credentials.
+	credentials := gcp.GetCredentialsFromStore(s.credentials)
+	if authContext.CredentialsFile != "" {
+		credentials = authContext.CredentialsFile
+	}
+
+	clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
+		Credentials: credentials,
+	})
+
+	client, err := secretmanager.NewClient(ctx, clientOpts...)
+	if err != nil {
+		if client != nil {
+			if closeErr := client.Close(); closeErr != nil {
+				log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
+			}
+		}
+		return fmt.Errorf(errWrapFormat, ErrCreateClient, err)
+	}
+
+	s.client = client
+
+	return nil
+}
+
 // ensureClient lazily initializes the GCP client if it hasn't been initialized yet.
 func (s *GSMStore) ensureClient() error {
 	if s.client != nil {
@@ -139,43 +176,9 @@ func (s *GSMStore) ensureClient() error {
 	s.initOnce.Do(func() {
 		if s.identityName == "" {
 			s.initErr = s.initDefaultClient()
-			return
+		} else {
+			s.initErr = s.initIdentityClient()
 		}
-
-		if s.authResolver == nil {
-			s.initErr = fmt.Errorf("%w: store requires identity %q but no auth resolver was injected", ErrIdentityNotConfigured, s.identityName)
-			return
-		}
-
-		ctx := context.Background()
-		authContext, err := s.authResolver.ResolveGCPAuthContext(ctx, s.identityName)
-		if err != nil {
-			s.initErr = fmt.Errorf("%w: failed to resolve GCP auth context for identity %q: %w", ErrAuthContextNotAvailable, s.identityName, err)
-			return
-		}
-
-		// Use credentials file from GCP auth context if available, otherwise fall back to store credentials.
-		credentials := gcp.GetCredentialsFromStore(s.credentials)
-		if authContext.CredentialsFile != "" {
-			credentials = authContext.CredentialsFile
-		}
-
-		clientOpts := gcp.GetClientOptions(gcp.AuthOptions{
-			Credentials: credentials,
-		})
-
-		client, err := secretmanager.NewClient(ctx, clientOpts...)
-		if err != nil {
-			if client != nil {
-				if closeErr := client.Close(); closeErr != nil {
-					log.Trace("Failed to close Google Secret Manager client after creation error", "error", closeErr)
-				}
-			}
-			s.initErr = fmt.Errorf(errWrapFormat, ErrCreateClient, err)
-			return
-		}
-
-		s.client = client
 	})
 
 	return s.initErr

@@ -57,20 +57,49 @@ The dependency chain is: `pkg/config` imports `pkg/store`, `pkg/auth` imports `p
 
 | Store Type | Identity Support | Auth Mechanism |
 |---|---|---|
-| aws-ssm-parameter-store | Yes | `LoadConfigWithAuth()` with `AWSAuthContext` |
-| azure-key-vault | Yes | Credentials from `AzureAuthContext` |
+| aws-ssm-parameter-store | Yes | AWS SDK config loaded from `AWSAuthContext` credential/config files |
+| azure-key-vault | Yes | `DefaultAzureCredential` with tenant hint from `AzureAuthContext` |
 | google-secret-manager | Yes | Credentials file from `GCPAuthContext` |
 | redis | No | Env vars / connection string |
 | artifactory | No | Access tokens |
 
+## Realm Compatibility
+
+Store identity support is fully compatible with [Atmos auth realms](https://atmos.tools/cli/auth). Realms provide credential isolation between different repositories or customer environments by namespacing credential file paths.
+
+### How Realms Work with Store Identities
+
+When a realm is configured (via `auth.realm` in `atmos.yaml` or `ATMOS_AUTH_REALM` env var), the auth system embeds the realm into all credential file paths. The authbridge resolver passes these realm-scoped absolute paths through to stores unchanged, so stores automatically use realm-isolated credentials.
+
+The flow is:
+
+1. Auth manager creates realm-scoped credential paths during `Authenticate()`.
+2. `PostAuthenticate` populates `AuthContext` with absolute paths containing the realm directory.
+3. The authbridge resolver reads these paths from `AuthContext` and passes them to the store.
+4. The store uses the paths directly — no realm awareness needed in store code.
+
+### Per-Provider Realm Behavior
+
+| Provider | Realm Mechanism | Example Path |
+|---|---|---|
+| AWS SSM | `CredentialsFile` and `ConfigFile` include realm in path | `~/.config/atmos/{realm}/aws/{provider}/credentials` |
+| GCP GSM | `CredentialsFile` includes realm in path | `~/.config/atmos/{realm}/gcp/{provider}/adc/{identity}/application_default_credentials.json` |
+| Azure KV | Auth sets MSAL cache + env vars during `Authenticate()`; `CredentialsFile` available for future use | `~/.azure/atmos/{realm}/{provider}/credentials.json` |
+
+### Design Decisions
+
+- **Store code is realm-unaware.** Stores receive pre-resolved absolute paths and never need to know about realms. This keeps the store layer simple and avoids coupling it to the realm system.
+- **Auth config types mirror schema types.** `AWSAuthConfig`, `AzureAuthConfig`, and `GCPAuthConfig` in `pkg/store/identity.go` carry all realm-relevant fields from `schema.AWSAuthContext`, `schema.AzureAuthContext`, and `schema.GCPAuthContext` respectively.
+- **Empty realm is backward-compatible.** When no realm is configured, credential paths use the legacy layout without a realm subdirectory. Stores work identically in both cases.
+
 ## Files Changed
 
 - `pkg/store/config.go` — Add `Identity` field.
-- `pkg/store/identity.go` — New interfaces.
+- `pkg/store/identity.go` — New interfaces and auth config types (mirrors schema auth contexts).
 - `pkg/store/errors.go` — New error sentinels.
 - `pkg/store/aws_ssm_param_store.go` — Lazy init + identity.
 - `pkg/store/azure_keyvault_store.go` — Lazy init + identity.
 - `pkg/store/google_secret_manager_store.go` — Lazy init + identity.
 - `pkg/store/registry.go` — Pass identity, add `SetAuthContextResolver`.
-- `pkg/store/authbridge/resolver.go` — Resolver implementation.
+- `pkg/store/authbridge/resolver.go` — Resolver implementation (bridges store and auth packages).
 - `internal/exec/terraform.go` — Inject resolver after auth.

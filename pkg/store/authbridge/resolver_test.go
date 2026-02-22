@@ -63,6 +63,43 @@ func TestResolveAWSAuthContext_Success(t *testing.T) {
 	assert.Equal(t, "us-east-1", authConfig.Region)
 }
 
+func TestResolveAWSAuthContext_RealmScopedPaths(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockManager := types.NewMockAuthManager(ctrl)
+
+	// Simulate realm-scoped credential paths (as populated by auth system with realm).
+	realmCredsFile := filepath.Join(".config", "atmos", "my-realm", "aws", "aws-sso", "credentials")
+	realmConfigFile := filepath.Join(".config", "atmos", "my-realm", "aws", "aws-sso", "config")
+
+	stackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{
+				CredentialsFile: realmCredsFile,
+				ConfigFile:      realmConfigFile,
+				Profile:         "prod-admin",
+				Region:          "eu-west-1",
+			},
+		},
+	}
+
+	mockManager.EXPECT().
+		Authenticate(gomock.Any(), "prod-admin").
+		Return(&types.WhoamiInfo{}, nil)
+
+	resolver := NewResolver(mockManager, stackInfo)
+
+	authConfig, err := resolver.ResolveAWSAuthContext(context.Background(), "prod-admin")
+	assert.NoError(t, err)
+	assert.NotNil(t, authConfig)
+	// Verify realm-scoped paths flow through unchanged.
+	assert.Equal(t, realmCredsFile, authConfig.CredentialsFile)
+	assert.Equal(t, realmConfigFile, authConfig.ConfigFile)
+	assert.Equal(t, "prod-admin", authConfig.Profile)
+	assert.Equal(t, "eu-west-1", authConfig.Region)
+}
+
 func TestResolveAWSAuthContext_AuthFailure(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -112,12 +149,19 @@ func TestResolveAzureAuthContext_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
+
+	// Simulate realm-scoped credential path (as populated by auth system with realm).
+	realmCredsFile := filepath.Join(".azure", "atmos", "my-realm", "azure-oidc", "credentials.json")
+
 	stackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			Azure: &schema.AzureAuthContext{
-				TenantID: "tenant-123",
-				UseOIDC:  true,
-				ClientID: "client-456",
+				CredentialsFile: realmCredsFile,
+				SubscriptionID:  "sub-789",
+				TenantID:        "tenant-123",
+				UseOIDC:         true,
+				ClientID:        "client-456",
+				TokenFilePath:   filepath.Join("tmp", "oidc-token"),
 			},
 		},
 	}
@@ -131,9 +175,13 @@ func TestResolveAzureAuthContext_Success(t *testing.T) {
 	authConfig, err := resolver.ResolveAzureAuthContext(context.Background(), "azure-prod")
 	assert.NoError(t, err)
 	assert.NotNil(t, authConfig)
+	// Verify all fields including realm-scoped paths flow through.
+	assert.Equal(t, realmCredsFile, authConfig.CredentialsFile)
+	assert.Equal(t, "sub-789", authConfig.SubscriptionID)
 	assert.Equal(t, "tenant-123", authConfig.TenantID)
 	assert.True(t, authConfig.UseOIDC)
 	assert.Equal(t, "client-456", authConfig.ClientID)
+	assert.Equal(t, filepath.Join("tmp", "oidc-token"), authConfig.TokenFilePath)
 }
 
 func TestResolveAzureAuthContext_AuthFailure(t *testing.T) {
@@ -182,12 +230,15 @@ func TestResolveGCPAuthContext_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	mockManager := types.NewMockAuthManager(ctrl)
-	expectedCredsFile := filepath.Join("tmp", "gcp-creds.json")
+
+	// Simulate realm-scoped credential path (as populated by auth system with realm).
+	realmCredsFile := filepath.Join(".config", "atmos", "my-realm", "gcp", "gcp-adc", "adc", "gcp-prod", "application_default_credentials.json")
 
 	stackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{
 			GCP: &schema.GCPAuthContext{
-				CredentialsFile: expectedCredsFile,
+				CredentialsFile: realmCredsFile,
+				ProjectID:       "my-gcp-project",
 			},
 		},
 	}
@@ -201,7 +252,9 @@ func TestResolveGCPAuthContext_Success(t *testing.T) {
 	authConfig, err := resolver.ResolveGCPAuthContext(context.Background(), "gcp-prod")
 	assert.NoError(t, err)
 	assert.NotNil(t, authConfig)
-	assert.Equal(t, expectedCredsFile, authConfig.CredentialsFile)
+	// Verify realm-scoped path and project ID flow through.
+	assert.Equal(t, realmCredsFile, authConfig.CredentialsFile)
+	assert.Equal(t, "my-gcp-project", authConfig.ProjectID)
 }
 
 func TestResolveGCPAuthContext_AuthFailure(t *testing.T) {
@@ -251,9 +304,11 @@ func TestResolver_NilStackInfo(t *testing.T) {
 
 	mockManager := types.NewMockAuthManager(ctrl)
 
+	// All three resolve methods call Authenticate, so expect three calls.
 	mockManager.EXPECT().
 		Authenticate(gomock.Any(), "test-identity").
-		Return(&types.WhoamiInfo{}, nil)
+		Return(&types.WhoamiInfo{}, nil).
+		Times(3)
 
 	// Create resolver with nil stackInfo.
 	resolver := NewResolver(mockManager, nil)
@@ -262,4 +317,12 @@ func TestResolver_NilStackInfo(t *testing.T) {
 	_, err := resolver.ResolveAWSAuthContext(context.Background(), "test-identity")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "AWS auth context not available")
+
+	_, err = resolver.ResolveAzureAuthContext(context.Background(), "test-identity")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "Azure auth context not available")
+
+	_, err = resolver.ResolveGCPAuthContext(context.Background(), "test-identity")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "GCP auth context not available")
 }

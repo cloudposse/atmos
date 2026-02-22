@@ -13,19 +13,27 @@ type AWSAuthConfig struct {
 }
 
 // AzureAuthConfig holds the Azure-specific authentication configuration resolved from an identity.
+// Fields mirror schema.AzureAuthContext; realm-scoped paths are embedded in CredentialsFile.
 type AzureAuthConfig struct {
-	TenantID string
-	UseOIDC  bool
-	ClientID string
+	CredentialsFile string
+	SubscriptionID  string
+	TenantID        string
+	UseOIDC         bool
+	ClientID        string
+	TokenFilePath   string
 }
 
 // GCPAuthConfig holds the GCP-specific authentication configuration resolved from an identity.
+// Fields mirror schema.GCPAuthContext; realm-scoped paths are embedded in CredentialsFile.
 type GCPAuthConfig struct {
 	CredentialsFile string
+	ProjectID       string
 }
 
 // AuthContextResolver resolves an identity name to a cloud-specific auth configuration.
 // Implemented outside this package (in pkg/store/authbridge) to avoid circular deps.
+//
+//go:generate go run go.uber.org/mock/mockgen@v0.6.0 -source=$GOFILE -destination=mock_identity.go -package=store
 type AuthContextResolver interface {
 	// ResolveAWSAuthContext authenticates the named identity and returns AWS credentials.
 	ResolveAWSAuthContext(ctx context.Context, identityName string) (*AWSAuthConfig, error)

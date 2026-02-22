@@ -77,9 +77,12 @@ func (r *Resolver) ResolveAzureAuthContext(ctx context.Context, identityName str
 	azure := r.stackInfo.AuthContext.Azure
 
 	return &store.AzureAuthConfig{
-		TenantID: azure.TenantID,
-		UseOIDC:  azure.UseOIDC,
-		ClientID: azure.ClientID,
+		CredentialsFile: azure.CredentialsFile,
+		SubscriptionID:  azure.SubscriptionID,
+		TenantID:        azure.TenantID,
+		UseOIDC:         azure.UseOIDC,
+		ClientID:        azure.ClientID,
+		TokenFilePath:   azure.TokenFilePath,
 	}, nil
 }
 
@@ -102,5 +105,6 @@ func (r *Resolver) ResolveGCPAuthContext(ctx context.Context, identityName strin
 
 	return &store.GCPAuthConfig{
 		CredentialsFile: gcpCtx.CredentialsFile,
+		ProjectID:       gcpCtx.ProjectID,
 	}, nil
 }

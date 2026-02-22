@@ -23,11 +23,17 @@ stores:
 ```
 
 This works with all cloud-backed store types:
-- **AWS SSM Parameter Store** - uses `AWSAuthContext` credentials
-- **Azure Key Vault** - uses `AzureAuthContext` credentials
-- **Google Secret Manager** - uses `GCPAuthContext` credentials
+- **AWS SSM Parameter Store** - loads AWS config from realm-scoped credential and config files
+- **Azure Key Vault** - authenticates via `DefaultAzureCredential` with tenant hint from auth context
+- **Google Secret Manager** - uses realm-scoped application default credentials file
 
 Redis and Artifactory stores do not support identity-based authentication since they don't map to cloud provider identity types.
+
+## Realm Compatibility
+
+Store identities are fully compatible with Atmos auth realms. When a realm is configured, the auth system embeds the realm into credential file paths (e.g., `~/.config/atmos/{realm}/aws/{provider}/credentials`). These realm-scoped paths flow through the resolver to stores automatically -- store code never needs to know about realms.
+
+This means stores in different realms use isolated credentials, preventing cross-environment credential collisions.
 
 ## Why This Matters
 
@@ -38,6 +44,27 @@ Previously, stores always used the default credential chain, which meant separat
 1. Configure an identity in your `atmos.yaml` auth section (as you normally would for `atmos auth`).
 2. Add the `identity` field to your store configuration referencing that identity name.
 3. The store will automatically authenticate using that identity on first access.
+
+```yaml
+stores:
+  prod/aws-ssm:
+    type: aws-ssm-parameter-store
+    identity: prod-admin
+    options:
+      region: us-east-1
+
+  staging/azure-kv:
+    type: azure-key-vault
+    identity: staging-azure
+    options:
+      vault_url: https://staging-vault.vault.azure.net
+
+  prod/gsm:
+    type: google-secret-manager
+    identity: gcp-prod
+    options:
+      project_id: my-gcp-project
+```
 
 Stores without the `identity` field continue to work exactly as before -- this is a fully backward-compatible change.
 

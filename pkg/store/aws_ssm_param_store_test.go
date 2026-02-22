@@ -624,6 +624,73 @@ func TestNewSSMStore(t *testing.T) {
 	}
 }
 
+func TestSSMStore_BuildAuthConfigOpts(t *testing.T) {
+	tests := []struct {
+		name        string
+		region      string
+		authContext *AWSAuthConfig
+		wantLen     int
+	}{
+		{
+			name:   "all fields populated",
+			region: "us-east-1",
+			authContext: &AWSAuthConfig{
+				CredentialsFile: "/path/to/creds",
+				ConfigFile:      "/path/to/config",
+				Profile:         "prod",
+				Region:          "eu-west-1",
+			},
+			wantLen: 4, // creds + config + profile + store region
+		},
+		{
+			name:   "empty credentials file",
+			region: "us-east-1",
+			authContext: &AWSAuthConfig{
+				ConfigFile: "/path/to/config",
+				Profile:    "prod",
+			},
+			wantLen: 3, // config + profile + region
+		},
+		{
+			name:   "region fallback from auth context",
+			region: "",
+			authContext: &AWSAuthConfig{
+				CredentialsFile: "/path/to/creds",
+				Region:          "eu-west-1",
+			},
+			wantLen: 2, // creds + auth region
+		},
+		{
+			name:        "all empty auth context with store region",
+			region:      "us-east-1",
+			authContext: &AWSAuthConfig{},
+			wantLen:     1, // just store region
+		},
+		{
+			name:        "both regions empty",
+			region:      "",
+			authContext: &AWSAuthConfig{},
+			wantLen:     0,
+		},
+		{
+			name:   "only profile set",
+			region: "",
+			authContext: &AWSAuthConfig{
+				Profile: "prod-admin",
+			},
+			wantLen: 1, // just profile
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			store := &SSMStore{region: tt.region}
+			opts := store.buildAuthConfigOpts(tt.authContext)
+			assert.Len(t, opts, tt.wantLen)
+		})
+	}
+}
+
 func TestSSMStore_getKey(t *testing.T) {
 	tests := []struct {
 		name           string
