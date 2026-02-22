@@ -569,7 +569,7 @@ func TestTemplateGolden(t *testing.T) {
 				Resources:        plugin.ResourceCounts{Create: 1},
 				CreatedResources: []string{"random_id.foo[0]"},
 				Warnings: []string{
-					"> Warning: Value for undeclared variable\n> \n> The root module does not declare a variable named \"stage\".\n> To silence these warnings, use TF_VAR_... environment variables.",
+					"> Warning: Value for undeclared variable\n>\n> The root module does not declare a variable named \"stage\".\n> To silence these warnings, use TF_VAR_... environment variables.",
 				},
 			},
 		},
