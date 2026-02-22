@@ -582,8 +582,8 @@ import (
 ```
 pkg/ci/
   ├── check.go                 # CheckRun types and constants (✅ implemented)
-  ├── component_provider.go    # ComponentCIProvider interface (✅ implemented)
-  ├── component_registry.go    # Component provider registry (✅ implemented)
+  ├── plugin.go                # Plugin interface (✅ implemented)
+  ├── plugin_registry.go       # Plugin registry (✅ implemented)
   ├── context.go               # Context struct (run ID, PR, SHA, etc.) (✅ implemented)
   ├── executor.go              # Execute() - unified action executor (✅ implemented)
   ├── generic.go               # Generic CI provider fallback (✅ implemented)
@@ -1050,8 +1050,8 @@ jobs:
 | `pkg/ci/check.go` | CheckRun types and constants | ✅ Done |
 | `pkg/ci/executor.go` | Execute() - unified action executor | ✅ Done |
 | `pkg/ci/generic.go` | Generic CI provider fallback | ✅ Done |
-| `pkg/ci/component_provider.go` | ComponentCIProvider interface | ✅ Done |
-| `pkg/ci/component_registry.go` | Component provider registry | ✅ Done |
+| `pkg/ci/plugin.go` | Plugin interface | ✅ Done |
+| `pkg/ci/plugin_registry.go` | Plugin registry | ✅ Done |
 | **pkg/ci/planfile/** | | |
 | `pkg/ci/planfile/interface.go` | PlanfileStore interface | ✅ Done |
 | `pkg/ci/planfile/registry.go` | Store registry | ✅ Done |
@@ -1259,11 +1259,11 @@ Users currently using the GitHub Actions can migrate incrementally:
 
 ## References
 
-- [Existing CI Detection](pkg/telemetry/ci.go) - Detects 24+ CI providers
-- [Lifecycle Hooks](pkg/hooks/) - Hook system for terraform events
-- [Plan-Diff](internal/exec/terraform_plan_diff*.go) - Semantic plan comparison
-- [Store Registry](pkg/store/registry.go) - Pattern for planfile stores
-- [Terraform Output Package](pkg/terraform/output/) - Output formatting (tf-output-format branch)
+- [Existing CI Detection](../../pkg/telemetry/ci.go) - Detects 24+ CI providers
+- [Lifecycle Hooks](../../pkg/hooks/) - Hook system for terraform events
+- Plan-Diff (`internal/exec/terraform_plan_diff*.go`) - Semantic plan comparison (planned)
+- [Store Registry](../../pkg/store/registry.go) - Pattern for planfile stores
+- Terraform Output Package (`pkg/terraform/output/`) - Output formatting (planned, tf-output-format branch)
 - [tfcmt](https://github.com/suzuki-shunsuke/tfcmt) - Inspiration for PR comments
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)
 
@@ -1310,8 +1310,8 @@ Users currently using the GitHub Actions can migrate incrementally:
 |-----------|------|---------|
 | Check types | `pkg/ci/check.go` | CheckRun types and constants |
 | Generic provider | `pkg/ci/generic.go` | Fallback CI provider for non-GitHub environments |
-| Component provider | `pkg/ci/component_provider.go` | ComponentCIProvider interface for terraform/helmfile |
-| Component registry | `pkg/ci/component_registry.go` | Registry for component-type providers |
+| Plugin | `pkg/ci/plugin.go` | Plugin interface for terraform/helmfile |
+| Plugin registry | `pkg/ci/plugin_registry.go` | Registry for component-type plugins |
 | Executor | `pkg/ci/executor.go` | Unified action executor |
 | Terraform provider | `pkg/ci/terraform/` | Terraform-specific CI behavior |
 | Template loader | `pkg/ci/templates/loader.go` | Template loading with override support |

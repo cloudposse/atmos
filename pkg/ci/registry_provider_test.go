@@ -1,0 +1,153 @@
+package ci
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+)
+
+// mockProvider is a mock CI provider for testing.
+type mockProvider struct {
+	name     string
+	detected bool
+}
+
+func (m *mockProvider) Name() string { return m.name }
+
+func (m *mockProvider) Detect() bool { return m.detected }
+
+func (m *mockProvider) Context() (*provider.Context, error) {
+	return &provider.Context{
+		Provider:   m.name,
+		RunID:      "123",
+		Repository: "owner/repo",
+		RepoOwner:  "owner",
+		RepoName:   "repo",
+		SHA:        "abc123",
+	}, nil
+}
+
+func (m *mockProvider) GetStatus(_ context.Context, _ provider.StatusOptions) (*provider.Status, error) {
+	return &provider.Status{}, nil
+}
+
+func (m *mockProvider) CreateCheckRun(_ context.Context, _ *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
+	return &provider.CheckRun{ID: 1}, nil
+}
+
+func (m *mockProvider) UpdateCheckRun(_ context.Context, _ *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	return &provider.CheckRun{ID: 1}, nil
+}
+
+func (m *mockProvider) OutputWriter() provider.OutputWriter {
+	return nil
+}
+
+func TestRegisterAndGet(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	mock := &mockProvider{name: "test-provider", detected: false}
+	Register(mock)
+
+	// Test Get.
+	p, err := Get("test-provider")
+	assert.NoError(t, err)
+	assert.Equal(t, "test-provider", p.Name())
+
+	// Test Get not found.
+	_, err = Get("nonexistent")
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrCIProviderNotFound))
+}
+
+func TestDetect(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// Test no providers detected.
+	p := Detect()
+	assert.Nil(t, p)
+
+	// Register a non-detected provider.
+	notDetected := &mockProvider{name: "not-detected", detected: false}
+	Register(notDetected)
+	p = Detect()
+	assert.Nil(t, p)
+
+	// Register a detected provider.
+	detected := &mockProvider{name: "detected", detected: true}
+	Register(detected)
+	p = Detect()
+	assert.NotNil(t, p)
+	assert.Equal(t, "detected", p.Name())
+}
+
+func TestDetectOrError(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// Test no providers detected.
+	_, err := DetectOrError()
+	assert.Error(t, err)
+	assert.True(t, errors.Is(err, errUtils.ErrCIProviderNotDetected))
+
+	// Register a detected provider.
+	detected := &mockProvider{name: "detected", detected: true}
+	Register(detected)
+	p, err := DetectOrError()
+	assert.NoError(t, err)
+	assert.Equal(t, "detected", p.Name())
+}
+
+func TestList(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// Empty list.
+	names := List()
+	assert.Empty(t, names)
+
+	// Register providers.
+	Register(&mockProvider{name: "provider1", detected: false})
+	Register(&mockProvider{name: "provider2", detected: false})
+
+	names = List()
+	assert.Len(t, names, 2)
+	assert.Contains(t, names, "provider1")
+	assert.Contains(t, names, "provider2")
+}
+
+func TestIsCI(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	// Not in CI.
+	assert.False(t, IsCI())
+
+	// In CI.
+	Register(&mockProvider{name: "ci", detected: true})
+	assert.True(t, IsCI())
+}
+
+// testSaveAndClearRegistry clears the provider registry and returns the previous
+// map. For use in tests only. Restore with testRestoreRegistry.
+func testSaveAndClearRegistry() map[string]provider.Provider {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	prev := providers
+	providers = make(map[string]provider.Provider)
+	return prev
+}
+
+// TestRestoreRegistry restores the provider registry from a previous snapshot.
+func testRestoreRegistry(m map[string]provider.Provider) {
+	providersMu.Lock()
+	defer providersMu.Unlock()
+	providers = m
+}

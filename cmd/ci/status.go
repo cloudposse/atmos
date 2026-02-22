@@ -5,8 +5,7 @@ import (
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/github" // Register GitHub provider.
+	cipkg "github.com/cloudposse/atmos/pkg/ci"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/flags/global"
@@ -59,7 +58,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Check if CI is enabled in config (only relevant when actually in CI).
-	if configLoaded && ci.IsCI() && !atmosConfig.CI.Enabled {
+	if configLoaded && cipkg.IsCI() && !atmosConfig.CI.Enabled {
 		return errUtils.Build(errUtils.ErrCIDisabled).
 			WithExplanation("CI integration is disabled in atmos.yaml").
 			WithHint("Set ci.enabled: true in atmos.yaml to enable CI features").
@@ -67,7 +66,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Get CI provider.
-	provider, err := ci.DetectOrError()
+	provider, err := cipkg.DetectOrError()
 	if err != nil {
 		// If not in CI, try to get a provider from the registry.
 		provider, err = getDefaultProvider()
@@ -86,7 +85,7 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Fetch status.
-	status, err := provider.GetStatus(ctx, ci.StatusOptions{
+	status, err := provider.GetStatus(ctx, cipkg.StatusOptions{
 		Owner:                 repoCtx.Owner,
 		Repo:                  repoCtx.Repo,
 		Branch:                repoCtx.Branch,
@@ -107,11 +106,11 @@ func runStatus(cmd *cobra.Command, _ []string) error {
 
 // getDefaultProvider returns a provider from the registry.
 // This is used when not running in CI but a provider is still available.
-func getDefaultProvider() (ci.Provider, error) {
+func getDefaultProvider() (cipkg.Provider, error) {
 	// Try to get any registered provider from the registry.
-	names := ci.List()
+	names := cipkg.List()
 	for _, name := range names {
-		p, err := ci.Get(name)
+		p, err := cipkg.Get(name)
 		if err == nil {
 			return p, nil
 		}
@@ -128,7 +127,7 @@ type repoContext struct {
 }
 
 // getRepoContext extracts repository context using the provider interface with git fallback.
-func getRepoContext(provider ci.Provider) (*repoContext, error) {
+func getRepoContext(provider cipkg.Provider) (*repoContext, error) {
 	ctx := getContextFromProvider(provider)
 
 	if err := fillMissingRepoInfo(ctx); err != nil {
@@ -149,7 +148,7 @@ func getRepoContext(provider ci.Provider) (*repoContext, error) {
 }
 
 // getContextFromProvider extracts context from the CI provider.
-func getContextFromProvider(provider ci.Provider) *repoContext {
+func getContextFromProvider(provider cipkg.Provider) *repoContext {
 	ctx := &repoContext{}
 	ciCtx, ctxErr := provider.Context()
 	if ctxErr == nil && ciCtx != nil {
@@ -213,7 +212,7 @@ func fillMissingSHA(ctx *repoContext) {
 }
 
 // renderStatus renders the CI status to the terminal.
-func renderStatus(status *ci.Status) {
+func renderStatus(status *cipkg.Status) {
 	ui.Writef("Relevant pull requests in %s\n\n", status.Repository)
 
 	// Current branch.
@@ -239,7 +238,7 @@ func renderStatus(status *ci.Status) {
 }
 
 // renderBranchStatus renders status for a branch.
-func renderBranchStatus(bs *ci.BranchStatus) {
+func renderBranchStatus(bs *cipkg.BranchStatus) {
 	ui.Writeln("Current branch")
 
 	if bs.PullRequest != nil {
@@ -252,7 +251,7 @@ func renderBranchStatus(bs *ci.BranchStatus) {
 }
 
 // renderPRStatus renders status for a pull request.
-func renderPRStatus(pr *ci.PRStatus) {
+func renderPRStatus(pr *cipkg.PRStatus) {
 	ui.Writef("  #%d  %s [%s]\n", pr.Number, pr.Title, pr.Branch)
 
 	if pr.AllPassed && len(pr.Checks) > 0 {
@@ -263,7 +262,7 @@ func renderPRStatus(pr *ci.PRStatus) {
 }
 
 // renderChecks renders a list of checks.
-func renderChecks(checks []*ci.CheckStatus, indent string) {
+func renderChecks(checks []*cipkg.CheckStatus, indent string) {
 	for _, check := range checks {
 		icon := getCheckIcon(check.CheckState())
 		ui.Writef("%s- %s %s (%s)\n", indent, icon, check.Name, check.Conclusion)
@@ -271,17 +270,17 @@ func renderChecks(checks []*ci.CheckStatus, indent string) {
 }
 
 // getCheckIcon returns the icon for a check state.
-func getCheckIcon(state ci.CheckStatusState) string {
+func getCheckIcon(state cipkg.CheckStatusState) string {
 	switch state {
-	case ci.CheckStatusStateSuccess:
+	case cipkg.CheckStatusStateSuccess:
 		return "\u2713" // Check mark.
-	case ci.CheckStatusStateFailure:
+	case cipkg.CheckStatusStateFailure:
 		return "\u2717" // X mark.
-	case ci.CheckStatusStatePending:
+	case cipkg.CheckStatusStatePending:
 		return "\u25CB" // Open circle.
-	case ci.CheckStatusStateCancelled:
+	case cipkg.CheckStatusStateCancelled:
 		return "\u25CF" // Filled circle.
-	case ci.CheckStatusStateSkipped:
+	case cipkg.CheckStatusStateSkipped:
 		return "\u2212" // Minus.
 	default:
 		return "?"

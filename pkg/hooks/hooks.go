@@ -9,7 +9,9 @@ import (
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci"
-	_ "github.com/cloudposse/atmos/pkg/ci/terraform" // Register terraform CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform" // Register terraform CI plugin.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/generic" // Register generic CI provider.
+	_ "github.com/cloudposse/atmos/pkg/ci/providers/github"  // Register GitHub Actions CI provider.
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -42,7 +44,7 @@ func GetHooks(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStac
 		AuthManager:          nil,
 	})
 	if err != nil {
-		return &Hooks{}, fmt.Errorf("failed to execute describe component: %w", err)
+		return &Hooks{}, err
 	}
 
 	hooksSection, ok := sections["hooks"].(map[string]any)
@@ -110,7 +112,8 @@ func (h Hooks) RunAll(event HookEvent, atmosConfig *schema.AtmosConfiguration, i
 // This is called automatically during command execution if CI is enabled.
 // The output parameter is the command output to process (e.g., terraform plan output).
 // The forceCIMode parameter forces CI mode even when environment detection fails (--ci flag).
-func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string, forceCIMode bool) error {
+// The cmdErr parameter is the error from the command execution (nil on success).
+func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo, output string, forceCIMode bool, cmdErr error) error {
 	defer perf.Track(atmosConfig, "hooks.RunCIHooks")()
 
 	log.Debug("Running CI hooks", "event", event, "force_ci", forceCIMode)
@@ -123,10 +126,11 @@ func RunCIHooks(event HookEvent, atmosConfig *schema.AtmosConfiguration, info *s
 
 	// Execute CI actions based on provider bindings.
 	return ci.Execute(ci.ExecuteOptions{
-		Event:       string(event),
-		AtmosConfig: atmosConfig,
-		Info:        info,
-		Output:      output,
-		ForceCIMode: forceCIMode,
+		Event:        string(event),
+		AtmosConfig:  atmosConfig,
+		Info:         info,
+		Output:       output,
+		ForceCIMode:  forceCIMode,
+		CommandError: cmdErr,
 	})
 }

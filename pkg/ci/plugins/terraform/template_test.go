@@ -1,0 +1,684 @@
+package terraform
+
+import (
+	"flag"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"text/template"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+)
+
+var regenerateGolden = flag.Bool("regenerate-golden", false, "Regenerate golden files")
+
+// TestTemplateRendering tests various template scenarios with different context combinations.
+func TestTemplateRendering(t *testing.T) {
+	tests := []struct {
+		name            string
+		templateName    string
+		context         *TerraformTemplateContext
+		wantContains    []string
+		wantNotContains []string
+	}{
+		// Plan scenarios.
+		{
+			name:         "plan with creates only",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{Create: 3},
+				CreatedResources: []string{
+					"aws_vpc.main",
+					"aws_subnet.a",
+					"aws_subnet.b",
+				},
+			},
+			wantContains: []string{
+				"Changes Found",
+				"PLAN-CREATE-success",
+				"vpc",
+				"dev-us-east-1",
+				"aws_vpc.main",
+				"+ aws_subnet",
+				"cloudposse.com",
+			},
+			wantNotContains: []string{
+				"DESTROY",
+				"FAILED",
+				"CAUTION",
+			},
+		},
+		{
+			name:         "plan with destroys shows warning",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "legacy",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Destroy: 5},
+				DeletedResources: []string{"aws_instance.old[0]"},
+				HasDestroy:       true,
+			},
+			wantContains: []string{
+				"PLAN-DESTROY-critical",
+				"CAUTION",
+				"Terraform will delete resources",
+				"- aws_instance.old",
+			},
+		},
+		{
+			name:         "plan with errors",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "broken",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:  1,
+						HasErrors: true,
+						Errors:    []string{"Invalid provider configuration", "Missing required argument"},
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+			wantContains: []string{
+				"PLAN-FAILED-ff0000",
+				"Plan Failed",
+				"Error summary",
+				":warning:",
+				"Invalid provider configuration",
+			},
+		},
+		{
+			name:         "plan no changes",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "stable",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: false,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+			wantContains: []string{
+				"NO_CHANGE-inactive",
+				"No Changes",
+			},
+			wantNotContains: []string{
+				"CREATE",
+				"DESTROY",
+				"CAUTION",
+			},
+		},
+		{
+			name:         "plan with mixed operations",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "app",
+					ComponentType: "terraform",
+					Stack:         "staging",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{
+					Create:  2,
+					Change:  1,
+					Replace: 1,
+					Destroy: 1,
+				},
+				CreatedResources:  []string{"aws_instance.new"},
+				UpdatedResources:  []string{"aws_instance.updated"},
+				ReplacedResources: []string{"aws_instance.replaced"},
+				DeletedResources:  []string{"aws_instance.deleted"},
+				HasDestroy:        true,
+			},
+			wantContains: []string{
+				"PLAN-CREATE",
+				"PLAN-CHANGE",
+				"PLAN-REPLACE",
+				"PLAN-DESTROY",
+				"CAUTION",
+				"+ aws_instance.new",
+				"~ aws_instance.updated",
+				"-/+ aws_instance.replaced",
+				"- aws_instance.deleted",
+			},
+		},
+		{
+			name:         "plan with imported resources",
+			templateName: "plan",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "imports",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: false,
+						HasErrors:  false,
+					},
+				},
+				Resources:         plugin.ResourceCounts{},
+				ImportedResources: []string{"aws_instance.imported"},
+			},
+			wantContains: []string{
+				"<= aws_instance.imported",
+				"Import",
+			},
+		},
+
+		// Apply scenarios.
+		{
+			name:         "apply success",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "bucket",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{Create: 1},
+			},
+			wantContains: []string{
+				"APPLY-SUCCESS-success",
+				"Apply Succeeded",
+			},
+			wantNotContains: []string{
+				"FAILED",
+				"Error summary",
+			},
+		},
+		{
+			name:         "apply success with outputs",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "bucket",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{Create: 1},
+				Outputs: map[string]plugin.TerraformOutput{
+					"bucket_arn":  {Value: "arn:aws:s3:::prod-bucket", Sensitive: false},
+					"secret_key":  {Value: "", Sensitive: true},
+					"bucket_name": {Value: "prod-bucket", Sensitive: false},
+				},
+			},
+			wantContains: []string{
+				"APPLY-SUCCESS-success",
+				"Terraform Outputs",
+				"bucket_arn",
+				"arn:aws:s3:::prod-bucket",
+				"secret_key",
+				"*(sensitive)*",
+			},
+		},
+		{
+			name:         "apply failure",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "broken",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:  1,
+						HasErrors: true,
+						Errors:    []string{"Error creating resource: permission denied"},
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+			wantContains: []string{
+				"APPLY-FAILED-critical",
+				"Apply Failed",
+				"Error creating resource",
+			},
+		},
+		{
+			name:         "apply no changes",
+			templateName: "apply",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "stable",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: false,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+			wantContains: []string{
+				"APPLY-SUCCESS-success",
+				"No changes applied",
+			},
+		},
+	}
+
+	p := &Plugin{}
+	fs := p.GetDefaultTemplates()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Load template.
+			content, err := fs.ReadFile("templates/" + tt.templateName + ".md")
+			require.NoError(t, err)
+
+			// Parse template.
+			tmpl, err := template.New(tt.templateName).Parse(string(content))
+			require.NoError(t, err)
+
+			// Render template.
+			var buf strings.Builder
+			err = tmpl.Execute(&buf, tt.context)
+			require.NoError(t, err)
+
+			rendered := buf.String()
+
+			// Check expected content.
+			for _, want := range tt.wantContains {
+				assert.Contains(t, rendered, want, "should contain: %s", want)
+			}
+			for _, notWant := range tt.wantNotContains {
+				assert.NotContains(t, rendered, notWant, "should not contain: %s", notWant)
+			}
+		})
+	}
+}
+
+// TestTemplateWithCIContext tests that CI context is properly rendered.
+func TestTemplateWithCIContext(t *testing.T) {
+	p := &Plugin{}
+	fs := p.GetDefaultTemplates()
+
+	ctx := &TerraformTemplateContext{
+		TemplateContext: &plugin.TemplateContext{
+			Component:     "vpc",
+			ComponentType: "terraform",
+			Stack:         "dev",
+			Command:       "plan",
+			CI: &provider.Context{
+				SHA:        "abc123def456",
+				Repository: "owner/repo",
+				Actor:      "testuser",
+			},
+			Result: &plugin.OutputResult{
+				ExitCode:   0,
+				HasChanges: true,
+			},
+		},
+		Resources:        plugin.ResourceCounts{Create: 1},
+		CreatedResources: []string{"aws_vpc.main"},
+	}
+
+	content, err := fs.ReadFile("templates/plan.md")
+	require.NoError(t, err)
+
+	tmpl, err := template.New("plan").Parse(string(content))
+	require.NoError(t, err)
+
+	var buf strings.Builder
+	err = tmpl.Execute(&buf, ctx)
+	require.NoError(t, err)
+
+	rendered := buf.String()
+
+	// Verify basic rendering works with CI context present.
+	assert.Contains(t, rendered, "vpc")
+	assert.Contains(t, rendered, "dev")
+	assert.Contains(t, rendered, "Changes Found")
+}
+
+// TestTerraformTemplateContextHelpers tests helper methods.
+func TestTerraformTemplateContextHelpers(t *testing.T) {
+	t.Run("Target", func(t *testing.T) {
+		ctx := &TerraformTemplateContext{
+			TemplateContext: &plugin.TemplateContext{
+				Stack:     "dev",
+				Component: "vpc",
+			},
+		}
+		assert.Equal(t, "dev-vpc", ctx.Target())
+	})
+
+	t.Run("Target with slashes", func(t *testing.T) {
+		ctx := &TerraformTemplateContext{
+			TemplateContext: &plugin.TemplateContext{
+				Stack:     "plat-ue2-sandbox",
+				Component: "foobar/changes",
+			},
+		}
+		assert.Equal(t, "plat-ue2-sandbox-foobar_changes", ctx.Target())
+	})
+
+	t.Run("Target with nil base", func(t *testing.T) {
+		ctx := &TerraformTemplateContext{}
+		assert.Equal(t, "", ctx.Target())
+	})
+
+	t.Run("HasChanges", func(t *testing.T) {
+		tests := []struct {
+			name      string
+			resources plugin.ResourceCounts
+			want      bool
+		}{
+			{"no changes", plugin.ResourceCounts{}, false},
+			{"create only", plugin.ResourceCounts{Create: 1}, true},
+			{"change only", plugin.ResourceCounts{Change: 1}, true},
+			{"replace only", plugin.ResourceCounts{Replace: 1}, true},
+			{"destroy only", plugin.ResourceCounts{Destroy: 1}, true},
+			{"mixed", plugin.ResourceCounts{Create: 1, Destroy: 1}, true},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				ctx := &TerraformTemplateContext{Resources: tt.resources}
+				assert.Equal(t, tt.want, ctx.HasChanges())
+			})
+		}
+	})
+
+	t.Run("blockquoteWarnings", func(t *testing.T) {
+		input := []string{
+			"Warning: Something\n\nDetails here\nMore details",
+			"Warning: Another",
+		}
+		result := blockquoteWarnings(input)
+		assert.Equal(t, "> Warning: Something\n>\n> Details here\n> More details", result[0])
+		assert.Equal(t, "> Warning: Another", result[1])
+	})
+
+	t.Run("TotalChanges", func(t *testing.T) {
+		ctx := &TerraformTemplateContext{
+			Resources: plugin.ResourceCounts{
+				Create:  1,
+				Change:  2,
+				Replace: 3,
+				Destroy: 4,
+			},
+		}
+		assert.Equal(t, 10, ctx.TotalChanges())
+	})
+}
+
+// TestTemplateGolden tests template rendering against golden files for regression testing.
+func TestTemplateGolden(t *testing.T) {
+	goldenDir := "testdata/golden"
+
+	tests := []struct {
+		name         string
+		templateName string
+		goldenFile   string
+		context      *TerraformTemplateContext
+	}{
+		{
+			name:         "plan creates only",
+			templateName: "plan",
+			goldenFile:   "plan_creates_only.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "vpc",
+					ComponentType: "terraform",
+					Stack:         "dev-us-east-1",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{Create: 3},
+				CreatedResources: []string{
+					"aws_vpc.main",
+					"aws_subnet.a",
+					"aws_subnet.b",
+				},
+			},
+		},
+		{
+			name:         "plan destroys warning",
+			templateName: "plan",
+			goldenFile:   "plan_destroys_warning.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "legacy",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Destroy: 5},
+				DeletedResources: []string{"aws_instance.old[0]", "aws_instance.old[1]"},
+				HasDestroy:       true,
+			},
+		},
+		{
+			name:         "plan no changes",
+			templateName: "plan",
+			goldenFile:   "plan_no_changes.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "stable",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: false,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+		},
+		{
+			name:         "plan failure",
+			templateName: "plan",
+			goldenFile:   "plan_failure.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "broken",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:  1,
+						HasErrors: true,
+						Errors:    []string{"Invalid provider configuration", "Missing required argument"},
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+		},
+		{
+			name:         "plan with warnings",
+			templateName: "plan",
+			goldenFile:   "plan_with_warnings.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "mycomponent",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "plan",
+					Output:        "Plan: 1 to add, 0 to change, 0 to destroy.",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources:        plugin.ResourceCounts{Create: 1},
+				CreatedResources: []string{"random_id.foo[0]"},
+				Warnings: []string{
+					"> Warning: Value for undeclared variable\n>\n> The root module does not declare a variable named \"stage\".\n> To silence these warnings, use TF_VAR_... environment variables.",
+				},
+			},
+		},
+		{
+			name:         "apply success",
+			templateName: "apply",
+			goldenFile:   "apply_success.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "bucket",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "apply",
+					Output:        "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{Create: 1},
+			},
+		},
+		{
+			name:         "apply with outputs",
+			templateName: "apply",
+			goldenFile:   "apply_with_outputs.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "bucket",
+					ComponentType: "terraform",
+					Stack:         "prod",
+					Command:       "apply",
+					Output:        "Apply complete! Resources: 1 added, 0 changed, 0 destroyed.",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: true,
+						HasErrors:  false,
+					},
+				},
+				Resources: plugin.ResourceCounts{Create: 1},
+				Outputs: map[string]plugin.TerraformOutput{
+					"bucket_arn":  {Value: "arn:aws:s3:::prod-bucket", Sensitive: false},
+					"bucket_name": {Value: "prod-bucket", Sensitive: false},
+					"secret_key":  {Value: "", Sensitive: true},
+				},
+			},
+		},
+		{
+			name:         "apply failure",
+			templateName: "apply",
+			goldenFile:   "apply_failure.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "broken",
+					ComponentType: "terraform",
+					Stack:         "dev",
+					Command:       "apply",
+					Result: &plugin.OutputResult{
+						ExitCode:  1,
+						HasErrors: true,
+						Errors:    []string{"Error creating resource: permission denied"},
+					},
+				},
+				Resources: plugin.ResourceCounts{},
+			},
+		},
+	}
+
+	p := &Plugin{}
+	fs := p.GetDefaultTemplates()
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Load template.
+			content, err := fs.ReadFile("templates/" + tt.templateName + ".md")
+			require.NoError(t, err)
+
+			// Parse template.
+			tmpl, err := template.New(tt.templateName).Parse(string(content))
+			require.NoError(t, err)
+
+			// Render template.
+			var buf strings.Builder
+			err = tmpl.Execute(&buf, tt.context)
+			require.NoError(t, err)
+
+			rendered := buf.String()
+			goldenPath := filepath.Join(goldenDir, tt.goldenFile)
+
+			if *regenerateGolden {
+				// Write golden file.
+				err := os.MkdirAll(goldenDir, 0o755)
+				require.NoError(t, err)
+				err = os.WriteFile(goldenPath, []byte(rendered), 0o644)
+				require.NoError(t, err)
+				t.Logf("Regenerated golden file: %s", goldenPath)
+				return
+			}
+
+			// Read golden file.
+			expected, err := os.ReadFile(goldenPath)
+			if os.IsNotExist(err) {
+				t.Fatalf("Golden file not found: %s. Run with -regenerate-golden to create it.", goldenPath)
+			}
+			require.NoError(t, err)
+
+			// Compare.
+			assert.Equal(t, string(expected), rendered, "Output does not match golden file. Run with -regenerate-golden to update.")
+		})
+	}
+}

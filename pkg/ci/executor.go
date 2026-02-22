@@ -2,16 +2,20 @@ package ci
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/planfile"
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/github" // Register github store.
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/local"  // Register local store.
-	_ "github.com/cloudposse/atmos/pkg/ci/planfile/s3"     // Register s3 store.
+	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
+	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github" // Register github store.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"  // Register local store.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"     // Register s3 store.
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -39,17 +43,21 @@ type ExecuteOptions struct {
 	// ForceCIMode forces CI mode even if environment detection fails.
 	// This is set when --ci flag is used.
 	ForceCIMode bool
+
+	// CommandError is the error from the command execution, if any.
+	// When set, check runs are updated with failure status.
+	CommandError error
 }
 
 // actionContext holds all context needed to execute a CI action.
 type actionContext struct {
 	Opts     ExecuteOptions
-	Provider ComponentCIProvider
-	Platform Provider
-	CICtx    *Context
-	Binding  *HookBinding
+	Plugin   plugin.Plugin
+	Platform provider.Provider
+	CICtx    *provider.Context
+	Binding  *plugin.HookBinding
 	Command  string
-	Result   *OutputResult
+	Result   *plugin.OutputResult
 }
 
 // Execute runs all CI actions for a hook event.
@@ -58,31 +66,39 @@ func Execute(opts ExecuteOptions) error {
 	defer perf.Track(opts.AtmosConfig, "ci.Execute")()
 
 	// Detect CI platform.
+	// Only ForceCIMode (--ci flag) triggers the generic provider fallback.
+	// ci.enabled in config means "CI features are available" but requires
+	// an actual CI platform to be detected (or --ci flag) to activate.
 	platform := detectPlatform(opts.ForceCIMode)
 	if platform == nil {
 		return nil
 	}
 
-	// Get provider and binding for this event.
-	provider, binding := getProviderAndBinding(opts)
-	if provider == nil || binding == nil {
+	// Get plugin and binding for this event.
+	plugin, binding := getPluginAndBinding(opts)
+	if plugin == nil || binding == nil {
 		return nil
 	}
 
 	// Build and execute actions.
-	actCtx := buildActionContext(opts, platform, provider, binding)
+	actCtx := buildActionContext(opts, platform, plugin, binding)
 	executeActions(actCtx, binding.Actions)
 
 	return nil
 }
 
 // detectPlatform detects the CI platform based on environment.
-func detectPlatform(forceCIMode bool) Provider {
+func detectPlatform(forceCIMode bool) provider.Provider {
 	if forceCIMode {
 		platform := Detect()
 		if platform == nil {
 			log.Debug("CI mode forced but no platform detected, using generic provider")
-			return NewGenericProvider()
+			generic, err := Get("generic")
+			if err != nil {
+				log.Warn("Failed to get generic CI provider", "error", err)
+				return nil
+			}
+			return generic
 		}
 		return platform
 	}
@@ -95,8 +111,8 @@ func detectPlatform(forceCIMode bool) Provider {
 	return platform
 }
 
-// getProviderAndBinding gets the component provider and hook binding for an event.
-func getProviderAndBinding(opts ExecuteOptions) (ComponentCIProvider, *HookBinding) {
+// getPluginAndBinding gets the CI plugin and hook binding for an event.
+func getPluginAndBinding(opts ExecuteOptions) (plugin.Plugin, *plugin.HookBinding) {
 	componentType := opts.ComponentType
 	if componentType == "" {
 		componentType = extractComponentType(opts.Event)
@@ -107,24 +123,24 @@ func getProviderAndBinding(opts ExecuteOptions) (ComponentCIProvider, *HookBindi
 		return nil, nil
 	}
 
-	provider, ok := GetComponentProvider(componentType)
+	pl, ok := GetPlugin(componentType)
 	if !ok {
-		log.Debug("No CI provider registered for component type", "component_type", componentType)
+		log.Debug("No CI plugin registered for component type", "component_type", componentType)
 		return nil, nil
 	}
 
-	bindings := HookBindings(provider.GetHookBindings())
+	bindings := plugin.HookBindings(pl.GetHookBindings())
 	binding := bindings.GetBindingForEvent(opts.Event)
 	if binding == nil {
-		log.Debug("Provider does not handle this event", "event", opts.Event, "component_type", componentType)
+		log.Debug("Plugin does not handle this event", "event", opts.Event, "component_type", componentType)
 		return nil, nil
 	}
 
-	return provider, binding
+	return pl, binding
 }
 
 // buildActionContext builds the action context for executing CI actions.
-func buildActionContext(opts ExecuteOptions, platform Provider, provider ComponentCIProvider, binding *HookBinding) *actionContext {
+func buildActionContext(opts ExecuteOptions, platform provider.Provider, pl plugin.Plugin, binding *plugin.HookBinding) *actionContext {
 	ciCtx, err := platform.Context()
 	if err != nil {
 		log.Warn("Failed to get CI context", "error", err)
@@ -133,15 +149,28 @@ func buildActionContext(opts ExecuteOptions, platform Provider, provider Compone
 
 	command := extractCommand(opts.Event)
 
-	result, err := provider.ParseOutput(opts.Output, command)
+	result, err := pl.ParseOutput(opts.Output, command)
 	if err != nil {
 		log.Warn("Failed to parse command output", "error", err)
-		result = &OutputResult{}
+		result = &plugin.OutputResult{}
+	}
+
+	// If the command had an error, ensure the result reflects that.
+	// This handles the case where RunE fails and the output is empty
+	// (Cobra skips PostRunE on error, so we get called via defer with no output).
+	if opts.CommandError != nil {
+		result.HasErrors = true
+		if result.ExitCode == 0 {
+			result.ExitCode = 1
+		}
+		if len(result.Errors) == 0 {
+			result.Errors = []string{opts.CommandError.Error()}
+		}
 	}
 
 	return &actionContext{
 		Opts:     opts,
-		Provider: provider,
+		Plugin:   pl,
 		Platform: platform,
 		CICtx:    ciCtx,
 		Binding:  binding,
@@ -151,7 +180,7 @@ func buildActionContext(opts ExecuteOptions, platform Provider, provider Compone
 }
 
 // executeActions executes all actions in the binding.
-func executeActions(ctx *actionContext, actions []HookAction) {
+func executeActions(ctx *actionContext, actions []plugin.HookAction) {
 	for _, action := range actions {
 		// Check if action is enabled in config.
 		if !isActionEnabled(ctx.Opts.AtmosConfig, action) {
@@ -171,35 +200,35 @@ func executeActions(ctx *actionContext, actions []HookAction) {
 // - Output: enabled by default
 // - Checks: disabled by default (requires extra permissions)
 // - Upload/Download: always enabled (controlled by planfile config).
-func isActionEnabled(cfg *schema.AtmosConfiguration, action HookAction) bool {
+func isActionEnabled(cfg *schema.AtmosConfiguration, action plugin.HookAction) bool {
 	// No config means use defaults (enabled for most actions).
 	if cfg == nil {
-		return action != ActionCheck // Checks disabled by default.
+		return action != plugin.ActionCheck // Checks disabled by default.
 	}
 
 	switch action {
-	case ActionSummary:
+	case plugin.ActionSummary:
 		// Summary is enabled by default. Only skip if explicitly disabled.
 		// nil means "not set" = use default (enabled).
 		if cfg.CI.Summary.Enabled == nil {
 			return true
 		}
 		return *cfg.CI.Summary.Enabled
-	case ActionOutput:
+	case plugin.ActionOutput:
 		// Output is enabled by default. Only skip if explicitly disabled.
 		// nil means "not set" = use default (enabled).
 		if cfg.CI.Output.Enabled == nil {
 			return true
 		}
 		return *cfg.CI.Output.Enabled
-	case ActionCheck:
+	case plugin.ActionCheck:
 		// Checks are disabled by default (require extra permissions).
 		// nil means "not set" = use default (disabled).
 		if cfg.CI.Checks.Enabled == nil {
 			return false
 		}
 		return *cfg.CI.Checks.Enabled
-	case ActionUpload, ActionDownload:
+	case plugin.ActionUpload, plugin.ActionDownload:
 		// Upload/Download are always enabled (controlled by planfile config).
 		return true
 	default:
@@ -208,23 +237,23 @@ func isActionEnabled(cfg *schema.AtmosConfiguration, action HookAction) bool {
 }
 
 // executeAction executes a single CI action.
-func executeAction(action HookAction, ctx *actionContext) error {
+func executeAction(action plugin.HookAction, ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeAction")()
 
 	switch action {
-	case ActionSummary:
+	case plugin.ActionSummary:
 		return executeSummaryAction(ctx)
 
-	case ActionOutput:
+	case plugin.ActionOutput:
 		return executeOutputAction(ctx)
 
-	case ActionUpload:
+	case plugin.ActionUpload:
 		return executeUploadAction(ctx)
 
-	case ActionDownload:
+	case plugin.ActionDownload:
 		return executeDownloadAction(ctx)
 
-	case ActionCheck:
+	case plugin.ActionCheck:
 		return executeCheckAction(ctx)
 
 	default:
@@ -256,7 +285,7 @@ func executeSummaryAction(ctx *actionContext) error {
 
 	// Build template context.
 	// Provider returns an extended context type (e.g., *TerraformTemplateContext) that embeds *TemplateContext.
-	tmplCtx, err := ctx.Provider.BuildTemplateContext(ctx.Opts.Info, ctx.CICtx, ctx.Opts.Output, ctx.Command)
+	tmplCtx, err := ctx.Plugin.BuildTemplateContext(ctx.Opts.Info, ctx.CICtx, ctx.Opts.Output, ctx.Command)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).
@@ -267,9 +296,9 @@ func executeSummaryAction(ctx *actionContext) error {
 	// Load and render template.
 	loader := templates.NewLoader(ctx.Opts.AtmosConfig)
 	rendered, err := loader.LoadAndRender(
-		ctx.Provider.GetType(),
+		ctx.Plugin.GetType(),
 		templateName,
-		ctx.Provider.GetDefaultTemplates(),
+		ctx.Plugin.GetDefaultTemplates(),
 		tmplCtx,
 	)
 	if err != nil {
@@ -307,7 +336,7 @@ func executeOutputAction(ctx *actionContext) error {
 	}
 
 	// Get output variables from provider.
-	vars := ctx.Provider.GetOutputVariables(ctx.Result, ctx.Command)
+	vars := ctx.Plugin.GetOutputVariables(ctx.Result, ctx.Command)
 
 	// Add common variables.
 	vars["stack"] = ctx.Opts.Info.Stack
@@ -373,8 +402,20 @@ func executeUploadAction(ctx *actionContext) error {
 }
 
 // validateUploadPrerequisites checks if upload can proceed and returns the path and key.
+// When the planfile path is not explicitly set, it attempts to resolve it via ComponentConfigurationResolver.
 func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
+	if path == "" {
+		if resolver, ok := ctx.Plugin.(plugin.ComponentConfigurationResolver); ok {
+			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
+			if err != nil {
+				log.Debug("Failed to resolve artifact path for upload", "error", err)
+			} else {
+				ctx.Opts.Info.PlanFile = resolved
+				path = resolved
+			}
+		}
+	}
 	if path == "" {
 		log.Debug("No planfile path specified, skipping upload")
 		return "", "", true
@@ -383,7 +424,7 @@ func validateUploadPrerequisites(ctx *actionContext) (path, key string, skip boo
 		log.Debug("Planfile does not exist, skipping upload", "path", path)
 		return "", "", true
 	}
-	key = ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
+	key = ctx.Plugin.GetArtifactKey(ctx.Opts.Info, ctx.Command)
 	if key == "" {
 		log.Debug("Could not generate artifact key, skipping upload")
 		return "", "", true
@@ -434,13 +475,25 @@ func executeDownloadAction(ctx *actionContext) error {
 }
 
 // validateDownloadPrerequisites checks if download can proceed and returns the path and key.
+// When the planfile path is not explicitly set, it attempts to resolve it via ComponentConfigurationResolver.
 func validateDownloadPrerequisites(ctx *actionContext) (path, key string, skip bool) {
 	path = ctx.Opts.Info.PlanFile
+	if path == "" {
+		if resolver, ok := ctx.Plugin.(plugin.ComponentConfigurationResolver); ok {
+			resolved, err := resolver.ResolveComponentPlanfilePath(ctx.Opts.AtmosConfig, ctx.Opts.Info)
+			if err != nil {
+				log.Debug("Failed to resolve artifact path for download", "error", err)
+			} else {
+				ctx.Opts.Info.PlanFile = resolved
+				path = resolved
+			}
+		}
+	}
 	if path == "" {
 		log.Debug("No planfile path specified, skipping download")
 		return "", "", true
 	}
-	key = ctx.Provider.GetArtifactKey(ctx.Opts.Info, ctx.Command)
+	key = ctx.Plugin.GetArtifactKey(ctx.Opts.Info, ctx.Command)
 	if key == "" {
 		log.Debug("Could not generate artifact key, skipping download")
 		return "", "", true
@@ -482,14 +535,193 @@ func logArtifactOperation(op, key, storeName, path string, info *schema.ConfigAn
 	log.Debug(op+" planfile", args...)
 }
 
-// executeCheckAction performs a validation/check.
+// checkRunIDs stores check run IDs keyed by "stack/component/command" for correlating
+// before/after hook events within the same process.
+var checkRunIDs sync.Map
+
+// executeCheckAction creates or updates a check run on the CI platform.
+// For "before" events it creates a check run with in_progress status.
+// For "after" events it updates the existing check run with the final result.
 func executeCheckAction(ctx *actionContext) error {
 	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckAction")()
 
-	// Check actions are provider-specific.
-	// For now, this is a placeholder for future drift detection, etc.
-	log.Debug("Check action not yet implemented")
+	eventPrefix := extractEventPrefix(ctx.Opts.Event)
+
+	switch eventPrefix {
+	case "before":
+		return executeCheckCreate(ctx)
+	case "after":
+		return executeCheckUpdate(ctx)
+	default:
+		log.Debug("Unknown event prefix for check action", "prefix", eventPrefix, "event", ctx.Opts.Event)
+		return nil
+	}
+}
+
+// executeCheckCreate creates a new check run with in_progress status.
+func executeCheckCreate(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckCreate")()
+
+	name := provider.FormatCheckRunName(ctx.Command, ctx.Opts.Info.Stack, ctx.Opts.Info.ComponentFromArg)
+
+	opts := &provider.CreateCheckRunOptions{
+		Name:   name,
+		Status: provider.CheckRunStateInProgress,
+		Title:  fmt.Sprintf("Running %s...", ctx.Command),
+	}
+
+	if ctx.CICtx != nil {
+		opts.Owner = ctx.CICtx.RepoOwner
+		opts.Repo = ctx.CICtx.RepoName
+		opts.SHA = ctx.CICtx.SHA
+	}
+
+	checkRun, err := ctx.Platform.CreateCheckRun(context.Background(), opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
+			WithCause(err).
+			WithContext("name", name).
+			Err()
+	}
+
+	// Store check run ID for the corresponding "after" event.
+	key := buildCheckRunKey(ctx)
+	checkRunIDs.Store(key, checkRun.ID)
+
+	log.Debug("Created check run", "name", name, "id", checkRun.ID)
 	return nil
+}
+
+// executeCheckUpdate updates an existing check run with the final result.
+// If no stored check run ID is found (e.g., the before hook was skipped),
+// it falls back to creating a new completed check run.
+func executeCheckUpdate(ctx *actionContext) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckUpdate")()
+
+	name := provider.FormatCheckRunName(ctx.Command, ctx.Opts.Info.Stack, ctx.Opts.Info.ComponentFromArg)
+	key := buildCheckRunKey(ctx)
+
+	// Look up stored check run ID from the "before" event.
+	idVal, ok := checkRunIDs.LoadAndDelete(key)
+	if !ok {
+		// No stored ID — create a new completed check run instead.
+		log.Debug("No check run ID found for update, creating new completed check run", "name", name)
+		return executeCheckCreateCompleted(ctx, name)
+	}
+
+	checkRunID, _ := idVal.(int64)
+	status, conclusion := resolveCheckResult(ctx)
+	now := time.Now()
+
+	opts := &provider.UpdateCheckRunOptions{
+		CheckRunID:  checkRunID,
+		Name:        name,
+		Status:      status,
+		Conclusion:  conclusion,
+		Title:       buildCheckTitle(ctx),
+		Summary:     buildCheckSummary(ctx),
+		CompletedAt: &now,
+	}
+
+	if ctx.CICtx != nil {
+		opts.Owner = ctx.CICtx.RepoOwner
+		opts.Repo = ctx.CICtx.RepoName
+	}
+
+	_, err := ctx.Platform.UpdateCheckRun(context.Background(), opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
+			WithCause(err).
+			WithContext("name", name).
+			WithContext("check_run_id", fmt.Sprintf("%d", checkRunID)).
+			Err()
+	}
+
+	log.Debug("Updated check run", "name", name, "id", checkRunID, "status", status)
+	return nil
+}
+
+// executeCheckCreateCompleted creates a new check run with the final result status.
+// Used when no "before" event was processed (e.g., checks were enabled mid-run).
+func executeCheckCreateCompleted(ctx *actionContext, name string) error {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.executeCheckCreateCompleted")()
+
+	status, _ := resolveCheckResult(ctx)
+
+	opts := &provider.CreateCheckRunOptions{
+		Name:    name,
+		Status:  status,
+		Title:   buildCheckTitle(ctx),
+		Summary: buildCheckSummary(ctx),
+	}
+
+	if ctx.CICtx != nil {
+		opts.Owner = ctx.CICtx.RepoOwner
+		opts.Repo = ctx.CICtx.RepoName
+		opts.SHA = ctx.CICtx.SHA
+	}
+
+	_, err := ctx.Platform.CreateCheckRun(context.Background(), opts)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
+			WithCause(err).
+			WithContext("name", name).
+			Err()
+	}
+
+	log.Debug("Created completed check run", "name", name, "status", status)
+	return nil
+}
+
+// buildCheckRunKey creates a unique key for storing check run IDs between before/after events.
+func buildCheckRunKey(ctx *actionContext) string {
+	return ctx.Opts.Info.Stack + "/" + ctx.Opts.Info.ComponentFromArg + "/" + ctx.Command
+}
+
+// resolveCheckResult determines the check run status and conclusion from the action context.
+func resolveCheckResult(ctx *actionContext) (provider.CheckRunState, string) {
+	defer perf.Track(ctx.Opts.AtmosConfig, "ci.resolveCheckResult")()
+
+	if ctx.Opts.CommandError != nil {
+		return provider.CheckRunStateFailure, "failure"
+	}
+	return provider.CheckRunStateSuccess, "success"
+}
+
+// buildCheckTitle creates a human-readable title for a completed check run.
+func buildCheckTitle(ctx *actionContext) string {
+	if ctx.Result != nil {
+		if tfData, ok := ctx.Result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
+			return tfData.ChangedResult
+		}
+
+		if ctx.Result.HasChanges {
+			return fmt.Sprintf("%s: changes detected", ctx.Command)
+		}
+	}
+
+	return fmt.Sprintf("%s: no changes", ctx.Command)
+}
+
+// buildCheckSummary creates a brief summary for a completed check run.
+func buildCheckSummary(ctx *actionContext) string {
+	if ctx.Result != nil {
+		if tfData, ok := ctx.Result.Data.(*plugin.TerraformOutputData); ok && tfData.ChangedResult != "" {
+			return tfData.ChangedResult
+		}
+	}
+
+	return ""
+}
+
+// extractEventPrefix extracts the prefix from a hook event.
+// Example: "before.terraform.plan" → "before".
+func extractEventPrefix(event string) string {
+	parts := strings.Split(event, ".")
+	if len(parts) >= 1 {
+		return parts[0]
+	}
+	return ""
 }
 
 // createPlanfileStore creates a planfile store from configuration.
@@ -578,7 +810,7 @@ func buildPlanfileMetadata(ctx *actionContext) *planfile.Metadata {
 	// Add plan result data if available.
 	if ctx.Result != nil {
 		metadata.HasChanges = ctx.Result.HasChanges
-		if tfData, ok := ctx.Result.Data.(*TerraformOutputData); ok {
+		if tfData, ok := ctx.Result.Data.(*plugin.TerraformOutputData); ok {
 			metadata.Additions = tfData.ResourceCounts.Create
 			metadata.Changes = tfData.ResourceCounts.Change
 			metadata.Destructions = tfData.ResourceCounts.Destroy

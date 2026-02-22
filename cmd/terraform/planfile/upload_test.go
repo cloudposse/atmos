@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 )
 
 func TestBuildUploadMetadata(t *testing.T) {
@@ -82,6 +82,58 @@ func TestResolveUploadKey(t *testing.T) {
 
 		_, err := resolveUploadKey(opts)
 		assert.True(t, errors.Is(err, errUtils.ErrPlanfileKeyInvalid))
+	})
+}
+
+func TestResolveUploadPlanfilePath(t *testing.T) {
+	t.Run("explicit planfile path", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "/tmp/my-plan.tfplan",
+			Stack:        "dev",
+			Component:    "vpc",
+		}
+
+		path, err := resolveUploadPlanfilePath(opts, nil)
+		require.NoError(t, err)
+		assert.Equal(t, "/tmp/my-plan.tfplan", path)
+	})
+
+	t.Run("missing planfile and component", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "",
+			Stack:        "dev",
+			Component:    "",
+		}
+
+		_, err := resolveUploadPlanfilePath(opts, nil)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
+		assert.Contains(t, err.Error(), "--planfile is required")
+	})
+
+	t.Run("missing planfile and stack", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "",
+			Stack:        "",
+			Component:    "vpc",
+		}
+
+		_, err := resolveUploadPlanfilePath(opts, nil)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
+		assert.Contains(t, err.Error(), "--planfile is required")
+	})
+
+	t.Run("missing planfile stack and component", func(t *testing.T) {
+		opts := &UploadOptions{
+			PlanfilePath: "",
+			Stack:        "",
+			Component:    "",
+		}
+
+		_, err := resolveUploadPlanfilePath(opts, nil)
+		require.Error(t, err)
+		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
 	})
 }
 

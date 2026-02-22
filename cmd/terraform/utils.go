@@ -29,6 +29,37 @@ func runHooks(event h.HookEvent, cmd_ *cobra.Command, args []string) error {
 	return runHooksWithOutput(event, cmd_, args, "")
 }
 
+// runHooksOnError runs CI hooks with command error context.
+// Used to update check runs to failure status when RunE fails
+// (Cobra skips PostRunE on error, so this must be called explicitly).
+func runHooksOnError(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error) {
+	runHooksOnErrorWithOutput(event, cmd_, args, cmdErr, "")
+}
+
+// runHooksOnErrorWithOutput runs CI hooks with command error context and captured output.
+func runHooksOnErrorWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, cmdErr error, output string) {
+	finalArgs := append([]string{cmd_.Name()}, args...)
+
+	info, err := e.ProcessCommandLineArgs("terraform", cmd_, finalArgs, nil)
+	if err != nil {
+		return
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	if err != nil {
+		return
+	}
+
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		forceCIMode = viper.GetBool("ci")
+	}
+
+	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, cmdErr); err != nil {
+		log.Warn("CI hook execution failed", "error", err)
+	}
+}
+
 func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, output string) error {
 	// Build args for ProcessCommandLineArgs.
 	// Note: Double-dash processing is handled by AtmosFlagParser in terraformRun (RunE).
@@ -41,16 +72,31 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		return err
 	}
 
+	// Validate Atmos config first to provide specific error messages
+	// (e.g., stacks directory does not exist) before full initialization.
+	if err := internal.ValidateAtmosConfig(); err != nil {
+		return err
+	}
+
 	// Initialize the CLI config.
 	atmosConfig, err := cfg.InitCliConfig(info, true)
 	if err != nil {
 		return errors.Join(errUtils.ErrInitializeCLIConfig, err)
 	}
 
+	// Resolve path-based component arguments before getting hooks.
+	// Path resolution must happen before GetHooks because GetHooks calls
+	// ExecuteDescribeComponent which needs a valid component name, not a raw path.
+	if info.NeedsPathResolution && info.ComponentFromArg != "" {
+		if err := resolveComponentPath(&info, cfg.TerraformComponentType); err != nil {
+			return err
+		}
+	}
+
 	// Run user-defined hooks from stack configuration.
 	hooks, err := h.GetHooks(&atmosConfig, &info)
 	if err != nil {
-		return errors.Join(errUtils.ErrGetHooks, err)
+		return err
 	}
 
 	if hooks != nil && hooks.HasHooks() {
@@ -62,12 +108,18 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 	}
 
 	// Check for --ci flag or CI environment variable.
-	// The flag is registered via TerraformFlags() which includes CI env var binding.
-	forceCIMode := viper.GetBool("ci")
+	// Read directly from Cobra flag (not Viper) because pflags are only bound
+	// to Viper in RunE via BindFlagsToViper. During PreRunE, Viper doesn't
+	// yet see the Cobra flag value — only env vars and defaults.
+	forceCIMode, _ := cmd_.Flags().GetBool("ci")
+	if !forceCIMode {
+		// Fall back to Viper for env var support (ATMOS_CI, CI).
+		forceCIMode = viper.GetBool("ci")
+	}
 
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
-	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode); err != nil {
+	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, nil); err != nil {
 		log.Warn("CI hook execution failed", "error", err)
 		// Don't fail the command on CI hook errors.
 	}
@@ -160,17 +212,9 @@ func isMultiComponentExecution(info *schema.ConfigAndStacksInfo) bool {
 }
 
 // executeSingleComponent executes terraform for a single component.
-func executeSingleComponent(info *schema.ConfigAndStacksInfo) error {
+func executeSingleComponent(info *schema.ConfigAndStacksInfo, shellOpts ...e.ShellCommandOption) error {
 	log.Debug("Routing to ExecuteTerraform (single-component)")
-	err := e.ExecuteTerraform(*info)
-	if err != nil {
-		if errors.Is(err, errUtils.ErrPlanHasDiff) {
-			errUtils.CheckErrorAndPrint(err, "", "")
-			return err
-		}
-		errUtils.CheckErrorPrintAndExit(err, "", "")
-	}
-	return nil
+	return e.ExecuteTerraform(*info, shellOpts...)
 }
 
 // newTerraformPassthroughSubcommand creates a Cobra subcommand that delegates to the parent
@@ -244,7 +288,8 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
 // Commands with their own parsers (plan, apply, deploy) bind their parsers in RunE.
-func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions) error {
+// Optional ShellCommandOption values are forwarded to ExecuteTerraform for stdout capture, etc.
+func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string, opts *TerraformRunOptions, shellOpts ...e.ShellCommandOption) error {
 	subCommand := actualCmd.Name()
 	log.Debug("terraformRunWithOptions entry", "subCommand", subCommand, "args", args)
 
@@ -295,7 +340,7 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
-	return executeSingleComponent(&info)
+	return executeSingleComponent(&info, shellOpts...)
 }
 
 // hasMultiComponentFlags checks if any multi-component flags are set.

@@ -6,12 +6,18 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 	"text/template"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// templateFuncs provides custom template functions for CI summary templates.
+var templateFuncs = template.FuncMap{
+	"replace": strings.ReplaceAll,
+}
 
 // Loader loads CI templates with layered override support.
 type Loader struct {
@@ -117,7 +123,7 @@ func (l *Loader) loadFromEmbedded(componentType, command string, defaultTemplate
 func (l *Loader) Render(templateContent string, ctx any) (string, error) {
 	defer perf.Track(l.atmosConfig, "templates.Loader.Render")()
 
-	tmpl, err := template.New("ci-summary").Parse(templateContent)
+	tmpl, err := template.New("ci-summary").Funcs(templateFuncs).Parse(templateContent)
 	if err != nil {
 		return "", errUtils.Build(errUtils.ErrTemplateEvaluation).
 			WithCause(err).

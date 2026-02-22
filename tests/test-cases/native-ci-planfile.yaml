@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "atmos terraform planfile list"
+    enabled: true
+    snapshot: false
+    description: "Verify 'atmos terraform planfile list' command exists and returns exit code 0."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "planfile"
+      - "list"
+    expect:
+      exit_code: 0
+
+  - name: "atmos terraform plan with ci"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent -s prod --ci' and checks for summary output and two checks."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+      - "--ci"
+    expect:
+      exit_code: 0
+      stderr:
+        - "Check run created: atmos/plan: prod/mycomponent"
+        - "Check run completed: atmos/plan: prod/mycomponent"
+        - "Title: Running plan"
+        - "Title: 1 resource to add"
+        - "has_changes=true"
+        - "has_errors=false"
+        - "exit_code=0"
+
+  - name: "atmos terraform plan without ci"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent -s prod --ci' and checks for summary output and two checks."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+    expect:
+      exit_code: 0
+      stderr:
+        - !not "Check run created: atmos/plan: prod/mycomponent"
+        - !not "Check run completed: atmos/plan: prod/mycomponent"
+        - !not "Title: Running plan"
+        - !not "Title: 1 resource to add"
+        - !not "has_changes=true"
+        - !not "has_errors=false"
+        - !not "exit_code=0"
+
+
+  - name: "atmos terraform plan with ci failure"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent/failure -s prod --ci' and checks for summary output and two checks."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent/failure"
+      - "-s"
+      - "prod"
+      - "--ci"
+    expect:
+      exit_code: 1
+      stderr:
+        - "Check run created: atmos/plan: prod/mycomponent/failure"
+        - !not "Check run completed: atmos/plan: prod/mycomponent/failure"
+        - "Check run failed: atmos/plan: prod/mycomponent/failure"
+        - "has_changes=false"
+        - "has_errors=true"
+        - "exit_code=1"
+
+  - name: "atmos terraform plan with github actions env"
+    enabled: true
+    sandbox: true
+    clean: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent -s prod' without --ci flag but with GITHUB_ACTIONS=true to verify automatic GitHub provider detection."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent"
+      - "-s"
+      - "prod"
+    expect:
+      exit_code: 0
+      stderr:
+        - "CI action failed"
+      file_contains:
+        "github-output.txt":
+          - "has_changes=false"
+          - "has_errors=false"
+          - "exit_code=0"
+        "github-step-summary.txt":
+          - "No Changes for"
+          - "mycomponent"
+          - "prod"
