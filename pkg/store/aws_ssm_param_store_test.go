@@ -593,7 +593,7 @@ func TestNewSSMStore(t *testing.T) {
 			// Clear AWS_PROFILE to prevent conflicts with local AWS configuration.
 			t.Setenv("AWS_PROFILE", "")
 
-			store, err := NewSSMStore(tt.options)
+			store, err := NewSSMStore(tt.options, "")
 			if tt.wantErr {
 				assert.Error(t, err)
 				assert.Nil(t, store)

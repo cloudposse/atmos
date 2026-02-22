@@ -1,0 +1,46 @@
+---
+slug: store-identity-support
+title: "Identity-Based Authentication for Stores"
+authors: [aknysh]
+tags: [feature]
+---
+
+Atmos stores now support identity-based authentication. You can configure stores to authenticate using the same named identities from `atmos auth` instead of relying on default credential chains.
+
+<!--truncate-->
+
+## What Changed
+
+Stores (`!store` YAML function) can now reference an Atmos auth identity via a new `identity` field in the store configuration. When set, the store uses that identity's credentials instead of the default credential chain (environment variables, default AWS profiles, etc.).
+
+```yaml
+stores:
+  prod/aws-ssm:
+    type: aws-ssm-parameter-store
+    identity: prod-admin
+    options:
+      region: us-east-1
+```
+
+This works with all cloud-backed store types:
+- **AWS SSM Parameter Store** - uses `AWSAuthContext` credentials
+- **Azure Key Vault** - uses `AzureAuthContext` credentials
+- **Google Secret Manager** - uses `GCPAuthContext` credentials
+
+Redis and Artifactory stores do not support identity-based authentication since they don't map to cloud provider identity types.
+
+## Why This Matters
+
+Previously, stores always used the default credential chain, which meant separate credential management for secrets access vs. Terraform execution. Now you can use the same identity system for both, simplifying credential management and enabling more granular access control.
+
+## How to Use It
+
+1. Configure an identity in your `atmos.yaml` auth section (as you normally would for `atmos auth`).
+2. Add the `identity` field to your store configuration referencing that identity name.
+3. The store will automatically authenticate using that identity on first access.
+
+Stores without the `identity` field continue to work exactly as before -- this is a fully backward-compatible change.
+
+## Get Involved
+
+Have questions or feedback? Open an issue on [GitHub](https://github.com/cloudposse/atmos/issues).
