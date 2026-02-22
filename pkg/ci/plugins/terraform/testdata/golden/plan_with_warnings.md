@@ -32,7 +32,7 @@ Plan: 1 to add, 0 to change, 0 to destroy.
 > [!WARNING]
 > ```
 > Warning: Value for undeclared variable
->
+> 
 > The root module does not declare a variable named "stage".
 > To silence these warnings, use TF_VAR_... environment variables.
 > ```
