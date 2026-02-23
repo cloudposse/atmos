@@ -123,6 +123,22 @@ atmos support --help
 atmos theme --help
 atmos theme list --help
 atmos theme show --help
+atmos toolchain --help
+atmos toolchain add --help
+atmos toolchain aliases --help
+atmos toolchain clean --help
+atmos toolchain exec --help
+atmos toolchain get --help
+atmos toolchain info --help
+atmos toolchain install --help
+atmos toolchain list --help
+atmos toolchain path --help
+atmos toolchain remove --help
+atmos toolchain run --help
+atmos toolchain set --help
+atmos toolchain uninstall --help
+atmos toolchain versions --help
+atmos toolchain which --help
 atmos validate --help
 atmos validate component --help
 atmos validate editorconfig --help
