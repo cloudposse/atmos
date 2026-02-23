@@ -37,6 +37,7 @@ tests:
         - "has_changes=true"
         - "has_errors=false"
         - "exit_code=0"
+        - "summary="
 
   - name: "atmos terraform plan without ci"
     enabled: true
@@ -60,6 +61,7 @@ tests:
         - !not "has_changes=true"
         - !not "has_errors=false"
         - !not "exit_code=0"
+        - !not "summary="
 
 
   - name: "atmos terraform plan with ci failure"
@@ -117,6 +119,7 @@ tests:
           - "has_changes=false"
           - "has_errors=false"
           - "exit_code=0"
+          - "summary<<EOF"
         "github-step-summary.txt":
           - "No Changes for"
           - "mycomponent"

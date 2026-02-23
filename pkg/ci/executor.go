@@ -51,13 +51,14 @@ type ExecuteOptions struct {
 
 // actionContext holds all context needed to execute a CI action.
 type actionContext struct {
-	Opts     ExecuteOptions
-	Plugin   plugin.Plugin
-	Platform provider.Provider
-	CICtx    *provider.Context
-	Binding  *plugin.HookBinding
-	Command  string
-	Result   *plugin.OutputResult
+	Opts            ExecuteOptions
+	Plugin          plugin.Plugin
+	Platform        provider.Provider
+	CICtx           *provider.Context
+	Binding         *plugin.HookBinding
+	Command         string
+	Result          *plugin.OutputResult
+	RenderedSummary string // Rendered summary markdown from executeSummaryAction.
 }
 
 // Execute runs all CI actions for a hook event.
@@ -309,6 +310,9 @@ func executeSummaryAction(ctx *actionContext) error {
 			Err()
 	}
 
+	// Store rendered summary for use by downstream actions (e.g., output).
+	ctx.RenderedSummary = rendered
+
 	// Write to job summary.
 	if err := writer.WriteSummary(rendered); err != nil {
 		return errUtils.Build(errUtils.ErrCIOutputWriteFailed).
@@ -342,6 +346,11 @@ func executeOutputAction(ctx *actionContext) error {
 	vars["stack"] = ctx.Opts.Info.Stack
 	vars["component"] = ctx.Opts.Info.ComponentFromArg
 	vars["command"] = ctx.Command
+
+	// Add rendered summary if available (set by executeSummaryAction).
+	if ctx.RenderedSummary != "" {
+		vars["summary"] = ctx.RenderedSummary
+	}
 
 	// Filter by configured variables if specified.
 	if cfg := ctx.Opts.AtmosConfig; cfg != nil && len(cfg.CI.Output.Variables) > 0 {

@@ -4,6 +4,8 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -14,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
 
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
@@ -1042,6 +1045,86 @@ func TestBuildCheckRunKey(t *testing.T) {
 		Command: "plan",
 	}
 	assert.Equal(t, "dev-us-east-1/vpc/plan", buildCheckRunKey(ctx))
+}
+
+func TestExecute_SummaryContentFlowsToOutput(t *testing.T) {
+	// Verify that the rendered summary markdown from executeSummaryAction
+	// is available as a "summary" output variable in executeOutputAction.
+
+	// Create a temp directory with a template file.
+	tmpDir := t.TempDir()
+	terraformDir := filepath.Join(tmpDir, "terraform")
+	require.NoError(t, os.MkdirAll(terraformDir, 0o755))
+	templateContent := "## Plan for `{{.Component}}` in `{{.Stack}}`\n"
+	require.NoError(t, os.WriteFile(filepath.Join(terraformDir, "plan.md"), []byte(templateContent), 0o644))
+
+	// Set up provider registry with a full capturing provider.
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	fcp := newFullCapturingProvider("generic", false)
+	Register(fcp)
+
+	// Set up plugin registry with a mock terraform plugin.
+	ClearPlugins()
+	ctrl := gomock.NewController(t)
+	mockPlugin := NewMockPlugin(ctrl)
+	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
+	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
+		{
+			Event:    "after.terraform.plan",
+			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput},
+			Template: "plan",
+		},
+	}).AnyTimes()
+
+	// GetDefaultTemplates won't be reached due to base_path override.
+	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
+
+	// BuildTemplateContext returns a simple context for the template.
+	mockPlugin.EXPECT().BuildTemplateContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(map[string]string{"Component": "vpc", "Stack": "dev"}, nil).AnyTimes()
+
+	// ParseOutput returns a basic result.
+	mockPlugin.EXPECT().ParseOutput(gomock.Any(), "plan").Return(&plugin.OutputResult{
+		HasChanges: true,
+	}, nil).AnyTimes()
+
+	// GetOutputVariables returns some base variables.
+	mockPlugin.EXPECT().GetOutputVariables(gomock.Any(), gomock.Any()).Return(map[string]string{
+		"has_changes": "true",
+	}).AnyTimes()
+
+	require.NoError(t, RegisterPlugin(mockPlugin))
+
+	// Execute with CI forced, using template base_path pointing to temp dir.
+	err := Execute(ExecuteOptions{
+		Event:       "after.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: &schema.AtmosConfiguration{
+			CI: schema.CIConfig{
+				Templates: schema.CITemplatesConfig{
+					BasePath: tmpDir,
+				},
+			},
+		},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev-us-east-1",
+			ComponentFromArg: "vpc",
+		},
+		Output: "some terraform output",
+	})
+	require.NoError(t, err)
+
+	// Verify summary was written.
+	require.Len(t, fcp.writer.summaries, 1, "WriteSummary should have been called once")
+	assert.Contains(t, fcp.writer.summaries[0], "vpc")
+	assert.Contains(t, fcp.writer.summaries[0], "dev")
+
+	// Verify the "summary" output variable contains the rendered summary markdown.
+	summaryOutput, ok := fcp.writer.outputs["summary"]
+	assert.True(t, ok, "output variables should include 'summary'")
+	assert.Equal(t, fcp.writer.summaries[0], summaryOutput, "summary output should match rendered summary")
 }
 
 func TestFilterVariables(t *testing.T) {

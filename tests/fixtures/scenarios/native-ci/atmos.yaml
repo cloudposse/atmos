@@ -78,6 +78,7 @@ ci:
       - exit_code
       - artifact_key
       - plan_summary
+      - summary
 
   # Job summary with plan/apply results
   # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts
