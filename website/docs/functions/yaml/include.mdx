@@ -96,12 +96,13 @@ strategy in order and uses the **first match** that points to an existing file:
    settings: !include ./overrides.yaml
    ```
 
-3. **Paths relative to `base_path`** — All other relative paths (those that do **not** start with `./` or `../`)
-   are resolved with **first-match-wins**: Atmos first checks relative to the manifest directory, and if not found,
-   falls back to the [`base_path`](/cli/configuration#base-path) in `atmos.yaml`. Use bare paths (no prefix) for
-   `base_path`-relative resolution; use `./` or `../` to make manifest-relative resolution unambiguous.
+3. **Paths relative to `base_path`** — For all other relative paths (in both `atmos.yaml` and stack configuration files), Atmos resolves them in the following order (first match wins):
+   1. Relative to the directory of the current stack manifest file with the `!include`
+   2. Relative to the [`base_path`](/cli/configuration#base-path) defined in `atmos.yaml`
+
+   Use bare paths (no prefix) for `base_path`-relative resolution; use `./` or `../` to make manifest-relative
+   resolution unambiguous.
    ```yaml
-   # Resolved relative to `base_path` in atmos.yaml (e.g., the repo root)
    vars: !include stacks/catalog/vpc/vars.yaml
    policy: !include config/policies/deny.rego
    ```
