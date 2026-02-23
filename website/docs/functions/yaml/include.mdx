@@ -97,7 +97,7 @@ strategy in order and uses the **first match** that points to an existing file:
    ```
 
 3. **Paths relative to `base_path`** — For all other relative paths (in both `atmos.yaml` and stack configuration files), Atmos resolves them in the following order (first match wins):
-   1. Relative to the directory of the current stack manifest file with the `!include`
+   1. Relative to the directory of the current stack manifest file containing the `!include` directive
    2. Relative to the [`base_path`](/cli/configuration#base-path) defined in `atmos.yaml`
 
    Use bare paths (no prefix) for `base_path`-relative resolution; use `./` or `../` to make manifest-relative

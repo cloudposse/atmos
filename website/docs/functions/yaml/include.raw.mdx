@@ -194,7 +194,7 @@ Path resolution follows the same rules as [`!include`](./include#local-sources),
 2. **Manifest-relative paths** — paths starting with `./` or `../` resolve relative to the directory of the current
    manifest file: `!include.raw ../configs/settings.yaml`
 3. **`base_path`-relative paths** — For all other relative paths (in both `atmos.yaml` and stack configuration files), Atmos resolves them in the following order (first match wins):
-   1. Relative to the directory of the current stack manifest file with the `!include.raw`
+   1. Relative to the directory of the current stack manifest file containing the `!include.raw` directive
    2. Relative to the [`base_path`](/cli/configuration#base-path) defined in `atmos.yaml`
 
    Example:
