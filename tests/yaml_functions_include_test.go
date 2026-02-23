@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -13,7 +14,7 @@ import (
 
 // TestYAMLFunctionInclude tests the !include YAML function with various file types.
 func TestYAMLFunctionInclude(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
+	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -136,7 +137,7 @@ func TestYAMLFunctionInclude(t *testing.T) {
 // TestYAMLFunctionIncludeExtended tests extended !include scenarios including
 // !include.raw, .txt, .tf, extensionless files, and advanced YQ expressions.
 func TestYAMLFunctionIncludeExtended(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
+	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
 
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
@@ -280,7 +281,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 
 // TestYAMLFunctionIncludeEdgeCases tests edge cases for the !include function.
 func TestYAMLFunctionIncludeEdgeCases(t *testing.T) {
-	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
+	t.Chdir(filepath.Join(".", "fixtures", "scenarios", "atmos-include-yaml-function"))
 
 	_, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
 	require.NoError(t, err)
