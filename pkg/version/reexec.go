@@ -96,8 +96,9 @@ func (d *defaultInstaller) Install(toolSpec string, force, allowPrereleases bool
 
 // CheckAndReexec checks if version.use is configured and re-executes with the specified version.
 // This should be called after config/profiles are loaded but before command execution.
-// Returns true if re-exec was triggered (caller should exit), false otherwise.
-func CheckAndReexec(atmosConfig *schema.AtmosConfiguration) bool {
+// Returns nil if no re-exec was needed or if re-exec replaced the process (unreachable).
+// Returns an error for hard failures (PR/SHA/invalid version install failures, exec failures).
+func CheckAndReexec(atmosConfig *schema.AtmosConfiguration) error {
 	defer perf.Track(atmosConfig, "version.CheckAndReexec")()
 
 	return CheckAndReexecWithConfig(atmosConfig, DefaultReexecConfig())
@@ -105,16 +106,16 @@ func CheckAndReexec(atmosConfig *schema.AtmosConfiguration) bool {
 
 // CheckAndReexecWithConfig checks if version.use is configured and re-executes with the specified version.
 // This variant accepts a ReexecConfig for testability.
-func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) bool {
+func CheckAndReexecWithConfig(atmosConfig *schema.AtmosConfiguration, cfg *ReexecConfig) error {
 	defer perf.Track(atmosConfig, "version.CheckAndReexecWithConfig")()
 
 	requestedVersion := resolveRequestedVersion(atmosConfig, cfg)
 	if requestedVersion == "" {
-		return false
+		return nil
 	}
 
 	if shouldSkipReexec(requestedVersion, cfg) {
-		return false
+		return nil
 	}
 
 	return executeVersionSwitch(requestedVersion, cfg)
@@ -173,9 +174,9 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 }
 
 // executeVersionSwitch performs the actual version switch.
-//
-//nolint:revive // os.Exit is intentional for hard failures on PR/SHA version errors.
-func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
+// Returns an error for hard failures (PR/SHA/invalid version, exec failure).
+// Returns nil for successful exec (unreachable) or graceful fallback to current version.
+func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) error {
 	targetVersion := strings.TrimPrefix(requestedVersion, "v")
 
 	// Find or install the requested version.
@@ -183,36 +184,30 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	if err != nil {
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
-			os.Exit(1)
+			return err
 		}
 
 		// For SHA versions, fail hard - don't continue with wrong version.
 		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
-			os.Exit(1)
+			return err
 		}
 
 		// Check if this is an invalid version format error - fail hard for those too.
 		_, _, parseErr := toolchain.ParseVersionSpec(requestedVersion)
 		if parseErr != nil {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
-			os.Exit(1)
+			return err
 		}
 
 		// For regular semver versions, fall back to current (existing behavior).
 		ui.Warningf("Failed to switch to Atmos version %s: %v", requestedVersion, err)
 		ui.Warningf("Continuing with current version %s", Version)
-		return false
+		return nil
 	}
 
 	// Set re-exec guard to prevent loops.
 	if err := cfg.SetEnv(ReexecGuardEnvVar, requestedVersion); err != nil {
 		log.Warn("Failed to set re-exec guard", "error", err)
-		return false
+		return nil
 	}
 
 	// Re-exec with the new binary.
@@ -223,12 +218,11 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	args = stripUseVersionFlags(args)
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
-		ui.Errorf("Failed to exec %s: %v", binaryPath, err)
-		return false
+		return fmt.Errorf("failed to exec %s: %w", binaryPath, err)
 	}
 
 	// This line is never reached on successful exec.
-	return true
+	return nil
 }
 
 // findOrInstallVersionWithConfig finds the binary for a version, installing if needed.

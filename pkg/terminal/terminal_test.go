@@ -711,6 +711,45 @@ func TestDetectColorProfile_RespectsTTY(t *testing.T) {
 			expected: ColorNone,
 			reason:   "Should return ColorNone when --no-color is set",
 		},
+		{
+			name: "CLICOLOR_FORCE with COLORTERM=truecolor detects TrueColor",
+			config: Config{
+				EnvCLIColorForce: true,
+				EnvColorTerm:     "truecolor",
+			},
+			isTTY:    false,
+			expected: ColorTrue,
+			reason:   "CLICOLOR_FORCE enables color but COLORTERM determines depth",
+		},
+		{
+			name: "CLICOLOR_FORCE with TERM=xterm-256color detects 256 colors",
+			config: Config{
+				EnvCLIColorForce: true,
+				EnvTerm:          "xterm-256color",
+			},
+			isTTY:    false,
+			expected: Color256,
+			reason:   "CLICOLOR_FORCE enables color but TERM determines depth",
+		},
+		{
+			name: "CLICOLOR_FORCE alone defaults to Color16",
+			config: Config{
+				EnvCLIColorForce: true,
+			},
+			isTTY:    false,
+			expected: Color16,
+			reason:   "CLICOLOR_FORCE without COLORTERM/TERM should default to safe Color16",
+		},
+		{
+			name: "ForceColor overrides TERM to TrueColor",
+			config: Config{
+				ForceColor: true,
+				EnvTerm:    "xterm-256color",
+			},
+			isTTY:    true,
+			expected: ColorTrue,
+			reason:   "--force-color should force TrueColor regardless of TERM",
+		},
 	}
 
 	for _, tt := range tests {

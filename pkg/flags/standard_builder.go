@@ -544,7 +544,7 @@ func (b *StandardOptionsBuilder) WithForceColor() *StandardOptionsBuilder {
 	defer perf.Track(nil, "flags.StandardOptionsBuilder.WithForceColor")()
 
 	b.options = append(b.options, WithBoolFlag("force-color", "", false, "Force color output even when not a TTY (useful for screenshots)"))
-	b.options = append(b.options, WithEnvVars("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"))
+	b.options = append(b.options, WithEnvVars("force-color", "ATMOS_FORCE_COLOR"))
 	return b
 }
 

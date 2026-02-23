@@ -71,9 +71,9 @@ func TestCheckAndReexecWithConfig_NoVersionUse(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when version.use is empty")
+	assert.NoError(t, err, "Should return nil when version.use is empty")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath")
 	assert.Equal(t, 0, installer.callCount, "Should not call Install")
 }
@@ -102,9 +102,9 @@ func TestCheckAndReexecWithConfig_GuardActive(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when guard is active for same version")
+	assert.NoError(t, err, "Should return nil when guard is active for same version")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
 }
 
@@ -124,9 +124,9 @@ func TestCheckAndReexecWithConfig_VersionMatch(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when versions match")
+	assert.NoError(t, err, "Should return nil when versions match")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when versions match")
 }
 
@@ -146,9 +146,9 @@ func TestCheckAndReexecWithConfig_VersionMatchWithVPrefix(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when versions match (v prefix normalized)")
+	assert.NoError(t, err, "Should return nil when versions match (v prefix normalized)")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when versions match")
 }
 
@@ -188,9 +188,9 @@ func TestCheckAndReexecWithConfig_VersionMismatchExistingInstall(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
+	assert.NoError(t, err, "Should return nil when re-exec is triggered")
 	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath once")
 	assert.Equal(t, 0, installer.callCount, "Should not call Install when binary exists")
 	assert.Equal(t, "/home/user/.atmos/bin/cloudposse/atmos/1.160.0/atmos", execCalledWith)
@@ -243,9 +243,9 @@ func TestCheckAndReexecWithConfig_VersionMismatchNeedsInstall(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
+	assert.NoError(t, err, "Should return nil when re-exec is triggered")
 	assert.Equal(t, 2, findCallCount, "Should call FindBinaryPath twice (before and after install)")
 	assert.Equal(t, 1, installer.callCount, "Should call Install once")
 	assert.Equal(t, "/home/user/.atmos/bin/cloudposse/atmos/1.160.0/atmos", execCalledWith)
@@ -275,9 +275,9 @@ func TestCheckAndReexecWithConfig_InstallFails(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when install fails")
+	assert.NoError(t, err, "Should return nil when semver install fails (fallback to current)")
 	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath once")
 	assert.Equal(t, 1, installer.callCount, "Should call Install once")
 }
@@ -313,9 +313,9 @@ func TestCheckAndReexecWithConfig_ExecFails(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when exec fails")
+	assert.Error(t, err, "Should return error when exec fails")
 }
 
 func TestCheckAndReexecWithConfig_SetEnvFails(t *testing.T) {
@@ -347,9 +347,9 @@ func TestCheckAndReexecWithConfig_SetEnvFails(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when SetEnv fails")
+	assert.NoError(t, err, "Should return nil when SetEnv fails (graceful fallback)")
 }
 
 func TestCheckAndReexecWithConfig_GuardIsSet(t *testing.T) {
@@ -445,9 +445,9 @@ func TestCheckAndReexecWithConfig_EnvVarVersions(t *testing.T) {
 				},
 			}
 
-			result := CheckAndReexecWithConfig(atmosConfig, cfg)
+			err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-			assert.True(t, result, "Should return true when re-exec is triggered")
+			assert.NoError(t, err, "Should return nil when re-exec is triggered")
 			assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
 		})
 	}
@@ -488,9 +488,9 @@ func TestCheckAndReexecWithConfig_EnvVarPrecedence(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
+	assert.NoError(t, err, "Should return nil when re-exec is triggered")
 	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
 }
 
@@ -526,9 +526,9 @@ func TestCheckAndReexecWithConfig_EnvVarFallbackToConfig(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
+	assert.NoError(t, err, "Should return nil when re-exec is triggered")
 	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
 }
 
@@ -567,9 +567,9 @@ func TestCheckAndReexecWithConfig_UseVersionFlagPrecedence(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
+	assert.NoError(t, err, "Should return nil when re-exec is triggered")
 	assert.Equal(t, 1, finder.callCount, "Should call FindBinaryPath")
 }
 
@@ -752,9 +752,9 @@ func TestCheckAndReexecWithConfig_StripsChdirFlags(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.True(t, result, "Should return true when re-exec is triggered")
+	assert.NoError(t, err, "Should return nil when re-exec is triggered")
 	// Verify both --chdir and --use-version flags were stripped from args.
 	assert.Equal(t, []string{"atmos", "terraform", "plan"}, execCalledWithArgs)
 }
@@ -1043,9 +1043,9 @@ func TestCheckAndReexecWithConfig_PRVersionGuardActive(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when guard is active for PR version")
+	assert.NoError(t, err, "Should return nil when guard is active for PR version")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
 }
 
@@ -1074,9 +1074,9 @@ func TestCheckAndReexecWithConfig_SHAVersionGuardActive(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	assert.False(t, result, "Should return false when guard is active for SHA version")
+	assert.NoError(t, err, "Should return nil when guard is active for SHA version")
 	assert.Equal(t, 0, finder.callCount, "Should not call FindBinaryPath when guard active")
 }
 
@@ -1117,10 +1117,10 @@ func TestCheckAndReexecWithConfig_InvalidVersionFormat(t *testing.T) {
 		},
 	}
 
-	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	// Should return false because install fails and it's a semver (fallback to current).
-	assert.False(t, result, "Should return false when install fails for semver version")
+	// Should return nil because install fails and it's a semver (fallback to current).
+	assert.NoError(t, err, "Should return nil when install fails for semver version (fallback to current)")
 }
 
 func TestStripUseVersionFlags_AtEnd(t *testing.T) {
@@ -1265,6 +1265,79 @@ func TestCheckAndReexecWithConfig_SHAVersionReexec(t *testing.T) {
 	// shouldSkipReexec returns false for SHA versions (never skip).
 	result := shouldSkipReexec("sha:ceb7526", cfg)
 	assert.False(t, result, "Should not skip re-exec for SHA version")
+}
+
+func TestCheckAndReexecWithConfig_PRVersionInstallFails(t *testing.T) {
+	// Previously untestable due to os.Exit(1) in executeVersionSwitch.
+	// Now that the API returns error, we can verify PR install failures are propagated.
+	originalVersion := Version
+	Version = "1.150.0"
+	defer func() { Version = originalVersion }()
+
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+
+	cfg := &ReexecConfig{
+		Finder:    finder,
+		Installer: installer,
+		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
+		GetEnv:    func(key string) string { return "" },
+		SetEnv:    func(key, value string) error { return nil },
+		Args:      []string{"atmos", "version"},
+		Environ:   func() []string { return []string{} },
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Use: "pr:9999",
+		},
+	}
+
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+	// PR install failure should return an error (not os.Exit).
+	assert.Error(t, err, "Should return error when PR version install fails")
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+}
+
+func TestCheckAndReexecWithConfig_ExecFailReturnsError(t *testing.T) {
+	// Verify that exec failures return an error instead of silently continuing.
+	originalVersion := Version
+	Version = "1.150.0"
+	defer func() { Version = originalVersion }()
+
+	finder := &mockVersionFinder{
+		findBinaryPathFunc: func(owner, repo, version string) (string, error) {
+			return "/path/to/atmos", nil
+		},
+	}
+	installer := &mockVersionInstaller{}
+
+	cfg := &ReexecConfig{
+		Finder:    finder,
+		Installer: installer,
+		ExecFn: func(argv0 string, argv []string, envv []string) error {
+			return errors.New("permission denied")
+		},
+		GetEnv:  func(key string) string { return "" },
+		SetEnv:  func(key, value string) error { return nil },
+		Args:    []string{"atmos", "version"},
+		Environ: func() []string { return []string{} },
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Use: "1.160.0",
+		},
+	}
+
+	err := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+	assert.Error(t, err, "Should return error when exec fails")
+	assert.Contains(t, err.Error(), "permission denied")
 }
 
 func TestDefaultReexecConfig(t *testing.T) {

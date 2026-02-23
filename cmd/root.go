@@ -479,10 +479,12 @@ var RootCmd = &cobra.Command{
 			// unless an explicit --use-version flag was provided.
 			shouldReexec := explicitVersionRequested || !isVersionManagementCommand(cmd)
 			if shouldReexec {
-				// CheckAndReexec returns true only on successful syscall.Exec, which replaces
-				// the current process entirely. This means true is never returned in practice
-				// since exec doesn't return. We call it for its side effects.
-				_ = pkgversion.CheckAndReexec(&tmpConfig)
+				// CheckAndReexec returns nil on success (exec replaces process) or if no
+				// re-exec was needed. Returns an error for hard failures (PR/SHA/invalid
+				// version install failures, exec failures).
+				if reexecErr := pkgversion.CheckAndReexec(&tmpConfig); reexecErr != nil {
+					errUtils.CheckErrorPrintAndExit(reexecErr, "", "")
+				}
 			}
 		}
 
@@ -1638,9 +1640,13 @@ func init() {
 	viper.SetEnvPrefix("ATMOS")
 	viper.AutomaticEnv()
 
-	// Bind both ATMOS_FORCE_COLOR and CLICOLOR_FORCE to the same viper key (they are equivalent).
-	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"); err != nil {
-		log.Error("Failed to bind ATMOS_FORCE_COLOR/CLICOLOR_FORCE environment variables", "error", err)
+	// Bind ATMOS_FORCE_COLOR to the force-color viper key.
+	// Note: CLICOLOR_FORCE is intentionally NOT bound here. Per the CLICOLOR spec,
+	// CLICOLOR_FORCE means "enable colors even without a TTY" but says nothing about
+	// color depth. Only --force-color / ATMOS_FORCE_COLOR should force TrueColor.
+	// CLICOLOR_FORCE is handled separately in pkg/terminal via EnvCLIColorForce.
+	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR"); err != nil {
+		log.Error("Failed to bind ATMOS_FORCE_COLOR environment variable", "error", err)
 	}
 	// Bind mask flag to Viper so viper.GetBool("mask") reads the flag value.
 	if err := viper.BindPFlag("mask", RootCmd.PersistentFlags().Lookup("mask")); err != nil {
