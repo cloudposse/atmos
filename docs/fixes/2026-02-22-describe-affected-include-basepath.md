@@ -191,3 +191,28 @@ go test ./pkg/utils/ -run TestIncludeMultipleInSameFile -v
 go test ./pkg/utils/ -run TestIncludeBasePathResolution -v
 go test ./tests/ -run TestDescribeAffectedWithInclude -v
 ```
+
+### Documentation Updated
+
+Updated `website/docs/functions/yaml/include.mdx` and `website/docs/functions/yaml/include.raw.mdx` to make the
+path resolution behavior exceptionally clear:
+
+- **Numbered resolution order** — Documents the exact order Atmos tries when resolving a relative path:
+  1. **Absolute paths** — used as-is
+  2. **Manifest-relative paths** — paths starting with `./` or `../` resolve relative to the directory of the
+     manifest file containing the `!include`
+  3. **`base_path`-relative paths** — all other relative paths resolve relative to the `base_path` setting in
+     `atmos.yaml` (most common pattern)
+
+- **First-match-wins behavior** — Explains that Atmos tries each strategy in order and uses the first match that
+  points to an existing file
+
+- **Best practice callout** — A `<Note>` advising users to use `./` or `../` prefixes for explicit manifest-relative
+  resolution, and bare paths (no prefix) for `base_path`-relative resolution
+
+- **`!include.raw` cross-reference** — Updated to link back to `!include` docs for full path resolution details,
+  with a concise summary of the three path types
+
+This documentation clarifies the behavior that led to the original bug report — users were unaware that bare paths
+(like `stacks/catalog/.../policy.rego`) resolve relative to `base_path`, and the error message showing
+`base path ''` was confusing because it wasn't clear what `base_path` referred to or why it was empty.
