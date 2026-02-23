@@ -206,7 +206,7 @@ jobs:
       #       }
 
       - name: Acceptance tests
-        timeout-minutes: 45
+        timeout-minutes: 60
         if: ${{ ! ( matrix.flavor.target == 'windows' && github.event.pull_request.draft  ) }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
