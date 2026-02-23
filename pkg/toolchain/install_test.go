@@ -791,6 +791,58 @@ func TestInstallFromToolVersions_InvalidPath(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestRunInstall_PRVersionFormat tests that RunInstall detects PR version format.
+func TestRunInstall_PRVersionFormat(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	// Ensure no GitHub token is available so InstallFromPR fails fast.
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// "pr:9999" should be detected as a PR version.
+	err := RunInstall("pr:9999", false, false, false, false)
+	// It will fail because no GitHub token, but the PR detection path is exercised.
+	assert.Error(t, err)
+}
+
+// TestRunInstall_SHAVersionFormat tests that RunInstall detects SHA version format.
+func TestRunInstall_SHAVersionFormat(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	// Ensure no GitHub token is available so InstallFromSHA fails fast.
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// "sha:ceb7526" should be detected as a SHA version.
+	err := RunInstall("sha:ceb7526", false, false, false, false)
+	// It will fail because no GitHub token, but the SHA detection path is exercised.
+	assert.Error(t, err)
+}
+
+// TestRunInstall_PRVersionInToolSpec tests PR version after @ in tool spec.
+func TestRunInstall_PRVersionInToolSpec(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// "atmos@pr:9999" should parse the tool and then detect PR version.
+	err := RunInstall("atmos@pr:9999", false, false, false, false)
+	assert.Error(t, err)
+}
+
+// TestRunInstall_SHAVersionInToolSpec tests SHA version after @ in tool spec.
+func TestRunInstall_SHAVersionInToolSpec(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	t.Setenv("ATMOS_GITHUB_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+
+	// "atmos@sha:ceb7526" should parse the tool and then detect SHA version.
+	err := RunInstall("atmos@sha:ceb7526", false, false, false, false)
+	assert.Error(t, err)
+}
+
 // TestInstallOptions tests the InstallOptions struct.
 func TestInstallOptions(t *testing.T) {
 	opts := InstallOptions{

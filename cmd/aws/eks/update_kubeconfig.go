@@ -50,7 +50,13 @@ See https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html 
 // https://docs.aws.amazon.com/cli/latest/reference/eks/update-kubeconfig.html.
 func init() {
 	// Create parser with update-kubeconfig-specific flags using functional options.
+	// WithViperPrefix("eks") namespaces all Viper keys under "eks.*" to prevent
+	// collision with global flags (e.g., "profile" → "eks.profile" in Viper).
+	// Without this, the "profile" flag's AWS_PROFILE env binding overwrites the
+	// global "profile" → ATMOS_PROFILE binding, causing all commands to treat
+	// AWS_PROFILE as an Atmos configuration profile name (issue #2076).
 	updateKubeconfigParser = flags.NewStandardParser(
+		flags.WithViperPrefix("eks"),
 		flags.WithStringFlag("stack", "s", "", "Specify the stack name"),
 		flags.WithStringFlag("profile", "", "", "Specify the AWS CLI profile to use for authentication"),
 		flags.WithStringFlag("name", "", "", "Specify the name of the EKS cluster to update the kubeconfig for"),

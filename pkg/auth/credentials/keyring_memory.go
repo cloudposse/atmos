@@ -41,6 +41,9 @@ func (s *memoryKeyringStore) Store(alias string, creds types.ICredentials, realm
 	case *types.AWSCredentials:
 		typ = "aws"
 		raw, err = json.Marshal(c)
+	case *types.GCPCredentials:
+		typ = "gcp"
+		raw, err = json.Marshal(c)
 	case *types.OIDCCredentials:
 		typ = "oidc"
 		raw, err = json.Marshal(c)
@@ -85,6 +88,12 @@ func (s *memoryKeyringStore) Retrieve(alias string, realm string) (types.ICreden
 		var c types.AWSCredentials
 		if err := json.Unmarshal(env.Data, &c); err != nil {
 			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal AWS credentials: %w", err))
+		}
+		return &c, nil
+	case "gcp":
+		var c types.GCPCredentials
+		if err := json.Unmarshal(env.Data, &c); err != nil {
+			return nil, errors.Join(ErrCredentialStore, fmt.Errorf("failed to unmarshal GCP credentials: %w", err))
 		}
 		return &c, nil
 	case "oidc":

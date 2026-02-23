@@ -30,6 +30,10 @@ components:
     base_path: ""
     command: ""
     auto_generate_files: false
+  ansible:
+    base_path: ""
+    command: ""
+    auto_generate_files: false
 stacks:
   base_path: stacks
   included_paths:
@@ -78,6 +82,7 @@ excludeStackAbsolutePaths:
 terraformDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks/components/terraform
 helmfileDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 packerDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
+ansibleDirAbsolutePath: /absolute/path/to/repo/examples/demo-stacks
 default: false
 cli_config_path: /absolute/path/to/repo/examples/demo-stacks
 import: []
@@ -87,4 +92,8 @@ docs:
   generate:
     readme:
       output: ./README.md
+auth:
+  realm: <hash>
+  providers: {}
+  identities: {}
 

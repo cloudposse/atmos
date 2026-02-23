@@ -32,6 +32,7 @@ import (
 	// Import generate package for early file generation.
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
@@ -186,6 +187,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// to access the same authenticated session without re-prompting for credentials.
 	info.AuthManager = authManager
 
+	// Inject auth resolver into identity-aware stores so they can lazily resolve credentials
+	// on first access. This bridges the store system with the auth system.
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, &info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
+
 	// Determine whether to process stacks and check stack configuration.
 	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
 
@@ -231,7 +239,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			}
 
 			// Generate files before path validation.
-			if genErr := generateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
+			if genErr := GenerateFilesForComponent(&atmosConfig, &info, componentPath); genErr != nil {
 				return errors.Join(errUtils.ErrFileOperation, genErr)
 			}
 		}
@@ -391,7 +399,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	}
 
 	// Generate files from the generate section when auto_generate_files is enabled.
-	err = generateFilesForComponent(&atmosConfig, &info, workingDir)
+	err = GenerateFilesForComponent(&atmosConfig, &info, workingDir)
 	if err != nil {
 		return err
 	}

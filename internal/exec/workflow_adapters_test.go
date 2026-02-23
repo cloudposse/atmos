@@ -48,7 +48,7 @@ func TestNewWorkflowCommandRunner(t *testing.T) {
 		{
 			name: "with retry config",
 			retryConfig: &schema.RetryConfig{
-				MaxAttempts: 3,
+				MaxAttempts: intPtr(3),
 			},
 		},
 	}
@@ -567,4 +567,9 @@ func TestWorkflowAuthProvider_PrepareEnvironment_EmptyBaseEnv(t *testing.T) {
 	assert.NoError(t, err)
 	// Result should contain system env plus the AWS_PROFILE added by auth.
 	assert.Contains(t, result, "AWS_PROFILE=test")
+}
+
+// intPtr returns a pointer to the given int value.
+func intPtr(i int) *int {
+	return &i
 }

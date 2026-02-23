@@ -246,10 +246,12 @@ func (m *manager) loadCredentialsWithFallback(ctx context.Context, identityName 
 	// Each identity type knows how to load its own credentials from storage.
 	loadedCreds, loadErr := identity.LoadCredentials(ctx)
 	if loadErr != nil {
+		m.emitRealmMismatchWarning(identityName)
 		return nil, fmt.Errorf("failed to load credentials from identity storage for %q: %w", identityName, loadErr)
 	}
 
 	if loadedCreds == nil {
+		m.emitRealmMismatchWarning(identityName)
 		return nil, fmt.Errorf("%w: credentials loaded from storage are nil for identity %q", errUtils.ErrNoCredentialsFound, identityName)
 	}
 
@@ -302,14 +304,18 @@ func (m *manager) authenticateWithProvider(ctx context.Context, providerName str
 	provider, exists := m.providers[providerName]
 	if !exists {
 		wrappedErr := fmt.Errorf("provider %q not registered: %w", providerName, errUtils.ErrInvalidAuthConfig)
-		errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate with Provider", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate with Provider", "")
+		}
 		return nil, wrappedErr
 	}
 
 	log.Debug("Authenticating with provider", "provider", providerName)
 	credentials, err := provider.Authenticate(ctx)
 	if err != nil {
-		errUtils.CheckErrorAndPrint(err, "Authenticate with Provider", "")
+		if !types.SuppressAuthErrors(ctx) {
+			errUtils.CheckErrorAndPrint(err, "Authenticate with Provider", "")
+		}
 		return nil, fmt.Errorf("%w: provider=%s: %w", errUtils.ErrAuthenticationFailed, providerName, err)
 	}
 
@@ -470,7 +476,9 @@ func (m *manager) authenticateIdentityChain(ctx context.Context, startIndex int,
 		identity, exists := m.identities[identityStep]
 		if !exists {
 			wrappedErr := fmt.Errorf("%w: identity %q not found in chain step %d", errUtils.ErrInvalidAuthConfig, identityStep, i)
-			errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Identity Chain", "")
+			if !types.SuppressAuthErrors(ctx) {
+				errUtils.CheckErrorAndPrint(wrappedErr, "Authenticate Identity Chain", "")
+			}
 			return nil, wrappedErr
 		}
 

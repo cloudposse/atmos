@@ -242,10 +242,25 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 				}
 				sort.Strings(availableNames)
 
-				return errUtils.Build(errUtils.ErrProfileNotFound).
+				builder := errUtils.Build(errUtils.ErrProfileNotFound).
 					WithExplanationf("Profile `%s` does not exist in any configured location", profileName).
-					WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", ")).
-					WithHint("Check the spelling of the profile name").
+					WithExplanationf("Available profiles are: `%s`", strings.Join(availableNames, ", "))
+
+				// Check if the profile name matches an auth identity name.
+				// This helps users who confuse ATMOS_PROFILE (configuration profiles)
+				// with ATMOS_IDENTITY (authentication identities).
+				// See: https://github.com/cloudposse/atmos/issues/2071
+				if isAuthIdentityName(profileName, atmosConfig) {
+					builder = builder.
+						WithHintf("`%s` is an auth identity, not a configuration profile", profileName).
+						WithHint("If you want to select an auth identity, use `ATMOS_IDENTITY` or `--identity` instead of `ATMOS_PROFILE`").
+						WithHintf("Example: `export ATMOS_IDENTITY=%s` or `atmos terraform plan --identity %s`", profileName, profileName)
+				} else {
+					builder = builder.
+						WithHint("Check the spelling of the profile name")
+				}
+
+				return builder.
 					WithHint("Run `atmos profile list` for detailed information about each profile").
 					WithHint("Verify the profile directory exists if you expect to see it").
 					WithContext("profile", profileName).
@@ -271,4 +286,22 @@ func loadProfiles(v *viper.Viper, profileNames []string, atmosConfig *schema.Atm
 	}
 
 	return nil
+}
+
+// isAuthIdentityName checks whether the given name matches an auth identity in the config.
+// This is used to provide better error messages when users confuse ATMOS_PROFILE with ATMOS_IDENTITY.
+func isAuthIdentityName(name string, atmosConfig *schema.AtmosConfiguration) bool {
+	if atmosConfig == nil || len(atmosConfig.Auth.Identities) == 0 {
+		return false
+	}
+
+	// Check case-insensitive match against identity names.
+	nameLower := strings.ToLower(name)
+	for identityName := range atmosConfig.Auth.Identities {
+		if strings.ToLower(identityName) == nameLower {
+			return true
+		}
+	}
+
+	return false
 }

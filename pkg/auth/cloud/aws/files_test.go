@@ -928,11 +928,18 @@ func TestAWSFileManager_GetCredentialsPath_WithRealm(t *testing.T) {
 			expected:     "/home/user/.config/atmos/test-realm/aws/my-provider/credentials",
 		},
 		{
-			name:         "handles auto-generated realm hash",
+			name:         "handles explicit realm",
 			baseDir:      "/home/user/.config/atmos",
 			realm:        "a1b2c3d4",
 			providerName: "provider",
 			expected:     "/home/user/.config/atmos/a1b2c3d4/aws/provider/credentials",
+		},
+		{
+			name:         "empty realm produces backward-compatible path",
+			baseDir:      "/home/user/.config/atmos",
+			realm:        "",
+			providerName: "my-provider",
+			expected:     "/home/user/.config/atmos/aws/my-provider/credentials",
 		},
 	}
 

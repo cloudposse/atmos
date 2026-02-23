@@ -52,15 +52,14 @@ func initialSpinnerModel(message string) *spinnerModel {
 	}
 }
 
-func (m *spinnerModel) Init() tea.Cmd {
-	defer perf.Track(nil, "toolchain.spinnerModel.Init")()
+// Init, Update, and View are TUI frame callbacks invoked on every tick.
+// perf.Track is intentionally omitted to avoid hot-path overhead.
 
+func (m *spinnerModel) Init() tea.Cmd {
 	return m.spinner.Tick
 }
 
 func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	defer perf.Track(nil, "toolchain.spinnerModel.Update")()
-
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
@@ -79,8 +78,6 @@ func (m *spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *spinnerModel) View() string {
-	defer perf.Track(nil, "toolchain.spinnerModel.View")()
-
 	if m.done {
 		return ""
 	}
@@ -90,10 +87,9 @@ func (m *spinnerModel) View() string {
 // Custom message type for signaling installation completion.
 type installDoneMsg struct{}
 
-// Run spinner with Bubble Tea - proper way.
+// runBubbleTeaSpinner creates and returns a Bubble Tea program with a spinner.
 func runBubbleTeaSpinner(message string) *tea.Program {
-	p := tea.NewProgram(initialSpinnerModel(message), tea.WithOutput(os.Stderr))
-	return p
+	return tea.NewProgram(initialSpinnerModel(message), tea.WithOutput(os.Stderr))
 }
 
 // RunInstall installs the specified tool (owner/repo@version or alias@version).
@@ -102,6 +98,9 @@ func runBubbleTeaSpinner(message string) *tea.Program {
 // The reinstallFlag parameter forces reinstallation even if already installed.
 // The showHint parameter controls whether to show the PATH export hint message.
 // The showProgressBar parameter controls whether to show spinner and success messages.
+//
+// Special format: pr:NNNN - installs Atmos from a PR's build artifact.
+// Example: atmos version install pr:2038.
 func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProgressBar bool) error {
 	defer perf.Track(nil, "toolchain.Install")()
 
@@ -109,8 +108,32 @@ func RunInstall(toolSpec string, setAsDefault, reinstallFlag, showHint, showProg
 		return installFromToolVersions(GetToolVersionsFilePath(), reinstallFlag, showHint)
 	}
 
+	// Check if this is a PR version specifier (e.g., "pr:2038").
+	if prNumber, isPR := IsPRVersion(toolSpec); isPR {
+		_, err := InstallFromPR(prNumber, showProgressBar)
+		return err
+	}
+
+	// Check if this is a SHA version specifier (e.g., "sha:ceb7526").
+	if sha, isSHA := IsSHAVersion(toolSpec); isSHA {
+		_, err := InstallFromSHA(sha, showProgressBar)
+		return err
+	}
+
 	tool, version, err := ParseToolVersionArg(toolSpec)
 	if err != nil {
+		return err
+	}
+
+	// Also check if the version is a PR specifier (e.g., "atmos@pr:2038").
+	if prNumber, isPR := IsPRVersion(version); isPR {
+		_, err := InstallFromPR(prNumber, showProgressBar)
+		return err
+	}
+
+	// Also check if the version is a SHA specifier (e.g., "atmos@sha:ceb7526").
+	if sha, isSHA := IsSHAVersion(version); isSHA {
+		_, err := InstallFromSHA(sha, showProgressBar)
 		return err
 	}
 
