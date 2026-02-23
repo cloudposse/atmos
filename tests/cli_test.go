@@ -786,7 +786,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		logger.Info("Atmos runner initialized for test", "coverageEnabled", coverDir != "")
 	}
 
-	// Create a context with timeout if specified
+	// Create a context with timeout if specified, defaulting to 10 minutes
+	// to prevent any single test from consuming the entire test budget.
+	const defaultTestTimeout = 10 * time.Minute
+
 	var ctx context.Context
 	var cancel context.CancelFunc
 
@@ -799,10 +802,10 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		if timeout > 0 {
 			ctx, cancel = context.WithTimeout(context.Background(), timeout)
 		} else {
-			ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+			ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 		}
 	} else {
-		ctx, cancel = context.WithCancel(context.Background()) // No timeout, but cancelable
+		ctx, cancel = context.WithTimeout(context.Background(), defaultTestTimeout)
 	}
 	defer cancel()
 
