@@ -840,19 +840,28 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		tc.Env["GIT_TERMINAL_PROMPT"] = "0"
 	}
 
-	// Configure git authentication for GitHub via environment-based git config.
-	// On macOS CI, actions/checkout stores credentials in the repo's local .git/config
-	// (http.https://github.com/.extraheader), but vendor tests run git clone from
-	// different directories where this local config is unavailable. This injects the
-	// same credential as a global git config via GIT_CONFIG_* env vars (Git 2.31+).
-	if isCIEnvironment() {
+	// Configure git for non-interactive use via GIT_CONFIG_* env vars (Git 2.31+).
+	// macOS ships with credential.helper=osxkeychain in the system-level git config
+	// (/Library/Developer/CommandLineTools/.../gitconfig). This is NOT in ~/.gitconfig,
+	// so it persists even when HOME is overridden to a temp directory. When git clone
+	// runs, the osxkeychain helper tries to store/retrieve credentials:
+	//   - On CI (headless): hangs forever because there's no UI for Keychain
+	//   - Locally on macOS: shows a Keychain popup asking permission
+	// We fix this by disabling credential.helper and injecting GITHUB_TOKEN directly.
+	if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
 		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
-			if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
-				basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
-				tc.Env["GIT_CONFIG_COUNT"] = "1"
-				tc.Env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
-				tc.Env["GIT_CONFIG_VALUE_0"] = "AUTHORIZATION: basic " + basicAuth
-			}
+			// Disable credential helper (prevents osxkeychain hangs/popups) and inject token.
+			basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+			tc.Env["GIT_CONFIG_COUNT"] = "2"
+			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
+			tc.Env["GIT_CONFIG_VALUE_0"] = ""
+			tc.Env["GIT_CONFIG_KEY_1"] = "http.https://github.com/.extraheader"
+			tc.Env["GIT_CONFIG_VALUE_1"] = "AUTHORIZATION: basic " + basicAuth
+		} else {
+			// No token available — just disable the credential helper to prevent hangs/popups.
+			tc.Env["GIT_CONFIG_COUNT"] = "1"
+			tc.Env["GIT_CONFIG_KEY_0"] = "credential.helper"
+			tc.Env["GIT_CONFIG_VALUE_0"] = ""
 		}
 	}
 
