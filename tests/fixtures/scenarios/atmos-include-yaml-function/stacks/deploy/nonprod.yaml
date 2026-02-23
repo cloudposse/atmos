@@ -33,3 +33,39 @@ components:
       metadata:
         component: yaml-functions
       vars: !include config/vars.yaml
+
+    # !include.raw - returns raw string even for parseable files
+    component-5:
+      metadata:
+        component: yaml-functions
+      vars:
+        yaml_raw: !include.raw config/vars.yaml
+        json_raw: !include.raw config/vars.json
+
+    # YQ advanced expressions - array index and nested map key
+    component-6:
+      metadata:
+        component: yaml-functions
+      vars:
+        first_item: !include config/vars.json .list_var[0]
+        map_value: !include config/vars.json .map_var.a
+
+    # .txt file - should be raw string
+    component-7:
+      metadata:
+        component: yaml-functions
+      vars:
+        note: !include config/note.txt
+
+    # Extensionless file - should be raw string
+    component-8:
+      metadata:
+        component: yaml-functions
+      vars:
+        readme: !include config/README
+
+    # .tf file - HCL parsing
+    component-9:
+      metadata:
+        component: yaml-functions
+      vars: !include config/vars.tf

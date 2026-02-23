@@ -133,6 +133,151 @@ func TestYAMLFunctionInclude(t *testing.T) {
 	})
 }
 
+// TestYAMLFunctionIncludeExtended tests extended !include scenarios including
+// !include.raw, .txt, .tf, extensionless files, and advanced YQ expressions.
+func TestYAMLFunctionIncludeExtended(t *testing.T) {
+	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
+
+	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	require.NoError(t, err)
+	require.NotNil(t, atmosConfig)
+
+	t.Run("include.raw returns raw string for YAML file", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-5",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// !include.raw should return raw string, not a parsed map.
+		yamlRaw, ok := vars["yaml_raw"].(string)
+		require.True(t, ok, "yaml_raw should be a string, got %T", vars["yaml_raw"])
+		assert.Contains(t, yamlRaw, "string_var")
+	})
+
+	t.Run("include.raw returns raw string for JSON file", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-5",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// !include.raw should return raw string, not a parsed map.
+		jsonRaw, ok := vars["json_raw"].(string)
+		require.True(t, ok, "json_raw should be a string, got %T", vars["json_raw"])
+		assert.Contains(t, jsonRaw, "\"string_var\"")
+	})
+
+	t.Run("YQ array index expression", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-6",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// .list_var[0] should return "a".
+		assert.Equal(t, "a", vars["first_item"], "first_item should be 'a' from list_var[0]")
+	})
+
+	t.Run("YQ nested map key expression", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-6",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// .map_var.a should return 1.
+		assert.Equal(t, 1, vars["map_value"], "map_value should be 1 from map_var.a")
+	})
+
+	t.Run("include txt file as raw string", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-7",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// .txt files should be returned as raw strings.
+		note, ok := vars["note"].(string)
+		require.True(t, ok, "note should be a string, got %T", vars["note"])
+		assert.Contains(t, note, "plain text note")
+	})
+
+	t.Run("include extensionless file as raw string", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-8",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// Extensionless files should be returned as raw strings.
+		readme, ok := vars["readme"].(string)
+		require.True(t, ok, "readme should be a string, got %T", vars["readme"])
+		assert.Contains(t, readme, "Extensionless file")
+	})
+
+	t.Run("include tf file with HCL parsing", func(t *testing.T) {
+		componentSection, err := e.ExecuteDescribeComponent(
+			&e.ExecuteDescribeComponentParams{
+				Component: "component-9",
+				Stack:     "nonprod",
+			},
+		)
+
+		require.NoError(t, err)
+		require.NotNil(t, componentSection)
+
+		vars, ok := componentSection["vars"].(map[string]interface{})
+		require.True(t, ok, "vars should be a map")
+
+		// .tf files should be parsed as HCL (same as .tfvars).
+		assert.Equal(t, "t3.micro", vars["instance_type"], "instance_type should be 't3.micro'")
+		assert.Equal(t, "us-west-2", vars["region"], "region should be 'us-west-2'")
+	})
+}
+
 // TestYAMLFunctionIncludeEdgeCases tests edge cases for the !include function.
 func TestYAMLFunctionIncludeEdgeCases(t *testing.T) {
 	t.Chdir("./fixtures/scenarios/atmos-include-yaml-function")
@@ -174,6 +319,11 @@ func TestYAMLFunctionIncludeEdgeCases(t *testing.T) {
 			"component-2",
 			"component-3",
 			"component-4",
+			"component-5",
+			"component-6",
+			"component-7",
+			"component-8",
+			"component-9",
 		}
 
 		for _, componentName := range components {
