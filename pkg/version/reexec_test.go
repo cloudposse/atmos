@@ -1339,6 +1339,7 @@ func TestCheckAndReexecWithConfig_ExecFailReturnsError(t *testing.T) {
 
 	assert.Error(t, err, "Should return error when exec fails")
 	assert.Contains(t, err.Error(), "permission denied")
+	assert.ErrorIs(t, err, errUtils.ErrCommandFailed, "Should wrap with ErrCommandFailed sentinel")
 }
 
 func TestDefaultReexecConfig(t *testing.T) {
