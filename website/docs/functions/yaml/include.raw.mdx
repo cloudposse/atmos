@@ -193,8 +193,9 @@ Path resolution follows the same rules as [`!include`](./include#local-sources),
 1. **Absolute paths** — used as-is: `!include.raw /path/to/file.json`
 2. **Manifest-relative paths** — paths starting with `./` or `../` resolve relative to the directory of the current
    manifest file: `!include.raw ../configs/settings.yaml`
-3. **`base_path`-relative paths** — all other relative paths resolve relative to the
-   [`base_path`](/cli/configuration#base-path) setting in `atmos.yaml`: `!include.raw stacks/catalog/template.tf`
+3. **`base_path`-relative paths** — all other relative paths are first checked relative to the manifest directory,
+   then relative to the [`base_path`](/cli/configuration#base-path) setting in `atmos.yaml` (first match wins):
+   `!include.raw stacks/catalog/template.tf`
 
 ### Remote Files
 - HTTP/HTTPS: `!include.raw https://example.com/config.json`

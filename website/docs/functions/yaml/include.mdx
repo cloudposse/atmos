@@ -96,24 +96,15 @@ strategy in order and uses the **first match** that points to an existing file:
    settings: !include ./overrides.yaml
    ```
 
-3. **Paths relative to `base_path`** — All other relative paths (those that do **not** start with `./` or `../`) are
-   resolved relative to the [`base_path`](/cli/configuration#base-path) setting in `atmos.yaml`. This is the most
-   common pattern when referencing shared configuration files from any stack manifest, regardless of the manifest's
-   location in the directory tree.
+3. **Paths relative to `base_path`** — All other relative paths (those that do **not** start with `./` or `../`)
+   are resolved with **first-match-wins**: Atmos first checks relative to the manifest directory, and if not found,
+   falls back to the [`base_path`](/cli/configuration#base-path) in `atmos.yaml`. Use bare paths (no prefix) for
+   `base_path`-relative resolution; use `./` or `../` to make manifest-relative resolution unambiguous.
    ```yaml
    # Resolved relative to `base_path` in atmos.yaml (e.g., the repo root)
    vars: !include stacks/catalog/vpc/vars.yaml
    policy: !include config/policies/deny.rego
    ```
-
-<Note>
-  **Resolution order matters.** When Atmos encounters a relative path without `./` or `../`, it first checks if the
-  file exists relative to the manifest directory (strategy 2), and then checks relative to `base_path` (strategy 3).
-  The first match wins.
-
-  To avoid ambiguity, use `./` or `../` prefixes when you explicitly want manifest-relative resolution, and use bare
-  paths (without prefix) when you want `base_path`-relative resolution.
-</Note>
 
 ### Remote Sources
 
