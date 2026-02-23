@@ -138,7 +138,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 85,
+      progress: 88,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
@@ -164,6 +164,7 @@ export const roadmapConfig = {
         { label: 'Auth realm isolation for multi-repository workflows', status: 'shipped', quarter: 'q1-2026', pr: 2043, changelog: 'auth-realm-isolation', prd: 'auth-realm-isolation', description: 'Credential isolation using realm-scoped storage paths and keyring keys, preventing collisions when working with multiple repositories using identical identity names.', benefits: 'Safely work across multiple customer repositories without credential leakage. Each project has isolated credentials.' },
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
+        { label: 'Identity selection for stores', status: 'shipped', quarter: 'q1-2026', pr: 2099, changelog: 'store-identity-support', description: 'Stores can authenticate using atmos auth identities instead of default credential chains.', benefits: 'Use the same identity system for stores as for Terraform. No separate credential management for secrets access.' },
       ],
       issues: [],
       prs: [
@@ -397,7 +398,7 @@ export const roadmapConfig = {
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
-      progress: 85,
+      progress: 88,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
@@ -406,6 +407,7 @@ export const roadmapConfig = {
         { label: 'CodeRabbit review integration', status: 'shipped', quarter: 'q3-2025', description: 'Automated code reviews with AI-powered suggestions and security analysis.', benefits: 'PRs get immediate feedback. Security issues are caught before human review.' },
         { label: 'Nightly releases (RC candidates)', status: 'shipped', quarter: 'q4-2025', description: 'Automated nightly builds for testing upcoming features before stable release.', category: 'featured', priority: 'high', benefits: 'Test new features before they ship. Report issues while fixes are still easy.' },
         { label: 'PR feature releases', status: 'shipped', quarter: 'q4-2025', description: 'Every PR gets a pre-release version for easy testing before merge.', benefits: 'Test the exact changes in a PR without building locally. Validate fixes before they merge.' },
+        { label: 'PR and SHA artifact installation via --use-version', status: 'shipped', quarter: 'q1-2026', pr: 2040, changelog: 'pr-artifact-installation', description: 'Test features from any PR or commit SHA with --use-version (e.g., --use-version 2040 or --use-version sha:ceb7526). Automatically downloads the correct platform binary from GitHub Actions, caches it locally, and re-executes.', benefits: 'Test PR features or specific commits without compiling from source. One command to switch to any PR or commit build.' },
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },

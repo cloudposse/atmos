@@ -54,19 +54,27 @@ func newGitHubClient(ctx context.Context) *github.Client {
 	// 3. GITHUB_TOKEN environment variable
 	githubToken := httpClient.GetGitHubTokenFromEnv()
 
+	return newGitHubClientWithToken(ctx, githubToken)
+}
+
+// newGitHubClientWithToken creates a new GitHub client with an explicit token.
+// If token is empty, it returns an unauthenticated client.
+func newGitHubClientWithToken(ctx context.Context, token string) *github.Client {
+	defer perf.Track(nil, "github.newGitHubClientWithToken")()
+
 	// Create HTTP client with timeout to prevent hangs in CI environments
 	// when network is unavailable or DNS resolution fails.
 	baseClient := &http.Client{
 		Timeout: defaultHTTPTimeout,
 	}
 
-	if githubToken == "" {
+	if token == "" {
 		return github.NewClient(baseClient)
 	}
 
 	// Token found, create an authenticated client with timeout.
 	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: githubToken},
+		&oauth2.Token{AccessToken: token},
 	)
 	// Create oauth2 client with our timeout-configured base transport.
 	tc := oauth2.NewClient(ctx, ts)

@@ -4,14 +4,17 @@
 
 This document defines the authentication realm architecture for Atmos. A realm provides complete credential isolation between different repositories, customers, or environments that may use identical identity and provider names.
 
-**Status:** 📋 **Proposed** - Ready for implementation.
+**Status:** ✅ **Implemented** - Realm isolation is opt-in by design.
 
 **Key Problem:** Credentials are cached globally using only identity and provider names, causing collisions when engineers work with multiple customer repositories that use the same naming conventions.
 
-**Solution:** Introduce realms as the top-level isolation boundary for all credential storage. By default, realms are automatically derived from the repository path, ensuring zero-configuration isolation.
+**Solution:** Introduce realms as the top-level isolation boundary for all credential storage. Realms are explicitly configured via `auth.realm` in `atmos.yaml` or `ATMOS_AUTH_REALM` environment variable.
+
+**Design Decision:** Realm isolation is **opt-in** rather than automatic. When auth is configured, an explicit realm value is required — this ensures users consciously choose their isolation boundary rather than relying on path-derived hashes that break when directories are moved or renamed. See [GitHub issue #2071](https://github.com/cloudposse/atmos/issues/2071) for rationale.
 
 **Implementation Scope:**
-- **AWS:** Will be implemented with this PRD (AWS authentication is currently implemented)
+- **AWS:** ✅ Implemented — realm is used for file path isolation and keyring key prefixing
+- **GCP:** ✅ Implemented — GCP service account identity enforces non-empty realm
 - **Azure:** Will be implemented when Azure authentication is built (Azure auth is documented but not yet implemented—see [Azure Authentication File Isolation PRD](./azure-auth-file-isolation.md))
 
 ---
@@ -32,11 +35,14 @@ An authentication realm defines a complete, isolated authentication universe in 
 
 ### Default Behavior
 
-By default, the realm is automatically computed as the SHA256 hash (first 8 characters) of the `CliConfigPath` (the directory containing `atmos.yaml`). This ensures:
+Realm isolation is **opt-in**. When auth is configured (providers and/or identities exist in `atmos.yaml`), an explicit realm value is required via either `ATMOS_AUTH_REALM` environment variable or `auth.realm` in `atmos.yaml`. If neither is set, `NewAuthManager` returns `ErrEmptyRealm` and the auth operation fails with a clear error message.
 
-- **Zero-configuration isolation** - Works automatically without any setup
-- **Repository-scoped credentials** - Each repo gets its own credential space
-- **No collisions by default** - Different paths produce different hashes
+This opt-in design ensures:
+
+- **Explicit isolation boundaries** - Users consciously choose their realm name
+- **Portable across machines** - Named realms like `customer-acme` work the same everywhere
+- **CI/CD friendly** - `ATMOS_AUTH_REALM` can be set per pipeline/job
+- **No surprises from path changes** - Moving a directory doesn't invalidate credentials
 
 ### Precedence Order
 
@@ -44,7 +50,7 @@ By default, the realm is automatically computed as the SHA256 hash (first 8 char
 |----------|--------|---------|----------|
 | 1 (highest) | `ATMOS_AUTH_REALM` env var | `customer-acme` | CI/CD pipelines, testing |
 | 2 | `auth.realm` in `atmos.yaml` | `customer-acme` | Explicit, portable across machines |
-| 3 (default) | SHA256(`CliConfigPath`)[:8] | `a1b2c3d4` | Automatic isolation |
+| 3 (default) | Empty (error) | — | Fails with `ErrEmptyRealm` when auth is configured |
 
 ### Realm Value Requirements
 
@@ -86,12 +92,12 @@ Please update your auth.realm configuration or ATMOS_AUTH_REALM environment vari
 
 The realm becomes the **top-level directory** under the atmos base path, with cloud as the next level:
 
-| Cloud | Current Path | With Realm | Status |
-|-------|--------------|------------|--------|
-| AWS | `~/.config/atmos/aws/{provider}/` | `~/.config/atmos/{realm}/aws/{provider}/` | ✅ Will be implemented |
+| Cloud | Without Realm | With Realm | Status |
+|-------|---------------|------------|--------|
+| AWS | `~/.config/atmos/aws/{provider}/` | `~/.config/atmos/{realm}/aws/{provider}/` | ✅ Implemented |
 | Azure | `~/.azure/atmos/{provider}/` | `~/.config/atmos/{realm}/azure/{provider}/` | 🚧 Future (Azure auth not yet implemented) |
 
-**Note:** All cloud providers now share the same base path (`~/.config/atmos/`) with realm as the top-level directory, followed by cloud type, then provider.
+**Note:** All cloud providers share the same base path (`~/.config/atmos/`) with realm as the top-level directory, followed by cloud type, then provider.
 
 **Azure Note:** Azure authentication is documented in the [Azure Authentication File Isolation PRD](./azure-auth-file-isolation.md) but not yet implemented. When Azure auth is implemented, it will include realm support from the start.
 
@@ -99,7 +105,7 @@ The realm becomes the **top-level directory** under the atmos base path, with cl
 
 ```
 ~/.config/atmos/
-├── a1b2c3d4/                      # Realm (auto-hash from Customer A's path)
+├── customer-a/                    # Realm (from auth.realm or ATMOS_AUTH_REALM)
 │   └── aws/
 │       ├── aws-sso/
 │       │   ├── credentials        # INI file with identity profiles
@@ -108,7 +114,7 @@ The realm becomes the **top-level directory** under the atmos base path, with cl
 │           ├── credentials
 │           └── config
 │
-├── b5c6d7e8/                      # Realm (auto-hash from Customer B's path)
+├── customer-b/                    # Realm (different customer, same provider names)
 │   └── aws/
 │       └── aws-sso/               # Same provider name, different realm
 │           ├── credentials
@@ -126,23 +132,23 @@ The realm becomes the **top-level directory** under the atmos base path, with cl
 
 ### Keyring Storage
 
-Keyring keys include realm prefix:
+Keyring keys include realm prefix using underscore separators (underscores instead of colons for Windows filesystem compatibility):
 
-| Current | With Realm |
-|---------|------------|
-| `{identity}` | `atmos:{realm}:{identity}` |
+| Without Realm | With Realm |
+|---------------|------------|
+| `atmos_{identity}` | `atmos_{realm}_{identity}` |
 
 **Examples:**
-- Current: `core-root/terraform`
-- With realm: `atmos:a1b2c3d4:core-root/terraform`
+- Without realm: `atmos_core-root/terraform`
+- With realm: `atmos_customer-a_core-root/terraform`
 
 ### Environment Variables
 
 When credentials are set up, file paths include the realm:
 
 ```bash
-AWS_SHARED_CREDENTIALS_FILE=~/.config/atmos/a1b2c3d4/aws/aws-sso/credentials
-AWS_CONFIG_FILE=~/.config/atmos/a1b2c3d4/aws/aws-sso/config
+AWS_SHARED_CREDENTIALS_FILE=~/.config/atmos/customer-a/aws/aws-sso/credentials
+AWS_CONFIG_FILE=~/.config/atmos/customer-a/aws/aws-sso/config
 ```
 
 ---
@@ -150,23 +156,20 @@ AWS_CONFIG_FILE=~/.config/atmos/a1b2c3d4/aws/aws-sso/config
 ## Data Flow Architecture
 
 ```
-atmosConfig.CliConfigPath
-│   (e.g., /Users/dev/customer-acme/infrastructure)
-│
-▼
 realm.GetRealm(config.Realm, cliConfigPath)
 │   1. Check ATMOS_AUTH_REALM env var
 │   2. Check config.Realm from atmos.yaml
-│   3. Default: SHA256(cliConfigPath)[:8] → "a1b2c3d4"
+│   3. Default: empty → ErrEmptyRealm (realm is required)
 │
 ▼
 manager.realm (stored in auth manager)
 │
 ├──► credentialStore.Retrieve(identity, realm)
-│         └──► keyring key: "atmos:a1b2c3d4:core-root/terraform"
+│         └──► keyring key: "atmos_customer-a_core-root/terraform"
 │
-├──► awsFileManager.GetCredentialsPath(provider, realm)
-│         └──► ~/.config/atmos/a1b2c3d4/aws/aws-sso/credentials
+├──► awsFileManager (realm stored on struct at construction)
+│         └──► GetCredentialsPath(provider)
+│                   └──► ~/.config/atmos/customer-a/aws/aws-sso/credentials
 │
 └──► PostAuthenticateParams.Realm
            │
@@ -179,11 +182,11 @@ manager.realm (stored in auth manager)
 
 ---
 
-## Implementation Requirements
+## Implementation Details
 
-### New Package
+### Realm Package
 
-**File:** `pkg/auth/realm/realm.go`
+**File:** `pkg/auth/realm/realm.go` — ✅ Implemented
 
 ```go
 package realm
@@ -202,22 +205,27 @@ type RealmInfo struct {
 }
 
 // GetRealm computes the realm with proper precedence.
+// Returns empty realm with SourceAuto when no explicit realm is configured.
+// NewAuthManager rejects empty realms — explicit configuration is required.
 // Returns error if explicit realm value contains invalid characters.
 func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error)
 
-// validate checks that a realm value contains only allowed characters.
+// Validate checks that a realm value contains only allowed characters.
 // Returns error describing invalid characters if validation fails.
-func validate(input string) error
+func Validate(input string) error
+
+// SourceDescription returns a human-readable description of where the realm came from.
+func (r RealmInfo) SourceDescription(cliConfigPath string) string
 ```
 
-### Schema Changes
+### Schema Changes — ✅ Implemented
 
 **File:** `pkg/schema/schema_auth.go`
 
 ```go
 type AuthConfig struct {
     // Realm provides credential isolation between different repositories.
-    // Default: SHA256 hash of atmos.yaml directory path.
+    // Required when auth providers/identities are configured.
     Realm string `yaml:"realm,omitempty" json:"realm,omitempty" mapstructure:"realm"`
 
     // ... existing fields
@@ -235,7 +243,7 @@ type WhoamiInfo struct {
 }
 ```
 
-### Interface Changes
+### Interface Changes — ✅ Implemented
 
 **File:** `pkg/auth/types/interfaces.go`
 
@@ -245,7 +253,9 @@ type CredentialStore interface {
     Store(alias string, creds ICredentials, realm string) error
     Retrieve(alias string, realm string) (ICredentials, error)
     Delete(alias string, realm string) error
-    // ... other methods with realm parameter
+    List(realm string) ([]string, error)
+    IsExpired(alias string, realm string) (bool, error)
+    Type() string
 }
 ```
 
@@ -258,41 +268,44 @@ type PostAuthenticateParams struct {
     IdentityName string
     Credentials  ICredentials
     Manager      AuthManager
-    Realm        string  // NEW: Credential isolation realm
+    Realm        string  // Credential isolation realm
 }
 ```
 
-### File Manager Changes
+**Provider and Identity interfaces** also include `SetRealm(realm string)` methods,
+called by the manager after realm computation to propagate the realm to all components.
+
+### File Manager Changes — ✅ Implemented
 
 **File:** `pkg/auth/cloud/aws/files.go`
 
+The realm is stored on the `AWSFileManager` struct at construction time rather than passed per-call:
+
 ```go
-// GetCredentialsPath returns path with realm as top-level directory.
-// Result: ~/.config/atmos/{realm}/aws/{provider}/credentials
-func (m *AWSFileManager) GetCredentialsPath(providerName, realm string) string {
-    if realm != "" {
-        return filepath.Join(m.baseDir, realm, "aws", providerName, "credentials")
-    }
-    return filepath.Join(m.baseDir, "aws", providerName, "credentials")
+type AWSFileManager struct {
+    baseDir string  // e.g., ~/.config/atmos
+    realm   string  // Realm for credential isolation
 }
 
-// GetConfigPath returns path with realm as top-level directory.
-// Result: ~/.config/atmos/{realm}/aws/{provider}/config
-func (m *AWSFileManager) GetConfigPath(providerName, realm string) string {
-    if realm != "" {
-        return filepath.Join(m.baseDir, realm, "aws", providerName, "config")
-    }
-    return filepath.Join(m.baseDir, "aws", providerName, "config")
+// NewAWSFileManager creates a file manager with realm stored on the struct.
+// Result paths: ~/.config/atmos/{realm}/aws/{provider}/credentials
+func NewAWSFileManager(basePath, realm string) (*AWSFileManager, error)
+
+// GetCredentialsPath uses the stored realm.
+// With realm: {baseDir}/{realm}/aws/{provider}/credentials
+// Without realm: {baseDir}/aws/{provider}/credentials
+func (m *AWSFileManager) GetCredentialsPath(providerName string) string {
+    return filepath.Join(m.baseDir, m.realm, awsDirName, providerName, "credentials")
 }
 ```
 
-**Note:** The `baseDir` changes from `~/.config/atmos/aws` to `~/.config/atmos` since realm is now top-level.
+**Note:** `filepath.Join` skips empty segments, so when `m.realm == ""` the path is `{baseDir}/aws/{provider}/credentials` (backward-compatible).
 
 **File:** `pkg/auth/cloud/azure/files.go`
 
 Similar changes for Azure file manager, using `"azure"` as the cloud subdirectory.
 
-### Manager Changes
+### Manager Changes — ✅ Implemented
 
 **File:** `pkg/auth/manager.go`
 
@@ -305,7 +318,7 @@ type manager struct {
     validator       types.Validator
     stackInfo       *schema.ConfigAndStacksInfo
     chain           []string
-    realm           realm.RealmInfo  // NEW: Computed realm
+    realm           realm.RealmInfo  // Computed realm
 }
 
 func NewAuthManager(
@@ -313,12 +326,17 @@ func NewAuthManager(
     credentialStore types.CredentialStore,
     validator types.Validator,
     stackInfo *schema.ConfigAndStacksInfo,
-    cliConfigPath string,  // NEW: For realm computation
+    cliConfigPath string,  // For realm computation
 ) (types.AuthManager, error) {
     realmInfo, err := realm.GetRealm(config.Realm, cliConfigPath)
     if err != nil {
         return nil, fmt.Errorf("failed to compute auth realm: %w", err)
     }
+    // Empty realm is rejected — explicit configuration is required.
+    if realmInfo.Value == "" {
+        return nil, fmt.Errorf("%w: realm computation produced an empty value", ErrEmptyRealm)
+    }
+    // Realm is propagated to all providers and identities via SetRealm().
     // ...
 }
 ```
@@ -326,11 +344,11 @@ func NewAuthManager(
 **File:** `pkg/auth/manager_chain.go`
 
 ```go
-// Update credential lookups to use realm
+// All credential lookups use realm for isolation.
 keyringCreds, keyringErr := m.credentialStore.Retrieve(identityName, m.realm.Value)
 ```
 
-### Hooks Integration
+### Hooks Integration — ✅ Implemented
 
 **File:** `pkg/auth/hooks.go`
 
@@ -344,30 +362,33 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 ---
 
-## Files Requiring Modification
+## Files Modified
 
-| File | Change |
-|------|--------|
-| `pkg/auth/realm/realm.go` | **NEW** - Realm computation and validation |
-| `pkg/schema/schema_auth.go` | Add `Realm` field to `AuthConfig` |
-| `pkg/auth/types/interfaces.go` | Update `CredentialStore` interface, `PostAuthenticateParams` |
-| `pkg/auth/types/whoami.go` | Add `Realm`, `RealmSource` to `WhoamiInfo` |
-| `pkg/auth/credentials/keyring_system.go` | Include realm in key format |
-| `pkg/auth/credentials/keyring_file.go` | Include realm in key format |
-| `pkg/auth/credentials/keyring_memory.go` | Include realm in key format |
-| `pkg/auth/credentials/keyring_noop.go` | Include realm in key format |
-| `pkg/auth/cloud/aws/files.go` | Realm as top-level directory in paths |
-| `pkg/auth/cloud/aws/setup.go` | Pass realm to file operations |
-| `pkg/auth/cloud/azure/files.go` | Realm as top-level directory in paths (**Future** - when Azure auth is implemented) |
-| `pkg/auth/manager.go` | Store realm, update `NewAuthManager` |
-| `pkg/auth/manager_chain.go` | Use realm in credential lookups |
-| `pkg/auth/identities/aws/user.go` | Pass realm through PostAuthenticate |
-| `pkg/auth/identities/aws/assume_role.go` | Pass realm through PostAuthenticate |
-| `pkg/auth/identities/aws/permission_set.go` | Pass realm through PostAuthenticate |
-| `pkg/auth/identities/aws/assume_root.go` | Pass realm through PostAuthenticate |
-| `pkg/auth/identities/azure/subscription.go` | Pass realm through PostAuthenticate (**Future** - when Azure auth is implemented) |
-| `pkg/auth/hooks.go` | Pass `CliConfigPath` to manager creation |
-| `cmd/auth_whoami.go` | Display realm in status output |
+| File | Change | Status |
+|------|--------|--------|
+| `pkg/auth/realm/realm.go` | Realm computation and validation | ✅ Implemented |
+| `pkg/auth/realm/realm_test.go` | Tests for realm computation and validation | ✅ Implemented |
+| `pkg/schema/schema_auth.go` | `Realm` field on `AuthConfig` | ✅ Implemented |
+| `pkg/auth/types/interfaces.go` | `CredentialStore` interface with realm, `PostAuthenticateParams`, `SetRealm` on Provider/Identity | ✅ Implemented |
+| `pkg/auth/types/whoami.go` | `Realm`, `RealmSource` on `WhoamiInfo` | ✅ Implemented |
+| `pkg/auth/credentials/store.go` | `buildKeyringKey` with realm prefix (underscore separator) | ✅ Implemented |
+| `pkg/auth/credentials/keyring_system.go` | Realm in key format | ✅ Implemented |
+| `pkg/auth/credentials/keyring_file.go` | Realm in key format | ✅ Implemented |
+| `pkg/auth/credentials/keyring_memory.go` | Realm in key format | ✅ Implemented |
+| `pkg/auth/credentials/keyring_noop.go` | Realm in key format (accepts but ignores) | ✅ Implemented |
+| `pkg/auth/cloud/aws/files.go` | Realm stored on struct, used in path construction | ✅ Implemented |
+| `pkg/auth/cloud/aws/setup.go` | Pass realm to file operations | ✅ Implemented |
+| `pkg/auth/cloud/azure/files.go` | Realm as top-level directory in paths | 🚧 Future (Azure auth not yet implemented) |
+| `pkg/auth/manager.go` | Store realm, enforce non-empty, propagate via `SetRealm` | ✅ Implemented |
+| `pkg/auth/manager_chain.go` | Realm in credential lookups | ✅ Implemented |
+| `pkg/auth/identities/aws/user.go` | Realm through PostAuthenticate | ✅ Implemented |
+| `pkg/auth/identities/aws/assume_role.go` | Realm through PostAuthenticate | ✅ Implemented |
+| `pkg/auth/identities/aws/permission_set.go` | Realm through PostAuthenticate | ✅ Implemented |
+| `pkg/auth/identities/aws/assume_root.go` | Realm through PostAuthenticate | ✅ Implemented |
+| `pkg/auth/identities/gcp_service_account/` | GCP identity enforces non-empty realm | ✅ Implemented |
+| `pkg/auth/identities/azure/subscription.go` | Realm through PostAuthenticate | 🚧 Future (Azure auth not yet implemented) |
+| `pkg/auth/hooks.go` | Pass `CliConfigPath` to manager creation | ✅ Implemented |
+| `cmd/auth_whoami.go` | Display realm in status output (when non-empty) | ✅ Implemented |
 
 ---
 
@@ -375,20 +396,18 @@ func TerraformPreHook(atmosConfig *schema.AtmosConfiguration, stackInfo *schema.
 
 ### `atmos auth status` Output
 
-**With explicit realm:**
+**With realm configured via `atmos.yaml`:**
 ```
-Credential Realm: customer-acme
-  Source: atmos.yaml (auth.realm)
+Credential Realm: customer-acme (config)
 
 Active Identities:
   ✓ core-root/terraform (aws-sso)
     Expires: 2026-01-28T15:30:00Z
 ```
 
-**With automatic realm:**
+**With realm configured via environment variable:**
 ```
-Credential Realm: a1b2c3d4
-  Source: auto-generated from /Users/dev/customer-acme/infrastructure
+Credential Realm: customer-acme (env)
 
 Active Identities:
   ✓ core-root/terraform (aws-sso)
@@ -397,18 +416,12 @@ Active Identities:
 
 ### Error Messages
 
-When credentials are not found:
+When realm is not configured but auth is:
 
 ```
-Error: No cached credentials found for identity 'core-root/terraform'
+Error: realm is required for credential isolation but was not set
 
-The credential realm 'a1b2c3d4' does not contain cached credentials
-for this identity. This may happen when:
-  - Switching between different repositories
-  - The realm changed (directory moved or renamed)
-  - Using a different realm than when you last authenticated
-
-Run 'atmos auth login' to authenticate with this identity.
+Set auth.realm in atmos.yaml or ATMOS_AUTH_REALM environment variable.
 ```
 
 ---
@@ -418,7 +431,7 @@ Run 'atmos auth login' to authenticate with this identity.
 ### Environment Variable
 
 ```bash
-# Override realm for CI/CD or testing
+# Set realm for CI/CD or testing
 export ATMOS_AUTH_REALM="customer-acme"
 atmos terraform plan -s plat-ue1-prod
 ```
@@ -428,7 +441,7 @@ atmos terraform plan -s plat-ue1-prod
 ```yaml
 # atmos.yaml
 auth:
-  realm: "customer-acme"  # Optional: explicit realm for portability
+  realm: "customer-acme"  # Required: realm for credential isolation
 
   providers:
     aws-sso:
@@ -485,7 +498,6 @@ atmos auth login
 ### Residual Risks
 
 1. **Explicit same realm:** If users configure the same `auth.realm` in different repos, credentials will be shared (intentional)
-2. **Path changes:** Moving a repository changes the automatic realm, requiring re-authentication
 
 ---
 
@@ -493,11 +505,11 @@ atmos auth login
 
 ### Unit Tests
 
-1. Realm computation with env var, config, and auto-hash
+1. Realm computation with env var, config, and empty default
 2. Validation of realm values (valid and invalid cases)
 3. Error messages for invalid realm values
 4. Path generation with realm
-5. Keyring key format with realm
+5. Keyring key format with realm (underscore separator)
 
 ### Integration Tests
 
@@ -531,3 +543,4 @@ func TestCredentialRealmIsolation(t *testing.T) {
 | Date | Version | Changes |
 |------|---------|---------|
 | 2026-01-28 | 1.0 | Initial auth realm architecture PRD |
+| 2026-02-19 | 1.1 | Updated to reflect implemented opt-in design: realm is required when auth is configured (no auto-hash default), underscore keyring separator for Windows compatibility, realm stored on AWSFileManager struct. Updated status from Proposed to Implemented. |

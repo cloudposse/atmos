@@ -30,11 +30,11 @@ func TestGetRealm_ConfigPrecedence(t *testing.T) {
 }
 
 func TestGetRealm_AutoEmpty(t *testing.T) {
-	// When no explicit realm is configured, empty realm is used for backward compatibility.
+	// When no explicit realm is configured, GetRealm returns empty.
 	info, err := GetRealm("", "/path/to/config")
 	require.NoError(t, err)
 	assert.Equal(t, SourceAuto, info.Source)
-	assert.Empty(t, info.Value, "auto realm should be empty for backward compatibility")
+	assert.Empty(t, info.Value, "auto realm should be empty — identity types handle fallback")
 }
 
 func TestGetRealm_AutoEmptyConsistency(t *testing.T) {
