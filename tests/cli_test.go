@@ -3,6 +3,7 @@ package tests
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -829,6 +830,30 @@ func runCLICommandTest(t *testing.T, tc TestCase) {
 		t.Setenv("ATMOS_GITHUB_USERNAME", "")
 		t.Setenv("GITHUB_ACTOR", "")
 		t.Setenv("GITHUB_USERNAME", "")
+	}
+
+	// Prevent git from hanging waiting for credentials or interactive input.
+	// On macOS CI, the actions/checkout step configures git credentials as local config
+	// in the repo's .git/config, but vendor tests clone from different directories
+	// where this local config is not available, causing git to hang.
+	if _, exists := tc.Env["GIT_TERMINAL_PROMPT"]; !exists {
+		tc.Env["GIT_TERMINAL_PROMPT"] = "0"
+	}
+
+	// Configure git authentication for GitHub via environment-based git config.
+	// On macOS CI, actions/checkout stores credentials in the repo's local .git/config
+	// (http.https://github.com/.extraheader), but vendor tests run git clone from
+	// different directories where this local config is unavailable. This injects the
+	// same credential as a global git config via GIT_CONFIG_* env vars (Git 2.31+).
+	if isCIEnvironment() {
+		if githubToken := os.Getenv("GITHUB_TOKEN"); githubToken != "" {
+			if _, exists := tc.Env["GIT_CONFIG_COUNT"]; !exists {
+				basicAuth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + githubToken))
+				tc.Env["GIT_CONFIG_COUNT"] = "1"
+				tc.Env["GIT_CONFIG_KEY_0"] = "http.https://github.com/.extraheader"
+				tc.Env["GIT_CONFIG_VALUE_0"] = "AUTHORIZATION: basic " + basicAuth
+			}
+		}
 	}
 
 	if runtime.GOOS == "darwin" && isCIEnvironment() {
