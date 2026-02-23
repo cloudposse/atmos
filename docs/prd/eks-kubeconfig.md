@@ -166,12 +166,19 @@ type KubeconfigSettings struct {
     Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
 
     // Mode is the file permission mode as an octal string (optional, defaults to "0600").
-    // Parsed via strconv.ParseUint(mode, 8, 32) at config-load time.
+    // Parsed via strconv.ParseUint(mode, 8, 32) at config-load time (e.g., "0600" → 0o600).
     // Invalid values (e.g., "abc", "999") are rejected with a validation error
     // referencing KubeconfigSettings.Mode.
+    //
+    // Design decision: Mode is a string (not os.FileMode/int) because YAML octal
+    // parsing is ambiguous — YAML 1.1 treats 0600 as octal (384), but YAML 1.2
+    // (used by Go's yaml.v3) treats it as decimal 600. A quoted string "0600"
+    // with explicit octal parsing avoids this ambiguity entirely.
     Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
 
     // Update determines how to handle existing kubeconfig: "merge" (default), "replace", or "error".
+    // Validated at config-load time; invalid values (e.g., "invalid") are rejected with a
+    // validation error referencing KubeconfigSettings.Update. Defaults to "merge" when empty.
     Update string `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
 }
 ```
@@ -383,7 +390,7 @@ if the Atmos path is already present, it will not be duplicated.
 Users can export all auth environment variables (including the updated `KUBECONFIG`) at once:
 
 ```bash
-eval $(atmos auth env --format=export)
+eval $(atmos auth env)
 # KUBECONFIG now includes the Atmos kubeconfig path
 kubectl get pods
 ```
@@ -704,7 +711,9 @@ auth:
 ## Dependencies
 
 - **ECR integration** (merged via PR #1859): Provides integration infrastructure (`pkg/auth/integrations/`), including `Integration` interface, `IntegrationFactory`, registry pattern, and `KindAWSEKS` constant (already defined in `types.go`)
+- **Helmfile EKS modernization** (merged via PR #1903): Refactors `atmos aws eks` into command registry/flag handler pattern; must be merged before implementing this PRD (already in main)
 - **AWS SDK v2 EKS**: `github.com/aws/aws-sdk-go-v2/service/eks` (new dependency, not yet in go.mod)
+- **k8s.io/client-go**: Currently an indirect dependency; must be promoted to direct in go.mod for `clientcmd` imports used by the kubeconfig merge logic
 - **XDG package**: `pkg/xdg/` for path resolution (already available)
 
 ## Future Enhancements
