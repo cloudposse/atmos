@@ -52,6 +52,8 @@ func InitCliConfig(configAndStacksInfo schema.ConfigAndStacksInfo, processStacks
 		return atmosConfig, err
 	}
 
+	setAuthRealm(&atmosConfig)
+
 	// Set log config BEFORE processing stacks so pre-hooks (including auth) see the correct log level.
 	setLogConfig(&atmosConfig)
 
@@ -419,6 +421,14 @@ func AtmosConfigAbsolutePaths(atmosConfig *schema.AtmosConfiguration) error {
 		return err
 	}
 	atmosConfig.PackerDirAbsolutePath = packerDirAbsPath
+
+	// Convert Ansible dir to an absolute path.
+	ansibleBasePath := u.JoinPath(atmosBasePathAbs, atmosConfig.Components.Ansible.BasePath)
+	ansibleDirAbsPath, err := filepath.Abs(ansibleBasePath)
+	if err != nil {
+		return err
+	}
+	atmosConfig.AnsibleDirAbsolutePath = ansibleDirAbsPath
 
 	return nil
 }

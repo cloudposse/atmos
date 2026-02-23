@@ -147,7 +147,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	log.Debug("Loading AWS config for SSO authentication", "region", p.region)
 	// Initialize AWS config for the SSO region with isolated environment
-	// to avoid conflicts with external AWS env vars.
+	// to avoid conflicts with external AWS env vars and shared config files.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).

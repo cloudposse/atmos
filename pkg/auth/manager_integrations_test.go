@@ -129,6 +129,7 @@ func TestManager_ExecuteIntegration_IntegrationNotFound(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:        "test-realm",
 		Providers:    map[string]schema.Provider{},
 		Identities:   map[string]schema.Identity{},
 		Integrations: nil, // No integrations.
@@ -146,6 +147,7 @@ func TestManager_ExecuteIntegration_NoIdentity(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
 		Integrations: map[string]schema.Integration{
@@ -175,6 +177,7 @@ func TestManager_ExecuteIntegration_EmptyIdentity(t *testing.T) {
 	validator := validation.NewValidator()
 
 	m, err := NewAuthManager(&schema.AuthConfig{
+		Realm:      "test-realm",
 		Providers:  map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{},
 		Integrations: map[string]schema.Integration{
@@ -260,6 +263,7 @@ func TestManager_ExecuteIdentityIntegrations_Errors(t *testing.T) {
 			validator := validation.NewValidator()
 
 			m, err := NewAuthManager(&schema.AuthConfig{
+				Realm:        "test-realm",
 				Providers:    map[string]schema.Provider{},
 				Identities:   tt.identities,
 				Integrations: tt.integrations,

@@ -14,6 +14,7 @@ import (
 func TestCreateECRAuthManager_Success(t *testing.T) {
 	// Test that createECRAuthManager can be created with valid config.
 	authConfig := &schema.AuthConfig{
+		Realm:        "test-realm",
 		Providers:    map[string]schema.Provider{},
 		Identities:   map[string]schema.Identity{},
 		Integrations: map[string]schema.Integration{},
@@ -79,6 +80,7 @@ func TestAuthECRLoginCmd_NoArgsError(t *testing.T) {
 func TestCreateECRAuthManager_EmptyConfig(t *testing.T) {
 	// Test with empty but valid config.
 	authConfig := &schema.AuthConfig{
+		Realm:        "test-realm",
 		Providers:    map[string]schema.Provider{},
 		Identities:   map[string]schema.Identity{},
 		Integrations: map[string]schema.Integration{},
@@ -93,6 +95,7 @@ func TestCreateECRAuthManager_WithProviders(t *testing.T) {
 	// Test with config containing providers.
 	// Use mock provider kind which doesn't require additional config.
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-provider": {
 				Kind: "mock",
@@ -110,6 +113,7 @@ func TestCreateECRAuthManager_WithProviders(t *testing.T) {
 func TestCreateECRAuthManager_WithIntegrations(t *testing.T) {
 	// Test with config containing integrations.
 	authConfig := &schema.AuthConfig{
+		Realm:     "test-realm",
 		Providers: map[string]schema.Provider{},
 		Identities: map[string]schema.Identity{
 			"test-identity": {

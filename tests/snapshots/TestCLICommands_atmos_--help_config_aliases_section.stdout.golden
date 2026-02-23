@@ -13,6 +13,7 @@ USAGE
 
 SUBCOMMAND ALIASES
 
+      an               Alias of atmos ansible command
       hf               Alias of atmos helmfile command
       pk               Alias of atmos packer command
       tf               Alias of atmos terraform command
@@ -20,6 +21,7 @@ SUBCOMMAND ALIASES
 AVAILABLE COMMANDS
 
       about                                  Learn about Atmos
+      ansible [command]                      Manage ansible-based automation for infrastructure configuration
       atlantis [command]                     Generate and manage Atlantis configurations
       auth [command]                         Authenticate with cloud providers and identity services.
       aws [command]                          Run AWS-specific commands for interacting with cloud resources

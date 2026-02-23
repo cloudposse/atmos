@@ -23,6 +23,7 @@ func TestAuthCLIIntegrationWithCloudProvider(t *testing.T) {
 
 	// Create test auth configuration
 	authConfig := &schema.AuthConfig{
+		Realm: "test-realm",
 		Providers: map[string]schema.Provider{
 			"test-aws-provider": {
 				Kind:     "aws/iam-identity-center",

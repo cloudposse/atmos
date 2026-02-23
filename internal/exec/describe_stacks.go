@@ -19,6 +19,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 // componentInfoKey is the key used for component info in stack sections.
@@ -448,7 +449,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -457,6 +458,11 @@ func ExecuteDescribeStacks(
 								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 								if err != nil {
 									return nil, err
+								}
+
+								// Restore env vars that mapstructure:"-" dropped during Decode.
+								if envMap := extractEnvFromRawMap(settingsSection); len(envMap) > 0 {
+									settingsSectionStruct.Templates.Settings.Env = envMap
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
@@ -697,7 +703,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -706,6 +712,11 @@ func ExecuteDescribeStacks(
 								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 								if err != nil {
 									return nil, err
+								}
+
+								// Restore env vars that mapstructure:"-" dropped during Decode.
+								if envMap := extractEnvFromRawMap(settingsSection); len(envMap) > 0 {
+									settingsSectionStruct.Templates.Settings.Env = envMap
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
@@ -931,7 +942,7 @@ func ExecuteDescribeStacks(
 
 							// Process `Go` templates.
 							if processTemplates {
-								componentSectionStr, err := u.ConvertToYAML(componentSection)
+								componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(componentSection, atmosConfig.Templates.Settings.Delimiters)
 								if err != nil {
 									return nil, err
 								}
@@ -940,6 +951,11 @@ func ExecuteDescribeStacks(
 								err = mapstructure.Decode(settingsSection, &settingsSectionStruct)
 								if err != nil {
 									return nil, err
+								}
+
+								// Restore env vars that mapstructure:"-" dropped during Decode.
+								if envMap := extractEnvFromRawMap(settingsSection); len(envMap) > 0 {
+									settingsSectionStruct.Templates.Settings.Env = envMap
 								}
 
 								componentSectionProcessed, err := ProcessTmplWithDatasources(
