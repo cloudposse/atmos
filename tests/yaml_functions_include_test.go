@@ -147,7 +147,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-5",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -167,7 +167,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-5",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -187,7 +187,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-6",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -205,7 +205,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-6",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -223,7 +223,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-7",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -243,7 +243,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-8",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -263,7 +263,7 @@ func TestYAMLFunctionIncludeExtended(t *testing.T) {
 		componentSection, err := e.ExecuteDescribeComponent(
 			&e.ExecuteDescribeComponentParams{
 				Component: "component-9",
-				Stack:     "nonprod",
+				Stack:     "extended",
 			},
 		)
 
@@ -315,28 +315,32 @@ func TestYAMLFunctionIncludeEdgeCases(t *testing.T) {
 	})
 
 	t.Run("all components load successfully", func(t *testing.T) {
-		components := []string{
-			"component-1",
-			"component-2",
-			"component-3",
-			"component-4",
-			"component-5",
-			"component-6",
-			"component-7",
-			"component-8",
-			"component-9",
+		type componentTest struct {
+			name  string
+			stack string
+		}
+		components := []componentTest{
+			{"component-1", "nonprod"},
+			{"component-2", "nonprod"},
+			{"component-3", "nonprod"},
+			{"component-4", "nonprod"},
+			{"component-5", "extended"},
+			{"component-6", "extended"},
+			{"component-7", "extended"},
+			{"component-8", "extended"},
+			{"component-9", "extended"},
 		}
 
-		for _, componentName := range components {
-			t.Run(componentName, func(t *testing.T) {
+		for _, tc := range components {
+			t.Run(tc.name, func(t *testing.T) {
 				componentSection, err := e.ExecuteDescribeComponent(
 					&e.ExecuteDescribeComponentParams{
-						Component: componentName,
-						Stack:     "nonprod",
+						Component: tc.name,
+						Stack:     tc.stack,
 					},
 				)
 
-				require.NoError(t, err, "component %s should load without errors", componentName)
+				require.NoError(t, err, "component %s should load without errors", tc.name)
 				require.NotNil(t, componentSection)
 			})
 		}
