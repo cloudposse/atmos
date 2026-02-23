@@ -42,12 +42,7 @@ type RealmInfo struct {
 // GetRealm computes the authentication realm with the following precedence:
 //  1. ATMOS_AUTH_REALM environment variable (highest priority)
 //  2. configRealm from atmos.yaml auth.realm configuration
-//  3. Empty realm (no isolation) for backward compatibility
-//
-// Realm isolation is opt-in: credentials are stored without realm subdirectory
-// unless explicitly configured via ATMOS_AUTH_REALM env var or auth.realm config.
-// This preserves backward-compatible credential paths for CI/CD environments.
-// See: https://github.com/cloudposse/atmos/issues/2071
+//  3. Empty realm — legacy credential paths are used without a realm subdirectory.
 //
 // Returns an error if an explicit realm value (env var or config) contains invalid characters.
 func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
@@ -75,9 +70,7 @@ func GetRealm(configRealm, cliConfigPath string) (RealmInfo, error) {
 		}, nil
 	}
 
-	// Priority 3: No realm configured - use empty realm for backward compatibility.
-	// Credential paths will be {baseDir}/aws/{provider}/credentials (no realm subdirectory).
-	// Users who want isolation should explicitly set auth.realm or ATMOS_AUTH_REALM.
+	// Priority 3: No realm configured — return empty for legacy credential paths.
 	return RealmInfo{
 		Value:  "",
 		Source: SourceAuto,

@@ -54,20 +54,16 @@ func (i *Identity) SetName(name string) {
 }
 
 // SetRealm sets the credential realm for filesystem isolation.
-// Realm is mandatory for this identity type — all credential file operations
-// (setup, cleanup, load, environment) use realm to partition storage paths.
-// An empty realm will cause those operations to fail fast with ErrEmptyRealm.
+// When set explicitly (via auth.realm config or ATMOS_AUTH_REALM env var),
+// this realm is used directly for credential file paths.
+// When empty, legacy paths are used without a realm subdirectory.
 func (i *Identity) SetRealm(realm string) {
 	i.realm = realm
 }
 
-// requireRealm returns the realm or an error if it has not been set.
-// Realm is mandatory for all credential file operations to ensure isolation.
+// requireRealm returns the realm for credential file operations.
+// Empty realm is allowed to preserve backward-compatible credential paths.
 func (i *Identity) requireRealm() (string, error) {
-	if i.realm == "" {
-		return "", fmt.Errorf("%w: identity %q requires realm for credential file operations; ensure auth manager propagates realm before use",
-			errUtils.ErrEmptyRealm, i.Name())
-	}
 	return i.realm, nil
 }
 

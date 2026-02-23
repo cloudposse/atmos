@@ -721,7 +721,7 @@ func TestManager_GetRealm(t *testing.T) {
 			},
 		},
 		{
-			name: "returns auto realm (empty for backward compatibility)",
+			name: "returns auto realm (empty, identity types handle fallback)",
 			realm: realm.RealmInfo{
 				Value:  "",
 				Source: realm.SourceAuto,

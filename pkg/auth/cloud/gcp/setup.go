@@ -23,7 +23,7 @@ import (
 //
 // Parameters:
 //   - ctx: Context for cancellation.
-//   - realm: The realm for credential isolation (typically derived from atmos config hash).
+//   - realm: The realm for credential isolation. Empty realm uses legacy paths.
 //   - providerName: Name of the provider being set up.
 //   - identityName: Name of the identity being set up.
 //   - creds: The GCP credentials to write.

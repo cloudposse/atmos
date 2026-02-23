@@ -97,16 +97,18 @@ func GetGCPBaseDir() (string, error) {
 }
 
 // GetProviderDir returns the directory for a specific GCP provider.
-// Path structure: {baseDir}/{realm}/gcp/{provider}/.
-// Realm is required for credential isolation between different Atmos configurations.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/.
+// When realm is empty, legacy paths are used without a realm subdirectory.
 func GetProviderDir(realm, providerName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetProviderDir")()
 
 	if err := validatePathSegment("provider name", providerName); err != nil {
 		return "", err
 	}
-	if err := validatePathSegment("realm", realm); err != nil {
-		return "", err
+	if realm != "" {
+		if err := validatePathSegment("realm", realm); err != nil {
+			return "", err
+		}
 	}
 	base, err := GetGCPBaseDir()
 	if err != nil {
@@ -120,8 +122,7 @@ func GetProviderDir(realm, providerName string) (string, error) {
 }
 
 // GetADCDir returns the directory for ADC credentials for a specific identity.
-// Path structure: {baseDir}/{realm}/gcp/{provider}/adc/{identity}/.
-// Realm is required for credential isolation.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/adc/{identity}/.
 func GetADCDir(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCDir")()
 
@@ -140,8 +141,7 @@ func GetADCDir(realm, providerName, identityName string) (string, error) {
 }
 
 // GetADCFilePath returns the path to the ADC JSON file for a specific identity.
-// Path structure: {baseDir}/{realm}/gcp/{provider}/adc/{identity}/application_default_credentials.json.
-// Realm is required for credential isolation.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/adc/{identity}/application_default_credentials.json.
 func GetADCFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetADCFilePath")()
 
@@ -153,8 +153,7 @@ func GetADCFilePath(realm, providerName, identityName string) (string, error) {
 }
 
 // GetConfigDir returns the gcloud-style config directory for a specific identity.
-// Path structure: {baseDir}/{realm}/gcp/{provider}/config/{identity}/.
-// Realm is required for credential isolation.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/config/{identity}/.
 func GetConfigDir(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetConfigDir")()
 
@@ -173,8 +172,7 @@ func GetConfigDir(realm, providerName, identityName string) (string, error) {
 }
 
 // GetPropertiesFilePath returns the path to the gcloud properties file.
-// Path structure: {baseDir}/{realm}/gcp/{provider}/config/{identity}/properties.
-// Realm is required for credential isolation.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/config/{identity}/properties.
 func GetPropertiesFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetPropertiesFilePath")()
 
@@ -186,8 +184,7 @@ func GetPropertiesFilePath(realm, providerName, identityName string) (string, er
 }
 
 // GetAccessTokenFilePath returns the path to the access token file for an identity.
-// Path structure: {baseDir}/{realm}/gcp/{provider}/adc/{identity}/access_token.
-// Realm is required for credential isolation.
+// Path structure: {baseDir}/[realm]/gcp/{provider}/adc/{identity}/access_token.
 func GetAccessTokenFilePath(realm, providerName, identityName string) (string, error) {
 	defer perf.Track(nil, "gcp.GetAccessTokenFilePath")()
 
@@ -200,7 +197,6 @@ func GetAccessTokenFilePath(realm, providerName, identityName string) (string, e
 
 // WriteADCFile writes the Application Default Credentials JSON file.
 // Uses file locking to prevent concurrent modification conflicts.
-// Realm is required for credential isolation.
 func WriteADCFile(realm, providerName, identityName string, content *AuthorizedUserContent) (string, error) {
 	defer perf.Track(nil, "gcp.WriteADCFile")()
 
@@ -237,7 +233,6 @@ func WriteADCFile(realm, providerName, identityName string, content *AuthorizedU
 // WritePropertiesFile writes the gcloud-style properties file (INI format).
 // Uses the ini.v1 library for consistent, properly-escaped INI generation
 // and file locking to prevent concurrent modification conflicts.
-// Realm is required for credential isolation.
 func WritePropertiesFile(realm, providerName, identityName string, projectID string, region string) (string, error) {
 	defer perf.Track(nil, "gcp.WritePropertiesFile")()
 

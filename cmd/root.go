@@ -1477,6 +1477,10 @@ func Execute() error {
 // This is called BEFORE Cobra parses, allowing us to filter out terraform/helmfile
 // native flags that would otherwise be dropped by FParseErrWhitelist.
 //
+// It also normalizes flags with NoOptDefVal (like --identity) to ensure both
+// "--flag value" and "--flag=value" syntax work correctly, using the existing
+// FlagRegistry.PreprocessNoOptDefValArgs from the command's registered flag registry.
+//
 // The separated args are stored globally via compat.SetSeparated() and can be
 // retrieved in RunE via compat.GetSeparated().
 func preprocessCompatibilityFlags() {
@@ -1501,9 +1505,27 @@ func preprocessCompatibilityFlags() {
 		return
 	}
 
+	// Normalize flags with NoOptDefVal using the command's registered flag registry.
+	// This converts "--identity value" to "--identity=value" so pflag correctly
+	// captures the value instead of using NoOptDefVal and orphaning the value arg.
+	// Uses the same PreprocessNoOptDefValArgs that AtmosFlagParser.Parse() uses,
+	// driven by the flag registry rather than a hardcoded flag map.
+	argsChanged := false
+	if flagRegistry := internal.GetCommandFlagRegistry(cmdName); flagRegistry != nil {
+		normalized := flagRegistry.PreprocessNoOptDefValArgs(osArgs)
+		if len(normalized) != len(osArgs) {
+			osArgs = normalized
+			argsChanged = true
+		}
+	}
+
 	// Get compatibility flags from the command registry.
 	compatFlags := internal.GetCompatFlagsForCommand(cmdName)
 	if len(compatFlags) == 0 {
+		// No compat flags, but still apply normalization if args changed.
+		if argsChanged {
+			RootCmd.SetArgs(osArgs)
+		}
 		return
 	}
 
