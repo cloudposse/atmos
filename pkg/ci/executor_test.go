@@ -17,7 +17,6 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-
 // boolPtr returns a pointer to a bool value.
 func boolPtr(b bool) *bool {
 	return &b
