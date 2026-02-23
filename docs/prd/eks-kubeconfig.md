@@ -104,7 +104,7 @@ EKS follows the **integration pattern** established by ECR authentication (PR #1
                                       │ → atmos auth     │
                                       │   eks-token      │
                                       │                  │
-                                      │ STS GetCallerID  │
+                                      │ GetCallerIdentity│
                                       │ → Bearer token   │
                                       └──────────────────┘
 ```
@@ -515,7 +515,7 @@ internal/exec/
 #### 3. EKS Token Command (`cmd/auth_eks_token.go`)
 
 - Implements `atmos auth eks-token` as a subcommand of `authCmd`
-- Follows the existing auth subcommand pattern (see `cmd/auth_ecr_login.go` for reference)
+- Follows the existing auth subcommand pattern (see `cmd/auth_ecr_login.go` for reference) — added via `authCmd.AddCommand()`, not `CommandProvider` (which is for top-level commands only; no auth subcommand uses it)
 - Outputs `ExecCredential` JSON (`client.authentication.k8s.io/v1beta1`)
 - Generates EKS bearer token using STS pre-signed `GetCallerIdentity` URL
 - Accepts `--identity`, `--cluster-name`, `--region` flags
@@ -592,7 +592,7 @@ internal/exec/
 2. **File permissions**: Kubeconfig written with 0600 permissions
 3. **Directory permissions**: XDG kube directory created with 0700
 4. **Token security**: EKS tokens are short-lived (~15 minutes)
-5. **Credential source**: Exec plugin uses ambient AWS credentials from Atmos-managed files
+5. **Credential source**: Exec plugin resolves credentials deterministically via explicit `--identity` flag and `ATMOS_IDENTITY` env var (embedded at generation time), following the credential resolution order documented in the Exec Credential Plugin section
 6. **No secrets in kubeconfig**: Only cluster endpoint and CA cert stored; auth is via exec
 
 ## Configuration Examples
@@ -711,7 +711,7 @@ auth:
 
 1. **Token caching**: Cache EKS tokens to reduce API calls
 2. **Namespace support**: Set default namespace in kubeconfig context
-3. **Role ARN support**: Configure assume-role for kubectl authentication
+3. **Role ARN in exec plugin**: Embed `--role-arn` in the kubeconfig exec plugin args so kubectl token refresh assumes a role at runtime. This is distinct from the existing `--role-arn` flag on `atmos aws eks update-kubeconfig`, which applies role assumption at kubeconfig generation time only
 4. **Kubeconfig cleanup**: Command to remove stale cluster entries
 
 ## References
