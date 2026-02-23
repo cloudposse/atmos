@@ -316,6 +316,7 @@ func TestCheckAndReexecWithConfig_ExecFails(t *testing.T) {
 	err := CheckAndReexecWithConfig(atmosConfig, cfg)
 
 	assert.Error(t, err, "Should return error when exec fails")
+	assert.ErrorIs(t, err, errUtils.ErrCommandFailed, "Should wrap with ErrCommandFailed sentinel")
 }
 
 func TestCheckAndReexecWithConfig_SetEnvFails(t *testing.T) {

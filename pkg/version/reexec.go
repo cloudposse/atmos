@@ -218,7 +218,10 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) error {
 	args = stripUseVersionFlags(args)
 
 	if err := cfg.ExecFn(binaryPath, args, cfg.Environ()); err != nil {
-		return fmt.Errorf("failed to exec %s: %w", binaryPath, err)
+		return errUtils.Build(errUtils.ErrCommandFailed).
+			WithCause(err).
+			WithExplanationf("failed to exec %s", binaryPath).
+			Err()
 	}
 
 	// This line is never reached on successful exec.

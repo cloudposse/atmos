@@ -1640,14 +1640,8 @@ func init() {
 	viper.SetEnvPrefix("ATMOS")
 	viper.AutomaticEnv()
 
-	// Bind ATMOS_FORCE_COLOR to the force-color viper key.
-	// Note: CLICOLOR_FORCE is intentionally NOT bound here. Per the CLICOLOR spec,
-	// CLICOLOR_FORCE means "enable colors even without a TTY" but says nothing about
-	// color depth. Only --force-color / ATMOS_FORCE_COLOR should force TrueColor.
+	// force-color env binding is handled by the global flags registry via WithEnvVars.
 	// CLICOLOR_FORCE is handled separately in pkg/terminal via EnvCLIColorForce.
-	if err := viper.BindEnv("force-color", "ATMOS_FORCE_COLOR"); err != nil {
-		log.Error("Failed to bind ATMOS_FORCE_COLOR environment variable", "error", err)
-	}
 	// Bind mask flag to Viper so viper.GetBool("mask") reads the flag value.
 	if err := viper.BindPFlag("mask", RootCmd.PersistentFlags().Lookup("mask")); err != nil {
 		log.Error("Failed to bind mask flag to Viper", "error", err)
