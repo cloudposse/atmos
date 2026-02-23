@@ -90,17 +90,18 @@ type pkgComponentVendor struct {
 }
 
 type modelVendor struct {
-	packages    []pkgVendor
-	index       int
-	width       int
-	height      int
-	spinner     spinner.Model
-	progress    progress.Model
-	done        bool
-	dryRun      bool
-	failedPkg   int
-	atmosConfig *schema.AtmosConfiguration
-	isTTY       bool
+	packages       []pkgVendor
+	index          int
+	width          int
+	height         int
+	spinner        spinner.Model
+	progress       progress.Model
+	done           bool
+	dryRun         bool
+	failedPkg      int
+	failedPkgNames []string
+	atmosConfig    *schema.AtmosConfiguration
+	isTTY          bool
 }
 
 func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
@@ -128,7 +129,11 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	}
 
 	if model.failedPkg > 0 {
-		return fmt.Errorf("%w: %d", ErrVendorComponents, model.failedPkg)
+		explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
+			model.failedPkg, len(model.packages), strings.Join(model.failedPkgNames, ", "))
+		return errUtils.Build(ErrVendorComponents).
+			WithExplanation(explanation).
+			Err()
 	}
 	return nil
 }
@@ -254,6 +259,7 @@ func (m *modelVendor) handleInstalledPkgMsg(msg *installedPkgMsg) (tea.Model, te
 		}
 		mark = xMark
 		m.failedPkg++
+		m.failedPkgNames = append(m.failedPkgNames, pkg.name)
 	}
 	version := ""
 	if pkg.version != "" {
