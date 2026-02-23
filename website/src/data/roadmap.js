@@ -172,7 +172,7 @@ export const roadmapConfig = {
         { number: 1894, title: 'Add Azure OIDC/Workload Identity Federation provider' },
         { number: 1859, title: 'Add ECR authentication' },
         { number: 1884, title: 'Add EKS kubeconfig authentication integration PRD' },
-        { number: 1887, title: 'Add PRD for aws/login provider (native SDK auth)' },
+        { number: 1887, title: 'Browser-based authentication for aws/user' },
         { number: 1683, title: 'Update auth docs and implement GitHub providers' },
       ],
     },

@@ -77,7 +77,7 @@ The `aws login` command uses OAuth 2.0 Authorization Code flow with PKCE:
 
 - **Auto-refresh**: Credentials are automatically rotated every 15 minutes
 - **Session duration**: Valid up to 12 hours (limited by IAM principal's max session)
-- **Cache location**: `~/.aws/login/cache` (or `AWS_LOGIN_CACHE_DIRECTORY`)
+- **Storage**: Webflow credentials are stored in the atmos keychain per Design Decision 1, consistent with NFR-1 (no AWS CLI dependency). The AWS CLI cache path (`~/.aws/login/cache` or `AWS_LOGIN_CACHE_DIRECTORY`) is not used by the native SDK implementation.
 
 ### CloudTrail Events
 
@@ -125,6 +125,7 @@ auth:
         access_key_id: <key>
         secret_access_key: <secret>
         mfa_arn: <arn>            # Optional: MFA device ARN
+        webflow_enabled: <bool>   # Optional: Enable browser auth fallback (default: true)
       session:
         duration: <duration>      # Optional: Session duration (default: 12h, max: 12h)
 ```
@@ -310,7 +311,7 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 
 **Technical Implementation (in `webflow.go`):**
 
-1. Start local HTTP server by binding to `127.0.0.1:0` to let the OS assign an ephemeral port. Read back the assigned port from the listener and interpolate it into the `redirect_uri`. The `redirect_uri` (including port) must match what AWS accepts for the `arn:aws:signin:::devtools/same-device` client. If ephemeral binding fails, surface a clear error with a hint to check for port conflicts.
+1. Start local HTTP server by binding to `127.0.0.1:0` to let the OS assign an ephemeral port. Read back the assigned port from the listener and interpolate it into the `redirect_uri`. Per RFC 8252 Section 7.3, the `arn:aws:signin:::devtools/same-device` client accepts any port on loopback IPs at request time, so any OS-assigned ephemeral port is valid. If ephemeral binding fails, surface a clear error with a hint to check for port conflicts.
 2. Generate PKCE code verifier (random 32-byte string, base64url encoded)
 3. Generate code challenge (SHA-256 hash of verifier, base64url encoded)
 4. Open browser to authorization URL:
@@ -389,7 +390,7 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 ## Design Decisions
 
 1. **Credential Caching**: After successful browser authentication, webflow credentials will be stored in the keychain. This ensures the keychain check (tier 2) satisfies subsequent `atmos` invocations without re-triggering the browser flow, preserving the intended three-tier resolution behavior (see US-2). Cached credentials follow the same expiration and refresh lifecycle as other keychain-stored credentials.
-2. **Disable Option**: A `webflow_enabled: false` setting under the identity's `credentials` block will allow security-conscious organizations to disable browser fallback entirely. When disabled, the identity falls back only to YAML config and keychain, and returns an error if neither is available.
+2. **Disable Option**: The `credentials.webflow_enabled` setting (default: `true`) under the identity's `credentials` block controls browser fallback. Security-conscious organizations can set `webflow_enabled: false` to disable it entirely. When disabled, the identity falls back only to YAML config and keychain, and returns an error if neither is available.
 
 ## Open Questions
 
