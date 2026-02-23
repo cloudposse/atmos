@@ -187,9 +187,14 @@ vars:
 The `!include.raw` function supports the same sources as `!include`:
 
 ### Local Files
-- Absolute paths: `!include.raw /path/to/file.json`
-- Relative paths: `!include.raw ../configs/settings.yaml`
-- Base path relative: `!include.raw stacks/catalog/template.tf`
+
+Path resolution follows the same rules as [`!include`](./include#local-sources), tried in this order:
+
+1. **Absolute paths** — used as-is: `!include.raw /path/to/file.json`
+2. **Manifest-relative paths** — paths starting with `./` or `../` resolve relative to the directory of the current
+   manifest file: `!include.raw ../configs/settings.yaml`
+3. **`base_path`-relative paths** — all other relative paths resolve relative to the
+   [`base_path`](/cli/configuration#base-path) setting in `atmos.yaml`: `!include.raw stacks/catalog/template.tf`
 
 ### Remote Files
 - HTTP/HTTPS: `!include.raw https://example.com/config.json`

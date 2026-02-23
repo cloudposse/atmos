@@ -79,21 +79,41 @@ config: !include https://example.com/data.json?v=1#field
 
 ### Local Sources
 
-The `!include` function supports the following local file sources:
-  - Absolute paths
-    ```yaml
-    vars: !include /Users/me/Documents/vars.yaml
-    ```
+The `!include` function supports the following local file sources. When resolving a relative path, Atmos tries each
+strategy in order and uses the **first match** that points to an existing file:
 
-  - Paths relative to the current Atmos manifest (where the `!include` function is executed)
-    ```yaml
-    vars: !include ../config/vars.yaml
-    ```
+1. **Absolute paths** — The path is used as-is with no resolution needed.
+   ```yaml
+   vars: !include /Users/me/Documents/vars.yaml
+   ```
 
-  - Paths relative to the [`base_path`](/cli/configuration#base-path) defined in `atmos.yaml` CLI config file
-    ```yaml
-    vars: !include stacks/catalog/vpc/vars.yaml
-    ```
+2. **Paths relative to the current Atmos manifest** — Paths that start with `./` or `../` are resolved relative to
+   the directory containing the manifest file where the `!include` function is used. For example, if the manifest is
+   at `stacks/deploy/dev.yaml`, then `../catalog/defaults.yaml` resolves to `stacks/catalog/defaults.yaml`.
+   ```yaml
+   # Resolved relative to the directory of the current manifest file
+   vars: !include ../config/vars.yaml
+   settings: !include ./overrides.yaml
+   ```
+
+3. **Paths relative to `base_path`** — All other relative paths (those that do **not** start with `./` or `../`) are
+   resolved relative to the [`base_path`](/cli/configuration#base-path) setting in `atmos.yaml`. This is the most
+   common pattern when referencing shared configuration files from any stack manifest, regardless of the manifest's
+   location in the directory tree.
+   ```yaml
+   # Resolved relative to `base_path` in atmos.yaml (e.g., the repo root)
+   vars: !include stacks/catalog/vpc/vars.yaml
+   policy: !include config/policies/deny.rego
+   ```
+
+<Note>
+  **Resolution order matters.** When Atmos encounters a relative path without `./` or `../`, it first checks if the
+  file exists relative to the manifest directory (strategy 2), and then checks relative to `base_path` (strategy 3).
+  The first match wins.
+
+  To avoid ambiguity, use `./` or `../` prefixes when you explicitly want manifest-relative resolution, and use bare
+  paths (without prefix) when you want `base_path`-relative resolution.
+</Note>
 
 ### Remote Sources
 
