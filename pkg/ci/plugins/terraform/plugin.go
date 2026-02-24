@@ -208,9 +208,7 @@ func (p *Plugin) ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfigura
 // planOutputMarkers are searched in order to find where the meaningful plan output starts.
 // Everything before the first match is stripped (data source reads, state refreshes, etc.).
 var planOutputMarkers = []string{
-	"Terraform used the selected providers",
 	"Terraform will perform the following actions:",
-	"No changes.",
 }
 
 // cleanPlanOutput strips noisy preamble (data source reads, state refreshes)
@@ -218,7 +216,7 @@ var planOutputMarkers = []string{
 func cleanPlanOutput(output string) string {
 	for _, marker := range planOutputMarkers {
 		if idx := strings.Index(output, marker); idx > 0 {
-			return output[idx:]
+			return strings.TrimSpace(output[idx+len(marker):])
 		}
 	}
 	return output

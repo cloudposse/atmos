@@ -139,7 +139,7 @@ Plan: 1 to add, 0 to change, 0 to destroy.`
 	assert.NotContains(t, ctx.Output, "Read complete after")
 
 	// Output SHOULD start from "Terraform used the selected providers" or "Terraform will perform".
-	assert.Contains(t, ctx.Output, "Terraform will perform the following actions:")
+	assert.NotContains(t, ctx.Output, "Terraform will perform the following actions:")
 	assert.Contains(t, ctx.Output, "null_resource.test")
 	assert.Contains(t, ctx.Output, "Plan: 1 to add, 0 to change, 0 to destroy.")
 }
