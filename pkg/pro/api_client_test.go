@@ -129,65 +129,71 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 
 	t.Run("successful OIDC flow", func(t *testing.T) {
-		// Set up mock server for OIDC token request
-		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "Bearer test-request-token", r.Header.Get("Authorization"))
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
-		}))
-		defer oidcServer.Close()
+// Set up TLS mock server for OIDC token request (HTTPS required by SSRF validation).
+oidcServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+assert.Equal(t, "Bearer test-request-token", r.Header.Get("Authorization"))
+w.WriteHeader(http.StatusOK)
+w.Write([]byte(`{"value": "github-oidc-token-123"}`))
+}))
+defer oidcServer.Close()
+// Inject TLS-aware client so the test server certificate is trusted.
+oidcHTTPClientOverride = oidcServer.Client()
+defer func() { oidcHTTPClientOverride = nil }()
 
-		// Set up mock server for token exchange
-		exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"success": true, "data": {"token": "atmos-pro-token-456"}}`))
-		}))
-		defer exchangeServer.Close()
+// Set up mock server for token exchange
+exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+w.WriteHeader(http.StatusOK)
+w.Write([]byte(`{"success": true, "data": {"token": "atmos-pro-token-456"}}`))
+}))
+defer exchangeServer.Close()
 
-		// Unset API token to force OIDC flow
-		t.Setenv("ATMOS_PRO_TOKEN", "")
-		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
-		t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
-		t.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
-		t.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
+// Unset API token to force OIDC flow
+t.Setenv("ATMOS_PRO_TOKEN", "")
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", oidcServer.URL+"?token=dummy")
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
+t.Setenv("ATMOS_PRO_WORKSPACE_ID", "test-workspace")
+t.Setenv("ATMOS_PRO_BASE_URL", exchangeServer.URL)
 
-		viper.Reset()
-		// Bind environment variables like the main application does
-		viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
-		viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
-		viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
-		viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
+viper.Reset()
+// Bind environment variables like the main application does
+viper.BindEnv("ATMOS_PRO_BASE_URL", "ATMOS_PRO_BASE_URL")
+viper.BindEnv("ATMOS_PRO_ENDPOINT", "ATMOS_PRO_ENDPOINT")
+viper.BindEnv("ATMOS_PRO_TOKEN", "ATMOS_PRO_TOKEN")
+viper.BindEnv("ATMOS_PRO_WORKSPACE_ID", "ATMOS_PRO_WORKSPACE_ID")
 
-		// Create AtmosConfiguration with Pro settings populated from environment
-		atmosConfig := schema.AtmosConfiguration{
-			Settings: schema.AtmosSettings{
-				Pro: schema.ProSettings{
-					BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
-					Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
-					Token:       os.Getenv("ATMOS_PRO_TOKEN"),
-					WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
-					GithubOIDC: schema.GithubOIDCSettings{
-						RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
-						RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
-					},
-				},
-			},
-		}
+// Create AtmosConfiguration with Pro settings populated from environment
+atmosConfig := schema.AtmosConfiguration{
+Settings: schema.AtmosSettings{
+Pro: schema.ProSettings{
+BaseURL:     os.Getenv("ATMOS_PRO_BASE_URL"),
+Endpoint:    os.Getenv("ATMOS_PRO_ENDPOINT"),
+Token:       os.Getenv("ATMOS_PRO_TOKEN"),
+WorkspaceID: os.Getenv("ATMOS_PRO_WORKSPACE_ID"),
+GithubOIDC: schema.GithubOIDCSettings{
+RequestURL:   os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL"),
+RequestToken: os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN"),
+},
+},
+},
+}
 
-		client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
-		assert.NoError(t, err)
-		assert.NotNil(t, client)
-		assert.Equal(t, "atmos-pro-token-456", client.APIToken)
-	})
+client, err := NewAtmosProAPIClientFromEnv(&atmosConfig)
+assert.NoError(t, err)
+assert.NotNil(t, client)
+assert.Equal(t, "atmos-pro-token-456", client.APIToken)
+})
 
 	t.Run("missing workspace ID for OIDC", func(t *testing.T) {
-		// Set up mock server for OIDC token request
-		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set up TLS mock server for OIDC token request (HTTPS required by SSRF validation).
+		oidcServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
 		}))
 		defer oidcServer.Close()
+		// Inject TLS-aware client so the test server certificate is trusted.
+		oidcHTTPClientOverride = oidcServer.Client()
+		defer func() { oidcHTTPClientOverride = nil }()
 
 		// Unset API token and workspace ID to trigger error
 		t.Setenv("ATMOS_PRO_TOKEN", "")
@@ -261,12 +267,15 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 
 	t.Run("OIDC token exchange fails", func(t *testing.T) {
-		// Set up mock server for OIDC token request
-		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set up TLS mock server for OIDC token request (HTTPS required by SSRF validation).
+		oidcServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
 		}))
 		defer oidcServer.Close()
+		// Inject TLS-aware client so the test server certificate is trusted.
+		oidcHTTPClientOverride = oidcServer.Client()
+		defer func() { oidcHTTPClientOverride = nil }()
 
 		// Set up mock server for failed token exchange
 		exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

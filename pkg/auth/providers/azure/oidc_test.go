@@ -768,8 +768,8 @@ func TestOIDCProvider_FetchGitHubActionsToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Create test server.
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Create TLS test server (required by SSRF URL validation).
+			server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				// Verify request.
 				assert.Equal(t, http.MethodGet, r.Method)
 				assert.Equal(t, "application/json", r.Header.Get("Accept"))
@@ -798,12 +798,13 @@ func TestOIDCProvider_FetchGitHubActionsToken(t *testing.T) {
 			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL)
 			t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-request-token")
 
-			// Create provider.
+			// Create provider with TLS-aware client to trust the test certificate.
 			provider := &oidcProvider{
-				name:     "test-oidc",
-				tenantID: "tenant-123",
-				clientID: "client-456",
-				audience: tt.audience,
+				name:       "test-oidc",
+				tenantID:   "tenant-123",
+				clientID:   "client-456",
+				audience:   tt.audience,
+				httpClient: server.Client(),
 			}
 
 			// Call fetchGitHubActionsToken.
