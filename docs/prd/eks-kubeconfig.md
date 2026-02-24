@@ -2,27 +2,27 @@
 
 ## Executive Summary
 
-This document defines the design for integrating EKS kubeconfig generation into Atmos's authentication system. The integration enables automatic kubeconfig setup when users authenticate with AWS identities, eliminating manual `aws eks update-kubeconfig` invocations and providing seamless Kubernetes cluster access via Atmos-managed credentials.
+In cloud environments, obtaining Kubernetes credentials is tied to a cloud identity. On AWS, authenticating to EKS requires calling the AWS API to generate a kubeconfig for the current session. Since Atmos already manages authentication with cloud providers, a natural extension is for Atmos to provision the Kubernetes authentication configuration as part of that same workflow — allowing a developer to be fully authenticated with everything they need in a single step.
 
-**Key Design Decision:** EKS kubeconfig is an **integration** (not an identity) because it represents client-side credential materialization derived from an existing AWS identity—the kubeconfig itself is not an identity, but a credential file enabling `kubectl` to authenticate against EKS clusters.
+This PRD defines the design for that extension: integrating EKS kubeconfig generation into the Atmos auth system. When a user runs `atmos auth login`, Atmos can automatically configure kubeconfig for linked EKS clusters alongside the AWS credentials it already manages. This follows the same integration pattern established by ECR authentication (PR #1859).
+
+To be clear, Atmos does not provision identities. This is strictly about configuring the local environment to support working with Kubernetes once the appropriate cloud identity is in place.
+
+**Key Design Decision:** EKS kubeconfig is an **integration** (not an identity) because it represents client-side credential configuration derived from an existing AWS identity — the kubeconfig itself is not an identity, but a file that enables `kubectl` to authenticate against EKS clusters using the identity Atmos already manages.
 
 ## Problem Statement
 
-### Background
+Today, after authenticating with Atmos, users must still perform manual steps to access EKS clusters:
 
-Atmos introduced an authentication system (`atmos auth`) that manages AWS credentials through SSO, SAML, and other identity providers. Users can authenticate with a single command (`atmos auth login <identity>`) and have their AWS credentials automatically configured. However, EKS cluster access requires additional manual steps.
+1. **Manual kubeconfig setup**: Users must run `aws eks update-kubeconfig --name <cluster> --region <region>` for each cluster, even though Atmos already holds the credentials needed to do this.
 
-### Current Challenges
+2. **Credential mismatch**: The `aws eks update-kubeconfig` command uses ambient AWS credentials, which may not match the Atmos-managed identity the user authenticated with.
 
-1. **Manual kubeconfig setup**: After authenticating with Atmos, users must manually run `aws eks update-kubeconfig --name <cluster> --region <region>` for each EKS cluster they need to access.
+3. **Repetitive across clusters**: Users working with multiple clusters repeat this process for each one, often multiple times per day as credentials expire.
 
-2. **No integration with Atmos credentials**: The `aws eks update-kubeconfig` command uses ambient AWS credentials, which may not match the Atmos-managed identity the user authenticated with.
+4. **Token refresh complexity**: EKS exec credential plugins have short token lifetimes (~15 minutes), and users must ensure their AWS credentials remain valid when kubectl makes API calls.
 
-3. **Repetitive workflow**: Users working with multiple clusters must repeat the kubeconfig update process for each cluster, often multiple times per day as credentials expire.
-
-4. **Token refresh complexity**: EKS exec credential plugins have short token lifetimes (~15 minutes), and users must ensure their AWS credentials are valid when kubectl makes API calls.
-
-5. **Inconsistent credential sources**: The existing `atmos aws eks update-kubeconfig` command shells out to the AWS CLI, creating dependency on CLI installation and ambient credentials.
+5. **AWS CLI dependency**: The existing `atmos aws eks update-kubeconfig` command shells out to the AWS CLI rather than using the Go SDK directly.
 
 ### User Impact
 
@@ -696,6 +696,60 @@ auth:
             mode: "0600"
             update: replace  # merge | replace | error
 ```
+
+### Terraform Kubernetes Provider
+
+Once Atmos provisions the kubeconfig, Terraform components that use the `kubernetes`, `helm`, or `kubectl` providers can authenticate to EKS without any additional configuration. Because the kubeconfig's exec credential plugin calls `atmos auth eks-token`, token refresh happens transparently during long Terraform runs.
+
+**Provider configuration using kubeconfig (recommended):**
+
+```hcl
+# The Kubernetes provider reads KUBECONFIG automatically.
+# Since atmos auth login appends the Atmos-managed kubeconfig path
+# to the KUBECONFIG environment variable, this works out of the box.
+provider "kubernetes" {
+  config_path    = "~/.config/atmos/kube/config"
+  config_context = "dev-eks"
+}
+
+provider "helm" {
+  kubernetes {
+    config_path    = "~/.config/atmos/kube/config"
+    config_context = "dev-eks"
+  }
+}
+```
+
+**Provider configuration using exec (alternative):**
+
+Components can also call `atmos auth eks-token` directly, bypassing kubeconfig entirely. This is useful when the component needs to target a specific cluster without relying on kubeconfig context:
+
+```hcl
+provider "kubernetes" {
+  host                   = data.aws_eks_cluster.cluster.endpoint
+  cluster_ca_certificate = base64decode(data.aws_eks_cluster.cluster.certificate_authority[0].data)
+
+  exec {
+    api_version = "client.authentication.k8s.io/v1beta1"
+    command     = "atmos"
+    args        = ["auth", "eks-token", "--cluster-name", var.cluster_name, "--region", var.region]
+  }
+}
+```
+
+**Atmos component configuration:**
+
+To wire the kubeconfig context into a Terraform component, reference the integration's alias in the stack config:
+
+```yaml
+components:
+  terraform:
+    my-k8s-app:
+      vars:
+        eks_context: dev-eks  # Matches the alias from the integration spec
+```
+
+This pattern means `atmos auth login dev-admin` authenticates to AWS *and* configures kubectl *and* enables Terraform Kubernetes provider access — all in one step.
 
 ## Success Metrics
 
