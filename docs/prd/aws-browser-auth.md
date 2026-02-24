@@ -7,22 +7,20 @@
 
 ## Overview
 
-Enhance the existing `aws/user` identity to support browser-based OAuth2 authentication as a fallback when no static credentials are configured. This enables developers to authenticate using the same credentials they use for the AWS Management Console, eliminating the need for long-term IAM access keys.
+AWS IAM users have historically required static API credentials — an access key ID and secret access key — for programmatic access. While MFA adds a layer of protection, the fundamental problem remains: long-lived credentials exist on disk, in environment variables, or in configuration files where they can be leaked, shared, or stolen.
+
+AWS recently introduced support for [browser-based authentication flows](https://aws.amazon.com/blogs/security/simplified-developer-access-to-aws-with-aws-login/) for both IAM users and root accounts. This means static credentials are no longer required for local development. IAM users and root accounts can now follow the same convenient web-based flow that SSO users already enjoy.
+
+This PRD describes how to integrate this capability into the Atmos `aws/user` identity, so that browser authentication works as an automatic fallback when no static credentials are configured.
 
 ## Problem Statement
 
-Currently, the `aws/user` identity requires one of:
+The Atmos `aws/user` identity currently requires one of:
+
 1. Hardcoded credentials in YAML config
 2. Credentials stored in keychain via `atmos auth user configure`
 
-If neither is available, authentication fails with an error prompting the user to run `atmos auth user configure`.
-
-Many AWS users authenticate to the console using:
-- Root user credentials
-- IAM user username/password
-- Federated identity providers (non-SSO)
-
-These users should be able to authenticate seamlessly without pre-configuring static credentials.
+If neither is available, authentication fails with an error prompting the user to run `atmos auth user configure`. There is no credential-free path for IAM users or root accounts — unlike SSO users, who already have a seamless browser-based login experience.
 
 ## Solution
 
