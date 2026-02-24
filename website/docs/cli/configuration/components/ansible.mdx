@@ -1,0 +1,100 @@
+---
+title: Ansible Configuration
+sidebar_position: 5
+sidebar_label: ansible
+sidebar_class_name: command
+id: ansible
+description: Configure Ansible component behavior in atmos.yaml.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import DocCardList from '@theme/DocCardList'
+
+<Intro>
+Configure how Atmos executes Ansible commands for configuration management and infrastructure automation, including playbook execution and inventory management.
+</Intro>
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  ansible:
+    # Executable to run
+    command: ansible
+
+    # Base path to Ansible components
+    base_path: components/ansible
+```
+</File>
+
+## Configuration Reference
+
+<dl>
+  <dt>`command`</dt>
+  <dd>
+    Specifies the executable to run for Ansible commands. Defaults to `ansible`.
+
+    Examples:
+    - `ansible` - Use Ansible from PATH
+    - `/usr/local/bin/ansible` - Use specific binary
+    - `/opt/venv/bin/ansible` - Use virtualenv binary
+  </dd>
+
+  <dt>`base_path`</dt>
+  <dd>
+    Directory containing Ansible component directories. Supports absolute and relative paths.
+
+    Each subdirectory should contain Ansible playbooks and related files (roles, inventory, etc.).
+  </dd>
+</dl>
+
+## Component Directory Structure
+
+Ansible components follow the same directory structure as other component types:
+
+```
+components/
+└── ansible/
+    ├── hello-world/
+    │   ├── site.yml
+    │   └── inventory.ini
+    └── webserver/
+        ├── site.yml
+        ├── roles/
+        └── inventory/
+```
+
+## Example Configuration
+
+<File title="atmos.yaml">
+```yaml
+components:
+  ansible:
+    command: ansible
+    base_path: components/ansible
+```
+</File>
+
+With this configuration, you can run Ansible commands through Atmos:
+
+```bash
+# Run a playbook
+atmos ansible playbook hello-world -s dev
+
+# Check Ansible version
+atmos ansible version
+```
+
+## Related Commands
+
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ansible/usage', label: 'atmos ansible', description: 'Execute Ansible commands'},
+  {type: 'link', href: '/cli/commands/ansible/playbook', label: 'atmos ansible playbook', description: 'Run Ansible playbooks'},
+]} />
+
+## Related
+
+- [Component Configuration Overview](/cli/configuration/components)
+- [Ansible Components](/stacks/components/ansible)
+- [Stack Configuration](/cli/configuration/stacks)

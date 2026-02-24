@@ -2,14 +2,14 @@
 title: Configure Command Override
 sidebar_label: command
 sidebar_class_name: command
-description: Use the command setting to override the default executable for Terraform, Helmfile, or Packer.
+description: Use the command setting to override the default executable for Terraform, Helmfile, Packer, or Ansible.
 id: command
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 
 <Intro>
-The `command` setting allows you to override the executable that Atmos uses to run Terraform, Helmfile, or Packer commands. This is useful for using alternative tools like OpenTofu, custom wrappers, or specific binary versions.
+The `command` setting allows you to override the executable that Atmos uses to run Terraform, Helmfile, Packer, or Ansible commands. This is useful for using alternative tools like OpenTofu, custom wrappers, or specific binary versions.
 </Intro>
 
 ## Use Cases
@@ -162,13 +162,22 @@ packer:
 ```
 </File>
 
+### Ansible Command Override
+
+<File title="stacks/orgs/acme/_defaults.yaml">
+```yaml
+ansible:
+  command: /opt/venv/bin/ansible
+```
+</File>
+
 ## Precedence
 
 The command is resolved in this order:
 
 1. **Component level** (`components.terraform.<name>.command`)
 2. **Component-type level** (`terraform.command`)
-3. **Default** (the tool name itself: `terraform`, `helmfile`, or `packer`)
+3. **Default** (the tool name itself: `terraform`, `helmfile`, `packer`, or `ansible`)
 
 ## Best Practices
 
@@ -200,3 +209,4 @@ Some features may differ between Terraform and OpenTofu. Refer to their respecti
 - [Terraform Components](/stacks/components/terraform)
 - [Helmfile Components](/stacks/components/helmfile)
 - [Packer Components](/stacks/components/packer)
+- [Ansible Components](/stacks/components/ansible)
