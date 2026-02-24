@@ -32,6 +32,7 @@ import (
 	// Import generate package for early file generation.
 	tfgenerate "github.com/cloudposse/atmos/pkg/terraform/generate"
 
+	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
@@ -185,6 +186,13 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 	// This enables nested YAML functions (e.g., !terraform.state within component configs)
 	// to access the same authenticated session without re-prompting for credentials.
 	info.AuthManager = authManager
+
+	// Inject auth resolver into identity-aware stores so they can lazily resolve credentials
+	// on first access. This bridges the store system with the auth system.
+	if authManager != nil {
+		resolver := authbridge.NewResolver(authManager, &info)
+		atmosConfig.Stores.SetAuthContextResolver(resolver)
+	}
 
 	// Determine whether to process stacks and check stack configuration.
 	shouldProcess, shouldCheckStack := shouldProcessStacks(&info)
