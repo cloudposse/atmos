@@ -38,6 +38,7 @@ tests:
         - "has_errors=false"
         - "exit_code=0"
         - "summary="
+        - '<summary><a id="result-plat-ue2-sandbox-foobar_changes" />Plan: 1 to add, 0 to change, 0 to destroy.</summary>'
 
   - name: "atmos terraform plan without ci"
     enabled: true
