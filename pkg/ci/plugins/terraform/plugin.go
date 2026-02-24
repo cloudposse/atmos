@@ -216,7 +216,7 @@ var planOutputMarkers = []string{
 func cleanPlanOutput(output string) string {
 	for _, marker := range planOutputMarkers {
 		if idx := strings.Index(output, marker); idx > 0 {
-			return strings.TrimSpace(output[idx+len(marker):])
+			return output[idx+len(marker):]
 		}
 	}
 	return output
