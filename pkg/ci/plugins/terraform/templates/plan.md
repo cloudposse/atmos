@@ -38,6 +38,8 @@
 
 {{- if .Result.HasErrors }}
 <details><summary><a id="result-{{$target}}" />:warning: Error summary</summary>
+{{- else if .HasChanges }}
+<details><summary><a id="result-{{$target}}" />Plan: {{.Resources.Create}} to add, {{.Resources.Change}} to change, {{.Resources.Destroy}} to destroy.</summary>
 {{- else if .ChangedResult }}
 <details><summary><a id="result-{{$target}}" />{{.ChangedResult}}</summary>
 {{- else }}
