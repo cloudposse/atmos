@@ -291,45 +291,45 @@ func TestOIDCProvider_GetFilesDisplayPath(t *testing.T) {
 }
 
 func TestValidateGitHubActionsURL(t *testing.T) {
-tests := []struct {
-name        string
-rawURL      string
-expectError bool
-errorMsg    string
-}{
-{
-name:        "valid https URL",
-rawURL:      "https://token.actions.githubusercontent.com/api/v1/token",
-expectError: false,
-},
-{
-name:        "http scheme rejected",
-rawURL:      "http://token.actions.githubusercontent.com/api/v1/token",
-expectError: true,
-errorMsg:    "must use https scheme",
-},
-{
-name:        "empty host rejected",
-rawURL:      "https:///api/v1/token",
-expectError: true,
-errorMsg:    "non-empty host",
-},
-{
-name:        "invalid URL rejected",
-rawURL:      "://bad-url",
-expectError: true,
-errorMsg:    "invalid ACTIONS_ID_TOKEN_REQUEST_URL",
-},
-}
-for _, tt := range tests {
-t.Run(tt.name, func(t *testing.T) {
-err := validateGitHubActionsURL(tt.rawURL)
-if tt.expectError {
-assert.Error(t, err)
-assert.Contains(t, err.Error(), tt.errorMsg)
-} else {
-assert.NoError(t, err)
-}
-})
-}
+	tests := []struct {
+		name        string
+		rawURL      string
+		expectError bool
+		errorMsg    string
+	}{
+		{
+			name:        "valid https URL",
+			rawURL:      "https://token.actions.githubusercontent.com/api/v1/token",
+			expectError: false,
+		},
+		{
+			name:        "http scheme rejected",
+			rawURL:      "http://token.actions.githubusercontent.com/api/v1/token",
+			expectError: true,
+			errorMsg:    "must use https scheme",
+		},
+		{
+			name:        "empty host rejected",
+			rawURL:      "https:///api/v1/token",
+			expectError: true,
+			errorMsg:    "non-empty host",
+		},
+		{
+			name:        "invalid URL rejected",
+			rawURL:      "://bad-url",
+			expectError: true,
+			errorMsg:    "invalid ACTIONS_ID_TOKEN_REQUEST_URL",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateGitHubActionsURL(tt.rawURL)
+			if tt.expectError {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.errorMsg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
 }
