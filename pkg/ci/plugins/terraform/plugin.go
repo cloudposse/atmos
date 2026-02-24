@@ -5,6 +5,7 @@ import (
 	"embed"
 	"fmt"
 	"strconv"
+	"strings"
 
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
@@ -99,7 +100,7 @@ func (p *Plugin) BuildTemplateContext(
 		Command:       command,
 		CI:            ciCtx,
 		Result:        result,
-		Output:        output,
+		Output:        cleanPlanOutput(output),
 		Custom:        make(map[string]any),
 	}
 
@@ -202,4 +203,23 @@ func (p *Plugin) ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfigura
 	info.ComponentSection = resolvedInfo.ComponentSection
 
 	return e.ConstructTerraformComponentPlanfilePath(atmosConfig, &resolvedInfo), nil
+}
+
+// planOutputMarkers are searched in order to find where the meaningful plan output starts.
+// Everything before the first match is stripped (data source reads, state refreshes, etc.).
+var planOutputMarkers = []string{
+	"Terraform used the selected providers",
+	"Terraform will perform the following actions:",
+	"No changes.",
+}
+
+// cleanPlanOutput strips noisy preamble (data source reads, state refreshes)
+// from terraform plan output, keeping only the plan itself.
+func cleanPlanOutput(output string) string {
+	for _, marker := range planOutputMarkers {
+		if idx := strings.Index(output, marker); idx > 0 {
+			return output[idx:]
+		}
+	}
+	return output
 }

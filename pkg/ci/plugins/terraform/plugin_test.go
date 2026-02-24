@@ -103,6 +103,66 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	assert.True(t, ctx.HasChanges())
 }
 
+func TestPlugin_BuildTemplateContext_StripsOutputBeforePlanActions(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-us-east-1",
+	}
+
+	// Simulate realistic terraform plan output with noise before the plan actions.
+	output := `data.validation_warning.warn[0]: Reading...
+data.validation_warning.warn[0]: Read complete after 0s [id=none]
+
+Terraform used the selected providers to generate the following execution
+plan. Resource actions are indicated with the following symbols:
+  + create
+
+Terraform will perform the following actions:
+
+  # null_resource.test will be created
+  + resource "null_resource" "test" {
+      + id = (known after apply)
+    }
+
+Plan: 1 to add, 0 to change, 0 to destroy.`
+
+	result, err := p.BuildTemplateContext(info, nil, output, "plan")
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+
+	// Output should NOT contain the data source reading noise.
+	assert.NotContains(t, ctx.Output, "data.validation_warning.warn")
+	assert.NotContains(t, ctx.Output, "Reading...")
+	assert.NotContains(t, ctx.Output, "Read complete after")
+
+	// Output SHOULD start from "Terraform used the selected providers" or "Terraform will perform".
+	assert.Contains(t, ctx.Output, "Terraform will perform the following actions:")
+	assert.Contains(t, ctx.Output, "null_resource.test")
+	assert.Contains(t, ctx.Output, "Plan: 1 to add, 0 to change, 0 to destroy.")
+}
+
+func TestPlugin_BuildTemplateContext_PreservesOutputWithoutPlanActions(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-us-east-1",
+	}
+
+	// Output without the "Terraform will perform" marker should be preserved as-is.
+	output := "No changes. Your infrastructure matches the configuration."
+
+	result, err := p.BuildTemplateContext(info, nil, output, "plan")
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+
+	assert.Equal(t, output, ctx.Output)
+}
+
 func TestPlugin_ParseOutput(t *testing.T) {
 	p := &Plugin{}
 
