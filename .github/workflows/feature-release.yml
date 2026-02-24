@@ -17,7 +17,7 @@ jobs:
   release:
     if: |
       github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'release/feature')
-    uses: cloudposse/.github/.github/workflows/shared-go-feature-release.yml@main
+    uses: cloudposse/.github/.github/workflows/shared-go-auto-release.yml@main
     with:
       publish: true
       prerelease: true
