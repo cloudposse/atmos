@@ -1153,6 +1153,7 @@ func TestFindOrInstallVersionWithConfig_PRVersion(t *testing.T) {
 
 	// Should fail at the token check or PR install step.
 	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
 	assert.Empty(t, path)
 	// Should not call the semver finder/installer.
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for PR version")
