@@ -699,7 +699,7 @@ auth:
 
 ### Terraform Kubernetes Provider
 
-Once Atmos provisions the kubeconfig, Terraform components that use the `kubernetes`, `helm`, or `kubectl` providers can authenticate to EKS without any additional configuration. Because the kubeconfig's exec credential plugin calls `atmos auth eks-token`, token refresh happens transparently during long Terraform runs.
+Once Atmos provisions the kubeconfig, Terraform components that use the `kubernetes`, `helm`, or `kubectl` providers can authenticate to EKS without any additional configuration. The generated kubeconfig contains an exec credential plugin spec with `command: atmos` and `args: [auth, eks-token, ...]` (see [Output Format](#output-format)). When the Terraform provider reads this kubeconfig, it invokes `atmos auth eks-token` on demand to obtain short-lived tokens — the same mechanism kubectl uses. This means token refresh is handled automatically, even during long Terraform runs, as long as `atmos` is on PATH and the underlying AWS credentials are valid.
 
 **Provider configuration using kubeconfig (recommended):**
 
