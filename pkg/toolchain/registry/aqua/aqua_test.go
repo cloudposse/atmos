@@ -1323,6 +1323,600 @@ packages:
 	}
 }
 
+// =============================================================================
+// Real-world registry YAML tests
+// =============================================================================
+// These tests use EXACT real-world Aqua registry YAML with all the fields that
+// tools actually use (rosetta2, windows_arm_emulation, no_asset, checksum with
+// nested cosign, supported_envs, etc.) to verify our parser handles them correctly.
+
+// TestResolveVersionOverrides_RealCheckovPattern uses the exact checkov registry.yaml
+// from the Aqua registry. For version 3.2.506, the catch-all "true" override should
+// match and provide replacements {amd64: X86_64} and files with src paths.
+func TestResolveVersionOverrides_RealCheckovPattern(t *testing.T) {
+	// Exact YAML from https://github.com/aquaproj/aqua-registry/blob/main/pkgs/bridgecrewio/checkov/registry.yaml
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: bridgecrewio
+    repo_name: checkov
+    description: Prevent cloud misconfigurations and find vulnerabilities during build-time
+    version_constraint: "false"
+    version_overrides:
+      - version_constraint: Version == "2.3.321"
+        asset: checkov_{{.OS}}_{{.Arch}}_{{.Version}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        windows_arm_emulation: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+      - version_constraint: Version == "2.3.340"
+        no_asset: true
+      - version_constraint: Version == "2.5.15"
+        asset: checkov_{{.OS}}_{{.Arch}}_{{.Version}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        windows_arm_emulation: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: Version == "3.2.317"
+        asset: checkov_{{.OS}}_{{.Arch}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        windows_arm_emulation: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: Version == "3.2.322"
+        asset: checkov_{{.OS}}_{{.Arch}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+        supported_envs:
+          - linux
+      - version_constraint: semver("<= 2.3.314")
+        no_asset: true
+      - version_constraint: semver("<= 2.3.318")
+        asset: checkov_{{.OS}}_{{.Version}}
+        format: raw
+        complete_windows_ext: false
+        files:
+          - name: checkov
+            src: dist/checkov
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: semver("<= 2.3.334")
+        asset: checkov_{{.OS}}_{{.Arch}}_{{.Version}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        windows_arm_emulation: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: semver("<= 3.2.51")
+        asset: checkov_{{.OS}}_{{.Arch}}_{{.Version}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        windows_arm_emulation: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+      - version_constraint: "true"
+        asset: checkov_{{.OS}}_{{.Arch}}.{{.Format}}
+        format: zip
+        rosetta2: true
+        windows_arm_emulation: true
+        files:
+          - name: checkov
+            src: dist/checkov
+        replacements:
+          amd64: X86_64
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Version 3.2.506 should match the catch-all "true" override.
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "3.2.506")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: Replacements from the "true" catch-all must be applied.
+	require.NotNil(t, tool.Replacements, "Replacements must be set from catch-all override")
+	assert.Equal(t, "X86_64", tool.Replacements["amd64"],
+		"amd64 -> X86_64 replacement must be applied from catch-all override")
+
+	// CRITICAL: Files must include Src path (not just Name).
+	require.Len(t, tool.Files, 1, "Files must be populated from override")
+	assert.Equal(t, "checkov", tool.Files[0].Name)
+	assert.Equal(t, "dist/checkov", tool.Files[0].Src,
+		"Files[0].Src must be 'dist/checkov' (was lost due to anonymous struct missing Src field)")
+
+	// Asset and format from the catch-all.
+	assert.Equal(t, "checkov_{{.OS}}_{{.Arch}}.{{.Format}}", tool.Asset)
+	assert.Equal(t, "zip", tool.Format)
+	assert.Equal(t, "bridgecrewio", tool.RepoOwner)
+	assert.Equal(t, "checkov", tool.RepoName)
+}
+
+// TestResolveVersionOverrides_RealTrivyPattern uses the exact trivy registry.yaml
+// from the Aqua registry. For version 0.69.1, the catch-all "true" override should
+// match and provide replacements including {amd64: 64bit, linux: Linux}.
+func TestResolveVersionOverrides_RealTrivyPattern(t *testing.T) {
+	// Exact YAML from https://github.com/aquaproj/aqua-registry/blob/main/pkgs/aquasecurity/trivy/registry.yaml
+	// Includes checksum with nested cosign.bundle, overrides with empty replacements: {}.
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: aquasecurity
+    repo_name: trivy
+    description: Find vulnerabilities, misconfigurations, secrets, SBOM
+    version_constraint: "false"
+    version_overrides:
+      - version_constraint: Version == "v0.20.0"
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        rosetta2: true
+        replacements:
+          amd64: 64bit
+          darwin: macOS
+          linux: Linux
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+        overrides:
+          - goos: linux
+            replacements:
+              arm64: ARM64
+        supported_envs:
+          - linux
+          - darwin
+      - version_constraint: semver("<= 0.1.6")
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        rosetta2: true
+        windows_arm_emulation: true
+        replacements:
+          amd64: 64bit
+          darwin: macOS
+          linux: Linux
+          windows: Windows
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+        overrides:
+          - goos: linux
+            replacements:
+              arm64: ARM64
+          - goos: windows
+            format: zip
+      - version_constraint: semver("<= 0.16.0")
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        rosetta2: true
+        replacements:
+          amd64: 64bit
+          darwin: macOS
+          linux: Linux
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+        overrides:
+          - goos: linux
+            replacements:
+              arm64: ARM64
+        supported_envs:
+          - linux
+          - darwin
+      - version_constraint: semver("<= 0.31.3")
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        replacements:
+          amd64: 64bit
+          arm64: ARM64
+          darwin: macOS
+          linux: Linux
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+        supported_envs:
+          - linux
+          - darwin
+      - version_constraint: semver("<= 0.35.0")
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        replacements:
+          amd64: 64bit
+          arm64: ARM64
+          darwin: macOS
+          linux: Linux
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+          cosign:
+            opts:
+              - --certificate
+              - https://github.com/aquasecurity/trivy/releases/download/{{.Version}}/trivy_{{trimV .Version}}_checksums.txt.pem
+              - --certificate-identity
+              - https://github.com/aquasecurity/trivy/.github/workflows/reusable-release.yaml@refs/tags/{{.Version}}
+              - --certificate-oidc-issuer
+              - https://token.actions.githubusercontent.com
+              - --signature
+              - https://github.com/aquasecurity/trivy/releases/download/{{.Version}}/trivy_{{trimV .Version}}_checksums.txt.sig
+        supported_envs:
+          - linux
+          - darwin
+      - version_constraint: semver("<= 0.67.2")
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        windows_arm_emulation: true
+        replacements:
+          amd64: 64bit
+          arm64: ARM64
+          darwin: macOS
+          linux: Linux
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+          cosign:
+            opts:
+              - --certificate
+              - https://github.com/aquasecurity/trivy/releases/download/{{.Version}}/trivy_{{trimV .Version}}_checksums.txt.pem
+              - --certificate-identity
+              - https://github.com/aquasecurity/trivy/.github/workflows/reusable-release.yaml@refs/tags/{{.Version}}
+              - --certificate-oidc-issuer
+              - https://token.actions.githubusercontent.com
+              - --signature
+              - https://github.com/aquasecurity/trivy/releases/download/{{.Version}}/trivy_{{trimV .Version}}_checksums.txt.sig
+        overrides:
+          - goos: windows
+            format: zip
+            replacements: {}
+      - version_constraint: "true"
+        asset: trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}
+        format: tar.gz
+        windows_arm_emulation: true
+        replacements:
+          amd64: 64bit
+          arm64: ARM64
+          darwin: macOS
+          linux: Linux
+        checksum:
+          type: github_release
+          asset: trivy_{{trimV .Version}}_checksums.txt
+          algorithm: sha256
+          cosign:
+            bundle:
+              type: github_release
+              asset: trivy_{{trimV .Version}}_checksums.txt.sigstore.json
+            opts:
+              - --certificate-identity
+              - https://github.com/aquasecurity/trivy/.github/workflows/reusable-release.yaml@refs/tags/{{.Version}}
+              - --certificate-oidc-issuer
+              - https://token.actions.githubusercontent.com
+        overrides:
+          - goos: windows
+            format: zip
+            replacements: {}
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Version 0.69.1 should match the catch-all "true" override.
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "0.69.1")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: Replacements from the "true" catch-all must be applied.
+	require.NotNil(t, tool.Replacements, "Replacements must be set from catch-all override")
+	assert.Equal(t, "64bit", tool.Replacements["amd64"],
+		"amd64 -> 64bit replacement must be applied")
+	assert.Equal(t, "ARM64", tool.Replacements["arm64"],
+		"arm64 -> ARM64 replacement must be applied")
+	assert.Equal(t, "macOS", tool.Replacements["darwin"],
+		"darwin -> macOS replacement must be applied")
+	assert.Equal(t, "Linux", tool.Replacements["linux"],
+		"linux -> Linux replacement must be applied")
+
+	// Asset and format from the catch-all.
+	assert.Equal(t, "trivy_{{trimV .Version}}_{{.OS}}-{{.Arch}}.{{.Format}}", tool.Asset)
+	assert.Equal(t, "tar.gz", tool.Format)
+}
+
+// TestResolveVersionOverrides_RealYqPattern uses the exact yq registry.yaml
+// from the Aqua registry. The base has asset: yq_{{.OS}}_{{.Arch}} and the
+// single "true" override only has rosetta2: true. The base asset MUST be preserved.
+func TestResolveVersionOverrides_RealYqPattern(t *testing.T) {
+	// Exact YAML from https://github.com/aquaproj/aqua-registry/blob/main/pkgs/mikefarah/yq/registry.yaml
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: mikefarah
+    repo_name: yq
+    description: yq is a portable command-line YAML processor
+    asset: yq_{{.OS}}_{{.Arch}}
+    supported_envs:
+      - darwin
+      - linux
+      - amd64
+    version_constraint: semver(">= 4.9.6")
+    version_overrides:
+      - version_constraint: "true"
+        rosetta2: true
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Version 4.52.4 - the "true" override matches but only has rosetta2.
+	// The base asset template MUST be preserved.
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "4.52.4")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: Base asset must be preserved when override doesn't specify an asset.
+	assert.Equal(t, "yq_{{.OS}}_{{.Arch}}", tool.Asset,
+		"Base asset template must be preserved when override only has rosetta2")
+
+	// Base fields.
+	assert.Equal(t, "mikefarah", tool.RepoOwner)
+	assert.Equal(t, "yq", tool.RepoName)
+	assert.Equal(t, "github_release", tool.Type)
+
+	// SupportedEnvs from base should be preserved.
+	assert.Contains(t, tool.SupportedEnvs, "darwin")
+	assert.Contains(t, tool.SupportedEnvs, "linux")
+}
+
+// TestResolveVersionOverrides_RealJqPattern uses the exact jq registry.yaml
+// from the Aqua registry. Jq uses version_prefix: "jq-" and has multiple
+// semver constraints. For version 1.7.1, semver("< 1.8.0") should match.
+func TestResolveVersionOverrides_RealJqPattern(t *testing.T) {
+	// Exact YAML from https://github.com/aquaproj/aqua-registry/blob/main/pkgs/jqlang/jq/registry.yaml
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: jqlang
+    repo_name: jq
+    description: Command-line JSON processor
+    version_constraint: "false"
+    version_prefix: jq-
+    version_overrides:
+      - version_constraint: semver("<= 1.2")
+        no_asset: true
+      - version_constraint: semver("<= 1.4")
+        asset: jq-{{.OS}}-{{.Arch}}
+        format: raw
+        rosetta2: true
+        replacements:
+          amd64: x86_64
+          darwin: osx
+          windows: win64
+        overrides:
+          - goos: windows
+            asset: jq-{{.OS}}
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: Version == "jq-1.5rc1"
+        asset: jq-{{.OS}}-{{.Arch}}-static
+        format: raw
+        replacements:
+          windows: win64
+          amd64: x86_64
+        overrides:
+          - goos: windows
+            asset: jq-{{.OS}}
+        supported_envs:
+          - linux/amd64
+          - windows
+      - version_constraint: Version == "jq-1.5rc2"
+        asset: jq-{{.OS}}-{{.Arch}}
+        format: raw
+        rosetta2: true
+        replacements:
+          amd64: x86_64
+          darwin: osx
+          windows: win64
+        overrides:
+          - goos: windows
+            asset: jq-{{.OS}}
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: semver("<= 1.6")
+        asset: jq-{{.OS}}
+        format: raw
+        rosetta2: true
+        replacements:
+          linux: linux64
+          darwin: osx
+          windows: win64
+        overrides:
+          - goos: darwin
+            asset: jq-{{.OS}}-{{.Arch}}
+        supported_envs:
+          - darwin
+          - windows
+          - amd64
+      - version_constraint: semver("< 1.8.0")
+        asset: jq-{{.OS}}-{{.Arch}}
+        format: raw
+        windows_arm_emulation: true
+        replacements:
+          darwin: macos
+        checksum:
+          type: github_release
+          asset: sha256sum.txt
+          algorithm: sha256
+      - version_constraint: "true"
+        asset: jq-{{.OS}}-{{.Arch}}
+        format: raw
+        windows_arm_emulation: true
+        replacements:
+          darwin: macos
+        checksum:
+          type: github_release
+          asset: sha256sum.txt
+          algorithm: sha256
+        github_artifact_attestations:
+          signer_workflow: jqlang/jq/.github/workflows/ci.yml
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	// Version 1.7.1 should match semver("< 1.8.0") which has replacements: {darwin: macos}.
+	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.7.1")
+	require.NoError(t, err)
+	require.NotNil(t, tool)
+
+	// CRITICAL: VersionPrefix must be "jq-" from the base.
+	assert.Equal(t, "jq-", tool.VersionPrefix,
+		"VersionPrefix must be 'jq-' from base (not 'v' or empty)")
+
+	// CRITICAL: Replacements from the matching override must be applied.
+	require.NotNil(t, tool.Replacements, "Replacements must be set from semver(\"< 1.8.0\") override")
+	assert.Equal(t, "macos", tool.Replacements["darwin"],
+		"darwin -> macos replacement must be applied from version override")
+
+	// Asset and format from the matching override.
+	assert.Equal(t, "jq-{{.OS}}-{{.Arch}}", tool.Asset)
+	assert.Equal(t, "raw", tool.Format)
+}
+
+// TestEvaluateVersionConstraint_WithVersionPrefix tests that semver constraints
+// work correctly when the version has a non-standard prefix like "jq-".
+// Aqua strips the version_prefix before evaluating semver constraints.
+func TestEvaluateVersionConstraint_WithVersionPrefix(t *testing.T) {
+	tests := []struct {
+		name       string
+		constraint string
+		version    string
+		prefix     string
+		expected   bool
+	}{
+		{
+			name:       "jq prefix with semver less than",
+			constraint: `semver("< 1.8.0")`,
+			version:    "jq-1.7.1",
+			prefix:     "jq-",
+			expected:   true,
+		},
+		{
+			name:       "jq prefix with semver greater equal",
+			constraint: `semver(">= 1.8.0")`,
+			version:    "jq-1.8.1",
+			prefix:     "jq-",
+			expected:   true,
+		},
+		{
+			name:       "v prefix stripped",
+			constraint: `semver(">= 1.0.0")`,
+			version:    "v1.2.3",
+			prefix:     "v",
+			expected:   true,
+		},
+		{
+			name:       "no prefix works as before",
+			constraint: `semver(">= 1.0.0")`,
+			version:    "1.2.3",
+			prefix:     "",
+			expected:   true,
+		},
+		{
+			name:       "Version == compares full version including prefix",
+			constraint: `Version == "jq-1.5rc1"`,
+			version:    "jq-1.5rc1",
+			prefix:     "jq-",
+			expected:   false, // Version == needs full version, prefix stripping only for semver.
+		},
+		{
+			name:       "true literal with prefix",
+			constraint: `"true"`,
+			version:    "jq-1.8.1",
+			prefix:     "jq-",
+			expected:   true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Strip prefix before evaluation (this is what Aqua does).
+			version := tt.version
+			if tt.prefix != "" {
+				version = strings.TrimPrefix(version, tt.prefix)
+			}
+			result, err := evaluateVersionConstraint(tt.constraint, version)
+			require.NoError(t, err)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
 func TestExtractBinaryNameFromPackageName(t *testing.T) {
 	tests := []struct {
 		name        string

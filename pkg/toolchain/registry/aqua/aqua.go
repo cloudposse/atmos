@@ -186,19 +186,25 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 }
 
 // versionOverride holds version override data from Aqua registry.
+// Fields mirror Aqua's VersionOverride to handle all real-world registry YAML patterns.
 type versionOverride struct {
-	VersionConstraint string                  `yaml:"version_constraint"`
-	Asset             string                  `yaml:"asset"`
-	URL               string                  `yaml:"url"` // Alternative to Asset for http type tools.
-	Format            string                  `yaml:"format"`
-	Replacements      map[string]string       `yaml:"replacements"`
-	Overrides         []registry.AquaOverride `yaml:"overrides"`
-	Files             []struct {
-		Name string `yaml:"name"`
-	} `yaml:"files"`
+	VersionConstraint   string                  `yaml:"version_constraint"`
+	Asset               string                  `yaml:"asset"`
+	URL                 string                  `yaml:"url"` // Alternative to Asset for http type tools.
+	Format              string                  `yaml:"format"`
+	VersionPrefix       string                  `yaml:"version_prefix"`
+	Replacements        map[string]string       `yaml:"replacements"`
+	Overrides           []registry.AquaOverride `yaml:"overrides"`
+	Files               []registry.File         `yaml:"files"`
+	SupportedEnvs       []string                `yaml:"supported_envs"`
+	Rosetta2            bool                    `yaml:"rosetta2"`
+	WindowsArmEmulation bool                    `yaml:"windows_arm_emulation"`
+	NoAsset             bool                    `yaml:"no_asset"`
+	Checksum            registry.ChecksumConfig `yaml:"checksum"`
 }
 
 // applyVersionOverride applies a version override to the tool.
+// Only non-empty/non-zero override fields are applied; base fields serve as defaults.
 func applyVersionOverride(tool *registry.Tool, override *versionOverride, version string) {
 	// Use Asset if specified, otherwise fall back to URL (used by http type tools).
 	if override.Asset != "" {
@@ -209,8 +215,15 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	if override.Format != "" {
 		tool.Format = override.Format
 	}
+	if override.VersionPrefix != "" {
+		tool.VersionPrefix = override.VersionPrefix
+	}
 	if len(override.Files) > 0 {
 		tool.Name = override.Files[0].Name
+		tool.Files = override.Files
+	}
+	if len(override.SupportedEnvs) > 0 {
+		tool.SupportedEnvs = override.SupportedEnvs
 	}
 	// Apply replacements from version override (replaces base replacements).
 	if len(override.Replacements) > 0 {
@@ -278,7 +291,7 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 		SupportedEnvs: pkgDef.SupportedEnvs,
 	}
 
-	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version)
+	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version, pkgDef.VersionPrefix)
 	if selectedIdx == -1 {
 		log.Debug("No matching version override", "version", version, "overrides_count", len(pkgDef.VersionOverrides))
 		return tool, nil
@@ -321,11 +334,32 @@ func (ar *AquaRegistry) fetchRegistryPackage(registryURL string) (*registryPacka
 }
 
 // findMatchingOverride finds the first version override that matches the given version.
-func findMatchingOverride(overrides []versionOverride, version string) int {
+// Following Aqua's behavior, the version prefix is stripped before semver evaluation
+// but preserved for Version == comparisons.
+func findMatchingOverride(overrides []versionOverride, version, versionPrefix string) int {
+	// Strip version prefix for semver evaluation (Aqua's SetVersion behavior).
+	// The bare version is used for semver constraints; the full version for Version == comparisons.
+	bareVersion := version
+	if versionPrefix != "" {
+		bareVersion = strings.TrimPrefix(version, versionPrefix)
+	}
+	// Also strip standard "v" prefix if present (common convention).
+	bareVersion = strings.TrimPrefix(bareVersion, versionPrefix)
+	if bareVersion == version {
+		// No prefix was stripped, try stripping "v" as well.
+		bareVersion = strings.TrimPrefix(version, "v")
+	}
+
 	for i, override := range overrides {
-		matches, err := evaluateVersionConstraint(override.VersionConstraint, version)
+		// For semver constraints, use the bare version (prefix stripped).
+		// For Version == and true/false, use the full version.
+		constraintVersion := version
+		if strings.HasPrefix(override.VersionConstraint, "semver(") {
+			constraintVersion = bareVersion
+		}
+		matches, err := evaluateVersionConstraint(override.VersionConstraint, constraintVersion)
 		if err != nil {
-			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", version, "error", err)
+			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", constraintVersion, "error", err)
 			continue
 		}
 		if matches {
@@ -519,17 +553,30 @@ func resolveVersionStrings(tool *registry.Tool, version string) (releaseVersion,
 }
 
 // buildAssetTemplateData creates the template data map for asset URL rendering.
+// Applies tool.Replacements to OS/Arch values, matching the installer's buildTemplateData behavior.
 func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) map[string]string {
 	format := "zip"
 	if tool.Format != "" {
 		format = tool.Format
 	}
 
+	// Get OS and Arch, applying any replacements from the tool config.
+	osVal := getOS()
+	archVal := getArch()
+	if tool.Replacements != nil {
+		if replacement, ok := tool.Replacements[osVal]; ok {
+			osVal = replacement
+		}
+		if replacement, ok := tool.Replacements[archVal]; ok {
+			archVal = replacement
+		}
+	}
+
 	return map[string]string{
 		"Version":   releaseVersion,
 		"SemVer":    semVer,
-		"OS":        getOS(),
-		"Arch":      getArch(),
+		"OS":        osVal,
+		"Arch":      archVal,
 		"RepoOwner": tool.RepoOwner,
 		"RepoName":  tool.RepoName,
 		"Format":    format,

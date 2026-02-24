@@ -270,24 +270,54 @@ func (e *wrappedError) Unwrap() error {
 func TestVersionFallbackLogic(t *testing.T) {
 	t.Run("adds v prefix when missing", func(t *testing.T) {
 		version := "1.0.0"
+		prefix := VersionPrefix // "v"
 		var fallbackVersion string
-		if strings.HasPrefix(version, VersionPrefix) {
-			fallbackVersion = strings.TrimPrefix(version, VersionPrefix)
+		if strings.HasPrefix(version, prefix) {
+			fallbackVersion = strings.TrimPrefix(version, prefix)
 		} else {
-			fallbackVersion = VersionPrefix + version
+			fallbackVersion = prefix + version
 		}
 		assert.Equal(t, "v1.0.0", fallbackVersion)
 	})
 
 	t.Run("removes v prefix when present", func(t *testing.T) {
 		version := "v1.0.0"
+		prefix := VersionPrefix // "v"
 		var fallbackVersion string
-		if strings.HasPrefix(version, VersionPrefix) {
-			fallbackVersion = strings.TrimPrefix(version, VersionPrefix)
+		if strings.HasPrefix(version, prefix) {
+			fallbackVersion = strings.TrimPrefix(version, prefix)
 		} else {
-			fallbackVersion = VersionPrefix + version
+			fallbackVersion = prefix + version
 		}
 		assert.Equal(t, "1.0.0", fallbackVersion)
+	})
+
+	// REGRESSION TEST: jq uses version_prefix "jq-". The fallback must use the
+	// tool's prefix, not the hardcoded "v". Previously, version "jq-1.8.1" would
+	// get "v" prepended resulting in "vjq-1.8.1".
+	t.Run("custom prefix jq- strips correctly", func(t *testing.T) {
+		version := "jq-1.8.1"
+		prefix := "jq-" // tool.VersionPrefix
+		var fallbackVersion string
+		if strings.HasPrefix(version, prefix) {
+			fallbackVersion = strings.TrimPrefix(version, prefix)
+		} else {
+			fallbackVersion = prefix + version
+		}
+		assert.Equal(t, "1.8.1", fallbackVersion,
+			"jq-1.8.1 with prefix jq- should strip to 1.8.1, not prepend v to get vjq-1.8.1")
+	})
+
+	t.Run("custom prefix jq- adds when missing", func(t *testing.T) {
+		version := "1.8.1"
+		prefix := "jq-" // tool.VersionPrefix
+		var fallbackVersion string
+		if strings.HasPrefix(version, prefix) {
+			fallbackVersion = strings.TrimPrefix(version, prefix)
+		} else {
+			fallbackVersion = prefix + version
+		}
+		assert.Equal(t, "jq-1.8.1", fallbackVersion)
 	})
 }
 
