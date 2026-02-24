@@ -861,3 +861,84 @@ func TestBuildToolchainPATH_ConvertsRelativeToAbsolute(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildToolchainPATH_WithAbsolutePath verifies that BuildToolchainPATH
+// handles absolute paths correctly and exercises the filepath.Abs() code path.
+func TestBuildToolchainPATH_WithAbsolutePath(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Create a temp directory to use as an absolute install path.
+	tmpDir := t.TempDir()
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: tmpDir,
+		},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+	})
+	require.NoError(t, err)
+
+	// Expected absolute path for the tool.
+	expectedPathComponent := filepath.Join(tmpDir, "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify that the PATH contains the absolute path.
+	assert.Contains(t, result, expectedPathComponent,
+		"PATH should contain absolute path (%s)",
+		expectedPathComponent)
+
+	// Verify that all tool paths are absolute.
+	pathEntries := strings.Split(result, string(os.PathListSeparator))
+	for _, entry := range pathEntries {
+		if strings.Contains(entry, "hashicorp/terraform") {
+			assert.Truef(t, filepath.IsAbs(entry),
+				"PATH entry for terraform should be absolute, got: %s", entry)
+		}
+	}
+}
+
+// TestBuildToolchainPATH_WithMultipleTools verifies PATH construction with multiple tools
+// and exercises the loop that converts paths to absolute.
+func TestBuildToolchainPATH_WithMultipleTools(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	// Use a relative path to exercise the filepath.Abs() conversion.
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: ".tools",
+		},
+	}
+
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+		"cloudposse/atmos":    "1.0.0",
+	})
+	require.NoError(t, err)
+
+	// Get the current working directory.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Expected absolute paths for both tools.
+	expectedTerraformPath := filepath.Join(cwd, ".tools", "bin", "hashicorp", "terraform", "1.10.0")
+	expectedAtmosPath := filepath.Join(cwd, ".tools", "bin", "cloudposse", "atmos", "1.0.0")
+
+	// Verify both paths are included.
+	assert.Contains(t, result, expectedTerraformPath,
+		"PATH should contain terraform absolute path")
+	assert.Contains(t, result, expectedAtmosPath,
+		"PATH should contain atmos absolute path")
+
+	// Verify all entries are absolute paths.
+	pathEntries := strings.Split(result, string(os.PathListSeparator))
+	for _, entry := range pathEntries {
+		if strings.Contains(entry, ".tools") || strings.Contains(entry, "hashicorp") || strings.Contains(entry, "cloudposse") {
+			assert.Truef(t, filepath.IsAbs(entry),
+				"PATH entry should be absolute, got: %s", entry)
+		}
+	}
+}
