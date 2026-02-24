@@ -129,13 +129,19 @@ func executeVendorModel[T pkgComponentVendor | pkgAtmosVendor](
 	}
 
 	if model.failedPkg > 0 {
-		explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
-			model.failedPkg, len(model.packages), strings.Join(model.failedPkgNames, ", "))
-		return errUtils.Build(ErrVendorComponents).
-			WithExplanation(explanation).
-			Err()
+		return vendorFailureError(model.failedPkg, len(model.packages), model.failedPkgNames)
 	}
 	return nil
+}
+
+// vendorFailureError builds a descriptive error listing the names of the
+// components that failed to vendor.
+func vendorFailureError(failedCount, totalCount int, failedNames []string) error {
+	explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
+		failedCount, totalCount, strings.Join(failedNames, ", "))
+	return errUtils.Build(ErrVendorComponents).
+		WithExplanation(explanation).
+		Err()
 }
 
 // newModelVendor constructs a modelVendor prepared to run vendor installations

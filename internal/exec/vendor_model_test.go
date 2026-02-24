@@ -1,8 +1,7 @@
 package exec
 
 import (
-	"fmt"
-	"strings"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,19 +10,11 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
-func TestVendorErrorMessage_DescriptiveExplanation(t *testing.T) {
+func TestVendorFailureError(t *testing.T) {
 	// Regression test: the vendor error must contain a descriptive explanation
 	// listing the failed component names, not just a bare integer count.
 	t.Run("single failed component", func(t *testing.T) {
-		failedPkgNames := []string{"my-vpc"}
-		totalPkgs := 3
-		failedPkg := 1
-
-		explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
-			failedPkg, totalPkgs, strings.Join(failedPkgNames, ", "))
-		err := errUtils.Build(ErrVendorComponents).
-			WithExplanation(explanation).
-			Err()
+		err := vendorFailureError(1, 3, []string{"my-vpc"})
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrVendorComponents)
@@ -37,15 +28,7 @@ func TestVendorErrorMessage_DescriptiveExplanation(t *testing.T) {
 	})
 
 	t.Run("multiple failed components", func(t *testing.T) {
-		failedPkgNames := []string{"my-vpc", "my-rds", "my-s3"}
-		totalPkgs := 5
-		failedPkg := 3
-
-		explanation := fmt.Sprintf("Failed to vendor %d of %d components: %s",
-			failedPkg, totalPkgs, strings.Join(failedPkgNames, ", "))
-		err := errUtils.Build(ErrVendorComponents).
-			WithExplanation(explanation).
-			Err()
+		err := vendorFailureError(3, 5, []string{"my-vpc", "my-rds", "my-s3"})
 
 		require.Error(t, err)
 		assert.ErrorIs(t, err, ErrVendorComponents)
@@ -59,4 +42,35 @@ func TestVendorErrorMessage_DescriptiveExplanation(t *testing.T) {
 		assert.Contains(t, formatted, "my-s3")
 		assert.Contains(t, formatted, "Failed to vendor 3 of 5 components")
 	})
+}
+
+func TestHandleInstalledPkgMsg_TracksFailedNames(t *testing.T) {
+	// Verify that handleInstalledPkgMsg appends failed package names.
+	m := &modelVendor{
+		packages: []pkgVendor{
+			{name: "vpc"},
+			{name: "rds"},
+		},
+		index: 0,
+		isTTY: false,
+	}
+
+	// Simulate a failed install message.
+	msg := &installedPkgMsg{
+		err:  errors.New("download failed"),
+		name: "vpc",
+	}
+	m.handleInstalledPkgMsg(msg)
+
+	assert.Equal(t, 1, m.failedPkg)
+	assert.Equal(t, []string{"vpc"}, m.failedPkgNames)
+
+	// Simulate a second package succeeding.
+	m.index = 1
+	msg2 := &installedPkgMsg{name: "rds"}
+	m.handleInstalledPkgMsg(msg2)
+
+	// Failed count should not change.
+	assert.Equal(t, 1, m.failedPkg)
+	assert.Equal(t, []string{"vpc"}, m.failedPkgNames)
 }
