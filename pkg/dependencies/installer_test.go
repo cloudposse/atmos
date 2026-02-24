@@ -942,3 +942,38 @@ func TestBuildToolchainPATH_WithMultipleTools(t *testing.T) {
 		}
 	}
 }
+
+// TestBuildToolchainPATH_SkipsInvalidTools verifies that invalid tool specifications
+// are skipped without causing errors, and remaining valid tools are included.
+func TestBuildToolchainPATH_SkipsInvalidTools(t *testing.T) {
+	testPath := "/usr/bin:/bin"
+	t.Setenv("PATH", testPath)
+
+	config := &schema.AtmosConfiguration{
+		Toolchain: schema.Toolchain{
+			InstallPath: ".tools",
+		},
+	}
+
+	// Mix valid and invalid tool names.
+	result, err := BuildToolchainPATH(config, map[string]string{
+		"hashicorp/terraform": "1.10.0",
+		"invalid-tool":        "1.0.0", // Will be skipped by resolver.
+	})
+	require.NoError(t, err)
+
+	// Get the current working directory.
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+
+	// Expected absolute path for valid tool.
+	expectedTerraformPath := filepath.Join(cwd, ".tools", "bin", "hashicorp", "terraform", "1.10.0")
+
+	// Verify the valid tool path is included.
+	assert.Contains(t, result, expectedTerraformPath,
+		"PATH should contain terraform absolute path")
+
+	// Verify invalid tool doesn't cause empty PATH.
+	assert.NotEqual(t, testPath, result,
+		"PATH should include terraform path, not just original PATH")
+}

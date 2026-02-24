@@ -239,14 +239,10 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 
 		// Convert to absolute path to avoid Go 1.19+ exec.LookPath security issues.
 		// Go 1.19+ rejects executables found via relative PATH entries.
+		// Note: filepath.Abs rarely fails; if it does, skip this tool entry.
 		absBinPath, err := filepath.Abs(binPath)
 		if err != nil {
-			// If we can't get absolute path, log warning and skip this tool.
-			log.Warn("Failed to resolve absolute path for tool, skipping",
-				"tool", fmt.Sprintf("%s/%s", owner, repo),
-				"version", version,
-				"path", binPath,
-				"error", err)
+			log.Warn("Failed to resolve absolute path for tool, skipping", "tool", fmt.Sprintf("%s/%s", owner, repo), "version", version, "path", binPath, "error", err)
 			continue
 		}
 
