@@ -87,6 +87,32 @@ tests:
         - "has_errors=true"
         - "exit_code=1"
 
+  - name: "atmos terraform plan with ci no changes"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan mycomponent/no-changes -s prod --ci' and checks summary renders the no-changes template."
+    workdir: "fixtures/scenarios/native-ci"
+    command: "atmos"
+    args:
+      - "terraform"
+      - "plan"
+      - "mycomponent/no-changes"
+      - "-s"
+      - "prod"
+      - "--ci"
+    expect:
+      exit_code: 0
+      stderr:
+        - "## No Changes for `mycomponent/no-changes` in `prod`"
+        - "NO_CHANGE-inactive"
+        - "No changes. Your infrastructure matches the configuration."
+        - "atmos terraform plan mycomponent/no-changes -s prod"
+        - "has_changes=false"
+        - "has_errors=false"
+        - "exit_code=0"
+        - !not "Terraform will perform the following actions"
+        - !not "Plan: 0 to add, 0 to change, 0 to destroy"
+
   - name: "atmos terraform plan with github actions env"
     enabled: true
     sandbox: true

@@ -313,6 +313,8 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 	// Check for no changes.
 	if noChangesRe.MatchString(output) {
 		result.HasChanges = false
+		data.ChangedResult = "No changes. Your infrastructure matches the configuration."
+		data.Warnings = ExtractWarningBlocks(output)
 		return result
 	}
 

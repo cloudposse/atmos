@@ -531,6 +531,26 @@ func TestTemplateGolden(t *testing.T) {
 			},
 		},
 		{
+			name:         "plan no changes with changed result",
+			templateName: "plan",
+			goldenFile:   "plan_no_changes_with_changed_result.md",
+			context: &TerraformTemplateContext{
+				TemplateContext: &plugin.TemplateContext{
+					Component:     "foobar",
+					ComponentType: "terraform",
+					Stack:         "plat-ue2-sandbox",
+					Command:       "plan",
+					Result: &plugin.OutputResult{
+						ExitCode:   0,
+						HasChanges: false,
+						HasErrors:  false,
+					},
+				},
+				Resources:     plugin.ResourceCounts{},
+				ChangedResult: "No changes. Your infrastructure matches the configuration.",
+			},
+		},
+		{
 			name:         "plan failure",
 			templateName: "plan",
 			goldenFile:   "plan_failure.md",

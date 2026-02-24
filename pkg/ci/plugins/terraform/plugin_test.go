@@ -144,15 +144,34 @@ Plan: 1 to add, 0 to change, 0 to destroy.`
 	assert.Contains(t, ctx.Output, "Plan: 1 to add, 0 to change, 0 to destroy.")
 }
 
-func TestPlugin_BuildTemplateContext_PreservesOutputWithoutPlanActions(t *testing.T) {
+func TestPlugin_BuildTemplateContext_ClearsOutputForNoChanges(t *testing.T) {
 	p := &Plugin{}
 	info := &schema.ConfigAndStacksInfo{
 		ComponentFromArg: "vpc",
 		Stack:            "dev-us-east-1",
 	}
 
-	// Output without the "Terraform will perform" marker should be preserved as-is.
+	// No-changes output has no plan to display in the summary section.
 	output := "No changes. Your infrastructure matches the configuration."
+
+	result, err := p.BuildTemplateContext(info, nil, output, "plan")
+	require.NoError(t, err)
+
+	ctx, ok := result.(*TerraformTemplateContext)
+	require.True(t, ok)
+
+	assert.Empty(t, ctx.Output, "Output should be empty for no-changes plan")
+}
+
+func TestPlugin_BuildTemplateContext_PreservesOutputWithoutMarkers(t *testing.T) {
+	p := &Plugin{}
+	info := &schema.ConfigAndStacksInfo{
+		ComponentFromArg: "vpc",
+		Stack:            "dev-us-east-1",
+	}
+
+	// Output without any known markers should be preserved as-is.
+	output := "Some unknown terraform output"
 
 	result, err := p.BuildTemplateContext(info, nil, output, "plan")
 	require.NoError(t, err)

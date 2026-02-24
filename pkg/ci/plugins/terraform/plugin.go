@@ -211,9 +211,18 @@ var planOutputMarkers = []string{
 	"Terraform will perform the following actions:",
 }
 
+// noChangesMarker identifies output where terraform found no differences.
+const noChangesMarker = "No changes."
+
 // cleanPlanOutput strips noisy preamble (data source reads, state refreshes)
 // from terraform plan output, keeping only the plan itself.
+// Returns empty string for no-changes output (nothing useful to display).
 func cleanPlanOutput(output string) string {
+	// No-changes output has no plan to display.
+	if strings.Contains(output, noChangesMarker) {
+		return ""
+	}
+
 	for _, marker := range planOutputMarkers {
 		if idx := strings.Index(output, marker); idx > 0 {
 			return output[idx+len(marker):]
