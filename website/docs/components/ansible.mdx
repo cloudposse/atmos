@@ -3,6 +3,7 @@ title: Using Ansible
 sidebar_position: 6
 sidebar_label: Ansible
 id: ansible
+description: Run Ansible playbooks with the same stack-based configuration used for Terraform and Helmfile. Stack variables are automatically passed via --extra-vars.
 ---
 import Intro from '@site/src/components/Intro'
 
@@ -27,7 +28,7 @@ components:
           playbook: <playbook_file>
           inventory: <inventory_source>
       metadata: {}
-      command: ansible
+      command: ansible  # Base command (playbook subcommand always uses ansible-playbook)
       hooks: {}
 ```
 
@@ -69,7 +70,7 @@ components:
           inventory: inventory/production
 ```
 
-Command line flags take precedence over stack manifest settings:
+Command-line flags take precedence over stack manifest settings:
 
 ```bash
 atmos ansible playbook webserver -s prod --playbook deploy.yml -i inventory/staging

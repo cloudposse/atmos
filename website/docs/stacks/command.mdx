@@ -164,6 +164,12 @@ packer:
 
 ### Ansible Command Override
 
+:::note
+The `command` setting for Ansible only affects non-playbook subcommands (e.g., `atmos ansible version`).
+The `atmos ansible playbook` subcommand always uses the `ansible-playbook` binary. To use a custom
+`ansible-playbook` path, ensure it is available on your `PATH` or use a wrapper/symlink.
+:::
+
 <File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 ansible:

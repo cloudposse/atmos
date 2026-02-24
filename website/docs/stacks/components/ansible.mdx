@@ -8,7 +8,6 @@ id: ansible
 ---
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
-import EmbedFile from '@site/src/components/EmbedFile'
 
 <Intro>
 Ansible components run Ansible playbooks for configuration management and infrastructure automation. They allow you to manage playbook execution with the same stack-based configuration approach used for Terraform, Helmfile, and Packer.
@@ -196,8 +195,9 @@ Atmos automatically generates a YAML variables file containing all variables fro
 
 The generated file follows the naming convention: `<context>-<component>.ansible.vars.yaml`
 
-For example, for a component `webserver` in stack `prod`, the file would be:
-`prod-webserver.ansible.vars.yaml`
+Here, `<context>` is the full Atmos context prefix (e.g., `tenant-account-stage-region`), not just the stack name.
+For example, for a component `webserver` with context prefix `acme-plat-prod-us-east-1`, the file would be:
+`acme-plat-prod-us-east-1-webserver.ansible.vars.yaml`
 
 The file is automatically cleaned up after playbook execution completes.
 
