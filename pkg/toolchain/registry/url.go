@@ -7,7 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/Masterminds/semver/v3"
+	"github.com/expr-lang/expr"
+	goversion "github.com/hashicorp/go-version"
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -405,53 +406,98 @@ func applyOverrideFields(tool *Tool, override *VersionOverride, version string) 
 	log.Debug("Applied version override", versionLogKey, version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format)
 }
 
-// evaluateVersionConstraint evaluates an Aqua version constraint expression.
-// Supports:
-//   - `"true"` - Always matches
-//   - `"false"` - Never matches
-//   - `Version == "v1.2.3"` - Exact version match
-//   - `semver(">= 1.2.3")` - Semver constraint
+// evaluateVersionConstraint evaluates an Aqua version constraint expression using expr-lang.
+// This uses the same expression engine as the aqua registry for consistent behavior.
+// Supports: literal true/false, Version ==, semver(), semverWithVersion(), compound expressions.
 func evaluateVersionConstraint(constraint, version string) (bool, error) {
 	defer perf.Track(nil, "registry.evaluateVersionConstraint")()
 
-	// Trim whitespace.
 	constraint = strings.TrimSpace(constraint)
-
-	// Handle literal true/false.
-	if constraint == "true" || constraint == `"true"` {
-		return true, nil
-	}
-	if constraint == "false" || constraint == `"false"` {
+	if constraint == "" {
 		return false, nil
 	}
 
-	// Handle exact version match: Version == "v1.2.3"
-	if strings.HasPrefix(constraint, "Version ==") {
-		expectedVersion := strings.TrimSpace(strings.TrimPrefix(constraint, "Version =="))
-		expectedVersion = strings.Trim(expectedVersion, `"`)
-		return version == expectedVersion, nil
+	// Handle literal true/false (with optional quotes).
+	lower := strings.ToLower(strings.Trim(constraint, `"`))
+	if lower == "true" {
+		return true, nil
+	}
+	if lower == "false" {
+		return false, nil
 	}
 
-	// Handle semver constraint: semver(">= 1.2.3")
-	if strings.HasPrefix(constraint, "semver(") && strings.HasSuffix(constraint, ")") {
-		semverConstraint := strings.TrimPrefix(constraint, "semver(")
-		semverConstraint = strings.TrimSuffix(semverConstraint, ")")
-		semverConstraint = strings.Trim(semverConstraint, `"`)
-
-		// Parse the version (handle both "v1.2.3" and "1.2.3").
-		v, err := semver.NewVersion(version)
-		if err != nil {
-			return false, fmt.Errorf("invalid version %q: %w", version, err)
-		}
-
-		// Parse the constraint.
-		c, err := semver.NewConstraint(semverConstraint)
-		if err != nil {
-			return false, fmt.Errorf("invalid semver constraint %q: %w", semverConstraint, err)
-		}
-
-		return c.Check(v), nil
+	// Build expr-lang environment with Aqua-compatible functions.
+	semverFn := func(constraintStr string) bool {
+		return compareSemver(constraintStr, version)
 	}
 
-	return false, fmt.Errorf("%w: %q", errUtils.ErrUnsupportedVersionConstraint, constraint)
+	env := map[string]interface{}{
+		"Version":           version,
+		"SemVer":            version, // URL registry doesn't use version_prefix.
+		"semver":            semverFn,
+		"semverWithVersion": compareSemver,
+		"trimPrefix":        func(prefix, s string) string { return strings.TrimPrefix(s, prefix) },
+	}
+
+	program, err := expr.Compile(constraint, expr.Env(env))
+	if err != nil {
+		return false, fmt.Errorf("%w: %q: %w", errUtils.ErrUnsupportedVersionConstraint, constraint, err)
+	}
+
+	output, err := expr.Run(program, env)
+	if err != nil {
+		return false, fmt.Errorf("%w: %q: %w", errUtils.ErrUnsupportedVersionConstraint, constraint, err)
+	}
+
+	result, ok := output.(bool)
+	if !ok {
+		return false, fmt.Errorf("%w: expression %q did not return a boolean", errUtils.ErrUnsupportedVersionConstraint, constraint)
+	}
+
+	return result, nil
+}
+
+// compareSemver evaluates a semver constraint string against a version using hashicorp/go-version.
+// Supports comma-separated AND constraints: ">= 1.0.0, < 2.0.0".
+func compareSemver(constraintStr, ver string) bool {
+	sv1, err := goversion.NewVersion(ver)
+	if err != nil {
+		return false
+	}
+
+	for _, part := range strings.Split(strings.TrimSpace(constraintStr), ",") {
+		c := strings.TrimSpace(part)
+		if !evaluateSemverOp(sv1, c) {
+			return false
+		}
+	}
+	return true
+}
+
+// evaluateSemverOp evaluates a single semver comparison operator.
+func evaluateSemverOp(sv1 *goversion.Version, constraint string) bool {
+	type opEntry struct {
+		prefix string
+		fn     func(*goversion.Version) bool
+	}
+
+	ops := []opEntry{
+		{">=", sv1.GreaterThanOrEqual},
+		{"<=", sv1.LessThanOrEqual},
+		{"!=", func(v *goversion.Version) bool { return !sv1.Equal(v) }},
+		{">", sv1.GreaterThan},
+		{"<", sv1.LessThan},
+		{"=", sv1.Equal},
+	}
+
+	for _, op := range ops {
+		if s := strings.TrimPrefix(constraint, op.prefix); s != constraint {
+			sv2, err := goversion.NewVersion(strings.TrimSpace(s))
+			if err != nil {
+				return false
+			}
+			return op.fn(sv2)
+		}
+	}
+	return false
 }

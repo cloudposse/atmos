@@ -9,6 +9,7 @@ import (
 	"strings"
 	"text/template"
 
+	sprig "github.com/Masterminds/sprig/v3"
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
@@ -32,6 +33,7 @@ const (
 	defaultRegistryPriority = 10
 	registryLogKey          = "registry"
 	durationMetricKey       = "duration"
+	versionLogKey           = "version"
 
 	// Search scoring weights.
 	scoreExactRepoMatch     = 100
@@ -188,24 +190,41 @@ func (ar *AquaRegistry) GetToolWithVersion(owner, repo, version string) (*regist
 // versionOverride holds version override data from Aqua registry.
 // Fields mirror Aqua's VersionOverride to handle all real-world registry YAML patterns.
 type versionOverride struct {
-	VersionConstraint   string                  `yaml:"version_constraint"`
-	Asset               string                  `yaml:"asset"`
-	URL                 string                  `yaml:"url"` // Alternative to Asset for http type tools.
-	Format              string                  `yaml:"format"`
-	VersionPrefix       string                  `yaml:"version_prefix"`
-	Replacements        map[string]string       `yaml:"replacements"`
-	Overrides           []registry.AquaOverride `yaml:"overrides"`
-	Files               []registry.File         `yaml:"files"`
-	SupportedEnvs       []string                `yaml:"supported_envs"`
-	Rosetta2            bool                    `yaml:"rosetta2"`
-	WindowsArmEmulation bool                    `yaml:"windows_arm_emulation"`
-	NoAsset             bool                    `yaml:"no_asset"`
-	Checksum            registry.ChecksumConfig `yaml:"checksum"`
+	VersionConstraint   string                    `yaml:"version_constraint"`
+	Type                string                    `yaml:"type"`
+	RepoOwner           string                    `yaml:"repo_owner"`
+	RepoName            string                    `yaml:"repo_name"`
+	Asset               string                    `yaml:"asset"`
+	URL                 string                    `yaml:"url"` // Alternative to Asset for http type tools.
+	Format              string                    `yaml:"format"`
+	FormatOverrides     []registry.FormatOverride `yaml:"format_overrides"`
+	VersionPrefix       string                    `yaml:"version_prefix"`
+	Replacements        map[string]string         `yaml:"replacements"`
+	Overrides           []registry.AquaOverride   `yaml:"overrides"`
+	Files               []registry.File           `yaml:"files"`
+	SupportedEnvs       []string                  `yaml:"supported_envs"`
+	Rosetta2            bool                      `yaml:"rosetta2"`
+	WindowsArmEmulation bool                      `yaml:"windows_arm_emulation"`
+	NoAsset             bool                      `yaml:"no_asset"`
+	Checksum            registry.ChecksumConfig   `yaml:"checksum"`
+	ErrorMessage        string                    `yaml:"error_message"`
 }
 
 // applyVersionOverride applies a version override to the tool.
 // Only non-empty/non-zero override fields are applied; base fields serve as defaults.
+// When the override changes the tool Type, resetByPkgType clears fields not applicable to the new type.
 func applyVersionOverride(tool *registry.Tool, override *versionOverride, version string) {
+	// If the override changes the type, reset type-specific fields first.
+	if override.Type != "" && override.Type != tool.Type {
+		resetByPkgType(tool, override.Type)
+		tool.Type = override.Type
+	}
+	if override.RepoOwner != "" {
+		tool.RepoOwner = override.RepoOwner
+	}
+	if override.RepoName != "" {
+		tool.RepoName = override.RepoName
+	}
 	// Use Asset if specified, otherwise fall back to URL (used by http type tools).
 	if override.Asset != "" {
 		tool.Asset = override.Asset
@@ -214,6 +233,9 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	}
 	if override.Format != "" {
 		tool.Format = override.Format
+	}
+	if len(override.FormatOverrides) > 0 {
+		tool.FormatOverrides = override.FormatOverrides
 	}
 	if override.VersionPrefix != "" {
 		tool.VersionPrefix = override.VersionPrefix
@@ -233,32 +255,69 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	if len(override.Overrides) > 0 {
 		tool.Overrides = convertAquaOverrides(override.Overrides)
 	}
-	log.Debug("Applied version override", "version", version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format, "replacements", tool.Replacements)
+	// Apply rosetta2 and windows_arm_emulation flags (additive — once true, stays true).
+	if override.Rosetta2 {
+		tool.Rosetta2 = true
+	}
+	if override.WindowsArmEmulation {
+		tool.WindowsArmEmulation = true
+	}
+	if override.ErrorMessage != "" {
+		tool.ErrorMessage = override.ErrorMessage
+	}
+	log.Debug("Applied version override", versionLogKey, version, "constraint", override.VersionConstraint, "asset", tool.Asset, "format", tool.Format, "replacements", tool.Replacements)
+}
+
+// resetByPkgType clears fields not applicable when changing to a new package type.
+// This matches upstream aquaproj/aqua behavior where switching types (e.g., github_release -> http)
+// resets type-specific fields to avoid stale configuration.
+func resetByPkgType(tool *registry.Tool, newType string) {
+	switch newType {
+	case "http":
+		// HTTP type uses URL, not github_release-specific fields.
+		tool.Asset = ""
+	case "github_release":
+		// GitHub release type uses Asset, not http-specific URL.
+		tool.URL = ""
+	}
 }
 
 // registryPackage holds package data from Aqua registry file.
 // This struct must include all fields that need to be preserved when resolving version overrides.
 type registryPackage struct {
-	Name             string                  `yaml:"name"` // Package name (e.g., "kubernetes/kubernetes/kubectl").
-	Type             string                  `yaml:"type"`
-	RepoOwner        string                  `yaml:"repo_owner"`
-	RepoName         string                  `yaml:"repo_name"`
-	Asset            string                  `yaml:"asset"` // Used by github_release types.
-	URL              string                  `yaml:"url"`   // Used by http types.
-	Format           string                  `yaml:"format"`
-	BinaryName       string                  `yaml:"binary_name"`
-	Description      string                  `yaml:"description"`
-	VersionPrefix    string                  `yaml:"version_prefix"`
-	Replacements     map[string]string       `yaml:"replacements"`
-	Overrides        []registry.AquaOverride `yaml:"overrides"`
-	Files            []registry.File         `yaml:"files"`
-	VersionOverrides []versionOverride       `yaml:"version_overrides"`
-	SupportedEnvs    []string                `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux").
+	Name                string                    `yaml:"name"` // Package name (e.g., "kubernetes/kubernetes/kubectl").
+	Type                string                    `yaml:"type"`
+	RepoOwner           string                    `yaml:"repo_owner"`
+	RepoName            string                    `yaml:"repo_name"`
+	Asset               string                    `yaml:"asset"` // Used by github_release types.
+	URL                 string                    `yaml:"url"`   // Used by http types.
+	Format              string                    `yaml:"format"`
+	FormatOverrides     []registry.FormatOverride `yaml:"format_overrides"`
+	BinaryName          string                    `yaml:"binary_name"`
+	Description         string                    `yaml:"description"`
+	VersionPrefix       string                    `yaml:"version_prefix"`
+	VersionConstraint   string                    `yaml:"version_constraint"` // Top-level version constraint.
+	Rosetta2            bool                      `yaml:"rosetta2"`           // Allow arm64 to fall back to amd64 on macOS.
+	WindowsArmEmulation bool                      `yaml:"windows_arm_emulation"`
+	Replacements        map[string]string         `yaml:"replacements"`
+	Overrides           []registry.AquaOverride   `yaml:"overrides"`
+	Files               []registry.File           `yaml:"files"`
+	VersionOverrides    []versionOverride         `yaml:"version_overrides"`
+	SupportedEnvs       []string                  `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux").
+	ErrorMessage        string                    `yaml:"error_message"`
+	VersionSource       string                    `yaml:"version_source"` // Version source: "github_release" (default) or "github_tag".
+	NoAsset             bool                      `yaml:"no_asset"`
 }
 
 // resolveVersionOverrides fetches the full registry file and resolves version-specific overrides.
 // The sourceURL parameter should be the exact URL where the tool's registry.yaml was found,
 // which handles nested paths like kubernetes/kubernetes/kubectl correctly.
+//
+// This follows upstream aquaproj/aqua's SetVersion() algorithm:
+//  1. If NO top-level version_constraint -> return base package as-is (skip overrides).
+//  2. If top-level version_constraint matches -> return base package.
+//  3. Try each version_override (first match wins, apply override fields).
+//  4. If nothing matched -> return base package (NOT an error).
 func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*registry.Tool, error) {
 	if sourceURL == "" {
 		return nil, fmt.Errorf("%w: source URL is required for version override resolution", registry.ErrToolNotFound)
@@ -276,29 +335,82 @@ func (ar *AquaRegistry) resolveVersionOverrides(sourceURL, version string) (*reg
 	}
 
 	tool := &registry.Tool{
-		Name:          resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
-		Type:          pkgDef.Type,
-		RepoOwner:     pkgDef.RepoOwner,
-		RepoName:      pkgDef.RepoName,
-		Asset:         asset,
-		Format:        pkgDef.Format,
-		BinaryName:    pkgDef.BinaryName,
-		VersionPrefix: pkgDef.VersionPrefix,
-		Replacements:  pkgDef.Replacements,
-		Overrides:     convertAquaOverrides(pkgDef.Overrides),
-		Files:         pkgDef.Files,
-		SourceURL:     sourceURL,
-		SupportedEnvs: pkgDef.SupportedEnvs,
+		Name:                resolveBinaryName(pkgDef.BinaryName, pkgDef.Name, pkgDef.RepoName),
+		Type:                pkgDef.Type,
+		RepoOwner:           pkgDef.RepoOwner,
+		RepoName:            pkgDef.RepoName,
+		Asset:               asset,
+		Format:              pkgDef.Format,
+		FormatOverrides:     pkgDef.FormatOverrides,
+		BinaryName:          pkgDef.BinaryName,
+		VersionPrefix:       pkgDef.VersionPrefix,
+		Replacements:        pkgDef.Replacements,
+		Overrides:           convertAquaOverrides(pkgDef.Overrides),
+		Files:               pkgDef.Files,
+		SourceURL:           sourceURL,
+		SupportedEnvs:       pkgDef.SupportedEnvs,
+		Rosetta2:            pkgDef.Rosetta2,
+		WindowsArmEmulation: pkgDef.WindowsArmEmulation,
+		ErrorMessage:        pkgDef.ErrorMessage,
+		VersionSource:       pkgDef.VersionSource,
+		NoAsset:             pkgDef.NoAsset,
 	}
 
-	selectedIdx := findMatchingOverride(pkgDef.VersionOverrides, version, pkgDef.VersionPrefix)
-	if selectedIdx == -1 {
-		log.Debug("No matching version override", "version", version, "overrides_count", len(pkgDef.VersionOverrides))
+	// Phase 1: If no top-level constraint, return base (no overrides checked).
+	// This matches upstream: when there's no version_constraint at all, overrides are skipped.
+	if pkgDef.VersionConstraint == "" {
+		log.Debug("No top-level version_constraint, returning base config", versionLogKey, version)
 		return tool, nil
 	}
 
-	applyVersionOverride(tool, &pkgDef.VersionOverrides[selectedIdx], version)
+	// Compute SemVer (prefix-stripped version) for constraint evaluation.
+	sv := computeSemVer(version, pkgDef.VersionPrefix)
+
+	// Phase 2: Evaluate top-level constraint. If it matches, return base config.
+	matches, err := evaluateVersionConstraint(pkgDef.VersionConstraint, version, sv)
+	if err == nil && matches {
+		log.Debug("Version matches top-level constraint, returning base config",
+			versionLogKey, version, "constraint", pkgDef.VersionConstraint)
+		return tool, nil
+	}
+
+	// Phase 3: Try version overrides. First match wins.
+	for i := range pkgDef.VersionOverrides {
+		vo := &pkgDef.VersionOverrides[i]
+
+		// Compute per-override SemVer (upstream supports version_prefix in overrides).
+		vp := pkgDef.VersionPrefix
+		if vo.VersionPrefix != "" {
+			vp = vo.VersionPrefix
+		}
+		voSV := computeSemVer(version, vp)
+
+		m, constraintErr := evaluateVersionConstraint(vo.VersionConstraint, version, voSV)
+		if constraintErr != nil {
+			log.Debug("Failed to evaluate version override constraint",
+				"constraint", vo.VersionConstraint, versionLogKey, version, "error", constraintErr)
+			continue
+		}
+		if m {
+			applyVersionOverride(tool, vo, version)
+			return tool, nil
+		}
+	}
+
+	// Phase 4: No match -> return base config (NOT an error).
+	// This matches upstream: unmatched versions get the base package configuration.
+	log.Debug("No matching version override, returning base config",
+		versionLogKey, version, "overrides_count", len(pkgDef.VersionOverrides))
 	return tool, nil
+}
+
+// computeSemVer strips the version prefix to produce a SemVer-compatible string.
+// If the prefix is empty or the version doesn't start with it, returns the version as-is.
+func computeSemVer(version, prefix string) string {
+	if prefix != "" && strings.HasPrefix(version, prefix) {
+		return strings.TrimPrefix(version, prefix)
+	}
+	return version
 }
 
 // fetchRegistryPackage fetches and parses a registry file, returning the first package.
@@ -333,43 +445,7 @@ func (ar *AquaRegistry) fetchRegistryPackage(registryURL string) (*registryPacka
 	return &registryFile.Packages[0], nil
 }
 
-// findMatchingOverride finds the first version override that matches the given version.
-// Following Aqua's behavior, the version prefix is stripped before semver evaluation
-// but preserved for Version == comparisons.
-func findMatchingOverride(overrides []versionOverride, version, versionPrefix string) int {
-	// Strip version prefix for semver evaluation (Aqua's SetVersion behavior).
-	// The bare version is used for semver constraints; the full version for Version == comparisons.
-	bareVersion := version
-	if versionPrefix != "" {
-		bareVersion = strings.TrimPrefix(version, versionPrefix)
-	}
-	// Also strip standard "v" prefix if present (common convention).
-	bareVersion = strings.TrimPrefix(bareVersion, versionPrefix)
-	if bareVersion == version {
-		// No prefix was stripped, try stripping "v" as well.
-		bareVersion = strings.TrimPrefix(version, "v")
-	}
-
-	for i, override := range overrides {
-		// For semver constraints, use the bare version (prefix stripped).
-		// For Version == and true/false, use the full version.
-		constraintVersion := version
-		if strings.HasPrefix(override.VersionConstraint, "semver(") {
-			constraintVersion = bareVersion
-		}
-		matches, err := evaluateVersionConstraint(override.VersionConstraint, constraintVersion)
-		if err != nil {
-			log.Debug("Failed to evaluate version constraint", "constraint", override.VersionConstraint, "version", constraintVersion, "error", err)
-			continue
-		}
-		if matches {
-			return i
-		}
-	}
-	return -1
-}
-
-// defaultMkdirPermissions moved to constants block
+// defaultMkdirPermissions moved to constants block.
 
 // fetchFromRegistry fetches tool metadata from a specific registry.
 func (ar *AquaRegistry) fetchFromRegistry(registryURL, owner, repo string) (*registry.Tool, error) {
@@ -456,14 +532,20 @@ func (ar *AquaRegistry) parseRegistryFile(data []byte) (*registry.Tool, error) {
 
 		// Convert AquaPackage to Tool.
 		tool := &registry.Tool{
-			Name:          resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
-			RepoOwner:     pkg.RepoOwner,
-			RepoName:      pkg.RepoName,
-			Asset:         asset,
-			Format:        pkg.Format,
-			Type:          pkg.Type,
-			BinaryName:    pkg.BinaryName,
-			VersionPrefix: pkg.VersionPrefix,
+			Name:                resolveBinaryName(pkg.BinaryName, pkg.Name, pkg.RepoName),
+			RepoOwner:           pkg.RepoOwner,
+			RepoName:            pkg.RepoName,
+			Asset:               asset,
+			Format:              pkg.Format,
+			FormatOverrides:     pkg.FormatOverrides,
+			Type:                pkg.Type,
+			BinaryName:          pkg.BinaryName,
+			VersionPrefix:       pkg.VersionPrefix,
+			Rosetta2:            pkg.Rosetta2,
+			WindowsArmEmulation: pkg.WindowsArmEmulation,
+			ErrorMessage:        pkg.ErrorMessage,
+			VersionSource:       pkg.VersionSource,
+			NoAsset:             pkg.NoAsset,
 			// Copy Aqua-specific fields for nested file extraction and platform overrides.
 			Files:         pkg.Files,
 			Replacements:  pkg.Replacements,
@@ -492,13 +574,16 @@ func convertAquaOverrides(aquaOverrides []registry.AquaOverride) []registry.Over
 		overrides[i] = registry.Override{
 			GOOS:         ao.GOOS,
 			GOARCH:       ao.GOARCH,
+			Envs:         ao.Envs,
+			Type:         ao.Type,
 			Asset:        ao.Asset,
+			URL:          ao.URL,
 			Format:       ao.Format,
 			Files:        ao.Files,
 			Replacements: ao.Replacements,
 		}
-		// If URL is set in Aqua override, use it as Asset (Aqua uses url instead of asset).
-		if ao.URL != "" {
+		// If URL is set in Aqua override and Asset is not, use URL as Asset.
+		if ao.URL != "" && ao.Asset == "" {
 			overrides[i].Asset = ao.URL
 		}
 	}
@@ -555,14 +640,34 @@ func resolveVersionStrings(tool *registry.Tool, version string) (releaseVersion,
 // buildAssetTemplateData creates the template data map for asset URL rendering.
 // Applies tool.Replacements to OS/Arch values, matching the installer's buildTemplateData behavior.
 func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) map[string]string {
-	format := "zip"
-	if tool.Format != "" {
-		format = tool.Format
+	// Use the tool's explicit format. Aqua defaults to empty for github_release/http types,
+	// meaning raw binary (no archive extraction needed).
+	format := tool.Format
+
+	// Apply per-OS format overrides (e.g., zip on Windows, tar.gz on Linux).
+	for _, fo := range tool.FormatOverrides {
+		if fo.GOOS == getOS() {
+			format = fo.Format
+			break
+		}
 	}
 
-	// Get OS and Arch, applying any replacements from the tool config.
+	// Get OS and Arch, applying emulation fallbacks and replacements.
 	osVal := getOS()
 	archVal := getArch()
+
+	// Rosetta 2 fallback: on darwin/arm64, always use amd64 when rosetta2 is enabled.
+	// This matches upstream aquaproj/aqua behavior (no arm64 replacement check).
+	if tool.Rosetta2 && osVal == "darwin" && archVal == "arm64" {
+		archVal = "amd64"
+	}
+
+	// Windows ARM emulation fallback: always use amd64 when enabled on windows/arm64.
+	if tool.WindowsArmEmulation && osVal == "windows" && archVal == "arm64" {
+		archVal = "amd64"
+	}
+
+	// Apply replacements from the tool config.
 	if tool.Replacements != nil {
 		if replacement, ok := tool.Replacements[osVal]; ok {
 			osVal = replacement
@@ -577,6 +682,8 @@ func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) 
 		"SemVer":    semVer,
 		"OS":        osVal,
 		"Arch":      archVal,
+		"GOOS":      getOS(),
+		"GOARCH":    getArch(),
 		"RepoOwner": tool.RepoOwner,
 		"RepoName":  tool.RepoName,
 		"Format":    format,
@@ -584,36 +691,84 @@ func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) 
 }
 
 // assetTemplateFuncs returns the template function map for asset URL templates.
+// Uses Sprig v3 text functions as the base (matching Aqua upstream), with Aqua-specific overrides.
 func assetTemplateFuncs() template.FuncMap {
-	return template.FuncMap{
-		"trimV": func(s string) string {
-			return strings.TrimPrefix(s, versionPrefix)
-		},
-		"trimPrefix": func(prefix, s string) string {
-			return strings.TrimPrefix(s, prefix)
-		},
-		"trimSuffix": func(suffix, s string) string {
-			return strings.TrimSuffix(s, suffix)
-		},
-		"replace": func(old, new, s string) string {
-			return strings.ReplaceAll(s, old, new)
-		},
+	funcs := sprig.TxtFuncMap()
+
+	// Override with Aqua-specific functions that have different argument order
+	// or behavior than Sprig equivalents.
+	funcs["trimV"] = func(s string) string {
+		return strings.TrimPrefix(s, versionPrefix)
 	}
+	funcs["trimPrefix"] = func(prefix, s string) string {
+		return strings.TrimPrefix(s, prefix)
+	}
+	funcs["trimSuffix"] = func(suffix, s string) string {
+		return strings.TrimSuffix(s, suffix)
+	}
+	funcs["replace"] = func(old, new, s string) string {
+		return strings.ReplaceAll(s, old, new)
+	}
+
+	return funcs
 }
 
-// executeAssetTemplate parses and executes the asset template.
+// executeAssetTemplate parses and executes the asset template with two-pass rendering.
+// Pass 1: Render with base variables (Version, SemVer, OS, Arch, etc.).
+// Pass 2: If the template references {{.Asset}} or {{.AssetWithoutExt}},
+// inject the rendered asset name and re-render.
 func executeAssetTemplate(assetTemplate string, data map[string]string) (string, error) {
-	tmpl, err := template.New("asset").Funcs(assetTemplateFuncs()).Parse(assetTemplate)
+	// Pass 1: Render with base data.
+	result, err := renderTemplate(assetTemplate, data)
+	if err != nil {
+		return "", err
+	}
+
+	// Pass 2: If template references Asset or AssetWithoutExt, re-render with those values.
+	if strings.Contains(assetTemplate, ".Asset") {
+		data["Asset"] = result
+		data["AssetWithoutExt"] = stripFileExtension(result)
+		result, err = renderTemplate(assetTemplate, data)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	return result, nil
+}
+
+// renderTemplate parses and executes a Go template string.
+func renderTemplate(templateStr string, data map[string]string) (string, error) {
+	tmpl, err := template.New("asset").Funcs(assetTemplateFuncs()).Parse(templateStr)
 	if err != nil {
 		return "", fmt.Errorf("%w: failed to parse asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
 
-	var assetName strings.Builder
-	if err := tmpl.Execute(&assetName, data); err != nil {
+	var buf strings.Builder
+	if err := tmpl.Execute(&buf, data); err != nil {
 		return "", fmt.Errorf("%w: failed to execute asset template: %w", registry.ErrNoAssetTemplate, err)
 	}
 
-	return assetName.String(), nil
+	return buf.String(), nil
+}
+
+// stripFileExtension removes the file extension from an asset name.
+// Handles compound extensions like .tar.gz, .tar.xz, etc.
+func stripFileExtension(name string) string {
+	// Check compound extensions first.
+	compoundExts := []string{".tar.gz", ".tar.xz", ".tar.bz2"}
+	lower := strings.ToLower(name)
+	for _, ext := range compoundExts {
+		if strings.HasSuffix(lower, ext) {
+			return name[:len(name)-len(ext)]
+		}
+	}
+	// Fall back to single extension.
+	ext := filepath.Ext(name)
+	if ext != "" {
+		return strings.TrimSuffix(name, ext)
+	}
+	return name
 }
 
 // extractBinaryNameFromPackageName extracts the binary name from an Aqua package name.

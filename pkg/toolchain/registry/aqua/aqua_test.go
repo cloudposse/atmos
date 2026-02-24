@@ -385,6 +385,49 @@ func TestAquaRegistry_BuildAssetURL_WithTemplateFunctions(t *testing.T) {
 	assert.NotContains(t, url, "v1.0.0")
 }
 
+func TestAquaRegistry_BuildAssetURL_SprigFunctions(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	tests := []struct {
+		name     string
+		asset    string
+		contains string
+	}{
+		{
+			name:     "sprig title function",
+			asset:    "tool-{{title .OS}}-{{.Arch}}.tar.gz",
+			contains: "tool-",
+		},
+		{
+			name:     "sprig upper function",
+			asset:    "tool-{{upper .OS}}-{{.Arch}}.tar.gz",
+			contains: "tool-",
+		},
+		{
+			name:     "sprig lower function",
+			asset:    "tool-{{lower .RepoName}}-{{.SemVer}}.tar.gz",
+			contains: "tool-tool-1.0.0.tar.gz",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tool := &registry.Tool{
+				Name:      "test-tool",
+				Type:      "http",
+				RepoOwner: "test",
+				RepoName:  "TOOL",
+				Asset:     tt.asset,
+				Format:    "tar.gz",
+			}
+
+			url, err := ar.BuildAssetURL(tool, "1.0.0")
+			assert.NoError(t, err)
+			assert.Contains(t, url, tt.contains)
+		})
+	}
+}
+
 func TestAquaRegistry_BuildAssetURL_NoAsset(t *testing.T) {
 	ar := NewAquaRegistry()
 
@@ -914,7 +957,8 @@ packages:
 func TestApplyVersionOverride_Replacements(t *testing.T) {
 	// Registry YAML with version_overrides that include replacements.
 	// This pattern matches jq which has different replacements for older versions.
-	// Note: Aqua uses semver("constraint") format for version constraints.
+	// Note: A top-level version_constraint: "false" is needed so overrides are checked
+	// (upstream skips overrides when there's no top-level constraint).
 	registryYAML := `
 packages:
   - type: github_release
@@ -922,6 +966,7 @@ packages:
     repo_name: jq
     asset: "jq-{{.OS}}-{{.Arch}}"
     version_prefix: "jq-"
+    version_constraint: "false"
     replacements:
       darwin: macos
       arm64: arm64
@@ -960,13 +1005,15 @@ packages:
 // REGRESSION TEST: This test would have caught the bug where versionOverride struct
 // was missing the Overrides field.
 func TestApplyVersionOverride_OverridesField(t *testing.T) {
-	// Note: Aqua uses semver("constraint") format for version constraints.
+	// Note: A top-level version_constraint: "false" is needed so overrides are checked
+	// (upstream skips overrides when there's no top-level constraint).
 	registryYAML := `
 packages:
   - type: github_release
     repo_owner: test
     repo_name: tool
     asset: "tool_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz"
+    version_constraint: "false"
     version_overrides:
       - version_constraint: semver(">= 2.0.0")
         asset: "tool_{{.Version}}_{{.OS}}_{{.Arch}}.zip"
@@ -1673,8 +1720,9 @@ packages:
 }
 
 // TestResolveVersionOverrides_RealYqPattern uses the exact yq registry.yaml
-// from the Aqua registry. The base has asset: yq_{{.OS}}_{{.Arch}} and the
-// single "true" override only has rosetta2: true. The base asset MUST be preserved.
+// from the Aqua registry. Tests upstream algorithm where:
+// - Version >= 4.9.6 matches top-level constraint → returns base (no overrides checked).
+// - Version < 4.9.6 falls through to "true" catch-all override → gets rosetta2.
 func TestResolveVersionOverrides_RealYqPattern(t *testing.T) {
 	// Exact YAML from https://github.com/aquaproj/aqua-registry/blob/main/pkgs/mikefarah/yq/registry.yaml
 	registryYAML := `
@@ -1703,24 +1751,108 @@ packages:
 	ar := NewAquaRegistry()
 	ar.cache.baseDir = t.TempDir()
 
-	// Version 4.52.4 - the "true" override matches but only has rosetta2.
-	// The base asset template MUST be preserved.
-	tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "4.52.4")
-	require.NoError(t, err)
-	require.NotNil(t, tool)
+	t.Run("version matches top-level returns base", func(t *testing.T) {
+		// Version 4.52.4 matches top-level constraint >= 4.9.6 → returns base.
+		// Upstream: overrides NOT checked when top-level matches.
+		tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "4.52.4")
+		require.NoError(t, err)
+		require.NotNil(t, tool)
 
-	// CRITICAL: Base asset must be preserved when override doesn't specify an asset.
-	assert.Equal(t, "yq_{{.OS}}_{{.Arch}}", tool.Asset,
-		"Base asset template must be preserved when override only has rosetta2")
+		// Base asset must be preserved.
+		assert.Equal(t, "yq_{{.OS}}_{{.Arch}}", tool.Asset)
+		assert.Equal(t, "mikefarah", tool.RepoOwner)
+		assert.Equal(t, "yq", tool.RepoName)
+		assert.Equal(t, "github_release", tool.Type)
 
-	// Base fields.
-	assert.Equal(t, "mikefarah", tool.RepoOwner)
-	assert.Equal(t, "yq", tool.RepoName)
-	assert.Equal(t, "github_release", tool.Type)
+		// SupportedEnvs from base should be preserved.
+		assert.Contains(t, tool.SupportedEnvs, "darwin")
+		assert.Contains(t, tool.SupportedEnvs, "linux")
 
-	// SupportedEnvs from base should be preserved.
-	assert.Contains(t, tool.SupportedEnvs, "darwin")
-	assert.Contains(t, tool.SupportedEnvs, "linux")
+		// Rosetta2 is NOT set in base (only in override which isn't checked).
+		assert.False(t, tool.Rosetta2,
+			"rosetta2 should NOT be set when top-level matches (upstream doesn't check overrides)")
+	})
+
+	t.Run("version below top-level gets override", func(t *testing.T) {
+		// Version 4.9.5 doesn't match top-level >= 4.9.6 → falls to "true" override.
+		tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "4.9.5")
+		require.NoError(t, err)
+		require.NotNil(t, tool)
+
+		// Base asset must be preserved (override doesn't specify an asset).
+		assert.Equal(t, "yq_{{.OS}}_{{.Arch}}", tool.Asset)
+
+		// Rosetta2 should be propagated from the "true" catch-all override.
+		assert.True(t, tool.Rosetta2,
+			"rosetta2 should be set from catch-all override for older versions")
+	})
+}
+
+// TestResolveVersionOverrides_TopLevelConstraint verifies that when no override matches
+// and a top-level version_constraint exists, versions that don't satisfy it are rejected.
+func TestResolveVersionOverrides_TopLevelConstraint(t *testing.T) {
+	registryYAML := `
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    asset: tool_{{.OS}}_{{.Arch}}
+    version_constraint: semver(">= 2.0.0")
+    version_overrides:
+      - version_constraint: semver("<= 1.5.0")
+        asset: tool-old_{{.OS}}_{{.Arch}}
+`
+
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-yaml")
+		_, _ = w.Write([]byte(registryYAML))
+	}))
+	defer ts.Close()
+
+	ar := NewAquaRegistry()
+	ar.cache.baseDir = t.TempDir()
+
+	t.Run("version matches override", func(t *testing.T) {
+		// Version 1.3.0 matches the override constraint "<= 1.5.0".
+		tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.3.0")
+		require.NoError(t, err)
+		assert.Equal(t, "tool-old_{{.OS}}_{{.Arch}}", tool.Asset)
+	})
+
+	t.Run("version matches top-level constraint", func(t *testing.T) {
+		// Version 3.0.0 doesn't match any override, but matches top-level ">= 2.0.0".
+		tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "3.0.0")
+		require.NoError(t, err)
+		assert.Equal(t, "tool_{{.OS}}_{{.Arch}}", tool.Asset)
+	})
+
+	t.Run("version matches nothing returns base config", func(t *testing.T) {
+		// Version 1.8.0 doesn't match override (<= 1.5.0) or top-level (>= 2.0.0).
+		// Upstream behavior: return base config (NOT an error).
+		tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", "1.8.0")
+		require.NoError(t, err)
+		assert.Equal(t, "tool_{{.OS}}_{{.Arch}}", tool.Asset)
+	})
+
+	t.Run("no top-level constraint returns base config", func(t *testing.T) {
+		// Registry without top-level version_constraint — any version uses base config.
+		noConstraintYAML := `
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool2
+    asset: tool2_{{.OS}}_{{.Arch}}
+`
+		ts2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/x-yaml")
+			_, _ = w.Write([]byte(noConstraintYAML))
+		}))
+		defer ts2.Close()
+
+		tool, err := ar.resolveVersionOverrides(ts2.URL+"/registry.yaml", "0.0.1")
+		require.NoError(t, err)
+		assert.Equal(t, "tool2_{{.OS}}_{{.Arch}}", tool.Asset)
+	})
 }
 
 // TestResolveVersionOverrides_RealJqPattern uses the exact jq registry.yaml
@@ -1850,13 +1982,13 @@ packages:
 
 // TestEvaluateVersionConstraint_WithVersionPrefix tests that semver constraints
 // work correctly when the version has a non-standard prefix like "jq-".
-// Aqua strips the version_prefix before evaluating semver constraints.
+// Aqua passes Version (full) and SemVer (prefix-stripped) separately.
 func TestEvaluateVersionConstraint_WithVersionPrefix(t *testing.T) {
 	tests := []struct {
 		name       string
 		constraint string
-		version    string
-		prefix     string
+		version    string // Full version with prefix.
+		prefix     string // Version prefix to strip for SemVer.
 		expected   bool
 	}{
 		{
@@ -1892,7 +2024,14 @@ func TestEvaluateVersionConstraint_WithVersionPrefix(t *testing.T) {
 			constraint: `Version == "jq-1.5rc1"`,
 			version:    "jq-1.5rc1",
 			prefix:     "jq-",
-			expected:   false, // Version == needs full version, prefix stripping only for semver.
+			expected:   true, // Version is now the FULL version, so this matches.
+		},
+		{
+			name:       "SemVer == compares stripped version",
+			constraint: `SemVer == "1.5rc1"`,
+			version:    "jq-1.5rc1",
+			prefix:     "jq-",
+			expected:   true,
 		},
 		{
 			name:       "true literal with prefix",
@@ -1905,12 +2044,12 @@ func TestEvaluateVersionConstraint_WithVersionPrefix(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Strip prefix before evaluation (this is what Aqua does).
-			version := tt.version
+			// Compute SemVer by stripping prefix (this is what resolveVersionOverrides does).
+			sv := tt.version
 			if tt.prefix != "" {
-				version = strings.TrimPrefix(version, tt.prefix)
+				sv = strings.TrimPrefix(tt.version, tt.prefix)
 			}
-			result, err := evaluateVersionConstraint(tt.constraint, version)
+			result, err := evaluateVersionConstraint(tt.constraint, tt.version, sv)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, result)
 		})
@@ -1956,4 +2095,229 @@ func TestExtractBinaryNameFromPackageName(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+// TestResolveVersionOverrides_FormatOverrides verifies that format_overrides are propagated
+// both from base config and from version overrides.
+func TestResolveVersionOverrides_FormatOverrides(t *testing.T) {
+	tests := []struct {
+		name             string
+		registryYAML     string
+		version          string
+		expectedCount    int
+		expectedOverride []registry.FormatOverride
+	}{
+		{
+			name: "base format_overrides propagated",
+			registryYAML: `
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    asset: tool_{{.OS}}_{{.Arch}}.{{.Format}}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+      - goos: linux
+        format: tar.xz
+`,
+			version:       "1.0.0",
+			expectedCount: 2,
+			expectedOverride: []registry.FormatOverride{
+				{GOOS: "windows", Format: "zip"},
+				{GOOS: "linux", Format: "tar.xz"},
+			},
+		},
+		{
+			name: "version override replaces base format_overrides",
+			registryYAML: `
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    asset: tool_{{.OS}}_{{.Arch}}
+    format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+    version_constraint: semver(">= 2.0.0")
+    version_overrides:
+      - version_constraint: "true"
+        format_overrides:
+          - goos: windows
+            format: msi
+          - goos: darwin
+            format: pkg
+`,
+			version:       "1.0.0",
+			expectedCount: 2,
+			expectedOverride: []registry.FormatOverride{
+				{GOOS: "windows", Format: "msi"},
+				{GOOS: "darwin", Format: "pkg"},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/x-yaml")
+				_, _ = w.Write([]byte(tt.registryYAML))
+			}))
+			defer ts.Close()
+
+			ar := NewAquaRegistry()
+			ar.cache.baseDir = t.TempDir()
+
+			tool, err := ar.resolveVersionOverrides(ts.URL+"/registry.yaml", tt.version)
+			require.NoError(t, err)
+			require.NotNil(t, tool)
+
+			require.Len(t, tool.FormatOverrides, tt.expectedCount)
+			assert.Equal(t, tt.expectedOverride, tool.FormatOverrides)
+		})
+	}
+}
+
+// TestApplyVersionOverride_TypeChange verifies that changing type via version override
+// resets type-specific fields (resetByPkgType).
+func TestApplyVersionOverride_TypeChange(t *testing.T) {
+	tool := &registry.Tool{
+		Type:      "github_release",
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Asset:     "tool.tar.gz",
+	}
+
+	override := &versionOverride{
+		Type:  "http",
+		Asset: "https://example.com/tool.tar.gz",
+	}
+
+	applyVersionOverride(tool, override, "1.0.0")
+	assert.Equal(t, "http", tool.Type)
+	assert.Equal(t, "https://example.com/tool.tar.gz", tool.Asset)
+}
+
+// TestApplyVersionOverride_RepoChange verifies that repo_owner and repo_name can be
+// overridden per version.
+func TestApplyVersionOverride_RepoChange(t *testing.T) {
+	tool := &registry.Tool{
+		Type:      "github_release",
+		RepoOwner: "original",
+		RepoName:  "tool",
+		Asset:     "tool.tar.gz",
+	}
+
+	override := &versionOverride{
+		RepoOwner: "forked",
+		RepoName:  "tool-legacy",
+	}
+
+	applyVersionOverride(tool, override, "0.1.0")
+	assert.Equal(t, "forked", tool.RepoOwner)
+	assert.Equal(t, "tool-legacy", tool.RepoName)
+}
+
+// TestApplyVersionOverride_ErrorMessage verifies that error_message is propagated.
+func TestApplyVersionOverride_ErrorMessage(t *testing.T) {
+	tool := &registry.Tool{
+		Type:      "github_release",
+		RepoOwner: "test",
+		RepoName:  "tool",
+	}
+
+	override := &versionOverride{
+		ErrorMessage: "This version is no longer supported",
+	}
+
+	applyVersionOverride(tool, override, "0.1.0")
+	assert.Equal(t, "This version is no longer supported", tool.ErrorMessage)
+}
+
+// TestResetByPkgType verifies that resetByPkgType clears type-specific fields.
+func TestResetByPkgType(t *testing.T) {
+	t.Run("github_release to http clears Asset", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "github_release",
+			Asset: "tool.tar.gz",
+			URL:   "",
+		}
+		resetByPkgType(tool, "http")
+		assert.Equal(t, "", tool.Asset, "Asset should be cleared when switching to http")
+	})
+
+	t.Run("http to github_release clears URL", func(t *testing.T) {
+		tool := &registry.Tool{
+			Type:  "http",
+			Asset: "",
+			URL:   "https://example.com/tool.tar.gz",
+		}
+		resetByPkgType(tool, "github_release")
+		assert.Equal(t, "", tool.URL, "URL should be cleared when switching to github_release")
+	})
+}
+
+// TestStripFileExtension verifies file extension stripping for AssetWithoutExt.
+func TestStripFileExtension(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"tar.gz compound", "tool_linux_amd64.tar.gz", "tool_linux_amd64"},
+		{"tar.xz compound", "tool_linux_amd64.tar.xz", "tool_linux_amd64"},
+		{"tar.bz2 compound", "tool_linux_amd64.tar.bz2", "tool_linux_amd64"},
+		{"zip extension", "tool_windows_amd64.zip", "tool_windows_amd64"},
+		{"no extension", "tool_linux_amd64", "tool_linux_amd64"},
+		{"exe extension", "tool.exe", "tool"},
+		{"pkg extension", "tool.pkg", "tool"},
+		{"multiple dots", "tool.v1.2.3.tar.gz", "tool.v1.2.3"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stripFileExtension(tt.input))
+		})
+	}
+}
+
+// TestExecuteAssetTemplate_AssetWithoutExt verifies two-pass rendering with Asset/AssetWithoutExt.
+func TestExecuteAssetTemplate_AssetWithoutExt(t *testing.T) {
+	// Template that references AssetWithoutExt for checksum URL.
+	data := map[string]string{
+		"Version":   "v1.0.0",
+		"SemVer":    "1.0.0",
+		"OS":        "linux",
+		"Arch":      "amd64",
+		"RepoOwner": "test",
+		"RepoName":  "tool",
+		"Format":    "tar.gz",
+	}
+
+	t.Run("template without Asset reference renders normally", func(t *testing.T) {
+		result, err := executeAssetTemplate("{{.RepoName}}_{{.Version}}_{{.OS}}_{{.Arch}}.tar.gz", data)
+		require.NoError(t, err)
+		assert.Equal(t, "tool_v1.0.0_linux_amd64.tar.gz", result)
+	})
+
+	t.Run("template with AssetWithoutExt", func(t *testing.T) {
+		// Simulate a checksum template that uses AssetWithoutExt.
+		tmpl := "{{.AssetWithoutExt}}_checksums.txt"
+		// First we need to set Asset since the two-pass detects ".Asset" in the template.
+		// The template itself doesn't render an asset, so we need a self-referencing pattern.
+		// In practice, this is used in checksum URLs, not the asset template itself.
+		// Let's test the stripFileExtension utility and the data injection directly.
+		dataCopy := make(map[string]string)
+		for k, v := range data {
+			dataCopy[k] = v
+		}
+		dataCopy["Asset"] = "tool_v1.0.0_linux_amd64.tar.gz"
+		dataCopy["AssetWithoutExt"] = "tool_v1.0.0_linux_amd64"
+
+		result, err := renderTemplate(tmpl, dataCopy)
+		require.NoError(t, err)
+		assert.Equal(t, "tool_v1.0.0_linux_amd64_checksums.txt", result)
+	})
 }

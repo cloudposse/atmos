@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,27 @@ func TestBuildTemplateData_WithReplacements(t *testing.T) {
 
 	assert.Equal(t, "replaced-os", data.OS)
 	assert.Equal(t, "replaced-arch", data.Arch)
+}
+
+func TestBuildTemplateData_GOOSAndGOARCH(t *testing.T) {
+	// GOOS/GOARCH should always be raw runtime values, even when replacements are applied.
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Replacements: map[string]string{
+			runtime.GOOS:   "replaced-os",
+			runtime.GOARCH: "replaced-arch",
+		},
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+
+	// OS/Arch should have replacements applied.
+	assert.Equal(t, "replaced-os", data.OS)
+	assert.Equal(t, "replaced-arch", data.Arch)
+	// GOOS/GOARCH should be raw runtime values.
+	assert.Equal(t, runtime.GOOS, data.GOOS)
+	assert.Equal(t, runtime.GOARCH, data.GOARCH)
 }
 
 func TestBuildTemplateData_PartialReplacements(t *testing.T) {
@@ -379,6 +401,7 @@ func TestBuildAssetURL_GitHubRelease_DefaultAssetTemplate(t *testing.T) {
 func TestAssetTemplateFuncs(t *testing.T) {
 	funcs := assetTemplateFuncs()
 
+	// Aqua-specific overrides: test via direct type assertion.
 	t.Run("trimV removes v prefix", func(t *testing.T) {
 		fn := funcs["trimV"].(func(string) string)
 		assert.Equal(t, "1.2.3", fn("v1.2.3"))
@@ -402,22 +425,48 @@ func TestAssetTemplateFuncs(t *testing.T) {
 		assert.Equal(t, "bar-bar", fn("foo", "bar", "foo-foo"))
 	})
 
-	t.Run("eq compares equality", func(t *testing.T) {
-		fn := funcs["eq"].(func(string, string) bool)
-		assert.True(t, fn("a", "a"))
-		assert.False(t, fn("a", "b"))
+	// Sprig-provided functions: test via template execution (Sprig uses interface{} signatures).
+	t.Run("eq compares equality via template", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{if eq .A .B}}true{{else}}false{{end}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"A": "a", "B": "a"}))
+		assert.Equal(t, "true", buf.String())
 	})
 
-	t.Run("ne compares inequality", func(t *testing.T) {
-		fn := funcs["ne"].(func(string, string) bool)
-		assert.True(t, fn("a", "b"))
-		assert.False(t, fn("a", "a"))
+	t.Run("ne compares inequality via template", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{if ne .A .B}}true{{else}}false{{end}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"A": "a", "B": "b"}))
+		assert.Equal(t, "true", buf.String())
 	})
 
-	t.Run("ternary returns conditional value", func(t *testing.T) {
-		fn := funcs["ternary"].(func(bool, string, string) string)
-		assert.Equal(t, "yes", fn(true, "yes", "no"))
-		assert.Equal(t, "no", fn(false, "yes", "no"))
+	t.Run("ternary returns conditional value via template", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{ternary "yes" "no" true}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, nil))
+		assert.Equal(t, "yes", buf.String())
+	})
+
+	// Sprig functions: verify key Sprig functions are available.
+	t.Run("sprig title function", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{title .OS}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"OS": "darwin"}))
+		assert.Equal(t, "Darwin", buf.String())
+	})
+
+	t.Run("sprig upper function", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{upper .OS}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"OS": "linux"}))
+		assert.Equal(t, "LINUX", buf.String())
+	})
+
+	t.Run("sprig lower function", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{lower .Name}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"Name": "MyTool"}))
+		assert.Equal(t, "mytool", buf.String())
 	})
 }
 
@@ -467,7 +516,7 @@ func TestExecuteAssetTemplate_TemplateFunctions(t *testing.T) {
 		},
 		{
 			name:     "ternary function",
-			template: "{{ternary (eq .OS \"linux\") \"linux.tar.gz\" \"darwin.tar.gz\"}}",
+			template: "{{ternary \"linux.tar.gz\" \"darwin.tar.gz\" (eq .OS \"linux\")}}",
 			expected: "linux.tar.gz",
 		},
 	}
@@ -762,4 +811,40 @@ func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
 				"URL with %s extension should not have .exe appended: %s", tt.name, url)
 		})
 	}
+}
+
+func TestStripFileExtension(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"tar.gz compound", "tool_linux_amd64.tar.gz", "tool_linux_amd64"},
+		{"tar.xz compound", "tool_linux_amd64.tar.xz", "tool_linux_amd64"},
+		{"tar.bz2 compound", "tool_linux_amd64.tar.bz2", "tool_linux_amd64"},
+		{"zip extension", "tool_windows_amd64.zip", "tool_windows_amd64"},
+		{"no extension", "tool_linux_amd64", "tool_linux_amd64"},
+		{"exe extension", "tool.exe", "tool"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stripFileExtension(tt.input))
+		})
+	}
+}
+
+func TestBuildTemplateData_FormatOverrides(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Format:    "tar.gz",
+		FormatOverrides: []registry.FormatOverride{
+			{GOOS: runtime.GOOS, Format: "zip"},
+		},
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+	// The format override for the current OS should be applied.
+	assert.Equal(t, "zip", data.Format)
 }

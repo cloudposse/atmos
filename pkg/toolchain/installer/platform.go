@@ -26,6 +26,7 @@ func (e *PlatformError) Error() string {
 
 // CheckPlatformSupport checks if the current platform is supported by the tool.
 // Returns nil if supported, or a PlatformError with helpful hints if not.
+// Supports Rosetta 2 fallback (darwin/arm64 → darwin/amd64) and Windows ARM emulation.
 func CheckPlatformSupport(tool *registry.Tool) *PlatformError {
 	defer perf.Track(nil, "installer.CheckPlatformSupport")()
 
@@ -38,10 +39,28 @@ func CheckPlatformSupport(tool *registry.Tool) *PlatformError {
 	currentArch := runtime.GOARCH
 	currentEnv := fmt.Sprintf("%s/%s", currentOS, currentArch)
 
-	// Check if current platform is supported.
+	// Check if current platform is directly supported.
 	for _, env := range tool.SupportedEnvs {
 		if isPlatformMatch(env, currentOS, currentArch) {
 			return nil
+		}
+	}
+
+	// Rosetta 2 fallback: darwin/arm64 can run darwin/amd64 binaries.
+	if tool.Rosetta2 && currentOS == "darwin" && currentArch == "arm64" {
+		for _, env := range tool.SupportedEnvs {
+			if isPlatformMatch(env, "darwin", "amd64") {
+				return nil
+			}
+		}
+	}
+
+	// Windows ARM emulation fallback: windows/arm64 can run windows/amd64 binaries.
+	if tool.WindowsArmEmulation && currentOS == "windows" && currentArch == "arm64" {
+		for _, env := range tool.SupportedEnvs {
+			if isPlatformMatch(env, "windows", "amd64") {
+				return nil
+			}
 		}
 	}
 
@@ -65,6 +84,11 @@ func CheckPlatformSupport(tool *registry.Tool) *PlatformError {
 //   - "linux/arm64" - matches specific OS/arch
 func isPlatformMatch(env, currentOS, currentArch string) bool {
 	env = strings.ToLower(strings.TrimSpace(env))
+
+	// "all" matches any platform (upstream aquaproj/aqua convention).
+	if env == "all" {
+		return true
+	}
 
 	// Check for exact OS/arch match.
 	if strings.Contains(env, "/") {

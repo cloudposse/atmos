@@ -36,6 +36,11 @@ func TestIsPlatformMatch(t *testing.T) {
 		{"arch only amd64 does not match arm64", "amd64", "darwin", "arm64", false},
 		{"arch only arm64 matches any OS with arm64", "arm64", "darwin", "arm64", true},
 		{"arch only arm64 does not match amd64", "arm64", "linux", "amd64", false},
+		// "all" keyword (upstream aquaproj/aqua convention).
+		{"all matches any platform", "all", "darwin", "arm64", true},
+		{"all matches linux amd64", "all", "linux", "amd64", true},
+		{"all matches windows amd64", "all", "windows", "amd64", true},
+		{"ALL matches any platform (case insensitive)", "ALL", "darwin", "arm64", true},
 		// Edge cases.
 		{"handles whitespace", "  darwin  ", "darwin", "arm64", true},
 		{"handles uppercase", "DARWIN", "darwin", "arm64", true},
@@ -108,6 +113,29 @@ func TestCheckPlatformSupport(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCheckPlatformSupport_Rosetta2(t *testing.T) {
+	// Rosetta2 support can only be tested on darwin/arm64.
+	// On other platforms, verify rosetta2 flag doesn't break anything.
+	tool := &registry.Tool{
+		RepoOwner:     "test",
+		RepoName:      "tool",
+		SupportedEnvs: []string{runtime.GOOS + "/" + runtime.GOARCH},
+		Rosetta2:      true,
+	}
+	// Current platform is always supported (directly matched).
+	assert.Nil(t, CheckPlatformSupport(tool))
+
+	// Without rosetta2, a tool supporting only a different arch should fail.
+	unsupportedTool := &registry.Tool{
+		RepoOwner:     "test",
+		RepoName:      "tool",
+		SupportedEnvs: []string{"fakeos/fakearch"},
+		Rosetta2:      true,
+	}
+	// Rosetta2 only helps darwin/arm64 → darwin/amd64, not arbitrary platforms.
+	assert.NotNil(t, CheckPlatformSupport(unsupportedTool))
 }
 
 func TestBuildPlatformHints_Windows(t *testing.T) {
