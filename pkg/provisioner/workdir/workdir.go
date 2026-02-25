@@ -94,7 +94,15 @@ func (s *Service) Provision(
 	}
 
 	// If both source and workdir are enabled, skip local copy and let source provisioner handle it.
-	// This handles the case where workdir provisioner runs before source provisioner (due to registration order).
+	// This handles the case where workdir provisioner runs before source provisioner.
+	//
+	// NOTE: Provisioner execution order is determined by Go's init() function call order,
+	// which is not guaranteed between packages. When both source and workdir are enabled,
+	// they may run in either order. This check ensures correct behavior regardless of order:
+	// - If source runs first: WorkdirPathKey will be set (checked above), skip local copy
+	// - If workdir runs first: hasSource returns true (checked here), skip local copy and
+	//   let source provisioner download directly to workdir path
+	//
 	// The source provisioner will download directly to the workdir path and set WorkdirPathKey.
 	if hasSource(componentConfig) {
 		// Source provisioning will handle creating and populating the workdir.
@@ -358,7 +366,12 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, componentConfi
 
 // hasSource checks if component config has a valid source defined.
 // Returns true only if the source has a valid URI.
-// This is a copy of source.HasSource to avoid import cycles between workdir and source packages.
+//
+// NOTE: This is a duplicate of source.HasSource() to avoid import cycles.
+// The workdir package cannot import the source package because source already imports workdir
+// (to use workdir.WorkdirPathKey and other constants). Creating a shared utility package
+// could solve this, but adds complexity for a simple check. The duplication is acceptable
+// given the function's simplicity and stability.
 func hasSource(componentConfig map[string]any) bool {
 	defer perf.Track(nil, "workdir.hasSource")()
 	if componentConfig == nil {
