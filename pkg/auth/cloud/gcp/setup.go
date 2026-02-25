@@ -97,27 +97,48 @@ type adcClientCredentials struct {
 }
 
 func resolveADCClientCredentials() (string, string, error) {
-	clientID := strings.TrimSpace(os.Getenv("ATMOS_GCP_ADC_CLIENT_ID"))
-	if clientID == "" {
-		clientID = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
+	// Default client ID/secret are the public gcloud CLI OAuth credentials.
+	// These are publicly documented (e.g. in Google's cloud-sdk source) and are
+	// used by gcloud itself. They are safe to hardcode as a fallback — the
+	// client_secret for "installed" / "native" OAuth apps is NOT confidential.
+	const (
+		defaultClientID     = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
+		defaultClientSecret = "d-FL95Q19q7MQmFpd7hHD0Ty" //nolint:gosec // Public gcloud CLI OAuth secret, not confidential.
+	)
+
+	// Treat client ID/secret as an atomic pair: if a custom client ID is
+	// provided, the matching secret must also be set. A mismatched pair
+	// (custom ID + default secret) would fail OAuth refresh with invalid_client.
+	customClientID := strings.TrimSpace(os.Getenv("ATMOS_GCP_ADC_CLIENT_ID"))
+	customClientSecret := strings.TrimSpace(os.Getenv("ATMOS_GCP_ADC_CLIENT_SECRET"))
+
+	if customClientID != "" && customClientSecret != "" {
+		// Both provided — use the custom pair as-is.
+		return customClientID, customClientSecret, nil
 	}
 
-	clientSecret := strings.TrimSpace(os.Getenv("ATMOS_GCP_ADC_CLIENT_SECRET"))
-	if clientSecret != "" {
-		return clientID, clientSecret, nil
+	if customClientSecret != "" {
+		// Secret without ID — pair with default ID.
+		return defaultClientID, customClientSecret, nil
 	}
 
+	// Ignore custom ID when secret is absent — using a custom ID with the
+	// default gcloud secret would produce a mismatched pair that fails on
+	// token refresh.
+
+	// Try reading from existing ADC file (e.g. from `gcloud auth application-default login`).
 	adcCreds, err := readADCClientCredentials()
-	if err != nil {
-		return "", "", err
+	if err == nil && adcCreds.ClientID != "" && adcCreds.ClientSecret != "" {
+		// ADC file has a complete pair — use it.
+		return adcCreds.ClientID, adcCreds.ClientSecret, nil
 	}
-	if adcCreds.ClientID != "" {
-		clientID = adcCreds.ClientID
-	}
-	if adcCreds.ClientSecret == "" {
-		return "", "", fmt.Errorf("%w: ADC client secret is missing; run `gcloud auth application-default login` or set ATMOS_GCP_ADC_CLIENT_SECRET", errUtils.ErrInvalidAuthConfig)
-	}
-	return clientID, adcCreds.ClientSecret, nil
+
+	// Fall back to public gcloud defaults. This enables CI environments (e.g.
+	// GitHub Actions with WIF) where no ADC file exists and no env var is set.
+	// The ADC file still works — the access_token is the important part; the
+	// client_id/secret are only needed for token refresh via OAuth, which atmos
+	// manages externally.
+	return defaultClientID, defaultClientSecret, nil
 }
 
 func readADCClientCredentials() (*adcClientCredentials, error) {

@@ -63,7 +63,9 @@ var (
 )
 
 // NewGSMStore initializes a new Google Secret Manager Store.
-// If identityName is non-empty, client initialization is deferred until first use (lazy init).
+// Client initialization is always deferred to first use via ensureClient().
+// This allows auth credentials (e.g., GOOGLE_OAUTH_ACCESS_TOKEN) to be
+// established after config loading but before the store is actually used.
 func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	if options.ProjectID == "" {
 		return nil, ErrProjectIDRequired
@@ -87,13 +89,6 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	}
 
 	store.replication = createReplicationFromLocations(options.Locations)
-
-	// If no identity is configured, initialize the client eagerly (backward compatible behavior).
-	if identityName == "" {
-		if err := store.initDefaultClient(); err != nil {
-			return nil, err
-		}
-	}
 
 	return store, nil
 }

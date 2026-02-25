@@ -4,11 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 
 	secretmanagerpb "cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
-	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/google/go-cmp/cmp"
 	"github.com/googleapis/gax-go/v2"
 	"github.com/stretchr/testify/assert"
@@ -76,6 +74,9 @@ func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore 
 	}
 
 	store.replication = createReplicationFromLocations(options.Locations)
+
+	// Mark initOnce as done so ensureClient() won't try to create a real client.
+	store.initOnce.Do(func() {})
 
 	return store
 }
@@ -462,52 +463,44 @@ func TestNewGSMStore(t *testing.T) {
 		name        string
 		options     GSMStoreOptions
 		expectError bool
-		skipMessage string
 	}{
 		{
-			name: "valid_options_invalid_credentials",
+			name: "valid_options_with_credentials",
 			options: GSMStoreOptions{
 				ProjectID:      "test-project",
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
-				Credentials:    aws.String(`{"type": "service_account"}`), // Add minimal credentials
+				Prefix:         stringPtr("test-prefix"),
+				StackDelimiter: stringPtr("-"),
+				Credentials:    stringPtr(`{"type": "service_account"}`),
 			},
-			expectError: true, // Error is expected because the minimal credentials are incomplete for authentication
+			// Client creation is deferred — no error at construction time.
+			expectError: false,
 		},
 		{
 			name: "missing project ID",
 			options: GSMStoreOptions{
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
+				Prefix:         stringPtr("test-prefix"),
+				StackDelimiter: stringPtr("-"),
 			},
 			expectError: true,
 		},
 		{
-			name: "with credentials from env",
+			name: "valid_options_no_credentials",
 			options: GSMStoreOptions{
 				ProjectID:      "test-project",
-				Prefix:         aws.String("test-prefix"),
-				StackDelimiter: aws.String("-"),
+				Prefix:         stringPtr("test-prefix"),
+				StackDelimiter: stringPtr("-"),
 			},
+			// Client creation is deferred — succeeds at construction time.
 			expectError: false,
-			skipMessage: "GOOGLE_APPLICATION_CREDENTIALS environment variable not set",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.skipMessage != "" && os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
-				t.Skipf("%s", tt.skipMessage)
-			}
 			store, err := NewGSMStore(tt.options, "")
 			if tt.expectError {
 				assert.Error(t, err)
-				switch tt.name {
-				case "missing project ID":
-					assert.Contains(t, err.Error(), "project_id is required")
-				default:
-					assert.Contains(t, err.Error(), "failed to create client")
-				}
+				assert.Contains(t, err.Error(), "project_id is required")
 				assert.Nil(t, store)
 			} else {
 				assert.NoError(t, err)
@@ -515,6 +508,23 @@ func TestNewGSMStore(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewGSMStore_LazyClientCreation(t *testing.T) {
+	// Verify that NewGSMStore does not eagerly create a GCP client.
+	// This is important because config loading creates stores before auth
+	// credentials (e.g. GOOGLE_OAUTH_ACCESS_TOKEN) are established.
+	store, err := NewGSMStore(GSMStoreOptions{
+		ProjectID:      "test-project",
+		Prefix:         stringPtr("test-prefix"),
+		StackDelimiter: stringPtr("-"),
+	}, "")
+	assert.NoError(t, err)
+	assert.NotNil(t, store)
+
+	// The underlying client field should be nil (deferred).
+	gsmStore := store.(*GSMStore)
+	assert.Nil(t, gsmStore.client, "client should not be eagerly initialized")
 }
 
 func TestGSMStore_GetKey(t *testing.T) {
@@ -531,7 +541,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "basic path",
 			prefix:         "test-prefix",
-			stackDelimiter: aws.String("-"),
+			stackDelimiter: stringPtr("-"),
 			stack:          "dev-usw2",
 			component:      "app",
 			key:            "config",
@@ -541,7 +551,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "path with slashes",
 			prefix:         "test-prefix",
-			stackDelimiter: aws.String("-"),
+			stackDelimiter: stringPtr("-"),
 			stack:          "dev-usw2",
 			component:      "app/service",
 			key:            "config/key",
@@ -551,7 +561,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "path with multiple delimiters",
 			prefix:         "test/prefix",
-			stackDelimiter: aws.String("-"),
+			stackDelimiter: stringPtr("-"),
 			stack:          "dev-usw2-prod",
 			component:      "app/service/db",
 			key:            "config-key-name",
@@ -570,7 +580,7 @@ func TestGSMStore_GetKey(t *testing.T) {
 		{
 			name:           "overridden stack delimiter",
 			prefix:         "test-prefix",
-			stackDelimiter: aws.String("_"),
+			stackDelimiter: stringPtr("_"),
 			stack:          "dev_usw2_prod",
 			component:      "app/service",
 			key:            "config-key",
@@ -689,6 +699,8 @@ func TestGSMStore_GetKeyDirect(t *testing.T) {
 				client:    mockClient,
 				projectID: "test-project",
 			}
+			// Mark initOnce as done so ensureClient() won't try to create a real client.
+			store.initOnce.Do(func() {})
 
 			// Set up mock expectations
 			expectedFullPath := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", "test-project", tt.key)
