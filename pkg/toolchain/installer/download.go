@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
@@ -50,7 +51,7 @@ func downloadToCache(url, cachePath string) (string, error) {
 	defer perf.Track(nil, "downloadToCache")()
 
 	client := httpClient.NewDefaultClient(
-		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+		httpClient.WithGitHubToken(github.GetGitHubToken()),
 	)
 
 	req, err := http.NewRequest("GET", url, nil)

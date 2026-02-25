@@ -13,6 +13,7 @@ import (
 	log "github.com/charmbracelet/log"
 	"gopkg.in/yaml.v3"
 
+	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
@@ -97,7 +98,7 @@ func NewAquaRegistry(opts ...RegistryOption) *AquaRegistry {
 
 	ar := &AquaRegistry{
 		client: httpClient.NewDefaultClient(
-			httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+			httpClient.WithGitHubToken(github.GetGitHubToken()),
 		),
 		cache: &RegistryCache{
 			baseDir: filepath.Join(cacheBaseDir, "registry"),

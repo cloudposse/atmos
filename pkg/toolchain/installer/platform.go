@@ -30,47 +30,57 @@ func (e *PlatformError) Error() string {
 func CheckPlatformSupport(tool *registry.Tool) *PlatformError {
 	defer perf.Track(nil, "installer.CheckPlatformSupport")()
 
+	return checkPlatformSupportForEnv(tool, runtime.GOOS, runtime.GOARCH)
+}
+
+// checkPlatformSupportForEnv is the testable inner implementation of CheckPlatformSupport.
+// It accepts explicit OS/arch parameters so all branches can be exercised in tests.
+func checkPlatformSupportForEnv(tool *registry.Tool, currentOS, currentArch string) *PlatformError {
 	// If no supported_envs specified, assume all platforms are supported.
 	if len(tool.SupportedEnvs) == 0 {
 		return nil
 	}
 
-	currentOS := runtime.GOOS
-	currentArch := runtime.GOARCH
-	currentEnv := fmt.Sprintf("%s/%s", currentOS, currentArch)
-
 	// Check if current platform is directly supported.
-	for _, env := range tool.SupportedEnvs {
-		if isPlatformMatch(env, currentOS, currentArch) {
-			return nil
-		}
+	if hasPlatformMatch(tool.SupportedEnvs, currentOS, currentArch) {
+		return nil
 	}
 
-	// Rosetta 2 fallback: darwin/arm64 can run darwin/amd64 binaries.
-	if tool.Rosetta2 && currentOS == "darwin" && currentArch == "arm64" {
-		for _, env := range tool.SupportedEnvs {
-			if isPlatformMatch(env, "darwin", "amd64") {
-				return nil
-			}
-		}
-	}
-
-	// Windows ARM emulation fallback: windows/arm64 can run windows/amd64 binaries.
-	if tool.WindowsArmEmulation && currentOS == "windows" && currentArch == "arm64" {
-		for _, env := range tool.SupportedEnvs {
-			if isPlatformMatch(env, "windows", "amd64") {
-				return nil
-			}
-		}
+	// Check emulation fallbacks (Rosetta 2, Windows ARM).
+	if hasEmulationFallback(tool, currentOS, currentArch) {
+		return nil
 	}
 
 	// Platform not supported - build error with hints.
 	return &PlatformError{
 		Tool:          fmt.Sprintf("%s/%s", tool.RepoOwner, tool.RepoName),
-		CurrentEnv:    currentEnv,
+		CurrentEnv:    fmt.Sprintf("%s/%s", currentOS, currentArch),
 		SupportedEnvs: tool.SupportedEnvs,
 		Hints:         buildPlatformHints(currentOS, currentArch, tool.SupportedEnvs),
 	}
+}
+
+// hasPlatformMatch checks if any supported env matches the given OS/arch.
+func hasPlatformMatch(supportedEnvs []string, targetOS, targetArch string) bool {
+	for _, env := range supportedEnvs {
+		if isPlatformMatch(env, targetOS, targetArch) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasEmulationFallback checks if the tool supports the platform via emulation.
+// Rosetta 2: darwin/arm64 can run darwin/amd64 binaries.
+// Windows ARM: windows/arm64 can run windows/amd64 binaries.
+func hasEmulationFallback(tool *registry.Tool, currentOS, currentArch string) bool {
+	if tool.Rosetta2 && currentOS == "darwin" && currentArch == "arm64" {
+		return hasPlatformMatch(tool.SupportedEnvs, "darwin", "amd64")
+	}
+	if tool.WindowsArmEmulation && currentOS == "windows" && currentArch == "arm64" {
+		return hasPlatformMatch(tool.SupportedEnvs, "windows", "amd64")
+	}
+	return false
 }
 
 // isPlatformMatch checks if a supported_env entry matches the current platform.

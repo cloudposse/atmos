@@ -12,6 +12,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -49,7 +50,7 @@ func NewURLRegistry(baseURL string, ref string) *URLRegistry {
 	reg := &URLRegistry{
 		baseURL:    resolvedURL,
 		ref:        ref,
-		client:     httpClient.NewDefaultClient(httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv())),
+		client:     httpClient.NewDefaultClient(httpClient.WithGitHubToken(github.GetGitHubToken())),
 		cache:      make(map[string]*Tool),
 		indexCache: make(map[string]*Tool),
 		isIndexURL: isIndexFile,

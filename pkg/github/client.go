@@ -48,11 +48,12 @@ const (
 func newGitHubClient(ctx context.Context) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClient")()
 
-	// Get GitHub token using the standard Atmos precedence order:
+	// Get GitHub token using the full resolution chain:
 	// 1. --github-token CLI flag
 	// 2. ATMOS_GITHUB_TOKEN environment variable
 	// 3. GITHUB_TOKEN environment variable
-	githubToken := httpClient.GetGitHubTokenFromEnv()
+	// 4. `gh auth token` CLI fallback
+	githubToken := GetGitHubToken()
 
 	return newGitHubClientWithToken(ctx, githubToken)
 }
@@ -101,11 +102,12 @@ func handleGitHubAPIError(err error, resp *github.Response) error {
 		if httpClient.GetGitHubTokenFromEnv() != "" {
 			builder.
 				WithHint("Your GitHub token may be invalid or expired").
-				WithHint("Verify your token: `gh auth status` or check `ATMOS_GITHUB_TOKEN` / `GITHUB_TOKEN`")
+				WithHint("Verify your token: `gh auth status`").
+				WithHint("Try re-authenticating: `gh auth login`")
 		} else {
 			builder.
-				WithHint("Set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable for higher rate limits").
-				WithHint("Generate a token at: https://github.com/settings/tokens")
+				WithHint("Authenticate with GitHub CLI: `gh auth login`").
+				WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
 		}
 
 		return builder.Err()

@@ -86,11 +86,12 @@ func GetReleases(opts ReleasesOptions) ([]*github.RepositoryRelease, error) {
 			if httpClient.GetGitHubTokenFromEnv() != "" {
 				builder.
 					WithHint("Your GitHub token may be invalid or expired").
-					WithHint("Verify your token: `gh auth status` or check `ATMOS_GITHUB_TOKEN` / `GITHUB_TOKEN`")
+					WithHint("Verify your token: `gh auth status`").
+					WithHint("Try re-authenticating: `gh auth login`")
 			} else {
 				builder.
-					WithHint("Set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable for higher rate limits").
-					WithHint("Generate a token at: https://github.com/settings/tokens")
+					WithHint("Authenticate with GitHub CLI: `gh auth login`").
+					WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
 			}
 
 			return nil, builder.Err()

@@ -336,3 +336,177 @@ func TestAppendLinuxArm64Hints_NoAmd64Support(t *testing.T) {
 	result := appendLinuxArm64Hints(initialHints, "linux", "arm64", []string{"darwin/amd64"})
 	assert.Equal(t, initialHints, result)
 }
+
+// TestCheckPlatformSupportForEnv exercises all branches of the platform support logic
+// by explicitly passing OS/arch parameters, including cross-platform scenarios that
+// cannot be reached via CheckPlatformSupport on a single host.
+func TestCheckPlatformSupportForEnv(t *testing.T) {
+	tests := []struct {
+		name        string
+		tool        *registry.Tool
+		currentOS   string
+		currentArch string
+		wantNil     bool
+		wantTool    string
+		wantEnv     string
+	}{
+		{
+			name: "empty supported_envs allows all",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{},
+			},
+			currentOS:   "darwin",
+			currentArch: "arm64",
+			wantNil:     true,
+		},
+		{
+			name: "direct platform match",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{"linux/amd64", "darwin/arm64"},
+			},
+			currentOS:   "darwin",
+			currentArch: "arm64",
+			wantNil:     true,
+		},
+		{
+			name: "unsupported platform returns error",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{"linux/amd64"},
+			},
+			currentOS:   "windows",
+			currentArch: "arm64",
+			wantNil:     false,
+			wantTool:    "test/tool",
+			wantEnv:     "windows/arm64",
+		},
+		// Rosetta 2 fallback tests.
+		{
+			name: "rosetta2 enabled: darwin/arm64 falls back to darwin/amd64",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{"darwin/amd64", "linux/amd64"},
+				Rosetta2:      true,
+			},
+			currentOS:   "darwin",
+			currentArch: "arm64",
+			wantNil:     true,
+		},
+		{
+			name: "rosetta2 disabled: darwin/arm64 cannot fall back to darwin/amd64",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{"darwin/amd64", "linux/amd64"},
+				Rosetta2:      false,
+			},
+			currentOS:   "darwin",
+			currentArch: "arm64",
+			wantNil:     false,
+			wantTool:    "test/tool",
+			wantEnv:     "darwin/arm64",
+		},
+		{
+			name: "rosetta2 enabled but not darwin: no fallback",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{"darwin/amd64"},
+				Rosetta2:      true,
+			},
+			currentOS:   "linux",
+			currentArch: "arm64",
+			wantNil:     false,
+			wantTool:    "test/tool",
+			wantEnv:     "linux/arm64",
+		},
+		{
+			name: "rosetta2 enabled but not arm64: no fallback needed (direct match)",
+			tool: &registry.Tool{
+				RepoOwner:     "test",
+				RepoName:      "tool",
+				SupportedEnvs: []string{"darwin/amd64"},
+				Rosetta2:      true,
+			},
+			currentOS:   "darwin",
+			currentArch: "amd64",
+			wantNil:     true,
+		},
+		// Windows ARM emulation tests.
+		{
+			name: "windows arm emulation enabled: windows/arm64 falls back to windows/amd64",
+			tool: &registry.Tool{
+				RepoOwner:           "test",
+				RepoName:            "tool",
+				SupportedEnvs:       []string{"windows/amd64", "linux/amd64"},
+				WindowsArmEmulation: true,
+			},
+			currentOS:   "windows",
+			currentArch: "arm64",
+			wantNil:     true,
+		},
+		{
+			name: "windows arm emulation disabled: windows/arm64 cannot fall back",
+			tool: &registry.Tool{
+				RepoOwner:           "test",
+				RepoName:            "tool",
+				SupportedEnvs:       []string{"windows/amd64", "linux/amd64"},
+				WindowsArmEmulation: false,
+			},
+			currentOS:   "windows",
+			currentArch: "arm64",
+			wantNil:     false,
+			wantTool:    "test/tool",
+			wantEnv:     "windows/arm64",
+		},
+		{
+			name: "windows arm emulation enabled but not windows: no fallback",
+			tool: &registry.Tool{
+				RepoOwner:           "test",
+				RepoName:            "tool",
+				SupportedEnvs:       []string{"windows/amd64"},
+				WindowsArmEmulation: true,
+			},
+			currentOS:   "darwin",
+			currentArch: "arm64",
+			wantNil:     false,
+			wantTool:    "test/tool",
+			wantEnv:     "darwin/arm64",
+		},
+		// Error output validation.
+		{
+			name: "error includes platform hints",
+			tool: &registry.Tool{
+				RepoOwner:     "owner",
+				RepoName:      "repo",
+				SupportedEnvs: []string{"linux/amd64"},
+			},
+			currentOS:   "darwin",
+			currentArch: "arm64",
+			wantNil:     false,
+			wantTool:    "owner/repo",
+			wantEnv:     "darwin/arm64",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := checkPlatformSupportForEnv(tt.tool, tt.currentOS, tt.currentArch)
+			if tt.wantNil {
+				assert.Nil(t, err, "expected no error")
+			} else {
+				assert.NotNil(t, err, "expected PlatformError")
+				assert.Equal(t, tt.wantTool, err.Tool)
+				assert.Equal(t, tt.wantEnv, err.CurrentEnv)
+				assert.NotEmpty(t, err.Hints)
+				assert.Contains(t, err.Error(), "does not support")
+			}
+		})
+	}
+}
