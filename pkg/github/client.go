@@ -92,11 +92,22 @@ func handleGitHubAPIError(err error, resp *github.Response) error {
 		resetTime := resp.Rate.Reset.Time
 		waitDuration := time.Until(resetTime)
 
-		return fmt.Errorf("%w: rate limit exceeded, resets at %s (in %s). Consider setting ATMOS_GITHUB_TOKEN or GITHUB_TOKEN for higher limits",
-			errUtils.ErrGitHubRateLimitExceeded,
-			resetTime.Format(time.RFC3339),
-			waitDuration.Round(time.Second),
-		)
+		builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+			WithExplanation(fmt.Sprintf("Rate limit exceeded, resets at %s (in %s)",
+				resetTime.Format(time.RFC3339),
+				waitDuration.Round(time.Second)))
+
+		if httpClient.GetGitHubTokenFromEnv() != "" {
+			builder.
+				WithHint("Your GitHub token may be invalid or expired").
+				WithHint("Verify your token: `gh auth status` or check `ATMOS_GITHUB_TOKEN` / `GITHUB_TOKEN`")
+		} else {
+			builder.
+				WithHint("Set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable for higher rate limits").
+				WithHint("Generate a token at: https://github.com/settings/tokens")
+		}
+
+		return builder.Err()
 	}
 
 	return err
