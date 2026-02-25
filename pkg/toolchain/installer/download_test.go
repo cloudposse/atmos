@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/toolchain/registry"
 )
 
 func TestWriteResponseToCache(t *testing.T) {
@@ -424,6 +426,114 @@ func TestBuildPlatformNotSupportedError(t *testing.T) {
 			assert.NotNil(t, err)
 		})
 	}
+}
+
+// TestDownloadAssetWithVersionFallback tests the version fallback mechanism.
+func TestDownloadAssetWithVersionFallback(t *testing.T) {
+	t.Run("succeeds on first attempt without fallback", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		// Pre-create the asset file to simulate a successful download.
+		assetFile := filepath.Join(cacheDir, "tool_1.0.0_darwin_arm64.tar.gz")
+		require.NoError(t, os.WriteFile(assetFile, []byte("asset data"), 0o644))
+
+		installer := &Installer{
+			cacheDir: cacheDir,
+		}
+
+		tool := &registry.Tool{
+			Type:          "github_release",
+			RepoOwner:     "test",
+			RepoName:      "tool",
+			Asset:         "tool_{{.SemVer}}_{{.OS}}_{{.Arch}}.tar.gz",
+			VersionPrefix: "v",
+		}
+
+		// URL matches the cached file.
+		url := "https://github.com/test/tool/releases/download/v1.0.0/tool_1.0.0_darwin_arm64.tar.gz"
+		result, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", url)
+		assert.NoError(t, err)
+		assert.Equal(t, assetFile, result)
+	})
+
+	t.Run("returns non-404 errors without fallback", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		cacheDir := filepath.Join(tmpDir, "cache")
+		require.NoError(t, os.MkdirAll(cacheDir, 0o755))
+
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer ts.Close()
+
+		installer := &Installer{
+			cacheDir: cacheDir,
+		}
+
+		tool := &registry.Tool{
+			Type:          "github_release",
+			RepoOwner:     "test",
+			RepoName:      "tool",
+			Asset:         "tool-{{.Version}}.tar.gz",
+			VersionPrefix: "v",
+		}
+
+		_, err := installer.downloadAssetWithVersionFallback(tool, "1.0.0", ts.URL+"/asset.tar.gz")
+		assert.Error(t, err)
+		// Non-404 error should be returned directly, not trigger fallback.
+		assert.NotErrorIs(t, err, ErrHTTP404)
+	})
+}
+
+// TestTryFallbackVersion tests the version prefix fallback logic.
+func TestTryFallbackVersion(t *testing.T) {
+	t.Run("fallback builds alternative URL with prefix toggled", func(t *testing.T) {
+		// Set up an HTTP server that returns 404 for both original and fallback URLs.
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer ts.Close()
+
+		inst := &Installer{
+			cacheDir: t.TempDir(),
+		}
+		tool := &registry.Tool{
+			Type:          "github_release",
+			RepoOwner:     "test",
+			RepoName:      "tool",
+			Asset:         "tool-{{.Version}}.tar.gz",
+			VersionPrefix: "v",
+		}
+
+		// Version without prefix → fallback adds "v" prefix → tries "v1.0.0".
+		// Both URLs fail with 404, so we get an error.
+		_, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
+		assert.Error(t, err)
+	})
+
+	t.Run("fallback strips prefix when version has it", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+		}))
+		defer ts.Close()
+
+		inst := &Installer{
+			cacheDir: t.TempDir(),
+		}
+		tool := &registry.Tool{
+			Type:          "github_release",
+			RepoOwner:     "test",
+			RepoName:      "tool",
+			Asset:         "tool-{{.Version}}.tar.gz",
+			VersionPrefix: "v",
+		}
+
+		// Version with "v" prefix → fallback strips to "1.0.0".
+		_, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
+		assert.Error(t, err)
+	})
 }
 
 func TestGetOSAndGetArch(t *testing.T) {

@@ -245,5 +245,229 @@ func TestCompositeRegistry_GetLatestVersion(t *testing.T) {
 func TestCompositeRegistry_LoadLocalConfig(t *testing.T) {
 	defer perf.Track(nil, "registry.TestCompositeRegistry_LoadLocalConfig")()
 
-	t.Skip("Local config support was removed in refactoring")
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "test", Registry: &mockRegistry{tools: map[string]*Tool{}}, Priority: 100},
+	})
+
+	// LoadLocalConfig is a no-op, should return nil.
+	err := composite.LoadLocalConfig("/some/path")
+	if err != nil {
+		t.Errorf("LoadLocalConfig should return nil, got: %v", err)
+	}
+}
+
+// searchableMockRegistry is a mock that returns search and list results.
+type searchableMockRegistry struct {
+	mockRegistry
+	searchResults []*Tool
+	listResults   []*Tool
+	searchErr     error
+	listErr       error
+	metadataErr   error
+}
+
+func (m *searchableMockRegistry) Search(_ context.Context, _ string, _ ...SearchOption) ([]*Tool, error) {
+	defer perf.Track(nil, "searchableMockRegistry.Search")()
+
+	if m.searchErr != nil {
+		return nil, m.searchErr
+	}
+	return m.searchResults, nil
+}
+
+func (m *searchableMockRegistry) ListAll(_ context.Context, _ ...ListOption) ([]*Tool, error) {
+	defer perf.Track(nil, "searchableMockRegistry.ListAll")()
+
+	if m.listErr != nil {
+		return nil, m.listErr
+	}
+	return m.listResults, nil
+}
+
+func (m *searchableMockRegistry) GetMetadata(_ context.Context) (*RegistryMetadata, error) {
+	defer perf.Track(nil, "searchableMockRegistry.GetMetadata")()
+
+	if m.metadataErr != nil {
+		return nil, m.metadataErr
+	}
+	return &RegistryMetadata{
+		Name:      "searchable-mock",
+		Type:      "mock",
+		Source:    "mock://test",
+		ToolCount: len(m.tools),
+	}, nil
+}
+
+func TestCompositeRegistry_Search(t *testing.T) {
+	defer perf.Track(nil, "registry.TestCompositeRegistry_Search")()
+
+	reg1 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		searchResults: []*Tool{
+			{Name: "terraform", RepoOwner: "hashicorp", RepoName: "terraform"},
+		},
+	}
+	reg2 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		searchResults: []*Tool{
+			{Name: "terraform-dup", RepoOwner: "hashicorp", RepoName: "terraform"}, // same owner/repo.
+			{Name: "packer", RepoOwner: "hashicorp", RepoName: "packer"},
+		},
+	}
+
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "high", Registry: reg1, Priority: 100},
+		{Name: "low", Registry: reg2, Priority: 10},
+	})
+
+	results, err := composite.Search(context.Background(), "hashicorp")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+
+	// Should have 2 results: terraform (from high-priority) and packer (from low).
+	// hashicorp/terraform deduplicates to the first one found (high priority).
+	if len(results) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(results))
+	}
+}
+
+func TestCompositeRegistry_Search_ErrorContinues(t *testing.T) {
+	defer perf.Track(nil, "registry.TestCompositeRegistry_Search_ErrorContinues")()
+
+	reg1 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		searchErr:    errors.New("search failed"),
+	}
+	reg2 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		searchResults: []*Tool{
+			{Name: "terraform", RepoOwner: "hashicorp", RepoName: "terraform"},
+		},
+	}
+
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "broken", Registry: reg1, Priority: 100},
+		{Name: "working", Registry: reg2, Priority: 10},
+	})
+
+	results, err := composite.Search(context.Background(), "terraform")
+	if err != nil {
+		t.Fatalf("Search should not fail: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result from working registry, got %d", len(results))
+	}
+}
+
+func TestCompositeRegistry_ListAll(t *testing.T) {
+	defer perf.Track(nil, "registry.TestCompositeRegistry_ListAll")()
+
+	reg := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		listResults: []*Tool{
+			{Name: "tool1", RepoOwner: "owner1", RepoName: "repo1"},
+			{Name: "tool2", RepoOwner: "owner2", RepoName: "repo2"},
+		},
+	}
+
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "test", Registry: reg, Priority: 100},
+	})
+
+	results, err := composite.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("ListAll failed: %v", err)
+	}
+	if len(results) != 2 {
+		t.Errorf("Expected 2 results, got %d", len(results))
+	}
+}
+
+func TestCompositeRegistry_ListAll_ErrorContinues(t *testing.T) {
+	defer perf.Track(nil, "registry.TestCompositeRegistry_ListAll_ErrorContinues")()
+
+	reg1 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		listErr:      errors.New("list failed"),
+	}
+	reg2 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		listResults: []*Tool{
+			{Name: "tool", RepoOwner: "owner", RepoName: "repo"},
+		},
+	}
+
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "broken", Registry: reg1, Priority: 100},
+		{Name: "working", Registry: reg2, Priority: 10},
+	})
+
+	results, err := composite.ListAll(context.Background())
+	if err != nil {
+		t.Fatalf("ListAll should not fail: %v", err)
+	}
+	if len(results) != 1 {
+		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+}
+
+func TestCompositeRegistry_GetMetadata(t *testing.T) {
+	defer perf.Track(nil, "registry.TestCompositeRegistry_GetMetadata")()
+
+	reg1 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{
+			"a/b": {Name: "tool1"},
+			"c/d": {Name: "tool2"},
+		}},
+	}
+	reg2 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{
+			"e/f": {Name: "tool3"},
+		}},
+	}
+
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "reg1", Registry: reg1, Priority: 100},
+		{Name: "reg2", Registry: reg2, Priority: 50},
+	})
+
+	meta, err := composite.GetMetadata(context.Background())
+	if err != nil {
+		t.Fatalf("GetMetadata failed: %v", err)
+	}
+	if meta.Name != "composite" {
+		t.Errorf("Expected name 'composite', got %s", meta.Name)
+	}
+	if meta.ToolCount != 3 {
+		t.Errorf("Expected 3 tools, got %d", meta.ToolCount)
+	}
+}
+
+func TestCompositeRegistry_GetMetadata_ErrorContinues(t *testing.T) {
+	defer perf.Track(nil, "registry.TestCompositeRegistry_GetMetadata_ErrorContinues")()
+
+	reg1 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{}},
+		metadataErr:  errors.New("metadata failed"),
+	}
+	reg2 := &searchableMockRegistry{
+		mockRegistry: mockRegistry{tools: map[string]*Tool{
+			"a/b": {Name: "tool"},
+		}},
+	}
+
+	composite := NewCompositeRegistry([]PrioritizedRegistry{
+		{Name: "broken", Registry: reg1, Priority: 100},
+		{Name: "working", Registry: reg2, Priority: 50},
+	})
+
+	meta, err := composite.GetMetadata(context.Background())
+	if err != nil {
+		t.Fatalf("GetMetadata should not fail: %v", err)
+	}
+	// Only counts from the working registry.
+	if meta.ToolCount != 1 {
+		t.Errorf("Expected 1 tool from working registry, got %d", meta.ToolCount)
+	}
 }

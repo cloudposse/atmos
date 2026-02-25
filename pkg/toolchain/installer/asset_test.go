@@ -813,6 +813,77 @@ func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
 	}
 }
 
+// TestExecuteAssetTemplate_TwoPassRendering tests the two-pass rendering for Asset/AssetWithoutExt.
+func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "charmbracelet",
+		RepoName:  "gum",
+	}
+
+	t.Run("template referencing .AssetWithoutExt triggers second pass", func(t *testing.T) {
+		data := &assetTemplateData{
+			Version:   "v0.15.2",
+			SemVer:    "0.15.2",
+			OS:        "Linux",
+			Arch:      "x86_64",
+			RepoOwner: "charmbracelet",
+			RepoName:  "gum",
+			Format:    "tar.gz",
+		}
+		// Template that references .AssetWithoutExt (contains ".Asset" substring → triggers two-pass).
+		// Pass 1: AssetWithoutExt is empty, renders to "gum_0.15.2_Linux_x86_64.tar.gz/"
+		// Then: Asset = "gum_0.15.2_Linux_x86_64.tar.gz/", AssetWithoutExt = "gum_0.15.2_Linux_x86_64/"
+		// Pass 2: re-renders with AssetWithoutExt populated.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}/{{.AssetWithoutExt}}"
+		result, err := executeAssetTemplate(tmpl, tool, data)
+		require.NoError(t, err)
+		// Verify AssetWithoutExt was populated (two-pass was triggered).
+		assert.NotEmpty(t, data.AssetWithoutExt)
+		assert.NotEmpty(t, data.Asset)
+		assert.Contains(t, result, "gum_0.15.2_Linux_x86_64")
+	})
+
+	t.Run("template referencing .Asset directly triggers second pass", func(t *testing.T) {
+		data := &assetTemplateData{
+			Version:   "v1.0.0",
+			SemVer:    "1.0.0",
+			OS:        "linux",
+			Arch:      "amd64",
+			RepoOwner: "test",
+			RepoName:  "tool",
+			Format:    "tar.gz",
+		}
+		// Template with {{.Asset}} reference → triggers two-pass.
+		// Pass 1: Asset is empty → result = "tool_1.0.0_linux_amd64.tar.gz/"
+		// data.Asset = "tool_1.0.0_linux_amd64.tar.gz/", AssetWithoutExt computed.
+		// Pass 2: re-renders with Asset populated.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}/{{.Asset}}"
+		result, err := executeAssetTemplate(tmpl, tool, data)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data.Asset)
+		assert.Contains(t, result, "tool_1.0.0_linux_amd64")
+	})
+
+	t.Run("template without .Asset renders in single pass", func(t *testing.T) {
+		data := &assetTemplateData{
+			Version:   "v1.0.0",
+			SemVer:    "1.0.0",
+			OS:        "linux",
+			Arch:      "amd64",
+			RepoOwner: "test",
+			RepoName:  "test",
+			Format:    "tar.gz",
+		}
+		// No .Asset reference → single pass only.
+		tmpl := "{{.RepoName}}_{{.SemVer}}.{{.Format}}"
+		result, err := executeAssetTemplate(tmpl, tool, data)
+		require.NoError(t, err)
+		assert.Equal(t, "test_1.0.0.tar.gz", result)
+		// AssetWithoutExt should NOT have been set.
+		assert.Empty(t, data.AssetWithoutExt)
+	})
+}
+
 func TestStripFileExtension(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -2285,6 +2285,471 @@ func TestStripFileExtension(t *testing.T) {
 	}
 }
 
+// TestGetLatestVersion_GitHubTag tests the github_tag version source path.
+func TestGetLatestVersion_GitHubTag(t *testing.T) {
+	// Set up GitHub API server for tags endpoint.
+	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/tags") {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"name": "v3.2.1"}]`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer apiServer.Close()
+
+	ar := NewAquaRegistry(WithGitHubBaseURL(apiServer.URL))
+	// Override cache dir to temp dir so we don't pollute real cache.
+	tmpCache := t.TempDir()
+	ar.cache.baseDir = tmpCache
+
+	// Pre-populate the disk cache so GetTool finds our tool without hitting real GitHub.
+	// GetTool tries: "https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs/{owner}/{repo}/registry.yaml"
+	registryYAML := []byte(`packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    version_source: github_tag
+    asset: "tool-{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz"
+    binary_name: tool
+`)
+	firstURL := "https://raw.githubusercontent.com/aquaproj/aqua-registry/refs/heads/main/pkgs/test/tool/registry.yaml"
+	cacheKey := strings.ReplaceAll(firstURL, "/", "_")
+	cacheKey = strings.ReplaceAll(cacheKey, ":", "_")
+	require.NoError(t, os.WriteFile(filepath.Join(tmpCache, cacheKey+".yaml"), registryYAML, 0o644))
+
+	// Verify GetTool finds the tool with github_tag version source.
+	tool, err := ar.GetTool("test", "tool")
+	require.NoError(t, err)
+	assert.Equal(t, "github_tag", tool.VersionSource)
+
+	// GetLatestVersion should use the github_tag path and call getLatestTag.
+	version, err := ar.GetLatestVersion("test", "tool")
+	require.NoError(t, err)
+	assert.Equal(t, "3.2.1", version)
+}
+
+// TestGetLatestTag tests the getLatestTag function directly.
+func TestGetLatestTag(t *testing.T) {
+	t.Run("strips default v prefix when prefix is empty", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"name": "v2.0.0"}]`))
+		}))
+		defer ts.Close()
+
+		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+		version, err := ar.getLatestTag("test", "tool", "")
+		require.NoError(t, err)
+		assert.Equal(t, "2.0.0", version)
+	})
+
+	t.Run("strips custom prefix", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[{"name": "jq-1.7.1"}]`))
+		}))
+		defer ts.Close()
+
+		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+		version, err := ar.getLatestTag("jqlang", "jq", "jq-")
+		require.NoError(t, err)
+		assert.Equal(t, "1.7.1", version)
+	})
+
+	t.Run("handles no tags", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`[]`))
+		}))
+		defer ts.Close()
+
+		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+		_, err := ar.getLatestTag("test", "empty", "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, registry.ErrNoVersionsFound)
+	})
+
+	t.Run("handles server error", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+		defer ts.Close()
+
+		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+		_, err := ar.getLatestTag("test", "tool", "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, registry.ErrHTTPRequest)
+	})
+
+	t.Run("handles invalid JSON", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`not json`))
+		}))
+		defer ts.Close()
+
+		ar := NewAquaRegistry(WithGitHubBaseURL(ts.URL))
+		_, err := ar.getLatestTag("test", "tool", "")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, registry.ErrRegistryParse)
+	})
+}
+
+// TestBuildAssetTemplateData tests the buildAssetTemplateData helper.
+func TestBuildAssetTemplateData(t *testing.T) {
+	t.Run("basic data without replacements", func(t *testing.T) {
+		tool := &registry.Tool{
+			RepoOwner: "test",
+			RepoName:  "tool",
+			Format:    "tar.gz",
+		}
+		data := buildAssetTemplateData(tool, "v1.0.0", "1.0.0")
+		assert.Equal(t, "v1.0.0", data["Version"])
+		assert.Equal(t, "1.0.0", data["SemVer"])
+		assert.Equal(t, "test", data["RepoOwner"])
+		assert.Equal(t, "tool", data["RepoName"])
+		assert.Equal(t, "tar.gz", data["Format"])
+		assert.NotEmpty(t, data["OS"])
+		assert.NotEmpty(t, data["Arch"])
+		assert.NotEmpty(t, data["GOOS"])
+		assert.NotEmpty(t, data["GOARCH"])
+	})
+
+	t.Run("with replacements", func(t *testing.T) {
+		tool := &registry.Tool{
+			RepoOwner: "bridgecrewio",
+			RepoName:  "checkov",
+			Replacements: map[string]string{
+				"amd64": "X86_64",
+				"arm64": "aarch64",
+			},
+		}
+		data := buildAssetTemplateData(tool, "3.0.0", "3.0.0")
+		switch getArch() {
+		case "amd64":
+			assert.Equal(t, "X86_64", data["Arch"])
+		case "arm64":
+			assert.Equal(t, "aarch64", data["Arch"])
+		}
+		// GOARCH must remain raw.
+		assert.Equal(t, getArch(), data["GOARCH"])
+	})
+
+	t.Run("with format overrides", func(t *testing.T) {
+		tool := &registry.Tool{
+			RepoOwner: "test",
+			RepoName:  "tool",
+			Format:    "tar.gz",
+			FormatOverrides: []registry.FormatOverride{
+				{GOOS: getOS(), Format: "zip"},
+			},
+		}
+		data := buildAssetTemplateData(tool, "v1.0.0", "1.0.0")
+		assert.Equal(t, "zip", data["Format"])
+	})
+
+	t.Run("format override for non-matching OS ignored", func(t *testing.T) {
+		tool := &registry.Tool{
+			RepoOwner: "test",
+			RepoName:  "tool",
+			Format:    "tar.gz",
+			FormatOverrides: []registry.FormatOverride{
+				{GOOS: "nonexistent-os", Format: "dmg"},
+			},
+		}
+		data := buildAssetTemplateData(tool, "v1.0.0", "1.0.0")
+		assert.Equal(t, "tar.gz", data["Format"])
+	})
+}
+
+// TestResolveVersionStrings tests version/semver resolution logic.
+func TestResolveVersionStrings(t *testing.T) {
+	tests := []struct {
+		name            string
+		tool            *registry.Tool
+		version         string
+		expectedRelease string
+		expectedSemVer  string
+	}{
+		{
+			name:            "no prefix",
+			tool:            &registry.Tool{},
+			version:         "1.0.0",
+			expectedRelease: "1.0.0",
+			expectedSemVer:  "1.0.0",
+		},
+		{
+			name:            "v prefix adds v",
+			tool:            &registry.Tool{VersionPrefix: "v"},
+			version:         "1.0.0",
+			expectedRelease: "v1.0.0",
+			expectedSemVer:  "1.0.0",
+		},
+		{
+			name:            "v prefix already present",
+			tool:            &registry.Tool{VersionPrefix: "v"},
+			version:         "v1.0.0",
+			expectedRelease: "v1.0.0",
+			expectedSemVer:  "1.0.0",
+		},
+		{
+			name:            "custom prefix jq-",
+			tool:            &registry.Tool{VersionPrefix: "jq-"},
+			version:         "1.7.1",
+			expectedRelease: "jq-1.7.1",
+			expectedSemVer:  "1.7.1",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			release, semVer := resolveVersionStrings(tt.tool, tt.version)
+			assert.Equal(t, tt.expectedRelease, release)
+			assert.Equal(t, tt.expectedSemVer, semVer)
+		})
+	}
+}
+
+// TestComputeSemVer tests the computeSemVer helper.
+func TestComputeSemVer(t *testing.T) {
+	tests := []struct {
+		name     string
+		version  string
+		prefix   string
+		expected string
+	}{
+		{"empty prefix returns version as-is", "v1.0.0", "", "v1.0.0"},
+		{"strips v prefix", "v1.0.0", "v", "1.0.0"},
+		{"strips custom prefix", "jq-1.7.1", "jq-", "1.7.1"},
+		{"prefix not present returns as-is", "1.0.0", "v", "1.0.0"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := computeSemVer(tt.version, tt.prefix)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestAssetTemplateFuncs_SecurityDeletions verifies sensitive Sprig functions are removed.
+func TestAssetTemplateFuncs_SecurityDeletions(t *testing.T) {
+	funcs := assetTemplateFuncs()
+	assert.Nil(t, funcs["env"], "env function should be deleted for security")
+	assert.Nil(t, funcs["expandenv"], "expandenv function should be deleted for security")
+	assert.Nil(t, funcs["getHostByName"], "getHostByName function should be deleted for security")
+}
+
+// TestExecuteAssetTemplate_TwoPassRendering tests two-pass rendering for Asset/AssetWithoutExt.
+func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
+	t.Run("template without Asset reference renders in one pass", func(t *testing.T) {
+		data := map[string]string{
+			"Version":   "v1.0.0",
+			"SemVer":    "1.0.0",
+			"OS":        "linux",
+			"Arch":      "amd64",
+			"RepoOwner": "test",
+			"RepoName":  "tool",
+			"Format":    "tar.gz",
+		}
+		result, err := executeAssetTemplate("{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}", data)
+		require.NoError(t, err)
+		assert.Equal(t, "tool_1.0.0_linux_amd64.tar.gz", result)
+		// Asset/AssetWithoutExt should NOT be populated (no .Asset reference).
+		assert.Empty(t, data["Asset"])
+		assert.Empty(t, data["AssetWithoutExt"])
+	})
+
+	t.Run("template referencing .Asset triggers two-pass and populates Asset fields", func(t *testing.T) {
+		data := map[string]string{
+			"Version":         "v0.15.2",
+			"SemVer":          "0.15.2",
+			"OS":              "Linux",
+			"Arch":            "x86_64",
+			"RepoOwner":       "charmbracelet",
+			"RepoName":        "gum",
+			"Format":          "tar.gz",
+			"Asset":           "", // Pre-initialize to avoid <no value> in first pass.
+			"AssetWithoutExt": "",
+		}
+		// Template that references {{.Asset}} → triggers two-pass rendering.
+		// Pass 1: Asset is empty → result = "gum_0.15.2_Linux_x86_64.tar.gz/"
+		// Then: data["Asset"] set, AssetWithoutExt computed via stripFileExtension.
+		// Pass 2: re-renders with Asset populated.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}/{{.Asset}}"
+		result, err := executeAssetTemplate(tmpl, data)
+		require.NoError(t, err)
+		// After two-pass, Asset and AssetWithoutExt should be populated.
+		assert.NotEmpty(t, data["Asset"])
+		assert.NotEmpty(t, data["AssetWithoutExt"])
+		assert.Contains(t, result, "gum_0.15.2_Linux_x86_64")
+	})
+
+	t.Run("template referencing .AssetWithoutExt triggers two-pass", func(t *testing.T) {
+		data := map[string]string{
+			"Version":         "v1.0.0",
+			"SemVer":          "1.0.0",
+			"OS":              "linux",
+			"Arch":            "amd64",
+			"RepoOwner":       "test",
+			"RepoName":        "tool",
+			"Format":          "tar.gz",
+			"Asset":           "", // Pre-initialize.
+			"AssetWithoutExt": "",
+		}
+		// .AssetWithoutExt contains ".Asset" as substring → triggers two-pass.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}/{{.AssetWithoutExt}}"
+		result, err := executeAssetTemplate(tmpl, data)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data["Asset"])
+		assert.NotEmpty(t, data["AssetWithoutExt"])
+		assert.Contains(t, result, "tool_1.0.0_linux_amd64")
+	})
+
+	t.Run("two-pass with pre-initialized Asset fields", func(t *testing.T) {
+		data := map[string]string{
+			"Version":         "v2.0.0",
+			"SemVer":          "2.0.0",
+			"OS":              "darwin",
+			"Arch":            "arm64",
+			"RepoOwner":       "example",
+			"RepoName":        "app",
+			"Format":          "tar.gz",
+			"Asset":           "", // Pre-initialize to avoid <no value>.
+			"AssetWithoutExt": "", // Pre-initialize to avoid <no value>.
+		}
+		// Template with .AssetWithoutExt reference (contains ".Asset") to trigger two-pass.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}"
+		// This template does NOT contain ".Asset" so it's actually single-pass.
+		result, err := executeAssetTemplate(tmpl, data)
+		require.NoError(t, err)
+		assert.Equal(t, "app_2.0.0_darwin_arm64.tar.gz", result)
+	})
+
+	t.Run("parse error returns error", func(t *testing.T) {
+		data := map[string]string{
+			"Version": "v1.0.0",
+		}
+		// Invalid template syntax.
+		_, err := executeAssetTemplate("{{.Broken", data)
+		assert.Error(t, err)
+	})
+}
+
+// TestResolveBinaryName tests binary name resolution order.
+func TestResolveBinaryName(t *testing.T) {
+	tests := []struct {
+		name        string
+		binaryName  string
+		packageName string
+		repoName    string
+		expected    string
+	}{
+		{"explicit binary_name wins", "custom-binary", "owner/repo/binary", "repo", "custom-binary"},
+		{"package name with 3 segments", "", "kubernetes/kubernetes/kubectl", "kubernetes", "kubectl"},
+		{"falls back to repo_name", "", "hashicorp/terraform", "terraform", "terraform"},
+		{"empty package name falls back", "", "", "myrepo", "myrepo"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := resolveBinaryName(tt.binaryName, tt.packageName, tt.repoName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestExtractBinaryNameFromPackageName_AllCases tests package name parsing.
+func TestExtractBinaryNameFromPackageName_AllCases(t *testing.T) {
+	tests := []struct {
+		name        string
+		packageName string
+		expected    string
+	}{
+		{"three segments extracts last", "kubernetes/kubernetes/kubectl", "kubectl"},
+		{"four segments extracts last", "org/repo/sub/binary", "binary"},
+		{"two segments returns empty", "hashicorp/terraform", ""},
+		{"one segment returns empty", "terraform", ""},
+		{"empty returns empty", "", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := extractBinaryNameFromPackageName(tt.packageName)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestStripFileExtension_Aqua tests the Aqua package's stripFileExtension function.
+func TestStripFileExtension_Aqua(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"tar.gz", "tool_linux_amd64.tar.gz", "tool_linux_amd64"},
+		{"tar.xz", "tool_linux_amd64.tar.xz", "tool_linux_amd64"},
+		{"tar.bz2", "tool_linux_amd64.tar.bz2", "tool_linux_amd64"},
+		{"zip", "tool.zip", "tool"},
+		{"no extension", "tool-binary", "tool-binary"},
+		{"exe", "tool.exe", "tool"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := stripFileExtension(tt.input)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestAquaRegistry_BuildAssetURL_GitHubReleaseFullFlow tests the full BuildAssetURL flow.
+func TestAquaRegistry_BuildAssetURL_GitHubReleaseFullFlow(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	tool := &registry.Tool{
+		Name:          "terraform",
+		Type:          "github_release",
+		RepoOwner:     "hashicorp",
+		RepoName:      "terraform",
+		Asset:         "terraform_{{trimV .Version}}_{{.OS}}_{{.Arch}}.zip",
+		VersionPrefix: "v",
+	}
+
+	url, err := ar.BuildAssetURL(tool, "1.5.7")
+	require.NoError(t, err)
+	assert.Contains(t, url, "https://github.com/hashicorp/terraform/releases/download/v1.5.7/")
+	assert.Contains(t, url, "terraform_1.5.7_")
+}
+
+// TestAquaRegistry_BuildAssetURL_HTTPTypeURL tests HTTP type URL generation.
+func TestAquaRegistry_BuildAssetURL_HTTPTypeURL(t *testing.T) {
+	ar := NewAquaRegistry()
+
+	tool := &registry.Tool{
+		Name:      "aws-cli",
+		Type:      "http",
+		RepoOwner: "aws",
+		RepoName:  "aws-cli",
+		Asset:     "https://awscli.amazonaws.com/AWSCLIV2-{{.Version}}.pkg",
+	}
+
+	url, err := ar.BuildAssetURL(tool, "2.32.31")
+	require.NoError(t, err)
+	assert.Equal(t, "https://awscli.amazonaws.com/AWSCLIV2-2.32.31.pkg", url)
+}
+
+// TestRenderTemplate_ErrorCases tests error handling in renderTemplate.
+func TestRenderTemplate_ErrorCases(t *testing.T) {
+	t.Run("invalid template syntax", func(t *testing.T) {
+		_, err := renderTemplate("{{.Invalid", map[string]string{})
+		require.Error(t, err)
+		assert.ErrorIs(t, err, registry.ErrNoAssetTemplate)
+	})
+}
+
 // TestExecuteAssetTemplate_AssetWithoutExt verifies two-pass rendering with Asset/AssetWithoutExt.
 func TestExecuteAssetTemplate_AssetWithoutExt(t *testing.T) {
 	// Template that references AssetWithoutExt for checksum URL.
