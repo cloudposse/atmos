@@ -1,6 +1,7 @@
 package errors
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -764,4 +765,32 @@ func TestFormat_UseColor_ThreadedThrough(t *testing.T) {
 	assert.Contains(t, result, "Check the configuration")
 	assert.Contains(t, result, "## Context")
 	assert.Contains(t, result, "## Stack Trace")
+}
+
+func TestFormat_ExplanationWithErrorBuilder(t *testing.T) {
+	// Regression test: using ErrorBuilder.WithExplanation produces a meaningful
+	// explanation section, not a bare integer like fmt.Errorf("%w: %d", ...).
+	sentinel := errors.New("failed to vendor components")
+
+	t.Run("bare integer explanation is an anti-pattern", func(t *testing.T) {
+		// This is the old broken pattern: fmt.Errorf("%w: %d", sentinel, 1).
+		// The wrapped message is just "1" which is not helpful to the user.
+		err := fmt.Errorf("%w: %d", sentinel, 1)
+		_, wrappedMsg := extractSentinelAndWrappedMessage(err)
+		assert.Equal(t, "1", wrappedMsg, "Old pattern produces bare integer as wrapped message")
+	})
+
+	t.Run("ErrorBuilder produces descriptive explanation", func(t *testing.T) {
+		// This is the correct pattern: use ErrorBuilder.WithExplanation.
+		err := Build(sentinel).
+			WithExplanation("Failed to vendor 1 of 3 components: my-vpc").
+			Err()
+
+		config := DefaultFormatterConfig()
+		result := Format(err, config)
+
+		assert.Contains(t, result, "## Explanation")
+		assert.Contains(t, result, "Failed to vendor 1 of 3 components: my-vpc")
+		assert.ErrorIs(t, err, sentinel)
+	})
 }
