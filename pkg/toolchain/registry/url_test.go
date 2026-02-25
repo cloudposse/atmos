@@ -353,12 +353,6 @@ packages:
 	reg := NewURLRegistry(server.URL+"/registry.yaml", "")
 
 	t.Run("version matching override", func(t *testing.T) {
-		tool, err := reg.GetTool("test", "tool")
-		if err != nil {
-			t.Fatalf("Failed to get tool: %v", err)
-		}
-
-		// Apply version override manually via GetToolWithVersion.
 		toolWithVersion, err := reg.GetToolWithVersion("test", "tool", "0.9.0")
 		if err != nil {
 			t.Fatalf("Failed to get tool with version: %v", err)
@@ -373,7 +367,6 @@ packages:
 		if toolWithVersion.Format != "zip" {
 			t.Errorf("Expected format override 'zip', got %q", toolWithVersion.Format)
 		}
-		_ = tool
 	})
 
 	t.Run("version not matching override uses defaults", func(t *testing.T) {
