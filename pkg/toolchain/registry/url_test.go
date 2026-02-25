@@ -384,6 +384,12 @@ packages:
 		if toolWithVersion.Version != "2.0.0" {
 			t.Errorf("Expected version 2.0.0, got %q", toolWithVersion.Version)
 		}
+		if strings.Contains(toolWithVersion.Asset, "legacy") {
+			t.Errorf("Expected default asset (non-legacy), got %q", toolWithVersion.Asset)
+		}
+		if toolWithVersion.Format != "tar.gz" {
+			t.Errorf("Expected default format 'tar.gz', got %q", toolWithVersion.Format)
+		}
 	})
 
 	t.Run("tool not found returns error", func(t *testing.T) {

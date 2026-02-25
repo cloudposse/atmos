@@ -162,10 +162,14 @@ func (ur *URLRegistry) GetToolWithVersion(owner, repo, version string) (*Tool, e
 	defer perf.Track(nil, "registry.URLRegistry.GetToolWithVersion")()
 
 	// Get base tool metadata.
-	tool, err := ur.GetTool(owner, repo)
+	baseTool, err := ur.GetTool(owner, repo)
 	if err != nil {
 		return nil, err
 	}
+
+	// Work on a copy so we don't mutate the cached tool.
+	toolCopy := *baseTool
+	tool := &toolCopy
 
 	// Set the version.
 	tool.Version = version
