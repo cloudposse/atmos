@@ -373,7 +373,6 @@ func extractComponentPath(atmosConfig *schema.AtmosConfiguration, componentConfi
 // could solve this, but adds complexity for a simple check. The duplication is acceptable
 // given the function's simplicity and stability.
 func hasSource(componentConfig map[string]any) bool {
-	defer perf.Track(nil, "workdir.hasSource")()
 	if componentConfig == nil {
 		return false
 	}
