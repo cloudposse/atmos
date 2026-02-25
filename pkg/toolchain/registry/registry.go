@@ -202,7 +202,7 @@ type Tool struct {
 	SupportedIf         *SupportedIf      `yaml:"supported_if"`
 	Replacements        map[string]string `yaml:"replacements"`
 	BinaryName          string            `yaml:"binary_name"`
-	VersionPrefix       string            `yaml:"version_prefix"`        // GitHub tag prefix (e.g., "v", "kustomize/"). Defaults to "v".
+	VersionPrefix       string            `yaml:"version_prefix"`        // GitHub tag prefix (e.g., "v", "jq-"). Empty means no prefix.
 	SourceURL           string            `yaml:"-"`                     // URL where the registry file was found (not serialized).
 	SupportedEnvs       []string          `yaml:"supported_envs"`        // Supported platforms (e.g., "darwin", "linux", "windows", "darwin/amd64").
 	Rosetta2            bool              `yaml:"rosetta2"`              // Allow arm64 to fall back to amd64 on macOS via Rosetta 2.
@@ -210,6 +210,7 @@ type Tool struct {
 	ErrorMessage        string            `yaml:"error_message"`         // Custom error message for unsupported versions.
 	VersionSource       string            `yaml:"version_source"`        // Version source: "github_release" (default) or "github_tag".
 	NoAsset             bool              `yaml:"no_asset"`              // Tool has no downloadable asset (e.g., go_install only).
+	Checksum            ChecksumConfig    `yaml:"checksum"`              // Checksum verification configuration.
 }
 
 // File represents a file to be extracted from the archive.
@@ -228,10 +229,10 @@ type FormatOverride struct {
 type Override struct {
 	GOOS         string            `yaml:"goos"`
 	GOARCH       string            `yaml:"goarch"`
-	Envs         []string          `yaml:"envs"` // Supported environments for this override (e.g., "darwin/arm64").
-	Type         string            `yaml:"type"`
+	Envs         []string          `yaml:"envs,omitempty"` // Supported environments for this override (e.g., "darwin/arm64").
+	Type         string            `yaml:"type,omitempty"`
 	Asset        string            `yaml:"asset"`
-	URL          string            `yaml:"url"`
+	URL          string            `yaml:"url,omitempty"`
 	Format       string            `yaml:"format"`
 	Files        []File            `yaml:"files"`
 	Replacements map[string]string `yaml:"replacements"`
@@ -300,6 +301,7 @@ type AquaOverride struct {
 // ChecksumConfig represents checksum configuration for Aqua packages.
 type ChecksumConfig struct {
 	Type      string `yaml:"type"`
+	Asset     string `yaml:"asset"` // Checksum asset filename (e.g., "sha256sum.txt").
 	URL       string `yaml:"url"`
 	Algorithm string `yaml:"algorithm"`
 }

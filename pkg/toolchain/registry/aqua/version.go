@@ -26,7 +26,7 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 	// Check if the tool uses github_tag version source.
 	tool, err := ar.GetTool(owner, repo)
 	if err == nil && tool.VersionSource == "github_tag" {
-		return ar.getLatestTag(owner, repo)
+		return ar.getLatestTag(owner, repo, tool.VersionPrefix)
 	}
 
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/releases?per_page=%d", ar.githubBaseURL, owner, repo, githubPerPage)
@@ -46,7 +46,9 @@ func (ar *AquaRegistry) GetLatestVersion(owner, repo string) (string, error) {
 }
 
 // getLatestTag fetches the latest tag from GitHub tags API.
-func (ar *AquaRegistry) getLatestTag(owner, repo string) (string, error) {
+// The prefix parameter specifies the version prefix to strip (e.g., "v", "jq-").
+// If empty, falls back to the default "v" prefix.
+func (ar *AquaRegistry) getLatestTag(owner, repo, prefix string) (string, error) {
 	apiURL := fmt.Sprintf("%s/repos/%s/%s/tags?per_page=1", ar.githubBaseURL, owner, repo)
 
 	resp, err := ar.get(apiURL)
@@ -76,7 +78,10 @@ func (ar *AquaRegistry) getLatestTag(owner, repo string) (string, error) {
 		return "", fmt.Errorf("%w: no tags found for %s/%s", registry.ErrNoVersionsFound, owner, repo)
 	}
 
-	return strings.TrimPrefix(tags[0].Name, versionPrefix), nil
+	if prefix == "" {
+		prefix = versionPrefix
+	}
+	return strings.TrimPrefix(tags[0].Name, prefix), nil
 }
 
 // fetchVersionFromPage fetches releases from a single page and returns the first valid version.

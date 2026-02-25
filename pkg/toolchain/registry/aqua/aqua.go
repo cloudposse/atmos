@@ -203,8 +203,8 @@ type versionOverride struct {
 	Overrides           []registry.AquaOverride   `yaml:"overrides"`
 	Files               []registry.File           `yaml:"files"`
 	SupportedEnvs       []string                  `yaml:"supported_envs"`
-	Rosetta2            bool                      `yaml:"rosetta2"`
-	WindowsArmEmulation bool                      `yaml:"windows_arm_emulation"`
+	Rosetta2            *bool                     `yaml:"rosetta2"`
+	WindowsArmEmulation *bool                     `yaml:"windows_arm_emulation"`
 	NoAsset             bool                      `yaml:"no_asset"`
 	Checksum            registry.ChecksumConfig   `yaml:"checksum"`
 	ErrorMessage        string                    `yaml:"error_message"`
@@ -255,12 +255,17 @@ func applyVersionOverride(tool *registry.Tool, override *versionOverride, versio
 	if len(override.Overrides) > 0 {
 		tool.Overrides = convertAquaOverrides(override.Overrides)
 	}
-	// Apply rosetta2 and windows_arm_emulation flags (additive — once true, stays true).
-	if override.Rosetta2 {
-		tool.Rosetta2 = true
+	// Apply rosetta2 and windows_arm_emulation flags.
+	// Using *bool allows explicit false to disable (e.g., newer versions with native arm64).
+	if override.Rosetta2 != nil {
+		tool.Rosetta2 = *override.Rosetta2
 	}
-	if override.WindowsArmEmulation {
-		tool.WindowsArmEmulation = true
+	if override.WindowsArmEmulation != nil {
+		tool.WindowsArmEmulation = *override.WindowsArmEmulation
+	}
+	// Apply checksum configuration from version override.
+	if override.Checksum.Type != "" || override.Checksum.Asset != "" {
+		tool.Checksum = override.Checksum
 	}
 	if override.ErrorMessage != "" {
 		tool.ErrorMessage = override.ErrorMessage
@@ -695,6 +700,12 @@ func buildAssetTemplateData(tool *registry.Tool, releaseVersion, semVer string) 
 func assetTemplateFuncs() template.FuncMap {
 	funcs := sprig.TxtFuncMap()
 
+	// Security: remove OS/network helpers that could leak secrets from remote registry templates.
+	// Matches Helm and Argo CD which also remove these from Sprig.
+	delete(funcs, "env")
+	delete(funcs, "expandenv")
+	delete(funcs, "getHostByName")
+
 	// Override with Aqua-specific functions that have different argument order
 	// or behavior than Sprig equivalents.
 	funcs["trimV"] = func(s string) string {
@@ -716,7 +727,7 @@ func assetTemplateFuncs() template.FuncMap {
 // executeAssetTemplate parses and executes the asset template with two-pass rendering.
 // Pass 1: Render with base variables (Version, SemVer, OS, Arch, etc.).
 // Pass 2: If the template references {{.Asset}} or {{.AssetWithoutExt}},
-// inject the rendered asset name and re-render.
+// the rendered asset name is injected and the template is re-rendered.
 func executeAssetTemplate(assetTemplate string, data map[string]string) (string, error) {
 	// Pass 1: Render with base data.
 	result, err := renderTemplate(assetTemplate, data)

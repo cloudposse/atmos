@@ -1371,7 +1371,7 @@ packages:
 }
 
 // =============================================================================
-// Real-world registry YAML tests
+// Real-world registry YAML tests.
 // =============================================================================
 // These tests use EXACT real-world Aqua registry YAML with all the fields that
 // tools actually use (rosetta2, windows_arm_emulation, no_asset, checksum with
@@ -2273,6 +2273,8 @@ func TestStripFileExtension(t *testing.T) {
 		{"no extension", "tool_linux_amd64", "tool_linux_amd64"},
 		{"exe extension", "tool.exe", "tool"},
 		{"pkg extension", "tool.pkg", "tool"},
+		{"tgz extension", "tool_linux_amd64.tgz", "tool_linux_amd64"},
+		{"dmg extension", "tool_darwin.dmg", "tool_darwin"},
 		{"multiple dots", "tool.v1.2.3.tar.gz", "tool.v1.2.3"},
 	}
 

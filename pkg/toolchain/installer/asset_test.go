@@ -848,3 +848,47 @@ func TestBuildTemplateData_FormatOverrides(t *testing.T) {
 	// The format override for the current OS should be applied.
 	assert.Equal(t, "zip", data.Format)
 }
+
+// TestBuildTemplateData_Rosetta2 verifies that Rosetta2 fallback is applied in template data.
+// On darwin/arm64, Arch should fall back to "amd64" while GOARCH preserves the raw value.
+func TestBuildTemplateData_Rosetta2(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Format:    "tar.gz",
+		Rosetta2:  true,
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+
+	// GOARCH must always preserve the raw runtime value regardless of Rosetta2.
+	assert.Equal(t, runtime.GOARCH, data.GOARCH, "GOARCH always preserves raw runtime value")
+
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		assert.Equal(t, "amd64", data.Arch, "Rosetta2 should fall back Arch to amd64 on darwin/arm64")
+	} else {
+		assert.Equal(t, runtime.GOARCH, data.Arch, "Rosetta2 should not affect Arch on non-darwin-arm64")
+	}
+}
+
+// TestBuildTemplateData_WindowsArmEmulation verifies that Windows ARM emulation fallback
+// is applied in template data. On windows/arm64, Arch should fall back to "amd64".
+func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner:           "test",
+		RepoName:            "tool",
+		Format:              "tar.gz",
+		WindowsArmEmulation: true,
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+
+	// GOARCH must always preserve the raw runtime value regardless of emulation.
+	assert.Equal(t, runtime.GOARCH, data.GOARCH, "GOARCH always preserves raw runtime value")
+
+	if runtime.GOOS == "windows" && runtime.GOARCH == "arm64" {
+		assert.Equal(t, "amd64", data.Arch, "WindowsArmEmulation should fall back Arch to amd64 on windows/arm64")
+	} else {
+		assert.Equal(t, runtime.GOARCH, data.Arch, "WindowsArmEmulation should not affect Arch on non-windows-arm64")
+	}
+}
