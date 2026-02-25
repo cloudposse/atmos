@@ -87,6 +87,13 @@ tests:
         - "has_changes=false"
         - "has_errors=true"
         - "exit_code=1"
+        - "summary="
+        - '## Plan Failed for `mycomponent/failure` in `prod`'
+        - "PLAN-FAILED-ff0000"
+        - '<a id="result-prod-mycomponent-failure" />'
+        - ":warning: Error summary"
+        - "atmos terraform plan mycomponent/failure -s prod"
+        - "Error:"
 
   - name: "atmos terraform plan with ci no changes"
     enabled: true
