@@ -1,0 +1,123 @@
+# yaml-language-server: $schema=schema.json
+
+tests:
+  - name: "atmos terraform plan ci summary no changes"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan foobar -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the no-changes golden file."
+    workdir: "fixtures/scenarios/native-ci-gha-plan"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "foobar"
+      - "-s"
+      - "plat-ue2-sandbox"
+    expect:
+      exit_code: 0
+      stderr:
+        - "CI action failed"
+      file_contains:
+        "github-step-summary.txt":
+          - '## No Changes for `foobar` in `plat-ue2-sandbox`'
+          - 'cloudposse.com/logo-300x69.svg'
+          - 'NO_CHANGE-inactive'
+          - '<a id="result-plat-ue2-sandbox-foobar" />'
+          - 'No changes. Your infrastructure matches the configuration.'
+          - 'atmos terraform plan foobar -s plat-ue2-sandbox'
+        "github-output.txt":
+          - "has_changes=false"
+          - "has_errors=false"
+          - "exit_code=0"
+
+  - name: "atmos terraform plan ci summary with changes"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan foobar/changes -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the changes golden file."
+    workdir: "fixtures/scenarios/native-ci-gha-plan"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "foobar/changes"
+      - "-s"
+      - "plat-ue2-sandbox"
+    expect:
+      exit_code: 0
+      stderr:
+        - "CI action failed"
+      file_contains:
+        "github-step-summary.txt":
+          - '## Changes Found for `foobar/changes` in `plat-ue2-sandbox`'
+          - 'cloudposse.com/logo-300x69.svg'
+          - 'PLAN-CREATE-success'
+          - '<a id="result-plat-ue2-sandbox-foobar_changes" />'
+          - 'Plan: 1 to add, 0 to change, 0 to destroy.'
+          - 'atmos terraform plan foobar/changes -s plat-ue2-sandbox'
+          - '<a id="create-plat-ue2-sandbox-foobar_changes" />Create'
+          - 'random_id.foo\[0\]'
+          - 'Terraform <strong>Plan</strong> Summary'
+          - 'Test warning summary'
+          - 'Test warning details'
+        "github-output.txt":
+          - "has_changes=true"
+          - "has_errors=false"
+          - "exit_code=0"
+
+  - name: "atmos terraform plan ci summary with failure"
+    enabled: true
+    snapshot: false
+    description: "Runs 'atmos terraform plan foobar-fail -s plat-ue2-sandbox' with GitHub Actions env and verifies the CI summary matches the failure golden file."
+    workdir: "fixtures/scenarios/native-ci-gha-plan"
+    command: "atmos"
+    env:
+      GITHUB_ACTIONS: "true"
+      GITHUB_TOKEN: "test-token-for-ci"
+      GITHUB_OUTPUT: "github-output.txt"
+      GITHUB_STEP_SUMMARY: "github-step-summary.txt"
+      GITHUB_REPOSITORY: "test-owner/test-repo"
+      GITHUB_SHA: "abc123def456789"
+      GITHUB_RUN_ID: "12345"
+      ATMOS_VERSION_CHECK_ENABLED: "false"
+    args:
+      - "terraform"
+      - "plan"
+      - "foobar-fail"
+      - "-s"
+      - "plat-ue2-sandbox"
+    expect:
+      exit_code: 1
+      stderr:
+        - "CI action failed"
+      file_contains:
+        "github-step-summary.txt":
+          - '## Plan Failed for `foobar-fail` in `plat-ue2-sandbox`'
+          - 'cloudposse.com/logo-300x69.svg'
+          - 'PLAN-FAILED-ff0000'
+          - '<a id="result-plat-ue2-sandbox-foobar-fail" />'
+          - ':warning: Error summary'
+          - 'atmos terraform plan foobar-fail -s plat-ue2-sandbox'
+          - 'Invalid function argument'
+          - 'Failed because failure mode is enabled'
+        "github-output.txt":
+          - "has_changes=false"
+          - "has_errors=true"
+          - "exit_code=1"

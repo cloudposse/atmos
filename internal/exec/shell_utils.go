@@ -38,6 +38,7 @@ type ShellCommandOption func(*shellCommandConfig)
 // shellCommandConfig holds optional configuration for shell command execution.
 type shellCommandConfig struct {
 	stdoutCapture io.Writer
+	stderrCapture io.Writer
 }
 
 // WithStdoutCapture returns a ShellCommandOption that tees stdout to the provided writer.
@@ -45,6 +46,14 @@ type shellCommandConfig struct {
 func WithStdoutCapture(w io.Writer) ShellCommandOption {
 	return func(c *shellCommandConfig) {
 		c.stdoutCapture = w
+	}
+}
+
+// WithStderrCapture returns a ShellCommandOption that tees stderr to the provided writer.
+// The captured output includes secret masking (post-MaskWriter).
+func WithStderrCapture(w io.Writer) ShellCommandOption {
+	return func(c *shellCommandConfig) {
+		c.stderrCapture = w
 	}
 }
 
@@ -95,11 +104,26 @@ func ExecuteShellCommand(
 	}
 
 	if redirectStdError == "/dev/stderr" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "/dev/stdout" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stdout)
+		maskedStderr := ioLayer.MaskWriter(os.Stdout)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else if redirectStdError == "" {
-		cmd.Stderr = ioLayer.MaskWriter(os.Stderr)
+		maskedStderr := ioLayer.MaskWriter(os.Stderr)
+		if cfg.stderrCapture != nil {
+			cmd.Stderr = io.MultiWriter(maskedStderr, cfg.stderrCapture)
+		} else {
+			cmd.Stderr = maskedStderr
+		}
 	} else {
 		f, err := os.OpenFile(redirectStdError, os.O_WRONLY|os.O_CREATE, 0o644)
 		if err != nil {

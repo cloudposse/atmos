@@ -90,7 +90,7 @@ tests:
         - "summary="
         - '## Plan Failed for `mycomponent/failure` in `prod`'
         - "PLAN-FAILED-ff0000"
-        - '<a id="result-prod-mycomponent-failure" />'
+        - '<a id="result-prod-mycomponent_failure" />'
         - ":warning: Error summary"
         - "atmos terraform plan mycomponent/failure -s prod"
         - "Error:"

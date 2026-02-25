@@ -1822,11 +1822,14 @@ func cleanDirectory(t *testing.T, workdir string) error {
 		return fmt.Errorf("failed to get git status: %w", err)
 	}
 
-	// Clean only files in the provided working directory
+	// Clean only files in the provided working directory.
+	// Use workdir + separator to avoid matching directories with a shared prefix
+	// (e.g., "native-ci" should not match "native-ci-gha-plan").
+	workdirPrefix := workdir + string(filepath.Separator)
 	for file, statusEntry := range status {
 		if statusEntry.Worktree == git.Untracked {
 			fullPath := filepath.Join(repoRoot, file)
-			if strings.HasPrefix(fullPath, workdir) {
+			if strings.HasPrefix(fullPath, workdirPrefix) || fullPath == workdir {
 				t.Logf("Removing untracked file: %q", fullPath)
 				if err := os.RemoveAll(fullPath); err != nil {
 					return fmt.Errorf("failed to remove %q: %w", fullPath, err)

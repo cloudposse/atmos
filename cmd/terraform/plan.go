@@ -9,6 +9,7 @@ import (
 	"github.com/cloudposse/atmos/cmd/internal"
 	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ansi"
+	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/flags"
 	h "github.com/cloudposse/atmos/pkg/hooks"
 )
@@ -66,22 +67,35 @@ For complete Terraform/OpenTofu documentation, see:
 		// When CI mode is enabled, capture terraform plan stdout for CI hooks
 		// (summary, comments, outputs). The output is tee'd: terminal still
 		// receives it in real time, and the buffer collects a copy.
+		// CI mode is active when:
+		// 1. --ci flag or ATMOS_CI/CI env var is set, OR
+		// 2. A CI platform is auto-detected (e.g., GITHUB_ACTIONS=true).
 		ciMode, _ := cmd.Flags().GetBool("ci")
 		if !ciMode {
 			ciMode = v.GetBool("ci")
 		}
+		if !ciMode {
+			ciMode = ci.IsCI()
+		}
 
 		var shellOpts []e.ShellCommandOption
-		var buf bytes.Buffer
+		var stdoutBuf, stderrBuf bytes.Buffer
 		if ciMode {
-			shellOpts = append(shellOpts, e.WithStdoutCapture(&buf))
+			shellOpts = append(shellOpts, e.WithStdoutCapture(&stdoutBuf))
+			shellOpts = append(shellOpts, e.WithStderrCapture(&stderrBuf))
 		}
 
 		err := terraformRunWithOptions(terraformCmd, cmd, args, opts, shellOpts...)
 
 		// Strip ANSI escape codes so CI templates get clean text.
+		// Combine stdout and stderr so that error messages (which terraform
+		// writes to stderr) are available to the CI summary parser.
 		if ciMode {
-			capturedPlanOutput = ansi.Strip(buf.String())
+			combined := stdoutBuf.String()
+			if errOut := stderrBuf.String(); errOut != "" {
+				combined = combined + "\n" + errOut
+			}
+			capturedPlanOutput = ansi.Strip(combined)
 		}
 
 		return err
