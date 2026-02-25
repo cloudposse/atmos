@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -365,7 +366,13 @@ packages:
 		if toolWithVersion.Version != "0.9.0" {
 			t.Errorf("Expected version 0.9.0, got %q", toolWithVersion.Version)
 		}
-		// The override should have been applied.
+		// Verify override fields were applied for version <= 1.0.0.
+		if !strings.Contains(toolWithVersion.Asset, "legacy") {
+			t.Errorf("Expected legacy asset override, got %q", toolWithVersion.Asset)
+		}
+		if toolWithVersion.Format != "zip" {
+			t.Errorf("Expected format override 'zip', got %q", toolWithVersion.Format)
+		}
 		_ = tool
 	})
 

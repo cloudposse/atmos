@@ -330,6 +330,17 @@ func TestCompositeRegistry_Search(t *testing.T) {
 	if len(results) != 2 {
 		t.Errorf("Expected 2 results, got %d", len(results))
 	}
+	// Verify concrete identities to prove precedence/dedup semantics.
+	got := map[string]string{}
+	for _, tool := range results {
+		got[tool.RepoOwner+"/"+tool.RepoName] = tool.Name
+	}
+	if got["hashicorp/terraform"] != "terraform" {
+		t.Errorf("Expected high-priority terraform result, got %q", got["hashicorp/terraform"])
+	}
+	if _, ok := got["hashicorp/packer"]; !ok {
+		t.Errorf("Expected hashicorp/packer in results")
+	}
 }
 
 func TestCompositeRegistry_Search_ErrorContinues(t *testing.T) {
@@ -357,6 +368,11 @@ func TestCompositeRegistry_Search_ErrorContinues(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Errorf("Expected 1 result from working registry, got %d", len(results))
+	}
+	if len(results) == 1 {
+		if results[0].RepoOwner != "hashicorp" || results[0].RepoName != "terraform" {
+			t.Errorf("Expected hashicorp/terraform, got %s/%s", results[0].RepoOwner, results[0].RepoName)
+		}
 	}
 }
 
@@ -409,6 +425,11 @@ func TestCompositeRegistry_ListAll_ErrorContinues(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Errorf("Expected 1 result, got %d", len(results))
+	}
+	if len(results) == 1 {
+		if results[0].RepoOwner != "owner" || results[0].RepoName != "repo" {
+			t.Errorf("Expected owner/repo, got %s/%s", results[0].RepoOwner, results[0].RepoName)
+		}
 	}
 }
 

@@ -272,7 +272,7 @@ func (e *wrappedError) Unwrap() error {
 func TestVersionFallbackLogic(t *testing.T) {
 	t.Run("adds v prefix when missing", func(t *testing.T) {
 		version := "1.0.0"
-		prefix := VersionPrefix // "v"
+		prefix := VersionPrefix // "v".
 		var fallbackVersion string
 		if strings.HasPrefix(version, prefix) {
 			fallbackVersion = strings.TrimPrefix(version, prefix)
@@ -284,7 +284,7 @@ func TestVersionFallbackLogic(t *testing.T) {
 
 	t.Run("removes v prefix when present", func(t *testing.T) {
 		version := "v1.0.0"
-		prefix := VersionPrefix // "v"
+		prefix := VersionPrefix // "v".
 		var fallbackVersion string
 		if strings.HasPrefix(version, prefix) {
 			fallbackVersion = strings.TrimPrefix(version, prefix)
@@ -299,7 +299,7 @@ func TestVersionFallbackLogic(t *testing.T) {
 	// get "v" prepended resulting in "vjq-1.8.1".
 	t.Run("custom prefix jq- strips correctly", func(t *testing.T) {
 		version := "jq-1.8.1"
-		prefix := "jq-" // tool.VersionPrefix
+		prefix := "jq-" // tool.VersionPrefix.
 		var fallbackVersion string
 		if strings.HasPrefix(version, prefix) {
 			fallbackVersion = strings.TrimPrefix(version, prefix)
@@ -312,7 +312,7 @@ func TestVersionFallbackLogic(t *testing.T) {
 
 	t.Run("custom prefix jq- adds when missing", func(t *testing.T) {
 		version := "1.8.1"
-		prefix := "jq-" // tool.VersionPrefix
+		prefix := "jq-" // tool.VersionPrefix.
 		var fallbackVersion string
 		if strings.HasPrefix(version, prefix) {
 			fallbackVersion = strings.TrimPrefix(version, prefix)
@@ -490,8 +490,10 @@ func TestDownloadAssetWithVersionFallback(t *testing.T) {
 // TestTryFallbackVersion tests the version prefix fallback logic.
 func TestTryFallbackVersion(t *testing.T) {
 	t.Run("fallback builds alternative URL with prefix toggled", func(t *testing.T) {
-		// Set up an HTTP server that returns 404 for both original and fallback URLs.
+		var requestedPaths []string
+		// Set up an HTTP server that records paths and returns 404.
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestedPaths = append(requestedPaths, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer ts.Close()
@@ -499,22 +501,29 @@ func TestTryFallbackVersion(t *testing.T) {
 		inst := &Installer{
 			cacheDir: t.TempDir(),
 		}
+		// Use "http" type so BuildAssetURL routes through our test server.
+		// With {{.Version}} template, version "1.0.0" becomes "v1.0.0" (prefix added).
 		tool := &registry.Tool{
-			Type:          "github_release",
+			Type:          "http",
 			RepoOwner:     "test",
 			RepoName:      "tool",
-			Asset:         "tool-{{.Version}}.tar.gz",
+			Asset:         ts.URL + "/tool-{{.Version}}.tar.gz",
 			VersionPrefix: "v",
 		}
 
-		// Version without prefix → fallback adds "v" prefix → tries "v1.0.0".
-		// Both URLs fail with 404, so we get an error.
+		// Version "1.0.0" without prefix → fallback adds "v" → "v1.0.0".
+		// BuildAssetURL with "v1.0.0" and prefix "v" → Version="v1.0.0" → /tool-v1.0.0.tar.gz.
 		_, err := inst.tryFallbackVersion(tool, "1.0.0", ts.URL+"/tool-1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
+		// Verify the fallback URL was actually requested.
+		assert.Contains(t, requestedPaths, "/tool-v1.0.0.tar.gz",
+			"fallback should request URL with 'v' prefix added to version")
 	})
 
 	t.Run("fallback strips prefix when version has it", func(t *testing.T) {
+		var requestedPaths []string
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			requestedPaths = append(requestedPaths, r.URL.Path)
 			w.WriteHeader(http.StatusNotFound)
 		}))
 		defer ts.Close()
@@ -522,17 +531,24 @@ func TestTryFallbackVersion(t *testing.T) {
 		inst := &Installer{
 			cacheDir: t.TempDir(),
 		}
+		// Use "http" type with {{.SemVer}} template so the prefix toggle is visible.
+		// {{.SemVer}} produces the version without prefix.
 		tool := &registry.Tool{
-			Type:          "github_release",
+			Type:          "http",
 			RepoOwner:     "test",
 			RepoName:      "tool",
-			Asset:         "tool-{{.Version}}.tar.gz",
+			Asset:         ts.URL + "/tool-{{.SemVer}}.tar.gz",
 			VersionPrefix: "v",
 		}
 
-		// Version with "v" prefix → fallback strips to "1.0.0".
+		// Version "v1.0.0" with prefix → fallback strips to "1.0.0".
+		// Both produce SemVer="1.0.0", but the fallback IS attempted because
+		// the version strings differ ("v1.0.0" != "1.0.0").
 		_, err := inst.tryFallbackVersion(tool, "v1.0.0", ts.URL+"/tool-v1.0.0.tar.gz", ErrHTTP404)
 		assert.Error(t, err)
+		// Verify the fallback attempted the request (SemVer is "1.0.0" for both).
+		assert.Contains(t, requestedPaths, "/tool-1.0.0.tar.gz",
+			"fallback should request URL with prefix stripped via SemVer")
 	})
 }
 

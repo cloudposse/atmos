@@ -8,7 +8,6 @@ import (
 	"syscall"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -173,6 +172,14 @@ func shouldSkipReexec(requestedVersion string, cfg *ReexecConfig) bool {
 	return false
 }
 
+// fatalFormattedErr writes a pre-formatted error to stderr via the UI layer and exits.
+//
+//nolint:revive // os.Exit is intentional for hard failures.
+func fatalFormattedErr(formatted string) {
+	ui.Writeln(formatted)
+	os.Exit(1)
+}
+
 // executeVersionSwitch performs the actual version switch.
 //
 //nolint:revive // os.Exit is intentional for hard failures on PR/SHA version errors.
@@ -184,24 +191,18 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 	if err != nil {
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
-			os.Exit(1)
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
 		// For SHA versions, fail hard - don't continue with wrong version.
 		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
-			os.Exit(1)
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
 		// Check if this is an invalid version format error - fail hard for those too.
 		_, _, parseErr := toolchain.ParseVersionSpec(requestedVersion)
 		if parseErr != nil {
-			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
-			os.Exit(1)
+			fatalFormattedErr(errUtils.Format(err, errUtils.DefaultFormatterConfig()))
 		}
 
 		// For regular semver versions, fall back to current (existing behavior).

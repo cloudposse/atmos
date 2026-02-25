@@ -93,6 +93,7 @@ func handleGitHubAPIError(err error, resp *github.Response) error {
 		waitDuration := time.Until(resetTime)
 
 		builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+			WithCause(err).
 			WithExplanation(fmt.Sprintf("Rate limit exceeded, resets at %s (in %s)",
 				resetTime.Format(time.RFC3339),
 				waitDuration.Round(time.Second)))
