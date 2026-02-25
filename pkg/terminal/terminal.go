@@ -481,29 +481,31 @@ func (c *Config) DetectColorProfile(isTTY bool) ColorProfile {
 		return ColorTrue
 	}
 
-	// If CLICOLOR_FORCE is set, return TrueColor
-	if c.EnvCLIColorForce {
-		return ColorTrue
-	}
-
-	// Check for truecolor support
+	// Check for truecolor support.
 	colorTerm := strings.ToLower(c.EnvColorTerm)
 	if colorTerm == "truecolor" || colorTerm == "24bit" {
 		return ColorTrue
 	}
 
-	// Check TERM for 256 color support
+	// Check TERM for 256 color support.
 	termVar := strings.ToLower(c.EnvTerm)
 	if strings.Contains(termVar, "256color") || strings.Contains(termVar, "256") {
 		return Color256
 	}
 
-	// Check for any color support
+	// Check for any color support.
 	if strings.Contains(termVar, "color") || termVar == "xterm" || termVar == "screen" {
 		return Color16
 	}
 
-	// Default to 16 colors if TTY and color enabled
+	// CLICOLOR_FORCE enables color but does not dictate color depth.
+	// Per the CLICOLOR spec, it means "enable colors even without a TTY".
+	// Use Color16 as a safe minimum when no COLORTERM/TERM hints are available.
+	if c.EnvCLIColorForce {
+		return Color16
+	}
+
+	// Default to 16 colors if TTY and color enabled.
 	if isTTY {
 		return Color16
 	}

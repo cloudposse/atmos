@@ -346,7 +346,7 @@ func registerTerminalFlags(registry *FlagRegistry) {
 		Shorthand:   "",
 		Default:     false,
 		Description: "Force color output even when not a TTY (useful for screenshots)",
-		EnvVars:     []string{"ATMOS_FORCE_COLOR", "CLICOLOR_FORCE"},
+		EnvVars:     []string{"ATMOS_FORCE_COLOR"},
 	})
 
 	registry.Register(&BoolFlag{
