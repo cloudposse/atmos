@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	ioLayer "github.com/cloudposse/atmos/pkg/io"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -184,14 +185,14 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 		// For PR versions, fail hard - don't continue with wrong version.
 		if _, isPR := toolchain.IsPRVersion(requestedVersion); isPR {
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
 			os.Exit(1)
 		}
 
 		// For SHA versions, fail hard - don't continue with wrong version.
 		if _, isSHA := toolchain.IsSHAVersion(requestedVersion); isSHA {
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
 			os.Exit(1)
 		}
 
@@ -199,7 +200,7 @@ func executeVersionSwitch(requestedVersion string, cfg *ReexecConfig) bool {
 		_, _, parseErr := toolchain.ParseVersionSpec(requestedVersion)
 		if parseErr != nil {
 			formatted := errUtils.Format(err, errUtils.DefaultFormatterConfig())
-			ui.Errorf("%s", formatted)
+			_, _ = ioLayer.MaskWriter(os.Stderr).Write([]byte(formatted + "\n"))
 			os.Exit(1)
 		}
 
