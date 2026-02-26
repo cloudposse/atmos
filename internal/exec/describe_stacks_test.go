@@ -211,8 +211,8 @@ func TestExecuteDescribeStacks_Ansible(t *testing.T) {
 		nil,
 		nil,
 		false,
-		false,
-		false,
+		true,
+		true,
 		false,
 		nil,
 		nil, // authManager
