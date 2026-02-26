@@ -13,12 +13,11 @@ atmos terraform plan broken -s dev
 ```
 
 ---
+```hcl
 
-> [!CAUTION]
-> :warning: Invalid provider configuration
+Invalid provider configuration
 
-<!-- -->
+Missing required argument
 
-> [!CAUTION]
-> :warning: Missing required argument
+```
 </details>
