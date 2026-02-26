@@ -266,11 +266,11 @@ func (p *Provider) getTokenFromURL(ctx context.Context, ts *types.WIFTokenSource
 	if u.Hostname() == "" {
 		return "", fmt.Errorf("%w: token URL host is required", errUtils.ErrInvalidProviderConfig)
 	}
+	// When the URL comes from ACTIONS_ID_TOKEN_REQUEST_URL, skip host validation:
+	// GitHub Actions controls that URL and may use dynamic subdomains such as
+	// "run-actions-1-azure-eastus.actions.githubusercontent.com".
 	allowedHosts := ts.AllowedHosts
-	if fromEnv && len(allowedHosts) == 0 {
-		allowedHosts = []string{"token.actions.githubusercontent.com"}
-	}
-	if len(allowedHosts) > 0 && !hostAllowed(u, allowedHosts) {
+	if !fromEnv && len(allowedHosts) > 0 && !hostAllowed(u, allowedHosts) {
 		return "", fmt.Errorf("%w: token URL host %q is not allowed; set token_source.allowed_hosts to override", errUtils.ErrInvalidProviderConfig, u.Hostname())
 	}
 

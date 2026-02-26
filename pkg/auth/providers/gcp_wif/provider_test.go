@@ -728,6 +728,9 @@ func TestGetTokenFromURL_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "decode response")
 }
 
+// TestGetTokenFromURL_FromEnvVar verifies that when ACTIONS_ID_TOKEN_REQUEST_URL is set
+// and no explicit URL is configured, the token is fetched from the env var URL.
+// Host validation is skipped for env-sourced URLs (GitHub Actions controls the host).
 func TestGetTokenFromURL_FromEnvVar(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -741,9 +744,6 @@ func TestGetTokenFromURL_FromEnvVar(t *testing.T) {
 	server.StartTLS()
 	defer server.Close()
 
-	serverURL, err := url.Parse(server.URL)
-	require.NoError(t, err)
-
 	// Set ACTIONS_ID_TOKEN_REQUEST_URL to point to test server.
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL)
 
@@ -752,7 +752,7 @@ func TestGetTokenFromURL_FromEnvVar(t *testing.T) {
 			TokenSource: &types.WIFTokenSource{
 				Type: TokenSourceTypeURL,
 				// No URL set — should fall back to env var.
-				AllowedHosts: []string{serverURL.Hostname()},
+				// No AllowedHosts — env-sourced URLs skip host validation.
 			},
 		},
 	}
