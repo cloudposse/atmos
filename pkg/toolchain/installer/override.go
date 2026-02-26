@@ -24,7 +24,7 @@ func ApplyPlatformOverrides(tool *registry.Tool) {
 
 	for i := range tool.Overrides {
 		override := &tool.Overrides[i]
-		if matchesPlatform(override.GOOS, override.GOARCH, goos, goarch) {
+		if matchesOverride(override, goos, goarch) {
 			applyOverride(tool, override)
 			log.Debug("Applied platform override",
 				"goos", goos,
@@ -36,6 +36,21 @@ func ApplyPlatformOverrides(tool *registry.Tool) {
 			return // First match wins.
 		}
 	}
+}
+
+// matchesOverride checks if an override matches the current platform.
+// If the override has an Envs list, it uses isPlatformMatch for each entry.
+// Otherwise, falls back to GOOS/GOARCH matching (empty fields are wildcards).
+func matchesOverride(override *registry.Override, goos, goarch string) bool {
+	if len(override.Envs) > 0 {
+		for _, env := range override.Envs {
+			if isPlatformMatch(env, goos, goarch) {
+				return true
+			}
+		}
+		return false
+	}
+	return matchesPlatform(override.GOOS, override.GOARCH, goos, goarch)
 }
 
 // matchesPlatform checks if an override matches the current platform.
