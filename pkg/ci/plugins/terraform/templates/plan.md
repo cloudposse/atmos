@@ -112,7 +112,7 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 <details><summary>Terraform <strong>Plan</strong> Summary</summary>
 
 ```hcl
-{{ .Result.Errors }}
+{{ .Output }}
 ```
 
 </details>
