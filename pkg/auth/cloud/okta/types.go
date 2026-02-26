@@ -31,6 +31,10 @@ type OktaTokens struct {
 
 	// Scope contains the scopes granted by Okta (space-separated).
 	Scope string `json:"scope,omitempty"`
+
+	// OrgURL is the Okta organization URL (e.g., https://company.okta.com).
+	// Persisted so that whoami and other commands can display it when loading from cache.
+	OrgURL string `json:"org_url,omitempty"`
 }
 
 // IsExpired returns true if the access token is expired.

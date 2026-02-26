@@ -109,6 +109,8 @@ func buildProviderRows(providers map[string]schema.Provider) []table.Row {
 			url = truncateString(provider.StartURL, maxURLDisplay)
 		} else if provider.URL != "" {
 			url = truncateString(provider.URL, maxURLDisplay)
+		} else if oktaURL := getOktaProviderURL(&provider); oktaURL != "" {
+			url = truncateString(oktaURL, maxURLDisplay)
 		}
 
 		// Determine region.

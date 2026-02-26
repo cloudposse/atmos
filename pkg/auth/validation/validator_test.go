@@ -103,6 +103,109 @@ func TestValidateAuthConfig(t *testing.T) {
 	assert.Error(t, err)
 }
 
+func TestValidateProvider_Okta(t *testing.T) {
+	v := NewValidator()
+
+	// Valid Okta device code provider.
+	err := v.ValidateProvider("okta-corp", &schema.Provider{
+		Kind: "okta/device-code",
+		Spec: map[string]interface{}{
+			"org_url":   "https://company.okta.com",
+			"client_id": "0oa1234567890abcdef",
+		},
+	})
+	assert.NoError(t, err)
+
+	// Valid with optional fields.
+	err = v.ValidateProvider("okta-corp", &schema.Provider{
+		Kind: "okta/device-code",
+		Spec: map[string]interface{}{
+			"org_url":              "https://company.okta.com",
+			"client_id":           "0oa1234567890abcdef",
+			"authorization_server": "custom",
+			"scopes":              "openid profile offline_access",
+		},
+	})
+	assert.NoError(t, err)
+
+	// Missing org_url.
+	err = v.ValidateProvider("okta-bad", &schema.Provider{
+		Kind: "okta/device-code",
+		Spec: map[string]interface{}{
+			"client_id": "0oa1234567890abcdef",
+		},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "org_url is required")
+
+	// Missing client_id.
+	err = v.ValidateProvider("okta-bad", &schema.Provider{
+		Kind: "okta/device-code",
+		Spec: map[string]interface{}{
+			"org_url": "https://company.okta.com",
+		},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "client_id is required")
+
+	// Missing spec entirely.
+	err = v.ValidateProvider("okta-bad", &schema.Provider{
+		Kind: "okta/device-code",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "org_url is required")
+}
+
+func TestValidateIdentity_Okta(t *testing.T) {
+	v := NewValidator()
+	providers := map[string]*schema.Provider{
+		"okta-corp": {
+			Kind: "okta/device-code",
+			Spec: map[string]interface{}{
+				"org_url":   "https://company.okta.com",
+				"client_id": "0oa1234567890abcdef",
+			},
+		},
+	}
+
+	// Valid Okta API access identity.
+	err := v.ValidateIdentity("okta-api", &schema.Identity{
+		Kind: "okta/api-access",
+		Via:  &schema.IdentityVia{Provider: "okta-corp"},
+	}, providers)
+	assert.NoError(t, err)
+
+	// Missing via.provider.
+	err = v.ValidateIdentity("okta-bad", &schema.Identity{
+		Kind: "okta/api-access",
+	}, providers)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "via.provider is required")
+}
+
+func TestValidateAuthConfig_Okta(t *testing.T) {
+	v := NewValidator()
+	cfg := &schema.AuthConfig{
+		Logs: schema.Logs{Level: "Info"},
+		Providers: map[string]schema.Provider{
+			"okta-corp": {
+				Kind: "okta/device-code",
+				Spec: map[string]interface{}{
+					"org_url":   "https://company.okta.com",
+					"client_id": "0oa1234567890abcdef",
+				},
+			},
+		},
+		Identities: map[string]schema.Identity{
+			"okta-api": {
+				Kind: "okta/api-access",
+				Via:  &schema.IdentityVia{Provider: "okta-corp"},
+			},
+		},
+	}
+	assert.NoError(t, v.ValidateAuthConfig(cfg))
+}
+
 func TestValidateProvider_ErrorCases(t *testing.T) {
 	v := NewValidator()
 
@@ -141,6 +244,24 @@ func TestValidateProvider_ErrorCases(t *testing.T) {
 			provider: &schema.Provider{Kind: "github/oidc"},
 			wantErr:  true,
 			errMsg:   "audience is required",
+		},
+		{
+			name: "Okta missing org_url",
+			provider: &schema.Provider{
+				Kind: "okta/device-code",
+				Spec: map[string]interface{}{"client_id": "abc123"},
+			},
+			wantErr: true,
+			errMsg:  "org_url is required",
+		},
+		{
+			name: "Okta missing client_id",
+			provider: &schema.Provider{
+				Kind: "okta/device-code",
+				Spec: map[string]interface{}{"org_url": "https://company.okta.com"},
+			},
+			wantErr: true,
+			errMsg:  "client_id is required",
 		},
 	}
 
@@ -204,6 +325,12 @@ func TestValidateIdentity_ErrorCases(t *testing.T) {
 			identity:    &schema.Identity{Kind: "aws/permission-set", Via: &schema.IdentityVia{Provider: "aws-sso"}, Principal: map[string]any{"name": "DevAccess"}},
 			wantErr:     true,
 			expectedErr: errUtils.ErrMissingAccountSpec,
+		},
+		{
+			name:        "okta api-access missing via provider",
+			identity:    &schema.Identity{Kind: "okta/api-access"},
+			wantErr:     true,
+			expectedErr: errUtils.ErrInvalidIdentityConfig,
 		},
 	}
 

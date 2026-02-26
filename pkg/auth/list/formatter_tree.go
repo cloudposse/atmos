@@ -364,6 +364,9 @@ func addProviderAttributes(node *tree.Tree, provider *schema.Provider) {
 		node.Child(fmt.Sprintf("Provider Type: %s", provider.ProviderType))
 	}
 
+	// Add Okta-specific attributes from Spec.
+	addOktaProviderAttributes(node, provider)
+
 	// Add session config if present.
 	if provider.Session != nil && provider.Session.Duration != "" {
 		sessionNode := tree.New().Root("Session")
@@ -391,6 +394,9 @@ func addProviderAttributesStyled(node *tree.Tree, provider *schema.Provider, bra
 	if provider.ProviderType != "" {
 		node.Child(formatKeyValue("Provider Type", provider.ProviderType))
 	}
+
+	// Add Okta-specific attributes from Spec with styling.
+	addOktaProviderAttributesStyled(node, provider)
 
 	// Add session config if present.
 	if provider.Session != nil && provider.Session.Duration != "" {

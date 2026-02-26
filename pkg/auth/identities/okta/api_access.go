@@ -226,9 +226,9 @@ func (i *apiAccessIdentity) LoadCredentials(ctx context.Context) (authTypes.ICre
 	}
 
 	// Convert tokens to credentials.
-	// Note: We don't have org_url from tokens alone, so this is a limitation
-	// when loading from file. In normal flow, org_url comes from provider config.
+	// OrgURL is now persisted in the tokens file for cache-only whoami.
 	creds := &authTypes.OktaCredentials{
+		OrgURL:                tokens.OrgURL,
 		AccessToken:           tokens.AccessToken,
 		IDToken:               tokens.IDToken,
 		RefreshToken:          tokens.RefreshToken,

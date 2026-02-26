@@ -5,13 +5,16 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/tree"
 
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui/theme"
 )
 
 const (
@@ -259,4 +262,66 @@ func formatExpirationWithColor(duration string, status authStatus) string {
 	}
 
 	return style.Render(duration)
+}
+
+// isOktaProvider returns true if the provider kind starts with "okta/".
+func isOktaProvider(provider *schema.Provider) bool {
+	return strings.HasPrefix(provider.Kind, "okta/")
+}
+
+// getOktaSpecString extracts a string value from the provider Spec map.
+func getOktaSpecString(provider *schema.Provider, key string) string {
+	if provider.Spec == nil {
+		return ""
+	}
+	if val, ok := provider.Spec[key].(string); ok {
+		return val
+	}
+	return ""
+}
+
+// addOktaProviderAttributes adds Okta-specific attributes from Spec to an untyled tree node.
+func addOktaProviderAttributes(node *tree.Tree, provider *schema.Provider) {
+	if !isOktaProvider(provider) {
+		return
+	}
+
+	if orgURL := getOktaSpecString(provider, "org_url"); orgURL != "" {
+		node.Child(fmt.Sprintf("Org URL: %s", orgURL))
+	}
+	if clientID := getOktaSpecString(provider, "client_id"); clientID != "" {
+		node.Child(fmt.Sprintf("Client ID: %s", clientID))
+	}
+	if authServer := getOktaSpecString(provider, "authorization_server"); authServer != "" {
+		node.Child(fmt.Sprintf("Auth Server: %s", authServer))
+	}
+}
+
+// addOktaProviderAttributesStyled adds Okta-specific attributes from Spec to a styled tree node.
+func addOktaProviderAttributesStyled(node *tree.Tree, provider *schema.Provider) {
+	if !isOktaProvider(provider) {
+		return
+	}
+
+	keyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeKeyColor))
+	urlStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(theme.ColorCyan))
+	valueStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(treeValueColor))
+
+	if orgURL := getOktaSpecString(provider, "org_url"); orgURL != "" {
+		node.Child(fmt.Sprintf("%s: %s", keyStyle.Render("Org URL"), urlStyle.Render(orgURL)))
+	}
+	if clientID := getOktaSpecString(provider, "client_id"); clientID != "" {
+		node.Child(fmt.Sprintf("%s: %s", keyStyle.Render("Client ID"), valueStyle.Render(clientID)))
+	}
+	if authServer := getOktaSpecString(provider, "authorization_server"); authServer != "" {
+		node.Child(fmt.Sprintf("%s: %s", keyStyle.Render("Auth Server"), valueStyle.Render(authServer)))
+	}
+}
+
+// getOktaProviderURL returns the org_url from Spec for Okta providers, empty string otherwise.
+func getOktaProviderURL(provider *schema.Provider) string {
+	if !isOktaProvider(provider) {
+		return ""
+	}
+	return getOktaSpecString(provider, "org_url")
 }

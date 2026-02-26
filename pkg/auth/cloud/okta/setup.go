@@ -38,6 +38,7 @@ func SetupFiles(providerName, identityName string, creds types.ICredentials, bas
 		RefreshTokenExpiresAt: oktaCreds.RefreshTokenExpiresAt,
 		IDToken:               oktaCreds.IDToken,
 		Scope:                 oktaCreds.Scope,
+		OrgURL:                oktaCreds.OrgURL,
 	}
 
 	// Write tokens file.
