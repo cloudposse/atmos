@@ -499,7 +499,7 @@ func TestNewGSMStore(t *testing.T) {
 			if tt.skipMessage != "" && os.Getenv("GOOGLE_APPLICATION_CREDENTIALS") == "" {
 				t.Skipf("%s", tt.skipMessage)
 			}
-			store, err := NewGSMStore(tt.options)
+			store, err := NewGSMStore(tt.options, "")
 			if tt.expectError {
 				assert.Error(t, err)
 				switch tt.name {

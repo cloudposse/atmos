@@ -319,3 +319,108 @@ func TestApplyPlatformOverrides_WildcardGOARCHMatch(t *testing.T) {
 
 	assert.Equal(t, "wildcard-arch-asset", tool.Asset)
 }
+
+func TestMatchesOverride_WithEnvs(t *testing.T) {
+	tests := []struct {
+		name     string
+		override registry.Override
+		goos     string
+		goarch   string
+		expected bool
+	}{
+		{
+			name: "envs match current platform",
+			override: registry.Override{
+				Envs: []string{"darwin/arm64", "linux/amd64"},
+			},
+			goos:     "darwin",
+			goarch:   "arm64",
+			expected: true,
+		},
+		{
+			name: "envs match OS-only entry",
+			override: registry.Override{
+				Envs: []string{"darwin", "linux"},
+			},
+			goos:     "linux",
+			goarch:   "amd64",
+			expected: true,
+		},
+		{
+			name: "envs match arch-only entry",
+			override: registry.Override{
+				Envs: []string{"amd64"},
+			},
+			goos:     "darwin",
+			goarch:   "amd64",
+			expected: true,
+		},
+		{
+			name: "envs no match",
+			override: registry.Override{
+				Envs: []string{"windows/amd64", "linux/arm64"},
+			},
+			goos:     "darwin",
+			goarch:   "arm64",
+			expected: false,
+		},
+		{
+			name: "envs with all matches everything",
+			override: registry.Override{
+				Envs: []string{"all"},
+			},
+			goos:     "darwin",
+			goarch:   "arm64",
+			expected: true,
+		},
+		{
+			name: "empty envs falls back to goos/goarch matching",
+			override: registry.Override{
+				GOOS:   "darwin",
+				GOARCH: "arm64",
+			},
+			goos:     "darwin",
+			goarch:   "arm64",
+			expected: true,
+		},
+		{
+			name: "envs takes precedence over goos/goarch",
+			override: registry.Override{
+				GOOS:   "darwin",
+				GOARCH: "arm64",
+				Envs:   []string{"linux/amd64"},
+			},
+			goos:     "darwin",
+			goarch:   "arm64",
+			expected: false, // Envs doesn't include darwin/arm64.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := matchesOverride(&tt.override, tt.goos, tt.goarch)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestApplyPlatformOverrides_WithEnvs(t *testing.T) {
+	// Test that overrides with Envs field work with ApplyPlatformOverrides.
+	currentOS := runtime.GOOS
+	currentArch := runtime.GOARCH
+
+	tool := &registry.Tool{
+		Asset:  "original-asset",
+		Format: "tar.gz",
+		Overrides: []registry.Override{
+			{
+				Envs:  []string{currentOS + "/" + currentArch},
+				Asset: "envs-matched-asset",
+			},
+		},
+	}
+
+	ApplyPlatformOverrides(tool)
+
+	assert.Equal(t, "envs-matched-asset", tool.Asset)
+}
