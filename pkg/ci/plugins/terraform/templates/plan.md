@@ -55,18 +55,6 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 
 ---
 
-{{- if .Result.HasErrors }}
-{{- $first := true }}
-{{- range .Result.Errors }}
-{{ if not $first }}
-<!-- -->
-{{ end }}
-{{- $first = false }}
-> [!CAUTION]
-> :warning: {{ . }}
-{{- end }}
-{{- end }}
-
 {{- if not .Result.HasErrors }}
 {{- if gt (len .CreatedResources) 0 }}
 
@@ -109,15 +97,22 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 {{- end }}
 ```
 {{- end }}
+{{- else }}
+```hcl
+{{ range .Result.Errors }}
+{{ . }}
+{{ end }}
+```
 {{- end }}
 </details>
 
+{{- if not .Result.HasErrors }}
 {{- if gt (len .Output) 0 }}
 
 <details><summary>Terraform <strong>Plan</strong> Summary</summary>
 
 ```hcl
-{{ .Output }}
+{{ .Result.Errors }}
 ```
 
 </details>
@@ -130,5 +125,6 @@ atmos terraform plan {{.Component}} -s {{.Stack}}
 > ```
 {{ . }}
 > ```
+{{- end }}
 {{- end }}
 {{- end }}

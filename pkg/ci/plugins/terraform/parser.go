@@ -225,16 +225,28 @@ func ExtractWarnings(stdout string) []string {
 	return warnings
 }
 
+// ExtractErrorBlocks extracts full error blocks from terraform stdout.
+func ExtractErrorBlocks(stdout string) []string {
+	defer perf.Track(nil, "terraform.ExtractErrorBlocks")()
+
+	return ExtractBlocks(stdout, "Error")
+}
+
 // ExtractWarningBlocks extracts full warning blocks from terraform stdout.
-// Unlike ExtractWarnings which returns only summary lines, this returns the entire
-// warning block text (with box-drawing characters stripped) for display in CI summaries.
 func ExtractWarningBlocks(stdout string) []string {
 	defer perf.Track(nil, "terraform.ExtractWarningBlocks")()
+
+	return ExtractBlocks(stdout, "Warning")
+}
+
+// ExtractBlocks extracts full blocks from terraform stdout.
+func ExtractBlocks(stdout string, blockType string) []string {
+	defer perf.Track(nil, "terraform.ExtractBlocks")()
 
 	var blocks []string
 	lines := strings.Split(stdout, "\n")
 	var current []string
-	inWarningBlock := false
+	inBlock := false
 
 	for _, line := range lines {
 		// Strip box-drawing prefix (│ or |) from the line for content checking.
@@ -244,13 +256,13 @@ func ExtractWarningBlocks(stdout string) []string {
 		}
 
 		// Detect warning start.
-		if strings.HasPrefix(stripped, "Warning: ") && !inWarningBlock {
-			inWarningBlock = true
+		if strings.HasPrefix(stripped, blockType+": ") && !inBlock {
+			inBlock = true
 			current = []string{stripped}
 			continue
 		}
 
-		if inWarningBlock {
+		if inBlock {
 			trimmed := strings.TrimSpace(line)
 			// End of block on box-drawing end marker.
 			if trimmed == "╵" {
@@ -258,11 +270,11 @@ func ExtractWarningBlocks(stdout string) []string {
 					blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
 				}
 				current = nil
-				inWarningBlock = false
+				inBlock = false
 				continue
 			}
 			// Detect start of a new block (error or another warning).
-			if strings.HasPrefix(stripped, "Error: ") || (strings.HasPrefix(stripped, "Warning: ") && len(current) > 0) {
+			if strings.HasPrefix(stripped, blockType+": ") && len(current) > 0 {
 				blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
 				current = []string{stripped}
 				continue
@@ -273,7 +285,7 @@ func ExtractWarningBlocks(stdout string) []string {
 	}
 
 	// Handle block that extends to end of output.
-	if inWarningBlock && len(current) > 0 {
+	if inBlock && len(current) > 0 {
 		blocks = append(blocks, strings.TrimRight(strings.Join(current, "\n"), "\n"))
 	}
 
@@ -307,7 +319,7 @@ func ParsePlanOutput(output string) *plugin.OutputResult {
 	// Check for errors.
 	if errors := ExtractErrors(output); len(errors) > 0 {
 		result.HasErrors = true
-		result.Errors = errors
+		result.Errors = ExtractErrorBlocks(output)
 	}
 
 	// Check for no changes.
