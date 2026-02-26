@@ -186,24 +186,31 @@ func WithSort(sort string) ListOption {
 
 // Tool represents a single tool in the registry.
 type Tool struct {
-	Name             string            `yaml:"name"`
-	Registry         string            `yaml:"registry"`
-	Version          string            `yaml:"version"`
-	Type             string            `yaml:"type"`
-	RepoOwner        string            `yaml:"repo_owner"`
-	RepoName         string            `yaml:"repo_name"`
-	Asset            string            `yaml:"asset"`
-	URL              string            `yaml:"url"`
-	Format           string            `yaml:"format"`
-	Files            []File            `yaml:"files"`
-	Overrides        []Override        `yaml:"overrides"`
-	VersionOverrides []VersionOverride `yaml:"version_overrides"`
-	SupportedIf      *SupportedIf      `yaml:"supported_if"`
-	Replacements     map[string]string `yaml:"replacements"`
-	BinaryName       string            `yaml:"binary_name"`
-	VersionPrefix    string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/"). Defaults to "v".
-	SourceURL        string            `yaml:"-"`              // URL where the registry file was found (not serialized).
-	SupportedEnvs    []string          `yaml:"supported_envs"` // Supported platforms (e.g., "darwin", "linux", "windows", "darwin/amd64").
+	Name                string            `yaml:"name"`
+	Registry            string            `yaml:"registry"`
+	Version             string            `yaml:"version"`
+	Type                string            `yaml:"type"`
+	RepoOwner           string            `yaml:"repo_owner"`
+	RepoName            string            `yaml:"repo_name"`
+	Asset               string            `yaml:"asset"`
+	URL                 string            `yaml:"url"`
+	Format              string            `yaml:"format"`
+	FormatOverrides     []FormatOverride  `yaml:"format_overrides"`
+	Files               []File            `yaml:"files"`
+	Overrides           []Override        `yaml:"overrides"`
+	VersionOverrides    []VersionOverride `yaml:"version_overrides"`
+	SupportedIf         *SupportedIf      `yaml:"supported_if"`
+	Replacements        map[string]string `yaml:"replacements"`
+	BinaryName          string            `yaml:"binary_name"`
+	VersionPrefix       string            `yaml:"version_prefix"`        // GitHub tag prefix (e.g., "v", "jq-"). Empty means no prefix.
+	SourceURL           string            `yaml:"-"`                     // URL where the registry file was found (not serialized).
+	SupportedEnvs       []string          `yaml:"supported_envs"`        // Supported platforms (e.g., "darwin", "linux", "windows", "darwin/amd64").
+	Rosetta2            bool              `yaml:"rosetta2"`              // Allow arm64 to fall back to amd64 on macOS via Rosetta 2.
+	WindowsArmEmulation bool              `yaml:"windows_arm_emulation"` // Allow arm64 to fall back to amd64 on Windows.
+	ErrorMessage        string            `yaml:"error_message"`         // Custom error message for unsupported versions.
+	VersionSource       string            `yaml:"version_source"`        // Version source: "github_release" (default) or "github_tag".
+	NoAsset             bool              `yaml:"no_asset"`              // Tool has no downloadable asset (e.g., go_install only).
+	Checksum            ChecksumConfig    `yaml:"checksum"`              // Checksum verification configuration.
 }
 
 // File represents a file to be extracted from the archive.
@@ -212,11 +219,20 @@ type File struct {
 	Src  string `yaml:"src"`
 }
 
+// FormatOverride represents a per-OS format override (e.g., zip on Windows, tar.gz on Linux).
+type FormatOverride struct {
+	GOOS   string `yaml:"goos"`
+	Format string `yaml:"format"`
+}
+
 // Override represents platform-specific overrides.
 type Override struct {
 	GOOS         string            `yaml:"goos"`
 	GOARCH       string            `yaml:"goarch"`
+	Envs         []string          `yaml:"envs,omitempty"` // Supported environments for this override (e.g., "darwin/arm64").
+	Type         string            `yaml:"type,omitempty"`
 	Asset        string            `yaml:"asset"`
+	URL          string            `yaml:"url,omitempty"`
 	Format       string            `yaml:"format"`
 	Files        []File            `yaml:"files"`
 	Replacements map[string]string `yaml:"replacements"`
@@ -246,6 +262,8 @@ type AquaPackage struct {
 	URL        string `yaml:"url"`   // Used by http types (complete URL).
 	Format     string `yaml:"format"`
 	BinaryName string `yaml:"binary_name"`
+	// FormatOverrides provides per-OS format overrides (e.g., zip on Windows).
+	FormatOverrides []FormatOverride `yaml:"format_overrides"`
 	// Files specifies which files to extract from archive with their destination names.
 	Files []File `yaml:"files"`
 	// Overrides provides platform-specific (goos/goarch) configuration overrides.
@@ -253,12 +271,17 @@ type AquaPackage struct {
 	// Replacements provides OS/Arch string mappings (e.g., amd64 -> x86_64).
 	Replacements map[string]string `yaml:"replacements"`
 	// Additional Aqua fields.
-	Description       string            `yaml:"description"`
-	SupportedEnvs     []string          `yaml:"supported_envs"`
-	Checksum          ChecksumConfig    `yaml:"checksum"`
-	VersionConstraint string            `yaml:"version_constraint"`
-	VersionOverrides  []VersionOverride `yaml:"version_overrides"`
-	VersionPrefix     string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/").
+	Description         string            `yaml:"description"`
+	SupportedEnvs       []string          `yaml:"supported_envs"`
+	Rosetta2            bool              `yaml:"rosetta2"`
+	WindowsArmEmulation bool              `yaml:"windows_arm_emulation"`
+	Checksum            ChecksumConfig    `yaml:"checksum"`
+	VersionConstraint   string            `yaml:"version_constraint"`
+	VersionOverrides    []VersionOverride `yaml:"version_overrides"`
+	VersionPrefix       string            `yaml:"version_prefix"` // GitHub tag prefix (e.g., "v", "kustomize/").
+	ErrorMessage        string            `yaml:"error_message"`
+	VersionSource       string            `yaml:"version_source"` // Version source: "github_release" (default) or "github_tag".
+	NoAsset             bool              `yaml:"no_asset"`
 }
 
 // AquaOverride represents platform-specific overrides in Aqua format.
@@ -266,6 +289,8 @@ type AquaPackage struct {
 type AquaOverride struct {
 	GOOS         string            `yaml:"goos"`
 	GOARCH       string            `yaml:"goarch"`
+	Envs         []string          `yaml:"envs"` // Supported environments for this override.
+	Type         string            `yaml:"type"`
 	URL          string            `yaml:"url"`
 	Asset        string            `yaml:"asset"`
 	Format       string            `yaml:"format"`
@@ -276,6 +301,7 @@ type AquaOverride struct {
 // ChecksumConfig represents checksum configuration for Aqua packages.
 type ChecksumConfig struct {
 	Type      string `yaml:"type"`
+	Asset     string `yaml:"asset"` // Checksum asset filename (e.g., "sha256sum.txt").
 	URL       string `yaml:"url"`
 	Algorithm string `yaml:"algorithm"`
 }
@@ -283,14 +309,22 @@ type ChecksumConfig struct {
 // VersionOverride represents version-specific overrides for Aqua packages.
 type VersionOverride struct {
 	VersionConstraint   string            `yaml:"version_constraint"`
+	Type                string            `yaml:"type"`
+	RepoOwner           string            `yaml:"repo_owner"`
+	RepoName            string            `yaml:"repo_name"`
 	Asset               string            `yaml:"asset"`
+	URL                 string            `yaml:"url"`
 	Format              string            `yaml:"format"`
+	FormatOverrides     []FormatOverride  `yaml:"format_overrides"`
 	Rosetta2            bool              `yaml:"rosetta2"`
 	WindowsArmEmulation bool              `yaml:"windows_arm_emulation"`
 	SupportedEnvs       []string          `yaml:"supported_envs"`
 	Checksum            ChecksumConfig    `yaml:"checksum"`
 	Files               []File            `yaml:"files"`
+	Overrides           []AquaOverride    `yaml:"overrides"`
 	Replacements        map[string]string `yaml:"replacements"`
+	ErrorMessage        string            `yaml:"error_message"`
+	VersionPrefix       string            `yaml:"version_prefix"`
 }
 
 // AquaRegistryFile represents the structure of an Aqua registry YAML file (uses 'packages' key).

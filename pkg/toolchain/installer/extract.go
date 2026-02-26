@@ -269,7 +269,14 @@ func (i *Installer) extractFilesFromDir(tempDir, binaryPath string, tool *regist
 }
 
 // expandFileSrcTemplate expands template variables in a file source path.
-// This handles patterns like "{{.OS}}-{{.Arch}}/helm" in Aqua registry files.
+// This handles patterns like "{{.OS}}-{{.Arch}}/helm" or "{{.AssetWithoutExt}}/gum"
+// in Aqua registry files.
+//
+// Uses two-pass rendering (matching executeAssetTemplate):
+//   - Pass 1: Render the tool's Asset template to get the resolved asset name.
+//   - Pass 2: Populate Asset and AssetWithoutExt in template data, then render srcPath.
+//
+// This ensures templates referencing {{.Asset}} or {{.AssetWithoutExt}} resolve correctly.
 func (i *Installer) expandFileSrcTemplate(srcPath string, tool *registry.Tool) (string, error) {
 	// If no template syntax, return as-is.
 	if !strings.Contains(srcPath, "{{") {
@@ -278,6 +285,17 @@ func (i *Installer) expandFileSrcTemplate(srcPath string, tool *registry.Tool) (
 
 	// Build template data using the same function as asset URL templates.
 	data := buildTemplateData(tool, tool.Version)
+
+	// Two-pass rendering: if the srcPath references Asset or AssetWithoutExt,
+	// first render the tool's Asset template to populate those fields.
+	if strings.Contains(srcPath, ".Asset") && tool.Asset != "" {
+		assetName, err := executeAssetTemplate(tool.Asset, tool, data)
+		if err != nil {
+			return "", fmt.Errorf("failed to render asset template for file src: %w", err)
+		}
+		data.Asset = assetName
+		data.AssetWithoutExt = stripFileExtension(assetName)
+	}
 
 	tmpl, err := template.New("filesrc").Funcs(assetTemplateFuncs()).Parse(srcPath)
 	if err != nil {
