@@ -92,6 +92,7 @@ func formatTokenExpiry(t time.Time) string {
 	return t.UTC().Format(time.RFC3339)
 }
 
+// adcClientCredentials holds the OAuth client ID and secret read from an ADC file.
 type adcClientCredentials struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`

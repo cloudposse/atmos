@@ -117,6 +117,8 @@ func (p *Provider) providerID() string {
 
 // Validate validates the provider configuration.
 func (p *Provider) Validate() error {
+	defer perf.Track(nil, "gcp_wif.Validate")()
+
 	if p.spec == nil {
 		return fmt.Errorf("%w: spec is nil", errUtils.ErrInvalidProviderConfig)
 	}
@@ -242,6 +244,10 @@ func (p *Provider) getTokenFromFile(ts *types.WIFTokenSource) (string, error) {
 	return token, nil
 }
 
+// getTokenFromURL fetches the OIDC token via an HTTP GET request.
+// When no explicit URL is configured, it falls back to the GitHub Actions
+// ACTIONS_ID_TOKEN_REQUEST_URL environment variable and auto-constructs
+// the WIF audience so the token's aud claim matches what GCP STS expects.
 func (p *Provider) getTokenFromURL(ctx context.Context, ts *types.WIFTokenSource) (string, error) {
 	defer perf.Track(nil, "gcp_wif.getTokenFromURL")()
 
@@ -449,6 +455,8 @@ func (p *Provider) getScopes() []string {
 
 // Environment returns environment variables for this provider.
 func (p *Provider) Environment() (map[string]string, error) {
+	defer perf.Track(nil, "gcp_wif.Environment")()
+
 	env := make(map[string]string)
 	if p.spec != nil && p.spec.ProjectID != "" {
 		for key, value := range gcp.ProjectEnvVars(p.spec.ProjectID) {
