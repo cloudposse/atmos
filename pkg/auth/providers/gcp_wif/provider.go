@@ -274,10 +274,18 @@ func (p *Provider) getTokenFromURL(ctx context.Context, ts *types.WIFTokenSource
 		return "", fmt.Errorf("%w: token URL host %q is not allowed; set token_source.allowed_hosts to override", errUtils.ErrInvalidProviderConfig, u.Hostname())
 	}
 
-	// Add audience parameter if specified.
-	if ts.Audience != "" {
+	// Add audience parameter for the OIDC token request.
+	// When fetching from GitHub Actions without an explicit audience, auto-construct
+	// the WIF provider resource name so the OIDC token's `aud` claim matches what
+	// GCP STS expects. Without this, GitHub defaults to the repo owner URL
+	// (e.g., "https://github.com/org"), which STS rejects as audience mismatch.
+	audience := ts.Audience
+	if audience == "" && fromEnv {
+		audience = p.wifAudience()
+	}
+	if audience != "" {
 		q := u.Query()
-		q.Set("audience", ts.Audience)
+		q.Set("audience", audience)
 		u.RawQuery = q.Encode()
 		tokenURL = u.String()
 	}
@@ -342,12 +350,7 @@ func hostAllowed(u *url.URL, allowedHosts []string) bool {
 func (p *Provider) exchangeToken(ctx context.Context, oidcToken string) (*oauth2.Token, error) {
 	defer perf.Track(nil, "gcp_wif.exchangeToken")()
 
-	audience := fmt.Sprintf(
-		"//iam.googleapis.com/projects/%s/locations/global/workloadIdentityPools/%s/providers/%s",
-		p.spec.ProjectNumber,
-		p.poolID(),
-		p.providerID(),
-	)
+	audience := p.wifAudience()
 
 	// Use configured scopes or default.
 	scopes := p.getScopes()
@@ -420,6 +423,20 @@ func (p *Provider) impersonateServiceAccount(ctx context.Context, federatedToken
 	}
 
 	return accessToken, expiry, nil
+}
+
+// wifAudience returns the full WIF provider resource name used as the OIDC audience
+// for both the GitHub Actions token request and the GCP STS exchange.
+func (p *Provider) wifAudience() string {
+	pool := p.poolID()
+	provider := p.providerID()
+	if p.spec.ProjectNumber == "" || pool == "" || provider == "" {
+		return ""
+	}
+	return fmt.Sprintf(
+		"//iam.googleapis.com/projects/%s/locations/global/workloadIdentityPools/%s/providers/%s",
+		p.spec.ProjectNumber, pool, provider,
+	)
 }
 
 // getScopes returns the configured OAuth scopes or the default scope.
