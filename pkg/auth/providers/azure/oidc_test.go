@@ -1305,3 +1305,31 @@ func TestOIDCProvider_Authenticate_EdgeCases(t *testing.T) {
 		assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
 	})
 }
+
+func TestOIDCProvider_FetchGitHubActionsToken_URLValidation(t *testing.T) {
+provider := &oidcProvider{
+name:     "test-oidc",
+tenantID: "tenant-123",
+clientID: "client-456",
+}
+
+t.Run("http scheme rejected", func(t *testing.T) {
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "http://token.actions.githubusercontent.com")
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+
+_, err := provider.fetchGitHubActionsToken()
+require.Error(t, err)
+assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+assert.Contains(t, err.Error(), "must use https scheme")
+})
+
+t.Run("empty hostname rejected", func(t *testing.T) {
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https:///path/to/token")
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+
+_, err := provider.fetchGitHubActionsToken()
+require.Error(t, err)
+assert.ErrorIs(t, err, errUtils.ErrAuthenticationFailed)
+assert.Contains(t, err.Error(), "non-empty host")
+})
+}

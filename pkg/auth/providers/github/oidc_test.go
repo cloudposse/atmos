@@ -333,3 +333,31 @@ func TestValidateGitHubActionsURL(t *testing.T) {
 		})
 	}
 }
+
+func TestOIDCProvider_getHTTPClient(t *testing.T) {
+// Default client returned when no custom client is set.
+p := &oidcProvider{}
+client := p.getHTTPClient()
+assert.NotNil(t, client)
+
+// Custom client returned when httpClient field is set.
+custom := &http.Client{}
+p.httpClient = custom
+assert.Equal(t, custom, p.getHTTPClient())
+}
+
+func TestOIDCProvider_Authenticate_URLValidation(t *testing.T) {
+config := validOidcSpec()
+provider, err := NewOIDCProvider("github-oidc", config)
+require.NoError(t, err)
+
+t.Run("http scheme in OIDC URL rejected", func(t *testing.T) {
+t.Setenv("GITHUB_ACTIONS", "true")
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-token")
+t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "http://token.actions.githubusercontent.com")
+
+_, err := provider.Authenticate(context.Background())
+require.Error(t, err)
+assert.Contains(t, err.Error(), "must use https scheme")
+})
+}
