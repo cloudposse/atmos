@@ -84,6 +84,7 @@ func SetupFiles(
 	return paths, nil
 }
 
+// formatTokenExpiry formats a time as RFC3339 UTC, returning empty for zero times.
 func formatTokenExpiry(t time.Time) string {
 	if t.IsZero() {
 		return ""
@@ -96,6 +97,8 @@ type adcClientCredentials struct {
 	ClientSecret string `json:"client_secret"`
 }
 
+// resolveADCClientCredentials returns the OAuth client ID and secret for ADC files.
+// It treats ID/secret as an atomic pair: env overrides → existing ADC file → public gcloud defaults.
 func resolveADCClientCredentials() (string, string, error) {
 	// Default client ID/secret are the public gcloud CLI OAuth credentials.
 	// These are publicly documented (e.g. in Google's cloud-sdk source) and are
@@ -141,6 +144,7 @@ func resolveADCClientCredentials() (string, string, error) {
 	return defaultClientID, defaultClientSecret, nil
 }
 
+// readADCClientCredentials reads OAuth client credentials from the Application Default Credentials file.
 func readADCClientCredentials() (*adcClientCredentials, error) {
 	path := adcCredentialsPath()
 	if path == "" {
@@ -160,6 +164,8 @@ func readADCClientCredentials() (*adcClientCredentials, error) {
 	return &creds, nil
 }
 
+// adcCredentialsPath returns the path to the ADC credentials file, checking
+// GOOGLE_APPLICATION_CREDENTIALS, CLOUDSDK_CONFIG, and the default gcloud config directory.
 func adcCredentialsPath() string {
 	if path := strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")); path != "" {
 		return path

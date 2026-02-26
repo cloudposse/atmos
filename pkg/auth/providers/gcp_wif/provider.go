@@ -183,27 +183,37 @@ func (p *Provider) Authenticate(ctx context.Context) (types.ICredentials, error)
 }
 
 // getOIDCToken retrieves the OIDC token from the configured source.
+// When token_source is not configured, it auto-detects GitHub Actions
+// (via ACTIONS_ID_TOKEN_REQUEST_URL) and defaults to URL-based token fetch.
 func (p *Provider) getOIDCToken(ctx context.Context) (string, error) {
 	defer perf.Track(nil, "gcp_wif.getOIDCToken")()
 
-	if p.spec.TokenSource == nil {
-		return "", fmt.Errorf("%w: token_source not configured", errUtils.ErrInvalidProviderConfig)
+	tokenSource := p.spec.TokenSource
+
+	// Auto-detect GitHub Actions when token_source is not explicitly configured.
+	if tokenSource == nil {
+		if os.Getenv("ACTIONS_ID_TOKEN_REQUEST_URL") != "" {
+			tokenSource = &types.WIFTokenSource{Type: TokenSourceTypeURL}
+		} else {
+			return "", fmt.Errorf("%w: token_source not configured (set token_source in provider config, or run in GitHub Actions with id-token permission)", errUtils.ErrInvalidProviderConfig)
+		}
 	}
 
-	switch p.spec.TokenSource.Type {
+	switch tokenSource.Type {
 	case TokenSourceTypeEnvironment, "":
-		return p.getTokenFromEnv()
+		return p.getTokenFromEnv(tokenSource)
 	case TokenSourceTypeFile:
-		return p.getTokenFromFile()
+		return p.getTokenFromFile(tokenSource)
 	case TokenSourceTypeURL:
-		return p.getTokenFromURL(ctx)
+		return p.getTokenFromURL(ctx, tokenSource)
 	default:
-		return "", fmt.Errorf("%w: unknown token source type: %s", errUtils.ErrInvalidProviderConfig, p.spec.TokenSource.Type)
+		return "", fmt.Errorf("%w: unknown token source type: %s", errUtils.ErrInvalidProviderConfig, tokenSource.Type)
 	}
 }
 
-func (p *Provider) getTokenFromEnv() (string, error) {
-	envVar := p.spec.TokenSource.EnvironmentVariable
+// getTokenFromEnv reads the OIDC token from the configured environment variable.
+func (p *Provider) getTokenFromEnv(ts *types.WIFTokenSource) (string, error) {
+	envVar := ts.EnvironmentVariable
 	if envVar == "" {
 		// No default - environment_variable must be explicitly configured.
 		// Note: For GitHub Actions, use token_source.type=url instead, which fetches the OIDC token from ACTIONS_ID_TOKEN_REQUEST_URL.
@@ -216,11 +226,12 @@ func (p *Provider) getTokenFromEnv() (string, error) {
 	return token, nil
 }
 
-func (p *Provider) getTokenFromFile() (string, error) {
-	if p.spec.TokenSource.FilePath == "" {
+// getTokenFromFile reads the OIDC token from a file on disk.
+func (p *Provider) getTokenFromFile(ts *types.WIFTokenSource) (string, error) {
+	if ts.FilePath == "" {
 		return "", fmt.Errorf("%w: file_path not configured", errUtils.ErrInvalidProviderConfig)
 	}
-	data, err := os.ReadFile(p.spec.TokenSource.FilePath)
+	data, err := os.ReadFile(ts.FilePath)
 	if err != nil {
 		return "", fmt.Errorf("%w: read token file: %w", errUtils.ErrAuthenticationFailed, err)
 	}
@@ -231,10 +242,10 @@ func (p *Provider) getTokenFromFile() (string, error) {
 	return token, nil
 }
 
-func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
+func (p *Provider) getTokenFromURL(ctx context.Context, ts *types.WIFTokenSource) (string, error) {
 	defer perf.Track(nil, "gcp_wif.getTokenFromURL")()
 
-	tokenURL := p.spec.TokenSource.URL
+	tokenURL := ts.URL
 	fromEnv := false
 	if tokenURL == "" {
 		// GitHub Actions default.
@@ -255,7 +266,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 	if u.Hostname() == "" {
 		return "", fmt.Errorf("%w: token URL host is required", errUtils.ErrInvalidProviderConfig)
 	}
-	allowedHosts := p.spec.TokenSource.AllowedHosts
+	allowedHosts := ts.AllowedHosts
 	if fromEnv && len(allowedHosts) == 0 {
 		allowedHosts = []string{"token.actions.githubusercontent.com"}
 	}
@@ -264,9 +275,9 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 	}
 
 	// Add audience parameter if specified.
-	if p.spec.TokenSource.Audience != "" {
+	if ts.Audience != "" {
 		q := u.Query()
-		q.Set("audience", p.spec.TokenSource.Audience)
+		q.Set("audience", ts.Audience)
 		u.RawQuery = q.Encode()
 		tokenURL = u.String()
 	}
@@ -277,7 +288,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 	}
 
 	// Add bearer token if provided.
-	bearerToken := p.spec.TokenSource.RequestToken
+	bearerToken := ts.RequestToken
 	if bearerToken == "" {
 		bearerToken = os.Getenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 	}
@@ -309,6 +320,7 @@ func (p *Provider) getTokenFromURL(ctx context.Context) (string, error) {
 	return token, nil
 }
 
+// hostAllowed checks whether the URL's host is in the allowedHosts list.
 func hostAllowed(u *url.URL, allowedHosts []string) bool {
 	host := strings.ToLower(u.Hostname())
 	if host == "" {
@@ -410,6 +422,7 @@ func (p *Provider) impersonateServiceAccount(ctx context.Context, federatedToken
 	return accessToken, expiry, nil
 }
 
+// getScopes returns the configured OAuth scopes or the default scope.
 func (p *Provider) getScopes() []string {
 	if len(p.spec.Scopes) > 0 {
 		return p.spec.Scopes
@@ -451,6 +464,7 @@ func (p *Provider) PrepareEnvironment(ctx context.Context, environ map[string]st
 	return result, nil
 }
 
+// getHTTPClient returns the configured HTTP client or a default with timeout.
 func (p *Provider) getHTTPClient() *http.Client {
 	if p.httpClient != nil {
 		return p.httpClient
@@ -458,6 +472,7 @@ func (p *Provider) getHTTPClient() *http.Client {
 	return &http.Client{Timeout: TokenRequestTimeout * time.Second}
 }
 
+// getStsURL returns the configured STS endpoint or the default Google STS URL.
 func (p *Provider) getStsURL() string {
 	if p.stsURL != "" {
 		return p.stsURL

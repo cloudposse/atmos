@@ -26,6 +26,7 @@ type MockGSMClient struct {
 	mock.Mock
 }
 
+// CreateSecret mocks the GSM CreateSecret API call.
 func (m *MockGSMClient) CreateSecret(ctx context.Context, req *secretmanagerpb.CreateSecretRequest, opts ...gax.CallOption) (*secretmanagerpb.Secret, error) {
 	args := m.Called(mock.Anything, req)
 	if args.Get(0) == nil {
@@ -34,6 +35,7 @@ func (m *MockGSMClient) CreateSecret(ctx context.Context, req *secretmanagerpb.C
 	return args.Get(0).(*secretmanagerpb.Secret), args.Error(1)
 }
 
+// AddSecretVersion mocks the GSM AddSecretVersion API call.
 func (m *MockGSMClient) AddSecretVersion(ctx context.Context, req *secretmanagerpb.AddSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.SecretVersion, error) {
 	args := m.Called(mock.Anything, req)
 	if args.Get(0) == nil {
@@ -42,6 +44,7 @@ func (m *MockGSMClient) AddSecretVersion(ctx context.Context, req *secretmanager
 	return args.Get(0).(*secretmanagerpb.SecretVersion), args.Error(1)
 }
 
+// AccessSecretVersion mocks the GSM AccessSecretVersion API call.
 func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmanagerpb.AccessSecretVersionRequest, opts ...gax.CallOption) (*secretmanagerpb.AccessSecretVersionResponse, error) {
 	args := m.Called(mock.Anything, req)
 	if args.Get(0) == nil {
@@ -50,6 +53,7 @@ func (m *MockGSMClient) AccessSecretVersion(ctx context.Context, req *secretmana
 	return args.Get(0).(*secretmanagerpb.AccessSecretVersionResponse), args.Error(1)
 }
 
+// Close mocks the GSM client Close method.
 func (m *MockGSMClient) Close() error {
 	args := m.Called()
 	return args.Error(0)
@@ -81,6 +85,7 @@ func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore 
 	return store
 }
 
+// gsmClientSecretCreationMock returns a setup function that configures mock expectations for secret creation.
 func gsmClientSecretCreationMock(projectID string, secretId string, secretPayload string, replication *secretmanagerpb.Replication, err error) func(m *MockGSMClient) {
 	parent := fmt.Sprintf("projects/%s", "test-project")
 	return func(m *MockGSMClient) {

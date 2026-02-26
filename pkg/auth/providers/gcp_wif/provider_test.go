@@ -172,14 +172,14 @@ func TestGetTokenFromEnv(t *testing.T) {
 	// Test missing env var - ensure it's unset for this test.
 	t.Setenv("TEST_OIDC_TOKEN", "")
 	os.Unsetenv("TEST_OIDC_TOKEN")
-	_, err := p.getTokenFromEnv()
+	_, err := p.getTokenFromEnv(p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
 
 	// Test with env var set.
 	t.Setenv("TEST_OIDC_TOKEN", "my-oidc-token")
 
-	token, err := p.getTokenFromEnv()
+	token, err := p.getTokenFromEnv(p.spec.TokenSource)
 	require.NoError(t, err)
 	assert.Equal(t, "my-oidc-token", token)
 }
@@ -197,7 +197,7 @@ func TestGetTokenFromEnv_RequiresExplicitEnvVar(t *testing.T) {
 		},
 	}
 
-	_, err := p.getTokenFromEnv()
+	_, err := p.getTokenFromEnv(p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "environment_variable must be specified")
 }
@@ -216,7 +216,7 @@ func TestGetTokenFromFile(t *testing.T) {
 		},
 	}
 
-	token, err := p.getTokenFromFile()
+	token, err := p.getTokenFromFile(p.spec.TokenSource)
 	require.NoError(t, err)
 	assert.Equal(t, "file-oidc-token", token)
 }
@@ -231,7 +231,7 @@ func TestGetTokenFromFile_NotFound(t *testing.T) {
 		},
 	}
 
-	_, err := p.getTokenFromFile()
+	_, err := p.getTokenFromFile(p.spec.TokenSource)
 	require.Error(t, err)
 }
 
@@ -268,7 +268,7 @@ func TestGetTokenFromURL(t *testing.T) {
 	}
 	p.WithHTTPClient(server.Client())
 
-	token, err := p.getTokenFromURL(context.Background())
+	token, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.NoError(t, err)
 	assert.Equal(t, "url-oidc-token", token)
 }
@@ -283,7 +283,7 @@ func TestGetTokenFromURL_RejectsHTTP(t *testing.T) {
 		},
 	}
 
-	_, err := p.getTokenFromURL(context.Background())
+	_, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "https")
 }
@@ -407,7 +407,10 @@ func TestWithHTTPClient(t *testing.T) {
 	assert.Same(t, custom, p.httpClient)
 }
 
-func TestGetOIDCToken_NilTokenSource(t *testing.T) {
+// TestGetOIDCToken_NilTokenSource_NoGitHubActions verifies that a nil token_source
+// without GitHub Actions environment produces a helpful error.
+func TestGetOIDCToken_NilTokenSource_NoGitHubActions(t *testing.T) {
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{},
 	}
@@ -415,6 +418,24 @@ func TestGetOIDCToken_NilTokenSource(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
 	assert.Contains(t, err.Error(), "token_source not configured")
+}
+
+// TestGetOIDCToken_NilTokenSource_AutoDetectsGitHubActions verifies that a nil
+// token_source auto-detects GitHub Actions and defaults to URL-based OIDC fetch.
+func TestGetOIDCToken_NilTokenSource_AutoDetectsGitHubActions(t *testing.T) {
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.actions.githubusercontent.com/test")
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-bearer-token")
+	p := &Provider{
+		spec:       &types.GCPWorkloadIdentityFederationProviderSpec{},
+		httpClient: &http.Client{Timeout: 1 * time.Second},
+	}
+	// The call will fail because the mock URL doesn't serve a real token,
+	// but the error should be from the URL fetch, NOT from "token_source not configured".
+	_, err := p.getOIDCToken(context.Background())
+	require.Error(t, err)
+	// Should NOT be an invalid config error — it should be an authentication error
+	// from actually trying to fetch from the URL.
+	assert.NotContains(t, err.Error(), "token_source not configured")
 }
 
 func TestGetOIDCToken_UnknownType(t *testing.T) {
@@ -472,7 +493,7 @@ func TestGetTokenFromFile_MissingFilePath(t *testing.T) {
 			},
 		},
 	}
-	_, err := p.getTokenFromFile()
+	_, err := p.getTokenFromFile(p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "file_path not configured")
 }
@@ -490,7 +511,7 @@ func TestGetTokenFromFile_EmptyFile(t *testing.T) {
 			},
 		},
 	}
-	_, err := p.getTokenFromFile()
+	_, err := p.getTokenFromFile(p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "token is empty")
 }
@@ -507,7 +528,7 @@ func TestGetTokenFromURL_MissingURL(t *testing.T) {
 			},
 		},
 	}
-	_, err := p.getTokenFromURL(context.Background())
+	_, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "token URL not configured")
 }
@@ -522,7 +543,7 @@ func TestGetTokenFromURL_HostNotAllowed(t *testing.T) {
 			},
 		},
 	}
-	_, err := p.getTokenFromURL(context.Background())
+	_, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "not allowed")
 }
@@ -554,7 +575,7 @@ func TestGetTokenFromURL_NonOKStatus(t *testing.T) {
 	}
 	p.WithHTTPClient(server.Client())
 
-	_, err = p.getTokenFromURL(context.Background())
+	_, err = p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "token request failed")
 }
@@ -586,7 +607,7 @@ func TestGetTokenFromURL_EmptyResponseValue(t *testing.T) {
 	}
 	p.WithHTTPClient(server.Client())
 
-	_, err = p.getTokenFromURL(context.Background())
+	_, err = p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "token is empty")
 }
@@ -670,7 +691,7 @@ func TestGetTokenFromURL_NoBearer(t *testing.T) {
 	}
 	p.WithHTTPClient(server.Client())
 
-	token, err := p.getTokenFromURL(context.Background())
+	token, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.NoError(t, err)
 	assert.Equal(t, "no-bearer-token", token)
 }
@@ -702,7 +723,7 @@ func TestGetTokenFromURL_InvalidJSON(t *testing.T) {
 	}
 	p.WithHTTPClient(server.Client())
 
-	_, err = p.getTokenFromURL(context.Background())
+	_, err = p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "decode response")
 }
@@ -737,7 +758,7 @@ func TestGetTokenFromURL_FromEnvVar(t *testing.T) {
 	}
 	p.WithHTTPClient(server.Client())
 
-	token, err := p.getTokenFromURL(context.Background())
+	token, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
 	require.NoError(t, err)
 	assert.Equal(t, "env-url-token", token)
 }

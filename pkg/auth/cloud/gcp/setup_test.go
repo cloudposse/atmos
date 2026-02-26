@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// writeADCClientCredentials creates a temporary ADC credentials file for testing.
 func writeADCClientCredentials(t *testing.T) string {
 	t.Helper()
 
