@@ -1,13 +1,16 @@
 package version
 
 import (
+	"context"
 	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // mockVersionFinder is a test mock for VersionFinder.
@@ -57,6 +60,22 @@ func testReexecConfig(finder *mockVersionFinder, installer *mockVersionInstaller
 		},
 		Args:    []string{"atmos", "version"},
 		Environ: func() []string { return []string{} },
+		// Default PR/SHA mocks that return errors (safe defaults for tests that don't exercise these paths).
+		CheckPRCache: func(prNumber int) (toolchain.PRCacheStatus, string) {
+			return toolchain.PRCacheNeedsInstall, ""
+		},
+		CheckPRUpdate: func(_ context.Context, _ int, _ bool) (bool, error) {
+			return false, errors.New("mock: PR update check not configured")
+		},
+		InstallFromPR: func(_ int, _ bool) (string, error) {
+			return "", errors.New("mock: PR install not configured")
+		},
+		CheckSHACache: func(_ string) (bool, string) {
+			return false, ""
+		},
+		InstallFromSHA: func(_ string, _ bool) (string, error) {
+			return "", errors.New("mock: SHA install not configured")
+		},
 	}
 }
 
@@ -1138,101 +1157,125 @@ func TestStripChdirFlags_ConcatenatedC(t *testing.T) {
 }
 
 func TestFindOrInstallVersionWithConfig_PRVersion(t *testing.T) {
-	// PR version should dispatch to findOrInstallPRVersion, which will fail
-	// because no GitHub token is set.
-	t.Setenv("ATMOS_GITHUB_TOKEN", "")
-	t.Setenv("GITHUB_TOKEN", "")
-
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
 	cfg := testReexecConfig(finder, installer)
 
+	// Configure mock to return a cached binary for PR.
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		assert.Equal(t, 9999, prNumber)
+		return toolchain.PRCacheValid, "/path/to/pr-9999/atmos"
+	}
+
 	// "pr:9999" is a valid PR version specifier.
 	path, err := findOrInstallVersionWithConfig("pr:9999", cfg)
 
-	// Should fail at the token check or PR install step.
-	assert.Error(t, err)
-	assert.Empty(t, path)
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/pr-9999/atmos", path)
 	// Should not call the semver finder/installer.
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for PR version")
 	assert.Equal(t, 0, installer.callCount, "Should not use semver installer for PR version")
 }
 
 func TestFindOrInstallVersionWithConfig_SHAVersion(t *testing.T) {
-	// SHA version should dispatch to findOrInstallSHAVersion, which will fail
-	// because no GitHub token is set.
-	t.Setenv("ATMOS_GITHUB_TOKEN", "")
-	t.Setenv("GITHUB_TOKEN", "")
-
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
 	cfg := testReexecConfig(finder, installer)
 
+	// Configure mock to return a cached binary for SHA.
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		assert.Equal(t, "ceb7526", sha)
+		return true, "/path/to/sha-ceb7526/atmos"
+	}
+
 	// "sha:ceb7526" is a valid SHA version specifier.
 	path, err := findOrInstallVersionWithConfig("sha:ceb7526", cfg)
 
-	// Should fail at the token check or SHA install step.
-	assert.Error(t, err)
-	assert.Empty(t, path)
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/sha-ceb7526/atmos", path)
 	// Should not call the semver finder/installer.
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for SHA version")
 	assert.Equal(t, 0, installer.callCount, "Should not use semver installer for SHA version")
 }
 
 func TestFindOrInstallVersionWithConfig_AutoDetectPRNumber(t *testing.T) {
-	// All-digit version should be auto-detected as a PR number.
-	t.Setenv("ATMOS_GITHUB_TOKEN", "")
-	t.Setenv("GITHUB_TOKEN", "")
-
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
 	cfg := testReexecConfig(finder, installer)
 
-	// "99999" should be parsed as a PR number (use very high number unlikely to be cached).
+	// Mock fresh install path.
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		assert.Equal(t, 99999, prNumber)
+		return toolchain.PRCacheNeedsInstall, ""
+	}
+	cfg.InstallFromPR = func(prNumber int, showProgress bool) (string, error) {
+		assert.Equal(t, 99999, prNumber)
+		return "/path/to/pr-99999/atmos", nil
+	}
+
+	// "99999" should be parsed as a PR number.
 	path, err := findOrInstallVersionWithConfig("99999", cfg)
 
-	assert.Error(t, err)
-	assert.Empty(t, path)
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/pr-99999/atmos", path)
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for PR version")
 }
 
 func TestFindOrInstallVersionWithConfig_AutoDetectSHA(t *testing.T) {
-	// Hex string 7+ chars with letter should be auto-detected as SHA.
-	t.Setenv("ATMOS_GITHUB_TOKEN", "")
-	t.Setenv("GITHUB_TOKEN", "")
-
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
 	cfg := testReexecConfig(finder, installer)
 
+	// Mock fresh install path.
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		assert.Equal(t, "ceb7526", sha)
+		return false, ""
+	}
+	cfg.InstallFromSHA = func(sha string, showProgress bool) (string, error) {
+		assert.Equal(t, "ceb7526", sha)
+		return "/path/to/sha-ceb7526/atmos", nil
+	}
+
 	// "ceb7526" should be auto-detected as a SHA.
 	path, err := findOrInstallVersionWithConfig("ceb7526", cfg)
 
-	assert.Error(t, err)
-	assert.Empty(t, path)
+	require.NoError(t, err)
+	assert.Equal(t, "/path/to/sha-ceb7526/atmos", path)
 	assert.Equal(t, 0, finder.callCount, "Should not use semver finder for SHA version")
 }
 
 func TestCheckAndReexecWithConfig_PRVersionReexec(t *testing.T) {
-	// Test that PR version triggers re-exec path (even if it fails at install).
+	// Test that PR version triggers full re-exec path with mocked install.
 	originalVersion := Version
 	Version = "1.150.0"
 	defer func() { Version = originalVersion }()
 
-	t.Setenv("ATMOS_GITHUB_TOKEN", "")
-	t.Setenv("GITHUB_TOKEN", "")
-
 	finder := &mockVersionFinder{}
 	installer := &mockVersionInstaller{}
 
+	var execCalledWith string
 	cfg := &ReexecConfig{
 		Finder:    finder,
 		Installer: installer,
-		ExecFn:    func(argv0 string, argv []string, envv []string) error { return nil },
-		GetEnv:    func(key string) string { return "" },
-		SetEnv:    func(key, value string) error { return nil },
-		Args:      []string{"atmos", "version"},
-		Environ:   func() []string { return []string{} },
+		ExecFn: func(argv0 string, argv []string, envv []string) error {
+			execCalledWith = argv0
+			return nil
+		},
+		GetEnv:  func(key string) string { return "" },
+		SetEnv:  func(key, value string) error { return nil },
+		Args:    []string{"atmos", "version"},
+		Environ: func() []string { return []string{} },
+		CheckPRCache: func(prNumber int) (toolchain.PRCacheStatus, string) {
+			return toolchain.PRCacheValid, "/path/to/pr-9999/atmos"
+		},
+		CheckPRUpdate: func(_ context.Context, _ int, _ bool) (bool, error) {
+			return false, nil
+		},
+		InstallFromPR: func(_ int, _ bool) (string, error) {
+			return "/path/to/pr-9999/atmos", nil
+		},
+		CheckSHACache:  func(_ string) (bool, string) { return false, "" },
+		InstallFromSHA: func(_ string, _ bool) (string, error) { return "", errors.New("not used") },
 	}
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -1241,30 +1284,52 @@ func TestCheckAndReexecWithConfig_PRVersionReexec(t *testing.T) {
 		},
 	}
 
-	// PR version will not match current "1.150.0" and will not be skipped.
-	// shouldSkipReexec returns false for PR versions (never skip).
-	// executeVersionSwitch will try to install, fail, and os.Exit.
-	// Since os.Exit is called for PR version failures, this test just verifies
-	// shouldSkipReexec does not skip PR versions.
-	result := shouldSkipReexec("pr:9999", cfg)
-	assert.False(t, result, "Should not skip re-exec for PR version")
+	result := CheckAndReexecWithConfig(atmosConfig, cfg)
 
-	_ = atmosConfig // Used for context.
+	assert.True(t, result, "Should return true when PR re-exec is triggered")
+	assert.Equal(t, "/path/to/pr-9999/atmos", execCalledWith)
 }
 
 func TestCheckAndReexecWithConfig_SHAVersionReexec(t *testing.T) {
-	// Test that SHA version triggers re-exec path.
+	// Test that SHA version triggers full re-exec path with mocked install.
 	originalVersion := Version
 	Version = "1.150.0"
 	defer func() { Version = originalVersion }()
 
+	finder := &mockVersionFinder{}
+	installer := &mockVersionInstaller{}
+
+	var execCalledWith string
 	cfg := &ReexecConfig{
-		GetEnv: func(key string) string { return "" },
+		Finder:    finder,
+		Installer: installer,
+		ExecFn: func(argv0 string, argv []string, envv []string) error {
+			execCalledWith = argv0
+			return nil
+		},
+		GetEnv:        func(key string) string { return "" },
+		SetEnv:        func(key, value string) error { return nil },
+		Args:          []string{"atmos", "version"},
+		Environ:       func() []string { return []string{} },
+		CheckPRCache:  func(_ int) (toolchain.PRCacheStatus, string) { return toolchain.PRCacheNeedsInstall, "" },
+		CheckPRUpdate: func(_ context.Context, _ int, _ bool) (bool, error) { return false, nil },
+		InstallFromPR: func(_ int, _ bool) (string, error) { return "", errors.New("not used") },
+		CheckSHACache: func(sha string) (bool, string) {
+			return true, "/path/to/sha-ceb7526/atmos"
+		},
+		InstallFromSHA: func(_ string, _ bool) (string, error) { return "", errors.New("not used") },
 	}
 
-	// shouldSkipReexec returns false for SHA versions (never skip).
-	result := shouldSkipReexec("sha:ceb7526", cfg)
-	assert.False(t, result, "Should not skip re-exec for SHA version")
+	atmosConfig := &schema.AtmosConfiguration{
+		Version: schema.Version{
+			Use: "sha:ceb7526",
+		},
+	}
+
+	result := CheckAndReexecWithConfig(atmosConfig, cfg)
+
+	assert.True(t, result, "Should return true when SHA re-exec is triggered")
+	assert.Equal(t, "/path/to/sha-ceb7526/atmos", execCalledWith)
 }
 
 func TestDefaultReexecConfig(t *testing.T) {
@@ -1278,4 +1343,159 @@ func TestDefaultReexecConfig(t *testing.T) {
 	assert.NotNil(t, cfg.SetEnv)
 	assert.NotNil(t, cfg.Args)
 	assert.NotNil(t, cfg.Environ)
+	assert.NotNil(t, cfg.CheckPRCache)
+	assert.NotNil(t, cfg.CheckPRUpdate)
+	assert.NotNil(t, cfg.InstallFromPR)
+	assert.NotNil(t, cfg.CheckSHACache)
+	assert.NotNil(t, cfg.InstallFromSHA)
+}
+
+// TestFindOrInstallPRVersionWithConfig_CacheValid tests that a valid cached PR binary is returned immediately.
+func TestFindOrInstallPRVersionWithConfig_CacheValid(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		assert.Equal(t, 2040, prNumber)
+		return toolchain.PRCacheValid, "/cache/pr-2040/atmos"
+	}
+
+	path, err := findOrInstallPRVersionWithConfig(2040, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/cache/pr-2040/atmos", path)
+}
+
+// TestFindOrInstallPRVersionWithConfig_CacheNeedsCheck_NoReinstall tests the TTL-expired but SHA-unchanged path.
+func TestFindOrInstallPRVersionWithConfig_CacheNeedsCheck_NoReinstall(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		return toolchain.PRCacheNeedsCheck, "/cache/pr-2040/atmos"
+	}
+	cfg.CheckPRUpdate = func(_ context.Context, prNumber int, showProgress bool) (bool, error) {
+		assert.Equal(t, 2040, prNumber)
+		return false, nil // SHA unchanged.
+	}
+
+	path, err := findOrInstallPRVersionWithConfig(2040, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/cache/pr-2040/atmos", path)
+}
+
+// TestFindOrInstallPRVersionWithConfig_CacheNeedsCheck_Reinstall tests the TTL-expired, SHA-changed path.
+func TestFindOrInstallPRVersionWithConfig_CacheNeedsCheck_Reinstall(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		return toolchain.PRCacheNeedsCheck, "/cache/pr-2040/atmos"
+	}
+	cfg.CheckPRUpdate = func(_ context.Context, prNumber int, _ bool) (bool, error) {
+		return true, nil // SHA changed, needs reinstall.
+	}
+	cfg.InstallFromPR = func(prNumber int, _ bool) (string, error) {
+		assert.Equal(t, 2040, prNumber)
+		return "/cache/pr-2040/atmos-new", nil
+	}
+
+	path, err := findOrInstallPRVersionWithConfig(2040, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/cache/pr-2040/atmos-new", path)
+}
+
+// TestFindOrInstallPRVersionWithConfig_CacheNeedsInstall tests fresh PR install.
+func TestFindOrInstallPRVersionWithConfig_CacheNeedsInstall(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		return toolchain.PRCacheNeedsInstall, ""
+	}
+	cfg.InstallFromPR = func(prNumber int, _ bool) (string, error) {
+		assert.Equal(t, 2040, prNumber)
+		return "/installed/pr-2040/atmos", nil
+	}
+
+	path, err := findOrInstallPRVersionWithConfig(2040, cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/installed/pr-2040/atmos", path)
+}
+
+// TestFindOrInstallPRVersionWithConfig_InstallFails tests PR install failure wrapping.
+func TestFindOrInstallPRVersionWithConfig_InstallFails(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		return toolchain.PRCacheNeedsInstall, ""
+	}
+	cfg.InstallFromPR = func(prNumber int, _ bool) (string, error) {
+		return "", errors.New("artifact not found")
+	}
+
+	path, err := findOrInstallPRVersionWithConfig(2040, cfg)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.Empty(t, path)
+}
+
+// TestFindOrInstallPRVersionWithConfig_CheckUpdateFails tests PR update check failure wrapping.
+func TestFindOrInstallPRVersionWithConfig_CheckUpdateFails(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckPRCache = func(prNumber int) (toolchain.PRCacheStatus, string) {
+		return toolchain.PRCacheNeedsCheck, "/cache/pr-2040/atmos"
+	}
+	cfg.CheckPRUpdate = func(_ context.Context, _ int, _ bool) (bool, error) {
+		return false, errors.New("API rate limit")
+	}
+
+	path, err := findOrInstallPRVersionWithConfig(2040, cfg)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrVersionCheckFailed)
+	assert.Empty(t, path)
+}
+
+// TestFindOrInstallSHAVersionWithConfig_CacheHit tests SHA cache hit path.
+func TestFindOrInstallSHAVersionWithConfig_CacheHit(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		assert.Equal(t, "abc1234", sha)
+		return true, "/cache/sha-abc1234/atmos"
+	}
+
+	path, err := findOrInstallSHAVersionWithConfig("abc1234", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/cache/sha-abc1234/atmos", path)
+}
+
+// TestFindOrInstallSHAVersionWithConfig_CacheMiss tests SHA fresh install path.
+func TestFindOrInstallSHAVersionWithConfig_CacheMiss(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		return false, ""
+	}
+	cfg.InstallFromSHA = func(sha string, _ bool) (string, error) {
+		assert.Equal(t, "abc1234", sha)
+		return "/installed/sha-abc1234/atmos", nil
+	}
+
+	path, err := findOrInstallSHAVersionWithConfig("abc1234", cfg)
+
+	require.NoError(t, err)
+	assert.Equal(t, "/installed/sha-abc1234/atmos", path)
+}
+
+// TestFindOrInstallSHAVersionWithConfig_InstallFails tests SHA install failure wrapping.
+func TestFindOrInstallSHAVersionWithConfig_InstallFails(t *testing.T) {
+	cfg := testReexecConfig(&mockVersionFinder{}, &mockVersionInstaller{})
+	cfg.CheckSHACache = func(sha string) (bool, string) {
+		return false, ""
+	}
+	cfg.InstallFromSHA = func(sha string, _ bool) (string, error) {
+		return "", errors.New("download failed")
+	}
+
+	path, err := findOrInstallSHAVersionWithConfig("abc1234", cfg)
+
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrToolInstall)
+	assert.Empty(t, path)
 }

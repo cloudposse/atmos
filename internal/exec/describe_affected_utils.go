@@ -68,6 +68,8 @@ func executeDescribeAffected(
 	}
 
 	// Save current paths before modification.
+	currentBasePath := atmosConfig.BasePath
+	currentBasePathAbsolute := atmosConfig.BasePathAbsolute
 	currentStacksBaseAbsolutePath := atmosConfig.StacksBaseAbsolutePath
 	currentStacksTerraformDirAbsolutePath := atmosConfig.TerraformDirAbsolutePath
 	currentStacksHelmfileDirAbsolutePath := atmosConfig.HelmfileDirAbsolutePath
@@ -77,6 +79,10 @@ func executeDescribeAffected(
 	// Compute the relative paths from the git repo root to the current absolute paths.
 	// This handles the case where atmos is run from a subdirectory (e.g., -C examples/demo-stacks).
 	// We need to preserve the subdirectory path when constructing remote paths.
+	baseRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentBasePathAbsolute)
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	stacksRelPath, err := filepath.Rel(localRepoFileSystemPathAbs, currentStacksBaseAbsolutePath)
 	if err != nil {
 		return nil, nil, nil, err
@@ -95,6 +101,11 @@ func executeDescribeAffected(
 	}
 
 	// Update paths to point to the remote repo dir using the computed relative paths.
+	// BasePath and BasePathAbsolute must be updated so that !include can resolve files
+	// relative to the base path in the remote repo (fix for GitHub issue #2090).
+	remoteBasePath := filepath.Join(remoteRepoFileSystemPath, baseRelPath)
+	atmosConfig.BasePath = remoteBasePath
+	atmosConfig.BasePathAbsolute = remoteBasePath
 	atmosConfig.StacksBaseAbsolutePath = filepath.Join(remoteRepoFileSystemPath, stacksRelPath)
 	atmosConfig.TerraformDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, terraformRelPath)
 	atmosConfig.HelmfileDirAbsolutePath = filepath.Join(remoteRepoFileSystemPath, helmfileRelPath)
@@ -147,7 +158,9 @@ func executeDescribeAffected(
 		return nil, nil, nil, err
 	}
 
-	// Restore atmosConfig
+	// Restore atmosConfig.
+	atmosConfig.BasePath = currentBasePath
+	atmosConfig.BasePathAbsolute = currentBasePathAbsolute
 	atmosConfig.StacksBaseAbsolutePath = currentStacksBaseAbsolutePath
 	atmosConfig.TerraformDirAbsolutePath = currentStacksTerraformDirAbsolutePath
 	atmosConfig.HelmfileDirAbsolutePath = currentStacksHelmfileDirAbsolutePath
