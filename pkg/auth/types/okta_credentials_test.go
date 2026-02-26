@@ -191,6 +191,101 @@ func TestOktaCredentials_Validate(t *testing.T) {
 	})
 }
 
+func TestExtractOktaIDTokenClaims_ValidToken(t *testing.T) {
+	token := createTestIDToken(t, map[string]any{
+		"email": "user@example.com",
+		"sub":   "00u123456789",
+		"iss":   "https://company.okta.com",
+		"exp":   float64(time.Now().Add(time.Hour).Unix()),
+	})
+
+	claims, err := extractOktaIDTokenClaims(token)
+	require.NoError(t, err)
+	assert.Equal(t, "user@example.com", claims["email"])
+	assert.Equal(t, "00u123456789", claims["sub"])
+	assert.Equal(t, "https://company.okta.com", claims["iss"])
+}
+
+func TestExtractOktaIDTokenClaims_InvalidFormat(t *testing.T) {
+	tests := []struct {
+		name  string
+		token string
+	}{
+		{name: "empty string", token: ""},
+		{name: "one part", token: "header-only"},
+		{name: "two parts", token: "header.payload"},
+		{name: "four parts", token: "a.b.c.d"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := extractOktaIDTokenClaims(tt.token)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "invalid JWT format")
+		})
+	}
+}
+
+func TestExtractOktaIDTokenClaims_InvalidBase64(t *testing.T) {
+	// Valid header, invalid base64 payload, valid signature.
+	token := "eyJhbGciOiJSUzI1NiJ9.!!!invalid!!!.signature"
+	_, err := extractOktaIDTokenClaims(token)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to decode JWT payload")
+}
+
+func TestExtractOktaIDTokenClaims_InvalidJSON(t *testing.T) {
+	// Valid header, valid base64 but not JSON payload.
+	payload := base64.RawURLEncoding.EncodeToString([]byte("not-json"))
+	token := "eyJhbGciOiJSUzI1NiJ9." + payload + ".signature"
+	_, err := extractOktaIDTokenClaims(token)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse JWT claims")
+}
+
+func TestOktaCredentials_BuildWhoamiInfo_InvalidIDToken(t *testing.T) {
+	// An invalid ID token should be handled gracefully.
+	creds := &OktaCredentials{
+		OrgURL:  "https://company.okta.com",
+		IDToken: "not-a-valid-jwt",
+	}
+
+	info := &WhoamiInfo{}
+	creds.BuildWhoamiInfo(info)
+	// Should fall back to OrgURL.
+	assert.Equal(t, "https://company.okta.com", info.Account)
+	assert.Empty(t, info.Principal)
+}
+
+func TestOktaCredentials_Validate_InvalidIDToken(t *testing.T) {
+	creds := &OktaCredentials{
+		OrgURL:      "https://company.okta.com",
+		AccessToken: "valid-token",
+		IDToken:     "not-a-valid-jwt",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}
+
+	_, err := creds.Validate(context.Background())
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "failed to parse ID token")
+}
+
+func TestOktaCredentials_Validate_WithExpiration(t *testing.T) {
+	// Validate credentials without ID token but with expiration.
+	expiresAt := time.Now().Add(time.Hour)
+	creds := &OktaCredentials{
+		OrgURL:      "https://company.okta.com",
+		AccessToken: "valid-token",
+		ExpiresAt:   expiresAt,
+	}
+
+	info, err := creds.Validate(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "https://company.okta.com", info.Account)
+	require.NotNil(t, info.Expiration)
+	assert.Equal(t, expiresAt.Unix(), info.Expiration.Unix())
+}
+
 func TestOktaCredentials_CanRefresh(t *testing.T) {
 	tests := []struct {
 		name                  string

@@ -1,6 +1,7 @@
 package okta
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 	"time"
@@ -154,6 +155,139 @@ func TestOktaTokens_IsExpired(t *testing.T) {
 			assert.Equal(t, tt.expected, tokens.IsExpired())
 		})
 	}
+}
+
+func TestNewOktaFileManager_EmptyBasePath(t *testing.T) {
+	// With empty basePath and no realm, should use default home dir.
+	mgr, err := NewOktaFileManager("", "")
+	require.NoError(t, err)
+	assert.Contains(t, mgr.GetBaseDir(), "okta")
+}
+
+func TestNewOktaFileManager_EmptyBasePathWithRealm(t *testing.T) {
+	// With empty basePath and realm, should include realm in path.
+	mgr, err := NewOktaFileManager("", "my-realm")
+	require.NoError(t, err)
+	assert.Contains(t, mgr.GetBaseDir(), "my-realm")
+	assert.Contains(t, mgr.GetBaseDir(), "okta")
+}
+
+func TestOktaFileManager_GetDisplayPath(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewOktaFileManager(tempDir, "")
+	require.NoError(t, err)
+
+	// Display path for a non-home dir should return the dir itself.
+	displayPath := mgr.GetDisplayPath()
+	assert.NotEmpty(t, displayPath)
+}
+
+func TestOktaFileManager_WriteTokens_NilTokens(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewOktaFileManager(tempDir, "")
+	require.NoError(t, err)
+
+	err = mgr.WriteTokens("test-provider", nil)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrWriteTokensFile)
+}
+
+func TestOktaFileManager_CleanupAll(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewOktaFileManager(tempDir, "")
+	require.NoError(t, err)
+
+	// Write tokens for two providers.
+	tokens := &OktaTokens{
+		AccessToken: "token",
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}
+	err = mgr.WriteTokens("provider-a", tokens)
+	require.NoError(t, err)
+	err = mgr.WriteTokens("provider-b", tokens)
+	require.NoError(t, err)
+	assert.True(t, mgr.TokensExist("provider-a"))
+	assert.True(t, mgr.TokensExist("provider-b"))
+
+	// Cleanup all.
+	err = mgr.CleanupAll()
+	require.NoError(t, err)
+	assert.False(t, mgr.TokensExist("provider-a"))
+	assert.False(t, mgr.TokensExist("provider-b"))
+}
+
+func TestOktaFileManager_CleanupAll_NonExistent(t *testing.T) {
+	// CleanupAll on a non-existent directory should be a no-op.
+	mgr := &OktaFileManager{baseDir: filepath.Join(t.TempDir(), "does-not-exist")}
+	err := mgr.CleanupAll()
+	require.NoError(t, err)
+}
+
+func TestOktaFileManager_DeleteIdentity(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewOktaFileManager(tempDir, "")
+	require.NoError(t, err)
+
+	// Write tokens.
+	tokens := &OktaTokens{
+		AccessToken: "token",
+		TokenType:   "Bearer",
+		ExpiresAt:   time.Now().Add(time.Hour),
+	}
+	err = mgr.WriteTokens("test-provider", tokens)
+	require.NoError(t, err)
+	assert.True(t, mgr.TokensExist("test-provider"))
+
+	// Delete identity.
+	err = mgr.DeleteIdentity(context.Background(), "test-provider", "test-identity")
+	require.NoError(t, err)
+	assert.False(t, mgr.TokensExist("test-provider"))
+}
+
+func TestOktaFileManager_DeleteIdentity_NonExistent(t *testing.T) {
+	tempDir := t.TempDir()
+	mgr, err := NewOktaFileManager(tempDir, "")
+	require.NoError(t, err)
+
+	// Delete non-existent identity should be a no-op.
+	err = mgr.DeleteIdentity(context.Background(), "non-existent", "test-identity")
+	require.NoError(t, err)
+}
+
+func TestTokenResponse_ToOktaTokens(t *testing.T) {
+	resp := &TokenResponse{
+		AccessToken:  "access-token",
+		TokenType:    "Bearer",
+		ExpiresIn:    3600,
+		RefreshToken: "refresh-token",
+		IDToken:      "id-token",
+		Scope:        "openid profile",
+	}
+
+	tokens := resp.ToOktaTokens()
+	assert.Equal(t, "access-token", tokens.AccessToken)
+	assert.Equal(t, "Bearer", tokens.TokenType)
+	assert.Equal(t, 3600, tokens.ExpiresIn)
+	assert.Equal(t, "refresh-token", tokens.RefreshToken)
+	assert.Equal(t, "id-token", tokens.IDToken)
+	assert.Equal(t, "openid profile", tokens.Scope)
+	// ExpiresAt should be approximately 1 hour from now.
+	assert.WithinDuration(t, time.Now().Add(time.Hour), tokens.ExpiresAt, 5*time.Second)
+	// RefreshTokenExpiresAt should be approximately 7 days from now.
+	assert.WithinDuration(t, time.Now().Add(7*24*time.Hour), tokens.RefreshTokenExpiresAt, 5*time.Second)
+}
+
+func TestTokenResponse_ToOktaTokens_NoRefresh(t *testing.T) {
+	resp := &TokenResponse{
+		AccessToken: "access-token",
+		TokenType:   "Bearer",
+		ExpiresIn:   3600,
+	}
+
+	tokens := resp.ToOktaTokens()
+	assert.Empty(t, tokens.RefreshToken)
+	assert.True(t, tokens.RefreshTokenExpiresAt.IsZero())
 }
 
 func TestOktaTokens_CanRefresh(t *testing.T) {
