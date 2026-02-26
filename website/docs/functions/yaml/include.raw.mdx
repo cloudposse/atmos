@@ -194,7 +194,7 @@ strategies in order, finding the **first match** that points to an existing file
    vars: !include.raw /Users/me/Documents/policy.rego
    ```
 
-2. **Manifest-relative paths (`./` or `../`)** — Paths that start with `./` or `../` are resolved relative to the
+2. **Stack Manifest-relative paths (`./` or `../`)** — Paths that start with `./` or `../` are resolved relative to the
    directory containing the manifest file where the `!include.raw` function is used. Atmos rewrites the path by
    joining it with the manifest's directory before checking if the file exists. For example, if the manifest is at
    `stacks/deploy/dev.yaml`, then `../config/policy.rego` resolves to `stacks/config/policy.rego`.
