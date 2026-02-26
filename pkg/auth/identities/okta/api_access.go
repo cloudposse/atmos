@@ -124,7 +124,7 @@ func (i *apiAccessIdentity) PostAuthenticate(ctx context.Context, params *authTy
 
 	// Setup Okta files (tokens.json).
 	if err := oktaCloud.SetupFiles(params.ProviderName, params.IdentityName, params.Credentials, "", params.Realm); err != nil {
-		return fmt.Errorf("failed to setup Okta files: %w", err)
+		return fmt.Errorf("%w: failed to setup Okta files: %w", errUtils.ErrOktaPostAuthenticate, err)
 	}
 
 	// Populate Okta auth context.
@@ -138,12 +138,12 @@ func (i *apiAccessIdentity) PostAuthenticate(ctx context.Context, params *authTy
 		Realm:        params.Realm,
 	}
 	if err := oktaCloud.SetAuthContext(setupParams); err != nil {
-		return fmt.Errorf("failed to set Okta auth context: %w", err)
+		return fmt.Errorf("%w: failed to set Okta auth context: %w", errUtils.ErrOktaPostAuthenticate, err)
 	}
 
 	// Set environment variables in stack info.
 	if err := oktaCloud.SetEnvironmentVariables(params.AuthContext, params.StackInfo); err != nil {
-		return fmt.Errorf("failed to set Okta environment variables: %w", err)
+		return fmt.Errorf("%w: failed to set Okta environment variables: %w", errUtils.ErrOktaPostAuthenticate, err)
 	}
 
 	log.Debug("Post-authenticate complete for Okta API access identity",

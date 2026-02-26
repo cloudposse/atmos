@@ -124,11 +124,11 @@ func populateWhoamiFromValidation(whoami *authTypes.WhoamiInfo, validationInfo *
 func loadAuthManager() (authTypes.AuthManager, error) {
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to load atmos config: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: failed to load atmos config: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	manager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", errUtils.ErrInvalidAuthConfig, err)
+		return nil, fmt.Errorf("%w: %w", errUtils.ErrInvalidAuthConfig, err)
 	}
 	return manager, nil
 }

@@ -174,6 +174,7 @@ var (
 	ErrOktaAuthorizationPending = errors.New("authorization pending - user has not completed authentication")
 	ErrOktaSlowDown             = errors.New("polling too frequently - increasing interval")
 	ErrOktaTokenExpired         = errors.New("Okta token is expired")
+	ErrOktaPostAuthenticate     = errors.New("Okta post-authentication setup failed")
 	ErrInvalidCredentials       = errors.New("invalid credentials")
 
 	ErrBackendConfigRequired       = errors.New("backend configuration is required")

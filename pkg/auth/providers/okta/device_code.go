@@ -42,6 +42,14 @@ func isInteractive() bool {
 	return term.IsTTYSupportForStderr()
 }
 
+// truncateDeviceCode safely truncates a device code for logging.
+func truncateDeviceCode(code string) string {
+	if len(code) <= 8 {
+		return code + "..."
+	}
+	return code[:8] + "..."
+}
+
 // deviceCodeProvider implements Okta device code authentication.
 type deviceCodeProvider struct {
 	name                string
@@ -66,7 +74,7 @@ type deviceCodeConfig struct {
 }
 
 // extractDeviceCodeConfig extracts Okta config from provider spec.
-func extractDeviceCodeConfig(spec map[string]interface{}) deviceCodeConfig {
+func extractDeviceCodeConfig(spec map[string]any) deviceCodeConfig {
 	config := deviceCodeConfig{
 		AuthorizationServer: defaultAuthorizationServer,
 	}
@@ -88,7 +96,7 @@ func extractDeviceCodeConfig(spec map[string]interface{}) deviceCodeConfig {
 	// Parse scopes - can be string (space-separated) or array.
 	if scopesStr, ok := spec["scopes"].(string); ok {
 		config.Scopes = strings.Fields(scopesStr)
-	} else if scopesArr, ok := spec["scopes"].([]interface{}); ok {
+	} else if scopesArr, ok := spec["scopes"].([]any); ok {
 		for _, s := range scopesArr {
 			if str, ok := s.(string); ok {
 				config.Scopes = append(config.Scopes, str)
@@ -97,7 +105,7 @@ func extractDeviceCodeConfig(spec map[string]interface{}) deviceCodeConfig {
 	}
 
 	// Parse files.base_path.
-	if files, ok := spec["files"].(map[string]interface{}); ok {
+	if files, ok := spec["files"].(map[string]any); ok {
 		if basePath, ok := files["base_path"].(string); ok {
 			config.BasePath = basePath
 		}
@@ -241,7 +249,7 @@ func (p *deviceCodeProvider) startDeviceAuthorization(ctx context.Context) (*okt
 	}
 
 	log.Debug("Received device authorization response",
-		"device_code", deviceAuth.DeviceCode[:8]+"...",
+		"device_code", truncateDeviceCode(deviceAuth.DeviceCode),
 		"user_code", deviceAuth.UserCode,
 		"verification_uri", deviceAuth.VerificationURI,
 		"expires_in", deviceAuth.ExpiresIn,
@@ -249,216 +257,6 @@ func (p *deviceCodeProvider) startDeviceAuthorization(ctx context.Context) (*okt
 	)
 
 	return &deviceAuth, nil
-}
-
-// pollForToken polls the token endpoint until the user completes authentication.
-func (p *deviceCodeProvider) pollForToken(ctx context.Context, deviceAuth *oktaCloud.DeviceAuthorizationResponse) (*oktaCloud.OktaTokens, error) {
-	defer perf.Track(nil, "okta.pollForToken")()
-
-	interval := time.Duration(deviceAuth.Interval) * time.Second
-	if interval == 0 {
-		interval = defaultPollingInterval
-	}
-
-	// Calculate expiration time.
-	expiresAt := time.Now().Add(time.Duration(deviceAuth.ExpiresIn) * time.Second)
-
-	// Build token request body.
-	data := url.Values{}
-	data.Set("client_id", p.clientID)
-	data.Set("device_code", deviceAuth.DeviceCode)
-	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
-
-	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return nil, fmt.Errorf("%w: context cancelled while waiting for token", errUtils.ErrAuthenticationFailed)
-		case <-ticker.C:
-			// Check if device code has expired.
-			if time.Now().After(expiresAt) {
-				return nil, errUtils.ErrOktaDeviceCodeExpired
-			}
-
-			// Poll for token.
-			tokens, shouldContinue, err := p.tryGetToken(ctx, data)
-			if err != nil {
-				return nil, err
-			}
-			if tokens != nil {
-				return tokens, nil
-			}
-			if !shouldContinue {
-				return nil, errUtils.ErrOktaDeviceCodeDenied
-			}
-			// Continue polling.
-		}
-	}
-}
-
-// tryGetToken attempts to get a token from Okta.
-// Returns (tokens, shouldContinue, error).
-func (p *deviceCodeProvider) tryGetToken(ctx context.Context, data url.Values) (*oktaCloud.OktaTokens, bool, error) {
-	// Create request.
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.getTokenEndpoint(), strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, false, fmt.Errorf("%w: failed to create token request: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	// Send request.
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, false, fmt.Errorf("%w: failed to send token request: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body.
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, false, fmt.Errorf("%w: failed to read token response: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	// Handle success.
-	if resp.StatusCode == http.StatusOK {
-		var tokenResp oktaCloud.TokenResponse
-		if err := json.Unmarshal(body, &tokenResp); err != nil {
-			return nil, false, fmt.Errorf("%w: failed to parse token response: %w", errUtils.ErrAuthenticationFailed, err)
-		}
-		return tokenResp.ToOktaTokens(), false, nil
-	}
-
-	// Handle errors.
-	var errorResp oktaCloud.TokenErrorResponse
-	if err := json.Unmarshal(body, &errorResp); err != nil {
-		return nil, false, fmt.Errorf("%w: failed to parse error response: %w", errUtils.ErrAuthenticationFailed, err)
-	}
-
-	switch errorResp.Error {
-	case "authorization_pending":
-		// User hasn't completed authentication yet, continue polling.
-		log.Debug("Authorization pending, continuing to poll")
-		return nil, true, nil
-	case "slow_down":
-		// We're polling too fast, the interval will be increased by the caller.
-		log.Debug("Polling too fast, slowing down")
-		return nil, true, nil
-	case "access_denied":
-		// User denied the request.
-		return nil, false, nil
-	case "expired_token":
-		return nil, false, errUtils.ErrOktaDeviceCodeExpired
-	default:
-		return nil, false, fmt.Errorf("%w: %s: %s", errUtils.ErrAuthenticationFailed, errorResp.Error, errorResp.ErrorDescription)
-	}
-}
-
-// refreshToken exchanges a refresh token for new tokens.
-func (p *deviceCodeProvider) refreshToken(ctx context.Context, refreshToken string) (*oktaCloud.OktaTokens, error) {
-	defer perf.Track(nil, "okta.refreshToken")()
-
-	// Build request body.
-	data := url.Values{}
-	data.Set("client_id", p.clientID)
-	data.Set("grant_type", "refresh_token")
-	data.Set("refresh_token", refreshToken)
-	data.Set("scope", strings.Join(p.scopes, " "))
-
-	// Create request.
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.getTokenEndpoint(), strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create refresh token request: %w", errUtils.ErrOktaTokenRefreshFailed, err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("Accept", "application/json")
-
-	// Send request.
-	resp, err := p.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to send refresh token request: %w", errUtils.ErrOktaTokenRefreshFailed, err)
-	}
-	defer resp.Body.Close()
-
-	// Read response body.
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read refresh token response: %w", errUtils.ErrOktaTokenRefreshFailed, err)
-	}
-
-	// Check for errors.
-	if resp.StatusCode != http.StatusOK {
-		var errorResp oktaCloud.TokenErrorResponse
-		if err := json.Unmarshal(body, &errorResp); err == nil {
-			return nil, fmt.Errorf("%w: %s: %s", errUtils.ErrOktaTokenRefreshFailed, errorResp.Error, errorResp.ErrorDescription)
-		}
-		return nil, fmt.Errorf("%w: refresh failed with status %d: %s", errUtils.ErrOktaTokenRefreshFailed, resp.StatusCode, string(body))
-	}
-
-	// Parse response.
-	var tokenResp oktaCloud.TokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, fmt.Errorf("%w: failed to parse refresh token response: %w", errUtils.ErrOktaTokenRefreshFailed, err)
-	}
-
-	log.Debug("Successfully refreshed Okta token",
-		"expires_in", tokenResp.ExpiresIn,
-		"has_refresh_token", tokenResp.RefreshToken != "",
-	)
-
-	return tokenResp.ToOktaTokens(), nil
-}
-
-// tryCachedTokens attempts to use cached tokens, refreshing if needed.
-func (p *deviceCodeProvider) tryCachedTokens(ctx context.Context) (*oktaCloud.OktaTokens, error) {
-	defer perf.Track(nil, "okta.tryCachedTokens")()
-
-	fileManager, err := p.getFileManager()
-	if err != nil {
-		return nil, err
-	}
-
-	// Check if tokens exist.
-	if !fileManager.TokensExist(p.name) {
-		return nil, nil
-	}
-
-	// Load cached tokens.
-	tokens, err := fileManager.LoadTokens(p.name)
-	if err != nil {
-		log.Debug("Failed to load cached tokens", "error", err)
-		return nil, nil
-	}
-
-	// Check if tokens are still valid.
-	if !tokens.IsExpired() {
-		log.Debug("Using cached Okta tokens",
-			"expires_at", tokens.ExpiresAt.Format(time.RFC3339),
-		)
-		return tokens, nil
-	}
-
-	// Try to refresh if we have a refresh token.
-	if tokens.CanRefresh() {
-		log.Debug("Access token expired, attempting refresh")
-		refreshedTokens, err := p.refreshToken(ctx, tokens.RefreshToken)
-		if err != nil {
-			log.Debug("Failed to refresh token, will re-authenticate", "error", err)
-			return nil, nil
-		}
-
-		// Save refreshed tokens.
-		if err := fileManager.WriteTokens(p.name, refreshedTokens); err != nil {
-			log.Debug("Failed to save refreshed tokens", "error", err)
-		}
-
-		return refreshedTokens, nil
-	}
-
-	log.Debug("Cached tokens expired and no refresh token available")
-	return nil, nil
 }
 
 // Authenticate performs Okta device code authentication.

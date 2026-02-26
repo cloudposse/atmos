@@ -77,6 +77,34 @@ func AcquireFileLock(lockPath string) (*flock.Flock, error) {
 	}
 }
 
+// AcquireReadLock attempts to acquire a shared (read) file lock with timeout and retries.
+// Allows concurrent readers while blocking writers.
+func AcquireReadLock(lockPath string) (*flock.Flock, error) {
+	lock := flock.New(lockPath)
+	ctx, cancel := context.WithTimeout(context.Background(), fileLockTimeout)
+	defer cancel()
+
+	ticker := time.NewTicker(fileLockRetry)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil, fmt.Errorf("%w: %s", ErrFileLockTimeout, lockPath)
+		case <-ticker.C:
+			locked, err := lock.TryRLock()
+			if err != nil {
+				return nil, fmt.Errorf("failed to acquire read lock: %w", err)
+			}
+			if locked {
+				log.Debug("Acquired read lock", "lock_file", lockPath)
+				return lock, nil
+			}
+			log.Debug("Waiting for read lock", "lock_file", lockPath)
+		}
+	}
+}
+
 // OktaFileManager provides helpers to manage Okta token files.
 type OktaFileManager struct {
 	baseDir string
@@ -206,9 +234,9 @@ func (m *OktaFileManager) LoadTokens(providerName string) (*OktaTokens, error) {
 		return nil, errors.Join(ErrLoadTokensFile, err)
 	}
 
-	// Acquire file lock for reading.
+	// Acquire shared read lock to allow concurrent readers.
 	lockPath := tokensPath + ".lock"
-	lock, err := AcquireFileLock(lockPath)
+	lock, err := AcquireReadLock(lockPath)
 	if err != nil {
 		return nil, err
 	}

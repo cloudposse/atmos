@@ -495,10 +495,10 @@ func TestTryGetToken_Success(t *testing.T) {
 	data.Set("device_code", "test-device-code")
 	data.Set("grant_type", "urn:ietf:params:oauth:grant-type:device_code")
 
-	tokens, shouldContinue, err := p.tryGetToken(context.Background(), data)
+	tokens, result, err := p.tryGetToken(context.Background(), data)
 	require.NoError(t, err)
 	require.NotNil(t, tokens)
-	assert.False(t, shouldContinue)
+	assert.Equal(t, pollResultPending, result)
 	assert.Equal(t, "new-access-token", tokens.AccessToken)
 	assert.Equal(t, "new-refresh-token", tokens.RefreshToken)
 	assert.Equal(t, "new-id-token", tokens.IDToken)
@@ -525,10 +525,10 @@ func TestTryGetToken_AuthorizationPending(t *testing.T) {
 	data := url.Values{}
 	data.Set("client_id", "test-client-id")
 
-	tokens, shouldContinue, err := p.tryGetToken(context.Background(), data)
+	tokens, result, err := p.tryGetToken(context.Background(), data)
 	require.NoError(t, err)
 	assert.Nil(t, tokens)
-	assert.True(t, shouldContinue)
+	assert.Equal(t, pollResultPending, result)
 }
 
 func TestTryGetToken_SlowDown(t *testing.T) {
@@ -552,10 +552,10 @@ func TestTryGetToken_SlowDown(t *testing.T) {
 	data := url.Values{}
 	data.Set("client_id", "test-client-id")
 
-	tokens, shouldContinue, err := p.tryGetToken(context.Background(), data)
+	tokens, result, err := p.tryGetToken(context.Background(), data)
 	require.NoError(t, err)
 	assert.Nil(t, tokens)
-	assert.True(t, shouldContinue)
+	assert.Equal(t, pollResultSlowDown, result)
 }
 
 func TestTryGetToken_AccessDenied(t *testing.T) {
@@ -579,10 +579,10 @@ func TestTryGetToken_AccessDenied(t *testing.T) {
 	data := url.Values{}
 	data.Set("client_id", "test-client-id")
 
-	tokens, shouldContinue, err := p.tryGetToken(context.Background(), data)
+	tokens, result, err := p.tryGetToken(context.Background(), data)
 	require.NoError(t, err)
 	assert.Nil(t, tokens)
-	assert.False(t, shouldContinue)
+	assert.Equal(t, pollResultDenied, result)
 }
 
 func TestTryGetToken_ExpiredToken(t *testing.T) {
