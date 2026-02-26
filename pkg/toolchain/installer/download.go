@@ -15,6 +15,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/filesystem"
+	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/toolchain/registry"
@@ -50,7 +51,7 @@ func downloadToCache(url, cachePath string) (string, error) {
 	defer perf.Track(nil, "downloadToCache")()
 
 	client := httpClient.NewDefaultClient(
-		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+		httpClient.WithGitHubToken(github.GetGitHubToken()),
 	)
 
 	req, err := http.NewRequest("GET", url, nil)
@@ -152,14 +153,21 @@ func (i *Installer) downloadAssetWithVersionFallback(tool *registry.Tool, versio
 }
 
 // tryFallbackVersion attempts download with an alternative version prefix.
+// Uses the tool's VersionPrefix if set, otherwise falls back to the standard "v" prefix.
 func (i *Installer) tryFallbackVersion(tool *registry.Tool, version, assetURL string, originalErr error) (string, error) {
 	defer perf.Track(nil, "Installer.tryFallbackVersion")()
 
+	// Use tool-specific prefix (e.g., "jq-") if available, otherwise use standard "v".
+	prefix := VersionPrefix
+	if tool.VersionPrefix != "" {
+		prefix = tool.VersionPrefix
+	}
+
 	var fallbackVersion string
-	if strings.HasPrefix(version, VersionPrefix) {
-		fallbackVersion = strings.TrimPrefix(version, VersionPrefix)
+	if strings.HasPrefix(version, prefix) {
+		fallbackVersion = strings.TrimPrefix(version, prefix)
 	} else {
-		fallbackVersion = VersionPrefix + version
+		fallbackVersion = prefix + version
 	}
 
 	if fallbackVersion == version {
