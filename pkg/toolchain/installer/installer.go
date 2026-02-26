@@ -120,7 +120,7 @@ type Installer struct {
 	registries       []string
 	resolver         ToolResolver
 	configuredReg    registry.ToolRegistry // Registry loaded from atmos.yaml config.
-	useConfiguredReg bool                  // Whether to use configured registry vs legacy hardcoded list.
+	useConfiguredReg bool                  // Whether to use configured registry vs builtin registry list.
 	registryFactory  RegistryFactory       // Factory for creating Aqua registry instances.
 }
 
@@ -310,15 +310,15 @@ func (i *Installer) FindTool(owner, repo, version string) (*registry.Tool, error
 		logFieldVersion, version,
 		"useConfiguredReg", i.useConfiguredReg,
 		"hasConfiguredReg", i.configuredReg != nil,
-		"legacyRegistryCount", len(i.registries))
+		"builtinRegistryCount", len(i.registries))
 
 	// Use configured registries from atmos.yaml if available.
 	if tool, found := i.findToolInConfiguredRegistry(owner, repo, version); found {
 		return tool, nil
 	}
 
-	// Fallback: Search through legacy hardcoded registries.
-	if tool, found := i.findToolInLegacyRegistries(owner, repo, version); found {
+	// Fallback: Search through builtin registries.
+	if tool, found := i.findToolInBuiltinRegistries(owner, repo, version); found {
 		return tool, nil
 	}
 
@@ -341,7 +341,7 @@ func (i *Installer) FindTool(owner, repo, version string) (*registry.Tool, error
 // findToolInConfiguredRegistry searches for a tool in configured registries.
 func (i *Installer) findToolInConfiguredRegistry(owner, repo, version string) (*registry.Tool, bool) {
 	if !i.useConfiguredReg || i.configuredReg == nil {
-		log.Debug("No configured registries available, using legacy hardcoded registries",
+		log.Debug("No configured registries available, using builtin registries",
 			"useConfiguredReg", i.useConfiguredReg,
 			"hasConfiguredReg", i.configuredReg != nil)
 		return nil, false
@@ -370,17 +370,17 @@ func (i *Installer) findToolInConfiguredRegistry(owner, repo, version string) (*
 	return nil, false
 }
 
-// findToolInLegacyRegistries searches through legacy hardcoded registries.
-func (i *Installer) findToolInLegacyRegistries(owner, repo, version string) (*registry.Tool, bool) {
-	log.Debug("Falling back to legacy hardcoded registries", "count", len(i.registries))
+// findToolInBuiltinRegistries searches through builtin registries.
+func (i *Installer) findToolInBuiltinRegistries(owner, repo, version string) (*registry.Tool, bool) {
+	log.Debug("Falling back to builtin registries", "count", len(i.registries))
 	for _, reg := range i.registries {
-		log.Debug("Searching legacy registry", "registry", reg)
+		log.Debug("Searching builtin registry", "registry", reg)
 		tool, err := i.searchRegistry(reg, owner, repo, version)
 		if err == nil {
-			log.Debug("Tool found in legacy registry", "registry", reg)
+			log.Debug("Tool found in builtin registry", "registry", reg)
 			return tool, true
 		}
-		log.Debug("Tool not found in legacy registry", "registry", reg, "error", err)
+		log.Debug("Tool not found in builtin registry", "registry", reg, "error", err)
 	}
 	return nil, false
 }
