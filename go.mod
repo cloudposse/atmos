@@ -48,6 +48,7 @@ require (
 	github.com/creack/pty v1.1.24
 	github.com/editorconfig-checker/editorconfig-checker/v3 v3.6.1
 	github.com/elewis787/boa v0.1.3
+	github.com/expr-lang/expr v1.17.8
 	github.com/fatih/color v1.18.0
 	github.com/gabriel-vasile/mimetype v1.4.13
 	github.com/getsentry/sentry-go v0.42.0
