@@ -3,6 +3,7 @@ package installer
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -1081,4 +1082,111 @@ func TestEnsureWindowsExeExtension_CurrentPlatformBehavior(t *testing.T) {
 			assert.Equal(t, "myapp.exe", result)
 		})
 	}
+}
+
+func TestWithAtmosConfig(t *testing.T) {
+	t.Run("updates default resolver", func(t *testing.T) {
+		inst := &Installer{
+			resolver: &DefaultToolResolver{},
+		}
+		config := &schema.AtmosConfiguration{}
+		opt := WithAtmosConfig(config)
+		opt(inst)
+		resolver, ok := inst.resolver.(*DefaultToolResolver)
+		require.True(t, ok)
+		assert.Equal(t, config, resolver.AtmosConfig)
+	})
+
+	t.Run("skips non-default resolver", func(t *testing.T) {
+		inst := &Installer{
+			resolver: &mockToolResolver{},
+		}
+		config := &schema.AtmosConfiguration{}
+		opt := WithAtmosConfig(config)
+		// Should not panic or error.
+		opt(inst)
+	})
+}
+
+func TestWithConfiguredRegistry(t *testing.T) {
+	inst := &Installer{}
+	mockReg := &mockRegistryForInstaller{}
+	opt := WithConfiguredRegistry(mockReg)
+	opt(inst)
+	assert.True(t, inst.useConfiguredReg)
+	assert.NotNil(t, inst.configuredReg)
+}
+
+func TestGetBinDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	inst := &Installer{binDir: tmpDir}
+	assert.Equal(t, tmpDir, inst.GetBinDir())
+}
+
+func TestListInstalledVersions(t *testing.T) {
+	t.Run("returns empty for nonexistent directory", func(t *testing.T) {
+		inst := &Installer{binDir: filepath.Join(t.TempDir(), "nonexistent")}
+		versions, err := inst.ListInstalledVersions("owner", "repo")
+		require.NoError(t, err)
+		assert.Empty(t, versions)
+	})
+
+	t.Run("lists version directories", func(t *testing.T) {
+		tmpDir := t.TempDir()
+		toolDir := filepath.Join(tmpDir, "owner", "repo")
+		require.NoError(t, os.MkdirAll(filepath.Join(toolDir, "1.0.0"), 0o755))
+		require.NoError(t, os.MkdirAll(filepath.Join(toolDir, "2.0.0"), 0o755))
+		// Create a file (should be excluded - only dirs).
+		require.NoError(t, os.WriteFile(filepath.Join(toolDir, "latest"), []byte("2.0.0"), 0o644))
+
+		inst := &Installer{binDir: tmpDir}
+		versions, err := inst.ListInstalledVersions("owner", "repo")
+		require.NoError(t, err)
+		assert.Len(t, versions, 2)
+		assert.Contains(t, versions, "1.0.0")
+		assert.Contains(t, versions, "2.0.0")
+	})
+}
+
+func TestBuildCommonRegistryPaths(t *testing.T) {
+	paths := buildCommonRegistryPaths("terraform")
+	assert.NotEmpty(t, paths)
+	// Should contain a path with the tool name.
+	found := false
+	for _, p := range paths {
+		if strings.Contains(p, "terraform") {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "paths should contain the tool name")
+}
+
+// mockRegistryForInstaller implements registry.ToolRegistry for testing WithConfiguredRegistry.
+type mockRegistryForInstaller struct{}
+
+func (m *mockRegistryForInstaller) GetTool(_, _ string) (*registry.Tool, error) {
+	return nil, nil
+}
+
+func (m *mockRegistryForInstaller) GetToolWithVersion(_, _, _ string) (*registry.Tool, error) {
+	return nil, nil
+}
+
+func (m *mockRegistryForInstaller) GetLatestVersion(_, _ string) (string, error) {
+	return "", nil
+}
+
+func (m *mockRegistryForInstaller) LoadLocalConfig(_ string) error { return nil }
+
+func (m *mockRegistryForInstaller) Search(_ context.Context, _ string, _ ...registry.SearchOption) ([]*registry.Tool, error) {
+	return nil, nil
+}
+
+func (m *mockRegistryForInstaller) ListAll(_ context.Context, _ ...registry.ListOption) ([]*registry.Tool, error) {
+	return nil, nil
+}
+
+func (m *mockRegistryForInstaller) GetMetadata(_ context.Context) (*registry.RegistryMetadata, error) {
+	return nil, nil
 }

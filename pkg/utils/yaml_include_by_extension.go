@@ -97,9 +97,14 @@ func processIncludeTagInternal(
 			return err
 		}
 	} else {
-		// Local file not found - provide helpful error message
+		// Local file not found - provide helpful error message.
+		// Prefer BasePathAbsolute for the error since it's more informative.
+		errBasePath := atmosConfig.BasePathAbsolute
+		if errBasePath == "" {
+			errBasePath = atmosConfig.BasePath
+		}
 		return fmt.Errorf("%w: could not find local file '%s' (tried relative to manifest '%s' and base path '%s')",
-			ErrIncludeYamlFunctionInvalidFile, includeFile, file, atmosConfig.BasePath)
+			ErrIncludeYamlFunctionInvalidFile, includeFile, file, errBasePath)
 	}
 
 	// Apply YQ expression if provided
@@ -194,8 +199,13 @@ func findLocalFile(includeFile, manifestFile string, atmosConfig *schema.AtmosCo
 		return absPath
 	}
 
-	// Try relative to the base_path from atmos.yaml
-	atmosManifestPath := filepath.Join(atmosConfig.BasePath, includeFile)
+	// Try relative to the base_path from atmos.yaml.
+	// Prefer BasePathAbsolute (resolved during config init) over BasePath (which may be relative).
+	basePath := atmosConfig.BasePathAbsolute
+	if basePath == "" {
+		basePath = atmosConfig.BasePath
+	}
+	atmosManifestPath := filepath.Join(basePath, includeFile)
 	return resolveAbsolutePath(atmosManifestPath)
 }
 
