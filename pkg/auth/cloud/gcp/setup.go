@@ -113,7 +113,9 @@ func resolveADCClientCredentials() (string, string, error) {
 	// Treat client ID/secret as an atomic pair: if a custom client ID is
 	// provided, the matching secret must also be set. A mismatched pair
 	// (custom ID + default secret) would fail OAuth refresh with invalid_client.
+	//nolint:forbidigo // Direct os.Getenv required: called during auth before Viper/flags are wired.
 	customClientID := strings.TrimSpace(os.Getenv("ATMOS_GCP_ADC_CLIENT_ID"))
+	//nolint:forbidigo // Direct os.Getenv required: called during auth before Viper/flags are wired.
 	customClientSecret := strings.TrimSpace(os.Getenv("ATMOS_GCP_ADC_CLIENT_SECRET"))
 
 	if customClientID != "" && customClientSecret != "" {

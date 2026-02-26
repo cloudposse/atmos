@@ -272,11 +272,18 @@ func (p *Provider) getTokenFromURL(ctx context.Context, ts *types.WIFTokenSource
 	if u.Hostname() == "" {
 		return "", fmt.Errorf("%w: token URL host is required", errUtils.ErrInvalidProviderConfig)
 	}
-	// When the URL comes from ACTIONS_ID_TOKEN_REQUEST_URL, skip host validation:
-	// GitHub Actions controls that URL and may use dynamic subdomains such as
-	// "run-actions-1-azure-eastus.actions.githubusercontent.com".
+	// Validate the token URL host against a trust boundary.
+	// When the URL comes from ACTIONS_ID_TOKEN_REQUEST_URL, allow only known
+	// GitHub Actions OIDC hosts (including dynamic subdomains such as
+	// "run-actions-1-azure-eastus.actions.githubusercontent.com").
+	// When the URL is explicitly configured, use the user-supplied AllowedHosts list.
 	allowedHosts := ts.AllowedHosts
-	if !fromEnv && len(allowedHosts) > 0 && !hostAllowed(u, allowedHosts) {
+	if fromEnv {
+		host := strings.ToLower(u.Hostname())
+		if !isGitHubActionsHost(host) {
+			return "", fmt.Errorf("%w: token URL host %q is not a trusted GitHub Actions OIDC host", errUtils.ErrInvalidProviderConfig, u.Hostname())
+		}
+	} else if len(allowedHosts) > 0 && !hostAllowed(u, allowedHosts) {
 		return "", fmt.Errorf("%w: token URL host %q is not allowed; set token_source.allowed_hosts to override", errUtils.ErrInvalidProviderConfig, u.Hostname())
 	}
 
@@ -350,6 +357,15 @@ func hostAllowed(u *url.URL, allowedHosts []string) bool {
 		}
 	}
 	return false
+}
+
+// isGitHubActionsHost returns true if the host is a known GitHub Actions OIDC endpoint.
+// GitHub Actions uses "token.actions.githubusercontent.com" as the canonical host, but
+// also routes through dynamic regional subdomains like
+// "run-actions-1-azure-eastus.actions.githubusercontent.com".
+func isGitHubActionsHost(host string) bool {
+	const githubActionsSuffix = ".actions.githubusercontent.com"
+	return host == "token.actions.githubusercontent.com" || strings.HasSuffix(host, githubActionsSuffix)
 }
 
 // exchangeToken exchanges an OIDC token for a Google federated token via STS.

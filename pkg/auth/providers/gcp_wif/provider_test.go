@@ -728,39 +728,47 @@ func TestGetTokenFromURL_InvalidJSON(t *testing.T) {
 	assert.Contains(t, err.Error(), "decode response")
 }
 
-// TestGetTokenFromURL_FromEnvVar verifies that when ACTIONS_ID_TOKEN_REQUEST_URL is set
-// and no explicit URL is configured, the token is fetched from the env var URL.
-// Host validation is skipped for env-sourced URLs (GitHub Actions controls the host).
-func TestGetTokenFromURL_FromEnvVar(t *testing.T) {
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Skipf("Skipping: unable to bind local listener: %v", err)
-	}
-	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"value": "env-url-token"}`))
-	}))
-	server.Listener = ln
-	server.StartTLS()
-	defer server.Close()
-
-	// Set ACTIONS_ID_TOKEN_REQUEST_URL to point to test server.
-	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL)
+// TestGetTokenFromURL_FromEnvVar_RejectsNonGHAHost verifies that when
+// ACTIONS_ID_TOKEN_REQUEST_URL points to a non-GitHub-Actions host, the
+// request is rejected even though the URL came from the environment.
+func TestGetTokenFromURL_FromEnvVar_RejectsNonGHAHost(t *testing.T) {
+	// Set ACTIONS_ID_TOKEN_REQUEST_URL to a non-GHA host (local test server).
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://127.0.0.1:9999/token")
 
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
 			TokenSource: &types.WIFTokenSource{
 				Type: TokenSourceTypeURL,
-				// No URL set — should fall back to env var.
-				// No AllowedHosts — env-sourced URLs skip host validation.
 			},
 		},
 	}
-	p.WithHTTPClient(server.Client())
 
-	token, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
-	require.NoError(t, err)
-	assert.Equal(t, "env-url-token", token)
+	_, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+	assert.Contains(t, err.Error(), "not a trusted GitHub Actions OIDC host")
+}
+
+// TestIsGitHubActionsHost verifies the GitHub Actions OIDC host whitelist.
+func TestIsGitHubActionsHost(t *testing.T) {
+	tests := []struct {
+		host    string
+		trusted bool
+	}{
+		{"token.actions.githubusercontent.com", true},
+		{"run-actions-1-azure-eastus.actions.githubusercontent.com", true},
+		{"pipelines.actions.githubusercontent.com", true},
+		{"actions.githubusercontent.com", false},
+		{"evil.com", false},
+		{"127.0.0.1", false},
+		{"evil.actions.githubusercontent.com.attacker.com", false},
+		{"", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.host, func(t *testing.T) {
+			assert.Equal(t, tt.trusted, isGitHubActionsHost(tt.host))
+		})
+	}
 }
 
 func TestExchangeToken_SuccessWithMock(t *testing.T) {
