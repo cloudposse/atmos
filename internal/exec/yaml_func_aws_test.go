@@ -725,3 +725,243 @@ func TestCacheWithDifferentConfigFiles(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, callCount, "Different config file should result in new getter call")
 }
+
+// mockAWSOrganizationGetter is a mock implementation of AWSOrganizationGetter for testing.
+type mockAWSOrganizationGetter struct {
+	info *AWSOrganizationInfo
+	err  error
+}
+
+func (m *mockAWSOrganizationGetter) GetOrganization(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	authContext *schema.AWSAuthContext,
+) (*AWSOrganizationInfo, error) {
+	return m.info, m.err
+}
+
+// runAWSOrgYamlFuncTest is a helper that reduces duplication in AWS organization YAML function tests.
+func runAWSOrgYamlFuncTest(
+	input string,
+	mockInfo *AWSOrganizationInfo,
+	mockErr error,
+	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) any,
+) any {
+	// Clear cache before each test.
+	ClearAWSOrganizationCache()
+
+	// Set up mock.
+	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
+		info: mockInfo,
+		err:  mockErr,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	return testFunc(atmosConfig, input, stackInfo)
+}
+
+func TestProcessTagAwsOrganizationID(t *testing.T) {
+	tests := []struct {
+		name           string
+		input          string
+		mockInfo       *AWSOrganizationInfo
+		mockErr        error
+		expectedResult string
+	}{
+		{
+			name:  "valid organization ID",
+			input: u.AtmosYamlFuncAwsOrganizationID,
+			mockInfo: &AWSOrganizationInfo{
+				ID:              "o-abc123def4",
+				Arn:             "arn:aws:organizations::111111111111:organization/o-abc123def4",
+				MasterAccountID: "111111111111",
+			},
+			mockErr:        nil,
+			expectedResult: "o-abc123def4",
+		},
+		{
+			name:  "different organization ID",
+			input: u.AtmosYamlFuncAwsOrganizationID,
+			mockInfo: &AWSOrganizationInfo{
+				ID:              "o-xyz789ghi0",
+				Arn:             "arn:aws:organizations::999999999999:organization/o-xyz789ghi0",
+				MasterAccountID: "999999999999",
+			},
+			mockErr:        nil,
+			expectedResult: "o-xyz789ghi0",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := runAWSOrgYamlFuncTest(tt.input, tt.mockInfo, tt.mockErr, processTagAwsOrganizationID)
+			assert.Equal(t, tt.expectedResult, result)
+		})
+	}
+}
+
+func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {
+	ClearAWSOrganizationCache()
+
+	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
+		info: &AWSOrganizationInfo{
+			ID:              "o-authctx",
+			MasterAccountID: "444444444444",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{
+			AWS: &schema.AWSAuthContext{
+				Profile:         "test-profile",
+				CredentialsFile: "/test/credentials",
+			},
+		},
+	}
+
+	result := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, stackInfo)
+	assert.Equal(t, "o-authctx", result)
+}
+
+func TestProcessTagAwsOrganizationIDWithNilStackInfo(t *testing.T) {
+	ClearAWSOrganizationCache()
+
+	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
+		info: &AWSOrganizationInfo{
+			ID:              "o-nilstack",
+			MasterAccountID: "555555555555",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	result := processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, nil)
+	assert.Equal(t, "o-nilstack", result)
+}
+
+func TestProcessSimpleTagsWithAWSOrganizationID(t *testing.T) {
+	ClearAWSOrganizationCache()
+
+	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
+		info: &AWSOrganizationInfo{
+			ID:              "o-simpletag",
+			MasterAccountID: "666666666666",
+		},
+		err: nil,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// Test !aws.organization_id through processSimpleTags.
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, "", nil, stackInfo)
+	assert.NoError(t, err)
+	assert.True(t, handled)
+	assert.Equal(t, "o-simpletag", result)
+}
+
+func TestProcessSimpleTagsSkipsAWSOrganizationID(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// Test that skipping works for aws.organization_id.
+	skip := []string{"aws.organization_id"}
+	result, handled, err := processSimpleTags(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, "", skip, stackInfo)
+	assert.NoError(t, err)
+	assert.False(t, handled)
+	assert.Nil(t, result)
+}
+
+// TestAWSYamlFunctionConstants_Organization verifies the organization constant is defined correctly.
+func TestAWSYamlFunctionConstants_Organization(t *testing.T) {
+	assert.Equal(t, "!aws.organization_id", u.AtmosYamlFuncAwsOrganizationID)
+}
+
+// TestErrAwsDescribeOrganization verifies the error constant exists.
+func TestErrAwsDescribeOrganization(t *testing.T) {
+	assert.NotNil(t, errUtils.ErrAwsDescribeOrganization)
+}
+
+// TestOrganizationCacheIndependentFromIdentityCache verifies the two caches are separate.
+func TestOrganizationCacheIndependentFromIdentityCache(t *testing.T) {
+	ClearAWSIdentityCache()
+	ClearAWSOrganizationCache()
+
+	// Set up identity mock.
+	identityCallCount := 0
+	identityRestore := SetAWSGetter(&countingAWSGetter{
+		wrapped: &mockAWSGetter{
+			identity: &AWSCallerIdentity{
+				Account: "111111111111",
+				Arn:     "arn:aws:iam::111111111111:user/test",
+				UserID:  "AIDATEST",
+				Region:  "us-east-1",
+			},
+			err: nil,
+		},
+		callCount: &identityCallCount,
+	})
+	defer identityRestore()
+
+	// Set up organization mock.
+	orgCallCount := 0
+	orgMock := &mockAWSOrganizationGetter{
+		info: &AWSOrganizationInfo{
+			ID:              "o-independent",
+			MasterAccountID: "111111111111",
+		},
+	}
+	orgRestore := SetAWSOrganizationGetter(&countingAWSOrgGetter{
+		wrapped:   orgMock,
+		callCount: &orgCallCount,
+	})
+	defer orgRestore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	ctx := context.Background()
+
+	// Call identity.
+	identity, err := getAWSCallerIdentityCached(ctx, atmosConfig, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "111111111111", identity.Account)
+	assert.Equal(t, 1, identityCallCount)
+	assert.Equal(t, 0, orgCallCount, "Organization getter should not have been called")
+
+	// Call organization.
+	orgInfo, err := getAWSOrganizationCached(ctx, atmosConfig, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "o-independent", orgInfo.ID)
+	assert.Equal(t, 1, identityCallCount, "Identity getter should not be called again")
+	assert.Equal(t, 1, orgCallCount)
+
+	// Clear only identity cache - organization should still be cached.
+	ClearAWSIdentityCache()
+	orgInfo2, err := getAWSOrganizationCached(ctx, atmosConfig, nil)
+	require.NoError(t, err)
+	assert.Equal(t, "o-independent", orgInfo2.ID)
+	assert.Equal(t, 1, orgCallCount, "Organization should still be cached after clearing identity cache")
+}
+
+// countingAWSOrgGetter wraps another getter and counts calls.
+type countingAWSOrgGetter struct {
+	wrapped   AWSOrganizationGetter
+	callCount *int
+}
+
+func (c *countingAWSOrgGetter) GetOrganization(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	authContext *schema.AWSAuthContext,
+) (*AWSOrganizationInfo, error) {
+	*c.callCount++
+	return c.wrapped.GetOrganization(ctx, atmosConfig, authContext)
+}

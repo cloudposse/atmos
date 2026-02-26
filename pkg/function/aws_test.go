@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
+	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -308,4 +309,104 @@ func TestGetAWSIdentity_PartialStackInfo(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Equal(t, "ap-southeast-1", result)
+}
+
+// mockAWSOrgGetter is a test implementation of organization.Getter.
+type mockAWSOrgGetter struct {
+	info *awsOrg.OrganizationInfo
+	err  error
+}
+
+func (m *mockAWSOrgGetter) GetOrganization(
+	ctx context.Context,
+	atmosConfig *schema.AtmosConfiguration,
+	authContext *schema.AWSAuthContext,
+) (*awsOrg.OrganizationInfo, error) {
+	return m.info, m.err
+}
+
+func TestNewAwsOrganizationIDFunction(t *testing.T) {
+	fn := NewAwsOrganizationIDFunction()
+	require.NotNil(t, fn)
+	assert.Equal(t, TagAwsOrganizationID, fn.Name())
+	assert.Equal(t, PostMerge, fn.Phase())
+	assert.Nil(t, fn.Aliases())
+}
+
+func TestAwsOrganizationIDFunction_Execute(t *testing.T) {
+	// Clear organization cache before test.
+	awsOrg.ClearOrganizationCache()
+
+	// Set up mock.
+	mock := &mockAWSOrgGetter{
+		info: &awsOrg.OrganizationInfo{
+			ID:                 "o-abc123def4",
+			Arn:                "arn:aws:organizations::111111111111:organization/o-abc123def4",
+			MasterAccountID:    "111111111111",
+			MasterAccountEmail: "master@example.com",
+		},
+	}
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	fn := NewAwsOrganizationIDFunction()
+	result, err := fn.Execute(context.Background(), "", nil)
+
+	require.NoError(t, err)
+	assert.Equal(t, "o-abc123def4", result)
+}
+
+func TestAwsOrganizationIDFunction_Execute_Error(t *testing.T) {
+	// Clear organization cache before test.
+	awsOrg.ClearOrganizationCache()
+
+	// Set up mock that returns an error.
+	expectedErr := errors.New("not in an organization")
+	mock := &mockAWSOrgGetter{
+		err: expectedErr,
+	}
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	fn := NewAwsOrganizationIDFunction()
+	_, err := fn.Execute(context.Background(), "", nil)
+
+	require.Error(t, err)
+	assert.Equal(t, expectedErr, err)
+}
+
+func TestAwsOrganizationIDFunction_Execute_WithStackInfo(t *testing.T) {
+	// Clear organization cache before test.
+	awsOrg.ClearOrganizationCache()
+
+	mock := &mockAWSOrgGetter{
+		info: &awsOrg.OrganizationInfo{
+			ID:              "o-withstack",
+			MasterAccountID: "999999999999",
+		},
+	}
+
+	restore := awsOrg.SetGetter(mock)
+	defer restore()
+
+	// Create execution context with stack info and auth context.
+	execCtx := &ExecutionContext{
+		AtmosConfig: &schema.AtmosConfiguration{},
+		StackInfo: &schema.ConfigAndStacksInfo{
+			AuthContext: &schema.AuthContext{
+				AWS: &schema.AWSAuthContext{
+					Profile: "custom-profile",
+					Region:  "eu-west-1",
+				},
+			},
+		},
+	}
+
+	fn := NewAwsOrganizationIDFunction()
+	result, err := fn.Execute(context.Background(), "", execCtx)
+
+	require.NoError(t, err)
+	assert.Equal(t, "o-withstack", result)
 }
