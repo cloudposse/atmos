@@ -5,6 +5,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"text/template"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,6 +50,27 @@ func TestBuildTemplateData_WithReplacements(t *testing.T) {
 
 	assert.Equal(t, "replaced-os", data.OS)
 	assert.Equal(t, "replaced-arch", data.Arch)
+}
+
+func TestBuildTemplateData_GOOSAndGOARCH(t *testing.T) {
+	// GOOS/GOARCH should always be raw runtime values, even when replacements are applied.
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Replacements: map[string]string{
+			runtime.GOOS:   "replaced-os",
+			runtime.GOARCH: "replaced-arch",
+		},
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+
+	// OS/Arch should have replacements applied.
+	assert.Equal(t, "replaced-os", data.OS)
+	assert.Equal(t, "replaced-arch", data.Arch)
+	// GOOS/GOARCH should be raw runtime values.
+	assert.Equal(t, runtime.GOOS, data.GOOS)
+	assert.Equal(t, runtime.GOARCH, data.GOARCH)
 }
 
 func TestBuildTemplateData_PartialReplacements(t *testing.T) {
@@ -379,6 +401,7 @@ func TestBuildAssetURL_GitHubRelease_DefaultAssetTemplate(t *testing.T) {
 func TestAssetTemplateFuncs(t *testing.T) {
 	funcs := assetTemplateFuncs()
 
+	// Aqua-specific overrides: test via direct type assertion.
 	t.Run("trimV removes v prefix", func(t *testing.T) {
 		fn := funcs["trimV"].(func(string) string)
 		assert.Equal(t, "1.2.3", fn("v1.2.3"))
@@ -402,22 +425,48 @@ func TestAssetTemplateFuncs(t *testing.T) {
 		assert.Equal(t, "bar-bar", fn("foo", "bar", "foo-foo"))
 	})
 
-	t.Run("eq compares equality", func(t *testing.T) {
-		fn := funcs["eq"].(func(string, string) bool)
-		assert.True(t, fn("a", "a"))
-		assert.False(t, fn("a", "b"))
+	// Sprig-provided functions: test via template execution (Sprig uses interface{} signatures).
+	t.Run("eq compares equality via template", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{if eq .A .B}}true{{else}}false{{end}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"A": "a", "B": "a"}))
+		assert.Equal(t, "true", buf.String())
 	})
 
-	t.Run("ne compares inequality", func(t *testing.T) {
-		fn := funcs["ne"].(func(string, string) bool)
-		assert.True(t, fn("a", "b"))
-		assert.False(t, fn("a", "a"))
+	t.Run("ne compares inequality via template", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{if ne .A .B}}true{{else}}false{{end}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"A": "a", "B": "b"}))
+		assert.Equal(t, "true", buf.String())
 	})
 
-	t.Run("ternary returns conditional value", func(t *testing.T) {
-		fn := funcs["ternary"].(func(bool, string, string) string)
-		assert.Equal(t, "yes", fn(true, "yes", "no"))
-		assert.Equal(t, "no", fn(false, "yes", "no"))
+	t.Run("ternary returns conditional value via template", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{ternary "yes" "no" true}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, nil))
+		assert.Equal(t, "yes", buf.String())
+	})
+
+	// Sprig functions: verify key Sprig functions are available.
+	t.Run("sprig title function", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{title .OS}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"OS": "darwin"}))
+		assert.Equal(t, "Darwin", buf.String())
+	})
+
+	t.Run("sprig upper function", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{upper .OS}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"OS": "linux"}))
+		assert.Equal(t, "LINUX", buf.String())
+	})
+
+	t.Run("sprig lower function", func(t *testing.T) {
+		tmpl := template.Must(template.New("test").Funcs(funcs).Parse(`{{lower .Name}}`))
+		var buf strings.Builder
+		require.NoError(t, tmpl.Execute(&buf, map[string]string{"Name": "MyTool"}))
+		assert.Equal(t, "mytool", buf.String())
 	})
 }
 
@@ -467,7 +516,7 @@ func TestExecuteAssetTemplate_TemplateFunctions(t *testing.T) {
 		},
 		{
 			name:     "ternary function",
-			template: "{{ternary (eq .OS \"linux\") \"linux.tar.gz\" \"darwin.tar.gz\"}}",
+			template: "{{ternary \"linux.tar.gz\" \"darwin.tar.gz\" (eq .OS \"linux\")}}",
 			expected: "linux.tar.gz",
 		},
 	}
@@ -761,5 +810,156 @@ func TestBuildAssetURL_NoExeForOtherExtensions(t *testing.T) {
 			assert.False(t, strings.HasSuffix(url, ".exe"),
 				"URL with %s extension should not have .exe appended: %s", tt.name, url)
 		})
+	}
+}
+
+// TestExecuteAssetTemplate_TwoPassRendering tests the two-pass rendering for Asset/AssetWithoutExt.
+func TestExecuteAssetTemplate_TwoPassRendering(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "charmbracelet",
+		RepoName:  "gum",
+	}
+
+	t.Run("template referencing .AssetWithoutExt triggers second pass", func(t *testing.T) {
+		data := &assetTemplateData{
+			Version:   "v0.15.2",
+			SemVer:    "0.15.2",
+			OS:        "Linux",
+			Arch:      "x86_64",
+			RepoOwner: "charmbracelet",
+			RepoName:  "gum",
+			Format:    "tar.gz",
+		}
+		// Template that references .AssetWithoutExt (contains ".Asset" substring → triggers two-pass).
+		// Pass 1: AssetWithoutExt is empty, renders to "gum_0.15.2_Linux_x86_64.tar.gz/"
+		// Then: Asset = "gum_0.15.2_Linux_x86_64.tar.gz/", AssetWithoutExt = "gum_0.15.2_Linux_x86_64/"
+		// Pass 2: re-renders with AssetWithoutExt populated.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}/{{.AssetWithoutExt}}"
+		result, err := executeAssetTemplate(tmpl, tool, data)
+		require.NoError(t, err)
+		// Verify AssetWithoutExt was populated (two-pass was triggered).
+		assert.NotEmpty(t, data.AssetWithoutExt)
+		assert.NotEmpty(t, data.Asset)
+		assert.Contains(t, result, "gum_0.15.2_Linux_x86_64")
+	})
+
+	t.Run("template referencing .Asset directly triggers second pass", func(t *testing.T) {
+		data := &assetTemplateData{
+			Version:   "v1.0.0",
+			SemVer:    "1.0.0",
+			OS:        "linux",
+			Arch:      "amd64",
+			RepoOwner: "test",
+			RepoName:  "tool",
+			Format:    "tar.gz",
+		}
+		// Template with {{.Asset}} reference → triggers two-pass.
+		// Pass 1: Asset is empty → result = "tool_1.0.0_linux_amd64.tar.gz/"
+		// data.Asset = "tool_1.0.0_linux_amd64.tar.gz/", AssetWithoutExt computed.
+		// Pass 2: re-renders with Asset populated.
+		tmpl := "{{.RepoName}}_{{.SemVer}}_{{.OS}}_{{.Arch}}.{{.Format}}/{{.Asset}}"
+		result, err := executeAssetTemplate(tmpl, tool, data)
+		require.NoError(t, err)
+		assert.NotEmpty(t, data.Asset)
+		assert.Contains(t, result, "tool_1.0.0_linux_amd64")
+	})
+
+	t.Run("template without .Asset renders in single pass", func(t *testing.T) {
+		data := &assetTemplateData{
+			Version:   "v1.0.0",
+			SemVer:    "1.0.0",
+			OS:        "linux",
+			Arch:      "amd64",
+			RepoOwner: "test",
+			RepoName:  "test",
+			Format:    "tar.gz",
+		}
+		// No .Asset reference → single pass only.
+		tmpl := "{{.RepoName}}_{{.SemVer}}.{{.Format}}"
+		result, err := executeAssetTemplate(tmpl, tool, data)
+		require.NoError(t, err)
+		assert.Equal(t, "test_1.0.0.tar.gz", result)
+		// AssetWithoutExt should NOT have been set.
+		assert.Empty(t, data.AssetWithoutExt)
+	})
+}
+
+func TestStripFileExtension(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{"tar.gz compound", "tool_linux_amd64.tar.gz", "tool_linux_amd64"},
+		{"tar.xz compound", "tool_linux_amd64.tar.xz", "tool_linux_amd64"},
+		{"tar.bz2 compound", "tool_linux_amd64.tar.bz2", "tool_linux_amd64"},
+		{"zip extension", "tool_windows_amd64.zip", "tool_windows_amd64"},
+		{"no extension", "tool_linux_amd64", "tool_linux_amd64"},
+		{"exe extension", "tool.exe", "tool"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stripFileExtension(tt.input))
+		})
+	}
+}
+
+func TestBuildTemplateData_FormatOverrides(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Format:    "tar.gz",
+		FormatOverrides: []registry.FormatOverride{
+			{GOOS: runtime.GOOS, Format: "zip"},
+		},
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+	// The format override for the current OS should be applied.
+	assert.Equal(t, "zip", data.Format)
+}
+
+// TestBuildTemplateData_Rosetta2 verifies that Rosetta2 fallback is applied in template data.
+// On darwin/arm64, Arch should fall back to "amd64" while GOARCH preserves the raw value.
+func TestBuildTemplateData_Rosetta2(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner: "test",
+		RepoName:  "tool",
+		Format:    "tar.gz",
+		Rosetta2:  true,
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+
+	// GOARCH must always preserve the raw runtime value regardless of Rosetta2.
+	assert.Equal(t, runtime.GOARCH, data.GOARCH, "GOARCH always preserves raw runtime value")
+
+	if runtime.GOOS == "darwin" && runtime.GOARCH == "arm64" {
+		assert.Equal(t, "amd64", data.Arch, "Rosetta2 should fall back Arch to amd64 on darwin/arm64")
+	} else {
+		assert.Equal(t, runtime.GOARCH, data.Arch, "Rosetta2 should not affect Arch on non-darwin-arm64")
+	}
+}
+
+// TestBuildTemplateData_WindowsArmEmulation verifies that Windows ARM emulation fallback
+// is applied in template data. On windows/arm64, Arch should fall back to "amd64".
+func TestBuildTemplateData_WindowsArmEmulation(t *testing.T) {
+	tool := &registry.Tool{
+		RepoOwner:           "test",
+		RepoName:            "tool",
+		Format:              "tar.gz",
+		WindowsArmEmulation: true,
+	}
+
+	data := buildTemplateData(tool, "1.0.0")
+
+	// GOARCH must always preserve the raw runtime value regardless of emulation.
+	assert.Equal(t, runtime.GOARCH, data.GOARCH, "GOARCH always preserves raw runtime value")
+
+	if runtime.GOOS == "windows" && runtime.GOARCH == "arm64" {
+		assert.Equal(t, "amd64", data.Arch, "WindowsArmEmulation should fall back Arch to amd64 on windows/arm64")
+	} else {
+		assert.Equal(t, runtime.GOARCH, data.Arch, "WindowsArmEmulation should not affect Arch on non-windows-arm64")
 	}
 }

@@ -1220,6 +1220,10 @@ MIT LICENSED DEPENDENCIES
     License: MIT
     URL: https://github.com/emicklei/proto/blob/v1.14.3/LICENSE
 
+  - github.com/expr-lang/expr
+    License: MIT
+    URL: https://github.com/expr-lang/expr/blob/v1.17.8/LICENSE
+
   - github.com/fatih/color
     License: MIT
     URL: https://github.com/fatih/color/blob/v1.18.0/LICENSE.md
