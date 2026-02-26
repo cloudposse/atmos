@@ -295,6 +295,10 @@ func (p *Provider) getTokenFromURL(ctx context.Context, ts *types.WIFTokenSource
 	audience := ts.Audience
 	if audience == "" && fromEnv {
 		audience = p.wifAudience()
+		if audience == "" {
+			return "", fmt.Errorf("%w: cannot construct WIF audience for GitHub Actions OIDC request; ensure project_number, workload_identity_pool_id, and workload_identity_provider_id are set",
+				errUtils.ErrInvalidProviderConfig)
+		}
 	}
 	if audience != "" {
 		q := u.Query()

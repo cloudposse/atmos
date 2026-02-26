@@ -107,7 +107,7 @@ func resolveADCClientCredentials() (string, string, error) {
 	// client_secret for "installed" / "native" OAuth apps is NOT confidential.
 	const (
 		defaultClientID     = "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com"
-		defaultClientSecret = "d-FL95Q19q7MQmFpd7hHD0Ty" //nolint:gosec // Public gcloud CLI OAuth secret, not confidential.
+		defaultClientSecret = "d-FL95Q19q7MQmFpd7hHD0Ty" //nolint:gosec // gitleaks:allow -- Public gcloud CLI OAuth secret, not confidential.
 	)
 
 	// Treat client ID/secret as an atomic pair: if a custom client ID is

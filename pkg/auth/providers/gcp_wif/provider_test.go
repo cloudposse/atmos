@@ -169,9 +169,9 @@ func TestGetTokenFromEnv(t *testing.T) {
 		},
 	}
 
-	// Test missing env var - ensure it's unset for this test.
+	// Test missing env var — empty string triggers the "empty" error path
+	// because getTokenFromEnv uses os.Getenv which returns "" for both unset and empty.
 	t.Setenv("TEST_OIDC_TOKEN", "")
-	os.Unsetenv("TEST_OIDC_TOKEN")
 	_, err := p.getTokenFromEnv(p.spec.TokenSource)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "empty")
@@ -422,19 +422,41 @@ func TestGetOIDCToken_NilTokenSource_NoGitHubActions(t *testing.T) {
 
 // TestGetOIDCToken_NilTokenSource_AutoDetectsGitHubActions verifies that a nil
 // token_source auto-detects GitHub Actions and defaults to URL-based OIDC fetch.
+// Uses a local httptest server so the test is hermetic (no external network).
 func TestGetOIDCToken_NilTokenSource_AutoDetectsGitHubActions(t *testing.T) {
-	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.actions.githubusercontent.com/test")
-	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "test-bearer-token")
-	p := &Provider{
-		spec:       &types.GCPWorkloadIdentityFederationProviderSpec{},
-		httpClient: &http.Client{Timeout: 1 * time.Second},
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skipf("Skipping: unable to bind local listener: %v", err)
 	}
-	// The call will fail because the mock URL doesn't serve a real token,
-	// but the error should be from the URL fetch, NOT from "token_source not configured".
-	_, err := p.getOIDCToken(context.Background())
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer gha-request-token", r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"value": "auto-detected-oidc-token"}`))
+	}))
+	server.Listener = ln
+	server.StartTLS()
+	defer server.Close()
+
+	// Point ACTIONS_ID_TOKEN_REQUEST_URL at the local test server.
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", server.URL)
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "gha-request-token")
+
+	p := &Provider{
+		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
+			// Provide WIF fields so wifAudience() returns a value (avoids fail-fast).
+			ProjectNumber:              "123456",
+			WorkloadIdentityPoolID:     "my-pool",
+			WorkloadIdentityProviderID: "my-provider",
+		},
+		httpClient: server.Client(),
+	}
+
+	// Auto-detection produces a config error because the local test server
+	// host (127.0.0.1) is not a trusted GitHub Actions OIDC host.
+	_, err = p.getOIDCToken(context.Background())
 	require.Error(t, err)
-	// Should NOT be an invalid config error — it should be an authentication error
-	// from actually trying to fetch from the URL.
+	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+	assert.Contains(t, err.Error(), "not a trusted GitHub Actions OIDC host")
 	assert.NotContains(t, err.Error(), "token_source not configured")
 }
 
@@ -517,9 +539,8 @@ func TestGetTokenFromFile_EmptyFile(t *testing.T) {
 }
 
 func TestGetTokenFromURL_MissingURL(t *testing.T) {
-	// Ensure GitHub Actions env var is not set.
+	// Ensure GitHub Actions env var is empty so fallback produces "not configured".
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "")
-	os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_URL")
 
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
@@ -675,9 +696,8 @@ func TestGetTokenFromURL_NoBearer(t *testing.T) {
 	serverURL, err := url.Parse(server.URL)
 	require.NoError(t, err)
 
-	// Ensure ACTIONS_ID_TOKEN_REQUEST_TOKEN is not set.
+	// Ensure ACTIONS_ID_TOKEN_REQUEST_TOKEN is empty so no Bearer header is sent.
 	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN", "")
-	os.Unsetenv("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
 
 	p := &Provider{
 		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
@@ -769,6 +789,29 @@ func TestIsGitHubActionsHost(t *testing.T) {
 			assert.Equal(t, tt.trusted, isGitHubActionsHost(tt.host))
 		})
 	}
+}
+
+// TestGetTokenFromURL_FromEnvVar_FailFastEmptyAudience verifies that when the
+// OIDC URL comes from the environment but WIF config is incomplete (missing
+// project_number/pool/provider), the function fails fast with a clear error
+// instead of proceeding without an audience and hitting a cryptic STS rejection.
+func TestGetTokenFromURL_FromEnvVar_FailFastEmptyAudience(t *testing.T) {
+	t.Setenv("ACTIONS_ID_TOKEN_REQUEST_URL", "https://token.actions.githubusercontent.com/test")
+
+	p := &Provider{
+		spec: &types.GCPWorkloadIdentityFederationProviderSpec{
+			// Missing ProjectNumber, pool, and provider — wifAudience() returns "".
+			TokenSource: &types.WIFTokenSource{
+				Type: TokenSourceTypeURL,
+			},
+		},
+	}
+
+	_, err := p.getTokenFromURL(context.Background(), p.spec.TokenSource)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidProviderConfig)
+	assert.Contains(t, err.Error(), "cannot construct WIF audience")
+	assert.Contains(t, err.Error(), "project_number")
 }
 
 func TestExchangeToken_SuccessWithMock(t *testing.T) {
