@@ -1493,8 +1493,8 @@ description: "Custom metadata maps should be deep-merged with component values t
 
 for _, tt := range tests {
 t.Run(tt.name, func(t *testing.T) {
-atmosConfig := &schema.AtmosConfiguration{
 			trueVal := true
+atmosConfig := &schema.AtmosConfiguration{
 Stacks: schema.Stacks{
 Inherit: schema.StacksInherit{
 Metadata: &trueVal,
