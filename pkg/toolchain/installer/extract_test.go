@@ -1212,4 +1212,30 @@ func TestExpandFileSrcTemplate(t *testing.T) {
 		// On other platforms, different values but still expanded.
 		assert.NotContains(t, result, "{{")
 	})
+
+	t.Run("expands AssetWithoutExt from asset template", func(t *testing.T) {
+		// Regression test: gum uses {{.AssetWithoutExt}}/gum as files.src.
+		// The AssetWithoutExt must be populated by first rendering the Asset template.
+		tool := &registry.Tool{
+			Version:       "v0.17.0",
+			VersionPrefix: "v",
+			RepoOwner:     "charmbracelet",
+			RepoName:      "gum",
+			Asset:         "gum_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz",
+			Replacements: map[string]string{
+				"darwin": "Darwin",
+				"amd64":  "x86_64",
+			},
+		}
+
+		result, err := installer.expandFileSrcTemplate("{{.AssetWithoutExt}}/gum", tool)
+		require.NoError(t, err)
+
+		// Should NOT be "/gum" (empty AssetWithoutExt).
+		assert.NotEqual(t, "/gum", result, "AssetWithoutExt should not be empty")
+		// Should end with /gum.
+		assert.Contains(t, result, "/gum")
+		// Should contain gum_ prefix from rendered asset template.
+		assert.Contains(t, result, "gum_0.17.0_", "Should contain version from asset template")
+	})
 }
