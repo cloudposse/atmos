@@ -44,11 +44,74 @@ When processing the `!aws.organization_id` YAML function, Atmos:
 
 3. **Returns Organization ID** - Extracts and returns the organization ID (e.g., `o-abc123def4`) as a string
 
-:::note Atmos Auth Integration
+## Authentication
+
+### Atmos Auth Integration
+
 When using [Atmos Authentication](/cli/commands/auth/usage), the function automatically uses credentials
 from the active identity. This enables seamless integration with SSO, assume role chains, and other
 authentication methods configured in your `atmos.yaml`.
-:::
+
+The credential resolution order is:
+
+1. **Atmos Auth Context** (highest priority) - If an identity is active (via `--identity` flag or
+   default identity in `settings.auth`), Atmos uses the Atmos-managed credential files and profile
+   instead of the standard AWS credential chain
+2. **Standard AWS SDK resolution** (fallback) - If no Atmos auth context is available, falls back
+   to the standard chain (environment variables, `~/.aws/credentials`, IMDS, etc.)
+
+When Atmos Auth is active, the function receives an `AWSAuthContext` containing:
+- **Profile** - The identity name (e.g., `core-auto/terraform`)
+- **CredentialsFile** - Path to Atmos-managed credentials (e.g., `~/.atmos/auth/{realm}/aws/{provider}/credentials`)
+- **ConfigFile** - Path to Atmos-managed config (e.g., `~/.atmos/auth/{realm}/aws/{provider}/config`)
+- **Region** - AWS region from the identity or component override
+
+This context is passed to `LoadConfigWithAuth()`, which configures the AWS SDK to use the Atmos-managed
+files instead of the default `~/.aws/` paths.
+
+### Stack-Level Auth Configuration
+
+Auth can be configured at three levels, with component-level taking highest precedence:
+
+<File title="atmos.yaml">
+```yaml
+# Global auth configuration
+auth:
+  identities:
+    core-auto/terraform:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: aws-sso
+```
+</File>
+
+<File title="stack.yaml">
+```yaml
+components:
+  terraform:
+    my-component:
+      # Component-level auth override (highest precedence)
+      settings:
+        auth:
+          identities:
+            prod-deploy:
+              default: true
+              kind: aws/assume-role
+      vars:
+        # Uses credentials from prod-deploy identity
+        organization_id: !aws.organization_id
+```
+</File>
+
+### Using with the `--identity` Flag
+
+```bash
+# Explicitly specify the identity for the command
+atmos terraform plan my-component -s prod-ue1 --identity core-auto/terraform
+
+# The !aws.organization_id function will use the core-auto/terraform credentials
+```
 
 ## Caching
 
@@ -57,7 +120,8 @@ The `!aws.organization_id` function uses its own cache, separate from the identi
 the duration of the CLI invocation:
 
 - Multiple uses of `!aws.organization_id` in the same command only make one Organizations API call
-- Different authentication contexts (e.g., different profiles) get separate cache entries
+- Different authentication contexts (e.g., different profiles or credential files) get separate cache entries
+- The cache key is derived from `Profile:CredentialsFile:ConfigFile`, so different identities never share cached results
 - Each new CLI command starts with a fresh cache
 
 :::note Type-Aware Merging
