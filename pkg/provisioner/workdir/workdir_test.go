@@ -1276,3 +1276,251 @@ func TestBuildLocalMetadata_ExistingMetadata_ContentUnchanged(t *testing.T) {
 	// LastAccessed should still be updated.
 	assert.False(t, result.LastAccessed.IsZero())
 }
+
+// TestHasSource tests the hasSource function.
+func TestHasSource(t *testing.T) {
+	tests := []struct {
+		name     string
+		config   map[string]any
+		expected bool
+	}{
+		{
+			name:     "nil config",
+			config:   nil,
+			expected: false,
+		},
+		{
+			name:     "no source field",
+			config:   map[string]any{},
+			expected: false,
+		},
+		{
+			name: "source field is nil",
+			config: map[string]any{
+				"source": nil,
+			},
+			expected: false,
+		},
+		{
+			name: "source is empty string",
+			config: map[string]any{
+				"source": "",
+			},
+			expected: false,
+		},
+		{
+			name: "source is non-empty string",
+			config: map[string]any{
+				"source": "git::https://github.com/org/repo.git",
+			},
+			expected: true,
+		},
+		{
+			name: "source is map without uri",
+			config: map[string]any{
+				"source": map[string]any{
+					"version": "1.0.0",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "source is map with empty uri",
+			config: map[string]any{
+				"source": map[string]any{
+					"uri": "",
+				},
+			},
+			expected: false,
+		},
+		{
+			name: "source is map with non-empty uri",
+			config: map[string]any{
+				"source": map[string]any{
+					"uri":     "git::https://github.com/org/repo.git",
+					"version": "1.0.0",
+				},
+			},
+			expected: true,
+		},
+		{
+			name: "source is invalid type (int)",
+			config: map[string]any{
+				"source": 123,
+			},
+			expected: false,
+		},
+		{
+			name: "source map with uri as non-string",
+			config: map[string]any{
+				"source": map[string]any{
+					"uri": 123,
+				},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := hasSource(tt.config)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+// TestServiceProvision_SkipsWhenSourceConfigured tests that the workdir provisioner
+// skips local copy when source is configured.
+func TestServiceProvision_SkipsWhenSourceConfigured(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/test",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	tests := []struct {
+		name   string
+		config map[string]any
+	}{
+		{
+			name: "source as string",
+			config: map[string]any{
+				"component":   "vpc",
+				"atmos_stack": "dev",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+				"source": "git::https://github.com/org/repo.git",
+			},
+		},
+		{
+			name: "source as map with uri",
+			config: map[string]any{
+				"component":   "vpc",
+				"atmos_stack": "dev",
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+				"source": map[string]any{
+					"uri":     "git::https://github.com/org/repo.git",
+					"version": "main",
+				},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// The provisioner should skip without calling any filesystem operations.
+			// No mock expectations needed because it should return early.
+			err := service.Provision(ctx, atmosConfig, tt.config)
+			assert.NoError(t, err)
+		})
+	}
+}
+
+// TestServiceProvision_SkipsWhenWorkdirPathKeySet tests that the workdir provisioner
+// skips when WorkdirPathKey is already set (source provisioner ran first).
+func TestServiceProvision_SkipsWhenWorkdirPathKeySet(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: "/test",
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	config := map[string]any{
+		"component":    "vpc",
+		"atmos_stack":  "dev",
+		WorkdirPathKey: "/test/.workdir/terraform/dev-vpc", // Already set by source provisioner
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	// The provisioner should skip without calling any filesystem operations.
+	err := service.Provision(ctx, atmosConfig, config)
+	assert.NoError(t, err)
+}
+
+// TestServiceProvision_ProceedsWhenNoSourceAndWorkdirEnabled tests that the workdir
+// provisioner proceeds with local copy when workdir is enabled but no source is configured.
+// TestServiceProvision_ProceedsWhenNoSourceAndWorkdirEnabled tests that the workdir
+// provisioner proceeds with local copy when workdir is enabled but no source is configured.
+func TestServiceProvision_ProceedsWhenNoSourceAndWorkdirEnabled(t *testing.T) {
+	// Create a temp dir so WriteMetadata can write the file.
+	tempDir := t.TempDir()
+	componentPath := filepath.Join(tempDir, "components", "terraform", "vpc")
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-vpc")
+
+	// Create component directory structure
+	err := os.MkdirAll(componentPath, 0o755)
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	ctx := context.Background()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	config := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+		// No source configured
+	}
+
+	// Expect filesystem operations since workdir provisioning should proceed.
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists(componentPath).Return(true)
+	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(false, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("hash123", nil)
+
+	err = service.Provision(ctx, atmosConfig, config)
+	assert.NoError(t, err)
+
+	// Verify WorkdirPathKey was set
+	assert.Equal(t, workdirPath, config[WorkdirPathKey])
+}

@@ -9,6 +9,7 @@ import (
 
 	log "github.com/charmbracelet/log"
 
+	github "github.com/cloudposse/atmos/pkg/github"
 	httpClient "github.com/cloudposse/atmos/pkg/http"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -113,7 +114,7 @@ func tryRegistryPaths(paths []string, toolName string) (string, string, error) {
 	defer perf.Track(nil, "tryRegistryPaths")()
 
 	client := httpClient.NewDefaultClient(
-		httpClient.WithGitHubToken(httpClient.GetGitHubTokenFromEnv()),
+		httpClient.WithGitHubToken(github.GetGitHubToken()),
 	)
 
 	for _, path := range paths {
