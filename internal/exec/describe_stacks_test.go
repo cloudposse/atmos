@@ -179,3 +179,75 @@ func TestExecuteDescribeStacks_Packer(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, "aws/bastion", val)
 }
+
+func TestExecuteDescribeStacks_Ansible(t *testing.T) {
+	err := os.Unsetenv("ATMOS_CLI_CONFIG_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_CLI_CONFIG_PATH': %v", err)
+	}
+
+	err = os.Unsetenv("ATMOS_BASE_PATH")
+	if err != nil {
+		t.Fatalf("Failed to unset 'ATMOS_BASE_PATH': %v", err)
+	}
+
+	log.SetLevel(log.InfoLevel)
+	log.SetOutput(os.Stdout)
+
+	// Define the working directory.
+	workDir := "../../examples/demo-ansible"
+	t.Chdir(workDir)
+
+	// Set ATMOS_CLI_CONFIG_PATH to CWD to isolate from repo's atmos.yaml.
+	t.Setenv("ATMOS_CLI_CONFIG_PATH", ".")
+
+	atmosConfig, err := config.InitCliConfig(schema.ConfigAndStacksInfo{}, true)
+	assert.Nil(t, err)
+
+	stacksMap, err := ExecuteDescribeStacks(
+		&atmosConfig,
+		"",
+		nil,
+		nil,
+		nil,
+		false,
+		false,
+		false,
+		false,
+		nil,
+		nil, // authManager
+	)
+	assert.Nil(t, err)
+
+	// Verify both dev and prod stacks are found.
+	assert.Contains(t, stacksMap, "dev")
+	assert.Contains(t, stacksMap, "prod")
+
+	// Verify ansible component vars in dev stack.
+	val, err := u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.vars.app_name")
+	assert.Nil(t, err)
+	assert.Equal(t, "my-app", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.vars.app_version")
+	assert.Nil(t, err)
+	assert.Equal(t, "1.0.0-dev", val)
+
+	// Verify ansible component vars in prod stack.
+	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".prod.components.ansible.hello-world.vars.app_version")
+	assert.Nil(t, err)
+	assert.Equal(t, "2.0.0", val)
+
+	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".prod.components.ansible.hello-world.vars.app_port")
+	assert.Nil(t, err)
+	assert.Equal(t, 443, val)
+
+	// Verify component_info contains ansible type.
+	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.component_info.component_type")
+	assert.Nil(t, err)
+	assert.Equal(t, "ansible", val)
+
+	// Verify settings.ansible section is preserved.
+	val, err = u.EvaluateYqExpression(&atmosConfig, stacksMap, ".dev.components.ansible.hello-world.settings.ansible.playbook")
+	assert.Nil(t, err)
+	assert.Equal(t, "site.yml", val)
+}
