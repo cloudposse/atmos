@@ -12,7 +12,7 @@ import TabItem from '@theme/TabItem'
 import DocCardList from '@theme/DocCardList'
 
 <Intro>
-Components are the building blocks of your infrastructure, defined in the `components` section of stack manifests. Each component represents infrastructure-as-code (Terraform, Helmfile, or Packer) combined with its configuration. This page covers how to configure components in stacks and the common attributes available across all component types.
+Components are the building blocks of your infrastructure, defined in the `components` section of stack manifests. Each component represents infrastructure-as-code (Terraform, Helmfile, Packer, or Ansible) combined with its configuration. This page covers how to configure components in stacks and the common attributes available across all component types.
 </Intro>
 
 ## Supported Component Types
@@ -80,6 +80,11 @@ components:
     ami-builder:
       vars:
         base_ami: ami-12345678
+
+  ansible:
+    webserver:
+      vars:
+        app_name: myapp
 ```
 
 ## Metadata Attributes
@@ -226,6 +231,12 @@ Packer components use the standard sections listed above. Packer-specific config
 
 See [Packer Components](/stacks/components/packer) for details.
 
+### Ansible-Specific
+
+Ansible components use the standard sections listed above, plus `settings.ansible.playbook` and `settings.ansible.inventory` for playbook configuration.
+
+See [Ansible Components](/stacks/components/ansible) for details.
+
 ## Component-Type Defaults
 
 You can define default settings for all components of a type at the root level:
@@ -249,6 +260,13 @@ helmfile:
   env:
     HELM_CACHE_HOME: /tmp/helm-cache
 
+# Defaults for all Ansible components
+ansible:
+  vars:
+    managed_by: Atmos
+  env:
+    ANSIBLE_HOST_KEY_CHECKING: "false"
+
 # Individual components inherit and can override these defaults
 components:
   terraform:
@@ -270,6 +288,8 @@ components:
     base_path: components/helmfile
   packer:
     base_path: components/packer
+  ansible:
+    base_path: components/ansible
 ```
 
 Your project structure would look like:
@@ -286,9 +306,12 @@ Your project structure would look like:
 │   ├── helmfile/
 │   │   └── nginx/
 │   │       └── helmfile.yaml
-│   └── packer/
-│       └── ami-builder/
-│           └── template.pkr.hcl
+│   ├── packer/
+│   │   └── ami-builder/
+│   │       └── template.pkr.hcl
+│   └── ansible/
+│       └── webserver/
+│           └── site.yml
 └── stacks/
 ```
 
@@ -310,4 +333,5 @@ Your project structure would look like:
 - [Terraform Components](/stacks/components/terraform)
 - [Helmfile Components](/stacks/components/helmfile)
 - [Packer Components](/stacks/components/packer)
+- [Ansible Components](/stacks/components/ansible)
 - [Version Management Patterns](/design-patterns/version-management)
