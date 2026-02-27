@@ -1031,8 +1031,8 @@ func TestStore_Download(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1055,8 +1055,8 @@ func TestStore_Delete(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1078,8 +1078,8 @@ func TestStore_List(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1124,8 +1124,8 @@ func TestStore_List(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1185,8 +1185,8 @@ func TestStore_List(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1230,8 +1230,8 @@ func TestStore_List(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1264,8 +1264,8 @@ func TestStore_Exists(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1285,8 +1285,8 @@ func TestStore_Exists(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1322,8 +1322,8 @@ func TestStore_GetMetadata(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1344,8 +1344,8 @@ func TestStore_GetMetadata(t *testing.T) {
 			httpClient: server.Client(),
 			baseURL:    server.URL,
 
-			owner:      "testowner",
-			repo:       "testrepo",
+			owner: "testowner",
+			repo:  "testrepo",
 		}
 
 		ctx := context.Background()
