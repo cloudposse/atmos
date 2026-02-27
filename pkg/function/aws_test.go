@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	awsIdentity "github.com/cloudposse/atmos/pkg/aws/identity"
 	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
@@ -311,20 +312,6 @@ func TestGetAWSIdentity_PartialStackInfo(t *testing.T) {
 	assert.Equal(t, "ap-southeast-1", result)
 }
 
-// mockAWSOrgGetter is a test implementation of organization.Getter.
-type mockAWSOrgGetter struct {
-	info *awsOrg.OrganizationInfo
-	err  error
-}
-
-func (m *mockAWSOrgGetter) GetOrganization(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	authContext *schema.AWSAuthContext,
-) (*awsOrg.OrganizationInfo, error) {
-	return m.info, m.err
-}
-
 func TestNewAwsOrganizationIDFunction(t *testing.T) {
 	fn := NewAwsOrganizationIDFunction()
 	require.NotNil(t, fn)
@@ -337,15 +324,18 @@ func TestAwsOrganizationIDFunction_Execute(t *testing.T) {
 	// Clear organization cache before test.
 	awsOrg.ClearOrganizationCache()
 
-	// Set up mock.
-	mock := &mockAWSOrgGetter{
-		info: &awsOrg.OrganizationInfo{
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&awsOrg.OrganizationInfo{
 			ID:                 "o-abc123def4",
 			Arn:                "arn:aws:organizations::111111111111:organization/o-abc123def4",
 			MasterAccountID:    "111111111111",
 			MasterAccountEmail: "master@example.com",
-		},
-	}
+		}, nil).
+		Times(1)
 
 	restore := awsOrg.SetGetter(mock)
 	defer restore()
@@ -361,11 +351,14 @@ func TestAwsOrganizationIDFunction_Execute_Error(t *testing.T) {
 	// Clear organization cache before test.
 	awsOrg.ClearOrganizationCache()
 
-	// Set up mock that returns an error.
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+
 	expectedErr := errors.New("not in an organization")
-	mock := &mockAWSOrgGetter{
-		err: expectedErr,
-	}
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, expectedErr).
+		Times(1)
 
 	restore := awsOrg.SetGetter(mock)
 	defer restore()
@@ -381,12 +374,16 @@ func TestAwsOrganizationIDFunction_Execute_WithStackInfo(t *testing.T) {
 	// Clear organization cache before test.
 	awsOrg.ClearOrganizationCache()
 
-	mock := &mockAWSOrgGetter{
-		info: &awsOrg.OrganizationInfo{
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&awsOrg.OrganizationInfo{
 			ID:              "o-withstack",
 			MasterAccountID: "999999999999",
-		},
-	}
+		}, nil).
+		Times(1)
 
 	restore := awsOrg.SetGetter(mock)
 	defer restore()

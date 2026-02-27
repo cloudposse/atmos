@@ -3,6 +3,8 @@ package exec
 import (
 	"context"
 	"errors"
+	"os"
+	"os/exec"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -801,6 +803,91 @@ func TestProcessTagAwsOrganizationID(t *testing.T) {
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
+}
+
+// TestProcessTagAwsOrganizationID_ErrorExits verifies that error paths in processTagAwsOrganizationID
+// call CheckErrorPrintAndExit (which calls os.Exit). These are tested via subprocess to avoid
+// killing the test process.
+func TestProcessTagAwsOrganizationID_ErrorExits(t *testing.T) {
+	tests := []struct {
+		name    string
+		envVar  string
+		envVal  string
+		wantErr bool
+	}{
+		{
+			name:    "getter error causes exit",
+			envVar:  "TEST_ORG_ERROR",
+			envVal:  "getter_error",
+			wantErr: true,
+		},
+		{
+			name:    "nil org info causes exit",
+			envVar:  "TEST_ORG_ERROR",
+			envVal:  "nil_info",
+			wantErr: true,
+		},
+		{
+			name:    "empty org ID causes exit",
+			envVar:  "TEST_ORG_ERROR",
+			envVal:  "empty_id",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Use subprocess pattern: re-invoke the test binary with the specific helper.
+			cmd := exec.Command(os.Args[0], "-test.run=TestProcessTagAwsOrganizationID_ErrorHelper")
+			cmd.Env = append(os.Environ(), tt.envVar+"="+tt.envVal)
+
+			err := cmd.Run()
+			if tt.wantErr {
+				assert.Error(t, err, "Expected non-zero exit code")
+			}
+		})
+	}
+}
+
+// TestProcessTagAwsOrganizationID_ErrorHelper is a subprocess helper for exit-code tests.
+// It is not run directly by `go test` (no matching test name without _ErrorExits).
+func TestProcessTagAwsOrganizationID_ErrorHelper(t *testing.T) {
+	testMode := os.Getenv("TEST_ORG_ERROR")
+	if testMode == "" {
+		t.Skipf("Skipping: TEST_ORG_ERROR not set")
+		return
+	}
+
+	var mockInfo *AWSOrganizationInfo
+	var mockErr error
+
+	switch testMode {
+	case "getter_error":
+		mockInfo = nil
+		mockErr = errUtils.ErrAwsDescribeOrganization
+	case "nil_info":
+		mockInfo = nil
+		mockErr = nil
+	case "empty_id":
+		mockInfo = &AWSOrganizationInfo{ID: ""}
+		mockErr = nil
+	default:
+		t.Skipf("Unknown test mode: %s", testMode)
+		return
+	}
+
+	ClearAWSOrganizationCache()
+	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
+		info: mockInfo,
+		err:  mockErr,
+	})
+	defer restore()
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	stackInfo := &schema.ConfigAndStacksInfo{}
+
+	// This will call CheckErrorPrintAndExit → os.Exit(1).
+	processTagAwsOrganizationID(atmosConfig, u.AtmosYamlFuncAwsOrganizationID, stackInfo)
 }
 
 func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {

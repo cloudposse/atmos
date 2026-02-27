@@ -188,6 +188,12 @@ func processTagAwsOrganizationID(
 		return nil
 	}
 
+	if orgInfo == nil || orgInfo.ID == "" {
+		log.Error("Failed to get AWS organization info", "error", errUtils.ErrAwsDescribeOrganization)
+		errUtils.CheckErrorPrintAndExit(errUtils.ErrAwsDescribeOrganization, "", "")
+		return nil
+	}
+
 	log.Debug("Resolved !aws.organization_id", "organization_id", orgInfo.ID)
 	return orgInfo.ID
 }

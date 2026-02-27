@@ -8,50 +8,28 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// mockGetter is a test implementation of Getter.
-type mockOrgGetter struct {
-	info *OrganizationInfo
-	err  error
-}
-
-func (m *mockOrgGetter) GetOrganization(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	authContext *schema.AWSAuthContext,
-) (*OrganizationInfo, error) {
-	return m.info, m.err
-}
-
-// countingOrgGetter wraps another getter and counts calls.
-type countingOrgGetter struct {
-	wrapped   Getter
-	callCount *int
-}
-
-func (c *countingOrgGetter) GetOrganization(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	authContext *schema.AWSAuthContext,
-) (*OrganizationInfo, error) {
-	*c.callCount++
-	return c.wrapped.GetOrganization(ctx, atmosConfig, authContext)
-}
-
 func TestGetOrganizationCached_Success(t *testing.T) {
 	ClearOrganizationCache()
 
-	mock := &mockOrgGetter{
-		info: &OrganizationInfo{
-			ID:                 "o-abc123",
-			Arn:                "arn:aws:organizations::111111111111:organization/o-abc123",
-			MasterAccountID:    "111111111111",
-			MasterAccountEmail: "master@example.com",
-		},
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
+
+	expectedInfo := &OrganizationInfo{
+		ID:                 "o-abc123",
+		Arn:                "arn:aws:organizations::111111111111:organization/o-abc123",
+		MasterAccountID:    "111111111111",
+		MasterAccountEmail: "master@example.com",
 	}
+
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(expectedInfo, nil).
+		Times(1)
 
 	restore := SetGetter(mock)
 	defer restore()
@@ -70,21 +48,22 @@ func TestGetOrganizationCached_Success(t *testing.T) {
 func TestGetOrganizationCached_CacheBehavior(t *testing.T) {
 	ClearOrganizationCache()
 
-	callCount := 0
-	mock := &mockOrgGetter{
-		info: &OrganizationInfo{
-			ID:              "o-cached",
-			Arn:             "arn:aws:organizations::222222222222:organization/o-cached",
-			MasterAccountID: "222222222222",
-		},
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
+
+	expectedInfo := &OrganizationInfo{
+		ID:              "o-cached",
+		Arn:             "arn:aws:organizations::222222222222:organization/o-cached",
+		MasterAccountID: "222222222222",
 	}
 
-	counting := &countingOrgGetter{
-		wrapped:   mock,
-		callCount: &callCount,
-	}
+	// Expect exactly 3 calls: first call, different auth context, after cache clear.
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(expectedInfo, nil).
+		Times(3)
 
-	restore := SetGetter(counting)
+	restore := SetGetter(mock)
 	defer restore()
 
 	ctx := context.Background()
@@ -94,13 +73,11 @@ func TestGetOrganizationCached_CacheBehavior(t *testing.T) {
 	info1, err := GetOrganizationCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "o-cached", info1.ID)
-	assert.Equal(t, 1, callCount)
 
-	// Second call with same auth context should use cache.
+	// Second call with same auth context should use cache (no additional mock call).
 	info2, err := GetOrganizationCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "o-cached", info2.ID)
-	assert.Equal(t, 1, callCount, "Second call should use cache")
 
 	// Call with different auth context should call getter again.
 	differentAuth := &schema.AWSAuthContext{
@@ -110,32 +87,29 @@ func TestGetOrganizationCached_CacheBehavior(t *testing.T) {
 	info3, err := GetOrganizationCached(ctx, atmosConfig, differentAuth)
 	require.NoError(t, err)
 	assert.Equal(t, "o-cached", info3.ID)
-	assert.Equal(t, 2, callCount, "Different auth context should invoke getter")
 
 	// Clear cache and verify next call hits mock.
 	ClearOrganizationCache()
 	info4, err := GetOrganizationCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "o-cached", info4.ID)
-	assert.Equal(t, 3, callCount, "After cache clear, should invoke getter")
 }
 
 func TestGetOrganizationCached_ErrorCaching(t *testing.T) {
 	ClearOrganizationCache()
 
-	callCount := 0
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
+
 	expectedErr := errors.New("mock organization error")
-	mock := &mockOrgGetter{
-		info: nil,
-		err:  expectedErr,
-	}
 
-	counting := &countingOrgGetter{
-		wrapped:   mock,
-		callCount: &callCount,
-	}
+	// Expect exactly 1 call; second call should use cached error.
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil, expectedErr).
+		Times(1)
 
-	restore := SetGetter(counting)
+	restore := SetGetter(mock)
 	defer restore()
 
 	ctx := context.Background()
@@ -144,32 +118,31 @@ func TestGetOrganizationCached_ErrorCaching(t *testing.T) {
 	// First call should return error and cache it.
 	_, err := GetOrganizationCached(ctx, atmosConfig, nil)
 	require.Error(t, err)
-	assert.Equal(t, 1, callCount)
 
-	// Second call should return cached error.
+	// Second call should return cached error (no additional mock call).
 	_, err = GetOrganizationCached(ctx, atmosConfig, nil)
 	require.Error(t, err)
-	assert.Equal(t, 1, callCount, "Errors should be cached too")
 }
 
 func TestGetOrganizationCached_Concurrent(t *testing.T) {
 	ClearOrganizationCache()
 
-	callCount := 0
-	mock := &mockOrgGetter{
-		info: &OrganizationInfo{
-			ID:              "o-concurrent",
-			Arn:             "arn:aws:organizations::333333333333:organization/o-concurrent",
-			MasterAccountID: "333333333333",
-		},
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
+
+	expectedInfo := &OrganizationInfo{
+		ID:              "o-concurrent",
+		Arn:             "arn:aws:organizations::333333333333:organization/o-concurrent",
+		MasterAccountID: "333333333333",
 	}
 
-	counting := &countingOrgGetter{
-		wrapped:   mock,
-		callCount: &callCount,
-	}
+	// Despite 50 goroutines, expect at most 1 call due to caching.
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(expectedInfo, nil).
+		Times(1)
 
-	restore := SetGetter(counting)
+	restore := SetGetter(mock)
 	defer restore()
 
 	ctx := context.Background()
@@ -189,20 +162,16 @@ func TestGetOrganizationCached_Concurrent(t *testing.T) {
 	}
 
 	wg.Wait()
-
-	// Despite concurrent access, should only call getter once due to caching.
-	assert.Equal(t, 1, callCount, "Concurrent access should result in only one getter call")
 }
 
 func TestSetGetter_Restore(t *testing.T) {
 	ClearOrganizationCache()
 
-	// Save original getter type.
+	// Save original getter.
 	originalGetter := getter
 
-	mock := &mockOrgGetter{
-		info: &OrganizationInfo{ID: "o-mock"},
-	}
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
 
 	restore := SetGetter(mock)
 
@@ -256,9 +225,13 @@ func TestGetCacheKey(t *testing.T) {
 func TestGetOrganizationCached_DoubleCheckHit(t *testing.T) {
 	ClearOrganizationCache()
 
-	mock := &mockOrgGetter{
-		info: &OrganizationInfo{ID: "o-doublecheck"},
-	}
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
+
+	// Expect zero calls because we pre-populate the cache.
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(0)
 
 	restore := SetGetter(mock)
 	defer restore()
@@ -285,9 +258,13 @@ func TestGetOrganizationCached_DoubleCheckHit(t *testing.T) {
 func TestClearOrganizationCache(t *testing.T) {
 	ClearOrganizationCache()
 
-	mock := &mockOrgGetter{
-		info: &OrganizationInfo{ID: "o-clear-test"},
-	}
+	ctrl := gomock.NewController(t)
+	mock := NewMockGetter(ctrl)
+
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&OrganizationInfo{ID: "o-clear-test"}, nil).
+		Times(1)
 
 	restore := SetGetter(mock)
 	defer restore()

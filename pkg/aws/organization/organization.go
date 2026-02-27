@@ -54,7 +54,7 @@ func (d *defaultGetter) GetOrganization(
 	// Load AWS config using the shared identity package.
 	cfg, err := awsIdentity.LoadConfigWithAuth(ctx, "", "", 0, authContext)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsDescribeOrganization, err)
 	}
 
 	// Create Organizations client and describe organization.
