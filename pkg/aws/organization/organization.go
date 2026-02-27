@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/organizations"
 	"github.com/aws/aws-sdk-go-v2/service/organizations/types"
 
@@ -15,6 +16,26 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// organizationsAPI defines the subset of AWS Organizations client methods used by this package.
+// This interface enables unit testing of the defaultGetter without real AWS credentials.
+type organizationsAPI interface {
+	DescribeOrganization(
+		ctx context.Context,
+		params *organizations.DescribeOrganizationInput,
+		optFns ...func(*organizations.Options),
+	) (*organizations.DescribeOrganizationOutput, error)
+}
+
+// loadAWSConfig loads AWS SDK config with authentication.
+// This is a package-level variable to enable testing without real AWS credentials.
+var loadAWSConfig = awsIdentity.LoadConfigWithAuth
+
+// newOrgClient creates a new Organizations API client from AWS config.
+// This is a package-level variable to enable testing without real AWS credentials.
+var newOrgClient = func(cfg aws.Config) organizationsAPI {
+	return organizations.NewFromConfig(cfg)
+}
 
 // OrganizationInfo holds the information returned by AWS Organizations DescribeOrganization.
 type OrganizationInfo struct {
@@ -52,13 +73,13 @@ func (d *defaultGetter) GetOrganization(
 	log.Debug("Getting AWS organization info")
 
 	// Load AWS config using the shared identity package.
-	cfg, err := awsIdentity.LoadConfigWithAuth(ctx, "", "", 0, authContext)
+	cfg, err := loadAWSConfig(ctx, "", "", 0, authContext)
 	if err != nil {
 		return nil, fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrAwsDescribeOrganization, err)
 	}
 
 	// Create Organizations client and describe organization.
-	orgClient := organizations.NewFromConfig(cfg)
+	orgClient := newOrgClient(cfg)
 	output, err := orgClient.DescribeOrganization(ctx, &organizations.DescribeOrganizationInput{})
 	if err != nil {
 		// Check for the specific "not in an organization" error.

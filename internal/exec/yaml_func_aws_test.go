@@ -749,7 +749,7 @@ func runAWSOrgYamlFuncTest(
 	mock.EXPECT().
 		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(mockInfo, mockErr).
-		AnyTimes()
+		Times(1)
 
 	restore := SetAWSOrganizationGetter(mock)
 	defer restore()
@@ -838,7 +838,9 @@ func TestProcessTagAwsOrganizationID_ErrorExits(t *testing.T) {
 
 			err := cmd.Run()
 			if tt.wantErr {
-				assert.Error(t, err, "Expected non-zero exit code")
+				var exitErr *exec.ExitError
+				require.ErrorAs(t, err, &exitErr)
+				assert.Equal(t, 1, exitErr.ExitCode(), "Expected helper to exit with code 1")
 			}
 		})
 	}
@@ -878,7 +880,7 @@ func TestProcessTagAwsOrganizationID_ErrorHelper(t *testing.T) {
 	mock.EXPECT().
 		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(mockInfo, mockErr).
-		AnyTimes()
+		Times(1)
 
 	restore := SetAWSOrganizationGetter(mock)
 	defer restore()

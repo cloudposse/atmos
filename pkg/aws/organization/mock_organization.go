@@ -13,9 +13,54 @@ import (
 	context "context"
 	reflect "reflect"
 
+	organizations "github.com/aws/aws-sdk-go-v2/service/organizations"
 	schema "github.com/cloudposse/atmos/pkg/schema"
 	gomock "go.uber.org/mock/gomock"
 )
+
+// MockorganizationsAPI is a mock of organizationsAPI interface.
+type MockorganizationsAPI struct {
+	ctrl     *gomock.Controller
+	recorder *MockorganizationsAPIMockRecorder
+	isgomock struct{}
+}
+
+// MockorganizationsAPIMockRecorder is the mock recorder for MockorganizationsAPI.
+type MockorganizationsAPIMockRecorder struct {
+	mock *MockorganizationsAPI
+}
+
+// NewMockorganizationsAPI creates a new mock instance.
+func NewMockorganizationsAPI(ctrl *gomock.Controller) *MockorganizationsAPI {
+	mock := &MockorganizationsAPI{ctrl: ctrl}
+	mock.recorder = &MockorganizationsAPIMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockorganizationsAPI) EXPECT() *MockorganizationsAPIMockRecorder {
+	return m.recorder
+}
+
+// DescribeOrganization mocks base method.
+func (m *MockorganizationsAPI) DescribeOrganization(ctx context.Context, params *organizations.DescribeOrganizationInput, optFns ...func(*organizations.Options)) (*organizations.DescribeOrganizationOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, params}
+	for _, a := range optFns {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeOrganization", varargs...)
+	ret0, _ := ret[0].(*organizations.DescribeOrganizationOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeOrganization indicates an expected call of DescribeOrganization.
+func (mr *MockorganizationsAPIMockRecorder) DescribeOrganization(ctx, params any, optFns ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, params}, optFns...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeOrganization", reflect.TypeOf((*MockorganizationsAPI)(nil).DescribeOrganization), varargs...)
+}
 
 // MockGetter is a mock of Getter interface.
 type MockGetter struct {
