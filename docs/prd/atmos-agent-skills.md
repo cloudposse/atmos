@@ -20,10 +20,9 @@ on demand via progressive disclosure.
 
 ## Goals
 
-1. Ship Atmos skills inside the Atmos repository at `.claude/skills/`.
+1. Ship Atmos skills inside the Atmos repository at `agent-skills/`.
 2. Follow the [Agent Skills open standard](https://agentskills.io/specification) for cross-tool portability.
-3. Follow the [Claude Code skills documentation](https://docs.anthropic.com/en/docs/claude-code/skills) for
-   Claude-specific discovery.
+3. Support all major AI tools (Claude Code, GitHub Copilot, OpenAI Codex, Gemini, Grok, etc.).
 4. Cover all major Atmos subsystems with accurate, source-derived content.
 5. Enable external Atmos users to reference the skills from their own projects.
 
@@ -31,18 +30,24 @@ on demand via progressive disclosure.
 
 | Audience                   | How they access skills                                                                  |
 |----------------------------|-----------------------------------------------------------------------------------------|
-| **Atmos contributors**     | Auto-discovered when working in the Atmos repo (`.claude/skills/` is project-level)     |
+| **Atmos contributors**     | Auto-discovered when working in the Atmos repo                                          |
 | **Atmos users** (external) | Reference via `--add-dir`, plugin installation, or Git clone pointing to the Atmos repo |
 
-## Placement: `.claude/skills/`
+## Placement: `agent-skills/`
 
-### Why `.claude/skills/`
+### Why `agent-skills/`
 
-- **Canonical location**: Claude Code auto-discovers skills at `.claude/skills/<skill-name>/SKILL.md`.
-- **Already exists**: The Atmos repo has an empty `.claude/skills/` directory.
-- **Consistent**: Sits alongside `.claude/agents/` (9 existing agents) and `.claude/settings.local.json`.
-- **Auto-discovery**: Contributors get skills automatically when they clone the repo.
-- **External access**: Users can reference via `--add-dir` or clone the repo as a skill source.
+- **Tool-agnostic**: Not tied to any specific AI tool (Claude, Copilot, Codex, Gemini, Grok, etc.).
+- **Industry convention**: Follows the naming used by HashiCorp and Pulumi for their agent skills.
+- **Visible**: Top-level directory is easily discoverable by humans and AI tools alike.
+- **Standards-compliant**: Follows the [Agent Skills open standard](https://agentskills.io/specification).
+- **Co-located**: Skills stay in sync with the Atmos codebase, avoiding version drift.
+
+### Claude Code Auto-Discovery
+
+A symlink at `.claude/skills/ -> ../agent-skills/` enables Claude Code to auto-discover skills
+at the canonical `.claude/skills/<skill-name>/SKILL.md` path. Other AI tools can reference
+`agent-skills/` directly.
 
 ### Alternative considered: separate dedicated repo
 
@@ -255,103 +260,104 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 ## Directory Layout
 
 ```text
-.claude/
-├── agents/                              # Existing agents (9 files)
-├── skills/
-│   ├── AGENTS.md                        # Skill-activation router
-│   │
-│   ├── atmos-stacks/                    # Configuration
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── import-patterns.md
-│   │       └── inheritance-deep-merge.md
-│   │
-│   ├── atmos-components/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── component-types.md
-│   │       └── examples.md
-│   │
-│   ├── atmos-vendoring/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── vendor-manifest.md
-│   │
-│   ├── atmos-terraform/                 # Orchestration
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── commands-reference.md
-│   │       └── backend-configuration.md
-│   │
-│   ├── atmos-helmfile/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── commands-reference.md
-│   │
-│   ├── atmos-packer/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── commands-reference.md
-│   │
-│   ├── atmos-ansible/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── commands-reference.md
-│   │
-│   ├── atmos-workflows/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── workflow-syntax.md
-│   │
-│   ├── atmos-custom-commands/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── command-syntax.md
-│   │
-│   ├── atmos-auth/                      # Platform
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── providers-and-identities.md
-│   │       └── commands-reference.md
-│   │
-│   ├── atmos-stores/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── store-providers.md
-│   │
-│   ├── atmos-schemas/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       └── schema-structure.md
-│   │
-│   ├── atmos-gitops/                    # Integrations
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── github-actions.md
-│   │       └── spacelift.md
-│   │
-│   ├── atmos-validation/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── opa-policies.md
-│   │       └── json-schema.md
-│   │
-│   ├── atmos-templates/
-│   │   ├── SKILL.md
-│   │   └── references/
-│   │       ├── go-templates.md
-│   │       └── yaml-functions-reference.md
-│   │
-│   └── atmos-design-patterns/           # Guidance
-│       ├── SKILL.md
-│       └── references/
-│           ├── stack-organization.md
-│           └── version-management.md
+agent-skills/                                # Tool-agnostic skills (primary location)
+├── AGENTS.md                                # Skill-activation router
 │
-└── settings.local.json                  # Existing settings
+├── atmos-stacks/                            # Configuration
+│   ├── SKILL.md
+│   └── references/
+│       ├── import-patterns.md
+│       └── inheritance-deep-merge.md
+│
+├── atmos-components/
+│   ├── SKILL.md
+│   └── references/
+│       ├── component-types.md
+│       └── examples.md
+│
+├── atmos-vendoring/
+│   ├── SKILL.md
+│   └── references/
+│       └── vendor-manifest.md
+│
+├── atmos-terraform/                         # Orchestration
+│   ├── SKILL.md
+│   └── references/
+│       ├── commands-reference.md
+│       └── backend-configuration.md
+│
+├── atmos-helmfile/
+│   ├── SKILL.md
+│   └── references/
+│       └── commands-reference.md
+│
+├── atmos-packer/
+│   ├── SKILL.md
+│   └── references/
+│       └── commands-reference.md
+│
+├── atmos-ansible/
+│   ├── SKILL.md
+│   └── references/
+│       └── commands-reference.md
+│
+├── atmos-workflows/
+│   ├── SKILL.md
+│   └── references/
+│       └── workflow-syntax.md
+│
+├── atmos-custom-commands/
+│   ├── SKILL.md
+│   └── references/
+│       └── command-syntax.md
+│
+├── atmos-auth/                              # Platform
+│   ├── SKILL.md
+│   └── references/
+│       ├── providers-and-identities.md
+│       └── commands-reference.md
+│
+├── atmos-stores/
+│   ├── SKILL.md
+│   └── references/
+│       └── store-providers.md
+│
+├── atmos-schemas/
+│   ├── SKILL.md
+│   └── references/
+│       └── schema-structure.md
+│
+├── atmos-gitops/                            # Integrations
+│   ├── SKILL.md
+│   └── references/
+│       ├── github-actions.md
+│       └── spacelift.md
+│
+├── atmos-validation/
+│   ├── SKILL.md
+│   └── references/
+│       ├── opa-policies.md
+│       └── json-schema.md
+│
+├── atmos-templates/
+│   ├── SKILL.md
+│   └── references/
+│       ├── go-templates.md
+│       └── yaml-functions-reference.md
+│
+└── atmos-design-patterns/                   # Guidance
+    ├── SKILL.md
+    └── references/
+        ├── stack-organization.md
+        └── version-management.md
+
+.claude/
+├── agents/                                  # Existing agents (9 files)
+├── skills -> ../agent-skills                # Symlink for Claude Code auto-discovery
+└── settings.local.json                      # Existing settings
 ```
 
-**Total: 41 files** (16 SKILL.md + 24 references + AGENTS.md)
+**Total: 41 files** (16 SKILL.md + 24 references + AGENTS.md) + 1 symlink
 
 ## Implementation Plan
 
