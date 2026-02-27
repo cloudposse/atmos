@@ -1,10 +1,9 @@
 ---
-skill: atmos-introspection
-version: 1.0.0
-category: configuration
-description: >
-  Teaches AI assistants how to query and introspect Atmos projects using describe
-  and list commands to understand stack configurations, dependencies, and affected components.
+name: atmos-introspection
+description: "Introspection & Querying: describe/list commands, config filtering, workspace introspection, dependency graphs, YQ integration"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
 references:
   - references/commands-reference.md
 ---

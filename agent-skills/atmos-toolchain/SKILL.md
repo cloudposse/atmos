@@ -1,10 +1,9 @@
 ---
-skill: atmos-toolchain
-version: 1.0.0
-category: platform
-description: >
-  Teaches AI assistants how to manage CLI tool versions with the Atmos toolchain,
-  including Aqua registry integration, .tool-versions files, and custom registries.
+name: atmos-toolchain
+description: "Toolchain management: install/exec/search/env commands, Aqua registry integration, version pinning, multi-tooling execution"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
 references:
   - references/commands-reference.md
 ---

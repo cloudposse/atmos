@@ -1,10 +1,9 @@
 ---
-skill: atmos-devcontainer
-version: 1.0.0
-category: integrations
-description: >
-  Teaches AI assistants how to configure and manage Atmos devcontainers for
-  standardized development environments with Docker or Podman.
+name: atmos-devcontainer
+description: "Devcontainer orchestration: start/stop/attach/shell/exec/rebuild, instance management, config handling, VS Code integration"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
 references:
   - references/commands-reference.md
 ---
