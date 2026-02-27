@@ -9,8 +9,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	awsOrg "github.com/cloudposse/atmos/pkg/aws/organization"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -728,35 +730,28 @@ func TestCacheWithDifferentConfigFiles(t *testing.T) {
 	assert.Equal(t, 2, callCount, "Different config file should result in new getter call")
 }
 
-// mockAWSOrganizationGetter is a mock implementation of AWSOrganizationGetter for testing.
-type mockAWSOrganizationGetter struct {
-	info *AWSOrganizationInfo
-	err  error
-}
-
-func (m *mockAWSOrganizationGetter) GetOrganization(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	authContext *schema.AWSAuthContext,
-) (*AWSOrganizationInfo, error) {
-	return m.info, m.err
-}
-
 // runAWSOrgYamlFuncTest is a helper that reduces duplication in AWS organization YAML function tests.
 func runAWSOrgYamlFuncTest(
+	t *testing.T,
 	input string,
 	mockInfo *AWSOrganizationInfo,
 	mockErr error,
 	testFunc func(*schema.AtmosConfiguration, string, *schema.ConfigAndStacksInfo) any,
 ) any {
+	t.Helper()
+
 	// Clear cache before each test.
 	ClearAWSOrganizationCache()
 
-	// Set up mock.
-	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
-		info: mockInfo,
-		err:  mockErr,
-	})
+	// Set up generated mock.
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(mockInfo, mockErr).
+		AnyTimes()
+
+	restore := SetAWSOrganizationGetter(mock)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -799,7 +794,7 @@ func TestProcessTagAwsOrganizationID(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAWSOrgYamlFuncTest(tt.input, tt.mockInfo, tt.mockErr, processTagAwsOrganizationID)
+			result := runAWSOrgYamlFuncTest(t, tt.input, tt.mockInfo, tt.mockErr, processTagAwsOrganizationID)
 			assert.Equal(t, tt.expectedResult, result)
 		})
 	}
@@ -838,7 +833,7 @@ func TestProcessTagAwsOrganizationID_ErrorExits(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Use subprocess pattern: re-invoke the test binary with the specific helper.
-			cmd := exec.Command(os.Args[0], "-test.run=TestProcessTagAwsOrganizationID_ErrorHelper")
+			cmd := exec.Command(os.Args[0], "-test.run=^TestProcessTagAwsOrganizationID_ErrorHelper$")
 			cmd.Env = append(os.Environ(), tt.envVar+"="+tt.envVal)
 
 			err := cmd.Run()
@@ -877,10 +872,15 @@ func TestProcessTagAwsOrganizationID_ErrorHelper(t *testing.T) {
 	}
 
 	ClearAWSOrganizationCache()
-	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
-		info: mockInfo,
-		err:  mockErr,
-	})
+
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(mockInfo, mockErr).
+		AnyTimes()
+
+	restore := SetAWSOrganizationGetter(mock)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -893,13 +893,17 @@ func TestProcessTagAwsOrganizationID_ErrorHelper(t *testing.T) {
 func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {
 	ClearAWSOrganizationCache()
 
-	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
-		info: &AWSOrganizationInfo{
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&AWSOrganizationInfo{
 			ID:              "o-authctx",
 			MasterAccountID: "444444444444",
-		},
-		err: nil,
-	})
+		}, nil).
+		Times(1)
+
+	restore := SetAWSOrganizationGetter(mock)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -919,13 +923,17 @@ func TestProcessTagAwsOrganizationIDWithAuthContext(t *testing.T) {
 func TestProcessTagAwsOrganizationIDWithNilStackInfo(t *testing.T) {
 	ClearAWSOrganizationCache()
 
-	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
-		info: &AWSOrganizationInfo{
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&AWSOrganizationInfo{
 			ID:              "o-nilstack",
 			MasterAccountID: "555555555555",
-		},
-		err: nil,
-	})
+		}, nil).
+		Times(1)
+
+	restore := SetAWSOrganizationGetter(mock)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -937,13 +945,17 @@ func TestProcessTagAwsOrganizationIDWithNilStackInfo(t *testing.T) {
 func TestProcessSimpleTagsWithAWSOrganizationID(t *testing.T) {
 	ClearAWSOrganizationCache()
 
-	restore := SetAWSOrganizationGetter(&mockAWSOrganizationGetter{
-		info: &AWSOrganizationInfo{
+	ctrl := gomock.NewController(t)
+	mock := awsOrg.NewMockGetter(ctrl)
+	mock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&AWSOrganizationInfo{
 			ID:              "o-simpletag",
 			MasterAccountID: "666666666666",
-		},
-		err: nil,
-	})
+		}, nil).
+		Times(1)
+
+	restore := SetAWSOrganizationGetter(mock)
 	defer restore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -1000,17 +1012,17 @@ func TestOrganizationCacheIndependentFromIdentityCache(t *testing.T) {
 	defer identityRestore()
 
 	// Set up organization mock.
-	orgCallCount := 0
-	orgMock := &mockAWSOrganizationGetter{
-		info: &AWSOrganizationInfo{
+	ctrl := gomock.NewController(t)
+	orgMock := awsOrg.NewMockGetter(ctrl)
+	orgMock.EXPECT().
+		GetOrganization(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&AWSOrganizationInfo{
 			ID:              "o-independent",
 			MasterAccountID: "111111111111",
-		},
-	}
-	orgRestore := SetAWSOrganizationGetter(&countingAWSOrgGetter{
-		wrapped:   orgMock,
-		callCount: &orgCallCount,
-	})
+		}, nil).
+		Times(1)
+
+	orgRestore := SetAWSOrganizationGetter(orgMock)
 	defer orgRestore()
 
 	atmosConfig := &schema.AtmosConfiguration{}
@@ -1021,34 +1033,17 @@ func TestOrganizationCacheIndependentFromIdentityCache(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "111111111111", identity.Account)
 	assert.Equal(t, 1, identityCallCount)
-	assert.Equal(t, 0, orgCallCount, "Organization getter should not have been called")
 
-	// Call organization.
+	// Call organization (gomock enforces Times(1) — only one call allowed).
 	orgInfo, err := getAWSOrganizationCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "o-independent", orgInfo.ID)
 	assert.Equal(t, 1, identityCallCount, "Identity getter should not be called again")
-	assert.Equal(t, 1, orgCallCount)
 
 	// Clear only identity cache - organization should still be cached.
+	// A second call to getAWSOrganizationCached should use cache (no additional mock call).
 	ClearAWSIdentityCache()
 	orgInfo2, err := getAWSOrganizationCached(ctx, atmosConfig, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "o-independent", orgInfo2.ID)
-	assert.Equal(t, 1, orgCallCount, "Organization should still be cached after clearing identity cache")
-}
-
-// countingAWSOrgGetter wraps another getter and counts calls.
-type countingAWSOrgGetter struct {
-	wrapped   AWSOrganizationGetter
-	callCount *int
-}
-
-func (c *countingAWSOrgGetter) GetOrganization(
-	ctx context.Context,
-	atmosConfig *schema.AtmosConfiguration,
-	authContext *schema.AWSAuthContext,
-) (*AWSOrganizationInfo, error) {
-	*c.callCount++
-	return c.wrapped.GetOrganization(ctx, atmosConfig, authContext)
 }

@@ -2,7 +2,6 @@
  DEBU  processConfigImports resolved paths count=5
  DEBU  processConfigImports resolved paths count=5
  DEBU  Loading toolchain registries from atmos.yaml registryCount=0
- DEBU  gh auth token failed (gh CLI may not be installed or authenticated) error="exit status 1"
  DEBU  Successfully loaded configured registry from atmos.yaml
  DEBU  processConfigImports resolved paths count=5
  DEBU  processConfigImports resolved paths count=5

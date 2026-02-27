@@ -74,7 +74,7 @@ func (d *defaultGetter) GetOrganization(
 	// Extract values from the organization output.
 	org := output.Organization
 	if org == nil {
-		return info, nil
+		return nil, fmt.Errorf("%w: describe organization returned empty organization payload", errUtils.ErrAwsDescribeOrganization)
 	}
 
 	if org.Id != nil {
@@ -109,7 +109,11 @@ func SetGetter(g Getter) func() {
 	defer perf.Track(nil, "organization.SetGetter")()
 
 	original := getter
-	getter = g
+	if g == nil {
+		getter = &defaultGetter{}
+	} else {
+		getter = g
+	}
 	return func() {
 		getter = original
 	}
