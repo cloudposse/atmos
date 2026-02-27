@@ -222,6 +222,7 @@ func TestCreateAuthManager(t *testing.T) {
 		{
 			name: "valid config with provider and identity",
 			config: &schema.AuthConfig{
+				Realm: "test-realm",
 				Providers: map[string]schema.Provider{
 					"test-provider": {
 						Kind:     "aws/iam-identity-center",
@@ -253,7 +254,7 @@ func TestCreateAuthManager(t *testing.T) {
 		},
 		{
 			name:        "empty config - succeeds but has no providers/identities",
-			config:      &schema.AuthConfig{},
+			config:      &schema.AuthConfig{Realm: "test-realm"},
 			expectError: false,
 		},
 	}
@@ -262,7 +263,7 @@ func TestCreateAuthManager(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_ = NewTestKit(t) // Isolate RootCmd state per subtest.
 
-			manager, err := createAuthManager(tt.config)
+			manager, err := createAuthManager(tt.config, "")
 
 			if tt.expectError {
 				assert.Error(t, err)
@@ -730,6 +731,7 @@ func TestCreateAuthManagerExported(t *testing.T) {
 		{
 			name: "valid config",
 			config: &schema.AuthConfig{
+				Realm: "test-realm",
 				Providers: map[string]schema.Provider{
 					"test-provider": {
 						Kind:     "aws/iam-identity-center",
@@ -749,7 +751,7 @@ func TestCreateAuthManagerExported(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			manager, err := CreateAuthManager(tt.config)
+			manager, err := CreateAuthManager(tt.config, "")
 
 			if tt.expectError {
 				assert.Error(t, err)

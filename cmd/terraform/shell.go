@@ -67,6 +67,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 		processFunctions := v.GetBool("process-functions")
 		skip := v.GetStringSlice("skip")
 		dryRun := v.GetBool("dry-run")
+		identity := v.GetString("identity")
 
 		// Prompt for stack if missing.
 		if stack == "" {
@@ -103,6 +104,7 @@ as you would in a typical setup, but within the configured Atmos environment.`,
 			Component: component,
 			Stack:     stack,
 			DryRun:    dryRun,
+			Identity:  identity,
 			ProcessingOptions: e.ProcessingOptions{
 				ProcessTemplates: processTemplates,
 				ProcessFunctions: processFunctions,

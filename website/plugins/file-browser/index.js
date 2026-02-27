@@ -48,6 +48,7 @@ const TAGS_MAP = {
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
   'stack-names': ['Stacks'],
+  'demo-ansible': ['Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -111,7 +112,9 @@ const DOCS_MAP = {
     { label: 'CLI Configuration', url: '/cli/configuration' },
   ],
   toolchain: [
-    { label: 'Getting Started', url: '/quick-start' },
+    { label: 'Toolchain Configuration', url: '/cli/configuration/toolchain' },
+    { label: 'Toolchain Registries', url: '/cli/configuration/toolchain/registries' },
+    { label: 'Toolchain Commands', url: '/cli/commands/toolchain/usage' },
   ],
   devcontainer: [
     { label: 'Devcontainer Configuration', url: '/cli/configuration/devcontainer' },
@@ -124,6 +127,9 @@ const DOCS_MAP = {
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
+  ],
+  'demo-ansible': [
+    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
   ],
 };
 

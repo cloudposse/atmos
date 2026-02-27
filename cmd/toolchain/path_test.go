@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/cloudposse/atmos/pkg/schema"
-	"github.com/cloudposse/atmos/toolchain"
+	"github.com/cloudposse/atmos/pkg/toolchain"
 )
 
 // Provider and structure tests are in command_provider_test.go.

@@ -44,7 +44,80 @@ func TestNewAzureFileManager(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mgr, err := NewAzureFileManager(tt.basePath)
+			mgr, err := NewAzureFileManager(tt.basePath, "")
+
+			if tt.expectError {
+				require.Error(t, err)
+				assert.Nil(t, mgr)
+				return
+			}
+
+			require.NoError(t, err)
+			require.NotNil(t, mgr)
+			if tt.checkPath != nil {
+				tt.checkPath(t, mgr.baseDir)
+			}
+		})
+	}
+}
+
+func TestNewAzureFileManager_WithRealm(t *testing.T) {
+	tests := []struct {
+		name        string
+		basePath    string
+		realm       string
+		expectError bool
+		checkPath   func(*testing.T, string)
+	}{
+		{
+			name:        "custom basePath with realm",
+			basePath:    "/tmp/azure-test",
+			realm:       "test-realm",
+			expectError: false,
+			checkPath: func(t *testing.T, baseDir string) {
+				// Custom basePath is used as-is without realm.
+				assert.Equal(t, "/tmp/azure-test", baseDir)
+			},
+		},
+		{
+			name:        "empty basePath with realm uses default with realm",
+			basePath:    "",
+			realm:       "my-realm",
+			expectError: false,
+			checkPath: func(t *testing.T, baseDir string) {
+				// Should contain .azure/atmos/realm.
+				assert.Contains(t, baseDir, ".azure")
+				assert.Contains(t, baseDir, "atmos")
+				assert.Contains(t, baseDir, "my-realm")
+			},
+		},
+		{
+			name:        "empty basePath with empty realm uses default without realm",
+			basePath:    "",
+			realm:       "",
+			expectError: false,
+			checkPath: func(t *testing.T, baseDir string) {
+				// Should contain .azure/atmos but not have trailing realm.
+				assert.Contains(t, baseDir, ".azure")
+				assert.Contains(t, baseDir, "atmos")
+			},
+		},
+		{
+			name:        "empty basePath with auto-generated realm hash",
+			basePath:    "",
+			realm:       "a1b2c3d4",
+			expectError: false,
+			checkPath: func(t *testing.T, baseDir string) {
+				assert.Contains(t, baseDir, ".azure")
+				assert.Contains(t, baseDir, "atmos")
+				assert.Contains(t, baseDir, "a1b2c3d4")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mgr, err := NewAzureFileManager(tt.basePath, tt.realm)
 
 			if tt.expectError {
 				require.Error(t, err)

@@ -32,7 +32,7 @@ type ShowConfig struct {
 type WorkflowStep struct {
 	// Existing fields.
 	Name             string       `yaml:"name,omitempty" json:"name,omitempty" mapstructure:"name"`
-	Command          string       `yaml:"command,omitempty" json:"command,omitempty" mapstructure:"command"`
+	Command          string       `yaml:"command" json:"command" mapstructure:"command"`
 	Stack            string       `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
 	Type             string       `yaml:"type,omitempty" json:"type,omitempty" mapstructure:"type"`
 	WorkingDirectory string       `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
@@ -105,9 +105,10 @@ type WorkflowDefinition struct {
 	Description      string `yaml:"description,omitempty" json:"description,omitempty" mapstructure:"description"`
 	WorkingDirectory string `yaml:"working_directory,omitempty" json:"working_directory,omitempty" mapstructure:"working_directory"`
 	// Dependencies lists external tools required for this workflow to execute successfully.
-	Dependencies *Dependencies  `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
-	Steps        []WorkflowStep `yaml:"steps" json:"steps" mapstructure:"steps"`
-	Stack        string         `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Dependencies *Dependencies     `yaml:"dependencies,omitempty" json:"dependencies,omitempty" mapstructure:"dependencies"`
+	Steps        []WorkflowStep    `yaml:"steps" json:"steps" mapstructure:"steps"`
+	Stack        string            `yaml:"stack,omitempty" json:"stack,omitempty" mapstructure:"stack"`
+	Env          map[string]string `yaml:"env,omitempty" json:"env,omitempty" mapstructure:"env"`
 
 	// Output mode fields.
 	Output   string          `yaml:"output,omitempty" json:"output,omitempty" mapstructure:"output"`       // Default output mode for steps.

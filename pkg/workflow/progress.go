@@ -74,6 +74,7 @@ func (r *ProgressRenderer) Update(current int, stepName string) {
 
 // Render renders the progress bar with just the step name on the left.
 // Format: stepName ... [████░░░] n/m
+//
 // Deprecated: Use RenderWithLabel for combined step label + progress.
 func (r *ProgressRenderer) Render() {
 	if r == nil || !r.enabled {

@@ -13,7 +13,7 @@ tests:
       - "validate"
     expect:
       diff: []
-      stdout:
+      stderr:
         - "Authentication configuration is valid"
       exit_code: 0
 
@@ -325,6 +325,8 @@ tests:
     description: "Test auth login with mock identity (succeeds)"
     workdir: "fixtures/scenarios/atmos-auth-mock/"
     command: "atmos"
+    env:
+      ATMOS_AUTH_REALM: "test-realm"
     args:
       - "auth"
       - "login"

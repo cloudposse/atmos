@@ -21,11 +21,17 @@ atmos_cli_config:
       base_path: components/helmfile
       use_eks: true
       kubeconfig_path: /dev/shm
-      helm_aws_profile_pattern: '{namespace}-{tenant}-gbl-{stage}-helm'
-      cluster_name_pattern: '{namespace}-{tenant}-{environment}-{stage}-eks-cluster'
+      helm_aws_profile_pattern: ""
+      cluster_name_pattern: ""
+      cluster_name_template: '{{ .vars.namespace }}-{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}-eks-cluster'
+      cluster_name: ""
       command: ""
       auto_generate_files: false
     packer:
+      base_path: ""
+      command: ""
+      auto_generate_files: false
+    ansible:
       base_path: ""
       command: ""
       auto_generate_files: false
@@ -70,6 +76,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 181
@@ -80,6 +87,7 @@ component_info:
         default: false
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 92
@@ -94,6 +102,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 146
@@ -108,6 +117,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 20
@@ -125,6 +135,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 6
@@ -158,6 +169,7 @@ component_info:
           tenant: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 50
@@ -170,6 +182,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 137
@@ -192,6 +205,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 260
@@ -202,6 +216,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 97
@@ -212,6 +227,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 115
@@ -222,6 +238,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 199
@@ -236,6 +253,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 211
@@ -246,6 +264,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 205
@@ -264,6 +283,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 53
@@ -278,6 +298,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 67
@@ -294,6 +315,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 76
@@ -306,6 +328,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 31
@@ -323,6 +346,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 40
@@ -337,6 +361,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 226
@@ -350,6 +375,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 191
@@ -366,6 +392,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 242
@@ -385,6 +412,7 @@ component_info:
           - default
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 157
@@ -395,6 +423,7 @@ component_info:
         default: true
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 136
@@ -405,6 +434,7 @@ component_info:
         default: 0
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 147
@@ -418,6 +448,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 127
@@ -428,6 +459,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 103
@@ -438,6 +470,7 @@ component_info:
         default: false
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 193
@@ -448,6 +481,7 @@ component_info:
         default: true
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 107
@@ -462,6 +496,7 @@ component_info:
         default: []
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 125
@@ -472,6 +507,7 @@ component_info:
         default: false
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 113
@@ -482,6 +518,7 @@ component_info:
         default: t3.micro
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 119
@@ -494,6 +531,7 @@ component_info:
         default: true
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 98
@@ -507,6 +545,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 201
@@ -517,6 +556,7 @@ component_info:
         default: null
         required: true
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 1
@@ -527,6 +567,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 121
@@ -537,6 +578,7 @@ component_info:
         default: null
         required: true
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 142
@@ -549,6 +591,7 @@ component_info:
         default: {}
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 172
@@ -559,6 +602,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/context.tf
           line: 109
@@ -569,6 +613,7 @@ component_info:
         default: ""
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 171
@@ -579,6 +624,7 @@ component_info:
         default: ""
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 177
@@ -592,6 +638,7 @@ component_info:
         default: null
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 183
@@ -602,6 +649,7 @@ component_info:
         default: true
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 153
@@ -612,6 +660,7 @@ component_info:
         default: s3
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 165
@@ -622,6 +671,7 @@ component_info:
         default: ALL
         required: false
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/variables.tf
           line: 159
@@ -630,6 +680,7 @@ component_info:
         name: availability_zones
         description: List of Availability Zones where subnets were created
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 117
@@ -638,6 +689,7 @@ component_info:
         name: az_private_subnets_map
         description: Map of AZ names to list of private subnet IDs in the AZs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 122
@@ -646,6 +698,7 @@ component_info:
         name: az_public_subnets_map
         description: Map of AZ names to list of public subnet IDs in the AZs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 127
@@ -654,6 +707,7 @@ component_info:
         name: interface_vpc_endpoints
         description: List of Interface VPC Endpoints in this VPC.
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 112
@@ -662,6 +716,7 @@ component_info:
         name: max_subnet_count
         description: Maximum allowed number of subnets before all subnet CIDRs need to be recomputed
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 102
@@ -670,6 +725,7 @@ component_info:
         name: nat_eip_protections
         description: List of AWS Shield Advanced Protections for NAT Elastic IPs.
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 107
@@ -678,6 +734,7 @@ component_info:
         name: nat_gateway_ids
         description: NAT Gateway IDs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 87
@@ -686,6 +743,7 @@ component_info:
         name: nat_gateway_public_ips
         description: NAT Gateway public IPs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 97
@@ -694,6 +752,7 @@ component_info:
         name: nat_instance_ids
         description: NAT Instance IDs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 92
@@ -702,6 +761,7 @@ component_info:
         name: private_route_table_ids
         description: Private subnet route table IDs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 65
@@ -710,6 +770,7 @@ component_info:
         name: private_subnet_cidrs
         description: Private subnet CIDRs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 16
@@ -718,6 +779,7 @@ component_info:
         name: private_subnet_ids
         description: Private subnet IDs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 11
@@ -726,6 +788,7 @@ component_info:
         name: public_route_table_ids
         description: Public subnet route table IDs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 70
@@ -734,6 +797,7 @@ component_info:
         name: public_subnet_cidrs
         description: Public subnet CIDRs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 6
@@ -742,6 +806,7 @@ component_info:
         name: public_subnet_ids
         description: Public subnet IDs
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 1
@@ -750,6 +815,7 @@ component_info:
         name: route_tables
         description: Route tables info map
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 75
@@ -758,6 +824,7 @@ component_info:
         name: subnets
         description: Subnets info map
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 21
@@ -766,6 +833,7 @@ component_info:
         name: vpc
         description: VPC info map
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 55
@@ -774,6 +842,7 @@ component_info:
         name: vpc_cidr
         description: VPC CIDR
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 50
@@ -782,6 +851,7 @@ component_info:
         name: vpc_default_network_acl_id
         description: The ID of the network ACL created by default on VPC creation
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 35
@@ -790,6 +860,7 @@ component_info:
         name: vpc_default_security_group_id
         description: The ID of the security group created by default on VPC creation
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 40
@@ -798,6 +869,7 @@ component_info:
         name: vpc_id
         description: VPC ID
         sensitive: false
+        deprecated: ""
         pos:
           filename: /absolute/path/to/repo/examples/quick-start-advanced/components/terraform/vpc/outputs.tf
           line: 45

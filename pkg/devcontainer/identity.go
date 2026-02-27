@@ -83,7 +83,10 @@ func authenticateIdentity(ctx context.Context, identityName string) (*types.Whoa
 	// Create auth manager.
 	credStore := credentials.NewCredentialStore()
 	validator := validation.NewValidator()
-	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, nil)
+	authStackInfo := &schema.ConfigAndStacksInfo{
+		AuthContext: &schema.AuthContext{},
+	}
+	authManager, err := auth.NewAuthManager(&atmosConfig.Auth, credStore, validator, authStackInfo, atmosConfig.CliConfigPath)
 	if err != nil {
 		return nil, errUtils.Build(err).
 			WithExplanation("Failed to initialize authentication manager").

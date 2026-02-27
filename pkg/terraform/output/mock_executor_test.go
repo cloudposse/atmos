@@ -139,17 +139,22 @@ func (mr *MockTerraformRunnerMockRecorder) WorkspaceNew(ctx, workspace any, opts
 }
 
 // WorkspaceSelect mocks base method.
-func (m *MockTerraformRunner) WorkspaceSelect(ctx context.Context, workspace string) error {
+func (m *MockTerraformRunner) WorkspaceSelect(ctx context.Context, workspace string, opts ...tfexec.WorkspaceSelectOption) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WorkspaceSelect", ctx, workspace)
+	varargs := []any{ctx, workspace}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "WorkspaceSelect", varargs...)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // WorkspaceSelect indicates an expected call of WorkspaceSelect.
-func (mr *MockTerraformRunnerMockRecorder) WorkspaceSelect(ctx, workspace any) *gomock.Call {
+func (mr *MockTerraformRunnerMockRecorder) WorkspaceSelect(ctx, workspace any, opts ...any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkspaceSelect", reflect.TypeOf((*MockTerraformRunner)(nil).WorkspaceSelect), ctx, workspace)
+	varargs := append([]any{ctx, workspace}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WorkspaceSelect", reflect.TypeOf((*MockTerraformRunner)(nil).WorkspaceSelect), varargs...)
 }
 
 // MockComponentDescriber is a mock of ComponentDescriber interface.

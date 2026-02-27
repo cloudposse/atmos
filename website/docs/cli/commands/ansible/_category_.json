@@ -1,0 +1,11 @@
+{
+  "label": "ansible",
+  "position": 1,
+  "className": "command",
+  "collapsible": true,
+  "collapsed": true,
+  "link": {
+    "type": "doc",
+    "id": "usage"
+  }
+}

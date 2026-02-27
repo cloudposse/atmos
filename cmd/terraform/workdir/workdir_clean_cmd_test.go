@@ -404,3 +404,135 @@ func TestCleanSpecificWorkdir_VariousInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestCleanExpiredWorkdirs_Success(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanExpiredWorkdirs(gomock.Any(), "7d", false).Return(nil)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanExpiredWorkdirs(atmosConfig, "7d", false)
+	assert.NoError(t, err)
+}
+
+func TestCleanExpiredWorkdirs_DryRun(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	mock.EXPECT().CleanExpiredWorkdirs(gomock.Any(), "30d", true).Return(nil)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanExpiredWorkdirs(atmosConfig, "30d", true)
+	assert.NoError(t, err)
+}
+
+func TestCleanExpiredWorkdirs_Error(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mock := NewMockWorkdirManager(ctrl)
+	expectedErr := errUtils.Build(errUtils.ErrWorkdirClean).
+		WithExplanation("invalid TTL").
+		Err()
+	mock.EXPECT().CleanExpiredWorkdirs(gomock.Any(), "invalid", false).Return(expectedErr)
+
+	// Save and restore.
+	original := workdirManager
+	defer func() { workdirManager = original }()
+	SetWorkdirManager(mock)
+
+	atmosConfig := &schema.AtmosConfiguration{}
+	err := cleanExpiredWorkdirs(atmosConfig, "invalid", false)
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+// RunE validation tests - test the command entry point validation logic.
+
+// resetViperForTest resets viper flags for test isolation.
+// Note: cmd.NewTestKit cannot be used here due to circular import between
+// cmd/terraform/workdir and cmd packages.
+func resetViperForTest(t *testing.T) {
+	t.Helper()
+	v := viper.GetViper()
+	v.Set("all", false)
+	v.Set("expired", false)
+	v.Set("ttl", "")
+	v.Set("dry-run", false)
+	v.Set("stack", "")
+}
+
+func TestCleanCmd_RunE_ExpiredWithoutTTL(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("expired", true)
+	v.Set("ttl", "") // No TTL provided.
+
+	err := cleanCmd.RunE(cleanCmd, []string{})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ExpiredWithAll(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("expired", true)
+	v.Set("ttl", "7d")
+	v.Set("all", true) // Cannot use --all with --expired.
+
+	err := cleanCmd.RunE(cleanCmd, []string{})
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ExpiredWithComponent(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("expired", true)
+	v.Set("ttl", "7d")
+
+	err := cleanCmd.RunE(cleanCmd, []string{"vpc"}) // Component arg with --expired.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ActualCall_AllWithComponent(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("all", true)
+
+	err := cleanCmd.RunE(cleanCmd, []string{"vpc"}) // --all with component arg.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ActualCall_NoFlagsNoArgs(t *testing.T) {
+	resetViperForTest(t)
+
+	err := cleanCmd.RunE(cleanCmd, []string{}) // No flags, no args.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}
+
+func TestCleanCmd_RunE_ActualCall_ComponentWithoutStack(t *testing.T) {
+	resetViperForTest(t)
+	v := viper.GetViper()
+	v.Set("stack", "") // No stack provided.
+
+	err := cleanCmd.RunE(cleanCmd, []string{"vpc"}) // Component without --stack.
+	assert.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrWorkdirClean)
+}

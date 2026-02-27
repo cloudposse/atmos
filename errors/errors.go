@@ -101,6 +101,7 @@ var (
 	ErrPathNotWithinComponentBase = errors.New("path is not within component base path")
 	ErrStackRequired              = errors.New("--stack flag is required")
 	ErrStackHasNoLocals           = errors.New("stack has no locals defined")
+	ErrNoStackManifestsFound      = errors.New("no stack manifests found")
 
 	// ErrPlanHasDiff is returned when there are differences between two Terraform plan files.
 	ErrPlanHasDiff = errors.New("plan files have differences")
@@ -111,6 +112,7 @@ var (
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
+	ErrAwsDescribeOrganization          = errors.New("failed to describe AWS organization")
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")
@@ -140,6 +142,7 @@ var (
 	ErrGetObjectFromS3           = errors.New("failed to get object from S3")
 	ErrReadS3ObjectBody          = errors.New("failed to read S3 object body")
 	ErrS3BucketAccessDenied      = errors.New("access denied to S3 bucket")
+	ErrInvalidSSECustomerKey     = errors.New("invalid SSE-C customer encryption key")
 	ErrCreateGCSClient           = errors.New("failed to create GCS client")
 	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
 	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
@@ -223,6 +226,7 @@ var (
 	ErrLatestFileNotFound           = errors.New("latest version file not found")
 	ErrRegistryNotReachable         = errors.New("registry not reachable")
 	ErrToolNotInRegistry            = errors.New("tool not in registry")
+	ErrToolPlatformNotSupported     = errors.New("tool does not support this platform")
 	ErrAliasNotFound                = errors.New("alias not found")
 	ErrBinaryNotExecutable          = errors.New("binary not executable")
 	ErrBinaryNotFound               = errors.New("binary not found")
@@ -230,6 +234,7 @@ var (
 	ErrNoAssetTemplate              = errors.New("no asset template defined")
 	ErrAssetTemplateInvalid         = errors.New("asset template invalid")
 	ErrToolVersionsFileOperation    = errors.New("tool-versions file operation failed")
+	ErrNoToolsConfigured            = errors.New("no tools configured")
 	ErrUnsupportedVersionConstraint = errors.New("unsupported version constraint format")
 
 	// Flag validation errors.
@@ -407,6 +412,11 @@ var (
 	// Validation errors.
 	ErrValidationFailed = errors.New("validation failed")
 
+	// EditorConfig validation errors.
+	ErrEditorConfigValidationFailed = errors.New("EditorConfig validation failed")
+	ErrEditorConfigVersionMismatch  = errors.New("EditorConfig version mismatch")
+	ErrEditorConfigGetFiles         = errors.New("failed to get files for EditorConfig validation")
+
 	// Global/Stack-level section errors.
 	ErrInvalidVarsSection               = errors.New("invalid vars section")
 	ErrInvalidSettingsSection           = errors.New("invalid settings section")
@@ -453,6 +463,8 @@ var (
 	ErrMissingHelmfileKubeconfigPath     = errors.New("helmfile kubeconfig path is required")
 	ErrMissingHelmfileAwsProfilePattern  = errors.New("helmfile AWS profile pattern is required")
 	ErrMissingHelmfileClusterNamePattern = errors.New("helmfile cluster name pattern is required")
+	ErrMissingHelmfileClusterName        = errors.New("helmfile cluster name is required")
+	ErrMissingHelmfileAuth               = errors.New("helmfile AWS authentication is required")
 
 	// Packer configuration errors.
 	ErrMissingPackerBasePath = errors.New("packer base path is required")
@@ -464,15 +476,31 @@ var (
 	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
 	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
 
+	// Ansible configuration errors.
+	ErrMissingAnsibleBasePath = errors.New("ansible base path is required")
+
+	// Ansible-specific subsection errors.
+	ErrInvalidAnsibleSection  = errors.New("invalid ansible section")
+	ErrInvalidAnsibleCommand  = errors.New("invalid ansible command")
+	ErrInvalidAnsibleVars     = errors.New("invalid ansible vars section")
+	ErrInvalidAnsibleSettings = errors.New("invalid ansible settings section")
+	ErrInvalidAnsibleEnv      = errors.New("invalid ansible env section")
+	ErrInvalidAnsibleAuth     = errors.New("invalid ansible auth section")
+
+	// Ansible execution errors.
+	ErrAnsiblePlaybookMissing = errors.New("ansible playbook is required")
+
 	// Component type-specific section errors.
 	ErrInvalidComponentsTerraform = errors.New("invalid components.terraform section")
 	ErrInvalidComponentsHelmfile  = errors.New("invalid components.helmfile section")
 	ErrInvalidComponentsPacker    = errors.New("invalid components.packer section")
+	ErrInvalidComponentsAnsible   = errors.New("invalid components.ansible section")
 
 	// Specific component configuration errors.
 	ErrInvalidSpecificTerraformComponent = errors.New("invalid terraform component configuration")
 	ErrInvalidSpecificHelmfileComponent  = errors.New("invalid helmfile component configuration")
 	ErrInvalidSpecificPackerComponent    = errors.New("invalid packer component configuration")
+	ErrInvalidSpecificAnsibleComponent   = errors.New("invalid ansible component configuration")
 
 	// Pro API client errors.
 	ErrFailedToCreateRequest        = errors.New("failed to create request")
@@ -564,6 +592,7 @@ var (
 	ErrCopyFile            = errors.New("failed to copy file")
 	ErrCreateDirectory     = errors.New("failed to create directory")
 	ErrOpenFile            = errors.New("failed to open file")
+	ErrWriteFile           = errors.New("failed to write to file")
 	ErrStatFile            = errors.New("failed to stat file")
 	ErrRemoveDirectory     = errors.New("failed to remove directory")
 	ErrSetPermissions      = errors.New("failed to set permissions")
@@ -625,6 +654,10 @@ var (
 	ErrInvalidProviderKind          = errors.New("invalid provider kind")
 	ErrInvalidProviderConfig        = errors.New("invalid provider config")
 	ErrAuthenticationFailed         = errors.New("authentication failed")
+	ErrInvalidADCContent            = errors.New("invalid ADC content")
+	ErrWriteADCFile                 = errors.New("failed to write ADC file")
+	ErrWritePropertiesFile          = errors.New("failed to write properties file")
+	ErrWriteAccessTokenFile         = errors.New("failed to write access token file")
 	ErrPostAuthenticationHookFailed = errors.New("post authentication hook failed")
 	ErrAuthManager                  = errors.New("auth manager error")
 	ErrDefaultIdentity              = errors.New("default identity error")
@@ -689,6 +722,16 @@ var (
 
 	ErrAuthOidcDecodeFailed    = errors.New("failed to decode OIDC token")
 	ErrAuthOidcUnmarshalFailed = errors.New("failed to unmarshal oidc claims")
+
+	// Realm errors.
+	ErrFailedToComputeRealm = errors.New("failed to compute realm")
+	ErrInvalidRealm         = errors.New("invalid realm value")
+	ErrEmptyRealm           = errors.New("realm is required for credential isolation but was not set")
+
+	// Logout errors.
+	ErrFailedGetConfigDir   = errors.New("failed to get config directory")
+	ErrFailedDiscoverRealms = errors.New("failed to discover realms")
+	ErrFailedRemoveRealm    = errors.New("failed to remove realm")
 
 	// Store and hook errors.
 	ErrNilTerraformOutput = errors.New("terraform output returned nil")

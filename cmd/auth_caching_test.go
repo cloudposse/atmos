@@ -326,11 +326,11 @@ func TestKeyringStoreRetrieve(t *testing.T) {
 	}
 
 	// Store credentials
-	err := store.Store("test-identity", creds)
+	err := store.Store("test-identity", creds, "")
 	require.NoError(t, err, "Should store credentials")
 
 	// Retrieve credentials
-	retrieved, err := store.Retrieve("test-identity")
+	retrieved, err := store.Retrieve("test-identity", "")
 	require.NoError(t, err, "Should retrieve credentials")
 
 	// Verify type
