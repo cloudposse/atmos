@@ -1,7 +1,7 @@
 # Atmos Agent Instructions
 
 Atmos is a universal tool for DevOps and Cloud Automation by Cloud Posse. It orchestrates
-Terraform/OpenTofu/Packer/Helmfile by separating infrastructure code (components) from configuration (stacks).
+Terraform/OpenTofu/Packer/Helmfile/Ansible by separating infrastructure code (components) from configuration (stacks).
 You write a Terraform root module once, then deploy it across many environments, accounts, and
 regions using stack YAML manifests that are deep-merged through an inheritance hierarchy.
 
@@ -37,17 +37,17 @@ atmos workflow <name> -f <file>                  # Run a workflow
 
 When a task involves Atmos, activate the matching skill for detailed guidance.
 
-| Task                                                                                                                  | Skill                   | Path                                        |
-|-----------------------------------------------------------------------------------------------------------------------|-------------------------|---------------------------------------------|
-| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml stacks config | `atmos-stacks`          | `atmos-stacks/SKILL.md`                     |
-| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `atmos-components/SKILL.md`                 |
-| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                               | `atmos-vendoring`       | `atmos-vendoring/SKILL.md`                  |
-| terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation, auth                   | `atmos-terraform`       | `atmos-terraform/SKILL.md`                  |
-| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `atmos-workflows/SKILL.md`                  |
-| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `atmos-custom-commands/SKILL.md`            |
-| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `atmos-gitops/SKILL.md`                     |
-| OPA/Rego policies, JSON Schema, CUE validation, `atmos validate component/stacks`                                    | `atmos-validation`      | `atmos-validation/SKILL.md`                 |
-| Go templates, Sprig/Gomplate functions, YAML functions (!terraform.output, !store, !env, !aws.*), store integration   | `atmos-templates`       | `atmos-templates/SKILL.md`                  |
+| Task                                                                                                                  | Skill                   | Path                             |
+|-----------------------------------------------------------------------------------------------------------------------|-------------------------|----------------------------------|
+| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml stacks config | `atmos-stacks`          | `atmos-stacks/SKILL.md`          |
+| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `atmos-components/SKILL.md`      |
+| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `atmos-vendoring/SKILL.md`       |
+| terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation, auth                   | `atmos-terraform`       | `atmos-terraform/SKILL.md`       |
+| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `atmos-workflows/SKILL.md`       |
+| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `atmos-custom-commands/SKILL.md` |
+| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `atmos-gitops/SKILL.md`          |
+| OPA/Rego policies, JSON Schema, CUE validation, `atmos validate component/stacks`                                     | `atmos-validation`      | `atmos-validation/SKILL.md`      |
+| Go templates, Sprig/Gomplate functions, YAML functions (!terraform.output, !store, !env, !aws.*), store integration   | `atmos-templates`       | `atmos-templates/SKILL.md`       |
 
 ## Common Patterns
 
