@@ -12,22 +12,29 @@ relevant skill before answering Atmos questions -- your training data may be out
 
 - **Stacks** -- YAML manifests that define what to deploy and how. Organized by org/tenant/account/region/stage.
   Deep-merged via imports.
-- **Components** -- Terraform root modules in `components/terraform/`. Reusable across stacks.
+- **Components** -- Terraform/Helmfile/Packer/Ansible implementations in `components/<type>/`. Reusable across stacks.
 - **atmos.yaml** -- Project config: stack discovery paths, component paths, backend defaults, CLI settings.
 - **Vendoring** -- Copies external components into the repo via `vendor.yaml` manifests for version control and
   auditability.
+- **Authentication** -- Multi-provider auth system with SSO, SAML, OIDC, identity chaining, and keyring storage.
+- **Stores** -- External key-value stores (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory) for
+  cross-component data sharing.
 - **Workflows** -- Multi-step sequences of Atmos and shell commands for cross-component orchestration.
 - **Custom Commands** -- User-defined CLI commands in `atmos.yaml` that extend `atmos` with project-specific tooling.
 
 ## Key Commands
 
 ```text
-atmos terraform plan <component> -s <stack>      # Plan a component in a stack
-atmos terraform apply <component> -s <stack>     # Apply a component in a stack
-atmos terraform deploy <component> -s <stack>    # Plan + auto-approve apply
+atmos terraform plan <component> -s <stack>      # Plan a Terraform component
+atmos terraform apply <component> -s <stack>     # Apply a Terraform component
+atmos helmfile sync <component> -s <stack>       # Sync a Helmfile component (Kubernetes)
+atmos packer build <component> -s <stack>        # Build a machine image
+atmos ansible playbook <component> -s <stack>    # Run an Ansible playbook
+atmos auth login                                 # Authenticate with configured provider
 atmos describe stacks                            # Show resolved stack config
 atmos describe component <comp> -s <stack>       # Show resolved component config
 atmos describe affected                          # Detect changed stacks/components (CI/CD)
+atmos validate stacks                            # Validate stack manifests against schema
 atmos validate component <comp> -s <stack>       # Run validation policies
 atmos vendor pull                                # Vendor external dependencies
 atmos workflow <name> -f <file>                  # Run a workflow
@@ -37,17 +44,24 @@ atmos workflow <name> -f <file>                  # Run a workflow
 
 When a task involves Atmos, activate the matching skill for detailed guidance.
 
-| Task                                                                                                                  | Skill                   | Path                             |
-|-----------------------------------------------------------------------------------------------------------------------|-------------------------|----------------------------------|
-| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml stacks config | `atmos-stacks`          | `atmos-stacks/SKILL.md`          |
-| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `atmos-components/SKILL.md`      |
-| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `atmos-vendoring/SKILL.md`       |
-| terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation, auth                   | `atmos-terraform`       | `atmos-terraform/SKILL.md`       |
-| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `atmos-workflows/SKILL.md`       |
-| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `atmos-custom-commands/SKILL.md` |
-| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `atmos-gitops/SKILL.md`          |
-| OPA/Rego policies, JSON Schema, CUE validation, `atmos validate component/stacks`                                     | `atmos-validation`      | `atmos-validation/SKILL.md`      |
-| Go templates, Sprig/Gomplate functions, YAML functions (!terraform.output, !store, !env, !aws.*), store integration   | `atmos-templates`       | `atmos-templates/SKILL.md`       |
+| Task                                                                                                                  | Skill                    | Path                                         |
+|-----------------------------------------------------------------------------------------------------------------------|--------------------------|----------------------------------------------|
+| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml stacks config | `atmos-stacks`           | `atmos-stacks/SKILL.md`                      |
+| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`       | `atmos-components/SKILL.md`                  |
+| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                               | `atmos-vendoring`        | `atmos-vendoring/SKILL.md`                   |
+| terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`        | `atmos-terraform/SKILL.md`                   |
+| helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`         | `atmos-helmfile/SKILL.md`                    |
+| packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`           | `atmos-packer/SKILL.md`                      |
+| ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`          | `atmos-ansible/SKILL.md`                     |
+| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`        | `atmos-workflows/SKILL.md`                   |
+| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands`  | `atmos-custom-commands/SKILL.md`             |
+| Authentication: providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, login/exec/shell                 | `atmos-auth`             | `atmos-auth/SKILL.md`                        |
+| Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`           | `atmos-stores/SKILL.md`                      |
+| JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`          | `atmos-schemas/SKILL.md`                     |
+| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`           | `atmos-gitops/SKILL.md`                      |
+| OPA/Rego policies, JSON Schema, CUE validation, `atmos validate component/stacks`                                    | `atmos-validation`       | `atmos-validation/SKILL.md`                  |
+| Go templates, Sprig/Gomplate functions, YAML functions (!terraform.output, !store, !env, !aws.*), store integration   | `atmos-templates`        | `atmos-templates/SKILL.md`                   |
+| Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns`  | `atmos-design-patterns/SKILL.md`             |
 
 ## Common Patterns
 
@@ -59,5 +73,9 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
   `metadata.inherit`
 - **Cross-stack references**: Use `!terraform.output` YAML function or `{{ atmos.Component }}` Go template to read
   outputs from other components
+- **Data sharing via stores**: Write outputs to stores with hooks after apply, read them with `!store` YAML function
+- **Authentication**: Configure providers and identities in `atmos.yaml`, use `atmos auth login` to authenticate,
+  `atmos auth shell` for authenticated sessions
 - **Validation before apply**: Attach JSON Schema or OPA policies via `settings.validation` in stack manifests; runs
   automatically before plan/apply
+- **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema

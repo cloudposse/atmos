@@ -1,6 +1,6 @@
 # PRD: Atmos Agent Skills
 
-## Status: Planned
+## Status: Implemented
 
 ## Overview
 
@@ -16,8 +16,7 @@ on demand via progressive disclosure.
 
 1. AI agents hallucinate Atmos configuration syntax because their training data is outdated or sparse.
 2. There is no standardized way for Atmos users to give their AI tools accurate Atmos knowledge.
-3. The existing skills in the external `cloudposse/agent-skills` repo are not distributed with Atmos itself, requiring a
-   separate installation step.
+3. Skills must be co-located with the Atmos codebase to stay in sync with the codebase and avoid version drift.
 
 ## Goals
 
@@ -45,15 +44,12 @@ on demand via progressive disclosure.
 - **Auto-discovery**: Contributors get skills automatically when they clone the repo.
 - **External access**: Users can reference via `--add-dir` or clone the repo as a skill source.
 
-### Alternative considered: separate `cloudposse/agent-skills` repo
+### Alternative considered: separate dedicated repo
 
-HashiCorp and Pulumi use dedicated repos (`hashicorp/agent-skills`, `pulumi/agent-skills`).
+HashiCorp and Pulumi use dedicated repos for agent skills.
 This works for product-agnostic guidance but adds a separate installation step. Since Atmos
 skills are tightly coupled to Atmos versions, co-locating them in the Atmos repo keeps skills
 in sync with the codebase and avoids version drift.
-
-A separate `cloudposse/agent-skills` repo can still exist as a thin wrapper that references or
-re-exports skills from the Atmos repo if marketplace distribution is needed later.
 
 ## Standards
 
@@ -177,8 +173,8 @@ For marketplace distribution, skills can be packaged as a Claude Code plugin:
 Users install via:
 
 ```bash
-claude plugin marketplace add cloudposse/agent-skills
-claude plugin install atmos-configuration@cloudposse
+claude plugin marketplace add <org>/<plugin-name>
+claude plugin install <skill-name>@<org>
 ```
 
 ### AGENTS.md Convention
@@ -206,19 +202,26 @@ activation rate.
 
 ## Skill Inventory
 
-### 3 Plugins, 9 Skills
+### 16 Skills
 
-| # | Skill                   | Plugin        | Description                                                                                             |
-|---|-------------------------|---------------|---------------------------------------------------------------------------------------------------------|
-| 1 | `atmos-stacks`          | configuration | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml |
-| 2 | `atmos-components`      | configuration | Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns          |
-| 3 | `atmos-vendoring`       | configuration | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry                                  |
-| 4 | `atmos-terraform`       | orchestration | plan/apply/deploy, workspace management, backend config, varfile generation, authentication             |
-| 5 | `atmos-workflows`       | orchestration | Multi-step workflows, Go template support, cross-component orchestration                                |
-| 6 | `atmos-custom-commands` | orchestration | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars                                    |
-| 7 | `atmos-gitops`          | integrations  | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                     |
-| 8 | `atmos-validation`      | integrations  | OPA/Rego policies, JSON Schema, CUE validation, schema manifests                                        |
-| 9 | `atmos-templates`       | integrations  | Go templates, Sprig/Gomplate functions, YAML functions, store integration                               |
+| #  | Skill                    | Category      | Description                                                                                             |
+|----|--------------------------|---------------|---------------------------------------------------------------------------------------------------------|
+| 1  | `atmos-stacks`           | configuration | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml |
+| 2  | `atmos-components`       | configuration | Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns          |
+| 3  | `atmos-vendoring`        | configuration | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry                                 |
+| 4  | `atmos-terraform`        | orchestration | plan/apply/deploy, workspace management, backend config, varfile generation                             |
+| 5  | `atmos-helmfile`         | orchestration | sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                    |
+| 6  | `atmos-packer`           | orchestration | init/build/validate/inspect/output, machine image building, template management                         |
+| 7  | `atmos-ansible`          | orchestration | Playbook execution, variable passing, inventory management, configuration management                    |
+| 8  | `atmos-workflows`        | orchestration | Multi-step workflows, Go template support, cross-component orchestration                                |
+| 9  | `atmos-custom-commands`  | orchestration | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars                                    |
+| 10 | `atmos-auth`             | platform      | Providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, identity chaining, login/exec/shell |
+| 11 | `atmos-stores`           | platform      | AWS SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, hooks integration, data sharing       |
+| 12 | `atmos-schemas`          | platform      | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation        |
+| 13 | `atmos-gitops`           | integrations  | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                     |
+| 14 | `atmos-validation`       | integrations  | OPA/Rego policies, JSON Schema, CUE validation, schema manifests                                        |
+| 15 | `atmos-templates`        | integrations  | Go templates, Sprig/Gomplate functions, YAML functions, store integration                               |
+| 16 | `atmos-design-patterns`  | guidance      | Stack organization, component catalogs, inheritance, configuration composition, version management       |
 
 ### Content Sources
 
@@ -227,11 +230,20 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 | Source Path                                    | Content                                                                   |
 |------------------------------------------------|---------------------------------------------------------------------------|
 | `website/docs/stacks/`                         | Stack configuration, imports, vars, locals, settings, metadata, overrides |
-| `website/docs/components/`                     | Component types, root modules, backends, workspaces                       |
+| `website/docs/components/`                     | Component types (Terraform, Helmfile, Packer, Ansible)                    |
 | `website/docs/vendor/`                         | Vendor manifests, source types, URL syntax                                |
 | `website/docs/cli/commands/terraform/`         | All terraform subcommands                                                 |
+| `website/docs/cli/commands/helmfile/`          | All helmfile subcommands, source management                               |
+| `website/docs/cli/commands/packer/`            | All packer subcommands, source management                                 |
+| `website/docs/cli/commands/ansible/`           | Ansible playbook command, variable passing                                |
 | `website/docs/workflows/`                      | Workflow syntax and usage                                                 |
 | `website/docs/cli/configuration/commands.mdx`  | Custom command definition                                                 |
+| `website/docs/cli/configuration/auth/`         | Auth providers, identities, keyring, logs                                 |
+| `website/docs/cli/commands/auth/`              | Auth commands (login, exec, shell, console, etc.)                         |
+| `website/docs/cli/configuration/stores.mdx`    | Store backends configuration                                              |
+| `website/docs/cli/configuration/schemas.mdx`   | JSON Schema configuration, IDE integration                                |
+| `website/static/schemas/`                      | Atmos manifest JSON Schema files                                          |
+| `pkg/datafetcher/schema/`                      | Embedded schema files (stack-config, vendor, manifest)                    |
 | `website/docs/integrations/github-actions/`    | GitHub Actions workflows                                                  |
 | `website/docs/cli/configuration/integrations/` | Spacelift, Atlantis config                                                |
 | `website/docs/validation/`                     | OPA, JSON Schema, CUE validation                                          |
@@ -240,16 +252,15 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 | `website/docs/functions/template/`             | Go template functions                                                     |
 | `website/docs/design-patterns/`                | Best practices and patterns                                               |
 
-## Proposed Directory Layout
+## Directory Layout
 
 ```text
 .claude/
 ├── agents/                              # Existing agents (9 files)
 ├── skills/
 │   ├── AGENTS.md                        # Skill-activation router
-│   ├── README.md                        # Skills overview and usage
 │   │
-│   ├── atmos-stacks/
+│   ├── atmos-stacks/                    # Configuration
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       ├── import-patterns.md
@@ -266,11 +277,26 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 │   │   └── references/
 │   │       └── vendor-manifest.md
 │   │
-│   ├── atmos-terraform/
+│   ├── atmos-terraform/                 # Orchestration
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       ├── commands-reference.md
 │   │       └── backend-configuration.md
+│   │
+│   ├── atmos-helmfile/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── commands-reference.md
+│   │
+│   ├── atmos-packer/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── commands-reference.md
+│   │
+│   ├── atmos-ansible/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── commands-reference.md
 │   │
 │   ├── atmos-workflows/
 │   │   ├── SKILL.md
@@ -282,7 +308,23 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 │   │   └── references/
 │   │       └── command-syntax.md
 │   │
-│   ├── atmos-gitops/
+│   ├── atmos-auth/                      # Platform
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       ├── providers-and-identities.md
+│   │       └── commands-reference.md
+│   │
+│   ├── atmos-stores/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── store-providers.md
+│   │
+│   ├── atmos-schemas/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       └── schema-structure.md
+│   │
+│   ├── atmos-gitops/                    # Integrations
 │   │   ├── SKILL.md
 │   │   └── references/
 │   │       ├── github-actions.md
@@ -294,35 +336,51 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 │   │       ├── opa-policies.md
 │   │       └── json-schema.md
 │   │
-│   └── atmos-templates/
+│   ├── atmos-templates/
+│   │   ├── SKILL.md
+│   │   └── references/
+│   │       ├── go-templates.md
+│   │       └── yaml-functions-reference.md
+│   │
+│   └── atmos-design-patterns/           # Guidance
 │       ├── SKILL.md
 │       └── references/
-│           ├── go-templates.md
-│           └── yaml-functions-reference.md
+│           ├── stack-organization.md
+│           └── version-management.md
 │
 └── settings.local.json                  # Existing settings
 ```
 
-**Total: 28 new files** (9 SKILL.md + 15 references + AGENTS.md + README.md + 2 empty dirs created implicitly)
+**Total: 41 files** (16 SKILL.md + 24 references + AGENTS.md)
 
 ## Implementation Plan
 
-### Phase 1: Copy and Adapt Skills
+### Phase 1: Initial Skills (Completed)
 
-1. Copy the 9 SKILL.md files and 15 reference files from the external `agent-skills` repo.
-2. Update `!aws.organization_id` YAML function coverage in `atmos-templates` and `yaml-functions-reference.md`.
-3. Verify all SKILL.md files are under 500 lines.
-4. Verify all `name` fields match directory names.
-5. Add AGENTS.md skill-activation router.
-6. Add README.md with usage instructions.
+1. Created 9 SKILL.md files and 15 reference files for core subsystems.
+2. Updated `!aws.organization_id` YAML function coverage in `atmos-templates` and `yaml-functions-reference.md`.
+3. Verified all SKILL.md files are under 500 lines.
+4. Verified all `name` fields match directory names.
+5. Added AGENTS.md skill-activation router.
 
-### Phase 2: Validation
+### Phase 2: Expanded Coverage (Completed)
 
-1. Adapt `scripts/validate-structure.sh` to validate the `.claude/skills/` layout.
+1. Added `atmos-helmfile` skill for Kubernetes deployment orchestration.
+2. Added `atmos-packer` skill for machine image building.
+3. Added `atmos-ansible` skill for configuration management.
+4. Added `atmos-auth` skill for authentication and identity management.
+5. Added `atmos-stores` skill for external key-value store backends.
+6. Added `atmos-schemas` skill for JSON Schema system and how to update schemas.
+7. Added `atmos-design-patterns` skill for architectural patterns and best practices.
+8. Updated AGENTS.md with all 16 skills.
+
+### Phase 3: Validation (Planned)
+
+1. Add validation script to check `.claude/skills/` layout (frontmatter, name/dir match, line limits).
 2. Verify all reference files are linked from their SKILL.md.
 3. Run validation in CI.
 
-### Phase 3: Documentation
+### Phase 4: Documentation (Planned)
 
 1. Add Docusaurus documentation page explaining Atmos skills.
 2. Update CLAUDE.md to reference the skills.
