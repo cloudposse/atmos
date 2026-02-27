@@ -268,6 +268,11 @@ module.exports = {
                     id: 'components/packer',
                     label: 'Packer',
                 },
+                {
+                    type: 'doc',
+                    id: 'components/ansible',
+                    label: 'Ansible',
+                },
             ]
         },
 
