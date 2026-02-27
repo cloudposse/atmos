@@ -967,9 +967,11 @@ func TestStore_Upload(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", "not-a-jwt")
 
 		mock := &mockUploader{
-			createFn:   func(_ context.Context, _ *createArtifactRequest) (*createArtifactResponse, error) { return nil, nil },
-			uploadFn:   func(_ context.Context, _ string, _ []byte) error { return nil },
-			finalizeFn: func(_ context.Context, _ *finalizeArtifactRequest) (*finalizeArtifactResponse, error) { return nil, nil },
+			createFn: func(_ context.Context, _ *createArtifactRequest) (*createArtifactResponse, error) { return nil, nil },
+			uploadFn: func(_ context.Context, _ string, _ []byte) error { return nil },
+			finalizeFn: func(_ context.Context, _ *finalizeArtifactRequest) (*finalizeArtifactResponse, error) {
+				return nil, nil
+			},
 		}
 
 		store := &Store{

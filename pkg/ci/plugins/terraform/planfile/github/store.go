@@ -64,11 +64,11 @@ type artifactUploader interface {
 
 // createArtifactRequest is the request body for the CreateArtifact API.
 type createArtifactRequest struct {
-	Version               int    `json:"version"`
-	Name                  string `json:"name"`
-	WorkflowRunBackendID  string `json:"workflow_run_backend_id"`
+	Version                 int    `json:"version"`
+	Name                    string `json:"name"`
+	WorkflowRunBackendID    string `json:"workflow_run_backend_id"`
 	WorkflowJobRunBackendID string `json:"workflow_job_run_backend_id"`
-	ExpiresAfter          string `json:"expires_after,omitempty"`
+	ExpiresAfter            string `json:"expires_after,omitempty"`
 }
 
 // createArtifactResponse is the response from the CreateArtifact API.
