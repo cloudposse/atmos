@@ -4,12 +4,14 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/google/go-github/v59/github"
@@ -43,11 +45,67 @@ const (
 
 	// HTTPTimeout is the timeout for HTTP requests.
 	httpTimeout = 30 * time.Second
+
+	// artifactServicePath is the Twirp service path for artifact operations.
+	artifactServicePath = "twirp/github.actions.results.api.v1.ArtifactService"
+
+	// artifactVersion is the artifact API version.
+	artifactVersion = 4
 )
+
+// artifactUploader handles the GitHub Actions runtime API calls for artifact upload.
+// This is extracted as an interface for testability.
+type artifactUploader interface {
+	// CreateArtifact initiates artifact creation and returns a signed upload URL.
+	CreateArtifact(ctx context.Context, req *createArtifactRequest) (*createArtifactResponse, error)
+
+	// UploadBlob uploads data to the signed blob URL.
+	UploadBlob(ctx context.Context, uploadURL string, data []byte) error
+
+	// FinalizeArtifact finalizes the artifact after upload.
+	FinalizeArtifact(ctx context.Context, req *finalizeArtifactRequest) (*finalizeArtifactResponse, error)
+}
+
+// createArtifactRequest is the request body for the CreateArtifact API.
+type createArtifactRequest struct {
+	Version               int    `json:"version"`
+	Name                  string `json:"name"`
+	WorkflowRunBackendID  string `json:"workflow_run_backend_id"`
+	WorkflowJobRunBackendID string `json:"workflow_job_run_backend_id"`
+	ExpiresAfter          string `json:"expires_after,omitempty"`
+}
+
+// createArtifactResponse is the response from the CreateArtifact API.
+type createArtifactResponse struct {
+	OK              bool   `json:"ok"`
+	SignedUploadURL string `json:"signed_upload_url"`
+}
+
+// finalizeArtifactRequest is the request body for the FinalizeArtifact API.
+type finalizeArtifactRequest struct {
+	Name                    string `json:"name"`
+	Size                    int64  `json:"size"`
+	Hash                    string `json:"hash,omitempty"`
+	WorkflowRunBackendID    string `json:"workflow_run_backend_id"`
+	WorkflowJobRunBackendID string `json:"workflow_job_run_backend_id"`
+}
+
+// finalizeArtifactResponse is the response from the FinalizeArtifact API.
+type finalizeArtifactResponse struct {
+	OK         bool  `json:"ok"`
+	ArtifactID int64 `json:"artifact_id"`
+}
+
+// backendIDs holds the workflow backend IDs extracted from the runtime token.
+type backendIDs struct {
+	WorkflowRunBackendID    string
+	WorkflowJobRunBackendID string
+}
 
 // Store implements the planfile.Store interface using GitHub Actions Artifacts.
 type Store struct {
 	client        *github.Client
+	uploader      artifactUploader
 	owner         string
 	repo          string
 	retentionDays int
@@ -70,8 +128,17 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 	retentionDays := getRetentionDays(opts.Options)
 	client := github.NewClient(nil).WithAuthToken(token)
 
+	// Create the runtime uploader if running inside GitHub Actions.
+	var uploader artifactUploader
+	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	resultsURL := os.Getenv("ACTIONS_RESULTS_URL")
+	if runtimeToken != "" && resultsURL != "" {
+		uploader = newRuntimeUploader(resultsURL, runtimeToken)
+	}
+
 	return &Store{
 		client:        client,
+		uploader:      uploader,
 		owner:         owner,
 		repo:          repo,
 		retentionDays: retentionDays,
@@ -142,11 +209,21 @@ func (s *Store) artifactName(key string) string {
 }
 
 // Upload uploads a planfile as a GitHub artifact.
-// Note: GitHub Actions artifacts must be uploaded using the @actions/artifact toolkit
-// within a workflow. This implementation provides the interface but may require
-// shell-out to the actions toolkit for actual uploads.
+// This requires running within GitHub Actions with ACTIONS_RUNTIME_TOKEN and
+// ACTIONS_RESULTS_URL environment variables set.
 func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata *planfile.Metadata) error {
 	defer perf.Track(nil, "github.Upload")()
+
+	if s.uploader == nil {
+		return fmt.Errorf("%w: GitHub Artifacts upload requires running within GitHub Actions (ACTIONS_RUNTIME_TOKEN and ACTIONS_RESULTS_URL must be set)", errUtils.ErrNotImplemented)
+	}
+
+	// Parse backend IDs from runtime token.
+	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
+	ids, err := getBackendIDsFromToken(runtimeToken)
+	if err != nil {
+		return fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrPlanfileUploadFailed, err)
+	}
 
 	// Read the planfile data.
 	planData, err := io.ReadAll(data)
@@ -155,52 +232,87 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	}
 
 	// Create a zip archive containing the plan and metadata.
+	zipData, err := createArtifactZip(planData, metadata)
+	if err != nil {
+		return err
+	}
+
+	artifactName := s.artifactName(key)
+
+	// Step 1: Create the artifact to get a signed upload URL.
+	createReq := &createArtifactRequest{
+		Version:                 artifactVersion,
+		Name:                    artifactName,
+		WorkflowRunBackendID:    ids.WorkflowRunBackendID,
+		WorkflowJobRunBackendID: ids.WorkflowJobRunBackendID,
+	}
+	if s.retentionDays > 0 {
+		createReq.ExpiresAfter = fmt.Sprintf("%dd", s.retentionDays)
+	}
+
+	createResp, err := s.uploader.CreateArtifact(ctx, createReq)
+	if err != nil {
+		return fmt.Errorf("%w: failed to create artifact: %w", errUtils.ErrPlanfileUploadFailed, err)
+	}
+
+	if createResp.SignedUploadURL == "" {
+		return fmt.Errorf("%w: artifact service returned empty upload URL", errUtils.ErrPlanfileUploadFailed)
+	}
+
+	// Step 2: Upload the zip data to the signed URL.
+	if err := s.uploader.UploadBlob(ctx, createResp.SignedUploadURL, zipData); err != nil {
+		return fmt.Errorf("%w: failed to upload artifact data: %w", errUtils.ErrPlanfileUploadFailed, err)
+	}
+
+	// Step 3: Finalize the artifact.
+	finalizeReq := &finalizeArtifactRequest{
+		Name:                    artifactName,
+		Size:                    int64(len(zipData)),
+		WorkflowRunBackendID:    ids.WorkflowRunBackendID,
+		WorkflowJobRunBackendID: ids.WorkflowJobRunBackendID,
+	}
+
+	if _, err := s.uploader.FinalizeArtifact(ctx, finalizeReq); err != nil {
+		return fmt.Errorf("%w: failed to finalize artifact: %w", errUtils.ErrPlanfileUploadFailed, err)
+	}
+
+	return nil
+}
+
+// createArtifactZip creates a zip archive containing the plan and metadata.
+func createArtifactZip(planData []byte, metadata *planfile.Metadata) ([]byte, error) {
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
 
 	// Add the planfile.
 	planWriter, err := zipWriter.Create(planFilename)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create zip entry for plan: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return nil, fmt.Errorf("%w: failed to create zip entry for plan: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 	if _, err := planWriter.Write(planData); err != nil {
-		return fmt.Errorf("%w: failed to write plan to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return nil, fmt.Errorf("%w: failed to write plan to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
 	// Add metadata if provided.
 	if metadata != nil {
 		metadataWriter, err := zipWriter.Create(metadataFilename)
 		if err != nil {
-			return fmt.Errorf("%w: failed to create zip entry for metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return nil, fmt.Errorf("%w: failed to create zip entry for metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
 		}
 		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
-			return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return nil, fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
 		}
 		if _, err := metadataWriter.Write(metadataJSON); err != nil {
-			return fmt.Errorf("%w: failed to write metadata to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return nil, fmt.Errorf("%w: failed to write metadata to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
 		}
 	}
 
 	if err := zipWriter.Close(); err != nil {
-		return fmt.Errorf("%w: failed to close zip archive: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return nil, fmt.Errorf("%w: failed to close zip archive: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
-	// Note: GitHub Actions artifact upload requires the @actions/artifact toolkit.
-	// This implementation creates the artifact data but actual upload in GitHub Actions
-	// typically needs to use the artifact client or REST API with proper authentication.
-	// For now, we'll use the REST API to upload.
-
-	artifactName := s.artifactName(key)
-
-	// GitHub's artifact upload API is complex and typically uses the actions toolkit.
-	// For direct API access, we'd need to use the Artifacts API endpoints.
-	// This is a simplified implementation that may need enhancement.
-
-	_ = artifactName // Use artifact name (will be used with proper API)
-	_ = buf          // Use buffer (will be used with proper API)
-
-	return fmt.Errorf("%w: GitHub Artifacts upload requires running within GitHub Actions with @actions/artifact toolkit", errUtils.ErrNotImplemented)
+	return buf.Bytes(), nil
 }
 
 // Download downloads a planfile from GitHub artifacts.
@@ -492,6 +604,174 @@ func splitRepoString(repo string) []string {
 // hasPrefix checks if s has the given prefix.
 func hasPrefix(s, prefix string) bool {
 	return len(s) >= len(prefix) && s[:len(prefix)] == prefix
+}
+
+// runtimeUploader implements artifactUploader using the GitHub Actions runtime API.
+type runtimeUploader struct {
+	baseURL    string
+	token      string
+	httpClient *http.Client
+}
+
+// newRuntimeUploader creates a new runtime uploader for the GitHub Actions artifact API.
+func newRuntimeUploader(resultsURL, token string) *runtimeUploader {
+	// Ensure base URL has trailing slash.
+	if !strings.HasSuffix(resultsURL, "/") {
+		resultsURL += "/"
+	}
+
+	return &runtimeUploader{
+		baseURL:    resultsURL,
+		token:      token,
+		httpClient: &http.Client{Timeout: httpTimeout},
+	}
+}
+
+// CreateArtifact calls the CreateArtifact Twirp endpoint.
+func (u *runtimeUploader) CreateArtifact(ctx context.Context, req *createArtifactRequest) (*createArtifactResponse, error) {
+	defer perf.Track(nil, "github.runtimeUploader.CreateArtifact")()
+
+	endpoint := u.baseURL + artifactServicePath + "/CreateArtifact"
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal create request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+u.token)
+
+	resp, err := u.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call CreateArtifact: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("CreateArtifact returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result createArtifactResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode CreateArtifact response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// UploadBlob uploads data to the signed blob URL using a PUT request.
+func (u *runtimeUploader) UploadBlob(ctx context.Context, uploadURL string, data []byte) error {
+	defer perf.Track(nil, "github.runtimeUploader.UploadBlob")()
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPut, uploadURL, bytes.NewReader(data))
+	if err != nil {
+		return fmt.Errorf("failed to create upload request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/octet-stream")
+	httpReq.Header.Set("x-ms-blob-type", "BlockBlob")
+
+	resp, err := u.httpClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("failed to upload blob: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("blob upload returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	return nil
+}
+
+// FinalizeArtifact calls the FinalizeArtifact Twirp endpoint.
+func (u *runtimeUploader) FinalizeArtifact(ctx context.Context, req *finalizeArtifactRequest) (*finalizeArtifactResponse, error) {
+	defer perf.Track(nil, "github.runtimeUploader.FinalizeArtifact")()
+
+	endpoint := u.baseURL + artifactServicePath + "/FinalizeArtifact"
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal finalize request: %w", err)
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+u.token)
+
+	resp, err := u.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call FinalizeArtifact: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("FinalizeArtifact returned status %d: %s", resp.StatusCode, string(respBody))
+	}
+
+	var result finalizeArtifactResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode FinalizeArtifact response: %w", err)
+	}
+
+	return &result, nil
+}
+
+// getBackendIDsFromToken parses the ACTIONS_RUNTIME_TOKEN JWT to extract backend IDs.
+// The token contains a "scp" claim with space-separated scopes like:
+// "Actions.Results:ce7f54c7-61c7-4aae-887f-30da475f5f1a:ca395085-040a-526b-2ce8-bdc85f692774".
+func getBackendIDsFromToken(token string) (*backendIDs, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil, fmt.Errorf("invalid JWT format: expected 3 parts, got %d", len(parts))
+	}
+
+	// Decode the payload (second part).
+	payload := parts[1]
+	// Add padding if needed.
+	switch len(payload) % 4 {
+	case 2:
+		payload += "=="
+	case 3:
+		payload += "="
+	}
+
+	decoded, err := base64.URLEncoding.DecodeString(payload)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode JWT payload: %w", err)
+	}
+
+	var claims struct {
+		Scp string `json:"scp"`
+	}
+	if err := json.Unmarshal(decoded, &claims); err != nil {
+		return nil, fmt.Errorf("failed to parse JWT claims: %w", err)
+	}
+
+	// Parse the scp claim to find Actions.Results scope.
+	for _, scope := range strings.Split(claims.Scp, " ") {
+		if strings.HasPrefix(scope, "Actions.Results:") {
+			scopeParts := strings.Split(scope, ":")
+			if len(scopeParts) != 3 {
+				return nil, fmt.Errorf("invalid Actions.Results scope format: %s", scope)
+			}
+			return &backendIDs{
+				WorkflowRunBackendID:    scopeParts[1],
+				WorkflowJobRunBackendID: scopeParts[2],
+			}, nil
+		}
+	}
+
+	return nil, fmt.Errorf("Actions.Results scope not found in token")
 }
 
 func init() {
