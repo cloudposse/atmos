@@ -48,10 +48,7 @@ func SetupFiles(
 	// We use "authorized_user" type which requires client_id and client_secret.
 	// These are the public gcloud CLI credentials (publicly documented, used by gcloud itself).
 	// Without these, the Google Cloud SDK's threelegged.go throws "auth: client ID must be provided".
-	clientID, clientSecret, err := resolveADCClientCredentials()
-	if err != nil {
-		return nil, err
-	}
+	clientID, clientSecret := resolveADCClientCredentials()
 	adcContent := &AuthorizedUserContent{
 		Type:         "authorized_user",
 		AccessToken:  creds.AccessToken,
@@ -100,7 +97,8 @@ type adcClientCredentials struct {
 
 // resolveADCClientCredentials returns the OAuth client ID and secret for ADC files.
 // It treats ID/secret as an atomic pair: env overrides → existing ADC file → public gcloud defaults.
-func resolveADCClientCredentials() (string, string, error) {
+// Always returns a valid pair (falls back to public gcloud defaults on any failure).
+func resolveADCClientCredentials() (string, string) {
 	// Default client ID/secret are the public gcloud CLI OAuth credentials.
 	// These are publicly documented (e.g. in Google's cloud-sdk source) and are
 	// used by gcloud itself. They are safe to hardcode as a fallback — the
@@ -120,12 +118,12 @@ func resolveADCClientCredentials() (string, string, error) {
 
 	if customClientID != "" && customClientSecret != "" {
 		// Both provided — use the custom pair as-is.
-		return customClientID, customClientSecret, nil
+		return customClientID, customClientSecret
 	}
 
 	if customClientSecret != "" {
 		// Secret without ID — pair with default ID.
-		return defaultClientID, customClientSecret, nil
+		return defaultClientID, customClientSecret
 	}
 
 	// Ignore custom ID when secret is absent — using a custom ID with the
@@ -136,7 +134,7 @@ func resolveADCClientCredentials() (string, string, error) {
 	adcCreds, err := readADCClientCredentials()
 	if err == nil && adcCreds.ClientID != "" && adcCreds.ClientSecret != "" {
 		// ADC file has a complete pair — use it.
-		return adcCreds.ClientID, adcCreds.ClientSecret, nil
+		return adcCreds.ClientID, adcCreds.ClientSecret
 	}
 
 	// Fall back to public gcloud defaults. This enables CI environments (e.g.
@@ -144,7 +142,7 @@ func resolveADCClientCredentials() (string, string, error) {
 	// The ADC file still works — the access_token is the important part; the
 	// client_id/secret are only needed for token refresh via OAuth, which atmos
 	// manages externally.
-	return defaultClientID, defaultClientSecret, nil
+	return defaultClientID, defaultClientSecret
 }
 
 // readADCClientCredentials reads OAuth client credentials from the Application Default Credentials file.
@@ -170,9 +168,11 @@ func readADCClientCredentials() (*adcClientCredentials, error) {
 // adcCredentialsPath returns the path to the ADC credentials file, checking
 // GOOGLE_APPLICATION_CREDENTIALS, CLOUDSDK_CONFIG, and the default gcloud config directory.
 func adcCredentialsPath() string {
+	//nolint:forbidigo // Direct os.Getenv required: called during auth before Viper/flags are wired.
 	if path := strings.TrimSpace(os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")); path != "" {
 		return path
 	}
+	//nolint:forbidigo // Direct os.Getenv required: called during auth before Viper/flags are wired.
 	if configDir := strings.TrimSpace(os.Getenv("CLOUDSDK_CONFIG")); configDir != "" {
 		return filepath.Join(configDir, "application_default_credentials.json")
 	}
