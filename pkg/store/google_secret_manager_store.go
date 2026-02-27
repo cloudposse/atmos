@@ -63,7 +63,9 @@ var (
 )
 
 // NewGSMStore initializes a new Google Secret Manager Store.
-// If identityName is non-empty, client initialization is deferred until first use (lazy init).
+// Client initialization is always deferred to first use via ensureClient().
+// This allows auth credentials (e.g., GOOGLE_OAUTH_ACCESS_TOKEN) to be
+// established after config loading but before the store is actually used.
 func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	if options.ProjectID == "" {
 		return nil, ErrProjectIDRequired
@@ -87,13 +89,6 @@ func NewGSMStore(options GSMStoreOptions, identityName string) (Store, error) {
 	}
 
 	store.replication = createReplicationFromLocations(options.Locations)
-
-	// If no identity is configured, initialize the client eagerly (backward compatible behavior).
-	if identityName == "" {
-		if err := store.initDefaultClient(); err != nil {
-			return nil, err
-		}
-	}
 
 	return store, nil
 }
@@ -185,6 +180,7 @@ func (s *GSMStore) ensureClient() error {
 	return s.initErr
 }
 
+// createReplicationFromLocations builds a replication config: automatic if no locations, user-managed otherwise.
 func createReplicationFromLocations(locations *[]string) *secretmanagerpb.Replication {
 	if locations == nil || len(*locations) == 0 {
 		return &secretmanagerpb.Replication{
@@ -231,6 +227,7 @@ func (s *GSMStore) getKey(stack string, component string, key string) (string, e
 	return baseKey, nil
 }
 
+// createSecret creates a new secret in Google Secret Manager, returning an existing one if already present.
 func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretmanagerpb.Secret, error) {
 	parent := fmt.Sprintf("projects/%s", s.projectID)
 	createSecretReq := &secretmanagerpb.CreateSecretRequest{
@@ -260,6 +257,7 @@ func (s *GSMStore) createSecret(ctx context.Context, secretID string) (*secretma
 	return secret, nil
 }
 
+// addSecretVersion adds a new version with the given value to an existing secret.
 func (s *GSMStore) addSecretVersion(ctx context.Context, secret *secretmanagerpb.Secret, value string) error {
 	addVersionReq := &secretmanagerpb.AddSecretVersionRequest{
 		Parent: secret.GetName(),
@@ -384,6 +382,7 @@ func (s *GSMStore) Get(stack string, component string, key string) (any, error) 
 	return unmarshalled, nil
 }
 
+// GetKey retrieves a secret value directly by its key name, without stack/component scoping.
 func (s *GSMStore) GetKey(key string) (interface{}, error) {
 	if key == "" {
 		return nil, ErrEmptyKey
