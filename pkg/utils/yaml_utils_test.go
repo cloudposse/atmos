@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	fntag "github.com/cloudposse/atmos/pkg/function/tag"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -752,10 +753,10 @@ func generateLargeArray(size int) []string {
 	return result
 }
 
-// TestAtmosYamlTagsMap_ContainsAllTags tests that atmosYamlTagsMap contains all expected tags.
-// This validates P1.2 optimization: O(1) lookup map contains all custom YAML tags.
-func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
-	// Validate that atmosYamlTagsMap contains all tags from AtmosYamlTags slice.
+// TestFntagPackage_ContainsAllTags tests that the fntag package contains all expected tags.
+// This validates that the tag package is the single source of truth for supported YAML tags.
+func TestFntagPackage_ContainsAllTags(t *testing.T) {
+	// Validate that fntag.AllYAML() contains all expected tags.
 	expectedTags := []string{
 		AtmosYamlFuncExec,
 		AtmosYamlFuncStore,
@@ -764,6 +765,9 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncTerraformOutput,
 		AtmosYamlFuncTerraformState,
 		AtmosYamlFuncEnv,
+		AtmosYamlFuncInclude,
+		AtmosYamlFuncIncludeRaw,
+		AtmosYamlFuncGitRoot,
 		AtmosYamlFuncCwd,
 		AtmosYamlFuncRandom,
 		AtmosYamlFuncLiteral,
@@ -773,19 +777,26 @@ func TestAtmosYamlTagsMap_ContainsAllTags(t *testing.T) {
 		AtmosYamlFuncAwsRegion,
 	}
 
-	for _, tag := range expectedTags {
-		assert.True(t, atmosYamlTagsMap[tag],
-			"atmosYamlTagsMap should contain tag: %s", tag)
+	allTags := fntag.AllYAML()
+	for _, expectedTag := range expectedTags {
+		found := false
+		for _, tag := range allTags {
+			if tag == expectedTag {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "fntag.AllYAML() should contain tag: %s", expectedTag)
 	}
 
-	// Verify the map has exactly the expected number of tags.
-	assert.Equal(t, len(expectedTags), len(atmosYamlTagsMap),
-		"atmosYamlTagsMap should contain exactly %d tags", len(expectedTags))
+	// Verify the package has exactly the expected number of tags.
+	assert.Equal(t, len(expectedTags), len(allTags),
+		"fntag.AllYAML() should contain exactly %d tags", len(expectedTags))
 }
 
-// TestAtmosYamlTagsMap_O1Lookup tests that atmosYamlTagsMap provides O(1) lookup.
-// This validates P1.2 optimization: map lookup is constant time vs O(n) slice search.
-func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
+// TestFntagPackage_O1Lookup tests that fntag.IsValidYAML provides O(1) lookup.
+// This validates that tag lookup is constant time.
+func TestFntagPackage_O1Lookup(t *testing.T) {
 	// Test that all expected tags are found in O(1) time.
 	testCases := []struct {
 		tag      string
@@ -806,40 +817,21 @@ func TestAtmosYamlTagsMap_O1Lookup(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.tag, func(t *testing.T) {
-			result := atmosYamlTagsMap[tc.tag]
+			result := fntag.IsValidYAML(tc.tag)
 			assert.Equal(t, tc.expected, result,
-				"atmosYamlTagsMap[%s] should be %v", tc.tag, tc.expected)
+				"fntag.IsValidYAML(%s) should be %v", tc.tag, tc.expected)
 		})
 	}
 }
 
-// BenchmarkAtmosYamlTagsMap_MapLookup benchmarks map-based tag lookup (P1.2).
-// This demonstrates O(1) performance vs O(n) slice search.
-func BenchmarkAtmosYamlTagsMap_MapLookup(b *testing.B) {
+// BenchmarkFntagPackage_MapLookup benchmarks map-based tag lookup.
+// This demonstrates O(1) performance.
+func BenchmarkFntagPackage_MapLookup(b *testing.B) {
 	tag := AtmosYamlFuncTerraformOutput
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = atmosYamlTagsMap[tag]
-	}
-}
-
-// BenchmarkAtmosYamlTagsSlice_LinearSearch benchmarks slice-based tag search for comparison.
-// This demonstrates the O(n) performance that P1.2 optimization replaces.
-func BenchmarkAtmosYamlTagsSlice_LinearSearch(b *testing.B) {
-	tag := AtmosYamlFuncTerraformOutput
-
-	b.ResetTimer()
-	for i := 0; i < b.N; i++ {
-		// Simulate the old linear search approach.
-		found := false
-		for _, t := range AtmosYamlTags {
-			if t == tag {
-				found = true
-				break
-			}
-		}
-		_ = found
+		_ = fntag.IsValidYAML(tag)
 	}
 }
 
