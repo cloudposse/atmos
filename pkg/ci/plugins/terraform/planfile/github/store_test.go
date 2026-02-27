@@ -10,11 +10,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"testing"
 	"time"
 
-	"github.com/google/go-github/v59/github"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -537,6 +535,9 @@ func TestNewStore(t *testing.T) {
 		assert.Equal(t, "testowner", s.owner)
 		assert.Equal(t, "testrepo", s.repo)
 		assert.Equal(t, 14, s.retentionDays)
+		assert.Equal(t, "https://api.github.com", s.baseURL)
+		assert.Equal(t, "test-token", s.token)
+		assert.NotNil(t, s.httpClient)
 	})
 
 	t.Run("with GITHUB_REPOSITORY env", func(t *testing.T) {
@@ -1024,14 +1025,12 @@ func TestStore_Download(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1050,14 +1049,12 @@ func TestStore_Delete(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1075,14 +1072,12 @@ func TestStore_List(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1123,14 +1118,12 @@ func TestStore_List(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1142,6 +1135,67 @@ func TestStore_List(t *testing.T) {
 		// Should be sorted by last modified (newest first).
 		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Key)
 		assert.Equal(t, "stack2/component2/sha2.tfplan", files[1].Key)
+	})
+
+	t.Run("with pagination", func(t *testing.T) {
+		now := time.Now()
+		callCount := 0
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			callCount++
+			w.Header().Set("Content-Type", "application/json")
+
+			if callCount == 1 {
+				// First page: include Link header pointing to next page.
+				w.Header().Set("Link", fmt.Sprintf(`<%s/repos/testowner/testrepo/actions/artifacts?per_page=100&page=2>; rel="next"`, r.Host))
+				response := map[string]any{
+					"total_count": 2,
+					"artifacts": []map[string]any{
+						{
+							"id":            1,
+							"name":          "planfile-stack1--comp1--sha1.tfplan",
+							"size_in_bytes": 100,
+							"created_at":    now.Format(time.RFC3339),
+						},
+					},
+				}
+				respBytes, _ := json.Marshal(response)
+				_, _ = w.Write(respBytes)
+			} else {
+				// Second page: no Link header (last page).
+				response := map[string]any{
+					"total_count": 2,
+					"artifacts": []map[string]any{
+						{
+							"id":            2,
+							"name":          "planfile-stack2--comp2--sha2.tfplan",
+							"size_in_bytes": 200,
+							"created_at":    now.Add(-time.Hour).Format(time.RFC3339),
+						},
+					},
+				}
+				respBytes, _ := json.Marshal(response)
+				_, _ = w.Write(respBytes)
+			}
+		}))
+		defer server.Close()
+
+		store := &Store{
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
+		}
+
+		ctx := context.Background()
+		files, err := store.List(ctx, "")
+		require.NoError(t, err)
+		assert.Len(t, files, 2)
+		assert.Equal(t, 2, callCount, "should have made 2 API calls for pagination")
+
+		// Should be sorted by last modified (newest first).
+		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Key)
+		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Key)
 	})
 
 	t.Run("with prefix filter", func(t *testing.T) {
@@ -1170,14 +1224,12 @@ func TestStore_List(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1206,14 +1258,12 @@ func TestStore_Exists(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1229,14 +1279,12 @@ func TestStore_Exists(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1268,14 +1316,12 @@ func TestStore_GetMetadata(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1292,14 +1338,12 @@ func TestStore_GetMetadata(t *testing.T) {
 		}))
 		defer server.Close()
 
-		serverURL, _ := url.Parse(server.URL + "/")
-		client := github.NewClient(nil)
-		client.BaseURL = serverURL
-
 		store := &Store{
-			client: client,
-			owner:  "testowner",
-			repo:   "testrepo",
+			httpClient: server.Client(),
+			baseURL:    server.URL,
+			token:      "test-token",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1307,6 +1351,47 @@ func TestStore_GetMetadata(t *testing.T) {
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrPlanfileNotFound)
 	})
+}
+
+func TestParseNextPage(t *testing.T) {
+	tests := []struct {
+		name     string
+		link     string
+		expected int
+	}{
+		{
+			name:     "empty header",
+			link:     "",
+			expected: 0,
+		},
+		{
+			name:     "with next page",
+			link:     `<https://api.github.com/repos/owner/repo/actions/artifacts?per_page=100&page=2>; rel="next", <https://api.github.com/repos/owner/repo/actions/artifacts?per_page=100&page=5>; rel="last"`,
+			expected: 2,
+		},
+		{
+			name:     "no next rel",
+			link:     `<https://api.github.com/repos/owner/repo/actions/artifacts?per_page=100&page=5>; rel="last"`,
+			expected: 0,
+		},
+		{
+			name:     "page 3",
+			link:     `<https://api.github.com/repos/owner/repo/actions/artifacts?per_page=100&page=3>; rel="next"`,
+			expected: 3,
+		},
+		{
+			name:     "page param first in query",
+			link:     `<https://api.github.com/repos/owner/repo/actions/artifacts?page=4&per_page=100>; rel="next"`,
+			expected: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := parseNextPage(tt.link)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 // Helper functions for tests.

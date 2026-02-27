@@ -11,10 +11,9 @@ import (
 	"net/http"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
-
-	"github.com/google/go-github/v59/github"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
@@ -39,9 +38,6 @@ const (
 
 	// GithubPaginationLimit is the max number of items per page for GitHub API.
 	githubPaginationLimit = 100
-
-	// GithubMaxRedirects is the max number of redirects for artifact downloads.
-	githubMaxRedirects = 10
 
 	// HTTPTimeout is the timeout for HTTP requests.
 	httpTimeout = 30 * time.Second
@@ -102,9 +98,26 @@ type backendIDs struct {
 	WorkflowJobRunBackendID string
 }
 
+// artifact represents a GitHub Actions artifact from the REST API.
+type artifact struct {
+	ID          int64     `json:"id"`
+	Name        string    `json:"name"`
+	SizeInBytes int64     `json:"size_in_bytes"`
+	CreatedAt   time.Time `json:"created_at"`
+	ExpiresAt   time.Time `json:"expires_at"`
+}
+
+// listArtifactsResponse is the response from the list artifacts REST API.
+type listArtifactsResponse struct {
+	TotalCount int        `json:"total_count"`
+	Artifacts  []artifact `json:"artifacts"`
+}
+
 // Store implements the planfile.Store interface using GitHub Actions Artifacts.
 type Store struct {
-	client        *github.Client
+	httpClient    *http.Client
+	baseURL       string
+	token         string
 	uploader      artifactUploader
 	owner         string
 	repo          string
@@ -126,7 +139,6 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 	}
 
 	retentionDays := getRetentionDays(opts.Options)
-	client := github.NewClient(nil).WithAuthToken(token)
 
 	// Create the runtime uploader if running inside GitHub Actions.
 	var uploader artifactUploader
@@ -137,7 +149,9 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 	}
 
 	return &Store{
-		client:        client,
+		httpClient:    &http.Client{Timeout: httpTimeout},
+		baseURL:       "https://api.github.com",
+		token:         token,
 		uploader:      uploader,
 		owner:         owner,
 		repo:          repo,
@@ -315,16 +329,156 @@ func createArtifactZip(planData []byte, metadata *planfile.Metadata) ([]byte, er
 	return buf.Bytes(), nil
 }
 
+// listArtifacts calls GET /repos/{owner}/{repo}/actions/artifacts with pagination params.
+func (s *Store) listArtifacts(ctx context.Context, perPage, page int) (*listArtifactsResponse, int, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts?per_page=%d&page=%d", s.baseURL, s.owner, s.repo, perPage, page)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to create list artifacts request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to list artifacts: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, 0, fmt.Errorf("list artifacts returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result listArtifactsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, 0, fmt.Errorf("failed to decode list artifacts response: %w", err)
+	}
+
+	nextPage := parseNextPage(resp.Header.Get("Link"))
+
+	return &result, nextPage, nil
+}
+
+// downloadArtifactURL calls GET /repos/{owner}/{repo}/actions/artifacts/{id}/zip
+// with redirect-following disabled and returns the Location header URL.
+func (s *Store) downloadArtifactURL(ctx context.Context, artifactID int64) (string, error) {
+	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts/%d/zip", s.baseURL, s.owner, s.repo, artifactID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create download artifact request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	// Use a client that does not follow redirects to capture the Location header.
+	noRedirectClient := &http.Client{
+		Timeout: httpTimeout,
+		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := noRedirectClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get artifact download URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusFound {
+		location := resp.Header.Get("Location")
+		if location == "" {
+			return "", fmt.Errorf("artifact download returned redirect without Location header")
+		}
+		return location, nil
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("artifact download returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	// Some test servers may return 200 directly; in that case there's no redirect URL.
+	return "", fmt.Errorf("artifact download returned 200 instead of redirect")
+}
+
+// deleteArtifact calls DELETE /repos/{owner}/{repo}/actions/artifacts/{id}.
+func (s *Store) deleteArtifact(ctx context.Context, artifactID int64) error {
+	url := fmt.Sprintf("%s/repos/%s/%s/actions/artifacts/%d", s.baseURL, s.owner, s.repo, artifactID)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	if err != nil {
+		return fmt.Errorf("failed to create delete artifact request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+s.token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to delete artifact: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("delete artifact returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return nil
+}
+
+// parseNextPage extracts the next page number from a GitHub Link header.
+// Returns 0 if there is no next page.
+func parseNextPage(linkHeader string) int {
+	if linkHeader == "" {
+		return 0
+	}
+
+	// Link header format: <url>; rel="next", <url>; rel="last"
+	for _, part := range strings.Split(linkHeader, ",") {
+		part = strings.TrimSpace(part)
+		if !strings.Contains(part, `rel="next"`) {
+			continue
+		}
+
+		// Extract URL from angle brackets.
+		start := strings.Index(part, "<")
+		end := strings.Index(part, ">")
+		if start < 0 || end < 0 || end <= start {
+			continue
+		}
+
+		urlStr := part[start+1 : end]
+		// Strip everything before and including '?' to get query string.
+		if idx := strings.Index(urlStr, "?"); idx >= 0 {
+			urlStr = urlStr[idx+1:]
+		}
+		// Extract page parameter from query string.
+		for _, param := range strings.Split(urlStr, "&") {
+			if strings.HasPrefix(param, "page=") {
+				val := strings.TrimPrefix(param, "page=")
+				if p, err := strconv.Atoi(val); err == nil {
+					return p
+				}
+			}
+		}
+	}
+
+	return 0
+}
+
 // Download downloads a planfile from GitHub artifacts.
 func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planfile.Metadata, error) {
 	defer perf.Track(nil, "github.Download")()
 
-	artifact, err := s.findArtifact(ctx, key)
+	a, err := s.findArtifact(ctx, key)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	zipData, err := s.downloadArtifactContent(ctx, artifact.GetID())
+	zipData, err := s.downloadArtifactContent(ctx, a.ID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -333,19 +487,17 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 }
 
 // findArtifact finds an artifact by key.
-func (s *Store) findArtifact(ctx context.Context, key string) (*github.Artifact, error) {
+func (s *Store) findArtifact(ctx context.Context, key string) (*artifact, error) {
 	artifactName := s.artifactName(key)
 
-	artifacts, _, err := s.client.Actions.ListArtifacts(ctx, s.owner, s.repo, &github.ListOptions{
-		PerPage: githubPaginationLimit,
-	})
+	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to list artifacts for download: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
-	for _, artifact := range artifacts.Artifacts {
-		if artifact.GetName() == artifactName {
-			return artifact, nil
+	for i := range resp.Artifacts {
+		if resp.Artifacts[i].Name == artifactName {
+			return &resp.Artifacts[i], nil
 		}
 	}
 
@@ -354,13 +506,17 @@ func (s *Store) findArtifact(ctx context.Context, key string) (*github.Artifact,
 
 // downloadArtifactContent downloads artifact content as zip data.
 func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) ([]byte, error) {
-	url, _, err := s.client.Actions.DownloadArtifact(ctx, s.owner, s.repo, artifactID, githubMaxRedirects)
+	downloadURL, err := s.downloadArtifactURL(ctx, artifactID)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get artifact download URL: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
-	httpClient := &http.Client{Timeout: httpTimeout}
-	resp, err := httpClient.Get(url.String())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create download request: %w", errUtils.ErrPlanfileDownloadFailed, err)
+	}
+
+	resp, err := s.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to download artifact: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
@@ -440,17 +596,14 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	artifactName := s.artifactName(key)
 
 	// List artifacts to find the one matching our key.
-	artifacts, _, err := s.client.Actions.ListArtifacts(ctx, s.owner, s.repo, &github.ListOptions{
-		PerPage: 100,
-	})
+	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
 		return fmt.Errorf("%w: failed to list artifacts for deletion: %w", errUtils.ErrPlanfileDeleteFailed, err)
 	}
 
-	for _, artifact := range artifacts.Artifacts {
-		if artifact.GetName() == artifactName {
-			_, err := s.client.Actions.DeleteArtifact(ctx, s.owner, s.repo, artifact.GetID())
-			if err != nil {
+	for _, a := range resp.Artifacts {
+		if a.Name == artifactName {
+			if err := s.deleteArtifact(ctx, a.ID); err != nil {
 				return fmt.Errorf("%w: failed to delete artifact: %w", errUtils.ErrPlanfileDeleteFailed, err)
 			}
 			return nil
@@ -465,16 +618,16 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 	defer perf.Track(nil, "github.List")()
 
 	var files []planfile.PlanfileInfo
-	opts := &github.ListOptions{PerPage: githubPaginationLimit}
+	page := 1
 
 	for {
-		artifacts, resp, err := s.client.Actions.ListArtifacts(ctx, s.owner, s.repo, opts)
+		resp, nextPage, err := s.listArtifacts(ctx, githubPaginationLimit, page)
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrPlanfileListFailed, err)
 		}
 
-		for _, artifact := range artifacts.Artifacts {
-			name := artifact.GetName()
+		for _, a := range resp.Artifacts {
+			name := a.Name
 			// Only include planfile artifacts.
 			if len(name) < artifactPrefixLen || name[:artifactPrefixLen] != artifactNamePrefix {
 				continue
@@ -490,15 +643,15 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 
 			files = append(files, planfile.PlanfileInfo{
 				Key:          key,
-				Size:         artifact.GetSizeInBytes(),
-				LastModified: artifact.GetCreatedAt().Time,
+				Size:         a.SizeInBytes,
+				LastModified: a.CreatedAt,
 			})
 		}
 
-		if resp.NextPage == 0 {
+		if nextPage == 0 {
 			break
 		}
-		opts.Page = resp.NextPage
+		page = nextPage
 	}
 
 	// Sort by last modified (newest first).
@@ -515,15 +668,13 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 
 	artifactName := s.artifactName(key)
 
-	artifacts, _, err := s.client.Actions.ListArtifacts(ctx, s.owner, s.repo, &github.ListOptions{
-		PerPage: 100,
-	})
+	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
 		return false, fmt.Errorf("%w: failed to check artifact existence: %w", errUtils.ErrPlanfileListFailed, err)
 	}
 
-	for _, artifact := range artifacts.Artifacts {
-		if artifact.GetName() == artifactName {
+	for _, a := range resp.Artifacts {
+		if a.Name == artifactName {
 			return true, nil
 		}
 	}
@@ -537,21 +688,19 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 
 	artifactName := s.artifactName(key)
 
-	artifacts, _, err := s.client.Actions.ListArtifacts(ctx, s.owner, s.repo, &github.ListOptions{
-		PerPage: 100,
-	})
+	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to get artifact metadata: %w", errUtils.ErrPlanfileListFailed, err)
 	}
 
-	for _, artifact := range artifacts.Artifacts {
-		if artifact.GetName() == artifactName {
+	for _, a := range resp.Artifacts {
+		if a.Name == artifactName {
 			// Return basic metadata from artifact info.
 			// Full metadata would require downloading the artifact.
 			return &planfile.Metadata{
-				CreatedAt: artifact.GetCreatedAt().Time,
+				CreatedAt: a.CreatedAt,
 				ExpiresAt: func() *time.Time {
-					t := artifact.GetExpiresAt().Time
+					t := a.ExpiresAt
 					return &t
 				}(),
 			}, nil
