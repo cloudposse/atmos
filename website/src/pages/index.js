@@ -147,7 +147,7 @@ function Home() {
         </main>
         <footer>
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
-            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu, Ansible, and more today.</h3>
+            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu, Pakcer, Ansible, and more today.</h3>
             <section className="cta-section">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
             </section>
