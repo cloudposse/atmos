@@ -91,7 +91,7 @@ type finalizeArtifactRequest struct {
 // finalizeArtifactResponse is the response from the FinalizeArtifact API.
 type finalizeArtifactResponse struct {
 	OK         bool  `json:"ok"`
-	ArtifactID int64 `json:"artifact_id"`
+	ArtifactID int64 `json:"artifact_id,string"`
 }
 
 // backendIDs holds the workflow backend IDs extracted from the runtime token.
