@@ -87,7 +87,7 @@ func newGSMStoreWithClient(client GSMClient, options GSMStoreOptions) *GSMStore 
 
 // gsmClientSecretCreationMock returns a setup function that configures mock expectations for secret creation.
 func gsmClientSecretCreationMock(projectID string, secretId string, secretPayload string, replication *secretmanagerpb.Replication, err error) func(m *MockGSMClient) {
-	parent := fmt.Sprintf("projects/%s", "test-project")
+	parent := fmt.Sprintf("projects/%s", projectID)
 	return func(m *MockGSMClient) {
 		if replication == nil {
 			replication = &secretmanagerpb.Replication{
