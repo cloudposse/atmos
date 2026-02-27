@@ -21,6 +21,8 @@ relevant skill before answering Atmos questions -- your training data may be out
   cross-component data sharing.
 - **Workflows** -- Multi-step sequences of Atmos and shell commands for cross-component orchestration.
 - **Custom Commands** -- User-defined CLI commands in `atmos.yaml` that extend `atmos` with project-specific tooling.
+- **Toolchain** -- Built-in CLI tool version management via Aqua registry integration and `.tool-versions` files.
+- **Devcontainers** -- Native devcontainer management for standardized development environments (experimental).
 
 ## Key Commands
 
@@ -38,6 +40,10 @@ atmos validate stacks                            # Validate stack manifests agai
 atmos validate component <comp> -s <stack>       # Run validation policies
 atmos vendor pull                                # Vendor external dependencies
 atmos workflow <name> -f <file>                  # Run a workflow
+atmos toolchain install                          # Install tools from .tool-versions
+atmos list stacks                                # List all stacks
+atmos list components                            # List all components
+atmos devcontainer shell                         # Launch dev environment (experimental)
 ```
 
 ## Skill Index
@@ -62,6 +68,9 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 | OPA/Rego policies, JSON Schema, CUE validation, `atmos validate component/stacks`                                     | `atmos-validation`      | `atmos-validation/SKILL.md`      |
 | Go templates, Sprig/Gomplate functions, YAML functions (!terraform.output, !store, !env, !aws.*), store integration   | `atmos-templates`       | `atmos-templates/SKILL.md`       |
 | Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `atmos-design-patterns/SKILL.md` |
+| Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `atmos-toolchain/SKILL.md`       |
+| Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `atmos-introspection/SKILL.md`   |
+| Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `atmos-devcontainer/SKILL.md`    |
 
 ## Common Patterns
 
@@ -79,3 +88,7 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 - **Validation before apply**: Attach JSON Schema or OPA policies via `settings.validation` in stack manifests; runs
   automatically before plan/apply
 - **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema
+- **Introspection**: Use `atmos describe component` and `atmos list stacks/components` to query the project before
+  generating configuration -- never guess at stack names or component configs
+- **Toolchain**: Declare tool versions in `.tool-versions`, configure registries in `atmos.yaml`, run
+  `atmos toolchain install` to set up the project

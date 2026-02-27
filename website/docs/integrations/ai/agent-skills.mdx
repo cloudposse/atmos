@@ -13,13 +13,13 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-Atmos ships 16 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
+Atmos ships 19 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
 configuration, Terraform orchestration, authentication, validation, and more. The skills live in the `agent-skills/`
 folder at the root of the Atmos repository and work across all major AI tools.
 </Intro>
 
 <KeyPoints>
-- 16 domain-specific skills covering every Atmos subsystem
+- 19 domain-specific skills covering every Atmos subsystem
 - Works with Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more
 - Progressive disclosure: AI loads only the skill it needs, keeping context focused
 - Portable SKILL.md format with YAML frontmatter and tiered reference files
@@ -44,7 +44,7 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 ## Available Skills
 
-Atmos includes 16 skills organized into five categories:
+Atmos includes 19 skills organized into five categories:
 
 ### Core Configuration
 
@@ -54,6 +54,7 @@ Atmos includes 16 skills organized into five categories:
 | `atmos-components` | Terraform root modules, abstract components, component inheritance, versioning |
 | `atmos-vendoring` | Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry |
 | `atmos-schemas` | JSON Schema for stack manifests, IDE auto-completion, schema validation |
+| `atmos-introspection` | describe/list commands for querying stacks, components, dependencies, and change impact |
 
 ### Orchestration
 
@@ -72,6 +73,7 @@ Atmos includes 16 skills organized into five categories:
 | `atmos-stores` | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory) |
 | `atmos-workflows` | Multi-step workflows, Go template support, cross-component orchestration |
 | `atmos-custom-commands` | User-defined CLI commands in atmos.yaml with arguments, flags, and steps |
+| `atmos-toolchain` | CLI tool version management via Aqua registries, .tool-versions, install/exec |
 
 ### Integrations
 
@@ -80,6 +82,7 @@ Atmos includes 16 skills organized into five categories:
 | `atmos-gitops` | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based workflows |
 | `atmos-validation` | OPA/Rego policies, JSON Schema, CUE validation, `atmos validate` commands |
 | `atmos-templates` | Go templates, Sprig/Gomplate functions, YAML functions (`!store`, `!env`, `!aws.*`) |
+| `atmos-devcontainer` | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration |
 
 ### Guidance
 
@@ -107,7 +110,7 @@ agent-skills/
     references/
       commands-reference.md
       backend-configuration.md
-  ...                                    # 13 more skills with the same structure
+  ...                                    # 16 more skills with the same structure
 ```
 
 Each skill folder follows the same pattern: one `SKILL.md` file and a `references/` directory with one or more
@@ -260,30 +263,34 @@ Load the relevant skill from agent-skills/<skill-name>/SKILL.md.
 Cursor co-created the `AGENTS.md` standard and reads it natively. It also supports subagents in
 `.cursor/agents/*.md` with YAML frontmatter (since Cursor 2.4).
 
-```bash
-# Symlink skills into Cursor's directory
-ln -s agent-skills .cursor/skills
-```
-
-Or reference `AGENTS.md` in a `.cursor/rules/atmos.mdc` rule file:
+The **primary integration path** is adding an `.mdc` rule file that references the skills router.
+Simply symlinking to `.cursor/skills` will not automatically load context -- Cursor requires explicit
+`@` references or rule files to inject context:
 
 ```text
+# .cursor/rules/atmos.mdc
 @agent-skills/AGENTS.md
 ```
+
+This ensures Cursor loads the Atmos skill router whenever it processes files in the project.
 
   </TabItem>
   <TabItem value="windsurf" label="Windsurf">
 
-**Config directory:** `.windsurf/` | **Rules:** `.windsurf/rules/` | **AGENTS.md:** auto-discovered
+**Config directory:** `.windsurf/` | **Rules:** `.windsurf/rules/` or `.windsurfrules` | **AGENTS.md:** auto-discovered
 
 Windsurf automatically discovers `AGENTS.md` files in the workspace and subdirectories, applying them
-as scoped instructions to Cascade.
+as scoped instructions to Cascade. For guaranteed context loading, also add a pointer in your
+`.windsurfrules` file:
 
-```bash
-# Windsurf reads AGENTS.md automatically
-# For explicit skill access, symlink the skills directory
-ln -s agent-skills .windsurf/skills
+```text
+# .windsurfrules
+For Atmos-specific guidance, see agent-skills/AGENTS.md.
+Load the relevant skill from agent-skills/<skill-name>/SKILL.md.
 ```
+
+This ensures Windsurf applies Atmos context during all Cascade sessions, even if auto-discovery
+does not trigger for nested files.
 
   </TabItem>
   <TabItem value="github-copilot" label="GitHub Copilot">

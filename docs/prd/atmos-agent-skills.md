@@ -207,26 +207,29 @@ activation rate.
 
 ## Skill Inventory
 
-### 16 Skills
+### 19 Skills
 
 | #  | Skill                    | Category      | Description                                                                                             |
 |----|--------------------------|---------------|---------------------------------------------------------------------------------------------------------|
 | 1  | `atmos-stacks`           | configuration | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml |
 | 2  | `atmos-components`       | configuration | Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns          |
 | 3  | `atmos-vendoring`        | configuration | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry                                 |
-| 4  | `atmos-terraform`        | orchestration | plan/apply/deploy, workspace management, backend config, varfile generation                             |
-| 5  | `atmos-helmfile`         | orchestration | sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                    |
-| 6  | `atmos-packer`           | orchestration | init/build/validate/inspect/output, machine image building, template management                         |
-| 7  | `atmos-ansible`          | orchestration | Playbook execution, variable passing, inventory management, configuration management                    |
-| 8  | `atmos-workflows`        | orchestration | Multi-step workflows, Go template support, cross-component orchestration                                |
-| 9  | `atmos-custom-commands`  | orchestration | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars                                    |
-| 10 | `atmos-auth`             | platform      | Providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, identity chaining, login/exec/shell |
-| 11 | `atmos-stores`           | platform      | AWS SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, hooks integration, data sharing       |
-| 12 | `atmos-schemas`          | platform      | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation        |
-| 13 | `atmos-gitops`           | integrations  | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                     |
-| 14 | `atmos-validation`       | integrations  | OPA/Rego policies, JSON Schema, CUE validation, schema manifests                                        |
-| 15 | `atmos-templates`        | integrations  | Go templates, Sprig/Gomplate functions, YAML functions, store integration                               |
-| 16 | `atmos-design-patterns`  | guidance      | Stack organization, component catalogs, inheritance, configuration composition, version management       |
+| 4  | `atmos-schemas`          | configuration | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation        |
+| 5  | `atmos-introspection`    | configuration | describe/list commands for querying stacks, components, dependencies, change impact, provenance          |
+| 6  | `atmos-terraform`        | orchestration | plan/apply/deploy, workspace management, backend config, varfile generation                             |
+| 7  | `atmos-helmfile`         | orchestration | sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                    |
+| 8  | `atmos-packer`           | orchestration | init/build/validate/inspect/output, machine image building, template management                         |
+| 9  | `atmos-ansible`          | orchestration | Playbook execution, variable passing, inventory management, configuration management                    |
+| 10 | `atmos-workflows`        | orchestration | Multi-step workflows, Go template support, cross-component orchestration                                |
+| 11 | `atmos-custom-commands`  | orchestration | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars                                    |
+| 12 | `atmos-auth`             | platform      | Providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, identity chaining, login/exec/shell |
+| 13 | `atmos-stores`           | platform      | AWS SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, hooks integration, data sharing       |
+| 14 | `atmos-toolchain`        | platform      | CLI tool version management via Aqua registries, .tool-versions, install/exec/search                    |
+| 15 | `atmos-gitops`           | integrations  | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                     |
+| 16 | `atmos-validation`       | integrations  | OPA/Rego policies, JSON Schema, CUE validation, schema manifests                                        |
+| 17 | `atmos-templates`        | integrations  | Go templates, Sprig/Gomplate functions, YAML functions, store integration                               |
+| 18 | `atmos-devcontainer`     | integrations  | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration (experimental)      |
+| 19 | `atmos-design-patterns`  | guidance      | Stack organization, component catalogs, inheritance, configuration composition, version management       |
 
 ### Content Sources
 
@@ -256,6 +259,12 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 | `website/docs/functions/yaml/`                 | YAML functions                                                            |
 | `website/docs/functions/template/`             | Go template functions                                                     |
 | `website/docs/design-patterns/`                | Best practices and patterns                                               |
+| `website/docs/cli/commands/toolchain/`         | Toolchain commands (install, exec, search, env, registry)                 |
+| `website/docs/cli/configuration/toolchain/`    | Toolchain configuration (registries, aliases)                             |
+| `website/docs/cli/commands/describe/`          | Describe commands (component, stacks, affected, dependents, config)       |
+| `website/docs/cli/commands/list/`              | List commands (stacks, components, instances, affected, workflows)        |
+| `docs/prd/devcontainer-command.md`             | Devcontainer feature specification                                        |
+| `cmd/devcontainer/`                            | Devcontainer command implementations                                      |
 
 ## Directory Layout
 

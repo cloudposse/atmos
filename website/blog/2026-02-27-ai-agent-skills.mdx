@@ -5,18 +5,18 @@ authors: [aknysh]
 tags: [feature, dx]
 ---
 
-Atmos now ships 16 agent skills that give AI coding assistants deep knowledge of Atmos conventions, stack configuration, Terraform orchestration, authentication, validation, and more. Skills build on two open standards -- [AGENTS.md](https://agents.md/) and [Agent Skills](https://agentskills.io/specification) -- and work across Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and other AI tools.
+Atmos now ships 19 agent skills that give AI coding assistants deep knowledge of Atmos conventions, stack configuration, Terraform orchestration, authentication, validation, and more. Skills build on two open standards -- [AGENTS.md](https://agents.md/) and [Agent Skills](https://agentskills.io/specification) -- and work across Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and other AI tools.
 
 <!--truncate-->
 
 ## What Changed
 
-Atmos includes a new `agent-skills/` directory at the repository root containing 16 domain-specific skills:
+Atmos includes a new `agent-skills/` directory at the repository root containing 19 domain-specific skills:
 
-- **Core Configuration**: `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-schemas`
+- **Core Configuration**: `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-schemas`, `atmos-introspection`
 - **Orchestration**: `atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`
-- **Platform**: `atmos-auth`, `atmos-stores`, `atmos-workflows`, `atmos-custom-commands`
-- **Integrations**: `atmos-gitops`, `atmos-validation`, `atmos-templates`
+- **Platform**: `atmos-auth`, `atmos-stores`, `atmos-workflows`, `atmos-custom-commands`, `atmos-toolchain`
+- **Integrations**: `atmos-gitops`, `atmos-validation`, `atmos-templates`, `atmos-devcontainer`
 - **Guidance**: `atmos-design-patterns`
 
 Each skill is a self-contained package with a primary `SKILL.md` instruction file (under 500 lines) and a `references/` directory with deeper reference material. An `AGENTS.md` router file maps user tasks to the right skill, so AI tools load only the context they need.
@@ -60,17 +60,17 @@ cp agent-skills/AGENTS.md AGENTS.md
 
 ### Gemini CLI, Cursor, Windsurf, GitHub Copilot
 
-Symlink the skills into each tool's configuration directory:
+Each tool has its own integration path:
 
 ```bash
-# Gemini CLI (.gemini/)
+# Gemini CLI -- symlink to .gemini/skills
 ln -s agent-skills .gemini/skills
 
-# Cursor (.cursor/)
-ln -s agent-skills .cursor/skills
+# Cursor -- add .cursor/rules/atmos.mdc with: @agent-skills/AGENTS.md
+mkdir -p .cursor/rules && echo '@agent-skills/AGENTS.md' > .cursor/rules/atmos.mdc
 
-# Windsurf -- auto-discovers AGENTS.md in workspace, or:
-ln -s agent-skills .windsurf/skills
+# Windsurf -- add reference in .windsurfrules (also auto-discovers AGENTS.md)
+echo 'See agent-skills/AGENTS.md for Atmos guidance.' >> .windsurfrules
 
 # GitHub Copilot -- reference in .github/copilot-instructions.md
 ```
