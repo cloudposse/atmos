@@ -80,7 +80,14 @@ func (w *OutputModeWriter) executeViewport(cmd *exec.Cmd) (string, string, error
 		content += "\n--- stderr ---\n" + stderr.String()
 	}
 
-	p := pager.NewWithAtmosConfig(true)
+	// Use viewport config if available, otherwise use terminal dimensions.
+	height, width := 0, 0
+	if w.viewport != nil {
+		height = w.viewport.Height
+		width = w.viewport.Width
+	}
+
+	p := pager.NewWithViewport(true, height, width)
 	if pagerErr := p.Run(w.stepName, content); pagerErr != nil {
 		// Pager failed, fall back to raw output.
 		if writeErr := data.Write(content); writeErr != nil {
