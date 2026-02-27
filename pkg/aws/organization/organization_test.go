@@ -231,7 +231,7 @@ func TestGetCacheKey(t *testing.T) {
 			authContext: &schema.AWSAuthContext{
 				Profile: "test-profile",
 			},
-			expected: "test-profile::",
+			expected: `"test-profile"|""|""`,
 		},
 		{
 			name: "with all fields",
@@ -240,7 +240,7 @@ func TestGetCacheKey(t *testing.T) {
 				CredentialsFile: "/creds",
 				ConfigFile:      "/config",
 			},
-			expected: "prod:/creds:/config",
+			expected: `"prod"|"/creds"|"/config"`,
 		},
 	}
 
@@ -407,6 +407,26 @@ func TestDefaultGetter_GetOrganization_NotInOrg(t *testing.T) {
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrAwsDescribeOrganization)
 	assert.Contains(t, err.Error(), "not a member of an organization")
+}
+
+func TestDefaultGetter_GetOrganization_NilOutput(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	mockClient := NewMockorganizationsAPI(ctrl)
+
+	mockClient.EXPECT().
+		DescribeOrganization(gomock.Any(), gomock.Any()).
+		Return(nil, nil).
+		Times(1)
+
+	restore := withMockOrgClient(t, mockClient, nil)
+	defer restore()
+
+	d := &defaultGetter{}
+	_, err := d.GetOrganization(context.Background(), &schema.AtmosConfiguration{}, nil)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrAwsDescribeOrganization)
+	assert.Contains(t, err.Error(), "empty response payload")
 }
 
 func TestDefaultGetter_GetOrganization_NilOrgPayload(t *testing.T) {

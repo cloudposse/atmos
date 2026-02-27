@@ -90,6 +90,10 @@ func (d *defaultGetter) GetOrganization(
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrAwsDescribeOrganization, err)
 	}
 
+	if output == nil {
+		return nil, fmt.Errorf("%w: describe organization returned empty response payload", errUtils.ErrAwsDescribeOrganization)
+	}
+
 	info := &OrganizationInfo{}
 
 	// Extract values from the organization output.
@@ -165,7 +169,7 @@ func getCacheKey(authContext *schema.AWSAuthContext) string {
 	if authContext == nil {
 		return "default"
 	}
-	return fmt.Sprintf("%s:%s:%s", authContext.Profile, authContext.CredentialsFile, authContext.ConfigFile)
+	return fmt.Sprintf("%q|%q|%q", authContext.Profile, authContext.CredentialsFile, authContext.ConfigFile)
 }
 
 // GetOrganizationCached retrieves the AWS organization info with caching.
