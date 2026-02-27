@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/oauth2"
+
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -117,7 +119,6 @@ type listArtifactsResponse struct {
 type Store struct {
 	httpClient    *http.Client
 	baseURL       string
-	token         string
 	uploader      artifactUploader
 	owner         string
 	repo          string
@@ -148,10 +149,13 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 		uploader = newRuntimeUploader(resultsURL, runtimeToken)
 	}
 
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})
+	httpClient := oauth2.NewClient(context.Background(), ts)
+	httpClient.Timeout = httpTimeout
+
 	return &Store{
-		httpClient:    &http.Client{Timeout: httpTimeout},
+		httpClient:    httpClient,
 		baseURL:       "https://api.github.com",
-		token:         token,
 		uploader:      uploader,
 		owner:         owner,
 		repo:          repo,
@@ -337,7 +341,6 @@ func (s *Store) listArtifacts(ctx context.Context, perPage, page int) (*listArti
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to create list artifacts request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := s.httpClient.Do(req)
@@ -370,12 +373,13 @@ func (s *Store) downloadArtifactURL(ctx context.Context, artifactID int64) (stri
 	if err != nil {
 		return "", fmt.Errorf("failed to create download artifact request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	// Use a client that does not follow redirects to capture the Location header.
+	// Reuse the oauth2 transport so the token is still injected automatically.
 	noRedirectClient := &http.Client{
-		Timeout: httpTimeout,
+		Transport: s.httpClient.Transport,
+		Timeout:   httpTimeout,
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
 		},
@@ -412,7 +416,6 @@ func (s *Store) deleteArtifact(ctx context.Context, artifactID int64) error {
 	if err != nil {
 		return fmt.Errorf("failed to create delete artifact request: %w", err)
 	}
-	req.Header.Set("Authorization", "Bearer "+s.token)
 	req.Header.Set("Accept", "application/vnd.github+json")
 
 	resp, err := s.httpClient.Do(req)

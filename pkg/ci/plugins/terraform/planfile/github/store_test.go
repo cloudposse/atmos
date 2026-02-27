@@ -536,8 +536,8 @@ func TestNewStore(t *testing.T) {
 		assert.Equal(t, "testrepo", s.repo)
 		assert.Equal(t, 14, s.retentionDays)
 		assert.Equal(t, "https://api.github.com", s.baseURL)
-		assert.Equal(t, "test-token", s.token)
 		assert.NotNil(t, s.httpClient)
+		assert.NotNil(t, s.httpClient.Transport)
 	})
 
 	t.Run("with GITHUB_REPOSITORY env", func(t *testing.T) {
@@ -1030,7 +1030,7 @@ func TestStore_Download(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1054,7 +1054,7 @@ func TestStore_Delete(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1077,7 +1077,7 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1123,7 +1123,7 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1184,7 +1184,7 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1229,7 +1229,7 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1263,7 +1263,7 @@ func TestStore_Exists(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1284,7 +1284,7 @@ func TestStore_Exists(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1321,7 +1321,7 @@ func TestStore_GetMetadata(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
@@ -1343,7 +1343,7 @@ func TestStore_GetMetadata(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-			token:      "test-token",
+
 			owner:      "testowner",
 			repo:       "testrepo",
 		}
