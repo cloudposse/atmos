@@ -442,7 +442,7 @@ atmos terraform source list [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--stack` / `-s` | Target Atmos stack (required for single-component operations) |
+| `--stack` / `-s` | Target Atmos stack (required for most component operations, not needed for source commands) |
 | `--dry-run` | Preview without executing |
 | `--process-templates` | Enable/disable Go template processing |
 | `--process-functions` | Enable/disable YAML function processing |

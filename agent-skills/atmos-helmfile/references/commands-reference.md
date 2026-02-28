@@ -370,8 +370,8 @@ Settings under `components.helmfile` in `atmos.yaml`:
 | `kubeconfig_path` | | `ATMOS_COMPONENTS_HELMFILE_KUBECONFIG_PATH` | Directory for kubeconfig files |
 | `cluster_name` | | `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME` | Explicit EKS cluster name |
 | `cluster_name_template` | | `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_TEMPLATE` | Go template for dynamic cluster names |
-| `cluster_name_pattern` | | `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN` | Token replacement pattern (deprecated) |
-| `helm_aws_profile_pattern` | | `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` | AWS profile pattern (deprecated) |
+| `cluster_name_pattern` | | `ATMOS_COMPONENTS_HELMFILE_CLUSTER_NAME_PATTERN` | Token replacement pattern (deprecated, use `cluster_name_template` instead) |
+| `helm_aws_profile_pattern` | | `ATMOS_COMPONENTS_HELMFILE_HELM_AWS_PROFILE_PATTERN` | AWS profile pattern (deprecated, use identity-based auth instead) |
 
 Command-line flag overrides:
 - `--helmfile-command` -- Override the `command` setting

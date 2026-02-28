@@ -69,6 +69,7 @@ The following devcontainer spec fields are supported:
 
 Unsupported fields (`features`, `postCreateCommand`, `customizations`, etc.) are silently ignored
 with debug-level logging, allowing compatibility with VS Code `devcontainer.json` files.
+Use `ATMOS_LOGS_LEVEL=Debug` to see which fields are being ignored.
 
 ### Importing from devcontainer.json
 

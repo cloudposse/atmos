@@ -185,10 +185,10 @@ Reads values following the Atmos stack/component/key naming convention. The stor
 
 ```yaml
 vars:
-  # Two-parameter form: store + component + key (current stack implied)
+  # Three-argument form: store + component + key (current stack implied)
   vpc_id: !store prod/ssm vpc vpc_id
 
-  # Three-parameter form: store + stack + component + key
+  # Four-argument form: store + stack + component + key
   vpc_id: !store prod/ssm plat-ue2-prod vpc vpc_id
 
   # Dynamic stack reference using Go templates
@@ -249,7 +249,7 @@ Read from stores within Go template expressions:
 ```yaml
 vars:
   vpc_id: '{{ atmos.Store "prod/ssm" .stack "vpc" "vpc_id" }}'
-  config: !template '{{ (atmos.Store "redis" .stack "config" "config_map").defaults | toJSON }}'
+  config: !template '{{ (atmos.Store "cache" .stack "config" "config_map").defaults | toJSON }}'
 ```
 
 ## Writing to Stores with Hooks
