@@ -10,7 +10,7 @@ atmos packer <sub-command> <atmos-component> --stack <atmos-stack> [atmos-flags]
 
 - `<sub-command>` -- One of: `init`, `build`, `validate`, `inspect`, `output`, `version`, or `source`.
 - `<atmos-component>` -- The Packer component name or filesystem path.
-- `--stack` / `-s` -- The target Atmos stack (required for all commands except `version`).
+- `--stack` / `-s` -- The target Atmos stack (required for all commands except `version` and `source list`).
 - `[atmos-flags]` -- Atmos-specific flags such as `--template`.
 - `-- [packer-options]` -- Native Packer flags passed through after the `--` separator.
 
@@ -165,7 +165,7 @@ atmos packer inspect aws/bastion -s nonprod -t main.nonprod.pkr.hcl
 
 ### Sample Output
 
-```
+```text
 Packer Inspect: HCL2 mode
 
 > input-variables:
@@ -344,7 +344,7 @@ atmos packer source pull ami-builder --stack dev --identity admin
 
 ### Output
 
-```
+```text
 Vendoring component 'ami-builder' from source...
 Downloading from github.com/cloudposse/packer-templates//ami-builder?ref=1.0.0
 Successfully vendored component to components/packer/ami-builder
@@ -460,7 +460,7 @@ atmos packer source list --format tsv
 
 ### Sample Output (All Stacks)
 
-```
+```text
 STACK              COMPONENT       URI                                                    VERSION
 plat-ue2-dev       ami-builder     github.com/cloudposse/packer-templates//ami-builder    1.0.0
 plat-ue2-dev       docker-builder  github.com/cloudposse/packer-templates//docker         1.0.0
@@ -469,7 +469,7 @@ plat-ue2-prod      ami-builder     github.com/cloudposse/packer-templates//ami-b
 
 ### Sample Output (Single Stack)
 
-```
+```text
 COMPONENT       URI                                                    VERSION
 ami-builder     github.com/cloudposse/packer-templates//ami-builder    1.0.0
 docker-builder  github.com/cloudposse/packer-templates//docker         1.0.0
@@ -520,7 +520,7 @@ atmos packer source delete ami-builder --stack dev
 
 ### Sample Output
 
-```
+```text
 Deleting directory: components/packer/ami-builder
 Successfully deleted: components/packer/ami-builder
 ```
@@ -646,7 +646,7 @@ source:
 
 ### Missing Source Configuration
 
-```
+```text
 Error: source not configured
 
 Hint: Add source to the component configuration in your stack manifest
@@ -662,7 +662,7 @@ Example:
 
 ### Component Directory Already Exists
 
-```
+```text
 Error: component directory already exists
 
 Hint: Use --force to overwrite the existing directory
@@ -670,7 +670,7 @@ Hint: Use --force to overwrite the existing directory
 
 ### Download Failed
 
-```
+```text
 Error: failed to download source
 
 Cause: failed to clone repository: authentication required
@@ -680,7 +680,7 @@ Hint: Check credentials or use --identity to specify authentication
 
 ### Delete Without Force
 
-```
+```text
 Error: --force flag is required
 
 Explanation: Deletion requires --force flag for safety

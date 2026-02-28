@@ -176,7 +176,7 @@ auth:
       kind: aws/user                        # Required
       credentials:
         access_key_id: !env AWS_ACCESS_KEY_ID        # Use !env for env var references
-        secret_access_key: !env AWS_SECRET_KEY       # Use !env for env var references
+        secret_access_key: !env AWS_SECRET_ACCESS_KEY  # Use !env for env var references
         region: us-east-1                            # AWS region
         mfa_arn: arn:aws:iam::123456789012:mfa/user  # Optional: prompts for TOTP
       session:
@@ -201,7 +201,7 @@ auth:
 ```
 
 Sets environment variables: `AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, `AZURE_LOCATION`,
-`ARM_SUBSCRIPTION_ID`, etc.
+`ARM_LOCATION`, etc.
 
 ### GCP Service Account
 
@@ -416,7 +416,7 @@ components:
 Use Atmos profiles to swap provider implementations while keeping the same provider name. Identity
 configurations reference a consistent provider name that behaves differently per profile.
 
-```
+```text
 profiles/
   developer/auth.yaml    # SSO with standard sessions
   ci/auth.yaml           # GitHub OIDC for pipelines

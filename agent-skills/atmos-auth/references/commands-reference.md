@@ -507,7 +507,7 @@ atmos auth validate --verbose
 atmos auth login --identity <name> --verbose
 
 # Set log level
-ATMOS_LOG_LEVEL=Debug atmos auth whoami
+ATMOS_LOGS_LEVEL=Debug atmos auth whoami
 
 # Write auth logs to file
 # In atmos.yaml:

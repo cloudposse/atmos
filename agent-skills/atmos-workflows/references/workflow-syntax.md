@@ -28,7 +28,7 @@ workflows:
 
 ### Example Directory Layout
 
-```
+```text
 stacks/workflows/
   deploy.yaml
   destroy.yaml

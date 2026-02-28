@@ -55,7 +55,7 @@ and appending `.json`.
 
 Directory structure:
 
-```
+```text
 pkg/datafetcher/schema/
   atmos/manifest/1.0.json          -- Minimal manifest schema
   stacks/stack-config/1.0.json     -- Full stack config validation schema

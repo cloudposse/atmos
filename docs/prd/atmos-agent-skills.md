@@ -207,29 +207,30 @@ activation rate.
 
 ## Skill Inventory
 
-### 19 Skills
+### 20 Skills
 
 | #  | Skill                    | Category      | Description                                                                                             |
 |----|--------------------------|---------------|---------------------------------------------------------------------------------------------------------|
-| 1  | `atmos-stacks`           | configuration | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml |
-| 2  | `atmos-components`       | configuration | Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns          |
-| 3  | `atmos-vendoring`        | configuration | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry                                 |
-| 4  | `atmos-schemas`          | configuration | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation        |
-| 5  | `atmos-introspection`    | configuration | describe/list commands for querying stacks, components, dependencies, change impact, provenance          |
-| 6  | `atmos-terraform`        | orchestration | plan/apply/deploy, workspace management, backend config, varfile generation                             |
-| 7  | `atmos-helmfile`         | orchestration | sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                    |
-| 8  | `atmos-packer`           | orchestration | init/build/validate/inspect/output, machine image building, template management                         |
-| 9  | `atmos-ansible`          | orchestration | Playbook execution, variable passing, inventory management, configuration management                    |
-| 10 | `atmos-workflows`        | orchestration | Multi-step workflows, Go template support, cross-component orchestration                                |
-| 11 | `atmos-custom-commands`  | orchestration | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars                                    |
-| 12 | `atmos-auth`             | platform      | Providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, identity chaining, login/exec/shell |
-| 13 | `atmos-stores`           | platform      | AWS SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, hooks integration, data sharing       |
-| 14 | `atmos-toolchain`        | platform      | CLI tool version management via Aqua registries, .tool-versions, install/exec/search                    |
-| 15 | `atmos-gitops`           | integrations  | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                     |
-| 16 | `atmos-validation`       | integrations  | OPA/Rego policies, JSON Schema, CUE validation, schema manifests                                        |
-| 17 | `atmos-templates`        | integrations  | Go templates, Sprig/Gomplate functions, YAML functions, store integration                               |
-| 18 | `atmos-devcontainer`     | integrations  | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration (experimental)      |
-| 19 | `atmos-design-patterns`  | guidance      | Stack organization, component catalogs, inheritance, configuration composition, version management       |
+| 1  | `atmos-config`           | configuration | Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles                 |
+| 2  | `atmos-stacks`           | configuration | Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides              |
+| 3  | `atmos-components`       | configuration | Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns          |
+| 4  | `atmos-vendoring`        | configuration | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry                                 |
+| 5  | `atmos-schemas`          | configuration | JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation        |
+| 6  | `atmos-introspection`    | configuration | describe/list commands for querying stacks, components, dependencies, change impact, provenance          |
+| 7  | `atmos-terraform`        | orchestration | plan/apply/deploy, workspace management, backend config, varfile generation                             |
+| 8  | `atmos-helmfile`         | orchestration | sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                    |
+| 9  | `atmos-packer`           | orchestration | init/build/validate/inspect/output, machine image building, template management                         |
+| 10 | `atmos-ansible`          | orchestration | Playbook execution, variable passing, inventory management, configuration management                    |
+| 11 | `atmos-workflows`        | orchestration | Multi-step workflows, Go template support, cross-component orchestration                                |
+| 12 | `atmos-custom-commands`  | orchestration | Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars                                    |
+| 13 | `atmos-auth`             | platform      | Providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, identity chaining, login/exec/shell |
+| 14 | `atmos-stores`           | platform      | AWS SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory, hooks integration, data sharing       |
+| 15 | `atmos-toolchain`        | platform      | CLI tool version management via Aqua registries, .tool-versions, install/exec/search                    |
+| 16 | `atmos-gitops`           | integrations  | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                     |
+| 17 | `atmos-validation`       | integrations  | OPA/Rego policies, JSON Schema, CUE validation, schema manifests                                        |
+| 18 | `atmos-templates`        | integrations  | Go templates, Sprig/Gomplate functions, YAML functions, store integration                               |
+| 19 | `atmos-devcontainer`     | integrations  | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration (experimental)      |
+| 20 | `atmos-design-patterns`  | guidance      | Stack organization, component catalogs, inheritance, configuration composition, version management       |
 
 ### Content Sources
 
@@ -272,7 +273,12 @@ All SKILL.md content MUST be derived from the Atmos source documentation:
 agent-skills/                                # Tool-agnostic skills (primary location)
 ├── AGENTS.md                                # Skill-activation router
 │
-├── atmos-stacks/                            # Configuration
+├── atmos-config/                            # Configuration
+│   ├── SKILL.md
+│   └── references/
+│       └── sections-reference.md
+│
+├── atmos-stacks/
 │   ├── SKILL.md
 │   └── references/
 │       ├── import-patterns.md
@@ -366,7 +372,7 @@ agent-skills/                                # Tool-agnostic skills (primary loc
 └── settings.local.json                      # Existing settings
 ```
 
-**Total: 41 files** (16 SKILL.md + 24 references + AGENTS.md) + 1 symlink
+**Total: 49 files** (20 SKILL.md + 28 references + AGENTS.md) + 1 symlink
 
 ## Implementation Plan
 
@@ -387,7 +393,7 @@ agent-skills/                                # Tool-agnostic skills (primary loc
 5. Added `atmos-stores` skill for external key-value store backends.
 6. Added `atmos-schemas` skill for JSON Schema system and how to update schemas.
 7. Added `atmos-design-patterns` skill for architectural patterns and best practices.
-8. Updated AGENTS.md with all 16 skills.
+8. Updated AGENTS.md with all 20 skills.
 
 ### Phase 3: Validation (Planned)
 

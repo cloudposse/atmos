@@ -52,7 +52,8 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 
 | Task                                                                                                                  | Skill                   | Path                             |
 |-----------------------------------------------------------------------------------------------------------------------|-------------------------|----------------------------------|
-| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides, atmos.yaml stacks config | `atmos-stacks`          | `atmos-stacks/SKILL.md`          |
+| atmos.yaml project config: all sections, discovery, merging, base paths, settings, imports, profiles                 | `atmos-config`          | `atmos-config/SKILL.md`          |
+| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides                          | `atmos-stacks`          | `atmos-stacks/SKILL.md`          |
 | Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `atmos-components/SKILL.md`      |
 | vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `atmos-vendoring/SKILL.md`       |
 | terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `atmos-terraform/SKILL.md`       |
@@ -75,20 +76,20 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 ## Common Patterns
 
 - **Stack naming**: `{tenant}-{stage}` or `{org}-{tenant}-{account}-{region}`, configured via `name_pattern` or
-  `name_template` in `atmos.yaml`
+  `name_template` in `atmos.yaml`.
 - **Inheritance**: Use `_defaults.yaml` files at each directory level for shared config; deeper files override shallower
-  ones
+  ones.
 - **Component reuse**: Define abstract components with `metadata.type: abstract`, inherit with `metadata.component` and
-  `metadata.inherit`
+  `metadata.inherits`.
 - **Cross-stack references**: Use `!terraform.output` YAML function or `{{ atmos.Component }}` Go template to read
-  outputs from other components
-- **Data sharing via stores**: Write outputs to stores with hooks after apply, read them with `!store` YAML function
+  outputs from other components.
+- **Data sharing via stores**: Write outputs to stores with hooks after apply, read them with `!store` YAML function.
 - **Authentication**: Configure providers and identities in `atmos.yaml`, use `atmos auth login` to authenticate,
-  `atmos auth shell` for authenticated sessions
+  `atmos auth shell` for authenticated sessions.
 - **Validation before apply**: Attach JSON Schema or OPA policies via `settings.validation` in stack manifests; runs
-  automatically before plan/apply
-- **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema
+  automatically before plan/apply.
+- **Schema validation**: Use `atmos validate stacks` to validate manifests against the Atmos JSON Schema.
 - **Introspection**: Use `atmos describe component` and `atmos list stacks/components` to query the project before
-  generating configuration -- never guess at stack names or component configs
+  generating configuration -- never guess at stack names or component configs.
 - **Toolchain**: Declare tool versions in `.tool-versions`, configure registries in `atmos.yaml`, run
-  `atmos toolchain install` to set up the project
+  `atmos toolchain install` to set up the project.

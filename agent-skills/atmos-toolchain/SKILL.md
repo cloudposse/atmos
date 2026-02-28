@@ -10,8 +10,6 @@ references:
 
 # Atmos Toolchain
 
-Copyright 2026 Cloud Posse, LLC. Licensed under Apache 2.0.
-
 ## Purpose
 
 The Atmos toolchain manages CLI tool installation and versioning natively, using the Aqua package registry
@@ -24,7 +22,7 @@ integrates directly with atmos.yaml configuration.
 
 The `.tool-versions` file (asdf-compatible format) declares which tools and versions a project needs:
 
-```
+```text
 terraform 1.9.8
 opentofu 1.10.3
 kubectl 1.28.0
@@ -40,7 +38,7 @@ jq 1.7.1
 
 Tools are installed to `.tools/` (default) in a structured layout:
 
-```
+```text
 .tools/bin/{os}/{tool}/{version}/{binary}
 ```
 
@@ -225,7 +223,7 @@ toolchain:
       priority: 10
 ```
 
-```
+```text
 # .tool-versions
 hashicorp/terraform 1.9.8
 kubernetes-sigs/kubectl 1.28.0

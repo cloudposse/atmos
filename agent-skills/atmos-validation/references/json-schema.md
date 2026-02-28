@@ -67,12 +67,8 @@ structure including `vars`, `settings`, `env`, `backend`, etc.
   "properties": {
     "vars": {
       "type": "object",
-      "properties": {
-        // Define variable schemas here
-      },
-      "required": [
-        // List required variables
-      ],
+      "properties": {},
+      "required": [],
       "additionalProperties": true
     }
   }
@@ -293,7 +289,7 @@ Validate map keys that match a pattern:
 
 Recommended directory structure:
 
-```
+```text
 stacks/
   schemas/
     jsonschema/

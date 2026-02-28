@@ -12,8 +12,8 @@ name: "{{ .atmos_component }}"
 # Function call
 upper_name: "{{ .atmos_component | upper }}"
 
-# Conditional
-enabled: "{{ if eq .vars.stage "prod" }}true{{ else }}false{{ end }}"
+# Conditional (use single quotes to avoid YAML double-quote conflicts)
+enabled: '{{ if eq .vars.stage "prod" }}true{{ else }}false{{ end }}'
 ```
 
 ## Available Context Variables

@@ -194,7 +194,7 @@ policies enable complex business rule validation that goes beyond structural sch
 
 All Atmos OPA policies must:
 1. Use `package atmos`
-2. Define `errors` rules that return arrays of error message strings
+2. Define `errors` rules that return a set of error message strings (sets are serialized as arrays in OPA query results)
 
 ```rego
 package atmos
@@ -350,7 +350,7 @@ jobs:
 Atmos automatically runs validation before `terraform plan` and `terraform apply`. If any
 validation policy fails, the operation is blocked:
 
-```
+```text
 $ atmos terraform apply vpc -s plat-ue2-prod
 Mapping public IPs on launch is not allowed in 'prod'. Set 'map_public_ip_on_launch' variable to 'false'
 

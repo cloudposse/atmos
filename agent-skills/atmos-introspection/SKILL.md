@@ -10,8 +10,6 @@ references:
 
 # Atmos Introspection
 
-Copyright 2026 Cloud Posse, LLC. Licensed under Apache 2.0.
-
 ## Purpose
 
 Atmos provides powerful introspection commands (`describe` and `list`) for querying the stack graph,

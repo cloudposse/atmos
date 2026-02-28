@@ -1,6 +1,6 @@
 ---
 name: atmos-stacks
-description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, atmos.yaml setup"
+description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -16,39 +16,19 @@ A stack manifest is a YAML file that declares components and their configuration
 
 Stacks are not Terraform workspaces, although Atmos derives workspace names from stack names. A single stack manifest can configure multiple components, and a single component can appear across many stacks with different variable values.
 
-## atmos.yaml Stacks Configuration
+## Stack Discovery
 
-The `stacks` section in `atmos.yaml` controls how Atmos discovers and names stacks:
-
-```yaml
-# atmos.yaml
-stacks:
-  base_path: "stacks"
-  included_paths:
-    - "orgs/**/*"
-  excluded_paths:
-    - "**/_defaults.yaml"
-    - "catalog/**/*"
-    - "mixins/**/*"
-  name_template: "{{ .vars.tenant }}-{{ .vars.environment }}-{{ .vars.stage }}"
-```
-
-### Key Settings
-
-- `base_path`: Root directory for all stack manifests (default: `stacks`).
-- `included_paths`: Glob patterns for top-level stack manifests. Only files matching these patterns are treated as deployable stacks.
-- `excluded_paths`: Glob patterns to exclude from stack discovery. Use this to exclude catalog, mixin, and `_defaults.yaml` files that are only imported, never deployed directly.
-- `name_template`: Go template that computes the stack name from merged vars. This is the recommended naming approach.
-- `name_pattern`: Legacy token-based pattern (e.g., `{tenant}-{environment}-{stage}`). Superseded by `name_template`.
+Atmos discovers stack manifests based on `included_paths` and `excluded_paths` configured in the `stacks` section
+of `atmos.yaml`. For the complete `atmos.yaml` configuration reference, see the `atmos-config` skill.
 
 ### Stack Name Precedence
 
 Atmos resolves the stack name using this priority (highest first):
 
-1. `name` field in the stack manifest (explicit override)
-2. `name_template` in `atmos.yaml` (Go template)
-3. `name_pattern` in `atmos.yaml` (token pattern)
-4. File basename (e.g., `prod.yaml` becomes `prod`)
+1. `name` field in the stack manifest (explicit override).
+2. `name_template` in `atmos.yaml` (Go template).
+3. `name_pattern` in `atmos.yaml` (token pattern).
+4. File basename (e.g., `prod.yaml` becomes `prod`).
 
 ## Stack Manifest Structure
 
@@ -286,7 +266,7 @@ For maps, keys are recursively merged with higher-priority values overriding low
 
 A common convention is to use `_defaults.yaml` files at each level of the directory hierarchy:
 
-```
+```text
 stacks/
   orgs/
     acme/

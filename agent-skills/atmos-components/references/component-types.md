@@ -10,7 +10,7 @@ The most common type. Each component is a Terraform root module that provisions 
 
 Directory structure:
 
-```
+```text
 components/terraform/<component-name>/
   main.tf           # Resources and module calls
   variables.tf      # Input variable declarations
@@ -48,7 +48,7 @@ Used for deploying Helm charts to Kubernetes clusters via `helmfile`.
 
 Directory structure:
 
-```
+```text
 components/helmfile/<component-name>/
   helmfile.yaml
 ```
@@ -70,7 +70,7 @@ Used for building machine images (AMIs, VM images).
 
 Directory structure:
 
-```
+```text
 components/packer/<component-name>/
   template.pkr.hcl
 ```

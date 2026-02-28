@@ -274,7 +274,7 @@ components:
 
 Attempting to deploy an abstract component produces an error:
 
-```
+```text
 abstract component 'vpc/defaults' cannot be provisioned since it's explicitly
 prohibited from being deployed by 'metadata.type: abstract' attribute
 ```

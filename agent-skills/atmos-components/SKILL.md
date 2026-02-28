@@ -35,7 +35,7 @@ Terraform is by far the most common type. Custom commands can extend Atmos to su
 
 Components are stored in your project's `components/` directory, organized by type:
 
-```
+```text
 components/
   terraform/
     vpc/
@@ -280,7 +280,7 @@ All fields available in the `metadata` section:
 
 The `stacks/catalog/` directory is the conventional location for reusable component configurations:
 
-```
+```text
 stacks/
   catalog/
     vpc/
@@ -329,7 +329,7 @@ components:
 
 Mixins are small, focused configuration snippets that alter component behavior. They are typically stored in `stacks/mixins/` and imported into stacks:
 
-```
+```text
 stacks/
   mixins/
     region/
@@ -369,8 +369,8 @@ components:
   terraform:
     eks-cluster:
       vars:
-        vpc_id: !terraform.output vpc/vpc_id
-        subnet_ids: !terraform.output vpc/private_subnet_ids
+        vpc_id: !terraform.output vpc vpc_id
+        subnet_ids: !terraform.output vpc private_subnet_ids
 ```
 
 For the Terraform-side approach, use the `remote-state` module:
@@ -393,7 +393,7 @@ This reads the VPC component's Terraform outputs from the same or a different st
 
 Maintain multiple versions of a component side by side:
 
-```
+```text
 components/
   terraform/
     vpc/

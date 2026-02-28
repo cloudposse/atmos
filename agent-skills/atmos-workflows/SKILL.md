@@ -46,7 +46,7 @@ relative to it.
 
 Organize workflow files by purpose, environment, or team:
 
-```
+```text
 stacks/workflows/
   deploy.yaml
   destroy.yaml

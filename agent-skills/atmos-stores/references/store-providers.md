@@ -60,14 +60,14 @@ type StoreConfig struct {
 ### Key Construction
 
 For `Get`/`Set` (stack/component/key pattern):
-```
+```text
 /<prefix>/<stack-part-1>/<stack-part-2>/.../<component-parts>/<key>
 ```
 
 Stack name is split by `stack_delimiter` (default `-`). Component name is split by `/`. All parts are joined with `/`. Double slashes are collapsed.
 
 Example: prefix=`myapp`, stack=`plat-ue2-prod`, component=`vpc`, key=`vpc_id`:
-```
+```text
 /myapp/plat/ue2/prod/vpc/vpc_id
 ```
 
@@ -139,7 +139,7 @@ Azure Key Vault secret names must match `^[0-9a-zA-Z-]+$`. Atmos normalizes keys
 5. If the result is empty, use `"default"`.
 
 Example: prefix=`myapp`, stack=`plat-ue2-prod`, component=`vpc/network`, key=`vpc_id`:
-```
+```text
 myapp-plat-ue2-prod-vpc-network-vpc_id -> myapp-plat-ue2-prod-vpc-network-vpc-id
 ```
 
@@ -201,7 +201,7 @@ For `Get`/`Set`:
 4. Trim leading and trailing `_`.
 
 Example: prefix=`myapp`, stack=`plat-ue2-prod`, component=`vpc`, key=`vpc_id`:
-```
+```text
 myapp_plat_ue2_prod_vpc_vpc_id
 ```
 
@@ -272,7 +272,7 @@ Identity-based authentication is **not supported** for Redis stores. If `identit
 ### Key Construction
 
 For `Get`/`Set`:
-```
+```text
 <prefix>/<stack-parts>/<component-parts>/<key>
 ```
 
@@ -334,7 +334,7 @@ Create a **Generic** repository type in JFrog Artifactory. Atmos stores data as 
 ### Key Construction
 
 For `Get`/`Set`:
-```
+```text
 <repo_name>/<prefix>/<stack-parts>/<component-parts>/<key>
 ```
 

@@ -359,7 +359,7 @@ sources:
       - "components/terraform/vpc"
 ```
 
-For Git sources, use `?ref=` with a specific tag or commit SHA. Avoid using branch names like `main` which point to a moving target.
+For Git sources, use `?ref=` with a specific tag or commit SHA for reproducible builds. Branch names like `main` point to a moving target and should only be used intentionally for development workflows, not for production vendoring.
 
 ## Vendoring and Version Management Patterns
 
@@ -404,7 +404,7 @@ Groups by major.minor version (e.g., `vpc/1.398/`).
 ## Best Practices
 
 1. **Use vendor.yaml (not component.yaml)**: The centralized manifest is easier to maintain and provides a single view of all dependencies.
-2. **Pin all versions**: Use exact version tags or commit SHAs. Never use branch names.
+2. **Pin versions by default**: Use exact version tags or commit SHAs whenever possible. Use branch names only as an explicit exception when pinning is impractical.
 3. **Review changes via git diff**: After running `atmos vendor pull`, review the diff before committing.
 4. **Use tags for selective vendoring**: Tag sources by layer (networking, compute, security) for partial updates.
 5. **Automate with CI/CD**: Set up GitHub Actions to periodically run `atmos vendor pull` and open PRs with changes.

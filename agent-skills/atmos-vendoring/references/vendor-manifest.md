@@ -284,13 +284,13 @@ Mixins are processed after the main source, in list order. Common use case: repl
 
 ### Git URL Format
 
-```
+```text
 [scheme://]host/owner/repo.git[//subdirectory][?query-params]
 ```
 
 Examples:
 
-```
+```text
 github.com/org/repo.git?ref=v1.0.0
 github.com/org/repo.git//modules/vpc?ref=v1.0.0
 git::https://github.com/org/repo.git?ref=main
@@ -300,13 +300,13 @@ git@github.com:org/repo.git?ref=v1.0.0
 
 ### OCI URL Format
 
-```
+```text
 oci://registry/namespace/image:tag
 ```
 
 Examples:
 
-```
+```text
 oci://public.ecr.aws/cloudposse/components/terraform/stable/aws/vpc:latest
 oci://ghcr.io/org/components/vpc:v1.0.0
 oci://docker.io/library/nginx:alpine

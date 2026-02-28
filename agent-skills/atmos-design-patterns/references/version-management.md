@@ -57,7 +57,7 @@ components:
 
 ### Divergence Model
 
-```
+```text
 Time 0: Commit merged to main
   Dev:     new commit (deployed automatically)
   Staging: previous commit (operational divergence)
@@ -78,7 +78,7 @@ The foundational approach for organizing components with explicit folder structu
 
 ### Directory Structure
 
-```
+```text
 components/terraform/
   vpc/
     v1/                   # Version 1 implementation
@@ -388,7 +388,7 @@ Branch-based alternative where long-lived branches map to release channels.
 
 ### Branch Structure
 
-```
+```text
 main (integration branch)
   channels/prod        # Production channel
     channels/staging   # Staging channel
@@ -458,7 +458,7 @@ components:
 
 You can mix strategies per component:
 
-```
+```text
 components/terraform/
   vpc/                    # Trunk-based (all envs converge)
   eks/                    # Trunk-based (all envs converge)

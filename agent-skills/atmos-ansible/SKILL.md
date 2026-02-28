@@ -12,6 +12,11 @@ Atmos wraps the Ansible CLI to provide stack-aware orchestration of configuratio
 manually managing variables, inventory, and playbook paths for each Ansible component, Atmos resolves the full
 configuration from stack manifests and handles all of these concerns automatically.
 
+> **Note:** `atmos ansible playbook` is designed for interactive operator sessions where a human is present to
+> monitor output, respond to prompts, and approve changes. It is not suitable for headless CI/CD automation where
+> no interactive terminal is available. For automated pipelines, use a dedicated Ansible CI runner or invoke
+> `ansible-playbook` directly from a CI step with pre-exported credentials.
+
 ## How Atmos Orchestrates Ansible
 
 When you run `atmos ansible playbook`, Atmos performs the following sequence:
@@ -128,6 +133,11 @@ ansible:
   vars:
     managed_by: Atmos
   env:
+    # Security note: Setting ANSIBLE_HOST_KEY_CHECKING to "false" disables SSH host key verification,
+    # which exposes connections to man-in-the-middle attacks. Only use this in controlled environments
+    # (e.g., ephemeral CI environments with known-clean network paths). For production environments,
+    # maintain and distribute a known_hosts file or use the ansible_ssh_extra_args approach with
+    # StrictHostKeyChecking=accept-new to accept keys on first connection only.
     ANSIBLE_HOST_KEY_CHECKING: "false"
 
 components:
@@ -166,6 +176,8 @@ ansible:
   vars:
     managed_by: Atmos
   env:
+    # Security note: ANSIBLE_HOST_KEY_CHECKING: "false" disables SSH host key verification and should
+    # only be used in controlled environments. For production, use a known_hosts file instead.
     ANSIBLE_HOST_KEY_CHECKING: "false"
     ANSIBLE_FORCE_COLOR: "true"
 
@@ -257,7 +269,7 @@ components:
 
 ### Component Directory Structure
 
-```
+```text
 components/ansible/
   hello-world/
     site.yml
@@ -312,7 +324,7 @@ atmos ansible playbook . -s prod --playbook deploy.yml --inventory production
 
 Common environment variables for Ansible components configured via `env`:
 
-- **`ANSIBLE_HOST_KEY_CHECKING`** -- Disable SSH host key checking (set to `false`).
+- **`ANSIBLE_HOST_KEY_CHECKING`** -- Controls SSH host key verification. Prefer `"true"` in production; only set to `"false"` in ephemeral or development environments with explicit risk acceptance.
 - **`ANSIBLE_FORCE_COLOR`** -- Force colored output (set to `true`).
 - **`ANSIBLE_CONFIG`** -- Path to Ansible configuration file.
 - **`ANSIBLE_VAULT_PASSWORD_FILE`** -- Path to Ansible Vault password file.
@@ -324,6 +336,7 @@ components:
   ansible:
     webserver:
       env:
+        # Only disable host key checking in dev/ephemeral environments (see security note above)
         ANSIBLE_HOST_KEY_CHECKING: "false"
         ANSIBLE_FORCE_COLOR: "true"
         ANSIBLE_VAULT_PASSWORD_FILE: /path/to/vault-password
@@ -425,6 +438,10 @@ atmos ansible playbook webserver -s prod --dry-run
 ```
 
 ## Best Practices
+
+> **Interactive use only:** `atmos ansible playbook` is intended for interactive operator sessions, not
+> headless CI/CD automation. Ensure a human is present to monitor output and respond to any interactive
+> prompts. For fully automated pipelines, invoke `ansible-playbook` directly from a CI step.
 
 1. **Use stack manifest settings for playbook configuration.** Define `settings.ansible.playbook` and
    `settings.ansible.inventory` rather than passing flags every time.

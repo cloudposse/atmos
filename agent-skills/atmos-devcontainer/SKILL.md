@@ -10,8 +10,6 @@ references:
 
 # Atmos Devcontainer
 
-Copyright 2026 Cloud Posse, LLC. Licensed under Apache 2.0.
-
 ## Purpose
 
 Atmos provides native devcontainer management for creating standardized, reproducible development
@@ -93,7 +91,7 @@ Containers follow the naming convention: `atmos-devcontainer.{name}.{instance}`
 
 All Atmos devcontainers are labeled for management:
 
-```
+```text
 com.atmos.type=devcontainer
 com.atmos.devcontainer.name={name}
 com.atmos.devcontainer.instance={instance}

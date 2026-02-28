@@ -245,7 +245,7 @@ components:
         component: s3-bucket
       vars:
         name: gitops-plan-storage
-        allow_encrypted_uploads_only: false
+        allow_encrypted_uploads_only: true
 ```
 
 ### DynamoDB Table for Planfile Metadata

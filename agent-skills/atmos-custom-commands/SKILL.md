@@ -263,8 +263,9 @@ commands:
       - 'echo "Workspace: {{ .ComponentConfig.workspace }}"'
 ```
 
-Available fields: `.ComponentConfig.component`, `.backend`, `.workspace`, `.vars`, `.settings`,
-`.env`, `.deps`, `.metadata`. For the complete field reference, see
+Available fields: `.ComponentConfig.component`, `.ComponentConfig.backend`, `.ComponentConfig.workspace`,
+`.ComponentConfig.vars`, `.ComponentConfig.settings`, `.ComponentConfig.env`, `.ComponentConfig.deps`,
+`.ComponentConfig.metadata`. For the complete field reference, see
 [references/command-syntax.md](references/command-syntax.md).
 
 ## Go Templates in Steps

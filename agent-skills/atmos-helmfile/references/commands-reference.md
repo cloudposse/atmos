@@ -4,7 +4,7 @@ Complete reference of all `atmos helmfile` subcommands with syntax and key flags
 
 ## Command Syntax
 
-```
+```shell
 atmos helmfile <subcommand> <component> -s <stack> [flags] [-- native-helmfile-flags]
 ```
 

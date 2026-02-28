@@ -12,7 +12,7 @@ This reference provides complete directory layouts and configuration examples fo
 
 ### Directory Layout
 
-```
+```text
 project/
   atmos.yaml
   stacks/
@@ -103,7 +103,7 @@ atmos terraform apply vpc -s prod
 
 ### Directory Layout
 
-```
+```text
 project/
   atmos.yaml
   stacks/
@@ -251,7 +251,7 @@ This makes stack names shorter: `ue2-dev` instead of `us-east-2-dev`.
 
 ### Directory Layout
 
-```
+```text
 project/
   atmos.yaml
   stacks/
@@ -346,9 +346,9 @@ vars:
 
 ### Import Chain Visualization
 
-```
+```text
 network.yaml
-  -> prod/_defaults.yaml (stage: prod)
+  -> dev/_defaults.yaml (stage: dev)
     -> plat/_defaults.yaml (tenant: plat)
       -> acme/_defaults.yaml (namespace: acme)
   -> catalog/vpc/defaults.yaml (component defaults)
@@ -372,7 +372,7 @@ atmos terraform apply eks -s plat-prod-compute
 
 ### Directory Layout
 
-```
+```text
 stacks/
   catalog/
     vpc/
@@ -386,6 +386,7 @@ stacks/
     data.yaml
     compute.yaml
     observability.yaml
+    security.yaml
   deploy/
     dev.yaml
     prod.yaml
@@ -458,7 +459,7 @@ vars:
 
 ### Mixin Directory Structure
 
-```
+```text
 stacks/
   catalog/
     vpc/

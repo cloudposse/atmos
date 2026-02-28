@@ -13,13 +13,13 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-Atmos ships 19 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
+Atmos ships 20 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
 configuration, Terraform orchestration, authentication, validation, and more. The skills live in the `agent-skills/`
 folder at the root of the Atmos repository and work across all major AI tools.
 </Intro>
 
 <KeyPoints>
-- 19 domain-specific skills covering every Atmos subsystem
+- 20 domain-specific skills covering every Atmos subsystem
 - Works with Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more
 - Progressive disclosure: AI loads only the skill it needs, keeping context focused
 - Portable SKILL.md format with YAML frontmatter and tiered reference files
@@ -44,12 +44,13 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 ## Available Skills
 
-Atmos includes 19 skills organized into five categories:
+Atmos includes 20 skills organized into five categories:
 
 ### Core Configuration
 
 | Skill | Description |
 |-------|-------------|
+| `atmos-config` | Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles |
 | `atmos-stacks` | Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata |
 | `atmos-components` | Terraform root modules, abstract components, component inheritance, versioning |
 | `atmos-vendoring` | Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry |
@@ -92,11 +93,15 @@ Atmos includes 19 skills organized into five categories:
 
 ## Folder Structure
 
-```
+```text
 agent-skills/
   AGENTS.md                              # Skill-activation router (loaded first)
+  atmos-config/
+    SKILL.md                             # atmos.yaml project configuration
+    references/
+      sections-reference.md              # Complete section-by-section reference
   atmos-stacks/
-    SKILL.md                             # Primary skill instructions
+    SKILL.md                             # Stack manifest configuration
     references/
       import-patterns.md                 # Deep reference: import syntax and resolution
       inheritance-deep-merge.md          # Deep reference: merge algorithm details
@@ -122,12 +127,11 @@ Every skill file uses YAML frontmatter followed by markdown instructions:
 
 ```yaml
 ---
-skill: atmos-stacks
-version: 1.0.0
-category: configuration
-description: >
-  Teaches AI assistants how to write and manage
-  Atmos stack YAML manifests.
+name: atmos-stacks
+description: "Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides, atmos.yaml setup"
+metadata:
+  copyright: Copyright Cloud Posse, LLC 2026
+  version: "1.0.0"
 references:
   - references/import-patterns.md
   - references/inheritance-deep-merge.md
@@ -139,20 +143,20 @@ Instructions for the AI assistant...
 ```
 
 <dl>
-  <dt>`skill`</dt>
-  <dd>Unique identifier for the skill.</dd>
-
-  <dt>`version`</dt>
-  <dd>SemVer version of the skill content.</dd>
-
-  <dt>`category`</dt>
-  <dd>Grouping category (configuration, orchestration, platform, integrations, guidance).</dd>
+  <dt>`name`</dt>
+  <dd>Unique identifier for the skill (must match the directory name).</dd>
 
   <dt>`description`</dt>
   <dd>Human-readable summary of what the skill teaches.</dd>
 
+  <dt>`metadata.copyright`</dt>
+  <dd>Copyright notice.</dd>
+
+  <dt>`metadata.version`</dt>
+  <dd>SemVer version of the skill content.</dd>
+
   <dt>`references`</dt>
-  <dd>List of deeper reference files the AI should load when more detail is needed.</dd>
+  <dd>Optional list of deeper reference files the AI should load when more detail is needed.</dd>
 </dl>
 
 ## AGENTS.md Router
@@ -359,7 +363,7 @@ Without skills, AI assistants rely on general training data that may be outdated
 - **Accurate configuration** -- The AI knows the exact YAML schema, merge behavior, and naming conventions
 - **Correct commands** -- The AI generates valid `atmos terraform`, `atmos helmfile`, and other CLI commands
 - **Best practices** -- The AI follows Atmos design patterns for stack organization and component reuse
-- **Current features** -- Skills are updated with each Atmos release, covering features like `!aws.organization_id`,
+- **Current features** -- Skills are updated with each Atmos release, covering features like YAML functions (`!store`, `!aws.*`),
   store integrations, and multi-provider auth
 
 ### Example: Without Skills vs. With Skills
@@ -394,6 +398,6 @@ Skills are maintained in the Atmos repository under `agent-skills/`. To contribu
 2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
 3. Place detailed reference material in `references/` subdirectories
 4. Update `AGENTS.md` to include your skill in the routing table
-5. Use YAML frontmatter with `skill`, `version`, `category`, `description`, and `references` fields
+5. Use YAML frontmatter with `name`, `description`, `metadata` (containing `copyright` and `version`), and optionally `references` fields
 
 See the [Atmos Contributing Guide](/community) for general contribution guidelines.

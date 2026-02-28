@@ -4,7 +4,7 @@ Complete reference of all `atmos ansible` subcommands with syntax, flags, and ex
 
 ## Command Syntax
 
-```
+```shell
 atmos ansible <subcommand> [<component>] [-s <stack>] [flags] [-- native-ansible-flags]
 ```
 
@@ -207,7 +207,7 @@ atmos ansible version
 
 Example output:
 
-```
+```text
 ansible [core 2.15.0]
   config file = /etc/ansible/ansible.cfg
   configured module search path = ['/home/user/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
@@ -248,7 +248,7 @@ Atmos generates a YAML file from `vars` and passes it via `--extra-vars @<filena
 **Naming convention:** `<context>-<component>.ansible.vars.yaml`
 
 Example: For component `webserver` with context `acme-plat-prod-us-east-1`:
-```
+```text
 acme-plat-prod-us-east-1-webserver.ansible.vars.yaml
 ```
 

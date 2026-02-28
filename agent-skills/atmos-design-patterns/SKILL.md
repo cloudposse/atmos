@@ -14,7 +14,7 @@ Design patterns are proven solutions for structuring infrastructure configuratio
 
 Most teams follow this growth path:
 
-```
+```text
 Inline Configuration (learning/prototyping)
     |
 Basic Stack Organization (dev/staging/prod)
@@ -32,7 +32,7 @@ Start with the simplest pattern that meets your needs. You do not need to start 
 
 One file per environment. Simplest setup for single-region, single-account-per-stage deployments.
 
-```
+```text
 stacks/
   catalog/
     vpc/
@@ -64,7 +64,7 @@ Deploy with: `atmos terraform apply vpc -s dev`
 
 Extends basic pattern to deploy across multiple AWS regions. Each region gets its own stack file with region-specific settings (CIDR blocks, availability zones).
 
-```
+```text
 stacks/deploy/dev/
   us-east-2.yaml          # region: us-east-2, environment: ue2
   us-west-2.yaml          # region: us-west-2, environment: uw2
@@ -76,7 +76,7 @@ Use `name_template: "{{.vars.environment}}-{{.vars.stage}}"` in `atmos.yaml` to 
 
 Enterprise pattern for multiple organizations, OUs/tenants, and accounts. Uses `_defaults.yaml` files at each hierarchy level to create inheritance chains.
 
-```
+```text
 stacks/orgs/acme/
   _defaults.yaml                    # namespace: acme
   plat/
@@ -143,7 +143,7 @@ Best practices: keep to 3-4 levels maximum, document import chains, use base-rel
 
 Mirror your component directory in `stacks/catalog/`. Each component gets a `defaults.yaml` with shared configuration.
 
-```
+```text
 stacks/catalog/
   vpc/
     defaults.yaml          # Base defaults for all VPCs

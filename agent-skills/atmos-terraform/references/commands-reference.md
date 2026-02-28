@@ -4,7 +4,7 @@ Complete reference of all `atmos terraform` subcommands with syntax and key flag
 
 ## Command Syntax
 
-```
+```shell
 atmos terraform <subcommand> <component> -s <stack> [flags] [-- native-terraform-flags]
 ```
 

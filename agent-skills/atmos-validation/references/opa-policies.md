@@ -28,7 +28,7 @@ The `input` object contains the full component configuration. Key fields:
 
 ### Core Component Configuration
 
-```
+```text
 input.vars                 # Component variables (the values passed to Terraform)
 input.settings             # Component settings
 input.env                  # Environment variables
@@ -41,7 +41,7 @@ input.workspace            # Terraform workspace name
 
 ### Context Variables
 
-```
+```text
 input.vars.namespace       # Organization namespace
 input.vars.tenant          # Organizational unit
 input.vars.environment     # Region/environment identifier
@@ -52,7 +52,7 @@ input.vars.tags            # Resource tags map
 
 ### Execution Context (available during plan/apply)
 
-```
+```text
 input.process_env          # Map of OS environment variables
 input.cli_args             # List of CLI arguments (e.g., ["terraform", "plan"])
 input.tf_cli_vars          # Map from -var arguments with type conversion
