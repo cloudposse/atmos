@@ -10,6 +10,7 @@ atmos helmfile <subcommand> <component> -s <stack> [flags] [-- native-helmfile-f
 
 The `component` argument and `--stack` / `-s` flag are required for all single-component operations.
 Use `--` to pass flags directly to Helmfile without Atmos interpretation.
+Listing commands such as `source list` have different argument requirements (no component, optional stack).
 
 Atmos supports all Helmfile commands and options. In addition, the `component` argument and `stack` flag
 are required to generate variables for the component in the stack.

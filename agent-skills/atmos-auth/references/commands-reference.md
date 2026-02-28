@@ -333,7 +333,7 @@ atmos auth console --issuer devops-team --duration 2h   # Custom issuer
 
 ### Notes
 
-- AWS console signin tokens are valid for 15 minutes (to click the link). Console session duration is separate.
+- AWS console sign-in tokens are valid for 15 minutes (to click the link). Console session duration is separate.
 - 100+ AWS service aliases supported: `s3`, `ec2`, `lambda`, `dynamodb`, `rds`, `vpc`, `iam`, `eks`, etc.
 - Requires temporary credentials with session token (not permanent IAM user credentials).
 

@@ -225,7 +225,7 @@ vars:
   db_password: !store.get prod/ssm /myapp/prod/db/password
 
   # With default value
-  feature_flag: !store.get prod/ssm /features/new-feature \| default "disabled"
+  feature_flag: !store.get prod/ssm /features/new-feature | default "disabled"
 
   # With YQ query
   api_key: !store.get cache app-config | query .api.key
@@ -398,7 +398,7 @@ components:
 | `project_id is required` | Missing `project_id` for GCP | Add `project_id` to store options |
 | `failed to parse redis url` | Invalid Redis URL format | Use format `redis://:password@host:port/db` |
 | `access_token must be set` | Missing Artifactory token | Set `access_token` in options or `ARTIFACTORY_ACCESS_TOKEN` env var |
-| Key not found errors | Component not yet provisioned | Add `\| default` fallback value to the `!store` call |
+| Key not found errors | Component not yet provisioned | Add a `default` fallback value to the `!store` call |
 | Permission denied | Insufficient IAM/RBAC permissions | Check role ARNs, vault policies, or service account permissions |
 | Identity warning logged | Identity set on unsupported provider | Remove `identity` from Redis and Artifactory stores |
 

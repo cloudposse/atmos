@@ -140,7 +140,7 @@ Steps can be retried on failure:
 steps:
   - command: terraform apply vpc -auto-approve
     retry:
-      max_attempts: 3               # Maximum retry attempts (default: 1)
+      max_attempts: 3               # Maximum attempts (default: 1, meaning no retry)
       delay: 5s                     # Delay between retries (default: 5s)
       backoff_strategy: exponential  # constant, exponential, or linear
       initial_delay: 3s             # Initial delay for backoff

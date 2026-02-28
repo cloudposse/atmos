@@ -529,7 +529,7 @@ Successfully deleted: components/packer/ami-builder
 
 ## Path-Based Component Resolution
 
-All packer commands support using filesystem paths instead of component names.
+Component-scoped packer commands support using filesystem paths instead of component names.
 
 ### Supported Path Formats
 

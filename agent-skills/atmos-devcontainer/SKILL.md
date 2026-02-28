@@ -17,7 +17,9 @@ environments. It provides built-in orchestration that integrates with Atmos auth
 toolchains, and project configuration, replacing the need for external orchestration tooling
 like Geodesic (though Geodesic container images remain fully supported).
 
-**Note:** The devcontainer feature is currently **experimental**.
+**Note:** The devcontainer feature is currently **experimental**. By default (`settings.experimental: warn`),
+Atmos displays a warning but runs the command. Set `settings.experimental: silence` in `atmos.yaml` to
+suppress the warning, or `disable` to block experimental commands entirely.
 
 ## Core Concepts
 

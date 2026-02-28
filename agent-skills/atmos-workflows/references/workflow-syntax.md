@@ -69,7 +69,7 @@ description: |
 ### stack
 
 Default Atmos stack applied to all steps of type `atmos` that do not specify their own stack.
-Can be overridden at the step level or on the command line with `--stack` / `-s`.
+This can be overridden at the step level or on the command line with `--stack` / `-s`.
 
 ```yaml
 stack: tenant1-ue2-dev
@@ -77,7 +77,7 @@ stack: tenant1-ue2-dev
 
 ### working_directory
 
-Default working directory for all steps. Can be overridden at the step level.
+Default working directory for all steps. This can be overridden at the step level.
 
 ```yaml
 working_directory: !repo-root    # Git repository root

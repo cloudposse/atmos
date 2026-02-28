@@ -8,8 +8,9 @@ Complete reference of all `atmos terraform` subcommands with syntax and key flag
 atmos terraform <subcommand> <component> -s <stack> [flags] [-- native-terraform-flags]
 ```
 
-The `component` argument and `--stack` / `-s` flag are required for all single-component operations.
-Use `--` to pass flags directly to Terraform without Atmos interpretation.
+The `component` argument and `--stack` / `-s` flag are required for most component operations.
+Source management commands (`source pull`, `source describe`, `source delete`) take a component
+but do not require `--stack`. Use `--` to pass flags directly to Terraform without Atmos interpretation.
 
 ## Core Lifecycle Commands
 
@@ -292,7 +293,7 @@ atmos terraform clean [<component> -s <stack>] [flags]
 
 Key flags:
 - `--force` / `-f` -- Skip confirmation prompt
-- `--everything` -- Also delete state files
+- `--everything` -- Also delete state files (prompts for confirmation unless `--force` is set)
 - `--skip-lock-file` -- Preserve `.terraform.lock.hcl`
 - `--cache` -- Clean shared plugin cache
 - `--dry-run` -- Show what would be deleted
@@ -441,7 +442,7 @@ atmos terraform source list [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--stack` / `-s` | Target Atmos stack |
+| `--stack` / `-s` | Target Atmos stack (required for single-component operations) |
 | `--dry-run` | Preview without executing |
 | `--process-templates` | Enable/disable Go template processing |
 | `--process-functions` | Enable/disable YAML function processing |
