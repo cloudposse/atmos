@@ -14,7 +14,7 @@ Stores are external key-value backends configured in `atmos.yaml` that enable co
 
 Use stores when you need to:
 - Share data between components that is not managed by Terraform
-- Access configuration from external systems (SSM, Vault, Redis)
+- Access configuration from external systems (SSM, Azure Key Vault, Redis)
 - Integrate with CI/CD pipelines that write to parameter stores
 - Store and retrieve Terraform outputs via hooks for faster cross-component reads
 - Share state across accounts, regions, or cloud providers
