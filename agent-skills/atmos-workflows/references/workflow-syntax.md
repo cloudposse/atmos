@@ -234,7 +234,7 @@ Retry configuration for the step. Retries the command on failure.
 
 ```yaml
 retry:
-  max_attempts: 3                    # Max retries (default: 1, meaning no retry)
+  max_attempts: 3                    # Max attempts (default: 1, meaning no retry)
   delay: 5s                          # Delay between retries (default: 5s)
   backoff_strategy: exponential      # constant | exponential | linear (default: constant)
   initial_delay: 3s                  # Initial delay for backoff strategies (default: 5s)

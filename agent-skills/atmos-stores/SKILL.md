@@ -222,16 +222,16 @@ Reads arbitrary keys directly from a store without the stack/component/key conve
 ```yaml
 vars:
   # Direct key access
-  db_password: !store.get ssm /myapp/prod/db/password
+  db_password: !store.get prod/ssm /myapp/prod/db/password
 
   # With default value
-  feature_flag: !store.get ssm /features/new-feature | default "disabled"
+  feature_flag: !store.get prod/ssm /features/new-feature \| default "disabled"
 
   # With YQ query
-  api_key: !store.get redis app-config | query .api.key
+  api_key: !store.get cache app-config | query .api.key
 
   # Dynamic key with templates
-  config: !store.get redis "config-{{ .vars.region }}"
+  config: !store.get cache "config-{{ .vars.region }}"
 ```
 
 Key differences between `!store` and `!store.get`:

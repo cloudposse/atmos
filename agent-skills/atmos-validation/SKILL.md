@@ -1,6 +1,6 @@
 ---
 name: atmos-validation
-description: "Policy validation: OPA/Rego policies, JSON Schema, CUE validation, schema manifests"
+description: "Policy validation: OPA/Rego policies, JSON Schema, schema manifests"
 metadata:
   copyright: Copyright Cloud Posse, LLC 2026
   version: "1.0.0"
@@ -128,7 +128,7 @@ Each validation step supports these properties:
 
 | Property | Type | Description |
 |----------|------|-------------|
-| `schema_type` | string | `jsonschema`, `opa`, or `cue` |
+| `schema_type` | string | `jsonschema` or `opa` |
 | `schema_path` | string | Path to the schema file (absolute or relative to base_path) |
 | `module_paths` | list | (OPA only) Additional Rego module paths for imports |
 | `description` | string | Human-readable description of the validation step |

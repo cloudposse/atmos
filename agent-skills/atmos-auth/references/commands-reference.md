@@ -504,7 +504,6 @@ atmos auth logout                               # Interactive mode (no arguments
 ```shell
 # Verbose CLI output
 atmos auth validate --verbose
-atmos auth login --identity <name> --verbose
 
 # Set log level
 ATMOS_LOGS_LEVEL=Debug atmos auth whoami

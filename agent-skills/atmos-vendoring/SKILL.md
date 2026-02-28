@@ -348,7 +348,7 @@ atmos vendor pull --tags networking,compute
 
 ## Version Pinning
 
-Always pin versions in your vendor manifest for reproducible builds:
+Pin versions by default in your vendor manifest for reproducible builds:
 
 ```yaml
 sources:

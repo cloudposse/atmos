@@ -326,7 +326,7 @@ atmos describe component vpc -s plat-ue2-prod
 
 Atmos provides YAML functions for dynamic value resolution at runtime:
 
-- `!terraform.output <component>/<output>` -- Read Terraform outputs from another component.
+- `!terraform.output <component> <output>` -- Read Terraform outputs from another component.
 - `!terraform.state <component> <path>` -- Access Terraform state values.
 - `!store <store-name> <component> <key>` -- Read from external key-value stores (SSM, Vault, etc.).
 - `!env <VAR_NAME>` -- Read environment variables with optional defaults.

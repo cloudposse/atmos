@@ -280,13 +280,13 @@ When a step fails, Atmos displays:
 - A ready-to-use command to resume from the failed step
 
 ```console
-Step 'step-2' failed!
+Step 'step2' failed!
 
 Command failed:
 terraform plan vpc -s plat-ue2-staging
 
 To resume the workflow from this step, run:
-atmos workflow provision-vpcs -f networking --from-step step-2
+atmos workflow provision-vpcs -f networking --from-step step2
 ```
 
 ## Using Authentication with Workflows

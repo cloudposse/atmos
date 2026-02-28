@@ -155,7 +155,7 @@ No state migration needed when using stable `metadata.name`.
 
 Named channels that environments subscribe to. Promotes tracks instead of individual pins.
 
-### Two Organization Approaches
+### Two Organizational Approaches
 
 **Component-Centric** (`vpc/alpha/`, `vpc/beta/`, `vpc/prod/`):
 - Each component has its own tracks

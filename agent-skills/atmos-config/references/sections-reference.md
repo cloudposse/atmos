@@ -96,8 +96,8 @@ components:
 | `terraform.shell` | Configuration for `atmos terraform shell`. |
 | `helmfile.cluster_name_pattern` | Pattern for EKS cluster name resolution. |
 
-For Terraform details, see the `atmos-terraform` skill. For Helmfile, see `atmos-helmfile`.
-For Packer, see `atmos-packer`. For Ansible, see `atmos-ansible`.
+For details on specific component types, see the `atmos-terraform`, `atmos-helmfile`,
+`atmos-packer`, and `atmos-ansible` skills.
 
 ## workflows
 

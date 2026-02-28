@@ -20,7 +20,7 @@ Installs Atmos in the GitHub Actions runner.
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `atmos-version` | No | `latest` | The version of Atmos to install |
-| `token` | No | `github.token` | GitHub token for downloading Atmos |
+| `token` | No | `${{ github.token }}` | GitHub token for downloading Atmos |
 
 ## affected-stacks
 
@@ -210,11 +210,11 @@ The workflow checks if the label matches (e.g., `apply`) before proceeding.
 
 | GitHub Action | Atmos < 1.63.0 | Atmos >= 1.63.0 |
 |--------------|----------------|-----------------|
-| `affected-stacks` | v2 | v1 or later |
-| `atmos-terraform-plan` | v1 | v2 or later (v3 for artifact storage update) |
+| `affected-stacks` | v2 | v3 or later |
+| `atmos-terraform-plan` | v1 | v2 or later |
 | `atmos-terraform-apply` | v1 | v2 or later |
 | `atmos-terraform-drift-remediation` | v1 | v2 or later |
-| `atmos-terraform-drift-detection` | v0 | v1 or later (v2 for artifact storage update) |
+| `atmos-terraform-drift-detection` | v0 | v1 or later |
 
 ## Required GitHub Permissions
 

@@ -352,7 +352,7 @@ These flags are available on all Helmfile lifecycle commands when `use_eks: true
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--stack` | `-s` | Target Atmos stack (required) |
+| `--stack` | `-s` | Target Atmos stack (required for single-component operations, optional for `source list`) |
 | `--dry-run` | | Preview without executing |
 | `--redirect-stderr` | | Redirect stderr to file or file descriptor |
 | `--global-options` | | Pass global options to Helmfile CLI |

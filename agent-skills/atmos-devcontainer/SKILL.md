@@ -13,8 +13,9 @@ references:
 ## Purpose
 
 Atmos provides native devcontainer management for creating standardized, reproducible development
-environments. It replaces external tooling like Geodesic with a built-in system that integrates
-with Atmos authentication, toolchains, and project configuration.
+environments. It provides built-in orchestration that integrates with Atmos authentication,
+toolchains, and project configuration, replacing the need for external orchestration tooling
+like Geodesic (though Geodesic container images remain fully supported).
 
 **Note:** The devcontainer feature is currently **experimental**.
 

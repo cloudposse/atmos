@@ -83,10 +83,18 @@ atmos describe affected --format json --file affected.json
 Key flags:
 - `--ref` -- Git reference to compare (default: refs/remotes/origin/HEAD)
 - `--sha` -- Git commit SHA (takes precedence over --ref)
+- `--repo-path` -- Path to pre-cloned target repo (fastest, avoids cloning)
+- `--clone-target-ref` -- Clone the target reference instead of checking out
 - `--include-dependents` -- Include components that depend on changed components
+- `--include-settings` -- Include the settings section for each affected component
+- `--include-spacelift-admin-stacks` -- Include Spacelift admin stacks of affected stacks
 - `--exclude-locked` -- Exclude components marked as locked
 - `--upload` -- Upload results to an HTTP endpoint (for CI/CD integration)
-- `--repo-path` -- Path to pre-cloned target repo (fastest, avoids cloning)
+- `--ssh-key` -- Path to PEM-encoded private key for SSH cloning
+- `--ssh-key-password` -- Encryption password for the PEM-encoded private key
+- `--process-templates` -- Enable/disable Go template processing (default: true)
+- `--process-functions` -- Enable/disable YAML functions processing (default: true)
+- `--skip` -- Skip executing specific YAML functions
 
 ### atmos describe dependents
 

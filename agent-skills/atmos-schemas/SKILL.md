@@ -188,7 +188,8 @@ rely on `atmos validate stacks` or IDE auto-completion.
 
 ### Which Schema Files to Update
 
-You must update **all four** manifest schema files to keep them in sync:
+For feature work, always update the **website schema** and **stack-config schema** first.
+Then update the other two when the new keys or structure apply to their domains.
 
 | File | Purpose |
 |------|---------|
@@ -197,9 +198,9 @@ You must update **all four** manifest schema files to keep them in sync:
 | `pkg/datafetcher/schema/atmos/manifest/1.0.json` | Minimal embedded manifest schema |
 | `pkg/datafetcher/schema/config/global/1.0.json` | Global config validation schema |
 
-The **website schema** and the **stack-config schema** are typically the most complete and feature-rich.
-The **atmos/manifest** and **config/global** schemas may lag behind slightly but should be updated when
-adding top-level or structural changes.
+The **website schema** and the **stack-config schema** are the most complete and feature-rich.
+Update **atmos/manifest** and **config/global** when adding top-level or structural changes that
+affect their respective domains.
 
 For vendor manifest changes, update:
 - `pkg/datafetcher/schema/vendor/package/1.0.json`
@@ -408,8 +409,9 @@ The four manifest schema files are mostly identical but have some differences:
 - **Global config schema** (`pkg/datafetcher/schema/config/`) -- Similar to atmos manifest, used
   for global config validation.
 
-When adding new features, update at minimum the **website schema** and the **stack-config schema**.
-Update the others if the feature affects their respective domains.
+When adding new features, the minimum required updates are the **website schema** and the
+**stack-config schema**. Also update **atmos/manifest** when manifest-level validation is affected,
+and **config/global** when global config validation is affected.
 
 ### Checklist for Schema Updates
 

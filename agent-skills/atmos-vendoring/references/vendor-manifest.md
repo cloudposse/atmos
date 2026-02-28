@@ -104,7 +104,7 @@ source: "github.com/org/repo.git?ref=v1.0"
 **Type**: string
 **Required**: No
 
-Version identifier substituted into `{{ .Version }}` placeholders in `source` and `targets`. Can be a semantic version tag, branch name, or commit SHA.
+Version identifier substituted into `{{ .Version }}` placeholders in `source` and `targets`. It can be a semantic version tag, branch name, or commit SHA.
 
 ```yaml
 sources:

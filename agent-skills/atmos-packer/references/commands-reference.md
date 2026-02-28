@@ -576,12 +576,15 @@ atmos packer output . -s prod --query '.builds[0].artifact_id'
 
 | Flag | Short | Applies To | Description |
 |------|-------|------------|-------------|
-| `--stack` | `-s` | All (except version) | Target Atmos stack |
+| `--stack` | `-s` | All (except version, source list) | Target Atmos stack |
 | `--template` | `-t` | init, build, validate, inspect | Packer template file or directory |
 | `--query` | `-q` | output | YQ expression for manifest parsing |
 | `--force` | `-f` | source pull, source delete | Force operation |
 | `--identity` | `-i` | source pull | Authentication identity override |
 | `--format` | `-f` | source list | Output format (table/json/yaml/csv/tsv) |
+
+**Note:** The `-f` short flag has different meanings depending on the subcommand: it maps to `--force` for
+`source pull` and `source delete`, and to `--format` for `source list`.
 
 ---
 

@@ -21,11 +21,12 @@ Initialize the Terraform working directory for a component in a stack.
 atmos terraform init <component> -s <stack> [flags]
 ```
 
-Atmos enhancements: cleans `.terraform/environment`, can add `-reconfigure`, supports `--init-pass-vars`
-for OpenTofu. Runs automatically before plan/apply/deploy unless `--skip-init` is used.
+Atmos enhancements: cleans `.terraform/environment`, automatically adds `-reconfigure` when
+`init_run_reconfigure: true` is set in `atmos.yaml`, supports `--init-pass-vars` for OpenTofu.
+Runs automatically before plan/apply/deploy unless `--skip-init` is used.
 
 Key flags:
-- `--skip-init` -- Does not apply to init itself, but skips auto-init for other commands
+- `--skip-init` -- Skips the auto-init that runs before other commands (not applicable to `init` itself)
 - `--init-pass-vars` -- Pass generated varfile to init (OpenTofu feature)
 - Native: `-reconfigure`, `-upgrade`, `-migrate-state`, `-backend=false`, `-backend-config=PATH`,
   `-force-copy`, `-get=false`, `-input=false`, `-lock=false`, `-lock-timeout=DURATION`, `-plugin-dir=PATH`
