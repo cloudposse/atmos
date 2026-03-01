@@ -13,9 +13,9 @@ Atmos now ships 20 agent skills that give AI coding assistants deep knowledge of
 
 Atmos includes a new `agent-skills/` directory at the repository root containing 20 domain-specific skills:
 
-- **Core Configuration**: `atmos-config`, `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-schemas`, `atmos-introspection`
-- **Orchestration**: `atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`
-- **Platform**: `atmos-auth`, `atmos-stores`, `atmos-workflows`, `atmos-custom-commands`, `atmos-toolchain`
+- **Configuration**: `atmos-config`, `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-schemas`, `atmos-introspection`
+- **Orchestration**: `atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`, `atmos-workflows`, `atmos-custom-commands`
+- **Platform**: `atmos-auth`, `atmos-stores`, `atmos-toolchain`
 - **Integrations**: `atmos-gitops`, `atmos-validation`, `atmos-templates`, `atmos-devcontainer`
 - **Guidance**: `atmos-design-patterns`
 
@@ -41,14 +41,25 @@ Agent skills solve this by providing structured, up-to-date knowledge directly i
 
 Every major AI tool has its own configuration directory. The skills live in a tool-agnostic `agent-skills/` folder, and you symlink or reference them from each tool's expected location.
 
-### Claude Code (Auto-Discovery)
+### Claude Code
 
-Claude Code automatically discovers skills via the `.claude/skills` symlink included in the repo:
+Install from the Cloud Posse plugin marketplace:
 
 ```bash
-# Just use Claude Code in any Atmos project -- skills are auto-discovered
-claude
+# Add the Cloud Posse marketplace (one-time setup)
+/plugin marketplace add cloudposse/atmos
+
+# Install the plugins you need
+/plugin install atmos-configuration@cloudposse
+/plugin install atmos-orchestration@cloudposse
+/plugin install atmos-platform@cloudposse
+/plugin install atmos-integrations@cloudposse
+/plugin install atmos-guidance@cloudposse
 ```
+
+The `cloudposse/atmos` GitHub repo serves as the marketplace -- Claude Code fetches the plugin manifest directly from the repo. No central registry or approval is involved. Once installed, plugins are cached locally and skills activate automatically when you ask Atmos-related questions. Atmos plugins may also be submitted to the [official Anthropic marketplace](https://github.com/anthropics/claude-plugins-official) for broader discovery via Claude Code's "Discover" tab.
+
+For Atmos contributors working directly in the repo, skills are also auto-discovered via `.claude/skills/`, which contains 20 symlinks pointing into the category-based `agent-skills/` hierarchy.
 
 ### OpenAI Codex
 
@@ -81,15 +92,24 @@ Antigravity reads from `.agent/skills/`, JetBrains Junie reads `AGENTS.md` as a 
 
 ### In Your Infrastructure Project
 
-Copy the skills into your own infrastructure repository so AI assistants understand Atmos when working on your stacks and components:
+You install the `atmos` binary -- you don't need to clone the Atmos repository. Skills are installed separately through your AI tool.
+
+For Claude Code, install skills via the plugin marketplace (see above). For other AI tools that don't have Atmos marketplace support, copy the skills from the Atmos GitHub repo:
 
 ```bash
-cp -r /path/to/atmos/agent-skills/ agent-skills/
-mkdir -p .claude
-ln -s ../agent-skills .claude/skills
+# Download just the agent-skills directory
+git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/atmos.git /tmp/atmos
+cd /tmp/atmos && git sparse-checkout set agent-skills
+cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
 ```
 
 See the [AI Agent Skills documentation](/integrations/ai/agent-skills) for complete setup instructions for each tool.
+
+## How Skills Are Activated
+
+You don't invoke skills manually. When you ask your AI assistant a question about Atmos, it automatically activates the right skill based on your question. At session start, the AI loads lightweight metadata from each installed skill. When your question matches a skill's description, the full skill content loads on demand.
+
+For example, asking *"How do I configure stack imports?"* automatically activates the `atmos-stacks` skill. No special syntax needed.
 
 ## Get Involved
 

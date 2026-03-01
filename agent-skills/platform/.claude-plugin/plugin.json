@@ -1,0 +1,13 @@
+{
+  "name": "atmos-platform",
+  "version": "1.0.0",
+  "description": "Atmos platform skills: multi-provider authentication, external store backends, and CLI toolchain management.",
+  "author": {
+    "name": "Cloud Posse",
+    "url": "https://github.com/cloudposse"
+  },
+  "homepage": "https://atmos.tools/integrations/ai/agent-skills",
+  "repository": "https://github.com/cloudposse/atmos",
+  "license": "Apache-2.0",
+  "keywords": ["atmos", "auth", "stores", "toolchain", "iac"]
+}

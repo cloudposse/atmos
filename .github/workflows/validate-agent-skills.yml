@@ -5,10 +5,12 @@ on:
     branches: [main]
     paths:
       - "agent-skills/**"
+      - ".claude-plugin/**"
   pull_request:
     branches: [main]
     paths:
       - "agent-skills/**"
+      - ".claude-plugin/**"
 
 jobs:
   validate-skills:
@@ -25,6 +27,39 @@ jobs:
             exit 1
           fi
           echo "AGENTS.md exists"
+
+      - name: Validate plugin directory structure
+        run: |
+          ERRORS=0
+          CATEGORIES="configuration orchestration platform integrations guidance"
+          for cat in $CATEGORIES; do
+            if [ ! -d "agent-skills/$cat" ]; then
+              echo "::error::Missing plugin directory agent-skills/$cat"
+              ERRORS=$((ERRORS + 1))
+              continue
+            fi
+            if [ ! -f "agent-skills/$cat/.claude-plugin/plugin.json" ]; then
+              echo "::error::Missing plugin.json in agent-skills/$cat/.claude-plugin/"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if [ ! -d "agent-skills/$cat/skills" ]; then
+              echo "::error::Missing skills/ directory in agent-skills/$cat/"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS plugin structure error(s)"
+            exit 1
+          fi
+          echo "All plugin directories have correct structure"
+
+      - name: Validate marketplace.json exists
+        run: |
+          if [ ! -f ".claude-plugin/marketplace.json" ]; then
+            echo "::error::Missing .claude-plugin/marketplace.json"
+            exit 1
+          fi
+          echo "marketplace.json exists"
 
       - name: Validate SKILL.md frontmatter
         run: |
@@ -50,15 +85,16 @@ jobs:
           fi
           echo "All SKILL.md files have valid frontmatter"
 
-      - name: Validate skill directory structure
+      - name: Validate skill directories contain SKILL.md
         run: |
           ERRORS=0
-          for dir in agent-skills/atmos-*/; do
-            if [ ! -f "${dir}SKILL.md" ]; then
+          while IFS= read -r -d '' dir; do
+            SKILL_NAME=$(basename "$dir")
+            if [[ "$SKILL_NAME" == atmos-* ]] && [ ! -f "$dir/SKILL.md" ]; then
               echo "::error::Missing SKILL.md in $dir"
               ERRORS=$((ERRORS + 1))
             fi
-          done
+          done < <(find agent-skills/*/skills -mindepth 1 -maxdepth 1 -type d -print0)
           if [ $ERRORS -gt 0 ]; then
             echo "Found $ERRORS missing SKILL.md file(s)"
             exit 1
@@ -116,7 +152,7 @@ jobs:
             elif [ "$SIZE" -gt "$REF_WARN" ]; then
               echo "::warning file=$f::${SIZE} bytes, approaching ${REF_MAX}-byte limit"
             fi
-          done < <(find agent-skills/*/references -name "*.md" -print0 2>/dev/null)
+          done < <(find agent-skills/*/skills/*/references -name "*.md" -print0 2>/dev/null)
 
           # Check AGENTS.md (same limit as reference files)
           if [ -f "agent-skills/AGENTS.md" ]; then
@@ -156,3 +192,25 @@ jobs:
             exit 1
           fi
           echo "All code fences have language tags"
+
+      - name: Validate plugin.json files
+        run: |
+          ERRORS=0
+          while IFS= read -r -d '' f; do
+            if ! python3 -c "import json; json.load(open('$f'))" 2>/dev/null; then
+              echo "::error file=$f::Invalid JSON syntax"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(find agent-skills -name "plugin.json" -print0)
+          # Also validate marketplace.json
+          if [ -f ".claude-plugin/marketplace.json" ]; then
+            if ! python3 -c "import json; json.load(open('.claude-plugin/marketplace.json'))" 2>/dev/null; then
+              echo "::error file=.claude-plugin/marketplace.json::Invalid JSON syntax"
+              ERRORS=$((ERRORS + 1))
+            fi
+          fi
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS invalid JSON file(s)"
+            exit 1
+          fi
+          echo "All JSON manifests are valid"

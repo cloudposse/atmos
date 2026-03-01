@@ -1,0 +1,13 @@
+{
+  "name": "atmos-configuration",
+  "version": "1.0.0",
+  "description": "Atmos stack configuration skills: project config, stack design, components, vendoring, schemas, and introspection commands.",
+  "author": {
+    "name": "Cloud Posse",
+    "url": "https://github.com/cloudposse"
+  },
+  "homepage": "https://atmos.tools/integrations/ai/agent-skills",
+  "repository": "https://github.com/cloudposse/atmos",
+  "license": "Apache-2.0",
+  "keywords": ["atmos", "stacks", "components", "configuration", "vendoring", "schemas", "iac"]
+}
