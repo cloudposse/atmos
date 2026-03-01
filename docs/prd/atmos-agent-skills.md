@@ -141,7 +141,7 @@ This prevents context window bloat when many skills are installed.
 
 ### Claude Code Skills Discovery
 
-The [Claude Code skills documentation](https://docs.anthropic.com/en/docs/claude-code/skills)
+The [Claude Code skills documentation](https://code.claude.com/docs/en/skills)
 defines how skills are discovered and loaded.
 
 #### Discovery Hierarchy
@@ -179,8 +179,7 @@ with a single command.
 
 ##### Architecture Decision
 
-Skills are grouped into **five plugins** matching the skill categories. This mirrors the
-[cloudposse/agent-skills prototype](https://github.com/cloudposse/agent-skills) and allows
+Skills are grouped into **five plugins** matching the skill categories, allowing
 users to install only the skill categories they need.
 
 | Plugin | Skills | Description |
@@ -838,7 +837,7 @@ users configure and operate Atmos.
 ### Standards and Specifications
 
 - [Agent Skills Open Standard](https://agentskills.io/specification) -- Cross-tool skill format specification
-- [Claude Code Skills Documentation](https://docs.anthropic.com/en/docs/claude-code/skills) -- Claude Code skill discovery and loading
+- [Claude Code Skills Documentation](https://code.claude.com/docs/en/skills) -- Claude Code skill discovery and loading
 - [Claude Code Plugin Marketplaces](https://code.claude.com/docs/en/plugin-marketplaces) -- Creating and distributing plugin marketplaces
 - [Claude Code Plugin Discovery](https://code.claude.com/docs/en/discover-plugins) -- Installing plugins from marketplaces
 - [OpenAI Codex Skills](https://developers.openai.com/codex/skills/) -- Codex-compatible skill format (compatible with Agent Skills standard)

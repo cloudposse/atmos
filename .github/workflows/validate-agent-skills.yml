@@ -176,7 +176,11 @@ jobs:
             # Find opening code fences without language tags
             # Track open/close state to skip closing fences
             UNLABELED=$(awk '
-              /^```$/ { in_block = !in_block; next }
+              /^```$/ {
+                if (!in_block) { print NR": "$0 }
+                in_block = !in_block
+                next
+              }
               /^```[a-zA-Z]/ { in_block = 1; next }
               /^```[^a-zA-Z]/ { print NR": "$0; next }
               /^``` / { print NR": "$0; next }
