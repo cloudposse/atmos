@@ -57,3 +57,58 @@ updates:
   ignore:
     - dependency-name: "*"
       update-types: ["version-update:semver-major"]
+
+- package-ecosystem: docker
+  directory: /.devcontainer
+  schedule:
+    interval: daily
+
+- package-ecosystem: docker
+  directory: /
+  schedule:
+    interval: daily
+
+- package-ecosystem: docker
+  directory: /demo/screenshots
+  schedule:
+    interval: daily
+
+- package-ecosystem: docker
+  directory: /examples/devcontainer-build
+  schedule:
+    interval: daily
+
+- package-ecosystem: docker
+  directory: /examples/quick-start-advanced
+  schedule:
+    interval: daily
+
+- package-ecosystem: gomod
+  directory: /tools/gomodcheck
+  schedule:
+    interval: daily
+
+- package-ecosystem: gomod
+  directory: /tools/lintroller
+  schedule:
+    interval: daily
+
+- package-ecosystem: npm
+  directory: /website/plugins/custom-loaders
+  schedule:
+    interval: daily
+
+- package-ecosystem: npm
+  directory: /website/plugins/docusaurus-plugin-llms-txt
+  schedule:
+    interval: daily
+
+- package-ecosystem: npm
+  directory: /website/plugins/fetch-latest-release
+  schedule:
+    interval: daily
+
+- package-ecosystem: npm
+  directory: /website/plugins/glossary-tooltips
+  schedule:
+    interval: daily
