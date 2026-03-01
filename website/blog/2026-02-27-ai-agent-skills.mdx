@@ -77,13 +77,21 @@ Each tool has its own integration path:
 # Gemini CLI -- symlink to .gemini/skills
 ln -s agent-skills .gemini/skills
 
-# Cursor -- add .cursor/rules/atmos.mdc with: @agent-skills/AGENTS.md
-mkdir -p .cursor/rules && echo '@agent-skills/AGENTS.md' > .cursor/rules/atmos.mdc
+# Cursor -- create .cursor/rules/atmos.mdc (frontmatter required for auto-loading)
+mkdir -p .cursor/rules && cat > .cursor/rules/atmos.mdc << 'RULE'
+---
+description: Atmos infrastructure orchestration guidance
+globs: "*.yaml, *.tf"
+alwaysApply: false
+---
+@agent-skills/AGENTS.md
+RULE
 
 # Windsurf -- add reference in .windsurfrules (also auto-discovers AGENTS.md)
-echo 'See agent-skills/AGENTS.md for Atmos guidance.' >> .windsurfrules
+echo 'Always refer to agent-skills/AGENTS.md for Atmos commands and configuration patterns.' >> .windsurfrules
 
 # GitHub Copilot -- reference in .github/copilot-instructions.md
+mkdir -p .github && echo 'Always refer to agent-skills/AGENTS.md for Atmos commands and configuration patterns.' >> .github/copilot-instructions.md
 ```
 
 ### Other Tools
@@ -102,6 +110,8 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/at
 cd /tmp/atmos && git sparse-checkout set agent-skills
 cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
 ```
+
+Keep the downloaded directory structure intact -- don't flatten it. The `AGENTS.md` router references skills using relative paths that depend on the nested layout.
 
 See the [AI Agent Skills documentation](/integrations/ai/agent-skills) for complete setup instructions for each tool.
 

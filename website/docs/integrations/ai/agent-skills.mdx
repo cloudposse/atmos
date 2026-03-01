@@ -380,15 +380,21 @@ Cursor co-created the `AGENTS.md` standard and reads it natively. It also suppor
 `.cursor/agents/*.md` with YAML frontmatter (since Cursor 2.4).
 
 The **primary integration path** is adding an `.mdc` rule file that references the skills router.
-Simply symlinking to `.cursor/skills` will not automatically load context -- Cursor requires explicit
-`@` references or rule files to inject context:
+Cursor `.mdc` files require YAML frontmatter with `description`, `globs`, and `alwaysApply` fields --
+without frontmatter, the rule is treated as "Manual" and will not auto-load:
 
 ```text
 # .cursor/rules/atmos.mdc
+---
+description: Atmos infrastructure orchestration guidance
+globs: "*.yaml, *.tf"
+alwaysApply: false
+---
 @agent-skills/AGENTS.md
 ```
 
-This ensures Cursor loads the Atmos skill router whenever it processes files in the project.
+With this configuration, Cursor auto-attaches the Atmos skill router when editing YAML or Terraform
+files, and the agent can also discover it based on the description for any Atmos-related question.
 
   </TabItem>
   <TabItem value="windsurf" label="Windsurf">
@@ -401,7 +407,7 @@ as scoped instructions to Cascade. For guaranteed context loading, also add a po
 
 ```text
 # .windsurfrules
-For Atmos-specific guidance, see agent-skills/AGENTS.md.
+Always refer to agent-skills/AGENTS.md for Atmos commands and configuration patterns.
 Load the relevant skill using the paths in the AGENTS.md skill index.
 ```
 
@@ -489,6 +495,12 @@ git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/at
 cd /tmp/atmos && git sparse-checkout set agent-skills
 cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
 ```
+
+:::warning Keep the directory structure intact
+Do not flatten the downloaded `agent-skills/` directory. The `AGENTS.md` router references skills using
+relative paths like `agent-skills/configuration/skills/atmos-config/SKILL.md`. Restructuring or flattening the
+directory will break these references.
+:::
 
 Then configure your AI tool to reference the skills (see the tool-specific tabs above).
 
