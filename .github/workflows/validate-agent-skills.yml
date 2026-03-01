@@ -1,0 +1,158 @@
+name: Validate Agent Skills
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "agent-skills/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - "agent-skills/**"
+
+jobs:
+  validate-skills:
+    name: Validate agent skills structure and size
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate AGENTS.md exists
+        run: |
+          if [ ! -f "agent-skills/AGENTS.md" ]; then
+            echo "::error::Missing agent-skills/AGENTS.md"
+            exit 1
+          fi
+          echo "AGENTS.md exists"
+
+      - name: Validate SKILL.md frontmatter
+        run: |
+          ERRORS=0
+          while IFS= read -r -d '' f; do
+            FIRST_LINE=$(head -1 "$f")
+            if [ "$FIRST_LINE" != "---" ]; then
+              echo "::error file=$f::Missing frontmatter delimiter (first line must be ---)"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if ! grep -q "^name:" "$f"; then
+              echo "::error file=$f::Missing required 'name:' field in frontmatter"
+              ERRORS=$((ERRORS + 1))
+            fi
+            if ! grep -q "^description:" "$f"; then
+              echo "::error file=$f::Missing required 'description:' field in frontmatter"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(find agent-skills -name "SKILL.md" -print0)
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS SKILL.md validation error(s)"
+            exit 1
+          fi
+          echo "All SKILL.md files have valid frontmatter"
+
+      - name: Validate skill directory structure
+        run: |
+          ERRORS=0
+          for dir in agent-skills/atmos-*/; do
+            if [ ! -f "${dir}SKILL.md" ]; then
+              echo "::error::Missing SKILL.md in $dir"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS missing SKILL.md file(s)"
+            exit 1
+          fi
+          echo "All skill directories contain SKILL.md"
+
+      - name: Check SKILL.md line count (max 500 lines per spec)
+        run: |
+          # Agent Skills spec recommends SKILL.md under 500 lines
+          # https://agentskills.io/specification#progressive-disclosure
+          MAX_LINES=500
+          ERRORS=0
+          while IFS= read -r -d '' f; do
+            LINES=$(wc -l < "$f")
+            if [ "$LINES" -gt "$MAX_LINES" ]; then
+              echo "::error file=$f::$LINES lines exceeds ${MAX_LINES}-line limit. Move detailed content to references/"
+              ERRORS=$((ERRORS + 1))
+            elif [ "$LINES" -gt 450 ]; then
+              echo "::warning file=$f::$LINES lines, approaching ${MAX_LINES}-line limit"
+            fi
+          done < <(find agent-skills -name "SKILL.md" -print0)
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS SKILL.md file(s) exceeding the ${MAX_LINES}-line limit"
+            exit 1
+          fi
+          echo "All SKILL.md files are within the ${MAX_LINES}-line limit"
+
+      - name: Check file sizes (max 20KB for SKILL.md, max 25KB for references)
+        run: |
+          # Agent Skills spec recommends < 5000 tokens for SKILL.md body (~20KB)
+          # Reference files are loaded on demand so get a slightly higher limit
+          SKILL_MAX=20480    # 20KB for SKILL.md
+          REF_MAX=25600      # 25KB for reference files
+          SKILL_WARN=18432   # 18KB warning threshold
+          REF_WARN=23552     # 23KB warning threshold
+          ERRORS=0
+
+          # Check SKILL.md files
+          while IFS= read -r -d '' f; do
+            SIZE=$(wc -c < "$f")
+            if [ "$SIZE" -gt "$SKILL_MAX" ]; then
+              echo "::error file=$f::${SIZE} bytes exceeds ${SKILL_MAX}-byte limit. Move detailed content to references/"
+              ERRORS=$((ERRORS + 1))
+            elif [ "$SIZE" -gt "$SKILL_WARN" ]; then
+              echo "::warning file=$f::${SIZE} bytes, approaching ${SKILL_MAX}-byte limit"
+            fi
+          done < <(find agent-skills -name "SKILL.md" -print0)
+
+          # Check reference files
+          while IFS= read -r -d '' f; do
+            SIZE=$(wc -c < "$f")
+            if [ "$SIZE" -gt "$REF_MAX" ]; then
+              echo "::error file=$f::${SIZE} bytes exceeds ${REF_MAX}-byte limit. Split into smaller reference files"
+              ERRORS=$((ERRORS + 1))
+            elif [ "$SIZE" -gt "$REF_WARN" ]; then
+              echo "::warning file=$f::${SIZE} bytes, approaching ${REF_MAX}-byte limit"
+            fi
+          done < <(find agent-skills/*/references -name "*.md" -print0 2>/dev/null)
+
+          # Check AGENTS.md (same limit as reference files)
+          if [ -f "agent-skills/AGENTS.md" ]; then
+            SIZE=$(wc -c < "agent-skills/AGENTS.md")
+            if [ "$SIZE" -gt "$REF_MAX" ]; then
+              echo "::error file=agent-skills/AGENTS.md::${SIZE} bytes exceeds ${REF_MAX}-byte limit"
+              ERRORS=$((ERRORS + 1))
+            fi
+          fi
+
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS file(s) exceeding size limits"
+            exit 1
+          fi
+          echo "All skill files are within size limits"
+
+      - name: Validate code fence language tags
+        run: |
+          ERRORS=0
+          while IFS= read -r -d '' f; do
+            # Find opening code fences without language tags
+            # Track open/close state to skip closing fences
+            UNLABELED=$(awk '
+              /^```$/ { in_block = !in_block; next }
+              /^```[a-zA-Z]/ { in_block = 1; next }
+              /^```[^a-zA-Z]/ { print NR": "$0; next }
+              /^``` / { print NR": "$0; next }
+            ' "$f")
+            if [ -n "$UNLABELED" ]; then
+              echo "::error file=$f::Unlabeled code fences found (add language tags like yaml, bash, text, json)"
+              echo "$UNLABELED"
+              ERRORS=$((ERRORS + 1))
+            fi
+          done < <(find agent-skills -name "*.md" -print0)
+          if [ $ERRORS -gt 0 ]; then
+            echo "Found $ERRORS file(s) with unlabeled code fences"
+            exit 1
+          fi
+          echo "All code fences have language tags"
