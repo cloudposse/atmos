@@ -34,11 +34,13 @@ func newTestStore(t *testing.T, prefix string) (*Store, *fakestorage.Server) {
 	}, server
 }
 
+// TestStore_Name verifies the store returns the correct type name.
 func TestStore_Name(t *testing.T) {
 	store := &Store{bucket: "test-bucket"}
 	assert.Equal(t, "gcs", store.Name())
 }
 
+// TestStore_fullKey verifies key construction with and without prefix.
 func TestStore_fullKey(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -81,6 +83,7 @@ func TestStore_fullKey(t *testing.T) {
 	}
 }
 
+// TestNewStore_MissingBucket verifies that NewStore returns an error when bucket is missing or invalid.
 func TestNewStore_MissingBucket(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -119,6 +122,7 @@ func TestNewStore_MissingBucket(t *testing.T) {
 	}
 }
 
+// TestIsNotFoundError verifies detection of GCS object-not-found errors.
 func TestIsNotFoundError(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -150,14 +154,17 @@ func TestIsNotFoundError(t *testing.T) {
 	}
 }
 
+// TestStore_MetadataSuffix verifies the metadata sidecar file suffix constant.
 func TestStore_MetadataSuffix(t *testing.T) {
 	assert.Equal(t, ".metadata.json", metadataSuffix)
 }
 
+// TestStore_StoreName verifies the store name constant.
 func TestStore_StoreName(t *testing.T) {
 	assert.Equal(t, "gcs", storeName)
 }
 
+// TestStore_Upload verifies uploading planfiles with and without metadata.
 func TestStore_Upload(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -201,6 +208,7 @@ func TestStore_Upload(t *testing.T) {
 	})
 }
 
+// TestStore_Upload_WithPrefix verifies uploading planfiles under a store prefix.
 func TestStore_Upload_WithPrefix(t *testing.T) {
 	store, _ := newTestStore(t, "ci/plans")
 	ctx := context.Background()
@@ -214,6 +222,7 @@ func TestStore_Upload_WithPrefix(t *testing.T) {
 	assert.True(t, exists)
 }
 
+// TestStore_Download verifies downloading existing and nonexistent planfiles.
 func TestStore_Download(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -247,6 +256,7 @@ func TestStore_Download(t *testing.T) {
 	})
 }
 
+// TestStore_Delete verifies deleting planfiles and idempotent deletion of nonexistent files.
 func TestStore_Delete(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -279,6 +289,7 @@ func TestStore_Delete(t *testing.T) {
 	})
 }
 
+// TestStore_List verifies listing planfiles with prefix filtering.
 func TestStore_List(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -326,6 +337,7 @@ func TestStore_List(t *testing.T) {
 	})
 }
 
+// TestStore_List_WithPrefix verifies listing strips the store prefix from returned keys.
 func TestStore_List_WithPrefix(t *testing.T) {
 	store, _ := newTestStore(t, "ci/plans")
 	ctx := context.Background()
@@ -346,6 +358,7 @@ func TestStore_List_WithPrefix(t *testing.T) {
 	}
 }
 
+// TestStore_List_SkipsMetadataFiles verifies that metadata sidecar files are excluded from list results.
 func TestStore_List_SkipsMetadataFiles(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -364,6 +377,7 @@ func TestStore_List_SkipsMetadataFiles(t *testing.T) {
 	assert.Equal(t, "meta/test.tfplan", results[0].Key)
 }
 
+// TestStore_Exists verifies existence checks for existing and nonexistent planfiles.
 func TestStore_Exists(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -384,6 +398,7 @@ func TestStore_Exists(t *testing.T) {
 	})
 }
 
+// TestStore_GetMetadata verifies metadata retrieval with and without sidecar files.
 func TestStore_GetMetadata(t *testing.T) {
 	store, _ := newTestStore(t, "")
 	ctx := context.Background()
@@ -432,6 +447,7 @@ func TestStore_GetMetadata(t *testing.T) {
 	})
 }
 
+// TestStore_FullLifecycle verifies the complete upload, exists, metadata, download, list, delete lifecycle.
 func TestStore_FullLifecycle(t *testing.T) {
 	store, _ := newTestStore(t, "lifecycle")
 	ctx := context.Background()

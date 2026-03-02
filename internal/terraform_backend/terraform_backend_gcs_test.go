@@ -530,6 +530,7 @@ func newFakeGCSState(t *testing.T, bucket, prefix, workspace string, stateOutput
 	return server
 }
 
+// TestReadTerraformBackendGCSInternal_FakeServer verifies reading state with prefix from a fake GCS server.
 func TestReadTerraformBackendGCSInternal_FakeServer(t *testing.T) {
 	server := newFakeGCSState(t, "my-tf-state", "env/dev", "default", map[string]any{
 		"vpc_id":    "vpc-abc123",
@@ -554,6 +555,7 @@ func TestReadTerraformBackendGCSInternal_FakeServer(t *testing.T) {
 	assert.Contains(t, string(content), "subnet-def456")
 }
 
+// TestReadTerraformBackendGCSInternal_FakeServer_NoPrefix verifies reading state without a prefix.
 func TestReadTerraformBackendGCSInternal_FakeServer_NoPrefix(t *testing.T) {
 	server := newFakeGCSState(t, "my-tf-state", "", "production", map[string]any{
 		"cluster_name": "prod-cluster",
@@ -574,6 +576,7 @@ func TestReadTerraformBackendGCSInternal_FakeServer_NoPrefix(t *testing.T) {
 	assert.Contains(t, string(content), "prod-cluster")
 }
 
+// TestReadTerraformBackendGCSInternal_FakeServer_DefaultWorkspace verifies fallback to the default workspace.
 func TestReadTerraformBackendGCSInternal_FakeServer_DefaultWorkspace(t *testing.T) {
 	// When no workspace is set, Terraform defaults to "default".
 	server := newFakeGCSState(t, "state-bucket", "terraform/state", "default", map[string]any{
@@ -596,6 +599,7 @@ func TestReadTerraformBackendGCSInternal_FakeServer_DefaultWorkspace(t *testing.
 	assert.Contains(t, string(content), "output_value")
 }
 
+// TestReadTerraformBackendGCSInternal_FakeServer_NotFound verifies that a missing state file returns nil without error.
 func TestReadTerraformBackendGCSInternal_FakeServer_NotFound(t *testing.T) {
 	// Create a server with no objects — state file doesn't exist.
 	server := fakestorage.NewServer(nil)
@@ -618,6 +622,7 @@ func TestReadTerraformBackendGCSInternal_FakeServer_NotFound(t *testing.T) {
 	assert.Nil(t, content)
 }
 
+// TestReadTerraformBackendGCSInternal_FakeServer_ValidJSON verifies the returned content is valid Terraform state JSON.
 func TestReadTerraformBackendGCSInternal_FakeServer_ValidJSON(t *testing.T) {
 	// Verify the returned content is valid JSON matching Terraform state format.
 	server := newFakeGCSState(t, "json-bucket", "state", "default", map[string]any{

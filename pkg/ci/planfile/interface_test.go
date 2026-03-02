@@ -8,11 +8,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+// TestDefaultKeyPattern verifies the default key pattern value.
 func TestDefaultKeyPattern(t *testing.T) {
 	pattern := DefaultKeyPattern()
 	assert.Equal(t, "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan", pattern.Pattern)
 }
 
+// TestKeyPatternGenerateKey verifies key generation from patterns with various contexts.
 func TestKeyPatternGenerateKey(t *testing.T) {
 	tests := []struct {
 		name        string
