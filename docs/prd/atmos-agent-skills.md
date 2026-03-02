@@ -255,7 +255,7 @@ File: `.claude-plugin/marketplace.json` (repo root)
   "name": "cloudposse",
   "owner": {
     "name": "Cloud Posse",
-    "email": "hello@cloudposse.com"
+    "email": "opensource@cloudposse.com"
   },
   "metadata": {
     "description": "Official Cloud Posse plugins and skills for Claude Code",
@@ -483,19 +483,32 @@ separately through each AI tool's own mechanism.
 |---------|-------------|---------------------|
 | **Claude Code** | Yes (third-party) | `/plugin marketplace add cloudposse/atmos` then `/plugin install atmos-configuration@cloudposse` |
 | **Cursor** | Yes (curated) | Cloud Posse would submit to [cursor.com/marketplace](https://cursor.com/marketplace) (separate process, requires review) |
-| **Gemini CLI** | No | Copy skills to `.gemini/skills/` or `~/.gemini/skills/` in the project |
-| **GitHub Copilot** | No (requested) | Copy skills to `.github/skills/` in the project |
-| **OpenAI Codex** | No | Copy `AGENTS.md` to the project root |
-| **Windsurf** | No | Reference `AGENTS.md` from `.windsurfrules` |
+| **Gemini CLI** | No | Vendor skills with `atmos vendor pull`, symlink to `.gemini/skills/` |
+| **GitHub Copilot** | No (requested) | Vendor skills with `atmos vendor pull`, reference from `.github/copilot-instructions.md` |
+| **OpenAI Codex** | No | Vendor skills with `atmos vendor pull`, copy `AGENTS.md` to the project root |
+| **Windsurf** | No | Vendor skills with `atmos vendor pull`, reference `AGENTS.md` from `.windsurfrules` |
 
-For tools without marketplaces, users copy the `agent-skills/` directory from the Atmos GitHub
-repo into their infrastructure project:
+For tools without marketplaces, users vendor the `agent-skills/` directory from the Atmos GitHub
+repo into their infrastructure project using Atmos vendoring:
+
+```yaml
+# Add to vendor.yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-agent-skills
+  description: Vendor Atmos AI agent skills
+spec:
+  sources:
+    - component: "agent-skills"
+      source: "github.com/cloudposse/atmos.git//agent-skills?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "agent-skills"
+```
 
 ```bash
-# Download skills from the Atmos repo (no need to clone the full repo)
-git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/atmos.git /tmp/atmos
-cd /tmp/atmos && git sparse-checkout set agent-skills
-cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
+atmos vendor pull --component agent-skills
 ```
 
 ### How Skills Are Activated

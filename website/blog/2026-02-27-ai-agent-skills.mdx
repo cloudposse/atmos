@@ -102,18 +102,31 @@ Antigravity reads from `.agent/skills/`, JetBrains Junie reads `AGENTS.md` as a 
 
 You install the `atmos` binary -- you don't need to clone the Atmos repository. Skills are installed separately through your AI tool.
 
-For Claude Code, install skills via the plugin marketplace (see above). For other AI tools that don't have Atmos marketplace support, copy the skills from the Atmos GitHub repo:
+For Claude Code, install skills via the plugin marketplace (see above). For other AI tools that don't have Atmos marketplace support, use Atmos vendoring to pull the skills into your project:
 
-```bash
-# Download just the agent-skills directory
-git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/atmos.git /tmp/atmos
-cd /tmp/atmos && git sparse-checkout set agent-skills
-cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
+```yaml
+# Add to vendor.yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-agent-skills
+  description: Vendor Atmos AI agent skills
+spec:
+  sources:
+    - component: "agent-skills"
+      source: "github.com/cloudposse/atmos.git//agent-skills?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "agent-skills"
 ```
 
-Keep the downloaded directory structure intact -- don't flatten it. The `AGENTS.md` router references skills using relative paths that depend on the nested layout.
+```bash
+atmos vendor pull --component agent-skills
+```
 
-See the [AI Agent Skills documentation](/integrations/ai/agent-skills) for complete setup instructions for each tool.
+This downloads the `agent-skills/` directory with the correct structure intact. To update skills later, run the same command again.
+
+See the [AI Agent Skills documentation](/integrations/ai/agent-skills) for the full skill reference and [Configure AI Assistants](/projects/setup-editor/ai-assistants) for tool-specific setup instructions.
 
 ## How Skills Are Activated
 

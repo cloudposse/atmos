@@ -51,21 +51,33 @@ project's `.claude/settings.json` (see [Team Auto-Discovery](#team-auto-discover
 ### Other AI Tools
 
 Gemini CLI, OpenAI Codex, Cursor, Windsurf, and GitHub Copilot do not have third-party marketplace support
-for Atmos skills (Cursor has a curated marketplace but requires separate submission). For these tools, copy
-the skills from the Atmos GitHub repository into your project:
+for Atmos skills. For these tools, use Atmos vendoring to pull the skills into your project.
 
-```bash
-# Download just the agent-skills directory (no need to clone the full repo)
-git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/atmos.git /tmp/atmos
-cd /tmp/atmos && git sparse-checkout set agent-skills
-cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
+Add the following source to your `vendor.yaml`:
+
+```yaml
+apiVersion: atmos/v1
+kind: AtmosVendorConfig
+metadata:
+  name: atmos-agent-skills
+  description: Vendor Atmos AI agent skills
+spec:
+  sources:
+    - component: "agent-skills"
+      source: "github.com/cloudposse/atmos.git//agent-skills?ref={{.Version}}"
+      version: "main"
+      targets:
+        - "agent-skills"
 ```
 
-:::warning Keep the directory structure intact
-Do not flatten the downloaded `agent-skills/` directory. The `AGENTS.md` router references skills using
-relative paths like `agent-skills/configuration/skills/atmos-config/SKILL.md`. Restructuring or flattening the
-directory will break these references.
-:::
+Then pull the skills:
+
+```bash
+atmos vendor pull --component agent-skills
+```
+
+This downloads the `agent-skills/` directory into your project with the correct structure intact.
+To update skills later, run the same command again.
 
 Then configure your AI tool using the instructions below.
 
