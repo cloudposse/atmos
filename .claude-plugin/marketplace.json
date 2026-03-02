@@ -5,7 +5,7 @@
     "email": "opensource@cloudposse.com"
   },
   "metadata": {
-    "description": "Official Cloud Posse plugins and skills for Claude Code",
+    "description": "Official Atmos plugins and skills for Claude Code",
     "version": "1.0.0",
     "pluginRoot": "./agent-skills"
   },
