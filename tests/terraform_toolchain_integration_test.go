@@ -11,9 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/internal/exec"
+	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+
+	"github.com/cloudposse/atmos/internal/exec"
 )
 
 // skipInMacOSCI skips the test if running on macOS in a CI environment.
@@ -400,4 +402,136 @@ func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 	}
 
 	assert.True(t, foundBinary, "Terraform binary should be installed at expected location")
+}
+
+// TestTerraformToolchain_MixinLevelDependencies verifies that dependencies defined at
+// the component-type level (Scope 2) in stack YAML are propagated through to the
+// component section after stack processing.
+//
+// This reproduces the bug where a user configures:
+//
+//	terraform:
+//	  dependencies:
+//	    tools:
+//	      terraform: "1.6.0"
+//
+// But the stack processor drops this data, so toolchain auto-install never triggers.
+func TestTerraformToolchain_MixinLevelDependencies(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_MixinLevelDependencies")()
+
+	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	t.Chdir(workDir)
+
+	// Initialize CLI config and process stacks via ProcessStacks, which handles
+	// stack name resolution, stack map lookup, and component config extraction.
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "mixin-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-mixin",
+		SubCommand:       "plan",
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(info, true)
+	require.NoError(t, err)
+
+	info, err = exec.ProcessStacks(&atmosConfig, info, true, false, false, nil, nil)
+	require.NoError(t, err)
+
+	// Verify that the component section contains dependencies from the terraform
+	// section (Scope 2). Before the fix, this would be nil/empty because the stack
+	// processor dropped the terraform.dependencies section.
+	compSection := info.ComponentSection
+	require.NotNil(t, compSection, "ComponentSection should not be nil")
+
+	depsRaw, ok := compSection["dependencies"]
+	require.True(t, ok, "ComponentSection should contain 'dependencies' key from terraform section (Scope 2)")
+
+	deps, ok := depsRaw.(map[string]any)
+	require.True(t, ok, "dependencies should be a map")
+
+	toolsRaw, ok := deps["tools"]
+	require.True(t, ok, "dependencies should contain 'tools' key")
+
+	tools, ok := toolsRaw.(map[string]any)
+	require.True(t, ok, "tools should be a map")
+
+	tfVersion, ok := tools["terraform"]
+	require.True(t, ok, "tools should contain 'terraform' key")
+	assert.Equal(t, "1.6.0", tfVersion, "terraform version should be '1.6.0' from terraform section (Scope 2)")
+}
+
+// TestTerraformToolchain_MixinLevelDependencies_PlanCommand verifies end-to-end that
+// when dependencies are configured at the component-type level (Scope 2),
+// ExecuteTerraform with 'plan' subcommand resolves and auto-installs the terraform
+// binary from the toolchain.
+//
+// This test proves that Scope 2 dependencies flow through the stack processor
+// and trigger the toolchain installer. It verifies the binary is downloaded and
+// placed at the correct path.
+//
+// Note: The subprocess may still fail to find the binary due to a separate PATH
+// propagation issue (the installed binary path is in ComponentEnvList, but Go's
+// exec.LookPath checks the process PATH). That is tracked separately.
+func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_MixinLevelDependencies_PlanCommand")()
+
+	// Skip on macOS CI to prevent timeouts - these tests can be slow.
+	skipInMacOSCI(t)
+
+	// Skip if running in short mode (requires network to download terraform).
+	if testing.Short() {
+		t.Skip("Skipping toolchain integration test in short mode (requires network)")
+	}
+
+	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	t.Chdir(workDir)
+
+	// Clean up any existing toolchain installations.
+	toolsDir := ".tools"
+	os.RemoveAll(toolsDir)
+	defer os.RemoveAll(toolsDir)
+
+	info := schema.ConfigAndStacksInfo{
+		Stack:            "mixin-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-mixin",
+		SubCommand:       "plan",
+	}
+
+	// Capture stdout/stderr.
+	oldStdout := os.Stdout
+	oldStderr := os.Stderr
+	rOut, wOut, _ := os.Pipe()
+	rErr, wErr, _ := os.Pipe()
+	os.Stdout = wOut
+	os.Stderr = wErr
+
+	// Execute terraform - it may fail for various reasons (no init, no backend, etc.)
+	// but the key thing we verify is that the toolchain binary was installed.
+	_ = exec.ExecuteTerraform(info)
+
+	// Restore stdout/stderr.
+	wOut.Close()
+	wErr.Close()
+	os.Stdout = oldStdout
+	os.Stderr = oldStderr
+
+	// Read captured output.
+	var bufOut, bufErr bytes.Buffer
+	bufOut.ReadFrom(rOut)
+	bufErr.ReadFrom(rErr)
+
+	t.Logf("Stdout:\n%s", bufOut.String())
+	t.Logf("Stderr:\n%s", bufErr.String())
+
+	// Verify toolchain binary was installed at the expected location.
+	// This is the critical assertion: before the fix, the dependencies from the
+	// terraform section (Scope 2) were dropped by the stack processor, so the
+	// toolchain installer was never triggered and no binary was downloaded.
+	expectedBinaryPath := filepath.Join(toolsDir, "bin", "hashicorp", "terraform", "1.6.0", "terraform")
+	if runtime.GOOS == "windows" {
+		expectedBinaryPath += ".exe"
+	}
+	_, statErr := os.Stat(expectedBinaryPath)
+	assert.NoError(t, statErr, "Toolchain binary should be installed at: %s (Scope 2 dependencies should trigger auto-install)", expectedBinaryPath)
 }
