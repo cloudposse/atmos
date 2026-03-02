@@ -603,7 +603,7 @@ func TestReadTerraformBackendGCSInternal_FakeServer_DefaultWorkspace(t *testing.
 func TestReadTerraformBackendGCSInternal_FakeServer_NotFound(t *testing.T) {
 	// Create a server with no objects — state file doesn't exist.
 	server := fakestorage.NewServer(nil)
-	server.CreateBucket("empty-bucket")
+	server.CreateBucketWithOpts(fakestorage.CreateBucketOpts{Name: "empty-bucket"})
 	t.Cleanup(server.Stop)
 
 	client := tb.NewGCSClientFromStorageClient(server.Client())

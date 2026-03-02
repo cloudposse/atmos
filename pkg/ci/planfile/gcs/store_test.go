@@ -3,6 +3,7 @@ package gcs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -24,7 +25,7 @@ func newTestStore(t *testing.T, prefix string) (*Store, *fakestorage.Server) {
 	t.Helper()
 
 	server := fakestorage.NewServer(nil)
-	server.CreateBucket(testBucket)
+	server.CreateBucketWithOpts(fakestorage.CreateBucketOpts{Name: testBucket})
 	t.Cleanup(server.Stop)
 
 	return &Store{
@@ -142,6 +143,11 @@ func TestIsNotFoundError(t *testing.T) {
 		{
 			name:     "ErrObjectNotExist",
 			err:      storage.ErrObjectNotExist,
+			expected: true,
+		},
+		{
+			name:     "wrapped ErrObjectNotExist",
+			err:      fmt.Errorf("failed to read object: %w", storage.ErrObjectNotExist),
 			expected: true,
 		},
 	}

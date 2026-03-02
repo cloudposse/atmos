@@ -72,6 +72,12 @@ func TestKeyPatternGenerateKey(t *testing.T) {
 			},
 			expected: "plat-ue2-dev/vpc/.tfplan",
 		},
+		{
+			name:        "nil KeyContext returns error",
+			pattern:     "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan",
+			ctx:         nil,
+			expectError: true,
+		},
 	}
 
 	for _, tt := range tests {

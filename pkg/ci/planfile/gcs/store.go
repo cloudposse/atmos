@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"path"
+	"strings"
 
 	"cloud.google.com/go/storage"
 	"google.golang.org/api/iterator"
@@ -75,8 +75,7 @@ func (s *Store) fullKey(key string) string {
 	if s.prefix == "" {
 		return key
 	}
-	//nolint:forbidigo // GCS object keys use forward slashes regardless of OS, path.Join is correct here.
-	return path.Join(s.prefix, key)
+	return strings.TrimRight(s.prefix, "/") + "/" + key
 }
 
 // Upload uploads a planfile to GCS.
@@ -85,18 +84,11 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 
 	fullKey := s.fullKey(key)
 
-	// Read data into buffer.
-	buf, err := io.ReadAll(data)
-	if err != nil {
-		return fmt.Errorf("%w: failed to read planfile data: %w", errUtils.ErrPlanfileUploadFailed, err)
-	}
-
-	// Upload the planfile.
+	// Stream directly into the GCS writer to avoid buffering the entire planfile in memory.
 	obj := s.client.Bucket(s.bucket).Object(fullKey)
 	writer := obj.NewWriter(ctx)
 
-	if _, err := writer.Write(buf); err != nil {
-		// Attempt to close writer to release resources.
+	if _, err := io.Copy(writer, data); err != nil {
 		_ = writer.Close()
 		return fmt.Errorf("%w: failed to write planfile to GCS: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
@@ -107,24 +99,37 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 
 	// Upload metadata if provided.
 	if metadata != nil {
-		metadataKey := fullKey + metadataSuffix
-		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
-		if err != nil {
-			return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
+		if err := s.uploadMetadata(ctx, fullKey, metadata); err != nil {
+			// Best-effort rollback: delete the planfile that was already uploaded.
+			deleteErr := s.client.Bucket(s.bucket).Object(fullKey).Delete(ctx)
+			return errors.Join(
+				fmt.Errorf("%w: failed to upload metadata to GCS: %w", errUtils.ErrPlanfileUploadFailed, err),
+				deleteErr,
+			)
 		}
+	}
 
-		metaObj := s.client.Bucket(s.bucket).Object(metadataKey)
-		metaWriter := metaObj.NewWriter(ctx)
-		metaWriter.ContentType = "application/json"
+	return nil
+}
 
-		if _, err := metaWriter.Write(metadataJSON); err != nil {
-			_ = metaWriter.Close()
-			return fmt.Errorf("%w: failed to write metadata to GCS: %w", errUtils.ErrPlanfileUploadFailed, err)
-		}
+// uploadMetadata uploads the metadata sidecar JSON file to GCS.
+func (s *Store) uploadMetadata(ctx context.Context, planfileKey string, metadata *planfile.Metadata) error {
+	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal metadata: %w", err)
+	}
 
-		if err := metaWriter.Close(); err != nil {
-			return fmt.Errorf("%w: failed to upload metadata to GCS: %w", errUtils.ErrPlanfileUploadFailed, err)
-		}
+	metaObj := s.client.Bucket(s.bucket).Object(planfileKey + metadataSuffix)
+	metaWriter := metaObj.NewWriter(ctx)
+	metaWriter.ContentType = "application/json"
+
+	if _, err := metaWriter.Write(metadataJSON); err != nil {
+		_ = metaWriter.Close()
+		return fmt.Errorf("failed to write metadata: %w", err)
+	}
+
+	if err := metaWriter.Close(); err != nil {
+		return fmt.Errorf("failed to close metadata writer: %w", err)
 	}
 
 	return nil

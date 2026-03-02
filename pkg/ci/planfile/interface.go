@@ -2,7 +2,6 @@ package planfile
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -155,7 +154,7 @@ func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 	defer perf.Track(nil, "planfile.GenerateKey")()
 
 	if ctx == nil {
-		return "", errors.New("nil KeyContext")
+		return "", fmt.Errorf("nil KeyContext: %w", errUtils.ErrPlanfileKeyInvalid)
 	}
 
 	// Validate required fields based on pattern usage.
