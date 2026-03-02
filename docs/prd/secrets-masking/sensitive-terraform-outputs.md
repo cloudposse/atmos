@@ -2,7 +2,7 @@
 
 ## Status
 
-Draft — Addendum to [Secrets Management PRD](secrets-management.md)
+Draft — Addendum to [Secrets Management PRD](../secrets-management.md)
 
 ## Executive Summary
 
@@ -10,7 +10,7 @@ Automatically detect and mask sensitive Terraform outputs as they flow between c
 
 ## Problem Statement
 
-The [Secrets Management PRD](secrets-management.md) covers **human-provisioned secrets** — API keys, tokens, and passwords managed through `atmos secret set/get`. It explicitly scopes stores as "machine-written, machine-read state" and secrets as "human-managed configuration."
+The [Secrets Management PRD](../secrets-management.md) covers **human-provisioned secrets** — API keys, tokens, and passwords managed through `atmos secret set/get`. It explicitly scopes stores as "machine-written, machine-read state" and secrets as "human-managed configuration."
 
 This leaves a gap: **sensitive Terraform outputs that flow between components are never masked.** A database component that outputs a `password` marked `sensitive = true` in Terraform will have that password appear in cleartext when:
 
@@ -233,7 +233,7 @@ Both systems feed into the same I/O masking layer. A value registered by either 
 
 ## References
 
-- [Secrets Management PRD](secrets-management.md)
-- [I/O Handling Strategy PRD](io-handling-strategy.md)
+- [Secrets Management PRD](../secrets-management.md)
+- [I/O Handling Strategy PRD](../io-handling-strategy.md)
 - [Terraform `sensitive` outputs documentation](https://developer.hashicorp.com/terraform/language/values/outputs#sensitive-suppressing-values-in-cli-output)
 - `tfexec.OutputMeta` — `github.com/hashicorp/terraform-exec/tfexec`
