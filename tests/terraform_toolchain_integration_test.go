@@ -535,3 +535,90 @@ func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
 	_, statErr := os.Stat(expectedBinaryPath)
 	assert.NoError(t, statErr, "Toolchain binary should be installed at: %s (Scope 2 dependencies should trigger auto-install)", expectedBinaryPath)
 }
+
+// TestTerraformToolchain_DependencyPrecedence verifies that all 3 scopes of
+// dependencies are properly merged with correct precedence through the full
+// stack processor pipeline:
+//
+//	Scope 1 (global)          → lowest priority
+//	Scope 2 (component-type)  → middle priority
+//	Scope 3 (component)       → highest priority
+//
+// It tests two components in the same stack:
+//  1. test-component-override: has Scope 3 deps that override Scope 2
+//  2. test-component-inherit: has NO Scope 3 deps, inherits from Scope 1+2
+func TestTerraformToolchain_DependencyPrecedence(t *testing.T) {
+	defer perf.Track(nil, "tests.TestTerraformToolchain_DependencyPrecedence")()
+
+	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	t.Chdir(workDir)
+
+	// --- Test component that OVERRIDES Scope 2 at Scope 3 ---
+	overrideInfo := schema.ConfigAndStacksInfo{
+		Stack:            "override-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-override",
+		SubCommand:       "plan",
+	}
+
+	atmosConfig, err := cfg.InitCliConfig(overrideInfo, true)
+	require.NoError(t, err)
+
+	overrideInfo, err = exec.ProcessStacks(&atmosConfig, overrideInfo, true, false, false, nil, nil)
+	require.NoError(t, err)
+
+	compSection := overrideInfo.ComponentSection
+	require.NotNil(t, compSection)
+
+	depsRaw, ok := compSection["dependencies"]
+	require.True(t, ok, "override component should have dependencies")
+	deps := depsRaw.(map[string]any)
+	tools := deps["tools"].(map[string]any)
+
+	// Scope 3 overrides Scope 2 for terraform version.
+	assert.Equal(t, "1.10.3", tools["terraform"], "Scope 3 should override Scope 2 terraform version")
+
+	// Scope 2 tflint should be inherited (not overridden by Scope 3).
+	assert.Equal(t, "^0.54.0", tools["tflint"], "Scope 2 tflint should be inherited")
+
+	// Scope 1 jq should be inherited through.
+	assert.Equal(t, "latest", tools["jq"], "Scope 1 jq should be inherited")
+
+	// Scope 3 adds a new tool not in Scope 1 or 2.
+	assert.Equal(t, "latest", tools["checkov"], "Scope 3 should add checkov")
+
+	// --- Test component that INHERITS from Scope 1+2 only ---
+	inheritInfo := schema.ConfigAndStacksInfo{
+		Stack:            "override-test",
+		ComponentType:    "terraform",
+		ComponentFromArg: "test-component-inherit",
+		SubCommand:       "plan",
+	}
+
+	atmosConfig2, err := cfg.InitCliConfig(inheritInfo, true)
+	require.NoError(t, err)
+
+	inheritInfo, err = exec.ProcessStacks(&atmosConfig2, inheritInfo, true, false, false, nil, nil)
+	require.NoError(t, err)
+
+	compSection2 := inheritInfo.ComponentSection
+	require.NotNil(t, compSection2)
+
+	depsRaw2, ok := compSection2["dependencies"]
+	require.True(t, ok, "inherit component should have dependencies from Scope 1+2")
+	deps2 := depsRaw2.(map[string]any)
+	tools2 := deps2["tools"].(map[string]any)
+
+	// Should get Scope 2 terraform version (no Scope 3 override).
+	assert.Equal(t, "1.6.0", tools2["terraform"], "Scope 2 terraform should be inherited without override")
+
+	// Should get Scope 2 tflint.
+	assert.Equal(t, "^0.54.0", tools2["tflint"], "Scope 2 tflint should be inherited")
+
+	// Should get Scope 1 jq.
+	assert.Equal(t, "latest", tools2["jq"], "Scope 1 jq should be inherited")
+
+	// Should NOT have checkov (that was only in Scope 3 of the other component).
+	_, hasCheckov := tools2["checkov"]
+	assert.False(t, hasCheckov, "inherit component should NOT have checkov (only defined in other component's Scope 3)")
+}
