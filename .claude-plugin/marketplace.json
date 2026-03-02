@@ -11,9 +11,9 @@
   },
   "plugins": [
     {
-      "name": "atmos-cli",
-      "source": "cli",
-      "description": "Atmos CLI command skills: Terraform, Helmfile, Packer, Ansible orchestration, workflows, and custom commands.",
+      "name": "atmos",
+      "source": ".",
+      "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, and design patterns.",
       "version": "1.0.0",
       "author": {
         "name": "Cloud Posse"
@@ -21,127 +21,7 @@
       "homepage": "https://atmos.tools/integrations/ai/agent-skills",
       "repository": "https://github.com/cloudposse/atmos",
       "license": "Apache-2.0",
-      "keywords": ["atmos", "terraform", "helmfile", "packer", "ansible", "workflows", "cli", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-cli-configuration",
-      "source": "cli-configuration",
-      "description": "Atmos CLI configuration skills: project config, schemas, introspection, auth, stores, toolchain, and devcontainer.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "configuration", "auth", "stores", "toolchain", "schemas", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-stacks",
-      "source": "stacks",
-      "description": "Atmos stack skills: stack YAML manifests, imports, inheritance, deep merging, vars, settings, and metadata.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "stacks", "yaml", "inheritance", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-components",
-      "source": "components",
-      "description": "Atmos component skills: Terraform root modules, abstract components, component inheritance, and versioning.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "components", "terraform", "modules", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-vendor",
-      "source": "vendor",
-      "description": "Atmos vendoring skills: vendor manifests, pulling from Git, S3, HTTP, OCI, and Terraform Registry.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "vendor", "dependencies", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-validation",
-      "source": "validation",
-      "description": "Atmos validation skills: OPA/Rego policies, JSON Schema validation, and schema manifests.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "validation", "opa", "json-schema", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-integrations",
-      "source": "integrations",
-      "description": "Atmos integration skills: GitHub Actions, Spacelift, Atlantis, and CI/CD pipeline workflows.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "gitops", "github-actions", "cicd", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-functions",
-      "source": "functions",
-      "description": "Atmos function skills: Go templates, Sprig/Gomplate functions, YAML functions, and store integration.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "functions", "templates", "yaml", "iac"],
-      "category": "integration",
-      "strict": false
-    },
-    {
-      "name": "atmos-guidance",
-      "source": "guidance",
-      "description": "Atmos guidance skills: stack organization patterns, component catalogs, inheritance strategies, and version management.",
-      "version": "1.0.0",
-      "author": {
-        "name": "Cloud Posse"
-      },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "design-patterns", "best-practices", "iac"],
+      "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"],
       "category": "integration",
       "strict": false
     }

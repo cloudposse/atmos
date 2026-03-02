@@ -31,27 +31,19 @@ jobs:
       - name: Validate plugin directory structure
         run: |
           ERRORS=0
-          CATEGORIES="cli cli-configuration stacks components vendor validation integrations functions guidance"
-          for cat in $CATEGORIES; do
-            if [ ! -d "agent-skills/$cat" ]; then
-              echo "::error::Missing plugin directory agent-skills/$cat"
-              ERRORS=$((ERRORS + 1))
-              continue
-            fi
-            if [ ! -f "agent-skills/$cat/.claude-plugin/plugin.json" ]; then
-              echo "::error::Missing plugin.json in agent-skills/$cat/.claude-plugin/"
-              ERRORS=$((ERRORS + 1))
-            fi
-            if [ ! -d "agent-skills/$cat/skills" ]; then
-              echo "::error::Missing skills/ directory in agent-skills/$cat/"
-              ERRORS=$((ERRORS + 1))
-            fi
-          done
+          if [ ! -f "agent-skills/.claude-plugin/plugin.json" ]; then
+            echo "::error::Missing agent-skills/.claude-plugin/plugin.json"
+            ERRORS=$((ERRORS + 1))
+          fi
+          if [ ! -d "agent-skills/skills" ]; then
+            echo "::error::Missing agent-skills/skills/ directory"
+            ERRORS=$((ERRORS + 1))
+          fi
           if [ $ERRORS -gt 0 ]; then
             echo "Found $ERRORS plugin structure error(s)"
             exit 1
           fi
-          echo "All plugin directories have correct structure"
+          echo "Plugin directory has correct structure"
 
       - name: Validate marketplace.json exists
         run: |
@@ -94,7 +86,7 @@ jobs:
               echo "::error::Missing SKILL.md in $dir"
               ERRORS=$((ERRORS + 1))
             fi
-          done < <(find agent-skills/*/skills -mindepth 1 -maxdepth 1 -type d -print0)
+          done < <(find agent-skills/skills -mindepth 1 -maxdepth 1 -type d -print0)
           if [ $ERRORS -gt 0 ]; then
             echo "Found $ERRORS missing SKILL.md file(s)"
             exit 1
@@ -152,7 +144,7 @@ jobs:
             elif [ "$SIZE" -gt "$REF_WARN" ]; then
               echo "::warning file=$f::${SIZE} bytes, approaching ${REF_MAX}-byte limit"
             fi
-          done < <(find agent-skills/*/skills/*/references -name "*.md" -print0 2>/dev/null)
+          done < <(find agent-skills/skills/*/references -name "*.md" -print0 2>/dev/null)
 
           # Check AGENTS.md (same limit as reference files)
           if [ -f "agent-skills/AGENTS.md" ]; then

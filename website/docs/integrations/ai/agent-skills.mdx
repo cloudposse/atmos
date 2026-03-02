@@ -10,13 +10,13 @@ import Intro from '@site/src/components/Intro'
 import KeyPoints from '@site/src/components/KeyPoints'
 
 <Intro>
-Atmos ships 20 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
+Atmos ships 21 agent skills that give AI coding assistants deep, accurate knowledge of Atmos conventions, stack
 configuration, Terraform orchestration, authentication, validation, and more. The skills live in the `agent-skills/`
 folder at the root of the Atmos repository and work across all major AI tools.
 </Intro>
 
 <KeyPoints>
-- 20 domain-specific skills covering every Atmos subsystem
+- 21 domain-specific skills covering every Atmos subsystem
 - Works with Claude Code, Gemini CLI, OpenAI Codex, Cursor, Windsurf, GitHub Copilot, and more
 - Progressive disclosure: AI loads only the skill it needs, keeping context focused
 - Portable SKILL.md format with YAML frontmatter and tiered reference files
@@ -41,7 +41,7 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 ## Available Skills
 
-Atmos includes 20 skills organized into nine categories that mirror the documentation sidebar:
+Atmos includes 21 skills covering every major subsystem:
 
 ### CLI
 
@@ -59,7 +59,6 @@ Atmos includes 20 skills organized into nine categories that mirror the document
 | Skill | Description |
 |-------|-------------|
 | `atmos-config` | Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles |
-| `atmos-schemas` | JSON Schema for stack manifests, IDE auto-completion, schema validation |
 | `atmos-introspection` | describe/list commands for querying stacks, components, dependencies, and change impact |
 | `atmos-auth` | Multi-provider auth (SSO/SAML/OIDC), identities, keyring, login/exec/shell |
 | `atmos-stores` | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory) |
@@ -89,6 +88,7 @@ Atmos includes 20 skills organized into nine categories that mirror the document
 | Skill | Description |
 |-------|-------------|
 | `atmos-validation` | OPA/Rego policies, JSON Schema validation, `atmos validate` commands |
+| `atmos-schemas` | JSON Schema for stack manifests, IDE auto-completion, schema validation |
 
 ### Integrations
 
@@ -100,7 +100,8 @@ Atmos includes 20 skills organized into nine categories that mirror the document
 
 | Skill | Description |
 |-------|-------------|
-| `atmos-templates` | Go templates, Sprig/Gomplate functions, YAML functions (`!store`, `!env`, `!aws.*`) |
+| `atmos-yaml-functions` | YAML functions: `!terraform.state`, `!store`, `!env`, `!exec`, `!include`, `!aws.*` |
+| `atmos-templates` | Go templates, Sprig/Gomplate functions, `atmos.Component`, datasources |
 
 ### Guidance
 
@@ -110,77 +111,33 @@ Atmos includes 20 skills organized into nine categories that mirror the document
 
 ## Folder Structure
 
-Skills are organized into nine plugin categories that mirror the documentation sidebar, each distributable as a Claude Code plugin:
+All 20 skills live in a single flat directory, packaged as one Claude Code plugin:
 
 ```text
-agent-skills/                                  # Plugin-compatible hierarchy
+agent-skills/                                  # Single plugin
   AGENTS.md                                    # Skill-activation router (loaded first)
-  cli/                                         # Plugin: atmos-cli
-    .claude-plugin/plugin.json
-    skills/
-      atmos-terraform/                         # + atmos-helmfile, atmos-packer, atmos-ansible,
-        SKILL.md                               #   atmos-workflows, atmos-custom-commands
-        references/
-  cli-configuration/                           # Plugin: atmos-cli-configuration
-    .claude-plugin/plugin.json
-    skills/
-      atmos-config/                            # + atmos-schemas, atmos-introspection,
-        SKILL.md                               #   atmos-auth, atmos-stores, atmos-toolchain,
-        references/                            #   atmos-devcontainer
-  stacks/                                      # Plugin: atmos-stacks
-    .claude-plugin/plugin.json
-    skills/
-      atmos-stacks/
-        SKILL.md
-        references/
-  components/                                  # Plugin: atmos-components
-    .claude-plugin/plugin.json
-    skills/
-      atmos-components/
-        SKILL.md
-        references/
-  vendor/                                      # Plugin: atmos-vendor
-    .claude-plugin/plugin.json
-    skills/
-      atmos-vendoring/
-        SKILL.md
-        references/
-  validation/                                  # Plugin: atmos-validation
-    .claude-plugin/plugin.json
-    skills/
-      atmos-validation/
-        SKILL.md
-        references/
-  integrations/                                # Plugin: atmos-integrations
-    .claude-plugin/plugin.json
-    skills/
-      atmos-gitops/
-        SKILL.md
-        references/
-  functions/                                   # Plugin: atmos-functions
-    .claude-plugin/plugin.json
-    skills/
-      atmos-templates/
-        SKILL.md
-        references/
-  guidance/                                    # Plugin: atmos-guidance
-    .claude-plugin/plugin.json
-    skills/
-      atmos-design-patterns/
-        SKILL.md
-        references/
+  .claude-plugin/plugin.json                   # Plugin manifest
+  skills/
+    atmos-terraform/                           # One directory per skill (21 total)
+      SKILL.md                                 # Primary instruction file (<500 lines)
+      references/                              # Deep-dive reference files
+    atmos-stacks/
+      SKILL.md
+      references/
+    atmos-config/
+      SKILL.md
+      references/
+    ...                                        # 18 more skills
 
-.claude/skills/                                # Flat view for auto-discovery
-  atmos-terraform -> ../../agent-skills/cli/skills/atmos-terraform
-  atmos-config -> ../../agent-skills/cli-configuration/skills/atmos-config
-  atmos-stacks -> ../../agent-skills/stacks/skills/atmos-stacks
-  ...                                          # 20 symlinks total
+.claude/skills/                                # Symlinks for auto-discovery (Atmos contributors)
+  atmos-terraform -> ../../agent-skills/skills/atmos-terraform
+  atmos-config -> ../../agent-skills/skills/atmos-config
+  atmos-stacks -> ../../agent-skills/skills/atmos-stacks
+  ...                                          # 21 symlinks total
 ```
 
-The two directories serve different purposes. `agent-skills/` uses a category-based hierarchy required by the
-Claude Code plugin system and other AI tools. `.claude/skills/` provides a flat view via symlinks so Claude Code
-can auto-discover skills at `.claude/skills/<skill-name>/SKILL.md` when working directly in the Atmos repo.
-Both paths resolve to the same 20 `SKILL.md` files.
+`agent-skills/` is the single source of truth. `.claude/skills/` contains symlinks so Claude Code auto-discovers
+skills when working directly in the Atmos repo. Both paths resolve to the same 21 `SKILL.md` files.
 
 Each skill folder follows the same pattern: one `SKILL.md` file and a `references/` directory with one or more
 deep-dive reference files.
@@ -312,7 +269,7 @@ components:
 
 Skills are maintained in the Atmos repository under `agent-skills/`. To contribute:
 
-1. Follow the existing folder structure: `agent-skills/<category>/skills/<skill-name>/SKILL.md`
+1. Follow the existing folder structure: `agent-skills/skills/<skill-name>/SKILL.md`
 2. Keep the primary `SKILL.md` under 500 lines for optimal context usage
 3. Place detailed reference material in `references/` subdirectories
 4. Update `AGENTS.md` to include your skill in the routing table

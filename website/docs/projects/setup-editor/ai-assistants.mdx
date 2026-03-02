@@ -37,16 +37,8 @@ are installed with two commands and persist across sessions:
 # One-time marketplace setup
 /plugin marketplace add cloudposse/atmos
 
-# Install the plugins you need (9 available, install what's relevant)
-/plugin install atmos-cli@cloudposse
-/plugin install atmos-cli-configuration@cloudposse
-/plugin install atmos-stacks@cloudposse
-/plugin install atmos-components@cloudposse
-/plugin install atmos-vendor@cloudposse
-/plugin install atmos-validation@cloudposse
-/plugin install atmos-integrations@cloudposse
-/plugin install atmos-functions@cloudposse
-/plugin install atmos-guidance@cloudposse
+# Install the Atmos skills plugin
+/plugin install atmos@cloudposse
 ```
 
 To auto-configure skills for your entire team, add marketplace and plugin settings to your
@@ -100,38 +92,16 @@ The recommended way to install Atmos skills in Claude Code is via the Cloud Poss
 # Step 1: Add the Cloud Posse marketplace (one-time setup)
 /plugin marketplace add cloudposse/atmos
 
-# Step 2: Install the plugins you need
-/plugin install atmos-cli@cloudposse
-/plugin install atmos-cli-configuration@cloudposse
-/plugin install atmos-stacks@cloudposse
-/plugin install atmos-components@cloudposse
-/plugin install atmos-vendor@cloudposse
-/plugin install atmos-validation@cloudposse
-/plugin install atmos-integrations@cloudposse
-/plugin install atmos-functions@cloudposse
-/plugin install atmos-guidance@cloudposse
+# Step 2: Install the Atmos skills plugin (all 20 skills)
+/plugin install atmos@cloudposse
 ```
 
-Skills are available immediately after installation and persist across sessions.
+Skills are available immediately after installation and persist across sessions. One plugin installs all 20 skills -- the AI loads only the relevant skill on demand, so there is no performance overhead.
 
 **How it works**: The `cloudposse/atmos` GitHub repository serves as the marketplace. When you add it,
 Claude Code fetches `.claude-plugin/marketplace.json` directly from the repo via the GitHub API. When you
-install a plugin, Claude Code downloads the plugin directory and caches it locally. No central registry or
+install the plugin, Claude Code downloads the skills directory and caches it locally. No central registry or
 approval process is involved -- the GitHub repo IS the marketplace.
-
-**Available plugins:**
-
-| Plugin | Skills |
-|--------|--------|
-| `atmos-cli` | atmos-terraform, atmos-helmfile, atmos-packer, atmos-ansible, atmos-workflows, atmos-custom-commands |
-| `atmos-cli-configuration` | atmos-config, atmos-schemas, atmos-introspection, atmos-auth, atmos-stores, atmos-toolchain, atmos-devcontainer |
-| `atmos-stacks` | atmos-stacks |
-| `atmos-components` | atmos-components |
-| `atmos-vendor` | atmos-vendoring |
-| `atmos-validation` | atmos-validation |
-| `atmos-integrations` | atmos-gitops |
-| `atmos-functions` | atmos-templates |
-| `atmos-guidance` | atmos-design-patterns |
 
 #### Team Auto-Discovery
 
@@ -148,15 +118,7 @@ Teams can auto-configure the marketplace for all team members by adding to the p
     }
   },
   "enabledPlugins": {
-    "atmos-cli@cloudposse": true,
-    "atmos-cli-configuration@cloudposse": true,
-    "atmos-stacks@cloudposse": true,
-    "atmos-components@cloudposse": true,
-    "atmos-vendor@cloudposse": true,
-    "atmos-validation@cloudposse": true,
-    "atmos-integrations@cloudposse": true,
-    "atmos-functions@cloudposse": true,
-    "atmos-guidance@cloudposse": true
+    "atmos@cloudposse": true
   }
 }
 ```
@@ -170,7 +132,7 @@ Atmos plugins may also be available in the
 you can install without adding a marketplace first:
 
 ```bash
-/plugin install atmos-cli@claude-plugin-directory
+/plugin install atmos@claude-plugin-directory
 ```
 
 Check the "Discover" tab in `/plugin` to see if Atmos plugins are available in the official directory.

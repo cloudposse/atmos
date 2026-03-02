@@ -52,26 +52,27 @@ When a task involves Atmos, activate the matching skill for detailed guidance.
 
 | Task                                                                                                                  | Skill                   | Path                                                                  |
 |-----------------------------------------------------------------------------------------------------------------------|-------------------------|-----------------------------------------------------------------------|
-| atmos.yaml project config: all sections, discovery, merging, base paths, settings, imports, profiles                 | `atmos-config`          | `agent-skills/cli-configuration/skills/atmos-config/SKILL.md`         |
-| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides                          | `atmos-stacks`          | `agent-skills/stacks/skills/atmos-stacks/SKILL.md`                    |
-| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `agent-skills/components/skills/atmos-components/SKILL.md`            |
-| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `agent-skills/vendor/skills/atmos-vendoring/SKILL.md`                 |
-| terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/cli/skills/atmos-terraform/SKILL.md`                    |
-| helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/cli/skills/atmos-helmfile/SKILL.md`                     |
-| packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/cli/skills/atmos-packer/SKILL.md`                       |
-| ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/cli/skills/atmos-ansible/SKILL.md`                      |
-| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `agent-skills/cli/skills/atmos-workflows/SKILL.md`                    |
-| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `agent-skills/cli/skills/atmos-custom-commands/SKILL.md`              |
-| Authentication: providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, login/exec/shell                  | `atmos-auth`            | `agent-skills/cli-configuration/skills/atmos-auth/SKILL.md`           |
-| Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/cli-configuration/skills/atmos-stores/SKILL.md`         |
-| JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/cli-configuration/skills/atmos-schemas/SKILL.md`        |
-| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `agent-skills/integrations/skills/atmos-gitops/SKILL.md`              |
-| OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`                                          | `atmos-validation`      | `agent-skills/validation/skills/atmos-validation/SKILL.md`            |
-| Go templates, Sprig/Gomplate functions, YAML functions (!terraform.output, !store, !env, !aws.*), store integration   | `atmos-templates`       | `agent-skills/functions/skills/atmos-templates/SKILL.md`              |
-| Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/guidance/skills/atmos-design-patterns/SKILL.md`         |
-| Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `agent-skills/cli-configuration/skills/atmos-toolchain/SKILL.md`      |
-| Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/cli-configuration/skills/atmos-introspection/SKILL.md`  |
-| Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/cli-configuration/skills/atmos-devcontainer/SKILL.md`   |
+| atmos.yaml project config: all sections, discovery, merging, base paths, settings, imports, profiles                 | `atmos-config`          | `agent-skills/skills/atmos-config/SKILL.md`          |
+| Stack YAML, imports, inheritance, deep merging, vars, settings, locals, metadata, overrides                          | `atmos-stacks`          | `agent-skills/skills/atmos-stacks/SKILL.md`          |
+| Terraform root modules, abstract components, component inheritance, versioning, mixins, catalog patterns              | `atmos-components`      | `agent-skills/skills/atmos-components/SKILL.md`      |
+| vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry, component.yaml                                | `atmos-vendoring`       | `agent-skills/skills/atmos-vendoring/SKILL.md`       |
+| terraform plan/apply/deploy/destroy, workspace management, backend config, varfile generation                         | `atmos-terraform`       | `agent-skills/skills/atmos-terraform/SKILL.md`       |
+| helmfile sync/apply/destroy/diff, Kubernetes deployments, EKS integration, varfile generation                         | `atmos-helmfile`        | `agent-skills/skills/atmos-helmfile/SKILL.md`        |
+| packer init/build/validate/inspect/output, machine image building, template management                                | `atmos-packer`          | `agent-skills/skills/atmos-packer/SKILL.md`          |
+| ansible playbook execution, variable passing, inventory management, configuration management                          | `atmos-ansible`         | `agent-skills/skills/atmos-ansible/SKILL.md`         |
+| Multi-step workflows, Go template support in workflows, cross-component orchestration                                 | `atmos-workflows`       | `agent-skills/skills/atmos-workflows/SKILL.md`       |
+| Custom CLI commands in atmos.yaml, arguments, flags, steps, env vars, subcommands                                     | `atmos-custom-commands` | `agent-skills/skills/atmos-custom-commands/SKILL.md` |
+| Authentication: providers (SSO/SAML/OIDC/GCP), identities (AWS/Azure/GCP), keyring, login/exec/shell                  | `atmos-auth`            | `agent-skills/skills/atmos-auth/SKILL.md`            |
+| Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory), hooks, data sharing                    | `atmos-stores`          | `agent-skills/skills/atmos-stores/SKILL.md`          |
+| JSON Schema for stack manifests, IDE auto-completion, schema updates for new features, validation                     | `atmos-schemas`         | `agent-skills/skills/atmos-schemas/SKILL.md`         |
+| GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based plan/apply                                   | `atmos-gitops`          | `agent-skills/skills/atmos-gitops/SKILL.md`          |
+| OPA/Rego policies, JSON Schema validation, `atmos validate component/stacks`                                          | `atmos-validation`      | `agent-skills/skills/atmos-validation/SKILL.md`      |
+| YAML functions: !terraform.state, !terraform.output, !store, !store.get, !env, !exec, !include, !aws.*, !literal     | `atmos-yaml-functions`  | `agent-skills/skills/atmos-yaml-functions/SKILL.md`  |
+| Go templates, Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, template configuration            | `atmos-templates`       | `agent-skills/skills/atmos-templates/SKILL.md`       |
+| Design patterns: stack organization, component catalogs, inheritance, configuration composition, version management   | `atmos-design-patterns` | `agent-skills/skills/atmos-design-patterns/SKILL.md` |
+| Toolchain management: install/exec/search tools, .tool-versions, Aqua registries, custom registries, aliases         | `atmos-toolchain`       | `agent-skills/skills/atmos-toolchain/SKILL.md`       |
+| Introspection: describe component/stacks/affected/dependents, list stacks/components/instances, querying, provenance | `atmos-introspection`   | `agent-skills/skills/atmos-introspection/SKILL.md`   |
+| Devcontainers: start/stop/attach/exec/shell, Docker/Podman, identity integration, instance management (experimental) | `atmos-devcontainer`    | `agent-skills/skills/atmos-devcontainer/SKILL.md`    |
 
 ## Common Patterns
 

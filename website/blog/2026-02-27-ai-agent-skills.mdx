@@ -5,23 +5,15 @@ authors: [aknysh]
 tags: [feature, dx]
 ---
 
-Atmos now ships 20 agent skills that give AI coding assistants deep knowledge of Atmos conventions, stack configuration, Terraform orchestration, authentication, validation, and more. Skills build on two open standards -- [AGENTS.md](https://agents.md/) and [Agent Skills](https://agentskills.io/specification) -- and work across Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and other AI tools.
+Atmos now ships 21 agent skills that give AI coding assistants deep knowledge of Atmos conventions, stack configuration, Terraform orchestration, authentication, validation, and more. Skills build on two open standards -- [AGENTS.md](https://agents.md/) and [Agent Skills](https://agentskills.io/specification) -- and work across Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and other AI tools.
 
 <!--truncate-->
 
 ## What Changed
 
-Atmos includes a new `agent-skills/` directory at the repository root containing 20 domain-specific skills:
+Atmos includes a new `agent-skills/` directory at the repository root containing 21 domain-specific skills packaged as a single Claude Code plugin:
 
-- **CLI**: `atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`, `atmos-workflows`, `atmos-custom-commands`
-- **CLI Configuration**: `atmos-config`, `atmos-schemas`, `atmos-introspection`, `atmos-auth`, `atmos-stores`, `atmos-toolchain`, `atmos-devcontainer`
-- **Stacks**: `atmos-stacks`
-- **Components**: `atmos-components`
-- **Vendor**: `atmos-vendoring`
-- **Validation**: `atmos-validation`
-- **Integrations**: `atmos-gitops`
-- **Functions**: `atmos-templates`
-- **Guidance**: `atmos-design-patterns`
+`atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`, `atmos-workflows`, `atmos-custom-commands`, `atmos-config`, `atmos-introspection`, `atmos-auth`, `atmos-stores`, `atmos-toolchain`, `atmos-devcontainer`, `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-validation`, `atmos-schemas`, `atmos-gitops`, `atmos-yaml-functions`, `atmos-templates`, `atmos-design-patterns`
 
 Each skill is a self-contained package with a primary `SKILL.md` instruction file (under 500 lines) and a `references/` directory with deeper reference material. An `AGENTS.md` router file maps user tasks to the right skill, so AI tools load only the context they need.
 
@@ -53,21 +45,13 @@ Install from the Cloud Posse plugin marketplace:
 # Add the Cloud Posse marketplace (one-time setup)
 /plugin marketplace add cloudposse/atmos
 
-# Install the plugins you need (9 available, install what's relevant)
-/plugin install atmos-cli@cloudposse
-/plugin install atmos-cli-configuration@cloudposse
-/plugin install atmos-stacks@cloudposse
-/plugin install atmos-components@cloudposse
-/plugin install atmos-vendor@cloudposse
-/plugin install atmos-validation@cloudposse
-/plugin install atmos-integrations@cloudposse
-/plugin install atmos-functions@cloudposse
-/plugin install atmos-guidance@cloudposse
+# Install the Atmos skills plugin (all 20 skills)
+/plugin install atmos@cloudposse
 ```
 
-The `cloudposse/atmos` GitHub repo serves as the marketplace -- Claude Code fetches the plugin manifest directly from the repo. No central registry or approval is involved. Once installed, plugins are cached locally and skills activate automatically when you ask Atmos-related questions. Atmos plugins may also be submitted to the [official Anthropic marketplace](https://github.com/anthropics/claude-plugins-official) for broader discovery via Claude Code's "Discover" tab.
+One plugin, one install command, all 20 skills. The `cloudposse/atmos` GitHub repo serves as the marketplace -- Claude Code fetches the plugin manifest directly from the repo. No central registry or approval is involved. Once installed, the plugin is cached locally and skills activate automatically when you ask Atmos-related questions.
 
-For Atmos contributors working directly in the repo, skills are also auto-discovered via `.claude/skills/`, which contains 20 symlinks pointing into the category-based `agent-skills/` hierarchy.
+For Atmos contributors working directly in the repo, skills are also auto-discovered via `.claude/skills/` symlinks.
 
 ### OpenAI Codex
 
