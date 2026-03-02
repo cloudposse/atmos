@@ -43,7 +43,7 @@ dependencies:
 
 #### Component-Type Level
 
-Tool versions defined under `terraform`, `helmfile`, or `packer` apply to all components of that type:
+Tool versions defined under `terraform`, `helmfile`, `packer`, or `ansible` apply to all components of that type:
 
 <File title="stacks/orgs/acme/plat/prod/_defaults.yaml">
 ```yaml
@@ -58,6 +58,11 @@ helmfile:
     tools:
       helm: "3.13.0"         # All Helmfile releases use helm 3.13.0
       kubectl: "1.28.0"      # All Helmfile releases use kubectl 1.28.0
+
+ansible:
+  dependencies:
+    tools:
+      ansible: "2.16.0"      # All Ansible components use ansible 2.16.0
 ```
 </File>
 

@@ -37,6 +37,7 @@ func RegisterDefaults() {
 		mustRegister(registry, NewAwsCallerIdentityArnFunction())
 		mustRegister(registry, NewAwsCallerIdentityUserIDFunction())
 		mustRegister(registry, NewAwsRegionFunction())
+		mustRegister(registry, NewAwsOrganizationIDFunction())
 	})
 }
 

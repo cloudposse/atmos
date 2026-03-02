@@ -149,3 +149,51 @@ func processTagAwsRegion(
 	}
 	return result
 }
+
+// processTagAwsOrganizationID processes the !aws.organization_id YAML function.
+// It returns the AWS Organization ID of the current account.
+// The function takes no parameters.
+//
+// Usage in YAML:
+//
+//	org_id: !aws.organization_id
+func processTagAwsOrganizationID(
+	atmosConfig *schema.AtmosConfiguration,
+	input string,
+	stackInfo *schema.ConfigAndStacksInfo,
+) any {
+	defer perf.Track(atmosConfig, "exec.processTagAwsOrganizationID")()
+
+	log.Debug(execAWSYAMLFunction, functionKey, input)
+
+	// Validate the tag matches expected.
+	if input != u.AtmosYamlFuncAwsOrganizationID {
+		log.Error(invalidYAMLFunction, functionKey, input, "expected", u.AtmosYamlFuncAwsOrganizationID)
+		errUtils.CheckErrorPrintAndExit(errUtils.ErrYamlFuncInvalidArguments, "", "")
+		return nil
+	}
+
+	// Get auth context from stack info if available.
+	var authContext *schema.AWSAuthContext
+	if stackInfo != nil && stackInfo.AuthContext != nil && stackInfo.AuthContext.AWS != nil {
+		authContext = stackInfo.AuthContext.AWS
+	}
+
+	// Get the AWS organization info (cached).
+	ctx := context.Background()
+	orgInfo, err := getAWSOrganizationCached(ctx, atmosConfig, authContext)
+	if err != nil {
+		log.Error("Failed to get AWS organization info", "error", err)
+		errUtils.CheckErrorPrintAndExit(err, "", "")
+		return nil
+	}
+
+	if orgInfo == nil || orgInfo.ID == "" {
+		log.Error("Failed to get AWS organization info", "error", errUtils.ErrAwsDescribeOrganization)
+		errUtils.CheckErrorPrintAndExit(errUtils.ErrAwsDescribeOrganization, "", "")
+		return nil
+	}
+
+	log.Debug("Resolved !aws.organization_id", "organization_id", orgInfo.ID)
+	return orgInfo.ID
+}

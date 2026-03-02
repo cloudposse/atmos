@@ -9,6 +9,8 @@ import File from '@site/src/components/File'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Screengrab from '@site/src/components/Screengrab'
+import EmbedExample from '@site/src/components/EmbedExample'
+import EmbedFile from '@site/src/components/EmbedFile'
 
 <Intro>
 Use this command to run an Ansible playbook for an Atmos component in a stack, applying configuration
@@ -115,21 +117,9 @@ atmos ansible playbook webserver -s prod -- --extra-vars "version=1.2.3"
 
 Configure your Ansible component in the stack manifest:
 
-```yaml
-components:
-  ansible:
-    webserver:
-      vars:
-        app_name: myapp
-        app_port: 8080
-        app_version: "1.0.0"
-      settings:
-        ansible:
-          playbook: site.yml
-          inventory: inventory/production
-```
+<EmbedFile filePath="examples/demo-ansible/stacks/catalog/hello-world.yaml" />
 
-When you run `atmos ansible playbook webserver -s prod`, Atmos:
+When you run `atmos ansible playbook hello-world -s dev`, Atmos:
 
 1. Generates a variables file with the `vars` section
 2. Passes it to `ansible-playbook` via `--extra-vars @<varfile>`
@@ -147,3 +137,7 @@ For example, for a component `webserver` in stack `prod-us-east-1`, the file wou
 `prod-us-east-1-webserver.ansible.vars.yaml`
 
 The file is automatically cleaned up after the playbook execution completes.
+
+## Example
+
+<EmbedExample example="demo-ansible" />

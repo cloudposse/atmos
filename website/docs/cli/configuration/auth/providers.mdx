@@ -201,6 +201,8 @@ The `gcp/adc` provider requires existing Application Default Credentials. Run `g
 
 For CI/CD pipelines using OIDC tokens (e.g., GitHub Actions).
 
+**In GitHub Actions, `token_source` is auto-detected** — you only need the WIF pool configuration:
+
 <File title="atmos.yaml">
 ```yaml
 auth:
@@ -212,8 +214,33 @@ auth:
       workload_identity_pool_id: github-pool
       workload_identity_provider_id: github-provider
       service_account_email: ci-sa@my-project.iam.gserviceaccount.com
+```
+</File>
+
+When running in GitHub Actions (detected via `ACTIONS_ID_TOKEN_REQUEST_URL`), Atmos automatically:
+- Sets `token_source.type` to `url`
+- Uses `ACTIONS_ID_TOKEN_REQUEST_URL` as the token endpoint
+- Uses `ACTIONS_ID_TOKEN_REQUEST_TOKEN` as the bearer token
+- Constructs the OIDC `audience` from `project_number`, `workload_identity_pool_id`, and `workload_identity_provider_id`
+- Validates the token URL against known GitHub Actions OIDC hosts (`*.actions.githubusercontent.com`)
+
+For non-GitHub environments, configure `token_source` explicitly:
+
+<File title="atmos.yaml (non-GitHub)">
+```yaml
+auth:
+  providers:
+    gcp-wif:
+      kind: gcp/workload-identity-federation
+      project_number: "123456789012"
+      workload_identity_pool_id: my-pool
+      workload_identity_provider_id: my-provider
       token_source:
-        type: url                     # GitHub Actions OIDC
+        type: url
+        url: https://my-oidc-provider.example.com/token
+        audience: //iam.googleapis.com/projects/123456789012/locations/global/workloadIdentityPools/my-pool/providers/my-provider
+        allowed_hosts:
+          - my-oidc-provider.example.com
 ```
 </File>
 
@@ -236,8 +263,11 @@ auth:
   <dt>`service_account_email`</dt>
   <dd>Optional. Service account to impersonate after federation. If not set, uses the federated token directly.</dd>
 
+  <dt>`token_source`</dt>
+  <dd>Optional in GitHub Actions (auto-detected). Required for other OIDC providers.</dd>
+
   <dt>`token_source.type`</dt>
-  <dd>**Required.** Token source type: `url` (GitHub Actions), `file`, or `environment`.</dd>
+  <dd>Token source type: `url`, `file`, or `environment`. Auto-detected as `url` in GitHub Actions.</dd>
 
   <dt>`token_source.environment_variable`</dt>
   <dd>For `type: environment`. Environment variable containing the OIDC token.</dd>
@@ -246,13 +276,16 @@ auth:
   <dd>For `type: file`. Path to file containing the OIDC token.</dd>
 
   <dt>`token_source.url`</dt>
-  <dd>For `type: url`. URL to fetch OIDC token. Defaults to GitHub Actions OIDC endpoint.</dd>
+  <dd>For `type: url`. URL to fetch OIDC token. In GitHub Actions, defaults to `ACTIONS_ID_TOKEN_REQUEST_URL`.</dd>
 
   <dt>`token_source.request_token`</dt>
-  <dd>For `type: url`. Bearer token for authenticating to the OIDC token endpoint. For GitHub Actions, this is automatically populated from `ACTIONS_ID_TOKEN_REQUEST_TOKEN`. Required for non-GitHub OIDC providers.</dd>
+  <dd>For `type: url`. Bearer token for authenticating to the OIDC token endpoint. In GitHub Actions, defaults to `ACTIONS_ID_TOKEN_REQUEST_TOKEN`.</dd>
 
   <dt>`token_source.audience`</dt>
-  <dd>Optional. Audience for the OIDC token request.</dd>
+  <dd>Optional. Audience for the OIDC token request. In GitHub Actions, auto-constructed from `project_number`, `workload_identity_pool_id`, and `workload_identity_provider_id`.</dd>
+
+  <dt>`token_source.allowed_hosts`</dt>
+  <dd>For `type: url`. Allowed hostnames for the token endpoint. Not needed in GitHub Actions (validated against known GitHub hosts automatically).</dd>
 
   <dt>`scopes`</dt>
   <dd>Optional. OAuth scopes for the access token.</dd>
@@ -260,7 +293,7 @@ auth:
 
 ### GitHub Actions Setup
 
-For GitHub Actions, use `type: url` which automatically uses the `ACTIONS_ID_TOKEN_REQUEST_URL` and `ACTIONS_ID_TOKEN_REQUEST_TOKEN` environment variables:
+In GitHub Actions, the only requirement is `id-token: write` permission. No `token_source` configuration is needed:
 
 <File title=".github/workflows/deploy.yaml">
 ```yaml
@@ -299,14 +332,12 @@ auth:
     gcp-adc:
       kind: gcp/adc
 
-    # GCP GitHub Actions
+    # GCP GitHub Actions (token_source auto-detected)
     gcp-wif:
       kind: gcp/workload-identity-federation
       project_number: "123456789012"
       workload_identity_pool_id: github-pool
       workload_identity_provider_id: github-provider
-      token_source:
-        type: url
 ```
 </File>
 
