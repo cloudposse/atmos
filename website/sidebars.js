@@ -203,7 +203,14 @@ module.exports = {
                 {type: 'doc', id: 'cli/environment-variables', label: 'Environment Variables'},
                 {type: 'doc', id: 'cli/versioning', label: 'Versioning'},
                 {type: 'doc', id: 'projects/layout', label: 'Folder Structure'},
-                {type: 'doc', id: 'projects/setup-editor', label: 'Setup Editor (IDE)'},
+                {
+                    type: 'category',
+                    label: 'Setup Editor (IDE)',
+                    link: {type: 'doc', id: 'projects/setup-editor/index'},
+                    items: [
+                        {type: 'doc', id: 'projects/setup-editor/setup-ai-assistants', label: 'AI Assistants'},
+                    ]
+                },
             ]
         },
         {

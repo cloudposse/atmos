@@ -2,7 +2,7 @@
   "name": "cloudposse",
   "owner": {
     "name": "Cloud Posse",
-    "email": "hello@cloudposse.com"
+    "email": "opensource@cloudposse.com"
   },
   "metadata": {
     "description": "Official Cloud Posse plugins and skills for Claude Code",

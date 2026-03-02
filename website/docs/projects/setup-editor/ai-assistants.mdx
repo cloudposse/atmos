@@ -1,0 +1,325 @@
+---
+title: Configure AI Assistants
+sidebar_position: 2
+sidebar_label: AI Assistants
+description: Configure Claude Code, Cursor, Windsurf, GitHub Copilot, Gemini CLI, OpenAI Codex, and other AI coding assistants to use Atmos agent skills.
+id: setup-ai-assistants
+slug: /projects/setup-editor/ai-assistants
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Configure your AI coding assistant to use Atmos agent skills. Skills give the AI deep knowledge of Atmos conventions,
+stack configuration, Terraform orchestration, and more. Each tool has its own installation method.
+</Intro>
+
+<KeyPoints>
+- Claude Code: install via the Cloud Posse plugin marketplace
+- Cursor, Windsurf, GitHub Copilot: reference `AGENTS.md` from the Atmos repo
+- Gemini CLI, OpenAI Codex: symlink or copy the `agent-skills/` directory
+- Skills activate automatically -- no special syntax needed
+</KeyPoints>
+
+## Install Atmos Skills
+
+Atmos users install the `atmos` binary -- you do **not** need to clone the Atmos repository. Skills are installed
+separately through your AI tool's own mechanism.
+
+### Claude Code Plugin (Recommended)
+
+The fastest way to add Atmos skills is via the Cloud Posse plugin marketplace. No files to copy -- skills
+are installed with two commands and persist across sessions:
+
+```bash
+# One-time marketplace setup
+/plugin marketplace add cloudposse/atmos
+
+# Install the plugins you need
+/plugin install atmos-configuration@cloudposse
+/plugin install atmos-orchestration@cloudposse
+/plugin install atmos-platform@cloudposse
+/plugin install atmos-integrations@cloudposse
+/plugin install atmos-guidance@cloudposse
+```
+
+To auto-configure skills for your entire team, add marketplace and plugin settings to your
+project's `.claude/settings.json` (see [Team Auto-Discovery](#team-auto-discovery) below).
+
+### Other AI Tools
+
+Gemini CLI, OpenAI Codex, Cursor, Windsurf, and GitHub Copilot do not have third-party marketplace support
+for Atmos skills (Cursor has a curated marketplace but requires separate submission). For these tools, copy
+the skills from the Atmos GitHub repository into your project:
+
+```bash
+# Download just the agent-skills directory (no need to clone the full repo)
+git clone --depth 1 --filter=blob:none --sparse https://github.com/cloudposse/atmos.git /tmp/atmos
+cd /tmp/atmos && git sparse-checkout set agent-skills
+cp -r agent-skills/ /path/to/your-infra-project/agent-skills/
+```
+
+:::warning Keep the directory structure intact
+Do not flatten the downloaded `agent-skills/` directory. The `AGENTS.md` router references skills using
+relative paths like `agent-skills/configuration/skills/atmos-config/SKILL.md`. Restructuring or flattening the
+directory will break these references.
+:::
+
+Then configure your AI tool using the instructions below.
+
+## Tool-Specific Configuration
+
+<Tabs>
+  <TabItem value="claude-code" label="Claude Code" default>
+
+**Config directory:** `.claude/` | **Instruction file:** `CLAUDE.md` | **Skills:** `.claude/skills/` or via plugins
+
+The recommended way to install Atmos skills in Claude Code is via the Cloud Posse plugin marketplace.
+
+#### Plugin Installation (Recommended)
+
+```bash
+# Step 1: Add the Cloud Posse marketplace (one-time setup)
+/plugin marketplace add cloudposse/atmos
+
+# Step 2: Install the plugins you need
+/plugin install atmos-configuration@cloudposse
+/plugin install atmos-orchestration@cloudposse
+/plugin install atmos-platform@cloudposse
+/plugin install atmos-integrations@cloudposse
+/plugin install atmos-guidance@cloudposse
+```
+
+Skills are available immediately after installation and persist across sessions.
+
+**How it works**: The `cloudposse/atmos` GitHub repository serves as the marketplace. When you add it,
+Claude Code fetches `.claude-plugin/marketplace.json` directly from the repo via the GitHub API. When you
+install a plugin, Claude Code downloads the plugin directory and caches it locally. No central registry or
+approval process is involved -- the GitHub repo IS the marketplace.
+
+**Available plugins:**
+
+| Plugin | Skills |
+|--------|--------|
+| `atmos-configuration` | atmos-config, atmos-stacks, atmos-components, atmos-vendoring, atmos-schemas, atmos-introspection |
+| `atmos-orchestration` | atmos-terraform, atmos-helmfile, atmos-packer, atmos-ansible, atmos-workflows, atmos-custom-commands |
+| `atmos-platform` | atmos-auth, atmos-stores, atmos-toolchain |
+| `atmos-integrations` | atmos-gitops, atmos-validation, atmos-templates, atmos-devcontainer |
+| `atmos-guidance` | atmos-design-patterns |
+
+#### Team Auto-Discovery
+
+Teams can auto-configure the marketplace for all team members by adding to the project's `.claude/settings.json`:
+
+```json
+{
+  "extraKnownMarketplaces": {
+    "cloudposse": {
+      "source": {
+        "source": "github",
+        "repo": "cloudposse/atmos"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "atmos-configuration@cloudposse": true,
+    "atmos-orchestration@cloudposse": true,
+    "atmos-platform@cloudposse": true,
+    "atmos-integrations@cloudposse": true,
+    "atmos-guidance@cloudposse": true
+  }
+}
+```
+
+When team members trust the repository folder, Claude Code prompts them to install these plugins automatically.
+
+#### Official Anthropic Marketplace (Alternative)
+
+Atmos plugins may also be available in the
+[official Anthropic marketplace](https://github.com/anthropics/claude-plugins-official). If listed there,
+you can install without adding a marketplace first:
+
+```bash
+/plugin install atmos-configuration@claude-plugin-directory
+```
+
+Check the "Discover" tab in `/plugin` to see if Atmos plugins are available in the official directory.
+
+#### Auto-Discovery (Atmos Contributors)
+
+When working directly in the Atmos repo, Claude Code automatically discovers skills via the
+`.claude/skills` symlinks -- no plugin installation needed.
+
+```bash
+# Skills are auto-discovered in the Atmos repo
+claude
+
+# Or add the skills directory from another location
+claude --add-dir /path/to/atmos/agent-skills
+```
+
+Claude Code loads `AGENTS.md` as the router, then activates the relevant `SKILL.md` based on your question.
+
+  </TabItem>
+  <TabItem value="openai-codex" label="OpenAI Codex">
+
+**Config directory:** `~/.codex/` | **Instruction file:** `AGENTS.md` (native) | **Skills:** via Agent Skills format
+
+OpenAI Codex CLI natively reads `AGENTS.md` from the repository root -- it co-created this standard.
+Codex does not have a `--add-dir` flag or a dedicated skill installation command.
+
+```bash
+# Codex reads AGENTS.md natively from the repo root
+# The agent-skills/AGENTS.md router is already in the repository
+
+# To point Codex at the skills, copy AGENTS.md to the repo root
+cp agent-skills/AGENTS.md AGENTS.md
+```
+
+The lookup order is: `AGENTS.override.md` > `AGENTS.md` > fallback files configured in `~/.codex/config.toml`.
+
+Alternatively, add a `CODEX.md` file at the repository root that references the skills:
+
+```markdown
+<!-- CODEX.md -->
+# Atmos Project Instructions
+
+This project uses Atmos for infrastructure orchestration.
+See agent-skills/AGENTS.md for the full skill index.
+
+When working with Atmos stacks, components, or CLI commands,
+load the relevant skill using the paths in the AGENTS.md skill index.
+```
+
+  </TabItem>
+  <TabItem value="gemini-cli" label="Gemini CLI">
+
+**Config directory:** `.gemini/` | **Instruction file:** `GEMINI.md` | **Subagents:** `.gemini/agents/*.md`
+
+Gemini CLI reads `GEMINI.md` from the project root (configurable via `context.fileName` in `settings.json`).
+It supports the Agent Skills specification and subagents with YAML frontmatter.
+
+```bash
+# Symlink skills to the Gemini-recognized path
+ln -s agent-skills .gemini/skills
+```
+
+You can also reference the skills in your `GEMINI.md` file:
+
+```markdown
+<!-- GEMINI.md -->
+For Atmos-specific guidance, see agent-skills/AGENTS.md.
+Load the relevant skill using the paths in the AGENTS.md skill index.
+```
+
+  </TabItem>
+  <TabItem value="cursor" label="Cursor">
+
+**Config directory:** `.cursor/` | **Rules:** `.cursor/rules/*.mdc` | **Agents:** `.cursor/agents/*.md`
+
+Cursor co-created the `AGENTS.md` standard and reads it natively. It also supports subagents in
+`.cursor/agents/*.md` with YAML frontmatter (since Cursor 2.4).
+
+The **primary integration path** is adding an `.mdc` rule file that references the skills router.
+Cursor `.mdc` files require YAML frontmatter with `description`, `globs`, and `alwaysApply` fields --
+without frontmatter, the rule is treated as "Manual" and will not auto-load:
+
+```text
+# .cursor/rules/atmos.mdc
+---
+description: Atmos infrastructure orchestration guidance
+globs: "*.yaml, *.tf"
+alwaysApply: false
+---
+@agent-skills/AGENTS.md
+```
+
+With this configuration, Cursor auto-attaches the Atmos skill router when editing YAML or Terraform
+files, and the agent can also discover it based on the description for any Atmos-related question.
+
+  </TabItem>
+  <TabItem value="windsurf" label="Windsurf">
+
+**Config directory:** `.windsurf/` | **Rules:** `.windsurf/rules/` or `.windsurfrules` | **AGENTS.md:** auto-discovered
+
+Windsurf automatically discovers `AGENTS.md` files in the workspace and subdirectories, applying them
+as scoped instructions to Cascade. For guaranteed context loading, also add a pointer in your
+`.windsurfrules` file:
+
+```text
+# .windsurfrules
+Always refer to agent-skills/AGENTS.md for Atmos commands and configuration patterns.
+Load the relevant skill using the paths in the AGENTS.md skill index.
+```
+
+This ensures Windsurf applies Atmos context during all Cascade sessions, even if auto-discovery
+does not trigger for nested files.
+
+  </TabItem>
+  <TabItem value="github-copilot" label="GitHub Copilot">
+
+**Config directory:** `.github/` | **Instructions:** `.github/copilot-instructions.md` | **Agents:** `.github/agents/*.md`
+
+GitHub Copilot supports custom instructions, domain-specific instruction files in `.github/instructions/*.md`,
+and custom agents in `.github/agents/*.md`. It reads `AGENTS.md` natively.
+
+```markdown
+<!-- .github/copilot-instructions.md -->
+See agent-skills/AGENTS.md for Atmos-specific guidance.
+When working with Atmos, load the relevant skill using the paths in the AGENTS.md skill index.
+```
+
+  </TabItem>
+  <TabItem value="other" label="Other Tools">
+
+For any AI tool that supports project-level context files:
+
+1. **Symlink** `agent-skills/` into the tool's configuration directory
+2. **Reference** `AGENTS.md` as the entry point in the tool's instruction file
+3. **Point** the tool at individual `SKILL.md` files for focused context
+
+The skills use standard Markdown with YAML frontmatter, which is universally supported by all AI tools.
+
+**Tool-specific paths:**
+
+| Tool | Config Directory | Instruction File |
+|------|-----------------|-----------------|
+| Antigravity | `.agent/` | Inherits `~/.gemini/GEMINI.md` |
+| Amazon Q Developer | `.amazonq/` | JSON agent configs in `.amazonq/cli-agents/` |
+| JetBrains Junie | `.junie/` | `.junie/guidelines.md` (also reads `AGENTS.md`) |
+
+```bash
+# Antigravity (uses Agent Skills format natively)
+ln -s agent-skills .agent/skills
+
+# JetBrains Junie (reads AGENTS.md as fallback)
+cp agent-skills/AGENTS.md AGENTS.md
+```
+
+  </TabItem>
+</Tabs>
+
+## How Skills Are Activated
+
+You do **not** invoke skills manually. Your AI tool activates the right skill automatically based on your question:
+
+1. **At session start**, the AI loads lightweight metadata (name and description) from each installed skill
+2. **When you ask a question** about Atmos, the AI matches your question to the most relevant skill's description
+3. **The full skill content** loads on demand, giving the AI accurate, up-to-date guidance
+4. **Reference files** load only when the AI needs deeper detail (e.g., full command reference, schema examples)
+
+For example, if you ask *"How do I configure stack imports?"*, the AI automatically activates the `atmos-stacks`
+skill and uses its content to answer correctly -- no special syntax or commands needed.
+
+:::tip
+For Claude Code plugin installations, activation uses the `description` field in each SKILL.md's frontmatter.
+For file-based installations (Codex, Gemini, Windsurf, Copilot), the `AGENTS.md` router maps your task to
+the right skill via its skill index table. Both mechanisms are automatic.
+:::
+
+## Related
+
+- [AI Agent Skills](/integrations/ai/agent-skills) -- Full list of available skills, folder structure, and SKILL.md format
+- [Setup Editor (IDE)](/projects/setup-editor) -- Configure VS Code and DevContainers for Atmos
