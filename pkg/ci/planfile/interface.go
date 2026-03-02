@@ -2,6 +2,8 @@ package planfile
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"time"
@@ -152,6 +154,10 @@ type KeyContext struct {
 func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 	defer perf.Track(nil, "planfile.GenerateKey")()
 
+	if ctx == nil {
+		return "", errors.New("nil KeyContext")
+	}
+
 	// Validate required fields based on pattern usage.
 	if err := validateKeyContext(p.Pattern, ctx); err != nil {
 		return "", err
@@ -167,6 +173,8 @@ func (p KeyPattern) GenerateKey(ctx *KeyContext) (string, error) {
 		"{{ .SHA }}":           ctx.SHA,
 		"{{ .BaseSHA }}":       ctx.BaseSHA,
 		"{{ .Branch }}":        ctx.Branch,
+		"{{ .PRNumber }}":      fmt.Sprint(ctx.PRNumber),
+		"{{ .RunID }}":         ctx.RunID,
 	}
 
 	for placeholder, value := range replacements {

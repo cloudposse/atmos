@@ -27,6 +27,9 @@ func Register(storeType string, factory StoreFactory) {
 
 	registryMu.Lock()
 	defer registryMu.Unlock()
+	if _, exists := factories[storeType]; exists {
+		panic(fmt.Sprintf("%v: store type %q already registered", errUtils.ErrPlanfileStoreInvalidArgs, storeType))
+	}
 	factories[storeType] = factory
 }
 

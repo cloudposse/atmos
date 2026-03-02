@@ -114,7 +114,7 @@ func TestNewStore_MissingBucket(t *testing.T) {
 				Options: tt.options,
 			})
 			assert.Error(t, err)
-			assert.ErrorIs(t, err, errUtils.ErrPlanfileStoreNotFound)
+			assert.ErrorIs(t, err, errUtils.ErrPlanfileStoreInvalidArgs)
 		})
 	}
 }

@@ -484,8 +484,7 @@ func TestGCSClientCaching(t *testing.T) {
 		"Should extract impersonation service account correctly")
 }
 
-// newFakeGCSState creates a fake GCS server pre-loaded with a terraform state file
-// and returns the server plus a GCSClient interface wrapper for ReadTerraformBackendGCSInternal.
+// newFakeGCSState creates a fake GCS server pre-loaded with a terraform state file and returns the server.
 func newFakeGCSState(t *testing.T, bucket, prefix, workspace string, stateOutputs map[string]any) *fakestorage.Server {
 	t.Helper()
 

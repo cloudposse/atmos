@@ -40,7 +40,7 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 
 	bucket, ok := opts.Options["bucket"].(string)
 	if !ok || bucket == "" {
-		return nil, fmt.Errorf("%w: bucket is required for GCS store", errUtils.ErrPlanfileStoreNotFound)
+		return nil, fmt.Errorf("%w: bucket is required for GCS store", errUtils.ErrPlanfileStoreInvalidArgs)
 	}
 
 	prefix, _ := opts.Options["prefix"].(string)
