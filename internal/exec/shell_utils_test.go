@@ -597,8 +597,13 @@ func TestExecuteShellCommand(t *testing.T) {
 		// We verify the subprocess sees the explicit value, not a duplicate.
 		outFile := filepath.Join(t.TempDir(), "force_tty.txt")
 
-		// Clear ATMOS_FORCE_TTY from parent env so the step value is the only source.
-		t.Setenv("ATMOS_FORCE_TTY", "")
+		// Ensure ATMOS_FORCE_TTY is absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present, which causes envKeyIsSet to suppress auto-injection for
+		// the wrong reason (key present rather than because the step env set it explicitly).
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
 		err := ExecuteShellCommand(
 			atmosConfig,
 			"sh",
@@ -621,8 +626,14 @@ func TestExecuteShellCommand(t *testing.T) {
 		// The subprocess should not see it unless explicitly provided.
 		outFile := filepath.Join(t.TempDir(), "force_tty_absent.txt")
 
-		// Clear ATMOS_FORCE_TTY from parent env so auto-injection is the only possible source.
-		t.Setenv("ATMOS_FORCE_TTY", "")
+		// Ensure ATMOS_FORCE_TTY is truly absent from parent env. t.Setenv("ATMOS_FORCE_TTY", "")
+		// leaves the key present: envKeyIsSet matches it and suppresses injection for the wrong
+		// reason (key present rather than no TTY), yielding a false positive — ${VAR:-default}
+		// expands to default for both unset and empty, hiding the incorrect skip path.
+		if orig, wasSet := os.LookupEnv("ATMOS_FORCE_TTY"); wasSet {
+			require.NoError(t, os.Unsetenv("ATMOS_FORCE_TTY"))
+			t.Cleanup(func() { os.Setenv("ATMOS_FORCE_TTY", orig) })
+		}
 		err := ExecuteShellCommand(
 			atmosConfig,
 			"sh",
