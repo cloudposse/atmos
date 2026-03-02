@@ -15,7 +15,7 @@ import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
 
 <Intro>
-The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, and static user credentials with a unified configuration model.
+The `auth` section of the `atmos.yaml` configures how Atmos authenticates with cloud providers. It supports AWS SSO, SAML, OIDC, GitHub Actions, Okta, and static user credentials with a unified configuration model.
 </Intro>
 
 ## Quick Start
@@ -71,7 +71,7 @@ auth:
 
 ## Subpages
 
-- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC)
+- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC, Okta)
 - **[Identities](/cli/configuration/auth/identities)** - Configure identities and identity chaining
 - **[Keyring](/cli/configuration/auth/keyring)** - Configure credential storage backends
 - **[Logs](/cli/configuration/auth/logs)** - Configure auth-specific logging
@@ -139,6 +139,12 @@ auth:
     github-oidc:
       kind: github/oidc
       region: us-east-1
+
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        org_url: https://company.okta.com
+        client_id: 0oa1234567890abcdef
 
   identities:
     # Development access via SSO

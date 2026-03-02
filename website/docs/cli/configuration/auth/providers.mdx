@@ -4,7 +4,7 @@ sidebar_position: 2
 sidebar_label: providers
 sidebar_class_name: command
 id: providers
-description: Configure authentication providers for AWS SSO, SAML, and GitHub OIDC in your `atmos.yaml`.
+description: Configure authentication providers for AWS SSO, SAML, GitHub OIDC, and Okta in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -14,7 +14,7 @@ import Tabs from '@theme/Tabs'
 import TabItem from '@theme/TabItem'
 
 <Intro>
-Providers are the upstream systems that Atmos uses to obtain initial credentials. Configure providers in the `auth.providers` section of your `atmos.yaml`.
+Providers are the upstream systems that Atmos uses to obtain initial credentials. Configure providers in the `auth.providers` section of your `atmos.yaml`. Atmos supports AWS SSO, SAML, GitHub OIDC, and Okta authentication.
 </Intro>
 
 <Experimental />
@@ -162,6 +162,89 @@ auth:
   <dd>Optional. OIDC audience. Defaults to STS endpoint for the region.</dd>
 </dl>
 
+## Okta Device Code
+
+For organizations using Okta as their central identity platform. Uses the OAuth 2.0 Device Authorization Grant (RFC 8628) for CLI authentication.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        org_url: https://company.okta.com
+        client_id: 0oa1234567890abcdef
+
+        # Optional configuration
+        authorization_server: default    # Okta authorization server (default: "default")
+        scopes: openid profile offline_access  # OAuth scopes (space-separated)
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `okta/device-code`.</dd>
+
+  <dt>`spec.org_url`</dt>
+  <dd>**Required.** Your Okta organization URL (e.g., `https://company.okta.com`).</dd>
+
+  <dt>`spec.client_id`</dt>
+  <dd>**Required.** OAuth 2.0 client ID from your Okta application.</dd>
+
+  <dt>`spec.authorization_server`</dt>
+  <dd>Optional. Okta authorization server ID. Default: `default`.</dd>
+
+  <dt>`spec.scopes`</dt>
+  <dd>Optional. Space-separated OAuth scopes. Default: `openid profile offline_access`.</dd>
+</dl>
+
+### Setting Up Okta
+
+To use the Okta device code provider, you need to create a Native Application in your Okta organization:
+
+1. In the Okta Admin Console, go to **Applications** > **Create App Integration**
+2. Select **OIDC - OpenID Connect** and **Native Application**
+3. Enable the **Device Authorization** grant type
+4. Set the **Sign-in redirect URI** to `http://localhost` (not used for device code, but required)
+5. Note the **Client ID** for your `atmos.yaml` configuration
+
+:::tip
+Include the `offline_access` scope to enable token refresh. Without it, users must re-authenticate when the access token expires.
+:::
+
+### AWS OIDC Federation
+
+Okta tokens can federate to AWS using `AssumeRoleWithWebIdentity`. Chain an Okta identity with an AWS assume-role identity:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        org_url: https://company.okta.com
+        client_id: 0oa1234567890abcdef
+
+  identities:
+    okta-api:
+      kind: okta/api-access
+      via:
+        provider: okta-corp
+
+    aws-prod:
+      kind: aws/assume-role
+      default: true
+      via:
+        identity: okta-api
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/OktaFederatedRole
+```
+</File>
+
+This requires an AWS IAM OIDC identity provider trust policy that trusts your Okta authorization server.
+
 ## Multiple Providers
 
 You can configure multiple providers for different use cases:
@@ -175,6 +258,13 @@ auth:
       kind: aws/iam-identity-center
       region: us-east-1
       start_url: https://company.awsapps.com/start
+
+    # Okta for centralized identity
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        org_url: https://company.okta.com
+        client_id: 0oa1234567890abcdef
 
     # SAML for legacy systems
     okta-saml:

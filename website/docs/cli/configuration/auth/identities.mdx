@@ -4,7 +4,7 @@ sidebar_position: 3
 sidebar_label: identities
 sidebar_class_name: command
 id: identities
-description: Configure authentication identities including AWS permission sets, assume roles, and IAM users in your `atmos.yaml`.
+description: Configure authentication identities including AWS permission sets, assume roles, IAM users, and Okta API access in your `atmos.yaml`.
 ---
 import DocCardList from '@theme/DocCardList'
 import File from '@site/src/components/File'
@@ -216,6 +216,69 @@ auth:
 </dl>
 
 The Azure subscription identity inherits credentials from the provider and sets subscription-specific environment variables (`AZURE_SUBSCRIPTION_ID`, `ARM_SUBSCRIPTION_ID`, etc.) for Terraform and other Azure tools.
+
+## Okta API Access
+
+For accessing Okta APIs and federating Okta tokens to cloud providers. Uses credentials from an `okta/device-code` provider.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  identities:
+    okta-api:
+      kind: okta/api-access
+      via:
+        provider: okta-corp           # Reference to an Okta provider
+```
+</File>
+
+<dl>
+  <dt>`kind`</dt>
+  <dd>**Required.** Must be `okta/api-access`.</dd>
+
+  <dt>`via.provider`</dt>
+  <dd>**Required.** Name of an `okta/device-code` provider to obtain credentials from.</dd>
+</dl>
+
+The Okta API access identity sets environment variables for Okta-aware tools:
+- `OKTA_ORG_URL` - Your Okta organization URL
+- `OKTA_BASE_URL` - Base URL for Okta API calls
+- `OKTA_OAUTH2_ACCESS_TOKEN` - OAuth 2.0 access token
+- `OKTA_CONFIG_DIR` - Directory containing Okta token files
+
+### Federating to AWS
+
+Chain an Okta identity with an AWS assume-role identity to federate Okta tokens to AWS using `AssumeRoleWithWebIdentity`:
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        org_url: https://company.okta.com
+        client_id: 0oa1234567890abcdef
+
+  identities:
+    okta-api:
+      kind: okta/api-access
+      via:
+        provider: okta-corp
+
+    aws-prod:
+      kind: aws/assume-role
+      default: true
+      via:
+        identity: okta-api
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/OktaFederatedRole
+```
+</File>
+
+:::note
+AWS OIDC federation requires an IAM OIDC identity provider configured to trust your Okta authorization server's issuer URL.
+:::
 
 ## Identity Chaining
 

@@ -1,0 +1,66 @@
+---
+slug: okta-authentication-support
+title: "Native Okta Authentication"
+authors: [atmos]
+tags: [feature]
+---
+
+Native Okta authentication using the OAuth 2.0 Device Authorization Grant flow. Authenticate with Okta and federate to AWS, all from the CLI.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos now supports Okta as a first-class authentication provider alongside AWS SSO, SAML, GitHub OIDC, and Azure. The new `okta/device-code` provider uses the OAuth 2.0 Device Authorization Grant (RFC 8628) for secure CLI authentication without browser automation.
+
+Key capabilities:
+- **Device code flow** - Authenticate by visiting a URL and entering a code, no browser automation required
+- **Token caching and refresh** - Access tokens are cached locally and refreshed automatically using refresh tokens
+- **AWS OIDC federation** - Use Okta ID tokens to assume AWS IAM roles via `AssumeRoleWithWebIdentity`
+- **XDG-compliant storage** - Tokens stored in `~/.config/atmos/okta/` with proper file permissions
+- **Realm isolation** - Credentials are isolated per repository to prevent collisions
+
+## Why This Matters
+
+Organizations using Okta as their central identity platform can now authenticate directly with Okta from the CLI. This replaces complex SAML browser automation with a modern device code flow and enables Okta tokens to federate to cloud providers.
+
+## How to Use It
+
+Configure an Okta provider and identity in your `atmos.yaml`:
+
+```yaml
+auth:
+  providers:
+    okta-corp:
+      kind: okta/device-code
+      spec:
+        org_url: https://company.okta.com
+        client_id: 0oa1234567890abcdef
+
+  identities:
+    okta-api:
+      kind: okta/api-access
+      via:
+        provider: okta-corp
+
+    # Federate to AWS
+    aws-prod:
+      kind: aws/assume-role
+      default: true
+      via:
+        identity: okta-api
+      principal:
+        assume_role: arn:aws:iam::123456789012:role/OktaFederatedRole
+```
+
+Then authenticate:
+
+```bash
+atmos auth login
+```
+
+Atmos displays a device code and URL. Visit the URL in your browser, enter the code, and you're authenticated.
+
+## Get Involved
+
+See the [provider documentation](/cli/configuration/auth/providers#okta-device-code) and [identity documentation](/cli/configuration/auth/identities#okta-api-access) for full configuration details.
