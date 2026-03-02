@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -589,6 +590,110 @@ func TestExecuteShellCommand(t *testing.T) {
 		)
 		assert.NoError(t, err)
 	})
+
+	t.Run("ATMOS_FORCE_TTY preserved when explicitly set in step env", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is explicitly set in the step environment, ExecuteShellCommand
+		// must not add a second copy. envKeyIsSet guards the auto-injection.
+		// We verify the subprocess sees the explicit value, not a duplicate.
+		outFile := filepath.Join(t.TempDir(), "force_tty.txt")
+
+		// Clear ATMOS_FORCE_TTY from parent env so the step value is the only source.
+		t.Setenv("ATMOS_FORCE_TTY", "")
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			[]string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)},
+			".",
+			[]string{"ATMOS_FORCE_TTY=explicit-value"},
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "explicit-value\n", string(content),
+			"ATMOS_FORCE_TTY should not be overridden by auto-injection")
+	})
+
+	t.Run("ATMOS_FORCE_TTY not auto-injected in non-TTY environment", func(t *testing.T) {
+		// In a non-TTY test environment, ATMOS_FORCE_TTY must not be auto-injected.
+		// The subprocess should not see it unless explicitly provided.
+		outFile := filepath.Join(t.TempDir(), "force_tty_absent.txt")
+
+		// Clear ATMOS_FORCE_TTY from parent env so auto-injection is the only possible source.
+		t.Setenv("ATMOS_FORCE_TTY", "")
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			// Print "not-set" if ATMOS_FORCE_TTY is absent, otherwise print its value.
+			[]string{"-c", fmt.Sprintf(`echo "${ATMOS_FORCE_TTY:-not-set}" > %s`, outFile)},
+			".",
+			nil, // no explicit ATMOS_FORCE_TTY
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		// Test runner has no real TTY (stderr is not a terminal), so auto-injection is skipped.
+		assert.Equal(t, "not-set\n", string(content),
+			"ATMOS_FORCE_TTY should not be auto-injected when parent has no TTY")
+	})
+}
+
+func TestEnvKeyIsSet(t *testing.T) {
+	tests := []struct {
+		name     string
+		env      []string
+		key      string
+		expected bool
+	}{
+		{
+			name:     "key present with value",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key present empty value",
+			env:      []string{"FOO=", "BAZ=qux"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key not present",
+			env:      []string{"FOO=bar", "BAZ=qux"},
+			key:      "MISSING",
+			expected: false,
+		},
+		{
+			name:     "partial key match does not count",
+			env:      []string{"ATMOS_FORCE_TTY_EXTRA=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "ATMOS_FORCE_TTY present",
+			env:      []string{"ATMOS_FORCE_TTY=true"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: true,
+		},
+		{
+			name:     "empty env",
+			env:      nil,
+			key:      "ANY_KEY",
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := envKeyIsSet(tt.env, tt.key)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
 func TestExecuteShell(t *testing.T) {

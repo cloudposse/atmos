@@ -9,6 +9,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ssooidc"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -810,6 +811,15 @@ func TestIsInteractive(t *testing.T) {
 	result := isInteractive()
 	// In test environment, this typically returns false, but we just verify it doesn't panic.
 	assert.IsType(t, false, result)
+}
+
+func TestIsInteractive_ForceTTY(t *testing.T) {
+	// Test that force-tty viper setting overrides the TTY check.
+	viper.Set("force-tty", true)
+	t.Cleanup(func() { viper.Set("force-tty", false) })
+
+	result := isInteractive()
+	assert.True(t, result, "isInteractive should return true when force-tty is set")
 }
 
 func TestSSOProvider_Paths(t *testing.T) {
