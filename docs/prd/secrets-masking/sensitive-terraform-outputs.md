@@ -172,49 +172,9 @@ However, for the `atmos terraform output` command specifically, the `--format` f
 - **`--format json`:** Values included but masked via I/O layer.
 - **`--format raw`:** Bypass masking (explicit opt-in for automation that needs raw values, e.g., piping to another tool). This requires the user to explicitly request unmasked output.
 
-### Phase 3b: Store Sensitivity Awareness
+### Store Sensitivity Awareness
 
-**Goal:** When stores are used as an intermediate for terraform outputs, preserve sensitivity metadata and use appropriate storage types.
-
-#### Store interface extension
-
-```go
-// Extended store interface
-type SensitiveStore interface {
-    Store
-    // SetWithSensitivity stores a value with sensitivity metadata.
-    SetWithSensitivity(stack, component, key string, value any, sensitive bool) error
-    // GetWithSensitivity retrieves a value and its sensitivity flag.
-    GetWithSensitivity(stack, component, key string) (value any, sensitive bool, err error)
-}
-```
-
-#### SSM Parameter Store: `SecureString` for sensitive outputs
-
-For SSM Parameter Store specifically, sensitive values are stored as `SecureString` (KMS-encrypted at rest) rather than `String`. The SSM store provider already interacts with the SSM API — this is a matter of setting the `Type` parameter based on sensitivity metadata.
-
-When a terraform output marked `sensitive = true` is written to an SSM-backed store, the store provider sets the parameter type to `SecureString`. On retrieval, the provider reads the parameter type and auto-registers the value with `io.RegisterSecret()` if it's a `SecureString`.
-
-#### Other store providers
-
-Each store provider maps sensitivity to its native equivalent:
-- **SSM**: `SecureString` parameter type (KMS-encrypted)
-- **AWS Secrets Manager**: Already encrypted by default (no change needed)
-- **Azure Key Vault**: Already a secrets store (no change needed)
-- **GCP Secret Manager**: Already a secrets store (no change needed)
-
-#### Retrieval-side masking
-
-When `!store` resolves a value from a sensitivity-aware store, it checks the sensitivity flag and registers with the masker:
-
-```go
-value, sensitive, err := store.GetWithSensitivity(stack, component, key)
-if sensitive {
-    if s, ok := value.(string); ok {
-        io.RegisterSecret(s)
-    }
-}
-```
+See [Store Sensitivity PRD](store-sensitivity.md) — covers extending the store interface to preserve sensitivity metadata (e.g., SSM `SecureString`) and auto-mask on retrieval via `!store`.
 
 ## Integration with Secrets Management PRD
 
@@ -235,7 +195,7 @@ Both systems feed into the same I/O masking layer. A value registered by either 
 1. **Phase 1** (preserve metadata) — Foundation, no behavioral change.
 2. **Phase 2** (auto-register) — Core value: sensitive outputs are masked everywhere.
 3. **Phase 3** (describe/list) — Mostly free once Phase 2 lands; just formatting tweaks for `terraform output`.
-4. **Phase 3b** (store awareness) — Stores preserve and propagate sensitivity metadata.
+4. **Store awareness** — See [Store Sensitivity PRD](store-sensitivity.md).
 
 ## Key Files
 
@@ -245,7 +205,7 @@ Both systems feed into the same I/O masking layer. A value registered by either 
 | `internal/exec/yaml_func_terraform_output.go` | `!terraform.output` resolution — where masking should be added |
 | `internal/exec/template_funcs_component.go` | `atmos.Component()` — where outputs flow to other components |
 | `pkg/io/global.go` | `RegisterSecret()` — the masking registration API |
-| `pkg/store/` | Store interface — sensitivity-aware extension |
+| `pkg/store/` | Store interface — see [Store Sensitivity PRD](store-sensitivity.md) |
 
 ## Testing Strategy
 
@@ -253,8 +213,6 @@ Both systems feed into the same I/O masking layer. A value registered by either 
 - Unit tests for `!terraform.output` resolution verifying `io.RegisterSecret()` is called for sensitive outputs (mock the masker).
 - Integration test: `atmos describe component` with a component that has sensitive outputs, verifying masked output.
 - Negative test: Non-sensitive outputs are NOT registered with the masker (avoid over-masking common values like VPC IDs).
-- Unit tests for `SensitiveStore` interface: SSM provider stores sensitive values as `SecureString` and non-sensitive as `String`.
-- Unit tests for `!store` resolution: values from `SecureString` parameters are auto-registered with the masker.
 
 ## References
 
