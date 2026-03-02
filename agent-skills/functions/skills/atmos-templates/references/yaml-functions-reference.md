@@ -7,9 +7,59 @@ type-safe, predictable, and unable to break YAML syntax.
 All YAML functions support Go template expressions in their arguments. Atmos processes
 templates first, then executes the YAML functions.
 
+## `!terraform.state` (Recommended)
+
+Read Terraform outputs directly from the state backend without initialization. This is the
+**recommended way** to read remote state in Atmos -- it reads the state file directly from the
+backend, skipping `terraform init` and provider downloads entirely.
+
+### Syntax
+
+```yaml
+# Current stack
+!terraform.state <component> <output>
+!terraform.state <component> <yq-expression>
+
+# Specific stack
+!terraform.state <component> <stack> <output>
+!terraform.state <component> <stack> <yq-expression>
+```
+
+### Supported Backends
+
+- `s3` (AWS)
+- `local`
+- `gcs` (Google Cloud Storage)
+- `azurerm` (Azure)
+
+### Examples
+
+```yaml
+vpc_id: !terraform.state vpc vpc_id
+subnet_ids: !terraform.state vpc plat-ue2-prod private_subnet_ids
+vpc_id: !terraform.state vpc {{ .stack }} vpc_id
+first_subnet: !terraform.state vpc .private_subnet_ids[0]
+username: !terraform.state config .config_map.username
+# Default value for unprovisioned components
+vpc_id: !terraform.state vpc ".vpc_id // ""default"""
+# YQ string concatenation
+url: !terraform.state aurora-postgres ".master_hostname | ""jdbc:postgresql://"" + . + "":5432"""
+# Bracket notation for keys with special characters
+key: !terraform.state security '.users["github-dependabot"].access_key_id'
+```
+
+### Notes
+
+- **10-100x faster** than `!terraform.output` (no init, no provider download)
+- Results are cached per execution
+- Supports YQ expressions and defaults
+- Same syntax as `!terraform.output` -- easy to migrate
+
 ## `!terraform.output`
 
-Read Terraform outputs (remote state) by running `terraform output`.
+Read Terraform outputs by running `terraform output`. This works but is **significantly slower**
+than `!terraform.state` because it requires Terraform initialization (downloading providers).
+Use `!terraform.state` instead when your backend is supported.
 
 ### Syntax
 
@@ -41,47 +91,9 @@ key: !terraform.output security '.users["github-dependabot"].access_key_id'
 
 ### Notes
 
-- Requires Terraform initialization (downloads providers) -- can be slow
+- Requires Terraform initialization (downloads providers) -- **slow**
 - Results are cached per execution
-- Prefer `!terraform.state` for supported backends (10-100x faster)
-
-## `!terraform.state`
-
-Read Terraform outputs directly from the state backend without initialization.
-
-### Syntax
-
-Same as `!terraform.output`:
-
-```yaml
-!terraform.state <component> <output>
-!terraform.state <component> <stack> <output>
-!terraform.state <component> <yq-expression>
-!terraform.state <component> <stack> <yq-expression>
-```
-
-### Supported Backends
-
-- `s3` (AWS)
-- `local`
-- `gcs` (Google Cloud Storage)
-- `azurerm` (Azure)
-
-### Examples
-
-```yaml
-vpc_id: !terraform.state vpc vpc_id
-subnet_ids: !terraform.state vpc plat-ue2-prod private_subnet_ids
-first_subnet: !terraform.state vpc .private_subnet_ids[0]
-# Default value
-vpc_id: !terraform.state vpc ".vpc_id // ""default"""
-```
-
-### Notes
-
-- Dramatically faster than `!terraform.output` (no init, no provider download)
-- Same caching behavior
-- Supports YQ expressions and defaults
+- **Prefer `!terraform.state`** for supported backends (s3, local, gcs, azurerm)
 
 ## `!store`
 

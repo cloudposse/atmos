@@ -41,20 +41,9 @@ that skill, and only pulls in reference files when deep detail is needed.
 
 ## Available Skills
 
-Atmos includes 20 skills organized into five categories:
+Atmos includes 20 skills organized into nine categories that mirror the documentation sidebar:
 
-### Configuration
-
-| Skill | Description |
-|-------|-------------|
-| `atmos-config` | Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles |
-| `atmos-stacks` | Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata |
-| `atmos-components` | Terraform root modules, abstract components, component inheritance, versioning |
-| `atmos-vendoring` | Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry |
-| `atmos-schemas` | JSON Schema for stack manifests, IDE auto-completion, schema validation |
-| `atmos-introspection` | describe/list commands for querying stacks, components, dependencies, and change impact |
-
-### Orchestration
+### CLI
 
 | Skill | Description |
 |-------|-------------|
@@ -65,22 +54,53 @@ Atmos includes 20 skills organized into five categories:
 | `atmos-workflows` | Multi-step workflows, Go template support, cross-component orchestration |
 | `atmos-custom-commands` | User-defined CLI commands in atmos.yaml with arguments, flags, and steps |
 
-### Platform
+### CLI Configuration
 
 | Skill | Description |
 |-------|-------------|
+| `atmos-config` | Project configuration: atmos.yaml structure, all sections, discovery, merging, profiles |
+| `atmos-schemas` | JSON Schema for stack manifests, IDE auto-completion, schema validation |
+| `atmos-introspection` | describe/list commands for querying stacks, components, dependencies, and change impact |
 | `atmos-auth` | Multi-provider auth (SSO/SAML/OIDC), identities, keyring, login/exec/shell |
 | `atmos-stores` | Store backends (SSM, Azure Key Vault, GCP Secret Manager, Redis, Artifactory) |
 | `atmos-toolchain` | CLI tool version management via Aqua registries, .tool-versions, install/exec |
+| `atmos-devcontainer` | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration |
+
+### Stacks
+
+| Skill | Description |
+|-------|-------------|
+| `atmos-stacks` | Stack YAML manifests, imports, inheritance, deep merging, vars, settings, metadata |
+
+### Components
+
+| Skill | Description |
+|-------|-------------|
+| `atmos-components` | Terraform root modules, abstract components, component inheritance, versioning |
+
+### Vendor
+
+| Skill | Description |
+|-------|-------------|
+| `atmos-vendoring` | Vendor manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry |
+
+### Validation
+
+| Skill | Description |
+|-------|-------------|
+| `atmos-validation` | OPA/Rego policies, JSON Schema validation, `atmos validate` commands |
 
 ### Integrations
 
 | Skill | Description |
 |-------|-------------|
 | `atmos-gitops` | GitHub Actions, Spacelift, Atlantis, `atmos describe affected`, PR-based workflows |
-| `atmos-validation` | OPA/Rego policies, JSON Schema validation, `atmos validate` commands |
+
+### Functions
+
+| Skill | Description |
+|-------|-------------|
 | `atmos-templates` | Go templates, Sprig/Gomplate functions, YAML functions (`!store`, `!env`, `!aws.*`) |
-| `atmos-devcontainer` | Devcontainer management: start/stop/shell/exec, Docker/Podman, identity integration |
 
 ### Guidance
 
@@ -90,45 +110,70 @@ Atmos includes 20 skills organized into five categories:
 
 ## Folder Structure
 
-Skills are organized into five plugin categories, each distributable as a Claude Code plugin:
+Skills are organized into nine plugin categories that mirror the documentation sidebar, each distributable as a Claude Code plugin:
 
 ```text
 agent-skills/                                  # Plugin-compatible hierarchy
   AGENTS.md                                    # Skill-activation router (loaded first)
-  configuration/                               # Plugin: atmos-configuration
-    .claude-plugin/plugin.json
-    skills/
-      atmos-config/
-        SKILL.md
-        references/sections-reference.md
-      atmos-stacks/
-        SKILL.md
-        references/
-          import-patterns.md
-          inheritance-deep-merge.md
-      atmos-components/                        # + atmos-vendoring, atmos-schemas, atmos-introspection
-        SKILL.md
-        references/
-  orchestration/                               # Plugin: atmos-orchestration
+  cli/                                         # Plugin: atmos-cli
     .claude-plugin/plugin.json
     skills/
       atmos-terraform/                         # + atmos-helmfile, atmos-packer, atmos-ansible,
         SKILL.md                               #   atmos-workflows, atmos-custom-commands
         references/
-  platform/                                    # Plugin: atmos-platform
+  cli-configuration/                           # Plugin: atmos-cli-configuration
     .claude-plugin/plugin.json
-    skills/                                    # atmos-auth, atmos-stores, atmos-toolchain
+    skills/
+      atmos-config/                            # + atmos-schemas, atmos-introspection,
+        SKILL.md                               #   atmos-auth, atmos-stores, atmos-toolchain,
+        references/                            #   atmos-devcontainer
+  stacks/                                      # Plugin: atmos-stacks
+    .claude-plugin/plugin.json
+    skills/
+      atmos-stacks/
+        SKILL.md
+        references/
+  components/                                  # Plugin: atmos-components
+    .claude-plugin/plugin.json
+    skills/
+      atmos-components/
+        SKILL.md
+        references/
+  vendor/                                      # Plugin: atmos-vendor
+    .claude-plugin/plugin.json
+    skills/
+      atmos-vendoring/
+        SKILL.md
+        references/
+  validation/                                  # Plugin: atmos-validation
+    .claude-plugin/plugin.json
+    skills/
+      atmos-validation/
+        SKILL.md
+        references/
   integrations/                                # Plugin: atmos-integrations
     .claude-plugin/plugin.json
-    skills/                                    # atmos-gitops, atmos-validation, atmos-templates, atmos-devcontainer
+    skills/
+      atmos-gitops/
+        SKILL.md
+        references/
+  functions/                                   # Plugin: atmos-functions
+    .claude-plugin/plugin.json
+    skills/
+      atmos-templates/
+        SKILL.md
+        references/
   guidance/                                    # Plugin: atmos-guidance
     .claude-plugin/plugin.json
-    skills/                                    # atmos-design-patterns
+    skills/
+      atmos-design-patterns/
+        SKILL.md
+        references/
 
 .claude/skills/                                # Flat view for auto-discovery
-  atmos-config -> ../../agent-skills/configuration/skills/atmos-config
-  atmos-stacks -> ../../agent-skills/configuration/skills/atmos-stacks
-  atmos-terraform -> ../../agent-skills/orchestration/skills/atmos-terraform
+  atmos-terraform -> ../../agent-skills/cli/skills/atmos-terraform
+  atmos-config -> ../../agent-skills/cli-configuration/skills/atmos-config
+  atmos-stacks -> ../../agent-skills/stacks/skills/atmos-stacks
   ...                                          # 20 symlinks total
 ```
 

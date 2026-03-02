@@ -31,7 +31,7 @@ jobs:
       - name: Validate plugin directory structure
         run: |
           ERRORS=0
-          CATEGORIES="configuration orchestration platform integrations guidance"
+          CATEGORIES="cli cli-configuration stacks components vendor validation integrations functions guidance"
           for cat in $CATEGORIES; do
             if [ ! -d "agent-skills/$cat" ]; then
               echo "::error::Missing plugin directory agent-skills/$cat"

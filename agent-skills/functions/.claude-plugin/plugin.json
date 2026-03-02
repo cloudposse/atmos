@@ -1,7 +1,7 @@
 {
-  "name": "atmos-integrations",
+  "name": "atmos-functions",
   "version": "1.0.0",
-  "description": "Atmos integration skills: GitHub Actions, Spacelift, Atlantis, and CI/CD pipeline workflows.",
+  "description": "Atmos function skills: Go templates, Sprig/Gomplate functions, YAML functions, and store integration.",
   "author": {
     "name": "Cloud Posse",
     "url": "https://github.com/cloudposse"
@@ -9,5 +9,5 @@
   "homepage": "https://atmos.tools/integrations/ai/agent-skills",
   "repository": "https://github.com/cloudposse/atmos",
   "license": "Apache-2.0",
-  "keywords": ["atmos", "gitops", "github-actions", "cicd", "iac"]
+  "keywords": ["atmos", "functions", "templates", "yaml", "iac"]
 }

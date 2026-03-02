@@ -13,10 +13,14 @@ Atmos now ships 20 agent skills that give AI coding assistants deep knowledge of
 
 Atmos includes a new `agent-skills/` directory at the repository root containing 20 domain-specific skills:
 
-- **Configuration**: `atmos-config`, `atmos-stacks`, `atmos-components`, `atmos-vendoring`, `atmos-schemas`, `atmos-introspection`
-- **Orchestration**: `atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`, `atmos-workflows`, `atmos-custom-commands`
-- **Platform**: `atmos-auth`, `atmos-stores`, `atmos-toolchain`
-- **Integrations**: `atmos-gitops`, `atmos-validation`, `atmos-templates`, `atmos-devcontainer`
+- **CLI**: `atmos-terraform`, `atmos-helmfile`, `atmos-packer`, `atmos-ansible`, `atmos-workflows`, `atmos-custom-commands`
+- **CLI Configuration**: `atmos-config`, `atmos-schemas`, `atmos-introspection`, `atmos-auth`, `atmos-stores`, `atmos-toolchain`, `atmos-devcontainer`
+- **Stacks**: `atmos-stacks`
+- **Components**: `atmos-components`
+- **Vendor**: `atmos-vendoring`
+- **Validation**: `atmos-validation`
+- **Integrations**: `atmos-gitops`
+- **Functions**: `atmos-templates`
 - **Guidance**: `atmos-design-patterns`
 
 Each skill is a self-contained package with a primary `SKILL.md` instruction file (under 500 lines) and a `references/` directory with deeper reference material. An `AGENTS.md` router file maps user tasks to the right skill, so AI tools load only the context they need.
@@ -49,11 +53,15 @@ Install from the Cloud Posse plugin marketplace:
 # Add the Cloud Posse marketplace (one-time setup)
 /plugin marketplace add cloudposse/atmos
 
-# Install the plugins you need
-/plugin install atmos-configuration@cloudposse
-/plugin install atmos-orchestration@cloudposse
-/plugin install atmos-platform@cloudposse
+# Install the plugins you need (9 available, install what's relevant)
+/plugin install atmos-cli@cloudposse
+/plugin install atmos-cli-configuration@cloudposse
+/plugin install atmos-stacks@cloudposse
+/plugin install atmos-components@cloudposse
+/plugin install atmos-vendor@cloudposse
+/plugin install atmos-validation@cloudposse
 /plugin install atmos-integrations@cloudposse
+/plugin install atmos-functions@cloudposse
 /plugin install atmos-guidance@cloudposse
 ```
 

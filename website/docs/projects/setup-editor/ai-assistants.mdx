@@ -37,11 +37,15 @@ are installed with two commands and persist across sessions:
 # One-time marketplace setup
 /plugin marketplace add cloudposse/atmos
 
-# Install the plugins you need
-/plugin install atmos-configuration@cloudposse
-/plugin install atmos-orchestration@cloudposse
-/plugin install atmos-platform@cloudposse
+# Install the plugins you need (9 available, install what's relevant)
+/plugin install atmos-cli@cloudposse
+/plugin install atmos-cli-configuration@cloudposse
+/plugin install atmos-stacks@cloudposse
+/plugin install atmos-components@cloudposse
+/plugin install atmos-vendor@cloudposse
+/plugin install atmos-validation@cloudposse
 /plugin install atmos-integrations@cloudposse
+/plugin install atmos-functions@cloudposse
 /plugin install atmos-guidance@cloudposse
 ```
 
@@ -97,10 +101,14 @@ The recommended way to install Atmos skills in Claude Code is via the Cloud Poss
 /plugin marketplace add cloudposse/atmos
 
 # Step 2: Install the plugins you need
-/plugin install atmos-configuration@cloudposse
-/plugin install atmos-orchestration@cloudposse
-/plugin install atmos-platform@cloudposse
+/plugin install atmos-cli@cloudposse
+/plugin install atmos-cli-configuration@cloudposse
+/plugin install atmos-stacks@cloudposse
+/plugin install atmos-components@cloudposse
+/plugin install atmos-vendor@cloudposse
+/plugin install atmos-validation@cloudposse
 /plugin install atmos-integrations@cloudposse
+/plugin install atmos-functions@cloudposse
 /plugin install atmos-guidance@cloudposse
 ```
 
@@ -115,10 +123,14 @@ approval process is involved -- the GitHub repo IS the marketplace.
 
 | Plugin | Skills |
 |--------|--------|
-| `atmos-configuration` | atmos-config, atmos-stacks, atmos-components, atmos-vendoring, atmos-schemas, atmos-introspection |
-| `atmos-orchestration` | atmos-terraform, atmos-helmfile, atmos-packer, atmos-ansible, atmos-workflows, atmos-custom-commands |
-| `atmos-platform` | atmos-auth, atmos-stores, atmos-toolchain |
-| `atmos-integrations` | atmos-gitops, atmos-validation, atmos-templates, atmos-devcontainer |
+| `atmos-cli` | atmos-terraform, atmos-helmfile, atmos-packer, atmos-ansible, atmos-workflows, atmos-custom-commands |
+| `atmos-cli-configuration` | atmos-config, atmos-schemas, atmos-introspection, atmos-auth, atmos-stores, atmos-toolchain, atmos-devcontainer |
+| `atmos-stacks` | atmos-stacks |
+| `atmos-components` | atmos-components |
+| `atmos-vendor` | atmos-vendoring |
+| `atmos-validation` | atmos-validation |
+| `atmos-integrations` | atmos-gitops |
+| `atmos-functions` | atmos-templates |
 | `atmos-guidance` | atmos-design-patterns |
 
 #### Team Auto-Discovery
@@ -136,10 +148,14 @@ Teams can auto-configure the marketplace for all team members by adding to the p
     }
   },
   "enabledPlugins": {
-    "atmos-configuration@cloudposse": true,
-    "atmos-orchestration@cloudposse": true,
-    "atmos-platform@cloudposse": true,
+    "atmos-cli@cloudposse": true,
+    "atmos-cli-configuration@cloudposse": true,
+    "atmos-stacks@cloudposse": true,
+    "atmos-components@cloudposse": true,
+    "atmos-vendor@cloudposse": true,
+    "atmos-validation@cloudposse": true,
     "atmos-integrations@cloudposse": true,
+    "atmos-functions@cloudposse": true,
     "atmos-guidance@cloudposse": true
   }
 }
@@ -154,7 +170,7 @@ Atmos plugins may also be available in the
 you can install without adding a marketplace first:
 
 ```bash
-/plugin install atmos-configuration@claude-plugin-directory
+/plugin install atmos-cli@claude-plugin-directory
 ```
 
 Check the "Discover" tab in `/plugin` to see if Atmos plugins are available in the official directory.
