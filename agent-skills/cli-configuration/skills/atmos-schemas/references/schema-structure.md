@@ -5,31 +5,7 @@
 | File | Purpose | Embedding |
 |------|---------|-----------|
 | `website/static/schemas/atmos/atmos-manifest/1.0/atmos-manifest.json` | Public schema for website and IDE integration | Not embedded; deployed to `atmos.tools` |
-| `pkg/datafetcher/schema/stacks/stack-config/1.0.json` | Primary schema for `atmos validate stacks` | Embedded via `//go:embed schema/*` |
-| `pkg/datafetcher/schema/atmos/manifest/1.0.json` | Minimal manifest schema (fallback) | Embedded via `//go:embed schema/*` |
-| `pkg/datafetcher/schema/config/global/1.0.json` | Global Atmos config schema | Embedded via `//go:embed schema/*` |
-| `pkg/datafetcher/schema/vendor/package/1.0.json` | Vendor manifest schema | Embedded via `//go:embed schema/*` |
-
-## Schema Embedding Mechanism
-
-The file `pkg/datafetcher/atmos_fetcher.go` embeds all schema files:
-
-```go
-//go:embed schema/*
-var schemaFiles embed.FS
-
-func (a atmosFetcher) FetchData(source string) ([]byte, error) {
-    source = strings.TrimPrefix(source, "atmos://")
-    data, err := schemaFiles.ReadFile(source + ".json")
-    if err != nil {
-        return nil, ErrAtmosSchemaNotFound
-    }
-    return data, nil
-}
-```
-
-The `atmos://` URI scheme resolves to embedded files. For example, `atmos://schema/stacks/stack-config/1.0`
-resolves to `schema/stacks/stack-config/1.0.json` in the embedded filesystem.
+|| `pkg/datafetcher/schema/config/global/1.0.json` | Global Atmos config schema | Embedded via `//go:embed schema/*` |
 
 ## Top-Level Schema Structure
 
