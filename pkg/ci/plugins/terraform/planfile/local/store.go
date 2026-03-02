@@ -2,6 +2,8 @@ package local
 
 import (
 	"context"
+	"crypto/md5" //nolint:gosec // MD5 used for content identification, not security.
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
@@ -80,6 +83,7 @@ func (s *Store) Name() string {
 }
 
 // Upload uploads a planfile to the local filesystem.
+// Computes MD5 checksum of the content and stores it in metadata.
 func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata *planfile.Metadata) error {
 	defer perf.Track(nil, "local.Upload")()
 
@@ -94,27 +98,36 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		return fmt.Errorf("%w: failed to create directory for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
-	// Write the planfile.
+	// Write the planfile while computing MD5.
 	f, err := os.Create(fullPath)
 	if err != nil {
 		return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 	defer f.Close()
 
-	if _, err := io.Copy(f, data); err != nil {
+	h := md5.New() //nolint:gosec // MD5 used for content identification, not security.
+	tee := io.TeeReader(data, h)
+
+	if _, err := io.Copy(f, tee); err != nil {
 		return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
-	// Write metadata if provided.
-	if metadata != nil {
-		metadataPath := fullPath + metadataSuffix
-		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
-		if err != nil {
-			return fmt.Errorf("%w: failed to marshal metadata for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
+	// Store MD5 in metadata.
+	if metadata == nil {
+		metadata = &planfile.Metadata{
+			CreatedAt: time.Now(),
 		}
-		if err := os.WriteFile(metadataPath, metadataJSON, defaultFilePerms); err != nil {
-			return fmt.Errorf("%w: failed to write metadata for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
-		}
+	}
+	metadata.MD5 = hex.EncodeToString(h.Sum(nil))
+
+	// Write metadata.
+	metadataPath := fullPath + metadataSuffix
+	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
+	if err != nil {
+		return fmt.Errorf("%w: failed to marshal metadata for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
+	}
+	if err := os.WriteFile(metadataPath, metadataJSON, defaultFilePerms); err != nil {
+		return fmt.Errorf("%w: failed to write metadata for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
 	return nil

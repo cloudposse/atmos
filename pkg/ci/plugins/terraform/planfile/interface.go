@@ -86,6 +86,9 @@ type Metadata struct {
 	// Destructions is the number of resources to destroy.
 	Destructions int `json:"destructions"`
 
+	// MD5 is the MD5 checksum of the planfile content.
+	MD5 string `json:"md5,omitempty"`
+
 	// Custom allows arbitrary key-value pairs for provider-specific metadata.
 	Custom map[string]string `json:"custom,omitempty"`
 }

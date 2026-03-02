@@ -232,6 +232,15 @@ func getStoreOptions(atmosConfig *schema.AtmosConfiguration, storeName string) (
 
 	// Explicit store name takes precedence.
 	if storeName != "" {
+		// Look up the named store in atmos configuration first.
+		if spec, ok := atmosConfig.Components.Terraform.Planfiles.Stores[storeName]; ok {
+			return planfile.StoreOptions{
+				Type:        spec.Type,
+				Options:     spec.Options,
+				AtmosConfig: atmosConfig,
+			}, nil
+		}
+		// Fall back to treating storeName as a store type directly.
 		return planfile.StoreOptions{
 			Type:        storeName,
 			Options:     map[string]any{},

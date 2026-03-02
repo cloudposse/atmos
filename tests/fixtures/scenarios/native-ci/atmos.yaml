@@ -29,6 +29,8 @@ components:
           type: github-artifacts
           options:
             retention_days: 7
+            owner: cloudposse
+            repo: github-action-atmos-terraform-plan
 
         azure:
           type: azure-blob

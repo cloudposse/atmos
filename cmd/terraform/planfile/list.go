@@ -104,6 +104,9 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Extract owner/repo from store options if available (e.g., GitHub store).
+	owner, repo := extractOwnerRepo(storeOpts)
+
 	// Create the store.
 	store, err := planfile.NewStore(storeOpts)
 	if err != nil {
@@ -117,14 +120,24 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	return renderPlanfileList(files, opts.Format)
+	return renderPlanfileList(files, opts.Format, owner, repo)
+}
+
+// extractOwnerRepo extracts owner and repo from store options if available.
+func extractOwnerRepo(opts planfile.StoreOptions) (string, string) {
+	defer perf.Track(nil, "planfile.extractOwnerRepo")()
+
+	owner, _ := opts.Options["owner"].(string)
+	repo, _ := opts.Options["repo"].(string)
+	return owner, repo
 }
 
 // renderPlanfileList formats and outputs the planfile list using pkg/list infrastructure.
-func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat string) error {
+// When owner or repo are non-empty, additional OWNER and REPO columns are included.
+func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat, owner, repo string) error {
 	if len(files) == 0 {
 		// No planfiles found - render empty result.
-		return renderWithRenderer([]map[string]any{}, outputFormat)
+		return renderWithRenderer([]map[string]any{}, outputFormat, owner, repo)
 	}
 
 	// Convert PlanfileInfo to map[string]any for the renderer.
@@ -139,26 +152,42 @@ func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat string) erro
 			item["stack"] = f.Metadata.Stack
 			item["component"] = f.Metadata.Component
 			item["sha"] = f.Metadata.SHA
+			item["md5"] = f.Metadata.MD5
 		} else {
 			item["stack"] = ""
 			item["component"] = ""
 			item["sha"] = ""
+			item["md5"] = ""
+		}
+		if owner != "" || repo != "" {
+			item["owner"] = owner
+			item["repo"] = repo
 		}
 		data[i] = item
 	}
 
-	return renderWithRenderer(data, outputFormat)
+	return renderWithRenderer(data, outputFormat, owner, repo)
 }
 
 // renderWithRenderer uses pkg/list renderer for consistent output formatting.
-func renderWithRenderer(data []map[string]any, outputFormat string) error {
+func renderWithRenderer(data []map[string]any, outputFormat, owner, repo string) error {
 	// Define columns for planfile listing.
 	columns := []column.Config{
-		{Name: "KEY", Value: "{{ .key }}"},
-		{Name: "SIZE", Value: "{{ .size }}"},
-		{Name: "MODIFIED", Value: "{{ .last_modified }}"},
 		{Name: "STACK", Value: "{{ .stack }}"},
 		{Name: "COMPONENT", Value: "{{ .component }}"},
+		{Name: "SHA", Value: "{{ .sha }}"},
+		{Name: "SIZE", Value: "{{ .size }}"},
+		{Name: "MODIFIED", Value: "{{ .last_modified }}"},
+		{Name: "KEY", Value: "{{ .key }}"},
+		{Name: "MD5", Value: "{{ .md5 }}"},
+	}
+
+	// Add OWNER and REPO columns when they are available from context.
+	if owner != "" || repo != "" {
+		columns = append(columns,
+			column.Config{Name: "OWNER", Value: "{{ .owner }}"},
+			column.Config{Name: "REPO", Value: "{{ .repo }}"},
+		)
 	}
 
 	// Create column selector with template functions.
