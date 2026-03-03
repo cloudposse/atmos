@@ -290,11 +290,6 @@ All Product Requirement Documents (PRDs) MUST be placed in `docs/prd/`. Use keba
 ### Pull Requests (MANDATORY)
 Follow template (what/why/references).
 
-**PR Size Guidelines:**
-- PRs under a few thousand lines changed are ideal
-- PRs over 10,000 lines changed are too large — split into smaller, phased PRs
-- Prefer one logical change per PR (one command, one package, one feature)
-
 **Blog Posts (CI Enforced):**
 - PRs labeled `minor`/`major` MUST include blog post: `website/blog/YYYY-MM-DD-feature-name.mdx`
 - Use `.mdx` with YAML front matter, `<!--truncate-->` after intro
