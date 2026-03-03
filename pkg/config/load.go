@@ -1403,7 +1403,7 @@ func preserveCaseSensitiveMaps(v *viper.Viper, atmosConfig *schema.AtmosConfigur
 // which breaks identity names containing dots. This function reads the raw YAML files directly
 // to extract identities with their original key names preserved.
 func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) error {
-	defer perf.Track(nil, "config.fixAuthIdentities")()
+	defer perf.Track(atmosConfig, "config.fixAuthIdentities")()
 
 	// Get list of all config files that were merged.
 	filesToProcess := collectConfigFilesForCasePreservation(v.ConfigFileUsed())
