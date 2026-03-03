@@ -49,9 +49,9 @@ This is NOT a new provider type - it enhances the existing `aws/user` identity.
 **I want** to use my existing console session for CLI access
 **So that** I have a seamless authentication experience
 
-### US-4: Headless Environment Authentication
-**As** a developer working on a remote server without a browser
-**I want** to authenticate using a manual authorization code flow
+### US-4: Non-Interactive Authentication
+**As** a developer working on a remote server or in CI without a browser
+**I want** to authenticate using a manual authorization code flow via `--interactive=false`
 **So that** I can work in headless environments
 
 ### US-5: Role Chaining
@@ -75,7 +75,7 @@ The `aws login` command uses OAuth 2.0 Authorization Code flow with PKCE:
 
 - **Auto-refresh**: Credentials are automatically rotated every 15 minutes
 - **Session duration**: Valid up to 12 hours (limited by IAM principal's max session)
-- **Storage**: Webflow credentials are stored in the atmos keychain per Design Decision 1, consistent with NFR-1 (no AWS CLI dependency). The AWS CLI cache path (`~/.aws/login/cache` or `AWS_LOGIN_CACHE_DIRECTORY`) is not used by the native SDK implementation.
+- **Storage**: Webflow credentials are stored in the atmos keychain under the XDG data directory (`$XDG_DATA_HOME/atmos/keyring/`, or `$ATMOS_XDG_DATA_HOME`), per Design Decision 1 and consistent with NFR-1 (no AWS CLI dependency). The AWS CLI cache path (`~/.aws/login/cache`) is not used.
 
 ### CloudTrail Events
 
@@ -90,12 +90,12 @@ Two new events are logged:
 | ID | Requirement | Priority |
 |----|-------------|----------|
 | FR-1 | Support browser-based OAuth2 authentication flow | P0 |
-| FR-2 | Support headless/remote mode with manual code entry | P0 |
+| FR-2 | Support non-interactive mode with manual code entry via `--interactive=false` | P0 |
 | FR-3 | Cache credentials in atmos credential store | P0 |
 | FR-4 | Integrate with existing `aws/assume-role` identity for role chaining | P0 |
 | FR-5 | Support multiple identities with browser auth fallback | P1 |
 | FR-6 | Display authentication status with spinner UI | P1 |
-| FR-7 | Auto-detect non-TTY and switch to remote mode | P2 |
+| FR-7 | Auto-detect non-TTY and switch to non-interactive mode | P2 |
 
 ### Non-Functional Requirements
 
@@ -145,7 +145,7 @@ auth:
       # No credentials block - will use browser authentication
 ```
 
-#### Static Credentials from Environment
+#### Static Credentials from Environment (Existing, Unaffected by Webflow)
 ```yaml
 auth:
   identities:
@@ -156,13 +156,13 @@ auth:
         secret_access_key: !env MY_AWS_SECRET_ACCESS_KEY
 ```
 
-#### With Role Chaining
+#### With Role Chaining (Existing, Unaffected by Webflow)
 ```yaml
 auth:
   identities:
     my-user:
       kind: aws/user
-      # Browser auth as fallback
+      # Browser auth as fallback when no static credentials are configured
 
     prod-admin:
       kind: aws/assume-role
@@ -201,18 +201,18 @@ Starting browser authentication...
   Expires     2025-12-17 22:00:00 UTC (11h 59m)
 ```
 
-### Headless Flow (Remote Mode)
+### Headless Flow (Non-Interactive Mode)
 
-When running in a non-TTY environment or with `--remote` flag:
+When running in a non-TTY environment or with `--interactive=false` (existing global flag):
 
 ```text
-$ atmos auth login --identity my-user --remote
+$ atmos auth login --identity my-user --interactive=false
 
 No stored credentials found for 'my-user'.
-Starting browser authentication (remote mode)...
+Starting browser authentication (non-interactive mode)...
 
 ╭──────────────────────────────────────────────────────────╮
-│  🔐 AWS Browser Authentication (Remote Mode)             │
+│  🔐 AWS Browser Authentication (Non-Interactive)          │
 │                                                          │
 │  Visit this URL on a device with a browser:              │
 │  https://us-east-1.signin.aws.amazon.com/authorize?...   │
@@ -239,7 +239,7 @@ Authorization code: █
 │                                                             │
 │  3. Initiate browser webflow                                │
 │     └─ Interactive TTY? → Open browser automatically        │
-│     └─ Headless/--remote? → Display URL for manual auth     │
+│     └─ Non-interactive? → Display URL for manual auth       │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -359,7 +359,7 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 
 ### Files to Create/Update
 - `website/docs/core-concepts/authentication/aws-user.mdx` - Update with browser auth fallback
-- `website/docs/cli/commands/auth/login.mdx` - Add `--remote` flag documentation
+- `website/docs/cli/commands/auth/login.mdx` - Document non-interactive webflow behavior with `--interactive=false`
 - Schema documentation updates for credential resolution order
 
 ## Rollout Plan
@@ -371,7 +371,7 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 
 ### Phase 2: UI and Integration
 - Implement browser opening and spinner UI (reuse patterns from SSO)
-- Add headless/remote mode support with `--remote` flag
+- Add non-interactive mode support via existing `--interactive=false` global flag
 - Add unit tests with mocked HTTP server
 
 ### Phase 3: Documentation and Polish
@@ -392,7 +392,7 @@ Modify `pkg/auth/identities/aws/user.go` to add browser authentication as a thir
 
 ## Open Questions
 
-1. **Auto-Detection Scope**: FR-7 specifies auto-detecting non-TTY and switching to remote mode. Should this also detect CI environments (e.g., `CI=true`) and skip the browser flow entirely rather than falling back to remote mode?
+1. **Auto-Detection Scope**: FR-7 specifies auto-detecting non-TTY and switching to non-interactive mode. The existing `--interactive` flag already defaults to disabled in CI. Should the webflow skip entirely in non-interactive mode, or still offer the manual code entry flow?
 
 ## References
 
