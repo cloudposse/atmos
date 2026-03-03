@@ -1220,6 +1220,9 @@
                       },
                       "type": {
                         "type": "string"
+                      },
+                      "retry": {
+                        "$ref": "#/definitions/workflow_retry"
                       }
                     },
                     "required": [
@@ -1394,6 +1397,60 @@
           "required": [
             "uri"
           ]
+        }
+      ]
+    },
+    "workflow_retry": {
+      "title": "workflow_retry",
+      "description": "Retry configuration for workflow steps",
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^!include"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "max_attempts": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Maximum number of retry attempts"
+            },
+            "initial_delay": {
+              "type": "string",
+              "description": "Initial delay between retries (e.g., '1s', '500ms')"
+            },
+            "max_delay": {
+              "type": "string",
+              "description": "Maximum delay between retries (e.g., '30s', '1m')"
+            },
+            "backoff_strategy": {
+              "type": "string",
+              "enum": [
+                "constant",
+                "linear",
+                "exponential"
+              ],
+              "description": "Strategy for increasing delay between retries"
+            },
+            "multiplier": {
+              "type": "number",
+              "minimum": 1,
+              "description": "Multiplier for exponential/linear backoff"
+            },
+            "random_jitter": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Random jitter factor (0-1) to add to delays"
+            },
+            "max_elapsed_time": {
+              "type": "string",
+              "description": "Maximum total time for all retry attempts (e.g., '5m', '1h')"
+            }
+          },
+          "required": []
         }
       ]
     },
