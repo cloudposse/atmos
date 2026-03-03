@@ -234,7 +234,13 @@ func BuildToolchainPATH(atmosConfig *schema.AtmosConfiguration, dependencies map
 
 		// Add versioned bin directory to PATH.
 		binPath := filepath.Join(toolsDir, "bin", owner, repo, version)
-		paths = append(paths, binPath)
+
+		// Convert to absolute path to avoid Go 1.19+ exec.LookPath security issues.
+		// Go 1.19+ rejects executables found via relative PATH entries.
+		// Note: filepath.Abs rarely fails in practice; we trust it to succeed here.
+		absBinPath, _ := filepath.Abs(binPath)
+
+		paths = append(paths, absBinPath)
 	}
 
 	// Prepend toolchain paths to existing PATH.

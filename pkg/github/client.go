@@ -48,11 +48,12 @@ const (
 func newGitHubClient(ctx context.Context) *github.Client {
 	defer perf.Track(nil, "github.newGitHubClient")()
 
-	// Get GitHub token using the standard Atmos precedence order:
+	// Get GitHub token using the full resolution chain:
 	// 1. --github-token CLI flag
 	// 2. ATMOS_GITHUB_TOKEN environment variable
 	// 3. GITHUB_TOKEN environment variable
-	githubToken := httpClient.GetGitHubTokenFromEnv()
+	// 4. `gh auth token` CLI fallback
+	githubToken := GetGitHubToken()
 
 	return newGitHubClientWithToken(ctx, githubToken)
 }
@@ -92,11 +93,24 @@ func handleGitHubAPIError(err error, resp *github.Response) error {
 		resetTime := resp.Rate.Reset.Time
 		waitDuration := time.Until(resetTime)
 
-		return fmt.Errorf("%w: rate limit exceeded, resets at %s (in %s). Consider setting ATMOS_GITHUB_TOKEN or GITHUB_TOKEN for higher limits",
-			errUtils.ErrGitHubRateLimitExceeded,
-			resetTime.Format(time.RFC3339),
-			waitDuration.Round(time.Second),
-		)
+		builder := errUtils.Build(errUtils.ErrGitHubRateLimitExceeded).
+			WithCause(err).
+			WithExplanation(fmt.Sprintf("Rate limit exceeded, resets at %s (in %s)",
+				resetTime.Format(time.RFC3339),
+				waitDuration.Round(time.Second)))
+
+		if httpClient.GetGitHubTokenFromEnv() != "" {
+			builder.
+				WithHint("Your GitHub token may be invalid or expired").
+				WithHint("Verify your token: `gh auth status`").
+				WithHint("Try re-authenticating: `gh auth login`")
+		} else {
+			builder.
+				WithHint("Authenticate with GitHub CLI: `gh auth login`").
+				WithHint("Or set `ATMOS_GITHUB_TOKEN` or `GITHUB_TOKEN` environment variable")
+		}
+
+		return builder.Err()
 	}
 
 	return err
