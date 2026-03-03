@@ -116,7 +116,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 func (s *Store) uploadMetadata(ctx context.Context, planfileKey string, metadata *planfile.Metadata) error {
 	metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 	if err != nil {
-		return fmt.Errorf("failed to marshal metadata: %w", err)
+		return fmt.Errorf("%w: failed to marshal metadata: %v", errUtils.ErrPlanfileMetadataFailed, err)
 	}
 
 	metaObj := s.client.Bucket(s.bucket).Object(planfileKey + metadataSuffix)
@@ -125,11 +125,11 @@ func (s *Store) uploadMetadata(ctx context.Context, planfileKey string, metadata
 
 	if _, err := metaWriter.Write(metadataJSON); err != nil {
 		_ = metaWriter.Close()
-		return fmt.Errorf("failed to write metadata: %w", err)
+		return fmt.Errorf("%w: failed to write metadata: %v", errUtils.ErrPlanfileMetadataFailed, err)
 	}
 
 	if err := metaWriter.Close(); err != nil {
-		return fmt.Errorf("failed to close metadata writer: %w", err)
+		return fmt.Errorf("%w: failed to close metadata writer: %v", errUtils.ErrPlanfileMetadataFailed, err)
 	}
 
 	return nil
@@ -208,8 +208,9 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 
 		// Remove prefix to get relative key.
 		relKey := key
-		if s.prefix != "" && len(key) > len(s.prefix)+1 {
-			relKey = key[len(s.prefix)+1:]
+		if s.prefix != "" {
+			normalizedPrefix := strings.TrimRight(s.prefix, "/") + "/"
+			relKey = strings.TrimPrefix(key, normalizedPrefix)
 		}
 
 		// Try to load metadata.
