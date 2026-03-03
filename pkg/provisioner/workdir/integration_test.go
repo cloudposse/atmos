@@ -591,6 +591,401 @@ func TestCleanAllWorkdirs_NoWorkdirsExist(t *testing.T) {
 	require.NoError(t, err, "CleanAllWorkdirs should handle non-existent .workdir gracefully")
 }
 
+// TestAtmosComponentPriority_OverridesBaseComponent verifies the core fix:
+// atmos_component takes priority over component/metadata.component for workdir path.
+func TestAtmosComponentPriority_OverridesBaseComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create the shared base component directory.
+	baseDir := filepath.Join(tempDir, "components", "terraform", "s3-bucket")
+	require.NoError(t, os.MkdirAll(baseDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "main.tf"), []byte("# s3"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// atmos_component should win over component and metadata.component.
+	componentConfig := map[string]any{
+		"atmos_component": "s3-bucket-logs",
+		"component":       "s3-bucket",
+		"atmos_stack":     "prod",
+		"metadata": map[string]any{
+			"component": "s3-bucket",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+		"component_path": baseDir,
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err)
+
+	workdirPath := componentConfig[WorkdirPathKey].(string)
+	// Must use atmos_component (s3-bucket-logs), NOT the base component (s3-bucket).
+	expectedSuffix := filepath.Join("terraform", "prod-s3-bucket-logs")
+	assert.True(t, strings.HasSuffix(workdirPath, expectedSuffix),
+		"workdir path %s should end with %s", workdirPath, expectedSuffix)
+}
+
+// TestAtmosComponentPriority_FallsBackToComponentKey verifies that when
+// atmos_component is absent, component key is used (backward compatibility).
+func TestAtmosComponentPriority_FallsBackToComponentKey(t *testing.T) {
+	tempDir := t.TempDir()
+
+	compDir := filepath.Join(tempDir, "components", "terraform", "vpc")
+	require.NoError(t, os.MkdirAll(compDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(compDir, "main.tf"), []byte("# vpc"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// No atmos_component — should fall back to component key.
+	componentConfig := map[string]any{
+		"component":   "vpc",
+		"atmos_stack": "staging",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err)
+
+	workdirPath := componentConfig[WorkdirPathKey].(string)
+	assert.Contains(t, workdirPath, "staging-vpc")
+}
+
+// TestAtmosComponentPriority_EmptyStringFallback verifies that an empty
+// atmos_component string falls back to extractComponentName.
+func TestAtmosComponentPriority_EmptyStringFallback(t *testing.T) {
+	tempDir := t.TempDir()
+
+	compDir := filepath.Join(tempDir, "components", "terraform", "rds")
+	require.NoError(t, os.MkdirAll(compDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(compDir, "main.tf"), []byte("# rds"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// atmos_component is empty string — should fall back to component key.
+	componentConfig := map[string]any{
+		"atmos_component": "",
+		"component":       "rds",
+		"atmos_stack":     "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err)
+
+	workdirPath := componentConfig[WorkdirPathKey].(string)
+	assert.Contains(t, workdirPath, "dev-rds")
+}
+
+// TestAtmosComponentPriority_NonStringFallback verifies that when
+// atmos_component is not a string type, it falls back to component key.
+func TestAtmosComponentPriority_NonStringFallback(t *testing.T) {
+	tempDir := t.TempDir()
+	workdirPath := filepath.Join(tempDir, ".workdir", "terraform", "dev-lambda")
+	require.NoError(t, os.MkdirAll(workdirPath, 0o755))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockFS := NewMockFileSystem(ctrl)
+	mockHasher := NewMockHasher(ctrl)
+	service := NewServiceWithDeps(mockFS, mockHasher)
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentPath := filepath.Join(tempDir, "components", "terraform", "lambda")
+
+	mockFS.EXPECT().MkdirAll(workdirPath, gomock.Any()).Return(nil)
+	mockFS.EXPECT().Exists(componentPath).Return(true)
+	mockFS.EXPECT().SyncDir(componentPath, workdirPath, mockHasher).Return(false, nil)
+	mockHasher.EXPECT().HashDir(workdirPath).Return("hash", nil)
+
+	// atmos_component is an int — should fall back to component key.
+	componentConfig := map[string]any{
+		"atmos_component": 42,
+		"component":       "lambda",
+		"atmos_stack":     "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := service.Provision(context.Background(), atmosConfig, componentConfig)
+	require.NoError(t, err)
+	assert.Contains(t, componentConfig[WorkdirPathKey], "dev-lambda")
+}
+
+// TestConcurrentComponentInstances tests parallel provisioning of component
+// instances sharing the same base component (the core use case from issue #2091).
+func TestConcurrentComponentInstances(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create a single shared base component.
+	baseDir := filepath.Join(tempDir, "components", "terraform", "elasticache")
+	require.NoError(t, os.MkdirAll(baseDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "main.tf"), []byte("# elasticache"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	instances := []string{
+		"elasticache-redis-cluster-1",
+		"elasticache-redis-cluster-2",
+		"elasticache-redis-cluster-3",
+		"elasticache-redis-cluster-4",
+		"elasticache-redis-cluster-5",
+	}
+
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(instances))
+	pathCh := make(chan string, len(instances))
+
+	for _, inst := range instances {
+		wg.Add(1)
+		go func(instanceName string) {
+			defer wg.Done()
+
+			componentConfig := map[string]any{
+				"atmos_component": instanceName,
+				"component":       "elasticache",
+				"atmos_stack":     "prod",
+				"metadata": map[string]any{
+					"component": "elasticache",
+				},
+				"provision": map[string]any{
+					"workdir": map[string]any{
+						"enabled": true,
+					},
+				},
+				"component_path": baseDir,
+			}
+
+			ctx := context.Background()
+			if err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil); err != nil {
+				errCh <- fmt.Errorf("instance %s: %w", instanceName, err)
+				return
+			}
+
+			wdPath, ok := componentConfig[WorkdirPathKey].(string)
+			if !ok {
+				errCh <- fmt.Errorf("instance %s: workdir path not set", instanceName)
+				return
+			}
+
+			// Verify instance name is in path (not base component name).
+			if !strings.Contains(wdPath, "prod-"+instanceName) {
+				errCh <- fmt.Errorf("instance %s: expected path with prod-%s, got %s", instanceName, instanceName, wdPath)
+				return
+			}
+
+			pathCh <- wdPath
+		}(inst)
+	}
+
+	wg.Wait()
+	close(errCh)
+	close(pathCh)
+
+	var errs []error
+	for err := range errCh {
+		errs = append(errs, err)
+	}
+	require.Empty(t, errs, "concurrent provisioning errors: %v", errs)
+
+	// Verify all paths are unique.
+	paths := make(map[string]bool)
+	for p := range pathCh {
+		require.False(t, paths[p], "duplicate workdir path: %s", p)
+		paths[p] = true
+	}
+	assert.Len(t, paths, len(instances), "should have %d unique workdir paths", len(instances))
+}
+
+// TestSyncDir_DeletesRemovedFiles verifies that SyncDir removes files from dest
+// that no longer exist in source.
+func TestSyncDir_DeletesRemovedFiles(t *testing.T) {
+	srcDir := filepath.Join(t.TempDir(), "src")
+	dstDir := filepath.Join(t.TempDir(), "dst")
+
+	// Initial state: both have file_a.tf and file_b.tf.
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file_a.tf"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "file_b.tf"), []byte("b"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "file_a.tf"), []byte("a"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "file_b.tf"), []byte("b"), 0o644))
+	// Extra file in dst only (should be removed by sync).
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "old_file.tf"), []byte("old"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	changed, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+	assert.True(t, changed, "sync should report changes when files are deleted")
+
+	// old_file.tf should be gone.
+	_, err = os.Stat(filepath.Join(dstDir, "old_file.tf"))
+	assert.True(t, os.IsNotExist(err), "old_file.tf should be deleted")
+
+	// Existing files should remain.
+	_, err = os.Stat(filepath.Join(dstDir, "file_a.tf"))
+	assert.NoError(t, err, "file_a.tf should still exist")
+	_, err = os.Stat(filepath.Join(dstDir, "file_b.tf"))
+	assert.NoError(t, err, "file_b.tf should still exist")
+}
+
+// TestSyncDir_NoChanges_Integration verifies that SyncDir returns false when files are identical.
+func TestSyncDir_NoChanges_Integration(t *testing.T) {
+	srcDir := filepath.Join(t.TempDir(), "src")
+	dstDir := filepath.Join(t.TempDir(), "dst")
+
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("same"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(dstDir, "main.tf"), []byte("same"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	changed, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+	assert.False(t, changed, "sync should report no changes when files are identical")
+}
+
+// TestSyncDir_PreservesAtmosMetadata verifies that SyncDir preserves the .atmos/ metadata directory.
+func TestSyncDir_PreservesAtmosMetadata(t *testing.T) {
+	srcDir := filepath.Join(t.TempDir(), "src")
+	dstDir := filepath.Join(t.TempDir(), "dst")
+
+	require.NoError(t, os.MkdirAll(srcDir, 0o755))
+	require.NoError(t, os.MkdirAll(dstDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("content"), 0o644))
+
+	// Create .atmos/ metadata in dst (should not be deleted by sync).
+	atmosDir := filepath.Join(dstDir, AtmosDir)
+	require.NoError(t, os.MkdirAll(atmosDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(atmosDir, "metadata.json"), []byte("{}"), 0o644))
+
+	fs := NewDefaultFileSystem()
+	hasher := NewDefaultHasher()
+
+	_, err := fs.SyncDir(srcDir, dstDir, hasher)
+	require.NoError(t, err)
+
+	// .atmos/metadata.json should still exist.
+	_, err = os.Stat(filepath.Join(atmosDir, "metadata.json"))
+	assert.NoError(t, err, ".atmos/metadata.json should be preserved during sync")
+}
+
+// TestFileNeedsCopy_PermissionChange verifies that permission changes are detected.
+func TestFileNeedsCopy_PermissionChange(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "src.sh")
+	dstFile := filepath.Join(tmpDir, "dst.sh")
+
+	content := []byte("#!/bin/bash\necho hello")
+	require.NoError(t, os.WriteFile(srcFile, content, 0o755)) // Executable.
+	require.NoError(t, os.WriteFile(dstFile, content, 0o644)) // Not executable.
+
+	hasher := NewDefaultHasher()
+
+	// Same content but different permissions — should need copy.
+	assert.True(t, fileNeedsCopy(srcFile, dstFile, hasher),
+		"file should need copy when permissions differ")
+}
+
+// TestFileNeedsCopy_IdenticalFiles verifies that identical files don't need copy.
+func TestFileNeedsCopy_IdenticalFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "src.tf")
+	dstFile := filepath.Join(tmpDir, "dst.tf")
+
+	content := []byte("resource \"aws_instance\" \"main\" {}")
+	require.NoError(t, os.WriteFile(srcFile, content, 0o644))
+	require.NoError(t, os.WriteFile(dstFile, content, 0o644))
+
+	hasher := NewDefaultHasher()
+
+	assert.False(t, fileNeedsCopy(srcFile, dstFile, hasher),
+		"identical files should not need copy")
+}
+
+// TestFileNeedsCopy_DestMissing verifies that missing destination triggers copy.
+func TestFileNeedsCopy_DestMissing(t *testing.T) {
+	tmpDir := t.TempDir()
+	srcFile := filepath.Join(tmpDir, "src.tf")
+	dstFile := filepath.Join(tmpDir, "nonexistent.tf")
+
+	require.NoError(t, os.WriteFile(srcFile, []byte("content"), 0o644))
+
+	hasher := NewDefaultHasher()
+
+	assert.True(t, fileNeedsCopy(srcFile, dstFile, hasher),
+		"missing destination should trigger copy")
+}
+
+// TestGetModTimeFromEntry_Error verifies the zero-value fallback.
+func TestGetModTimeFromEntry_Error(t *testing.T) {
+	result := getModTimeFromEntry(&errorDirEntry{})
+	assert.True(t, result.IsZero(), "should return zero time on Info() error")
+}
+
+// errorDirEntry is a mock DirEntry that returns an error from Info().
+type errorDirEntry struct{}
+
+func (e *errorDirEntry) Name() string               { return "error" }
+func (e *errorDirEntry) IsDir() bool                 { return false }
+func (e *errorDirEntry) Type() os.FileMode           { return 0 }
+func (e *errorDirEntry) Info() (os.FileInfo, error)  { return nil, os.ErrPermission }
+
 // Note: Tests for WorkdirPathKey extraction logic (used to override component path
 // in terraform execution) are in internal/exec/terraform_shell_test.go:TestWorkdirPathKeyExtraction.
 // That test covers all edge cases: path set, not set, empty string, nil, and wrong type.
