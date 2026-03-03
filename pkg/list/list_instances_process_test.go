@@ -240,8 +240,8 @@ func TestProcessInstancesWithDeps_StackPatternFilter(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name           string
-		stackPattern   string
+		name         string
+		stackPattern string
 		// returnedMap simulates what ExecuteDescribeStacks returns after applying the filter.
 		returnedMap    map[string]interface{}
 		expectedStacks []string
