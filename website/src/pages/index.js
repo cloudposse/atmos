@@ -27,9 +27,9 @@ function Home() {
               <h1>
                 <span className="hero__title-line">One Tool to Orchestrate</span>
                 <span className="typing-container" aria-hidden="true">
-                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'Devcontainers']} />
+                  <TypingAnimation words={['Terraform', 'OpenTofu', 'Packer', 'Helmfile', 'Ansible', 'Devcontainers']} />
                 </span>
-                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Devcontainers</span>
+                <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Ansible, and Devcontainers</span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
             <div className="hero__cta">
@@ -147,7 +147,7 @@ function Home() {
         </main>
         <footer>
             <h2>What are you waiting for? <strong className="atmos__text">It's FREE and Open Source</strong></h2>
-            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu and Packer today.</h3>
+            <h3><strong className="underline">Your team can succeed</strong> with Terraform/OpenTofu, Packer, Ansible, and more today.</h3>
             <section className="cta-section">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
             </section>

@@ -1,0 +1,13 @@
+base_path: "./"
+
+components:
+  ansible:
+    base_path: "components/ansible"
+
+stacks:
+  base_path: "stacks"
+  included_paths:
+    - "deploy/**/*"
+  excluded_paths:
+    - "**/_defaults.yaml"
+  name_template: "{{.vars.stage}}"

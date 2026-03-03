@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -328,4 +329,267 @@ packages:
 	if requestedURL != "/registry.yaml" {
 		t.Errorf("Expected request to /registry.yaml, got %q", requestedURL)
 	}
+}
+
+// TestURLRegistry_GetToolWithVersion tests version-specific overrides.
+func TestURLRegistry_GetToolWithVersion(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`
+packages:
+  - type: github_release
+    repo_owner: test
+    repo_name: tool
+    url: "tool-{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz"
+    format: tar.gz
+    version_overrides:
+      - version_constraint: 'semver("<= 1.0.0")'
+        asset: "tool-legacy-{{.Version}}-{{.OS}}-{{.Arch}}.tar.gz"
+        format: zip
+`))
+	}))
+	defer server.Close()
+
+	reg := NewURLRegistry(server.URL+"/registry.yaml", "")
+
+	t.Run("version matching override", func(t *testing.T) {
+		toolWithVersion, err := reg.GetToolWithVersion("test", "tool", "0.9.0")
+		if err != nil {
+			t.Fatalf("Failed to get tool with version: %v", err)
+		}
+		if toolWithVersion.Version != "0.9.0" {
+			t.Errorf("Expected version 0.9.0, got %q", toolWithVersion.Version)
+		}
+		// Verify override fields were applied for version <= 1.0.0.
+		if !strings.Contains(toolWithVersion.Asset, "legacy") {
+			t.Errorf("Expected legacy asset override, got %q", toolWithVersion.Asset)
+		}
+		if toolWithVersion.Format != "zip" {
+			t.Errorf("Expected format override 'zip', got %q", toolWithVersion.Format)
+		}
+	})
+
+	t.Run("version not matching override uses defaults", func(t *testing.T) {
+		toolWithVersion, err := reg.GetToolWithVersion("test", "tool", "2.0.0")
+		if err != nil {
+			t.Fatalf("Failed to get tool with version: %v", err)
+		}
+		if toolWithVersion.Version != "2.0.0" {
+			t.Errorf("Expected version 2.0.0, got %q", toolWithVersion.Version)
+		}
+		if strings.Contains(toolWithVersion.Asset, "legacy") {
+			t.Errorf("Expected default asset (non-legacy), got %q", toolWithVersion.Asset)
+		}
+		if toolWithVersion.Format != "tar.gz" {
+			t.Errorf("Expected default format 'tar.gz', got %q", toolWithVersion.Format)
+		}
+	})
+
+	t.Run("tool not found returns error", func(t *testing.T) {
+		_, err := reg.GetToolWithVersion("nonexistent", "tool", "1.0.0")
+		if err == nil {
+			t.Error("Expected error for nonexistent tool, got nil")
+		}
+	})
+}
+
+// TestURLRegistry_GetLatestVersion tests that URL registries don't support version queries.
+func TestURLRegistry_GetLatestVersion(t *testing.T) {
+	reg := &URLRegistry{
+		baseURL:    "https://example.com/registry.yaml",
+		cache:      make(map[string]*Tool),
+		indexCache: make(map[string]*Tool),
+	}
+
+	_, err := reg.GetLatestVersion("test", "tool")
+	if err == nil {
+		t.Error("Expected error, got nil")
+	}
+}
+
+// TestURLRegistry_LoadLocalConfig tests that LoadLocalConfig is a no-op.
+func TestURLRegistry_LoadLocalConfig(t *testing.T) {
+	reg := &URLRegistry{
+		baseURL:    "https://example.com/registry.yaml",
+		cache:      make(map[string]*Tool),
+		indexCache: make(map[string]*Tool),
+	}
+
+	err := reg.LoadLocalConfig("/nonexistent/path")
+	if err != nil {
+		t.Errorf("Expected nil error, got %v", err)
+	}
+}
+
+// TestURLRegistry_Search tests that Search returns empty for URL registries.
+func TestURLRegistry_Search(t *testing.T) {
+	reg := &URLRegistry{
+		baseURL:    "https://example.com/registry.yaml",
+		cache:      make(map[string]*Tool),
+		indexCache: make(map[string]*Tool),
+	}
+
+	results, err := reg.Search(context.Background(), "terraform")
+	if err != nil {
+		t.Errorf("Expected nil error, got %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected empty results, got %d", len(results))
+	}
+}
+
+// TestURLRegistry_ListAll tests that ListAll returns empty for URL registries.
+func TestURLRegistry_ListAll(t *testing.T) {
+	reg := &URLRegistry{
+		baseURL:    "https://example.com/registry.yaml",
+		cache:      make(map[string]*Tool),
+		indexCache: make(map[string]*Tool),
+	}
+
+	results, err := reg.ListAll(context.Background())
+	if err != nil {
+		t.Errorf("Expected nil error, got %v", err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected empty results, got %d", len(results))
+	}
+}
+
+// TestURLRegistry_VersionConstraintEvaluation tests the URL registry's version constraint functions.
+func TestURLRegistry_VersionConstraintEvaluation(t *testing.T) {
+	tests := []struct {
+		name       string
+		constraint string
+		version    string
+		want       bool
+		wantErr    bool
+	}{
+		{"empty constraint", "", "1.0.0", false, false},
+		{"literal true", "true", "1.0.0", true, false},
+		{"literal false", "false", "1.0.0", false, false},
+		{"quoted true", `"true"`, "1.0.0", true, false},
+		{"quoted false", `"false"`, "1.0.0", false, false},
+		{"exact version match", `Version == "v1.0.0"`, "v1.0.0", true, false},
+		{"exact version mismatch", `Version == "v1.0.0"`, "v2.0.0", false, false},
+		{"semver >=", `semver(">= 1.0.0")`, "1.5.0", true, false},
+		{"semver >= fails", `semver(">= 2.0.0")`, "1.5.0", false, false},
+		{"semver <=", `semver("<= 1.0.0")`, "0.9.0", true, false},
+		{"semver range", `semver(">= 1.0.0, < 2.0.0")`, "1.5.0", true, false},
+		{"semver range outside", `semver(">= 1.0.0, < 2.0.0")`, "2.5.0", false, false},
+		{"version not equal", `Version != "v1.0.0"`, "v2.0.0", true, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := evaluateVersionConstraint(tt.constraint, tt.version)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("Expected error, got nil")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("Unexpected error: %v", err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("evaluateVersionConstraint(%q, %q) = %v, want %v", tt.constraint, tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestCompareSemver_URLRegistry tests semver comparison in the URL registry.
+func TestCompareSemver_URLRegistry(t *testing.T) {
+	tests := []struct {
+		name       string
+		constraint string
+		version    string
+		want       bool
+	}{
+		{"greater than or equal true", ">= 1.0.0", "1.5.0", true},
+		{"greater than or equal false", ">= 2.0.0", "1.5.0", false},
+		{"less than or equal true", "<= 2.0.0", "1.5.0", true},
+		{"less than or equal false", "<= 1.0.0", "1.5.0", false},
+		{"greater than true", "> 1.0.0", "1.5.0", true},
+		{"greater than false", "> 2.0.0", "1.5.0", false},
+		{"less than true", "< 2.0.0", "1.5.0", true},
+		{"less than false", "< 1.0.0", "1.5.0", false},
+		{"equal true", "= 1.5.0", "1.5.0", true},
+		{"equal false", "= 1.0.0", "1.5.0", false},
+		{"not equal true", "!= 1.0.0", "1.5.0", true},
+		{"not equal false", "!= 1.5.0", "1.5.0", false},
+		{"comma-separated AND", ">= 1.0.0, < 2.0.0", "1.5.0", true},
+		{"comma-separated AND fails", ">= 1.0.0, < 2.0.0", "2.5.0", false},
+		{"invalid version", ">= 1.0.0", "not-a-version", false},
+		{"invalid constraint", ">= not-a-version", "1.5.0", false},
+		{"unknown operator", "~> 1.0.0", "1.5.0", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := compareSemver(tt.constraint, tt.version)
+			if got != tt.want {
+				t.Errorf("compareSemver(%q, %q) = %v, want %v", tt.constraint, tt.version, got, tt.want)
+			}
+		})
+	}
+}
+
+// TestApplyOverrideFields tests that override fields are applied correctly.
+func TestApplyOverrideFields(t *testing.T) {
+	t.Run("applies asset and format", func(t *testing.T) {
+		tool := &Tool{
+			Asset:  "default-asset",
+			Format: "tar.gz",
+		}
+		override := &VersionOverride{
+			VersionConstraint: "true",
+			Asset:             "override-asset",
+			Format:            "zip",
+		}
+		applyOverrideFields(tool, override, "1.0.0")
+		if tool.Asset != "override-asset" {
+			t.Errorf("Expected asset 'override-asset', got %q", tool.Asset)
+		}
+		if tool.Format != "zip" {
+			t.Errorf("Expected format 'zip', got %q", tool.Format)
+		}
+	})
+
+	t.Run("preserves defaults when override is empty", func(t *testing.T) {
+		tool := &Tool{
+			Asset:  "default-asset",
+			Format: "tar.gz",
+		}
+		override := &VersionOverride{
+			VersionConstraint: "true",
+			// No overrides set.
+		}
+		applyOverrideFields(tool, override, "1.0.0")
+		if tool.Asset != "default-asset" {
+			t.Errorf("Expected asset to remain 'default-asset', got %q", tool.Asset)
+		}
+		if tool.Format != "tar.gz" {
+			t.Errorf("Expected format to remain 'tar.gz', got %q", tool.Format)
+		}
+	})
+
+	t.Run("applies files and replacements", func(t *testing.T) {
+		tool := &Tool{
+			Asset: "default",
+		}
+		override := &VersionOverride{
+			VersionConstraint: "true",
+			Files:             []File{{Name: "binary", Src: "dist/binary"}},
+			Replacements:      map[string]string{"amd64": "x86_64"},
+		}
+		applyOverrideFields(tool, override, "1.0.0")
+		if len(tool.Files) != 1 || tool.Files[0].Name != "binary" {
+			t.Errorf("Expected files to be applied, got %v", tool.Files)
+		}
+		if tool.Replacements["amd64"] != "x86_64" {
+			t.Errorf("Expected replacements to be applied, got %v", tool.Replacements)
+		}
+	})
 }
