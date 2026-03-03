@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -929,6 +930,10 @@ func TestSyncDir_PreservesAtmosMetadata(t *testing.T) {
 
 // TestFileNeedsCopy_PermissionChange verifies that permission changes are detected.
 func TestFileNeedsCopy_PermissionChange(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping permission change test on Windows - file permissions work differently")
+	}
+
 	tmpDir := t.TempDir()
 	srcFile := filepath.Join(tmpDir, "src.sh")
 	dstFile := filepath.Join(tmpDir, "dst.sh")
