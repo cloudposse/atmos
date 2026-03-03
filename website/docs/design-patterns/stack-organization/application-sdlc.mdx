@@ -88,11 +88,11 @@ stacks:
     - "**/*"
   excluded_paths:
     - "defaults/*"
-  name_pattern: "{stage}"
+  name_template: "{{.vars.stage}}"
 ```
 </File>
 
-The key difference from other patterns: `name_pattern: "{stage}"` produces stack names that are simply `dev`, `staging`, `prod`, and `preview`. No region, no tenant, no namespace — just the SDLC environment.
+The key difference from other patterns: `name_template: "{{.vars.stage}}"` produces stack names that are simply `dev`, `staging`, `prod`, and `preview`. No region, no tenant, no namespace — just the SDLC environment.
 
 ### Configure Defaults
 
