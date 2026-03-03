@@ -498,6 +498,9 @@ func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
 		SubCommand:       "plan",
 	}
 
+	// Preserve PATH so toolchain installer mutations don't leak to other tests.
+	t.Setenv("PATH", os.Getenv("PATH"))
+
 	// Capture stdout/stderr.
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
