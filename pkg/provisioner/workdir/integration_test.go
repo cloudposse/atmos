@@ -984,9 +984,9 @@ func TestGetModTimeFromEntry_Error(t *testing.T) {
 type errorDirEntry struct{}
 
 func (e *errorDirEntry) Name() string               { return "error" }
-func (e *errorDirEntry) IsDir() bool                 { return false }
-func (e *errorDirEntry) Type() os.FileMode           { return 0 }
-func (e *errorDirEntry) Info() (os.FileInfo, error)  { return nil, os.ErrPermission }
+func (e *errorDirEntry) IsDir() bool                { return false }
+func (e *errorDirEntry) Type() os.FileMode          { return 0 }
+func (e *errorDirEntry) Info() (os.FileInfo, error) { return nil, os.ErrPermission }
 
 // TestProductionFlowWithComponentInfo tests the production flow where component_info.component_path
 // is set (as done by internal/exec/utils.go) but top-level component_path is NOT set.
