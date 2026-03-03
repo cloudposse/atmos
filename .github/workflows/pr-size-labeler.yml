@@ -30,11 +30,14 @@ jobs:
           s_label: "size/s"
           s_max_size: "100"
           m_label: "size/m"
-          m_max_size: "500"
+          m_max_size: "1000"
           l_label: "size/l"
-          l_max_size: "1000"
+          l_max_size: "5000"
           xl_label: "size/xl"
+          xl_max_size: "10000"
+          xxl_label: "size/xxl"
           fail_if_xl: "false"
+          fail_if_xxl: "false"
           files_to_ignore: |
             package-lock.json
             yarn.lock
