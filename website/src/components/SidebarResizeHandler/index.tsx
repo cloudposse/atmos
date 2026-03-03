@@ -72,12 +72,15 @@ export default function SidebarResizeHandler(): null {
         sidebar.removeEventListener('mousedown', onMouseDown);
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
+        dragging = false;
+        document.documentElement.classList.remove('sidebar-resizing');
       };
     }, 150);
 
     return () => {
       clearTimeout(timeoutId);
       cleanupRef.current?.();
+      document.documentElement.classList.remove('sidebar-resizing');
     };
   }, [location.pathname]);
 

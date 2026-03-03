@@ -1011,8 +1011,7 @@ a[class*="sidebarItemLink"]:hover {
 
 /* Table of contents - reasonable width with sticky positioning */
 .theme-doc-toc-desktop,
-div[class*="tableOfContents"],
-.thin-scrollbar {
+div[class*="tableOfContents"] {
     min-width: 250px;
     position: sticky;
     top: var(--ifm-navbar-height);

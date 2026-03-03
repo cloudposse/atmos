@@ -63,7 +63,7 @@ The following example shows how to structure an application repository with Terr
        ├── components
        │   └── app
        └── stacks
-           ├── _default.yaml
+           ├── _defaults.yaml
            ├── defaults
            │   └── app.yaml
            ├── dev.yaml
@@ -88,6 +88,7 @@ stacks:
     - "**/*"
   excluded_paths:
     - "defaults/*"
+    - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}"
 ```
 </File>
@@ -98,7 +99,7 @@ The key difference from other patterns: `name_template: "{{.vars.stage}}"` produ
 
 All context variables except `stage` are fixed — the app deploys to one account, one region. Only the SDLC environment changes.
 
-<File title="terraform/stacks/_default.yaml">
+<File title="terraform/stacks/_defaults.yaml">
 ```yaml
 vars:
   namespace: acme
@@ -129,7 +130,7 @@ Each SDLC environment is a single file that imports the shared defaults and sets
 <File title="terraform/stacks/dev.yaml">
 ```yaml
 import:
-  - _default
+  - _defaults
   - defaults/app
 
 vars:
@@ -140,7 +141,7 @@ vars:
 <File title="terraform/stacks/prod.yaml">
 ```yaml
 import:
-  - _default
+  - _defaults
   - defaults/app
 
 vars:
@@ -163,7 +164,7 @@ For ephemeral PR preview environments, use template functions to generate unique
 <File title="terraform/stacks/preview.yaml">
 ```yaml
 import:
-  - _default
+  - _defaults
   - defaults/app
 
 vars:
