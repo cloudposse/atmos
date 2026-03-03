@@ -182,7 +182,7 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 88,
+      progress: 90,
       status: 'in-progress',
       milestones: [
         { label: 'Zero-config terminal output (auto TTY/color)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Terminal output adapts automatically to your environment—colors when interactive, clean text when piping. Works identically in CI and locally without configuration.', benefits: 'No terminal configuration needed. Output is readable regardless of where commands run—locally, in CI, or piped to files.' },
@@ -214,6 +214,7 @@ export const roadmapConfig = {
         { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
         { label: 'Command aliases for vendor and workflow list', status: 'shipped', quarter: 'q1-2026', changelog: 'vendor-workflow-list-aliases', description: 'Added `atmos vendor list` and `atmos workflow list` as aliases for their `atmos list` counterparts for intuitive command discovery.', benefits: 'Users can use either command form. Natural command structure regardless of preference.' },
         { label: 'Packer directory-based templates', status: 'shipped', quarter: 'q1-2026', pr: 1982, changelog: 'packer-directory-based-templates', description: 'Packer commands now default to directory mode, loading all *.pkr.hcl files from the component directory. Aligns with HashiCorp best practices for multi-file configurations.', benefits: 'Organize Packer configurations across multiple files without explicit template configuration. Just run atmos packer build and it works.' },
+        { label: 'AI Agent Skills (19 domain skills)', status: 'shipped', quarter: 'q1-2026', changelog: 'ai-agent-skills', docs: '/integrations/ai/agent-skills', description: 'Atmos ships 19 domain-specific agent skills covering stacks, components, vendoring, terraform, helmfile, packer, ansible, workflows, custom-commands, auth, stores, schemas, gitops, validation, templates, design-patterns, toolchain, introspection, and devcontainers. Compatible with Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and more.', benefits: 'AI coding assistants get deep knowledge of Atmos conventions and patterns. Contributors and users get AI assistance that understands Atmos stack configuration, orchestration, and best practices.' },
       ],
       issues: [],
       prs: [
