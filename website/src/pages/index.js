@@ -34,11 +34,20 @@ function Home() {
                 <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Ansible, and Devcontainers</span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
-            <div className="hero__cloud-logos">
-              <SiAmazonwebservices />
-              <VscAzure />
-              <SiGooglecloud />
-            </div>
+            <Link to="/multi-cloud" className="hero__cloud-logos">
+              <div className="hero__cloud-logo">
+                <SiAmazonwebservices />
+                <span>AWS</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <VscAzure />
+                <span>Azure</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <SiGooglecloud />
+                <span>GCP</span>
+              </div>
+            </Link>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
               <Link to="/intro" className="hero__link">Learn More</Link>
