@@ -141,6 +141,29 @@ html[data-theme="dark"] .hero__description {
   color: #ccc;
 }
 
+.hero__cloud-logos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 2.5rem;
+  margin-top: 1.5rem;
+}
+
+.hero__cloud-logos svg {
+  height: 28px;
+  width: auto;
+  opacity: 0.25;
+}
+
+html[data-theme="dark"] .hero__cloud-logos svg {
+  fill: white;
+}
+
+html[data-theme="light"] .hero__cloud-logos svg {
+  fill: #1a202c;
+  opacity: 0.15;
+}
+
 /* Title line displays as block so animated word goes on next line */
 .hero__title-line {
   display: block;
