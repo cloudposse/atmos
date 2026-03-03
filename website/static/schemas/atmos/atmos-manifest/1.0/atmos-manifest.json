@@ -1223,6 +1223,21 @@
                       },
                       "retry": {
                         "$ref": "#/definitions/workflow_retry"
+                      },
+                      "working_directory": {
+                        "type": "string",
+                        "description": "Working directory for the workflow step"
+                      },
+                      "identity": {
+                        "type": "string",
+                        "description": "Identity to use for the workflow step"
+                      },
+                      "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                          "type": "string"
+                        },
+                        "description": "Environment variables for the workflow step"
                       }
                     },
                     "required": [
