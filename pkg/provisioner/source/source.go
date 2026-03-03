@@ -261,7 +261,16 @@ func buildWorkdirPath(
 		basePath = "."
 	}
 
-	// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-	workdirName := fmt.Sprintf("%s-%s", stack, component)
+	// Use atmos_component (instance name) for workdir path isolation,
+	// matching the workdir provisioner behavior from PR #2093.
+	// This ensures source pull uses the same workdir path as terraform plan/init
+	// when metadata.component differs from the instance name.
+	workdirComponent := component
+	if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
+		workdirComponent = atmosComponent
+	}
+
+	// Build workdir path: .workdir/<componentType>/<stack>-<workdirComponent>/
+	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
 	return filepath.Join(basePath, WorkdirPath, componentType, workdirName), nil
 }

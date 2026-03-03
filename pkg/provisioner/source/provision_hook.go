@@ -207,8 +207,17 @@ func determineSourceTargetDirectory(
 				Err()
 		}
 
-		// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-		workdirName := fmt.Sprintf("%s-%s", stack, component)
+		// Use atmos_component (instance name) for workdir path isolation,
+		// matching the workdir provisioner behavior from PR #2093.
+		// This ensures JIT-vendored components use the same workdir path
+		// as the workdir provisioner when metadata.component differs from the instance name.
+		workdirComponent := component
+		if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
+			workdirComponent = atmosComponent
+		}
+
+		// Build workdir path: .workdir/<componentType>/<stack>-<workdirComponent>/
+		workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
 		workdirPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
 		return workdirPath, true, nil
 	}
