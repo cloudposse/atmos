@@ -46,6 +46,7 @@ const TAGS_MAP = {
   'demo-localstack': ['DX'],
   'demo-helmfile': ['DX'],
   'stack-names': ['Stacks'],
+  'demo-ansible': ['Automation'],
 };
 
 // Documentation pages mapping for examples.
@@ -120,6 +121,9 @@ const DOCS_MAP = {
   ],
   'stack-names': [
     { label: 'Stack Names', url: '/stacks/name' },
+  ],
+  'demo-ansible': [
+    { label: 'Ansible Playbook', url: '/cli/commands/ansible/playbook' },
   ],
 };
 
