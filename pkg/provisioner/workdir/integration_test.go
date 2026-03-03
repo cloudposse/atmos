@@ -1150,6 +1150,51 @@ func TestSourceComponentFallsBackToWorkdirComponent(t *testing.T) {
 	assert.Contains(t, workdirPath, "dev-simple-vpc")
 }
 
+// TestSourceComponentFallsBackWhenNoComponentKeys verifies that when only atmos_component
+// is set (no component, metadata.component, or vars.component), the source path resolution
+// falls back to using the atmos_component value.
+func TestSourceComponentFallsBackWhenNoComponentKeys(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create the component directory matching the atmos_component name.
+	compDir := filepath.Join(tempDir, "components", "terraform", "standalone-lambda")
+	require.NoError(t, os.MkdirAll(compDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(compDir, "main.tf"), []byte("# lambda"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Only atmos_component is set — no component, metadata.component, or vars.component.
+	// extractComponentName() returns "" so sourceComponent falls back to workdirComponent.
+	componentConfig := map[string]any{
+		"atmos_component": "standalone-lambda",
+		"atmos_stack":     "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err)
+
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok)
+	assert.Contains(t, workdirPath, "dev-standalone-lambda")
+
+	// Verify content was copied from the atmos_component path.
+	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# lambda", string(content))
+}
+
 // Note: Tests for WorkdirPathKey extraction logic (used to override component path
 // in terraform execution) are in internal/exec/terraform_shell_test.go:TestWorkdirPathKeyExtraction.
 // That test covers all edge cases: path set, not set, empty string, nil, and wrong type.
