@@ -501,8 +501,18 @@ func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
 	// Capture stdout/stderr.
 	oldStdout := os.Stdout
 	oldStderr := os.Stderr
-	rOut, wOut, _ := os.Pipe()
-	rErr, wErr, _ := os.Pipe()
+	rOut, wOut, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	rErr, wErr, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
+	t.Cleanup(func() {
+		os.Stdout = oldStdout
+		os.Stderr = oldStderr
+		_ = wOut.Close()
+		_ = wErr.Close()
+		_ = rOut.Close()
+		_ = rErr.Close()
+	})
 	os.Stdout = wOut
 	os.Stderr = wErr
 
@@ -510,16 +520,16 @@ func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
 	// but the key thing we verify is that the toolchain binary was installed.
 	_ = exec.ExecuteTerraform(info)
 
-	// Restore stdout/stderr.
-	wOut.Close()
-	wErr.Close()
+	// Restore stdout/stderr and close write ends so readers can drain.
+	_ = wOut.Close()
+	_ = wErr.Close()
 	os.Stdout = oldStdout
 	os.Stderr = oldStderr
 
 	// Read captured output.
 	var bufOut, bufErr bytes.Buffer
-	bufOut.ReadFrom(rOut)
-	bufErr.ReadFrom(rErr)
+	_, _ = bufOut.ReadFrom(rOut)
+	_, _ = bufErr.ReadFrom(rErr)
 
 	t.Logf("Stdout:\n%s", bufOut.String())
 	t.Logf("Stderr:\n%s", bufErr.String())
