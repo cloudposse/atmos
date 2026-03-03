@@ -369,6 +369,13 @@ func (p *oidcProvider) fetchGitHubActionsToken() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("%w: invalid ACTIONS_ID_TOKEN_REQUEST_URL: %w", errUtils.ErrAuthenticationFailed, err)
 	}
+	// Validate the URL to prevent SSRF: scheme must be https and host must be non-empty.
+	if reqURL.Scheme != "https" {
+		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must use https scheme, got %q", errUtils.ErrAuthenticationFailed, reqURL.Scheme)
+	}
+	if reqURL.Hostname() == "" {
+		return "", fmt.Errorf("%w: ACTIONS_ID_TOKEN_REQUEST_URL must have a non-empty host", errUtils.ErrAuthenticationFailed)
+	}
 	q := reqURL.Query()
 	q.Set("audience", audience)
 	reqURL.RawQuery = q.Encode()

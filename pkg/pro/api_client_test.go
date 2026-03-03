@@ -129,13 +129,16 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 
 	t.Run("successful OIDC flow", func(t *testing.T) {
-		// Set up mock server for OIDC token request
-		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set up TLS mock server for OIDC token request (HTTPS required by SSRF validation).
+		oidcServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			assert.Equal(t, "Bearer test-request-token", r.Header.Get("Authorization"))
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
 		}))
 		defer oidcServer.Close()
+		// Inject TLS-aware client so the test server certificate is trusted.
+		oidcHTTPClientOverride = oidcServer.Client()
+		defer func() { oidcHTTPClientOverride = nil }()
 
 		// Set up mock server for token exchange
 		exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -182,12 +185,15 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 
 	t.Run("missing workspace ID for OIDC", func(t *testing.T) {
-		// Set up mock server for OIDC token request
-		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set up TLS mock server for OIDC token request (HTTPS required by SSRF validation).
+		oidcServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
 		}))
 		defer oidcServer.Close()
+		// Inject TLS-aware client so the test server certificate is trusted.
+		oidcHTTPClientOverride = oidcServer.Client()
+		defer func() { oidcHTTPClientOverride = nil }()
 
 		// Unset API token and workspace ID to trigger error
 		t.Setenv("ATMOS_PRO_TOKEN", "")
@@ -261,12 +267,15 @@ func TestNewAtmosProAPIClientFromEnv(t *testing.T) {
 	})
 
 	t.Run("OIDC token exchange fails", func(t *testing.T) {
-		// Set up mock server for OIDC token request
-		oidcServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set up TLS mock server for OIDC token request (HTTPS required by SSRF validation).
+		oidcServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
 			w.Write([]byte(`{"value": "github-oidc-token-123"}`))
 		}))
 		defer oidcServer.Close()
+		// Inject TLS-aware client so the test server certificate is trusted.
+		oidcHTTPClientOverride = oidcServer.Client()
+		defer func() { oidcHTTPClientOverride = nil }()
 
 		// Set up mock server for failed token exchange
 		exchangeServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

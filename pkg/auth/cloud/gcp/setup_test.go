@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// writeADCClientCredentials creates a temporary ADC credentials file for testing.
 func writeADCClientCredentials(t *testing.T) string {
 	t.Helper()
 
@@ -146,10 +147,16 @@ func TestSetup(t *testing.T) {
 	}
 }
 
-func TestSetupFiles_NoADCSecretAndNoADCFile(t *testing.T) {
+func TestSetupFiles_NoADCSecretAndNoADCFile_FallsBackToDefaults(t *testing.T) {
+	// When no ADC credentials file exists and no env vars are set,
+	// resolveADCClientCredentials falls back to the public gcloud defaults.
+	// This enables CI environments (e.g. GitHub Actions with WIF) where
+	// no ADC file exists.
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
 	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(tmp, "missing.json"))
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "")
+	os.Unsetenv("ATMOS_GCP_ADC_CLIENT_SECRET")
 
 	ctx := context.Background()
 	providerName := "gcp-adc"
@@ -159,9 +166,9 @@ func TestSetupFiles_NoADCSecretAndNoADCFile(t *testing.T) {
 		ProjectID:   "test-project",
 	}
 
-	_, err := SetupFiles(ctx, testRealm, providerName, "setup-identity", creds)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "application-default login")
+	paths, err := SetupFiles(ctx, testRealm, providerName, "setup-identity", creds)
+	require.NoError(t, err)
+	require.Len(t, paths, 3)
 }
 
 func TestCleanup(t *testing.T) {
@@ -349,8 +356,7 @@ func TestResolveADCClientCredentials_WithEnvVar(t *testing.T) {
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "env-secret")
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_ID", "env-client-id")
 
-	clientID, clientSecret, err := resolveADCClientCredentials()
-	require.NoError(t, err)
+	clientID, clientSecret := resolveADCClientCredentials()
 	assert.Equal(t, "env-client-id", clientID)
 	assert.Equal(t, "env-secret", clientSecret)
 }
@@ -359,9 +365,26 @@ func TestResolveADCClientCredentials_SecretOnlyFromEnv(t *testing.T) {
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "env-secret-only")
 	t.Setenv("ATMOS_GCP_ADC_CLIENT_ID", "")
 
-	clientID, clientSecret, err := resolveADCClientCredentials()
-	require.NoError(t, err)
+	clientID, clientSecret := resolveADCClientCredentials()
 	// Should use default client ID when env var is empty.
 	assert.Equal(t, "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com", clientID)
 	assert.Equal(t, "env-secret-only", clientSecret)
+}
+
+func TestResolveADCClientCredentials_CustomIDWithoutSecret(t *testing.T) {
+	// Custom client ID without a matching secret must fall back to the full
+	// default pair — a mismatched pair (custom ID + default secret) would
+	// cause invalid_client errors during OAuth token refresh.
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_ID", "custom-client-id")
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "")
+
+	// Ensure no ADC file interferes.
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("GOOGLE_APPLICATION_CREDENTIALS", filepath.Join(tmp, "missing.json"))
+
+	clientID, clientSecret := resolveADCClientCredentials()
+	// Both should be defaults — custom ID is ignored when secret is absent.
+	assert.Equal(t, "764086051850-6qr4p6gpi6hn506pt8ejuq83di341hur.apps.googleusercontent.com", clientID)
+	assert.Equal(t, "d-FL95Q19q7MQmFpd7hHD0Ty", clientSecret)
 }

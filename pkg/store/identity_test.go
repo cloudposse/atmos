@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
 
@@ -502,21 +503,19 @@ func TestNewAzureKeyVaultStore_WithoutIdentity_EagerInit(t *testing.T) {
 	assert.Empty(t, azStore.identityName)
 }
 
-func TestNewGSMStore_WithoutIdentity_EagerInit(t *testing.T) {
-	// Constructor with empty identity triggers initDefaultClient.
-	// GCP client creation may fail without credentials in test env.
+func TestNewGSMStore_WithoutIdentity_LazyInit(t *testing.T) {
+	// Client creation is always deferred to first use via ensureClient().
+	// This allows auth credentials (e.g., GOOGLE_OAUTH_ACCESS_TOKEN) to be
+	// established after config loading but before the store is actually used.
 	store, err := NewGSMStore(GSMStoreOptions{
 		ProjectID: "test-project",
 		Prefix:    stringPtr("test"),
 	}, "")
-	if err != nil {
-		// Error path covers initDefaultClient error branch.
-		assert.Nil(t, store)
-		return
-	}
+	require.NoError(t, err)
+	require.NotNil(t, store)
 
 	gsmStore := store.(*GSMStore)
-	assert.NotNil(t, gsmStore.client)
+	assert.Nil(t, gsmStore.client, "client should be nil — initialization is deferred to ensureClient()")
 	assert.Empty(t, gsmStore.identityName)
 }
 
