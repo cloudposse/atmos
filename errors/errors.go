@@ -448,6 +448,7 @@ var (
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformMetadata           = errors.New("invalid terraform metadata section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
@@ -457,6 +458,7 @@ var (
 	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
 	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
 	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
+	ErrInvalidHelmfileMetadata = errors.New("invalid helmfile metadata section")
 
 	// Helmfile configuration errors.
 	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
@@ -475,6 +477,7 @@ var (
 	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
 	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
 	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
+	ErrInvalidPackerMetadata = errors.New("invalid packer metadata section")
 
 	// Ansible configuration errors.
 	ErrMissingAnsibleBasePath = errors.New("ansible base path is required")
