@@ -46,6 +46,15 @@ $ kubectl get pods
 $ atmos auth login dev-admin
 # Kubeconfig automatically configured for all linked EKS clusters
 
+# Explicit identity via flag (equivalent to positional arg)
+$ atmos auth login --identity dev-admin
+
+# Interactive identity selection (when multiple identities exist)
+$ atmos auth login --identity
+
+# With configuration profile overlay
+$ atmos auth login dev-admin --profile production
+
 # Or explicit cluster setup using existing atmos aws command
 $ atmos aws eks update-kubeconfig dev/eks
 
@@ -111,17 +120,31 @@ EKS follows the **integration pattern** established by ECR authentication (PR #1
 
 ### Integration Interface
 
-EKS implements the same `Integration` interface as ECR:
+EKS implements the `Integration` interface. This PRD proposes extending the current interface
+(which has only `Kind()` and `Execute()`) with `Cleanup()` and `Environment()` methods to
+support logout cleanup and environment variable composition:
 
 ```go
 // Integration interface (defined in pkg/auth/integrations/types.go).
+// Current interface has Kind() and Execute(). This PRD adds Cleanup() and Environment().
 type Integration interface {
     // Kind returns the integration type (e.g., "aws/ecr", "aws/eks").
     Kind() string
 
-    // Execute performs the integration using the provided AWS credentials.
+    // Execute performs the integration using the provided credentials.
     // Returns nil on success, error on failure.
     Execute(ctx context.Context, creds types.ICredentials) error
+
+    // Cleanup reverses the effects of Execute (e.g., removes kubeconfig entries, docker logout).
+    // Called during identity/provider logout to clean up integration artifacts.
+    // Idempotent — returns nil if nothing to clean up.
+    // Errors are non-fatal during logout (logged as warnings, do not block logout).
+    Cleanup(ctx context.Context) error
+
+    // Environment returns environment variables contributed by this integration.
+    // Returns vars based on configuration (deterministic), not Execute() output.
+    // Called by the manager when composing env vars for atmos auth env / auth shell.
+    Environment() (map[string]string, error)
 }
 
 // IntegrationConfig wraps the schema.Integration with the integration name.
@@ -378,16 +401,25 @@ kubeDir, err := xdg.GetXDGConfigDir("kube", 0o700)
 
 #### Environment Variable Integration
 
-The EKS integration appends the Atmos kubeconfig path to the existing `KUBECONFIG` environment
-variable using colon-separated notation (standard kubectl behavior). The append is **idempotent** —
-if the Atmos path is already present, it will not be duplicated.
+The EKS integration contributes `KUBECONFIG` to the environment via the `Environment()` method
+on the `Integration` interface (see [Integration Interface](#integration-interface) and
+[Integration Environment Variables](#integration-environment-variables)). The manager appends the
+Atmos kubeconfig path to the existing `KUBECONFIG` using colon-separated notation (standard
+kubectl behavior). The append is **idempotent** — if the Atmos path is already present, it
+will not be duplicated.
 
 ```bash
 # Before: KUBECONFIG=~/.kube/config
 # After:  KUBECONFIG=~/.kube/config:~/.config/atmos/kube/config
 ```
 
-Users can export all auth environment variables (including the updated `KUBECONFIG`) at once:
+**Multiple EKS integrations under one identity:** When an identity has multiple EKS integrations
+(e.g., `dev/eks-blue` and `dev/eks-green`), all clusters are written to the same kubeconfig file
+(as separate contexts). Both integrations return the same `KUBECONFIG` path from `Environment()`,
+so the manager deduplicates before composing the colon-separated value.
+
+Users can export all auth environment variables (including integration-contributed variables
+like `KUBECONFIG`) at once:
 
 ```bash
 eval $(atmos auth env)
@@ -422,17 +454,19 @@ Usage:
   atmos aws eks update-kubeconfig --integration <name>  Use named integration
   atmos aws eks update-kubeconfig --name <cluster>      Explicit cluster name
 
-Flags:
-  -s, --stack string         Stack name (with component)
-      --integration string   Named integration from auth.integrations
+Flags (existing):
+  -s, --stack string         Stack name (env: ATMOS_STACK)
       --name string          EKS cluster name (explicit mode)
-      --region string        AWS region
-      --profile string       AWS profile
+      --region string        AWS region (env: ATMOS_AWS_REGION, AWS_REGION)
+      --profile string       AWS CLI profile (env: ATMOS_AWS_PROFILE, AWS_PROFILE)
       --role-arn string      IAM role ARN to assume
       --alias string         Context alias in kubeconfig
-      --kubeconfig string    Custom kubeconfig path
-      --dry-run              Print kubeconfig to stdout instead of writing
-      --verbose              Print detailed output
+      --kubeconfig string    Custom kubeconfig path (env: ATMOS_KUBECONFIG, KUBECONFIG)
+      --dry-run              Print generated kubeconfig to stdout without writing
+      --verbose              Enable verbose output
+
+Flags (new):
+      --integration string   Named integration from auth.integrations
 
 Examples:
   # Using a component (existing behavior, now with Go SDK)
@@ -444,6 +478,20 @@ Examples:
   # Explicit cluster
   atmos aws eks update-kubeconfig --name dev-cluster --region us-east-2 --alias dev
 ```
+
+**Flag disambiguation:**
+
+The `--profile` flag on `atmos aws eks update-kubeconfig` maps to `AWS_PROFILE` (the AWS CLI
+profile to use for authentication). This is distinct from the global `--profile` flag which maps
+to `ATMOS_PROFILE` (Atmos configuration profile overlays). The EKS command uses
+`flags.WithViperPrefix("eks")` to namespace its Viper keys under `eks.*`, preventing collision
+(see PR #2077).
+
+The `--identity` flag is available on all `atmos auth` subcommands (including `atmos auth eks-token`)
+as a PersistentFlag inherited from `authCmd`. It is **not** available on
+`atmos aws eks update-kubeconfig` because this command lives under the `aws` command tree, not
+`auth`. When using the `--integration` flag, identity resolution happens automatically from the
+integration's `via.identity` field.
 
 ### Error Handling
 
@@ -470,6 +518,90 @@ var (
 | `atmos auth login` (auto-provision) | Warn and continue; don't fail authentication |
 | `atmos aws eks update-kubeconfig` (explicit) | Return error to user |
 | Invalid configuration | Validation error during config load |
+
+### Integration Cleanup on Logout
+
+Today, `manager.Logout()` cleans up identity credentials (keyring entries and identity-specific
+files) but does not touch integration artifacts. This means logging out leaves stale kubeconfig
+entries and docker sessions. Since login triggers integrations, logout should undo their effects.
+
+**Updated logout flow for `manager.Logout(identityName)`:**
+
+1. Find all integrations linked to the identity (`findIntegrationsForIdentity(name, false)`)
+2. Create each integration instance via the registry
+3. Call `Cleanup()` on each (non-fatal — log warnings, do not block logout)
+4. Proceed with existing keyring deletion and `identity.Logout()` (unchanged)
+
+The same pattern applies to `LogoutProvider()` (cleanup integrations for all identities using
+that provider) and `LogoutAll()`.
+
+**EKS `Cleanup()` implementation:**
+- Remove the cluster, context, and user entries from the kubeconfig file (via `clientcmd`)
+- If the kubeconfig file is empty after removal, delete the file
+- Remove the Atmos kubeconfig path from `KUBECONFIG` if it was appended
+
+**ECR `Cleanup()` implementation:**
+- Call `docker.ConfigManager.RemoveAuth()` with the registry URL
+- This method already exists at `pkg/auth/cloud/docker/config.go`
+
+### Integration Environment Variables
+
+Providers and identities declare environment variables via `Environment()` and
+`PrepareEnvironment()` methods (see `pkg/auth/types/interfaces.go`). Integrations currently
+do not participate in this system. For EKS, `KUBECONFIG` must be set; for ECR, `DOCKER_CONFIG`
+may need to be set. This section specifies how integrations contribute to the env var system.
+
+**Design decision:** The `Environment()` method on the `Integration` interface (see
+[Integration Interface](#integration-interface)) returns env vars based on configuration
+(deterministic from config), not from `Execute()` output. For EKS, the kubeconfig path is
+known from the XDG default or `spec.cluster.kubeconfig.path`, so `Environment()` works without
+calling `DescribeCluster`.
+
+**Manager composition flow (updated `GetEnvironmentVariables` and `PrepareShellEnvironment`):**
+
+1. Get identity env vars (existing behavior — calls `identity.Environment()`)
+2. Find linked integrations for the identity (`findIntegrationsForIdentity(name, false)`)
+3. Call `Environment()` on each integration instance
+4. Merge integration env vars into identity env vars using composition rules
+
+**Composition strategy:**
+
+| Variable | Strategy | Rationale |
+|----------|----------|-----------|
+| `KUBECONFIG` | Colon-separated concatenation (idempotent, deduplicated) | Standard kubectl behavior for multiple kubeconfig files |
+| All others | Last integration in config order wins | Simple default; avoids overcomplicating for single-value vars |
+
+The manager maintains a small set of known composable variables and their delimiters. This set
+can be extended as new integration types are added.
+
+**EKS `Environment()` implementation:**
+
+Returns `{"KUBECONFIG": "<path>"}` where `<path>` is the XDG default
+(`~/.config/atmos/kube/config`) or the custom path from `spec.cluster.kubeconfig.path`.
+
+**ECR `Environment()` implementation:**
+
+Returns `{"DOCKER_CONFIG": "<docker-config-dir>"}`, matching what `cmd/auth_ecr_login.go`
+already sets via `os.Setenv`.
+
+**Multi-integration scenarios:**
+
+| Scenario | Behavior |
+|----------|----------|
+| Blue/green clusters (`dev/eks-blue`, `dev/eks-green`) under same identity | Both write different contexts to the same kubeconfig file. Both return the same `KUBECONFIG` path. Manager deduplicates. |
+| Mixed integrations (`dev/eks` + `dev/ecr`) under same identity | EKS returns `KUBECONFIG`, ECR returns `DOCKER_CONFIG`. No overlap — simple merge. |
+| Multiple identities with EKS integrations | Each identity's env vars are composed independently when queried via `atmos auth env --identity <name>`. |
+
+**Alternatives considered:**
+
+- **Side-effect during Execute():** Integrations call `os.Setenv()` during `Execute()`. Simpler,
+  and ECR already does this in `cmd/auth_ecr_login.go`. However, this is not declarative, not
+  composable (last write wins), and breaks `atmos auth env` which needs env vars without executing
+  integrations.
+
+- **File-based contract:** Integrations write to well-known XDG paths; identity's `Environment()`
+  discovers and includes them. Simpler, but creates tight coupling between identity and integration
+  implementations.
 
 ## Implementation Details
 
@@ -530,8 +662,10 @@ internal/exec/
 
 #### 4. EKS Integration (`pkg/auth/integrations/aws/eks.go`)
 
-- Implements `Integration` interface
+- Implements `Integration` interface (all four methods)
 - `Execute()` - DescribeCluster + write kubeconfig
+- `Cleanup()` - Remove cluster/context/user entries from kubeconfig file
+- `Environment()` - Return `{"KUBECONFIG": "<path>"}` (deterministic from config)
 - Validates configuration during construction
 
 #### 5. Enhanced CLI Command (`cmd/aws/eks/update_kubeconfig.go`)
@@ -574,6 +708,20 @@ internal/exec/
 - Test missing cluster config
 - Test missing via.identity
 - Test Execute with mock credentials
+- Test Cleanup removes cluster/context/user entries from kubeconfig
+- Test Cleanup with non-existent kubeconfig file (idempotent)
+- Test Environment returns correct KUBECONFIG path (XDG default and custom)
+
+**Integration Logout (`pkg/auth/manager_logout_test.go`):**
+- Test Logout calls Cleanup on linked integrations
+- Test Cleanup errors are non-fatal (logout still succeeds)
+- Test LogoutProvider cleans up integrations for all affected identities
+
+**Integration Environment Composition (`pkg/auth/manager_environment_test.go`):**
+- Test GetEnvironmentVariables includes integration env vars
+- Test KUBECONFIG colon-separated composition with deduplication
+- Test multiple integrations under one identity (EKS + ECR)
+- Test blue/green clusters produce deduplicated KUBECONFIG path
 
 **CLI Command (`cmd/aws/eks/update_kubeconfig_test.go`):**
 - Use `cmd.NewTestKit(t)` for command isolation
@@ -775,7 +923,7 @@ This pattern means `atmos auth login dev-admin` authenticates to AWS *and* confi
 1. **Token caching**: Cache EKS tokens to reduce API calls
 2. **Namespace support**: Set default namespace in kubeconfig context
 3. **Role ARN in exec plugin**: Embed `--role-arn` in the kubeconfig exec plugin args so kubectl token refresh assumes a role at runtime. This is distinct from the existing `--role-arn` flag on `atmos aws eks update-kubeconfig`, which applies role assumption at kubeconfig generation time only
-4. **Kubeconfig cleanup**: Command to remove stale cluster entries
+4. **CI/CD workflow**: Define how `atmos auth eks-token` works in CI environments where AWS credentials come from OIDC/instance profiles rather than `atmos auth login`
 
 ## References
 
@@ -794,3 +942,6 @@ This pattern means `atmos auth login dev-admin` authenticates to AWS *and* confi
 | 1.2 | 2026-02-17 | AI Assistant | Synced PRD with codebase after rebase: fixed Integration interface, corrected architecture diagram, updated file paths, noted `buildAWSConfigFromCreds` reuse, updated dependency status |
 | 1.3 | 2026-02-17 | AI Assistant | Changed exec credential plugin from `aws` to `atmos auth eks-token` (eliminates AWS CLI dependency), added `GetToken()` to package structure, simplified XDG path section, moved "Atmos as exec plugin" from Future Enhancements to core design |
 | 1.4 | 2026-02-18 | AI Assistant | Added identity flag and `interactiveMode: Never` to exec plugin spec, specified KUBECONFIG colon-separated append semantics (idempotent), fixed command path to `cmd/auth_eks_token.go` (follows existing auth subcommand pattern), specified `KubeconfigSettings.Mode` octal parsing with `strconv.ParseUint`, replaced custom `MergeKubeconfig` with `k8s.io/client-go/tools/clientcmd` merge |
+| 1.5 | 2026-02-18 | AI Assistant | Synced with codebase review: updated KubeconfigSettings.Update validation, added k8s.io/client-go and PR #1903 to Dependencies, fixed `atmos auth env` format |
+| 1.6 | 2026-03-03 | AI Assistant | Rewrote executive summary and problem statement, added Terraform Kubernetes provider section |
+| 1.7 | 2026-03-03 | AI Assistant | Added `--identity`/`--profile` flags to Desired Workflow, added `Cleanup()` and `Environment()` to Integration interface for logout cleanup and env var composition, added Integration Cleanup on Logout and Integration Environment Variables sections, updated CLI command flags with env var bindings and flag disambiguation, replaced kubeconfig cleanup future enhancement with CI/CD workflow |
