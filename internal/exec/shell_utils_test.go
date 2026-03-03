@@ -621,6 +621,29 @@ func TestExecuteShellCommand(t *testing.T) {
 			"ATMOS_FORCE_TTY should not be overridden by auto-injection")
 	})
 
+	t.Run("ATMOS_FORCE_TTY from parent env suppresses auto-injection", func(t *testing.T) {
+		// When ATMOS_FORCE_TTY is already in the parent environment (os.Environ()),
+		// auto-injection must not add a duplicate. The subprocess should see the parent value.
+		outFile := filepath.Join(t.TempDir(), "force_tty_parent.txt")
+
+		t.Setenv("ATMOS_FORCE_TTY", "from-parent")
+		err := ExecuteShellCommand(
+			atmosConfig,
+			"sh",
+			[]string{"-c", fmt.Sprintf(`printenv ATMOS_FORCE_TTY > %s`, outFile)},
+			".",
+			nil, // no step-level env
+			false,
+			"",
+		)
+		require.NoError(t, err)
+
+		content, readErr := os.ReadFile(outFile)
+		require.NoError(t, readErr)
+		assert.Equal(t, "from-parent\n", string(content),
+			"ATMOS_FORCE_TTY from parent env should be preserved, not duplicated")
+	})
+
 	t.Run("ATMOS_FORCE_TTY not auto-injected in non-TTY environment", func(t *testing.T) {
 		// In a non-TTY test environment, ATMOS_FORCE_TTY must not be auto-injected.
 		// The subprocess should not see it unless explicitly provided.
@@ -696,6 +719,24 @@ func TestEnvKeyIsSet(t *testing.T) {
 			env:      nil,
 			key:      "ANY_KEY",
 			expected: false,
+		},
+		{
+			name:     "duplicate keys returns true on first match",
+			env:      []string{"FOO=first", "FOO=second"},
+			key:      "FOO",
+			expected: true,
+		},
+		{
+			name:     "key as value does not match",
+			env:      []string{"OTHER=ATMOS_FORCE_TTY"},
+			key:      "ATMOS_FORCE_TTY",
+			expected: false,
+		},
+		{
+			name:     "key with equals in value",
+			env:      []string{"FOO=bar=baz"},
+			key:      "FOO",
+			expected: true,
 		},
 	}
 
