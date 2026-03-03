@@ -112,6 +112,7 @@ var (
 
 	ErrYamlFuncInvalidArguments         = errors.New("invalid number of arguments in the Atmos YAML function")
 	ErrAwsGetCallerIdentity             = errors.New("failed to get AWS caller identity")
+	ErrAwsDescribeOrganization          = errors.New("failed to describe AWS organization")
 	ErrDescribeComponent                = errors.New("failed to describe component")
 	ErrReadTerraformState               = errors.New("failed to read Terraform state")
 	ErrEvaluateTerraformBackendVariable = errors.New("failed to evaluate terraform backend variable")

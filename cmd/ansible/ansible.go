@@ -127,6 +127,11 @@ func buildConfigAndStacksInfo(cmd *cobra.Command) schema.ConfigAndStacksInfo {
 		info.Stack = stackFlag.Value.String()
 	}
 
+	// Get dry-run from flag if provided.
+	if dryRunFlag := cmd.Flag("dry-run"); dryRunFlag != nil && dryRunFlag.Value.String() == "true" {
+		info.DryRun = true
+	}
+
 	return info
 }
 
