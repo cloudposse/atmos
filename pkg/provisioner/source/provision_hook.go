@@ -21,9 +21,6 @@ import (
 // HookEventBeforeTerraformInit is the hook event for before terraform init.
 const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.init")
 
-// WorkdirPath is the standard workdir directory name.
-const WorkdirPath = ".workdir"
-
 // DirPermissions is the default permission mode for directories.
 const DirPermissions = 0o755
 
@@ -191,11 +188,6 @@ func determineSourceTargetDirectory(
 	component string,
 	componentConfig map[string]any,
 ) (string, bool, error) {
-	basePath := atmosConfig.BasePath
-	if basePath == "" {
-		basePath = "."
-	}
-
 	// Check if workdir is enabled.
 	if isWorkdirEnabled(componentConfig) {
 		// Get stack name for workdir path.
@@ -207,18 +199,12 @@ func determineSourceTargetDirectory(
 				Err()
 		}
 
-		// Use atmos_component (instance name) for workdir path isolation,
-		// matching the workdir provisioner behavior from PR #2093.
-		// This ensures JIT-vendored components use the same workdir path
-		// as the workdir provisioner when metadata.component differs from the instance name.
-		workdirComponent := component
-		if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
-			workdirComponent = atmosComponent
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
 		}
 
-		// Build workdir path: .workdir/<componentType>/<stack>-<workdirComponent>/
-		workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
-		workdirPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
 		return workdirPath, true, nil
 	}
 

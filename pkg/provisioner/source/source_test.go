@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -486,7 +487,7 @@ func TestDetermineTargetDirectory_WorkdirEnabled(t *testing.T) {
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "vpc", componentConfig)
 	require.NoError(t, err)
 	// Expecting: <tempDir>/.workdir/terraform/dev-vpc/
-	expected := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-vpc")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
 	assert.Equal(t, expected, result)
 }
 
@@ -517,7 +518,7 @@ func TestDetermineTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
 	// Pass the base component name, but expect the workdir to use atmos_component (instance name).
 	result, err := DetermineTargetDirectory(atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig)
 	require.NoError(t, err)
-	expected := filepath.Join(tempDir, WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
 	assert.Equal(t, expected, result)
 }
 

@@ -214,7 +214,7 @@ func TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) 
 	)
 	require.NoError(t, err)
 	assert.True(t, isWorkdir)
-	expected := filepath.Join(tempDir, WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
 	assert.Equal(t, expected, targetDir)
 }
 
@@ -240,7 +240,7 @@ func TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent(t *testing.T
 	)
 	require.NoError(t, err)
 	assert.True(t, isWorkdir)
-	expected := filepath.Join(tempDir, WorkdirPath, "terraform", "dev-vpc")
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
 	assert.Equal(t, expected, targetDir)
 }
 
