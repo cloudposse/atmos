@@ -455,6 +455,9 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 	workdirPaths := make(map[string]string)
 
 	// Provision workdirs for all instances.
+	// NOTE: No explicit "component_path" is set here. The fix ensures that extractComponentPath()
+	// uses the base component name (from "component" key) to build the correct source path,
+	// rather than the atmos_component (instance name) which would point to a non-existent directory.
 	for _, instance := range componentInstances {
 		componentConfig := map[string]any{
 			"atmos_component": instance.atmosComponent,
@@ -468,8 +471,6 @@ func TestComponentInstancesWithSameBaseComponent(t *testing.T) {
 					"enabled": true,
 				},
 			},
-			// Point to the shared elasticache component path.
-			"component_path": elasticacheDir,
 		}
 
 		err := ProvisionWorkdir(ctx, atmosConfig, componentConfig, nil)
@@ -610,7 +611,8 @@ func TestAtmosComponentPriority_OverridesBaseComponent(t *testing.T) {
 		},
 	}
 
-	// atmos_component should win over component and metadata.component.
+	// atmos_component should win over component and metadata.component for workdir naming.
+	// The source path should be resolved from the base component ("s3-bucket"), not the instance name.
 	componentConfig := map[string]any{
 		"atmos_component": "s3-bucket-logs",
 		"component":       "s3-bucket",
@@ -623,7 +625,6 @@ func TestAtmosComponentPriority_OverridesBaseComponent(t *testing.T) {
 				"enabled": true,
 			},
 		},
-		"component_path": baseDir,
 	}
 
 	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
@@ -792,6 +793,8 @@ func TestConcurrentComponentInstances(t *testing.T) {
 		go func(instanceName string) {
 			defer wg.Done()
 
+			// NOTE: No explicit "component_path" is set. The fix ensures source path
+			// is resolved from "component" key (base component), not atmos_component (instance).
 			componentConfig := map[string]any{
 				"atmos_component": instanceName,
 				"component":       "elasticache",
@@ -804,7 +807,6 @@ func TestConcurrentComponentInstances(t *testing.T) {
 						"enabled": true,
 					},
 				},
-				"component_path": baseDir,
 			}
 
 			ctx := context.Background()
@@ -985,6 +987,163 @@ func (e *errorDirEntry) Name() string               { return "error" }
 func (e *errorDirEntry) IsDir() bool                 { return false }
 func (e *errorDirEntry) Type() os.FileMode           { return 0 }
 func (e *errorDirEntry) Info() (os.FileInfo, error)  { return nil, os.ErrPermission }
+
+// TestProductionFlowWithComponentInfo tests the production flow where component_info.component_path
+// is set (as done by internal/exec/utils.go) but top-level component_path is NOT set.
+// This validates that extractComponentPath() correctly reads the nested path.
+func TestProductionFlowWithComponentInfo(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create the shared base component directory.
+	baseDir := filepath.Join(tempDir, "components", "terraform", "elasticache")
+	require.NoError(t, os.MkdirAll(baseDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "main.tf"), []byte("# elasticache"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Simulate the production ComponentSection as built by internal/exec/utils.go:
+	// - atmos_component = instance name (from CLI arg)
+	// - component = base component (from metadata inheritance)
+	// - component_info.component_path = resolved path (set by constructTerraformComponentWorkingDir)
+	// - NO top-level component_path
+	componentConfig := map[string]any{
+		"atmos_component": "elasticache-redis-cluster-1",
+		"component":       "elasticache",
+		"atmos_stack":     "prod",
+		"metadata": map[string]any{
+			"component": "elasticache",
+		},
+		"component_info": map[string]any{
+			"component_path": baseDir,
+			"component_type": "terraform",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err)
+
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok, "workdir path should be set")
+
+	// Verify workdir uses the instance name (atmos_component).
+	expectedSuffix := filepath.Join("terraform", "prod-elasticache-redis-cluster-1")
+	assert.True(t, strings.HasSuffix(workdirPath, expectedSuffix),
+		"workdir path %s should end with %s", workdirPath, expectedSuffix)
+
+	// Verify main.tf was copied from the base component directory.
+	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# elasticache", string(content))
+
+	// Verify metadata records the instance name.
+	metadataPath := MetadataPath(workdirPath)
+	metadataBytes, err := os.ReadFile(metadataPath)
+	require.NoError(t, err)
+	assert.Contains(t, string(metadataBytes), `"component": "elasticache-redis-cluster-1"`)
+}
+
+// TestSourcePathUsesBaseComponentNotInstance verifies the critical fix:
+// the source path is resolved from the base component name, not the instance name.
+// Without this fix, the provisioner would look for components/terraform/elasticache-redis-cluster-1
+// which doesn't exist - the actual module is at components/terraform/elasticache.
+func TestSourcePathUsesBaseComponentNotInstance(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create ONLY the base component directory (not the instance name directory).
+	baseDir := filepath.Join(tempDir, "components", "terraform", "rds")
+	require.NoError(t, os.MkdirAll(baseDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(baseDir, "main.tf"), []byte("# rds module"), 0o644))
+
+	// Do NOT create components/terraform/rds-primary - this is the instance name, not a directory.
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	componentConfig := map[string]any{
+		"atmos_component": "rds-primary",
+		"component":       "rds",
+		"atmos_stack":     "dev",
+		"metadata": map[string]any{
+			"component": "rds",
+		},
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err, "should succeed using base component path, not instance name path")
+
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok)
+
+	// Workdir should be named after the instance.
+	assert.Contains(t, workdirPath, "dev-rds-primary")
+
+	// Content should come from the base component directory.
+	content, err := os.ReadFile(filepath.Join(workdirPath, "main.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# rds module", string(content))
+}
+
+// TestSourceComponentFallsBackToWorkdirComponent verifies that when no "component" key
+// is set (non-inherited component), the source path falls back to using atmos_component.
+func TestSourceComponentFallsBackToWorkdirComponent(t *testing.T) {
+	tempDir := t.TempDir()
+
+	// Create the component directory matching the atmos_component name.
+	compDir := filepath.Join(tempDir, "components", "terraform", "simple-vpc")
+	require.NoError(t, os.MkdirAll(compDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(compDir, "main.tf"), []byte("# simple vpc"), 0o644))
+
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+		Components: schema.Components{
+			Terraform: schema.Terraform{
+				BasePath: "components/terraform",
+			},
+		},
+	}
+
+	// Non-inherited component: atmos_component and component are the same.
+	componentConfig := map[string]any{
+		"atmos_component": "simple-vpc",
+		"component":       "simple-vpc",
+		"atmos_stack":     "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	err := ProvisionWorkdir(context.Background(), atmosConfig, componentConfig, nil)
+	require.NoError(t, err)
+
+	workdirPath, ok := componentConfig[WorkdirPathKey].(string)
+	require.True(t, ok)
+	assert.Contains(t, workdirPath, "dev-simple-vpc")
+}
 
 // Note: Tests for WorkdirPathKey extraction logic (used to override component path
 // in terraform execution) are in internal/exec/terraform_shell_test.go:TestWorkdirPathKeyExtraction.
