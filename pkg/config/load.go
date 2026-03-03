@@ -1364,11 +1364,17 @@ func populateLegacyIdentityCaseMap(caseMaps *casemap.CaseMaps, atmosConfig *sche
 // - Default viper hooks (StringToTimeDurationHookFunc, StringToSliceHookFunc)
 // - Custom TasksDecodeHook for flexible command steps parsing (strings or structs).
 func atmosDecodeHook() viper.DecoderConfigOption {
-	return viper.DecodeHook(mapstructure.ComposeDecodeHookFunc(
+	return viper.DecodeHook(getAtmosDecodeHookFunc())
+}
+
+// getAtmosDecodeHookFunc returns the decode hook function used for Atmos config unmarshaling.
+// Extracted as a separate function to allow reuse in both Viper and mapstructure contexts.
+func getAtmosDecodeHookFunc() mapstructure.DecodeHookFunc {
+	return mapstructure.ComposeDecodeHookFunc(
 		mapstructure.StringToTimeDurationHookFunc(),
 		mapstructure.StringToSliceHookFunc(SliceSeparator),
 		schema.TasksDecodeHook(),
-	))
+	)
 }
 
 // preserveCaseSensitiveMaps extracts original case for registered paths from raw YAML files.
@@ -1446,11 +1452,7 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 			decoder, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
 				Result:           &identity,
 				WeaklyTypedInput: true,
-				DecodeHook: mapstructure.ComposeDecodeHookFunc(
-					mapstructure.StringToTimeDurationHookFunc(),
-					mapstructure.StringToSliceHookFunc(","),
-					schema.TasksDecodeHook(),
-				),
+				DecodeHook:       getAtmosDecodeHookFunc(),
 			})
 			if err != nil {
 				log.Trace("Failed to create decoder for identity", "name", identityName, "error", err)

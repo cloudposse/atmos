@@ -12,7 +12,6 @@ import (
 )
 
 // TestIdentityNamesWithDots verifies that identity names containing dots are correctly parsed.
-// This tests the fix for: https://github.com/cloudposse/atmos/issues/XXXX
 // When auto-provisioning AWS SSO identities, account names can contain dots (e.g., "product.usa"),
 // and these should not be treated as nested paths by Viper.
 func TestIdentityNamesWithDots(t *testing.T) {
