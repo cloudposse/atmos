@@ -72,7 +72,7 @@ func TestTerraformToolchain_WithDependencies(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode (requires network)")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// Clean up any existing toolchain installations.
@@ -166,7 +166,7 @@ func TestTerraformToolchain_WithoutDependencies(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// Clean up any existing toolchain installations.
@@ -271,7 +271,7 @@ func TestTerraformToolchain_PathPropagation(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	toolsDir := ".tools"
@@ -355,7 +355,7 @@ func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 	// component processing), this can be enabled.
 	t.Skip("Skipping: terraform version subcommand bypasses toolchain dependency installation")
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	toolsDir := ".tools"
@@ -419,7 +419,7 @@ func TestTerraformToolchain_BinaryLocation(t *testing.T) {
 func TestTerraformToolchain_MixinLevelDependencies(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_MixinLevelDependencies")()
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// Initialize CLI config and process stacks via ProcessStacks, which handles
@@ -483,7 +483,7 @@ func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
 		t.Skip("Skipping toolchain integration test in short mode (requires network)")
 	}
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// Clean up any existing toolchain installations.
@@ -550,7 +550,7 @@ func TestTerraformToolchain_MixinLevelDependencies_PlanCommand(t *testing.T) {
 func TestTerraformToolchain_DependencyPrecedence(t *testing.T) {
 	defer perf.Track(nil, "tests.TestTerraformToolchain_DependencyPrecedence")()
 
-	workDir := "fixtures/scenarios/toolchain-terraform-integration"
+	workDir := filepath.Join("fixtures", "scenarios", "toolchain-terraform-integration")
 	t.Chdir(workDir)
 
 	// --- Test component that OVERRIDES Scope 2 at Scope 3 ---
