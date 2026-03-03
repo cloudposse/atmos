@@ -163,15 +163,16 @@ func executeListInstancesCmd(cmd *cobra.Command, args []string, opts *InstancesO
 	}
 
 	return list.ExecuteListInstancesCmd(&list.InstancesCommandOptions{
-		Info:        &configAndStacksInfo,
-		Cmd:         cmd,
-		Args:        args,
-		ShowImports: opts.Provenance,
-		ColumnsFlag: opts.Columns,
-		FilterSpec:  opts.Filter,
-		SortSpec:    opts.Sort,
-		Delimiter:   opts.Delimiter,
-		Query:       opts.Query,
-		AuthManager: authManager,
+		Info:         &configAndStacksInfo,
+		Cmd:          cmd,
+		Args:         args,
+		ShowImports:  opts.Provenance,
+		ColumnsFlag:  opts.Columns,
+		FilterSpec:   opts.Filter,
+		SortSpec:     opts.Sort,
+		Delimiter:    opts.Delimiter,
+		Query:        opts.Query,
+		StackPattern: opts.Stack,
+		AuthManager:  authManager,
 	})
 }

@@ -116,7 +116,7 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	}
 
 	// Process instances (same as list instances, but we'll extract metadata).
-	instances, err := processInstances(&atmosConfig, opts.AuthManager)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.Stack)
 	if err != nil {
 		return errors.Join(errUtils.ErrProcessInstances, err)
 	}

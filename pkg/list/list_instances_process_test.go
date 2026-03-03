@@ -42,7 +42,7 @@ func TestProcessInstancesWithDeps_Success(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, "")
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 2)
@@ -66,7 +66,7 @@ func TestProcessInstancesWithDeps_ExecuteDescribeStacksError(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(nil, expectedErr)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, "")
 
 	assert.Error(t, err)
 	assert.Nil(t, instances)
@@ -87,7 +87,7 @@ func TestProcessInstancesWithDeps_EmptyStacksMap(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, "")
 
 	assert.NoError(t, err)
 	assert.Empty(t, instances)
@@ -136,7 +136,7 @@ func TestProcessInstancesWithDeps_MultipleStacks(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, "")
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 3)
@@ -177,7 +177,7 @@ func TestProcessInstancesWithDeps_AbstractComponentsFiltered(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, "")
 
 	assert.NoError(t, err)
 	assert.Len(t, instances, 1)
@@ -213,11 +213,93 @@ func TestProcessInstancesWithDeps_InvalidStackStructure(t *testing.T) {
 		ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, nil).
 		Return(stacksMap, nil)
 
-	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil)
+	instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, "")
 
 	assert.NoError(t, err)
 	// Only prod stack should be processed successfully.
 	assert.Len(t, instances, 1)
 	assert.Equal(t, "vpc", instances[0].Component)
 	assert.Equal(t, "prod", instances[0].Stack)
+}
+
+// TestProcessInstancesWithDeps_StackPatternFilter tests that the stack pattern is forwarded
+// to ExecuteDescribeStacks so only matching stacks are loaded and processed.
+func TestProcessInstancesWithDeps_StackPatternFilter(t *testing.T) {
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	makeStack := func(component string) map[string]interface{} {
+		return map[string]interface{}{
+			"components": map[string]interface{}{
+				"terraform": map[string]interface{}{
+					component: map[string]interface{}{
+						"metadata": map[string]interface{}{"type": "real"},
+					},
+				},
+			},
+		}
+	}
+
+	testCases := []struct {
+		name           string
+		stackPattern   string
+		// returnedMap simulates what ExecuteDescribeStacks returns after applying the filter.
+		returnedMap    map[string]interface{}
+		expectedStacks []string
+	}{
+		{
+			name:         "exact match - only prod stack returned",
+			stackPattern: "prod",
+			returnedMap: map[string]interface{}{
+				"prod": makeStack("vpc"),
+			},
+			expectedStacks: []string{"prod"},
+		},
+		{
+			name:         "glob pattern - only staging returned",
+			stackPattern: "stag*",
+			returnedMap: map[string]interface{}{
+				"staging": makeStack("app"),
+			},
+			expectedStacks: []string{"staging"},
+		},
+		{
+			name:         "empty pattern - all stacks returned",
+			stackPattern: "",
+			returnedMap: map[string]interface{}{
+				"dev":     makeStack("vpc"),
+				"prod":    makeStack("vpc"),
+				"staging": makeStack("app"),
+			},
+			expectedStacks: []string{"dev", "prod", "staging"},
+		},
+		{
+			name:           "no match - empty map returned",
+			stackPattern:   "nonexistent",
+			returnedMap:    map[string]interface{}{},
+			expectedStacks: []string{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			mockStacksProcessor := e.NewMockStacksProcessor(ctrl)
+
+			// Verify the pattern is passed through to ExecuteDescribeStacks.
+			mockStacksProcessor.EXPECT().
+				ExecuteDescribeStacks(atmosConfig, tc.stackPattern, nil, nil, nil, false, true, true, false, nil, nil).
+				Return(tc.returnedMap, nil)
+
+			instances, err := processInstancesWithDeps(atmosConfig, mockStacksProcessor, nil, tc.stackPattern)
+
+			assert.NoError(t, err)
+			assert.Len(t, instances, len(tc.expectedStacks))
+
+			for _, inst := range instances {
+				assert.Contains(t, tc.expectedStacks, inst.Stack)
+			}
+		})
+	}
 }

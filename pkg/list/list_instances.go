@@ -38,16 +38,17 @@ var defaultInstanceColumns = []column.Config{
 
 // InstancesCommandOptions contains options for the list instances command.
 type InstancesCommandOptions struct {
-	Info        *schema.ConfigAndStacksInfo
-	Cmd         *cobra.Command
-	Args        []string
-	ShowImports bool
-	ColumnsFlag []string
-	FilterSpec  string
-	SortSpec    string
-	Delimiter   string
-	Query       string
-	AuthManager auth.AuthManager
+	Info         *schema.ConfigAndStacksInfo
+	Cmd          *cobra.Command
+	Args         []string
+	ShowImports  bool
+	ColumnsFlag  []string
+	FilterSpec   string
+	SortSpec     string
+	Delimiter    string
+	Query        string
+	StackPattern string
+	AuthManager  auth.AuthManager
 }
 
 // parseColumnsFlag parses column specifications from CLI flag.
@@ -343,15 +344,17 @@ func processInstancesWithDeps(
 	atmosConfig *schema.AtmosConfiguration,
 	stacksProcessor e.StacksProcessor,
 	authManager auth.AuthManager,
+	stackPattern string,
 ) ([]schema.Instance, error) {
-	// Get all stacks with template processing enabled to render template variables.
-	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, "", nil, nil, nil, false, true, true, false, nil, authManager)
+	// Pass stackPattern directly to ExecuteDescribeStacks so only matching stacks are
+	// loaded and their templates evaluated — avoids unnecessary work and auth failures.
+	stacksMap, err := stacksProcessor.ExecuteDescribeStacks(atmosConfig, stackPattern, nil, nil, nil, false, true, true, false, nil, authManager)
 	if err != nil {
 		log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 		return nil, errors.Join(errUtils.ErrExecuteDescribeStacks, err)
 	}
 
-	// Collect instances.
+	// Collect instances from the (already-filtered) stacks map.
 	instances := collectInstances(stacksMap)
 
 	// Sort instances.
@@ -362,8 +365,8 @@ func processInstancesWithDeps(
 
 // processInstances collects, filters, and sorts instances.
 // This is a convenience wrapper around processInstancesWithDeps() for production use.
-func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager) ([]schema.Instance, error) {
-	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager)
+func processInstances(atmosConfig *schema.AtmosConfiguration, authManager auth.AuthManager, stackPattern string) ([]schema.Instance, error) {
+	return processInstancesWithDeps(atmosConfig, &e.DefaultStacksProcessor{}, authManager, stackPattern)
 }
 
 // ExecuteListInstancesCmd executes the list instances command.
@@ -428,7 +431,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 	}
 
 	// For non-tree formats, process instances normally.
-	instances, err := processInstances(&atmosConfig, opts.AuthManager)
+	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.StackPattern)
 	if err != nil {
 		log.Error(errUtils.ErrProcessInstances.Error(), "error", err)
 		return errors.Join(errUtils.ErrProcessInstances, err)
