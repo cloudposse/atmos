@@ -1067,6 +1067,12 @@ a[class*="table-of-contents__link"] {
 
 /* Drag handle: invisible strip on right edge of sidebar, visible on hover */
 @media (min-width: 997px) {
+    .theme-doc-sidebar-container {
+        width: var(--doc-sidebar-width, 300px) !important;
+        min-width: var(--doc-sidebar-width, 300px) !important;
+        flex: 0 0 var(--doc-sidebar-width, 300px) !important;
+    }
+
     .theme-doc-sidebar-container::after {
         content: '';
         position: absolute;

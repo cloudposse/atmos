@@ -61,7 +61,10 @@ export default function SidebarResizeHandler(): null {
         const current = getComputedStyle(document.documentElement)
           .getPropertyValue('--doc-sidebar-width')
           .trim();
-        localStorage.setItem(STORAGE_KEY, parseInt(current, 10).toString());
+        const parsed = parseInt(current, 10);
+        if (!Number.isNaN(parsed)) {
+          localStorage.setItem(STORAGE_KEY, parsed.toString());
+        }
       };
 
       sidebar.addEventListener('mousedown', onMouseDown);
