@@ -363,17 +363,7 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext and AuthManager if provided (from --identity flag).
-						// AuthContext carries credentials (e.g., AWS SSO profile).
-						// AuthManager is needed by YAML functions like !terraform.state and
-						// !terraform.output for nested component auth resolution.
-						if authManager != nil {
-							configAndStacksInfo.AuthManager = authManager
-							managerStackInfo := authManager.GetStackInfo()
-							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-							}
-						}
+						propagateAuth(&configAndStacksInfo, authManager)
 
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
@@ -629,17 +619,7 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext and AuthManager if provided (from --identity flag).
-						// AuthContext carries credentials (e.g., AWS SSO profile).
-						// AuthManager is needed by YAML functions like !terraform.state and
-						// !terraform.output for nested component auth resolution.
-						if authManager != nil {
-							configAndStacksInfo.AuthManager = authManager
-							managerStackInfo := authManager.GetStackInfo()
-							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-							}
-						}
+						propagateAuth(&configAndStacksInfo, authManager)
 
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
@@ -872,17 +852,7 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext and AuthManager if provided (from --identity flag).
-						// AuthContext carries credentials (e.g., AWS SSO profile).
-						// AuthManager is needed by YAML functions like !terraform.state and
-						// !terraform.output for nested component auth resolution.
-						if authManager != nil {
-							configAndStacksInfo.AuthManager = authManager
-							managerStackInfo := authManager.GetStackInfo()
-							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-							}
-						}
+						propagateAuth(&configAndStacksInfo, authManager)
 
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
@@ -1115,17 +1085,7 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext and AuthManager if provided (from --identity flag).
-						// AuthContext carries credentials (e.g., AWS SSO profile).
-						// AuthManager is needed by YAML functions like !terraform.state and
-						// !terraform.output for nested component auth resolution.
-						if authManager != nil {
-							configAndStacksInfo.AuthManager = authManager
-							managerStackInfo := authManager.GetStackInfo()
-							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
-								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
-							}
-						}
+						propagateAuth(&configAndStacksInfo, authManager)
 
 						if comp, ok := configAndStacksInfo.ComponentSection[cfg.ComponentSectionName].(string); !ok || comp == "" {
 							configAndStacksInfo.ComponentSection[cfg.ComponentSectionName] = componentName
@@ -1395,4 +1355,19 @@ func buildComponentInfo(atmosConfig *schema.AtmosConfiguration, componentSection
 	componentInfo[cfg.ComponentPathSectionName] = relativePath
 
 	return componentInfo
+}
+
+// propagateAuth populates AuthContext and AuthManager on configAndStacksInfo
+// from the provided AuthManager. This bridges the auth system with per-component
+// YAML function processing so that functions like !terraform.state can use
+// authenticated credentials (e.g., AWS SSO).
+func propagateAuth(configAndStacksInfo *schema.ConfigAndStacksInfo, authManager auth.AuthManager) {
+	if authManager == nil {
+		return
+	}
+	configAndStacksInfo.AuthManager = authManager
+	managerStackInfo := authManager.GetStackInfo()
+	if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
+		configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
+	}
 }

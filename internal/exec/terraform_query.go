@@ -2,6 +2,7 @@ package exec
 
 import (
 	"errors"
+	"fmt"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/auth"
@@ -12,6 +13,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/store/authbridge"
 	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// authManagerFactory creates an AuthManager from the given parameters.
+// Package-level variable to allow test injection.
+var authManagerFactory = func(identity string, authConfig schema.AuthConfig, flagSelectValue string, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
+	mergedAuthConfig := auth.CopyGlobalAuthConfig(&authConfig)
+	return auth.CreateAndAuthenticateManagerWithAtmosConfig(identity, mergedAuthConfig, flagSelectValue, atmosConfig)
+}
 
 // ExecuteTerraformQuery executes `atmos terraform <command> --query <yq-expression --stack <stack>`.
 func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
@@ -87,15 +95,14 @@ func ExecuteTerraformQuery(info *schema.ConfigAndStacksInfo) error {
 func createQueryAuthManager(info *schema.ConfigAndStacksInfo, atmosConfig *schema.AtmosConfiguration) (auth.AuthManager, error) {
 	defer perf.Track(atmosConfig, "exec.createQueryAuthManager")()
 
-	mergedAuthConfig := auth.CopyGlobalAuthConfig(&atmosConfig.Auth)
-	authManager, err := auth.CreateAndAuthenticateManagerWithAtmosConfig(
-		info.Identity, mergedAuthConfig, cfg.IdentityFlagSelectValue, atmosConfig,
+	authManager, err := authManagerFactory(
+		info.Identity, atmosConfig.Auth, cfg.IdentityFlagSelectValue, atmosConfig,
 	)
 	if err != nil {
 		if errors.Is(err, errUtils.ErrUserAborted) {
 			errUtils.Exit(errUtils.ExitCodeSIGINT)
 		}
-		return nil, err
+		return nil, fmt.Errorf("create query auth manager: %w", err)
 	}
 
 	// Store AuthManager in info so downstream operations can reuse it.
