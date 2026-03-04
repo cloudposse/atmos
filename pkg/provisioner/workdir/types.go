@@ -1,6 +1,7 @@
 package workdir
 
 import (
+	"fmt"
 	"path/filepath"
 	"time"
 
@@ -101,3 +102,25 @@ const (
 	// the component path with the workdir path.
 	WorkdirPathKey = "_workdir_path"
 )
+
+// BuildPath constructs the canonical workdir path for a component instance.
+// It uses atmos_component (the instance name) from componentConfig when available,
+// falling back to the provided component name. This ensures all provisioners
+// (workdir, source, JIT) use the same directory for a given component instance.
+//
+// Path format: <basePath>/.workdir/<componentType>/<stack>-<instanceName>.
+func BuildPath(basePath, componentType, component, stack string, componentConfig map[string]any) string {
+	defer perf.Track(nil, "workdir.BuildPath")()
+
+	// Use atmos_component (instance name) for path isolation.
+	// When metadata.component differs from the instance name (e.g., inherited components),
+	// atmos_component contains the unique instance name while component/metadata.component
+	// contains the shared base name.
+	workdirComponent := component
+	if atmosComponent, ok := componentConfig["atmos_component"].(string); ok && atmosComponent != "" {
+		workdirComponent = atmosComponent
+	}
+
+	workdirName := fmt.Sprintf("%s-%s", stack, workdirComponent)
+	return filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+}
