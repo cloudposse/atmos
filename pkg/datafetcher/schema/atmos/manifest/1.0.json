@@ -617,7 +617,6 @@
             "yaml": {
               "type": "object",
               "description": "YAML parsing settings",
-              "additionalProperties": false,
               "properties": {
                 "key_delimiter": {
                   "type": "string",
