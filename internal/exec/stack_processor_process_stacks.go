@@ -78,24 +78,28 @@ func ProcessStackConfig(
 	terraformHooks := map[string]any{}
 	terraformGenerate := map[string]any{}
 	terraformAuth := map[string]any{}
+	terraformDependencies := map[string]any{}
 
 	helmfileVars := map[string]any{}
 	helmfileSettings := map[string]any{}
 	helmfileEnv := map[string]any{}
 	helmfileCommand := ""
 	helmfileAuth := map[string]any{}
+	helmfileDependencies := map[string]any{}
 
 	packerVars := map[string]any{}
 	packerSettings := map[string]any{}
 	packerEnv := map[string]any{}
 	packerCommand := ""
 	packerAuth := map[string]any{}
+	packerDependencies := map[string]any{}
 
 	ansibleVars := map[string]any{}
 	ansibleSettings := map[string]any{}
 	ansibleEnv := map[string]any{}
 	ansibleCommand := ""
 	ansibleAuth := map[string]any{}
+	ansibleDependencies := map[string]any{}
 
 	terraformComponents := map[string]any{}
 	helmfileComponents := map[string]any{}
@@ -326,6 +330,29 @@ func ProcessStackConfig(
 		}
 	}
 
+	// Global dependencies section (Scope 1).
+	globalDependenciesSection := map[string]any{}
+
+	if i, ok := config[cfg.DependenciesSectionName]; ok {
+		globalDependenciesSection, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidDependenciesSection, stackName)
+		}
+	}
+
+	// Terraform dependencies section (Scope 2).
+	if i, ok := globalTerraformSection[cfg.DependenciesSectionName]; ok {
+		terraformDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidTerraformDependencies, stackName)
+		}
+	}
+
+	globalAndTerraformDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, terraformDependencies})
+	if err != nil {
+		return nil, err
+	}
+
 	// Helmfile section.
 	if i, ok := globalHelmfileSection[cfg.CommandSectionName]; ok {
 		helmfileCommand, ok = i.(string)
@@ -379,6 +406,19 @@ func ProcessStackConfig(
 	}
 
 	globalAndHelmfileAuth, err := m.Merge(atmosConfig, []map[string]any{globalAuthSection, helmfileAuth})
+	if err != nil {
+		return nil, err
+	}
+
+	// Helmfile dependencies section (Scope 2).
+	if i, ok := globalHelmfileSection[cfg.DependenciesSectionName]; ok {
+		helmfileDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidHelmfileDependencies, stackName)
+		}
+	}
+
+	globalAndHelmfileDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, helmfileDependencies})
 	if err != nil {
 		return nil, err
 	}
@@ -440,6 +480,19 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	// Packer dependencies section (Scope 2).
+	if i, ok := globalPackerSection[cfg.DependenciesSectionName]; ok {
+		packerDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidPackerDependencies, stackName)
+		}
+	}
+
+	globalAndPackerDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, packerDependencies})
+	if err != nil {
+		return nil, err
+	}
+
 	// Ansible section.
 	if i, ok := globalAnsibleSection[cfg.CommandSectionName]; ok {
 		ansibleCommand, ok = i.(string)
@@ -497,6 +550,19 @@ func ProcessStackConfig(
 		return nil, err
 	}
 
+	// Ansible dependencies section (Scope 2).
+	if i, ok := globalAnsibleSection[cfg.DependenciesSectionName]; ok {
+		ansibleDependencies, ok = i.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf(errFormatWithFile, errUtils.ErrInvalidAnsibleDependencies, stackName)
+		}
+	}
+
+	globalAndAnsibleDependencies, err := m.Merge(atmosConfig, []map[string]any{globalDependenciesSection, ansibleDependencies})
+	if err != nil {
+		return nil, err
+	}
+
 	// Convert atmosConfig.Auth struct to map[string]any once before parallel processing.
 	// This prevents race conditions when processAuthConfig is called from multiple goroutines.
 	// Use JSON marshaling for deep conversion of nested structs to maps.
@@ -536,6 +602,7 @@ func ProcessStackConfig(
 					GlobalSettings:                  globalAndTerraformSettings,
 					GlobalEnv:                       globalAndTerraformEnv,
 					GlobalAuth:                      globalAndTerraformAuth,
+					GlobalDependencies:              globalAndTerraformDependencies,
 					GlobalCommand:                   terraformCommand,
 					AtmosGlobalAuthMap:              atmosAuthConfig,
 					TerraformProviders:              terraformProviders,
@@ -582,6 +649,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndHelmfileSettings,
 					GlobalEnv:                globalAndHelmfileEnv,
 					GlobalAuth:               globalAndHelmfileAuth,
+					GlobalDependencies:       globalAndHelmfileDependencies,
 					GlobalCommand:            helmfileCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -619,6 +687,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndPackerSettings,
 					GlobalEnv:                globalAndPackerEnv,
 					GlobalAuth:               globalAndPackerAuth,
+					GlobalDependencies:       globalAndPackerDependencies,
 					GlobalCommand:            packerCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
@@ -656,6 +725,7 @@ func ProcessStackConfig(
 					GlobalSettings:           globalAndAnsibleSettings,
 					GlobalEnv:                globalAndAnsibleEnv,
 					GlobalAuth:               globalAndAnsibleAuth,
+					GlobalDependencies:       globalAndAnsibleDependencies,
 					GlobalCommand:            ansibleCommand,
 					AtmosGlobalAuthMap:       atmosAuthConfig,
 					AtmosConfig:              atmosConfig,
