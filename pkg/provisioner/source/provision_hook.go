@@ -82,11 +82,17 @@ func AutoProvisionSource(
 	if sourceSpec.TTL == "" {
 		switch componentType {
 		case cfg.TerraformComponentType:
-			sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+			if atmosConfig.Components.Terraform.Source != nil {
+				sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+			}
 		case cfg.HelmfileComponentType:
-			sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
+			if atmosConfig.Components.Helmfile.Source != nil {
+				sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
+			}
 		case cfg.PackerComponentType:
-			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
+			if atmosConfig.Components.Packer.Source != nil {
+				sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
+			}
 		}
 	}
 

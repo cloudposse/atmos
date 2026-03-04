@@ -332,6 +332,7 @@ func TestNeedsProvisioning(t *testing.T) {
 	}
 }
 
+// TestNeedsProvisioning_TTL verifies TTL-based cache expiration triggers re-provisioning.
 func TestNeedsProvisioning_TTL(t *testing.T) {
 	tests := []struct {
 		name          string

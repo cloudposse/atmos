@@ -465,7 +465,7 @@ type Terraform struct {
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
 	// Source holds global source configuration defaults for JIT-vendored components.
-	Source SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type TerraformInit struct {
@@ -494,7 +494,7 @@ type Helmfile struct {
 	// Generated files are defined in the component's generate section.
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 	// Source holds global source configuration defaults for JIT-vendored components.
-	Source SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type Packer struct {
@@ -505,7 +505,7 @@ type Packer struct {
 	// Generated files are defined in the component's generate section.
 	AutoGenerateFiles bool `yaml:"auto_generate_files" json:"auto_generate_files" mapstructure:"auto_generate_files"`
 	// Source holds global source configuration defaults for JIT-vendored components.
-	Source SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
+	Source *SourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 // Ansible defines configuration for Ansible components.
