@@ -9,6 +9,7 @@ slug: /cli/configuration/settings
 ---
 import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 The `settings` section configures Atmos global settings that affect how stacks are processed, how lists are merged, how output is displayed, and how authentication tokens are injected for private repositories.
@@ -21,6 +22,10 @@ The `settings` section configures Atmos global settings that affect how stacks a
 settings:
   # Specifies how lists are merged in Atmos stack manifests
   list_merge_strategy: replace
+
+  # YAML parsing settings
+  yaml:
+    key_delimiter: "."
 
   # Terminal settings
   terminal:
@@ -40,11 +45,44 @@ settings:
 
 | Section | Description |
 |---------|-------------|
+| [YAML Settings](#yaml-settings) | YAML parsing behavior, key delimiter for dot notation |
 | [Experimental](/cli/configuration/settings/experimental) | Control experimental feature behavior |
 | [Terminal](/cli/configuration/settings/terminal) | Terminal display, color, width, pager, and syntax highlighting |
 | [Secret Masking](/cli/configuration/settings/mask) | Automatic secret detection and masking in output |
 | [Markdown Styling](/cli/configuration/settings/markdown-styling) | Customize markdown rendering in terminal |
 | [Atmos Pro](/cli/configuration/settings/pro) | Atmos Pro integration for stack locking and workspace management |
+
+## YAML Settings
+
+<Experimental />
+
+<dl>
+  <dt>`settings.yaml.key_delimiter`</dt>
+  <dd>
+    Enables nested key expansion in stack YAML files. When set, unquoted YAML keys containing the delimiter are expanded into nested maps.
+
+    For example, with `key_delimiter: "."`, the key `metadata.component: vpc-base` is expanded to `metadata: { component: vpc-base }`.
+
+    Quoted keys (single or double quotes) are never expanded, allowing literal dotted key names when needed.
+
+    **Default:** Empty string (disabled — current behavior preserved).
+
+    ```yaml
+    settings:
+      yaml:
+        key_delimiter: "."
+    ```
+
+    **Custom delimiter example:**
+    ```yaml
+    settings:
+      yaml:
+        key_delimiter: "::"
+    ```
+
+    See [YAML Reference: Dot Notation](/reference/yaml#dot-notation-for-nested-keys) for usage examples.
+  </dd>
+</dl>
 
 ## List Merge Strategy
 

@@ -9,6 +9,7 @@ slug: /reference/yaml
 import File from '@site/src/components/File'
 import Intro from '@site/src/components/Intro'
 import KeyTakeaways from '@site/src/components/KeyTakeaways'
+import Experimental from '@site/src/components/Experimental'
 
 <Intro>
 YAML is the configuration language for Atmos stacks. Understanding YAML's features, gotchas, and best practices is essential for writing maintainable stack configurations at scale.
@@ -53,7 +54,23 @@ components:
 
 ## Dot Notation for Nested Keys
 
+<Experimental />
+
 When you only need to set a single value deep in a nested structure, you can use **dot notation** instead of creating the full hierarchy. This makes your configuration more concise and readable.
+
+:::info Configuration Required
+Dot notation requires enabling the `key_delimiter` setting in your `atmos.yaml`. Without it, dotted keys are treated as literal key names.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  yaml:
+    key_delimiter: "."
+```
+</File>
+
+See [YAML Settings](/cli/configuration/settings#yaml-settings) for details.
+:::
 
 ### Traditional Nesting vs Dot Notation
 
@@ -123,6 +140,52 @@ components:
 ```
 </File>
 
+### Quoting Preserves Literal Keys
+
+When `key_delimiter` is enabled, you can use YAML quoting (single or double quotes) to prevent expansion. Quoted keys are always treated as literal key names:
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      # Unquoted: expands to metadata: { component: vpc-base }
+      metadata.component: vpc-base
+
+      # Quoted: stays as literal key "output.json"
+      "output.json": true
+      'config.file': /etc/app.conf
+```
+</File>
+
+This is useful when your key names genuinely contain the delimiter character (e.g., filenames like `output.json`).
+
+### Custom Delimiters
+
+You can use any string as the delimiter, not just `.`:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  yaml:
+    key_delimiter: "::"
+```
+</File>
+
+<File title="stacks/prod.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      # With "::" delimiter, dots are literal
+      metadata::component: vpc-base
+      settings::spacelift::workspace_enabled: true
+
+      # Dotted keys stay as-is (not expanded)
+      output.json: true
+```
+</File>
+
 ### When to Use Dot Notation
 
 **✅ Use dot notation when:**
@@ -175,6 +238,23 @@ env:
   AWS_DEFAULT_REGION: us-east-1
 ```
 </File>
+
+### Edge Cases
+
+Keys with leading, trailing, or consecutive delimiters are treated as literal (never expanded):
+
+```yaml
+# These are ALL treated as literal keys (not expanded)
+.leading: value        # Leading delimiter
+trailing.: value       # Trailing delimiter
+double..dot: value     # Consecutive delimiters
+```
+
+:::warning External Tooling
+Dot notation is an Atmos-specific feature. External YAML tools — IDE linters, `yamllint`, YAML language servers, and schema validators — will see the unexpanded keys and may report false errors. For example, a linter validating against a JSON Schema that expects `metadata.component` to be a nested object will see `metadata.component` as a single flat key and flag it as invalid.
+
+If your workflow relies heavily on external YAML validation, consider using traditional nesting for validated sections and dot notation only where convenience outweighs tooling support.
+:::
 
 :::tip Best Practice
 Use dot notation when it improves readability. If you have 2+ values in the same section, traditional nesting is often clearer.
