@@ -363,8 +363,12 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						// Populate AuthContext and AuthManager if provided (from --identity flag).
+						// AuthContext carries credentials (e.g., AWS SSO profile).
+						// AuthManager is needed by YAML functions like !terraform.state and
+						// !terraform.output for nested component auth resolution.
 						if authManager != nil {
+							configAndStacksInfo.AuthManager = authManager
 							managerStackInfo := authManager.GetStackInfo()
 							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
@@ -625,8 +629,12 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						// Populate AuthContext and AuthManager if provided (from --identity flag).
+						// AuthContext carries credentials (e.g., AWS SSO profile).
+						// AuthManager is needed by YAML functions like !terraform.state and
+						// !terraform.output for nested component auth resolution.
 						if authManager != nil {
+							configAndStacksInfo.AuthManager = authManager
 							managerStackInfo := authManager.GetStackInfo()
 							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
@@ -864,8 +872,12 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						// Populate AuthContext and AuthManager if provided (from --identity flag).
+						// AuthContext carries credentials (e.g., AWS SSO profile).
+						// AuthManager is needed by YAML functions like !terraform.state and
+						// !terraform.output for nested component auth resolution.
 						if authManager != nil {
+							configAndStacksInfo.AuthManager = authManager
 							managerStackInfo := authManager.GetStackInfo()
 							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
@@ -1103,8 +1115,12 @@ func ExecuteDescribeStacks(
 							},
 						}
 
-						// Populate AuthContext from AuthManager if provided (from --identity flag).
+						// Populate AuthContext and AuthManager if provided (from --identity flag).
+						// AuthContext carries credentials (e.g., AWS SSO profile).
+						// AuthManager is needed by YAML functions like !terraform.state and
+						// !terraform.output for nested component auth resolution.
 						if authManager != nil {
+							configAndStacksInfo.AuthManager = authManager
 							managerStackInfo := authManager.GetStackInfo()
 							if managerStackInfo != nil && managerStackInfo.AuthContext != nil {
 								configAndStacksInfo.AuthContext = managerStackInfo.AuthContext
