@@ -141,6 +141,72 @@ html[data-theme="dark"] .hero__description {
   color: #ccc;
 }
 
+a.hero__cloud-logos,
+a.hero__cloud-logos:hover {
+  text-decoration: none;
+  color: inherit;
+}
+
+.hero__cloud-logos {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 3.5rem;
+  margin-top: 1.75rem;
+}
+
+.hero__cloud-logo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hero__cloud-logo span {
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.hero__cloud-logos svg {
+  height: 54px;
+  width: auto;
+}
+
+html[data-theme="dark"] .hero__cloud-logos svg {
+  fill: white;
+  opacity: 0.5;
+}
+
+html[data-theme="dark"] .hero__cloud-logo span {
+  color: white;
+  opacity: 0.65;
+}
+
+html[data-theme="light"] .hero__cloud-logos svg {
+  fill: #1a202c;
+  opacity: 0.45;
+}
+
+html[data-theme="light"] .hero__cloud-logo span {
+  color: #1a202c;
+  opacity: 0.65;
+}
+
+.hero__cloud-logos:hover svg,
+.hero__cloud-logos:hover .hero__cloud-logo span,
+.hero__cloud-logos:focus-visible svg,
+.hero__cloud-logos:focus-visible .hero__cloud-logo span {
+  opacity: 0.95;
+}
+
+.hero__cloud-logos:focus-visible {
+  outline: 2px solid var(--ifm-color-primary);
+  outline-offset: 4px;
+  border-radius: 8px;
+}
+
 /* Title line displays as block so animated word goes on next line */
 .hero__title-line {
   display: block;
