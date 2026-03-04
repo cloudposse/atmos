@@ -471,6 +471,7 @@ type TerraformPlan struct {
 // PlanfilesConfig contains configuration for planfile storage backends.
 type PlanfilesConfig struct {
 	Default    string                       `yaml:"default" json:"default" mapstructure:"default"`
+	Priority   []string                     `yaml:"priority,omitempty" json:"priority,omitempty" mapstructure:"priority"`
 	KeyPattern string                       `yaml:"key_pattern,omitempty" json:"key_pattern,omitempty" mapstructure:"key_pattern"`
 	Stores     map[string]PlanfileStoreSpec `yaml:"stores,omitempty" json:"stores,omitempty" mapstructure:"stores"`
 }

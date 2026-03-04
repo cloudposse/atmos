@@ -861,6 +861,17 @@ var (
 	ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
 	ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
 	ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")
+
+	// Artifact storage errors.
+	ErrArtifactNotFound         = errors.New("artifact not found")
+	ErrArtifactUploadFailed     = errors.New("failed to upload artifact")
+	ErrArtifactDownloadFailed   = errors.New("failed to download artifact")
+	ErrArtifactDeleteFailed     = errors.New("failed to delete artifact")
+	ErrArtifactListFailed       = errors.New("failed to list artifacts")
+	ErrArtifactStoreNotFound    = errors.New("artifact store not found")
+	ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
+	ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
+	ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

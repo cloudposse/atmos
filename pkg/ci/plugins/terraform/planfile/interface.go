@@ -89,6 +89,12 @@ type Metadata struct {
 	// MD5 is the MD5 checksum of the planfile content.
 	MD5 string `json:"md5,omitempty"`
 
+	// TerraformVersion is the version of Terraform used.
+	TerraformVersion string `json:"terraform_version,omitempty"`
+
+	// TerraformTool is the Terraform tool used (e.g., "terraform", "tofu").
+	TerraformTool string `json:"terraform_tool,omitempty"`
+
 	// Custom allows arbitrary key-value pairs for provider-specific metadata.
 	Custom map[string]string `json:"custom,omitempty"`
 }
