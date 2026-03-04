@@ -4,13 +4,18 @@ package list
 import (
 	"testing"
 
+	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/tests"
 )
 
 func TestParseMetadataColumnsFlag(t *testing.T) {
@@ -347,4 +352,61 @@ func TestMetadataOptionsStruct(t *testing.T) {
 	assert.Equal(t, "stack=dev*", opts.Filter)
 	assert.Equal(t, "dev", opts.Stack)
 	assert.Equal(t, ",", opts.Delimiter)
+}
+
+// TestExecuteListMetadataCmd tests the main metadata command entry point with real fixtures.
+func TestExecuteListMetadataCmd(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{})
+	assert.NoError(t, err)
+}
+
+// TestExecuteListMetadataCmd_WithStackPattern tests that --stack pattern is respected.
+func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	fixturePath := "../../tests/fixtures/scenarios/complete"
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: fixturePath,
+	}
+
+	err = ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
+		Stack: "tenant1-ue2-dev",
+	})
+	assert.NoError(t, err)
+}
+
+// TestExecuteListMetadataCmd_InvalidConfig tests error handling for invalid config.
+func TestExecuteListMetadataCmd_InvalidConfig(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().String("format", "table", "Output format")
+
+	info := &schema.ConfigAndStacksInfo{
+		BasePath: "/nonexistent/path",
+	}
+
+	err := ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{})
+	assert.Error(t, err)
 }

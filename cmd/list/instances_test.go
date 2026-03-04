@@ -1,11 +1,19 @@
 package list
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/tests"
 )
 
 // TestListInstancesFlags tests that the list instances command has the correct flags.
@@ -269,4 +277,159 @@ func TestInstancesParserInit(t *testing.T) {
 	}
 	// Note: If the flag is not found, that's not necessarily an error - it may be registered
 	// lazily or through a different mechanism. The important test is that the parser exists.
+}
+
+// TestExecuteListInstancesCmd_ProvenanceWithoutTree tests that --provenance fails without --format=tree.
+func TestExecuteListInstancesCmd_ProvenanceWithoutTree(t *testing.T) {
+	cmd := &cobra.Command{}
+	instancesParser.RegisterFlags(cmd)
+
+	opts := &InstancesOptions{
+		Format:     "table",
+		Provenance: true,
+	}
+
+	err := executeListInstancesCmd(cmd, []string{}, opts)
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, errUtils.ErrInvalidFlag)
+	assert.Contains(t, err.Error(), "--provenance flag only works with --format=tree")
+}
+
+// TestExecuteListInstancesCmd_ProvenanceWithTree tests that --provenance with --format=tree
+// passes validation and does not fail with ErrInvalidFlag.
+func TestExecuteListInstancesCmd_ProvenanceWithTree(t *testing.T) {
+	// Reset Viper to avoid state contamination from other tests.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	// This requires a valid fixture to initialize config.
+	fixtureRelPath := "../../tests/fixtures/scenarios/complete"
+	fixturePath, err := filepath.Abs(fixtureRelPath)
+	require.NoError(t, err)
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	// Register instance flags and add base-path flag pointing to the fixture.
+	cmd := &cobra.Command{}
+	instancesParser.RegisterFlags(cmd)
+	cmd.Flags().String("base-path", "", "Base path")
+	require.NoError(t, cmd.Flags().Set("base-path", fixturePath))
+
+	// Also need config, config-path, and profile flags required by ProcessCommandLineArgs.
+	cmd.Flags().StringSlice("config", []string{}, "Config files")
+	cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+	cmd.Flags().StringSlice("profile", []string{}, "Profiles")
+
+	opts := &InstancesOptions{
+		Format:     "tree",
+		Provenance: true,
+	}
+
+	// Should not fail with --provenance validation (may fail later in stack loading but not on the flag check).
+	err = executeListInstancesCmd(cmd, []string{}, opts)
+	// We can't assert NoError here because it may fail loading stacks in test env.
+	// The important thing is that it does NOT fail with ErrInvalidFlag (provenance validation).
+	if err != nil {
+		assert.NotErrorIs(t, err, errUtils.ErrInvalidFlag)
+	}
+}
+
+// TestExecuteListInstancesCmd_WithStackPattern tests that --stack pattern is forwarded to the command.
+func TestExecuteListInstancesCmd_WithStackPattern(t *testing.T) {
+	// Reset Viper to avoid state contamination from other tests.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	// This requires a valid fixture to initialize config.
+	fixtureRelPath := "../../tests/fixtures/scenarios/complete"
+	fixturePath, err := filepath.Abs(fixtureRelPath)
+	require.NoError(t, err)
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	ioCtx, err := iolib.NewContext()
+	require.NoError(t, err)
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+
+	// Register instance flags and add base-path flag pointing to the fixture.
+	cmd := &cobra.Command{}
+	instancesParser.RegisterFlags(cmd)
+	cmd.Flags().String("base-path", "", "Base path")
+	require.NoError(t, cmd.Flags().Set("base-path", fixturePath))
+
+	// Also need config, config-path, and profile flags required by ProcessCommandLineArgs.
+	cmd.Flags().StringSlice("config", []string{}, "Config files")
+	cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+	cmd.Flags().StringSlice("profile", []string{}, "Profiles")
+
+	opts := &InstancesOptions{
+		Format: "table",
+		Stack:  "tenant1-ue2-dev",
+	}
+
+	// Should succeed with a valid stack pattern and fixture.
+	err = executeListInstancesCmd(cmd, []string{}, opts)
+	assert.NoError(t, err)
+}
+
+// TestExecuteListInstancesCmd_InvalidBasePath tests error handling for invalid base path.
+func TestExecuteListInstancesCmd_InvalidBasePath(t *testing.T) {
+	// Reset Viper to avoid state contamination from other tests.
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+
+	cmd := &cobra.Command{}
+	instancesParser.RegisterFlags(cmd)
+	cmd.Flags().String("base-path", "", "Base path")
+	require.NoError(t, cmd.Flags().Set("base-path", "/nonexistent/path"))
+
+	// Also need config, config-path, and profile flags required by ProcessCommandLineArgs.
+	cmd.Flags().StringSlice("config", []string{}, "Config files")
+	cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+	cmd.Flags().StringSlice("profile", []string{}, "Profiles")
+
+	opts := &InstancesOptions{
+		Format: "table",
+	}
+
+	err := executeListInstancesCmd(cmd, []string{}, opts)
+	// InitCliConfig should fail with an invalid path.
+	assert.Error(t, err)
+}
+
+// TestColumnsCompletionForInstances tests the columnsCompletionForInstances function.
+func TestColumnsCompletionForInstances(t *testing.T) {
+	cmd := &cobra.Command{Use: "test"}
+
+	// With no valid config, should return no completions but no panic.
+	completions, directive := columnsCompletionForInstances(cmd, []string{}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	// Completions may be nil in test context without a valid config.
+	_ = completions
+}
+
+// TestColumnsCompletionForInstances_WithFixture tests completion with a valid fixture config.
+// The fixture has no custom columns defined, so should return ShellCompDirectiveNoFileComp.
+func TestColumnsCompletionForInstances_WithFixture(t *testing.T) {
+	fixtureRelPath := "../../tests/fixtures/scenarios/complete"
+	fixturePath, err := filepath.Abs(fixtureRelPath)
+	require.NoError(t, err)
+	tests.RequireFilePath(t, fixturePath, "test fixture directory")
+
+	cmd := &cobra.Command{Use: "test"}
+	cmd.Flags().String("base-path", "", "Base path")
+	require.NoError(t, cmd.Flags().Set("base-path", fixturePath))
+	cmd.Flags().StringSlice("config", []string{}, "Config files")
+	cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
+	cmd.Flags().StringSlice("profile", []string{}, "Profiles")
+
+	// With a valid config but no custom columns, should return no completions.
+	completions, directive := columnsCompletionForInstances(cmd, []string{}, "")
+	assert.Equal(t, cobra.ShellCompDirectiveNoFileComp, directive)
+	_ = completions
 }

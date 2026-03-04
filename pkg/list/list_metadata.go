@@ -16,6 +16,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
 	listSort "github.com/cloudposse/atmos/pkg/list/sort"
+	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -114,6 +115,8 @@ func ExecuteListMetadataCmd(info *schema.ConfigAndStacksInfo, cmd *cobra.Command
 	if err != nil {
 		return errors.Join(errUtils.ErrFailedToInitConfig, err)
 	}
+
+	defer perf.Track(&atmosConfig, "list.ExecuteListMetadataCmd")()
 
 	// Process instances (same as list instances, but we'll extract metadata).
 	instances, err := processInstances(&atmosConfig, opts.AuthManager, opts.Stack)

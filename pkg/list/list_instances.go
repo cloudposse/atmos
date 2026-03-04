@@ -412,7 +412,7 @@ func ExecuteListInstancesCmd(opts *InstancesCommandOptions) error {
 		e.ClearFindStacksMapCache()
 
 		// Get all stacks for provenance-based import resolution (single call).
-		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, "", nil, nil, nil, false, false, false, false, nil, opts.AuthManager)
+		stacksMap, err := e.ExecuteDescribeStacks(&atmosConfig, opts.StackPattern, nil, nil, nil, false, false, false, false, nil, opts.AuthManager)
 		if err != nil {
 			log.Error(errUtils.ErrExecuteDescribeStacks.Error(), "error", err)
 			return errors.Join(errUtils.ErrExecuteDescribeStacks, err)
