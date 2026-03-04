@@ -703,5 +703,35 @@ func TestExtractSource_WithoutTTL(t *testing.T) {
 	assert.Empty(t, result.TTL)
 }
 
+func TestExtractSource_WithInvalidTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "main",
+			"ttl":     "invalid-ttl",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.Error(t, err)
+	assert.Nil(t, result)
+	assert.ErrorIs(t, err, errUtils.ErrSourceInvalidSpec)
+}
+
+func TestExtractSource_WithZeroTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "main",
+			"ttl":     "0s",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "0s", result.TTL)
+}
+
 func intPtr(i int) *int             { return &i }
 func float64Ptr(f float64) *float64 { return &f }

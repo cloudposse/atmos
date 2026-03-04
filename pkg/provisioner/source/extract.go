@@ -6,6 +6,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
@@ -91,6 +92,17 @@ func parseSourceMap(sourceMap map[string]any) (*schema.VendorComponentSource, er
 
 	// Optional: ttl.
 	if ttl, ok := sourceMap["ttl"].(string); ok {
+		// Validate TTL format at extraction time so misconfigurations are explicit.
+		if !isZeroTTL(ttl) {
+			if _, err := duration.ParseDuration(ttl); err != nil {
+				return nil, errUtils.Build(errUtils.ErrSourceInvalidSpec).
+					WithCause(err).
+					WithExplanation(fmt.Sprintf("Invalid TTL value %q in source configuration", ttl)).
+					WithHint("Use formats like '1h', '30m', '7d', '0s', or keywords like 'daily', 'weekly'").
+					WithContext("ttl", ttl).
+					Err()
+			}
+		}
 		spec.TTL = ttl
 	}
 

@@ -80,7 +80,14 @@ func AutoProvisionSource(
 
 	// Apply global TTL default if not set per-component.
 	if sourceSpec.TTL == "" {
-		sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+		switch componentType {
+		case cfg.TerraformComponentType:
+			sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+		case cfg.HelmfileComponentType:
+			sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
+		case cfg.PackerComponentType:
+			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
+		}
 	}
 
 	stack, _ := componentConfig["atmos_stack"].(string)
@@ -340,8 +347,7 @@ func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
 
 	ttlDuration, err := duration.ParseDuration(ttl)
 	if err != nil {
-		// Invalid TTL format - skip TTL check rather than failing.
-		return false, ""
+		return true, fmt.Sprintf("Invalid source TTL %q; forcing re-provision to avoid stale cache", ttl)
 	}
 
 	if time.Since(updatedAt) > ttlDuration {

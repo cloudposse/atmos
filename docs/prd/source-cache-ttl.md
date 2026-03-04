@@ -109,7 +109,7 @@ The `duration.ParseDuration()` function rejects zero values by design (used for 
 | File | Change |
 |------|--------|
 | `pkg/schema/vendor_component.go` | Add `TTL` field to `VendorComponentSource` |
-| `pkg/schema/schema.go` | Add `TerraformSourceSettings` struct with `TTL`, add `Source` field to `Terraform` |
+| `pkg/schema/schema.go` | Add `SourceSettings` struct with `TTL`, add `Source` field to `Terraform`, `Helmfile`, and `Packer` |
 | `pkg/provisioner/source/extract.go` | Parse `ttl` from source map |
 | `pkg/provisioner/source/provision_hook.go` | TTL check in `needsProvisioning()`, global default merging, `isSourceCacheExpired()` helper |
 
