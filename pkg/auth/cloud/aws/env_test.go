@@ -41,6 +41,14 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_REGION":                  "us-west-2",
 				"AWS_DEFAULT_REGION":          "us-west-2",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				// Credential/IRSA vars explicitly set to empty to override os.Environ() in subprocess.
+				"AWS_ACCESS_KEY_ID":           "",
+				"AWS_SECRET_ACCESS_KEY":       "",
+				"AWS_SESSION_TOKEN":           "",
+				"AWS_SECURITY_TOKEN":          "",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+				"AWS_ROLE_ARN":                "",
+				"AWS_ROLE_SESSION_NAME":       "",
 			},
 		},
 		{
@@ -66,6 +74,14 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_PROFILE":                 "test-profile",
 				"AWS_SDK_LOAD_CONFIG":         "1",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				// Credential/IRSA vars set to empty string (not deleted) to override os.Environ().
+				"AWS_ACCESS_KEY_ID":           "",
+				"AWS_SECRET_ACCESS_KEY":       "",
+				"AWS_SESSION_TOKEN":           "",
+				"AWS_SECURITY_TOKEN":          "",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+				"AWS_ROLE_ARN":                "",
+				"AWS_ROLE_SESSION_NAME":       "",
 			},
 		},
 		{
@@ -84,6 +100,13 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_PROFILE":                 "test-profile",
 				"AWS_SDK_LOAD_CONFIG":         "1",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				"AWS_ACCESS_KEY_ID":           "",
+				"AWS_SECRET_ACCESS_KEY":       "",
+				"AWS_SESSION_TOKEN":           "",
+				"AWS_SECURITY_TOKEN":          "",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+				"AWS_ROLE_ARN":                "",
+				"AWS_ROLE_SESSION_NAME":       "",
 			},
 		},
 		{
@@ -101,6 +124,13 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_REGION":                  "eu-central-1",
 				"AWS_DEFAULT_REGION":          "eu-central-1",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				"AWS_ACCESS_KEY_ID":           "",
+				"AWS_SECRET_ACCESS_KEY":       "",
+				"AWS_SESSION_TOKEN":           "",
+				"AWS_SECURITY_TOKEN":          "",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+				"AWS_ROLE_ARN":                "",
+				"AWS_ROLE_SESSION_NAME":       "",
 			},
 		},
 		{
@@ -129,6 +159,13 @@ func TestPrepareEnvironment(t *testing.T) {
 				"AWS_REGION":                  "ap-southeast-1",
 				"AWS_DEFAULT_REGION":          "ap-southeast-1",
 				"AWS_EC2_METADATA_DISABLED":   "true",
+				"AWS_ACCESS_KEY_ID":           "",
+				"AWS_SECRET_ACCESS_KEY":       "",
+				"AWS_SESSION_TOKEN":           "",
+				"AWS_SECURITY_TOKEN":          "",
+				"AWS_WEB_IDENTITY_TOKEN_FILE": "",
+				"AWS_ROLE_ARN":                "",
+				"AWS_ROLE_SESSION_NAME":       "",
 			},
 		},
 	}
@@ -165,11 +202,9 @@ func TestPrepareEnvironment_DoesNotMutateInput(t *testing.T) {
 	assert.Equal(t, originalAccessKey, inputEnv["AWS_ACCESS_KEY_ID"], "AWS_ACCESS_KEY_ID should not be modified in input")
 	assert.Equal(t, originalSecretKey, inputEnv["AWS_SECRET_ACCESS_KEY"], "AWS_SECRET_ACCESS_KEY should not be modified in input")
 
-	// Verify result does not contain credentials.
-	_, hasAccessKey := result["AWS_ACCESS_KEY_ID"]
-	_, hasSecretKey := result["AWS_SECRET_ACCESS_KEY"]
-	assert.False(t, hasAccessKey, "result should not contain AWS_ACCESS_KEY_ID")
-	assert.False(t, hasSecretKey, "result should not contain AWS_SECRET_ACCESS_KEY")
+	// Verify result has credentials set to empty string (overrides os.Environ() in subprocess).
+	assert.Equal(t, "", result["AWS_ACCESS_KEY_ID"], "AWS_ACCESS_KEY_ID should be empty in result")
+	assert.Equal(t, "", result["AWS_SECRET_ACCESS_KEY"], "AWS_SECRET_ACCESS_KEY should be empty in result")
 
 	// Verify result contains expected values.
 	assert.Equal(t, "test-profile", result["AWS_PROFILE"])
@@ -344,6 +379,9 @@ func TestProblematicAWSEnvVars_ContainsExpectedVars(t *testing.T) {
 		"AWS_PROFILE",
 		"AWS_CONFIG_FILE",
 		"AWS_SHARED_CREDENTIALS_FILE",
+		"AWS_WEB_IDENTITY_TOKEN_FILE",
+		"AWS_ROLE_ARN",
+		"AWS_ROLE_SESSION_NAME",
 	}
 
 	for _, expected := range expectedVars {
@@ -509,4 +547,95 @@ func TestEnvironmentVarsToClear_ContainsExpectedVars(t *testing.T) {
 		}
 		assert.True(t, found, "environmentVarsToClear should contain %s", expected)
 	}
+}
+
+// TestPrepareEnvironment_IRSALeakPrevention reproduces the bug where IRSA env vars
+// from an EKS pod (os.Environ()) leak into the terraform subprocess because
+// PrepareEnvironment only received ComponentEnvSection (stack YAML env vars),
+// which never contained the IRSA vars. Previously, PrepareEnvironment used
+// delete() which was a no-op on absent keys. Now it sets empty strings so the
+// vars appear in ComponentEnvList and override os.Environ() in the subprocess.
+//
+// This simulates the full ARC runner scenario:
+//  1. Pod has IRSA vars injected (AWS_WEB_IDENTITY_TOKEN_FILE, AWS_ROLE_ARN)
+//  2. Atmos auth writes credentials to files
+//  3. PrepareEnvironment is called with only ComponentEnvSection (no IRSA vars)
+//  4. Result is appended to os.Environ() for subprocess
+//  5. Last occurrence wins in Go subprocess env
+func TestPrepareEnvironment_IRSALeakPrevention(t *testing.T) {
+	// Simulate IRSA vars injected by EKS pod identity webhook.
+	irsaTokenFile := "/var/run/secrets/eks.amazonaws.com/serviceaccount/token"
+	irsaRoleArn := "arn:aws:iam::241533146093:role/gold-core-use1-auto-actions-runner@actions-runner-system"
+
+	// Simulate os.Environ() from the pod (what the subprocess would inherit).
+	podEnviron := []string{
+		"HOME=/home/runner",
+		"PATH=/usr/bin",
+		"AWS_WEB_IDENTITY_TOKEN_FILE=" + irsaTokenFile,
+		"AWS_ROLE_ARN=" + irsaRoleArn,
+		"AWS_ROLE_SESSION_NAME=irsa-session",
+		"AWS_DEFAULT_REGION=us-east-1",
+		"AWS_REGION=us-east-1",
+		"AWS_STS_REGIONAL_ENDPOINTS=regional",
+	}
+
+	// ComponentEnvSection from stack YAML — does NOT contain IRSA vars.
+	// This is the input to PrepareEnvironment in the terraform execution path.
+	componentEnvSection := map[string]string{
+		"CUSTOM_VAR": "custom-value",
+	}
+
+	// Call PrepareEnvironment with only ComponentEnvSection (the bug scenario).
+	result := PrepareEnvironment(
+		componentEnvSection,
+		"core-artifacts/terraform",
+		"/home/runner/.config/atmos/aws/github-oidc/credentials",
+		"/home/runner/.config/atmos/aws/github-oidc/config",
+		"us-east-1",
+	)
+
+	// Convert result to ComponentEnvList (as terraform.go does).
+	var componentEnvList []string
+	for k, v := range result {
+		componentEnvList = append(componentEnvList, k+"="+v)
+	}
+
+	// Build subprocess env: os.Environ() + ComponentEnvList (as shell_utils.go does).
+	// In Go's exec.Cmd.Env, last occurrence wins.
+	subprocessEnv := make([]string, 0, len(podEnviron)+len(componentEnvList))
+	subprocessEnv = append(subprocessEnv, podEnviron...)
+	subprocessEnv = append(subprocessEnv, componentEnvList...)
+
+	// Parse subprocess env to a map (last occurrence wins, matching Go runtime behavior).
+	finalEnv := make(map[string]string)
+	for _, entry := range subprocessEnv {
+		if idx := indexOf(entry, '='); idx >= 0 {
+			finalEnv[entry[:idx]] = entry[idx+1:]
+		}
+	}
+
+	// The fix: IRSA vars should be overridden to empty string by ComponentEnvList,
+	// NOT leak through from os.Environ().
+	assert.Equal(t, "", finalEnv["AWS_WEB_IDENTITY_TOKEN_FILE"],
+		"AWS_WEB_IDENTITY_TOKEN_FILE should be overridden to empty, not leak IRSA token path")
+	assert.Equal(t, "", finalEnv["AWS_ROLE_ARN"],
+		"AWS_ROLE_ARN should be overridden to empty, not leak IRSA role ARN")
+	assert.Equal(t, "", finalEnv["AWS_ROLE_SESSION_NAME"],
+		"AWS_ROLE_SESSION_NAME should be overridden to empty, not leak IRSA session name")
+
+	// Atmos-managed credentials should be set correctly.
+	assert.Equal(t, "/home/runner/.config/atmos/aws/github-oidc/credentials",
+		finalEnv["AWS_SHARED_CREDENTIALS_FILE"])
+	assert.Equal(t, "core-artifacts/terraform", finalEnv["AWS_PROFILE"])
+	assert.Equal(t, "true", finalEnv["AWS_EC2_METADATA_DISABLED"])
+}
+
+// indexOf returns the index of the first occurrence of b in s, or -1.
+func indexOf(s string, b byte) int {
+	for i := range len(s) {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
 }

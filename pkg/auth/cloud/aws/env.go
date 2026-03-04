@@ -35,6 +35,14 @@ var problematicAWSEnvVars = []string{
 	"AWS_CONFIG_FILE",
 	"AWS_SHARED_CREDENTIALS_FILE",
 
+	// Web identity / IRSA (EKS pod-injected variables).
+	// On EKS pods with IRSA, these are injected by the pod identity webhook.
+	// They must be cleared during Atmos auth to prevent the AWS SDK from using
+	// pod credentials instead of Atmos-managed credentials.
+	"AWS_WEB_IDENTITY_TOKEN_FILE",
+	"AWS_ROLE_ARN",
+	"AWS_ROLE_SESSION_NAME",
+
 	// Note: AWS_REGION is intentionally NOT in this list as it's safe to inherit.
 }
 
@@ -239,14 +247,21 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 		result[k] = v
 	}
 
-	// Clear problematic credential environment variables.
+	// Clear problematic credential environment variables by setting them to empty string.
 	// When using profile-based authentication, these variables would override
 	// the credentials from AWS_SHARED_CREDENTIALS_FILE, causing auth to fail.
+	//
+	// We set to empty string rather than deleting because the input map may only contain
+	// ComponentEnvSection (stack YAML env vars), not os.Environ(). Pod-injected variables
+	// like AWS_WEB_IDENTITY_TOKEN_FILE (IRSA) live in os.Environ() and are inherited by
+	// subprocesses. Setting empty string ensures these appear in ComponentEnvList and
+	// override the inherited IRSA values (Go subprocess env: last occurrence wins).
+	// AWS SDK treats empty env var values as "not set".
 	for _, key := range environmentVarsToClear {
 		if _, exists := result[key]; exists {
 			log.Debug("Clearing AWS credential environment variable", "key", key)
-			delete(result, key)
 		}
+		result[key] = ""
 	}
 
 	// Set Atmos-managed credential file paths and profile.
