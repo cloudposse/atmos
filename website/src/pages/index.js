@@ -8,6 +8,8 @@ import TypingAnimation from '@site/src/components/TypingAnimation'
 import LazyDemo from '@site/src/components/LazyDemo'
 import ScrollFadeIn from '@site/src/components/ScrollFadeIn'
 import { RiLockLine, RiBox3Line, RiFlashlightLine, RiStackLine } from 'react-icons/ri';
+import { SiAmazonwebservices, SiGooglecloud } from 'react-icons/si';
+import { VscAzure } from 'react-icons/vsc';
 import '../css/landing-page.css';
 
 function Home() {
@@ -32,6 +34,20 @@ function Home() {
                 <span className="visually-hidden">Terraform, OpenTofu, Packer, Helmfile, Ansible, and Devcontainers</span>
               </h1>
             <p className="hero__description">Treat environments as configuration and eliminate code duplication, custom bash scripts, and complicated tooling with one tool to rule them all</p>
+            <Link to="/multi-cloud" className="hero__cloud-logos">
+              <div className="hero__cloud-logo">
+                <SiAmazonwebservices />
+                <span>AWS</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <VscAzure />
+                <span>Azure</span>
+              </div>
+              <div className="hero__cloud-logo">
+                <SiGooglecloud />
+                <span>GCP</span>
+              </div>
+            </Link>
             <div className="hero__cta">
               <Link to="/install" className="button button--lg button--primary"><p>Install Atmos</p></Link>
               <Link to="/intro" className="hero__link">Learn More</Link>

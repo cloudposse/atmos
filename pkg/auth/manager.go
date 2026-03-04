@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/huh"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/tui/templates/term"
@@ -54,11 +55,21 @@ const (
 	skipIntegrationsKey contextKey = "skipIntegrations"
 )
 
-// isInteractive checks if we're running in an interactive terminal.
-// Interactive mode requires stdin to be a TTY (for user input) and must not be in CI.
-// We don't check stdout because users should be able to pipe output (e.g., | cat)
-// while still interacting via stdin.
+// isInteractive checks if interactive prompts should be shown.
+// Interactive mode requires:
+// 1. --interactive flag is true (or ATMOS_INTERACTIVE env var).
+// 2. Stdin is a TTY (for user input).
+// 3. Not running in CI environment.
+//
+// This ensures prompts only appear in truly interactive contexts and gracefully
+// degrade to standard errors in pipelines, scripts, and CI environments.
 func isInteractive() bool {
+	// Check if interactive mode is enabled via flag or environment.
+	if !viper.GetBool("interactive") {
+		return false
+	}
+
+	// Check if stdin is a TTY and not in CI.
 	return term.IsTTYSupportForStdin() && !telemetry.IsCI()
 }
 
