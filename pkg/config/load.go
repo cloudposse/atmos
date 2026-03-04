@@ -1475,7 +1475,6 @@ func fixAuthIdentities(v *viper.Viper, atmosConfig *schema.AtmosConfiguration) e
 	// Replace the incorrectly parsed identities with the correctly parsed ones.
 	if len(mergedIdentities) > 0 {
 		atmosConfig.Auth.Identities = mergedIdentities
-		log.Debug("Fixed auth.identities with dots in names", "count", len(mergedIdentities))
 	}
 
 	return nil
