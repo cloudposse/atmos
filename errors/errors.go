@@ -422,6 +422,7 @@ var (
 	ErrInvalidSettingsSection           = errors.New("invalid settings section")
 	ErrInvalidEnvSection                = errors.New("invalid env section")
 	ErrInvalidGenerateSection           = errors.New("invalid generate section")
+	ErrInvalidDependenciesSection       = errors.New("invalid dependencies section")
 	ErrInvalidTerraformSection          = errors.New("invalid terraform section")
 	ErrInvalidHelmfileSection           = errors.New("invalid helmfile section")
 	ErrInvalidPackerSection             = errors.New("invalid packer section")
@@ -448,15 +449,17 @@ var (
 	ErrInvalidTerraformRemoteStateType    = errors.New("invalid terraform remote_state_backend_type")
 	ErrInvalidTerraformRemoteStateSection = errors.New("invalid terraform remote_state_backend section")
 	ErrInvalidTerraformAuth               = errors.New("invalid terraform auth section")
+	ErrInvalidTerraformDependencies       = errors.New("invalid terraform dependencies section")
 	ErrInvalidTerraformSource             = errors.New("invalid terraform source section")
 	ErrInvalidTerraformProvision          = errors.New("invalid terraform provision section")
 
 	// Helmfile-specific subsection errors.
-	ErrInvalidHelmfileCommand  = errors.New("invalid helmfile command")
-	ErrInvalidHelmfileVars     = errors.New("invalid helmfile vars section")
-	ErrInvalidHelmfileSettings = errors.New("invalid helmfile settings section")
-	ErrInvalidHelmfileEnv      = errors.New("invalid helmfile env section")
-	ErrInvalidHelmfileAuth     = errors.New("invalid helmfile auth section")
+	ErrInvalidHelmfileCommand      = errors.New("invalid helmfile command")
+	ErrInvalidHelmfileVars         = errors.New("invalid helmfile vars section")
+	ErrInvalidHelmfileSettings     = errors.New("invalid helmfile settings section")
+	ErrInvalidHelmfileEnv          = errors.New("invalid helmfile env section")
+	ErrInvalidHelmfileAuth         = errors.New("invalid helmfile auth section")
+	ErrInvalidHelmfileDependencies = errors.New("invalid helmfile dependencies section")
 
 	// Helmfile configuration errors.
 	ErrMissingHelmfileBasePath           = errors.New("helmfile base path is required")
@@ -470,22 +473,24 @@ var (
 	ErrMissingPackerBasePath = errors.New("packer base path is required")
 
 	// Packer-specific subsection errors.
-	ErrInvalidPackerCommand  = errors.New("invalid packer command")
-	ErrInvalidPackerVars     = errors.New("invalid packer vars section")
-	ErrInvalidPackerSettings = errors.New("invalid packer settings section")
-	ErrInvalidPackerEnv      = errors.New("invalid packer env section")
-	ErrInvalidPackerAuth     = errors.New("invalid packer auth section")
+	ErrInvalidPackerCommand      = errors.New("invalid packer command")
+	ErrInvalidPackerVars         = errors.New("invalid packer vars section")
+	ErrInvalidPackerSettings     = errors.New("invalid packer settings section")
+	ErrInvalidPackerEnv          = errors.New("invalid packer env section")
+	ErrInvalidPackerAuth         = errors.New("invalid packer auth section")
+	ErrInvalidPackerDependencies = errors.New("invalid packer dependencies section")
 
 	// Ansible configuration errors.
 	ErrMissingAnsibleBasePath = errors.New("ansible base path is required")
 
 	// Ansible-specific subsection errors.
-	ErrInvalidAnsibleSection  = errors.New("invalid ansible section")
-	ErrInvalidAnsibleCommand  = errors.New("invalid ansible command")
-	ErrInvalidAnsibleVars     = errors.New("invalid ansible vars section")
-	ErrInvalidAnsibleSettings = errors.New("invalid ansible settings section")
-	ErrInvalidAnsibleEnv      = errors.New("invalid ansible env section")
-	ErrInvalidAnsibleAuth     = errors.New("invalid ansible auth section")
+	ErrInvalidAnsibleSection      = errors.New("invalid ansible section")
+	ErrInvalidAnsibleCommand      = errors.New("invalid ansible command")
+	ErrInvalidAnsibleVars         = errors.New("invalid ansible vars section")
+	ErrInvalidAnsibleSettings     = errors.New("invalid ansible settings section")
+	ErrInvalidAnsibleEnv          = errors.New("invalid ansible env section")
+	ErrInvalidAnsibleAuth         = errors.New("invalid ansible auth section")
+	ErrInvalidAnsibleDependencies = errors.New("invalid ansible dependencies section")
 
 	// Ansible execution errors.
 	ErrAnsiblePlaybookMissing = errors.New("ansible playbook is required")

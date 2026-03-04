@@ -210,13 +210,14 @@ func mergeComponentConfigurations(atmosConfig *schema.AtmosConfiguration, opts *
 		}
 	}
 
-	// Merge dependencies (base component dependencies + component dependencies).
-	// Component dependencies take precedence over base component dependencies.
+	// Merge dependencies (global + base component + component dependencies).
+	// Priority (lowest to highest): global/component-type → base component → component instance.
 	var finalComponentDependencies map[string]any
-	if len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
+	if len(opts.GlobalDependencies) > 0 || len(result.BaseComponentDependencies) > 0 || len(result.ComponentDependencies) > 0 {
 		finalComponentDependencies, err = m.Merge(
 			atmosConfig,
 			[]map[string]any{
+				opts.GlobalDependencies,
 				result.BaseComponentDependencies,
 				result.ComponentDependencies,
 			})
