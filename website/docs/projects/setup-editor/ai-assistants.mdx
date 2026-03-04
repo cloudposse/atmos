@@ -103,6 +103,16 @@ Claude Code fetches `.claude-plugin/marketplace.json` directly from the repo via
 install the plugin, Claude Code downloads the skills directory and caches it locally. No central registry or
 approval process is involved -- the GitHub repo IS the marketplace.
 
+#### Uninstalling
+
+```bash
+# Remove the plugin
+/plugin uninstall atmos@cloudposse
+
+# Remove the marketplace (optional)
+/plugin marketplace remove cloudposse
+```
+
 #### Team Auto-Discovery
 
 Teams can auto-configure the marketplace for all team members by adding to the project's `.claude/settings.json`:
