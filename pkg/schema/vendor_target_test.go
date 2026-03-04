@@ -143,6 +143,16 @@ func TestAtmosVendorTargets_UnmarshalYAML_NotASequence(t *testing.T) {
 	assert.ErrorIs(t, err, ErrVendorTargetInvalidFormat)
 }
 
+func TestAtmosVendorTargets_UnmarshalYAML_UnexpectedNodeKind(t *testing.T) {
+	input := `
+- []
+`
+	var targets AtmosVendorTargets
+	err := yaml.Unmarshal([]byte(input), &targets)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVendorTargetUnexpectedNodeKind)
+}
+
 func TestAtmosVendorTargets_UnmarshalYAML_FullVendorSource(t *testing.T) {
 	// Test that AtmosVendorSource correctly unmarshals with the new target types.
 	input := `
