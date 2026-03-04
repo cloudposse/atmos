@@ -183,6 +183,18 @@ Cross-tool interoperability happens at the **file format level** (`AGENTS.md` an
 directory path. This is why Atmos places skills in a tool-agnostic `agent-skills/` directory and uses symlinks for
 tool-specific discovery.
 
+## Uninstalling Skills
+
+To remove Atmos skills from Claude Code:
+
+```bash
+# Remove the plugin
+/plugin uninstall atmos@cloudposse
+
+# Remove the marketplace (optional)
+/plugin marketplace remove cloudposse
+```
+
 ## Using Skills with AI Tools
 
 For step-by-step instructions on configuring each AI tool, see

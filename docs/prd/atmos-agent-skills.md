@@ -232,35 +232,26 @@ File: `.claude-plugin/marketplace.json` (repo root)
 ```json
 {
   "name": "cloudposse",
+  "version": "1.0.0",
+  "description": "Official Atmos plugins and skills for Claude Code",
   "owner": {
     "name": "Cloud Posse",
     "email": "opensource@cloudposse.com"
   },
-  "metadata": {
-    "description": "Official Cloud Posse plugins and skills for Claude Code",
-    "version": "1.0.0",
-    "pluginRoot": "./agent-skills"
-  },
   "plugins": [
     {
       "name": "atmos",
-      "source": ".",
-      "description": "Atmos skills for Claude Code: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, GitOps, templates, design patterns, and CLI configuration.",
-      "version": "1.0.0",
-      "author": { "name": "Cloud Posse" },
-      "homepage": "https://atmos.tools/integrations/ai/agent-skills",
-      "repository": "https://github.com/cloudposse/atmos",
-      "license": "Apache-2.0",
-      "keywords": ["atmos", "terraform", "helmfile", "packer", "orchestration", "iac", "stacks", "components", "validation", "gitops"],
-      "category": "integration",
-      "strict": false
+      "source": "./agent-skills",
+      "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, and design patterns.",
+      "category": "development"
     }
   ]
 }
 ```
 
-The `pluginRoot` field prepends `./agent-skills` to all relative plugin sources, so
-`"source": "."` resolves to `./agent-skills`.
+The `source` field points to the directory containing the plugin's `.claude-plugin/plugin.json`.
+Plugin-level metadata (`author`, `homepage`, `repository`, `license`, `keywords`) belongs in the
+plugin manifest (`agent-skills/.claude-plugin/plugin.json`), not the marketplace manifest.
 
 ##### Plugin Manifest
 
@@ -270,15 +261,15 @@ The single plugin directory contains `agent-skills/.claude-plugin/plugin.json`:
 {
   "name": "atmos",
   "version": "1.0.0",
-  "description": "Atmos skills for Claude Code: infrastructure orchestration, stack configuration, and design patterns.",
+  "description": "Atmos skills for AI coding assistants: Terraform/Helmfile/Packer/Ansible orchestration, stack configuration, components, vendoring, validation, YAML functions, Go templates, authentication, stores, workflows, and design patterns.",
   "author": {
     "name": "Cloud Posse",
     "url": "https://github.com/cloudposse"
   },
-  "homepage": "https://atmos.tools",
+  "homepage": "https://atmos.tools/integrations/ai/agent-skills",
   "repository": "https://github.com/cloudposse/atmos",
   "license": "Apache-2.0",
-  "keywords": ["atmos", "terraform", "helmfile", "packer", "orchestration", "iac", "stacks", "components", "validation"]
+  "keywords": ["atmos", "terraform", "infrastructure", "iac", "devops", "cloud"]
 }
 ```
 
@@ -294,6 +285,16 @@ The single plugin directory contains `agent-skills/.claude-plugin/plugin.json`:
 
 A single install command provides all 21 Atmos skills.
 
+##### Uninstalling
+
+```bash
+# Remove the plugin
+/plugin uninstall atmos@cloudposse
+
+# Remove the marketplace (optional)
+/plugin marketplace remove cloudposse
+```
+
 ##### Team Auto-Discovery
 
 Teams can auto-configure the marketplace and plugin for all team members by adding
@@ -301,6 +302,14 @@ to the project's `.claude/settings.json`:
 
 ```json
 {
+  "extraKnownMarketplaces": {
+    "cloudposse": {
+      "source": {
+        "source": "github",
+        "repo": "cloudposse/atmos"
+      }
+    }
+  },
   "enabledPlugins": {
     "atmos@cloudposse": true
   }
@@ -654,7 +663,7 @@ Restructure `agent-skills/` for Claude Code plugin compatibility and add marketp
    ```
 
 2. **Create marketplace manifest**: Add `.claude-plugin/marketplace.json` at the repo root
-   with a single plugin entry (`atmos` with `"source": "."`).
+   with a single plugin entry (`atmos` with `"source": "./agent-skills"`).
 
 3. **Create plugin manifest**: Add `agent-skills/.claude-plugin/plugin.json` for the single
    `atmos` plugin.
