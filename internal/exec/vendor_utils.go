@@ -51,6 +51,7 @@ type processTargetsParams struct {
 	TemplateData         struct{ Component, Version string }
 	VendorConfigFilePath string
 	URI                  string
+	SourceTemplate       string // Raw un-templated source URL for per-target version re-resolution.
 	PkgType              pkgType
 	SourceIsLocalFile    bool
 }
@@ -324,7 +325,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 		// Determine package type
 		pType := determinePackageType(useOciScheme, useLocalFileSystem)
 
-		// Process each target within the source
+		// Process each target within the source.
 		pkgs, err := processTargets(&processTargetsParams{
 			AtmosConfig:          params.atmosConfig,
 			IndexSource:          indexSource,
@@ -332,6 +333,7 @@ func processAtmosVendorSource(params *vendorSourceParams) ([]pkgAtmosVendor, err
 			TemplateData:         tmplData,
 			VendorConfigFilePath: params.vendorConfigFilePath,
 			URI:                  uri,
+			SourceTemplate:       params.sources[indexSource].Source,
 			PkgType:              pType,
 			SourceIsLocalFile:    sourceIsLocalFile,
 		})
@@ -356,23 +358,52 @@ func determinePackageType(useOciScheme, useLocalFileSystem bool) pkgType {
 func processTargets(params *processTargetsParams) ([]pkgAtmosVendor, error) {
 	var packages []pkgAtmosVendor
 	for indexTarget, tgt := range params.Source.Targets {
-		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt, params.TemplateData, false)
+		// Determine the effective template data and URI for this target.
+		tmplData := params.TemplateData
+		effectiveURI := params.URI
+		effectiveVersion := params.Source.Version
+
+		// If the target has its own version, override template data and re-resolve the source URI.
+		if tgt.Version != "" {
+			effectiveVersion = tgt.Version
+			tmplData = struct{ Component, Version string }{
+				Component: params.TemplateData.Component,
+				Version:   tgt.Version,
+			}
+			// Re-template the source URL with the target-specific version.
+			var err error
+			effectiveURI, err = ProcessTmpl(
+				params.AtmosConfig,
+				fmt.Sprintf("source-%d-target-%d", params.IndexSource, indexTarget),
+				params.SourceTemplate,
+				tmplData,
+				false,
+			)
+			if err != nil {
+				return nil, err
+			}
+			// Normalize the re-resolved URI.
+			effectiveURI = normalizeVendorURI(effectiveURI)
+		}
+
+		// Template-expand the target path.
+		target, err := ProcessTmpl(params.AtmosConfig, fmt.Sprintf("target-%d-%d", params.IndexSource, indexTarget), tgt.Path, tmplData, false)
 		if err != nil {
 			return nil, err
 		}
 		targetPath := filepath.Join(filepath.ToSlash(params.VendorConfigFilePath), filepath.ToSlash(target))
 		pkgName := params.Source.Component
 		if pkgName == "" {
-			pkgName = params.URI
+			pkgName = effectiveURI
 		}
-		// Create package struct
+		// Create package struct.
 		p := pkgAtmosVendor{
-			uri:               params.URI,
+			uri:               effectiveURI,
 			name:              pkgName,
 			targetPath:        targetPath,
 			sourceIsLocalFile: params.SourceIsLocalFile,
 			pkgType:           params.PkgType,
-			version:           params.Source.Version,
+			version:           effectiveVersion,
 			atmosVendorSource: *params.Source,
 		}
 		packages = append(packages, p)
