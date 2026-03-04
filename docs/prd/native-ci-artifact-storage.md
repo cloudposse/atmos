@@ -315,21 +315,55 @@ Note: Artifact signing/provenance is not needed as a separate feature — SHA-25
 **Questions to clarify:**
 - **CI context source**: Depends on the current provider from `pkg/ci/providers/*`. GitHub provider relies on environment variables. Generic provider uses environment variables with fallback to git, or leaves fields empty if both fail.
 - **Metadata extensibility**: No user-defined labels/tags. Only storage implementations can extend metadata (e.g., planfile storage adds `has_changes` field).
-- **Metadata struct**: Current struct has more than needed. Remove `ComponentPath` and `PlanSummary`. Replace `MD5` with `SHA256`. The base artifact metadata should contain: Stack, Component, SHA, BaseSHA, Branch, PRNumber, RunID, Repository, CreatedAt, ExpiresAt, SHA256, Custom. Planfile-specific fields (HasChanges, Additions, Changes, Destructions) belong in the planfile storage implementation.
-- **Atmos version in metadata**: Yes, include the Atmos version that created the artifact.
-- **Terraform version in metadata**: Yes, include the Terraform/OpenTofu version used and a field indicating which tool (terraform or opentofu).
+- **Metadata struct**: (**IMPLEMENTED**) Base artifact `Metadata` in `pkg/ci/artifact/metadata.go` contains: Stack, Component, SHA, BaseSHA, Branch, PRNumber, RunID, Repository, CreatedAt, ExpiresAt, SHA256, AtmosVersion, Custom. Planfile-specific fields (ComponentPath, PlanSummary, HasChanges, Additions, Changes, Destructions, MD5, TerraformVersion, TerraformTool) remain in the planfile `Metadata` in `pkg/ci/plugins/terraform/planfile/interface.go`.
+- **Atmos version in metadata**: Yes, included as `AtmosVersion` in base artifact metadata.
+- **Terraform version in metadata**: Yes, included as `TerraformVersion` and `TerraformTool` in planfile-specific metadata (not base artifact metadata, since these are terraform-specific).
 
 ## Implementation Phases
 
 Incremental approach using TDD: create tests, implement to pass tests, refactor (reduce duplication) while verifying tests still pass.
 
-1. **Phase 1**: Define Artifacts Basic Interface/Struct
+1. **Phase 1**: Define Artifacts Basic Interface/Struct — **SHIPPED**
 2. **Phase 2**: Implement local artifact storage
 3. **Phase 3**: Implement Planfile storage (on top of artifact storage)
 4. **Phase 4**: Implement GitHub backend
 
 **Questions to clarify:**
 - **Dependencies**: CI provider detection is already implemented in `pkg/ci/providers/*`. No blocking dependencies.
+
+### Phase 1 Implementation Details (SHIPPED)
+
+**Package**: `pkg/ci/artifact/`
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `metadata.go` | `Metadata` struct (Stack, Component, SHA, BaseSHA, Branch, PRNumber, RunID, Repository, CreatedAt, ExpiresAt, SHA256, AtmosVersion, Custom) and `ArtifactInfo` struct (Name, Size, LastModified, Metadata) |
+| `query.go` | `Query` struct with `Components []string`, `Stacks []string`, `SHAs []string`, `All bool` — supports multi-value filtering |
+| `store.go` | `Store` interface (Name, Upload, Download, Delete, List, Exists, GetMetadata), `FileEntry`/`FileResult` structs for bundle upload/download, `StoreOptions`, `StoreFactory` type, `//go:generate mockgen` directive |
+| `registry.go` | Thread-safe backend registry: `Register()`, `NewStore()`, `GetRegisteredTypes()` — follows same pattern as `pkg/ci/plugins/terraform/planfile/registry.go` |
+| `selector.go` | `EnvironmentChecker` interface and `SelectStore()` function for priority-based backend selection with explicit `--store` override |
+| `mock_store.go` | Generated mock via `go.uber.org/mock/mockgen` |
+| `metadata_test.go` | JSON round-trip tests, nil optional fields |
+| `registry_test.go` | Register/NewStore, panics on invalid args, GetRegisteredTypes |
+| `selector_test.go` | Priority selection, explicit override, no-available-store error, no-checker-means-available |
+| `store_test.go` | Interface compile checks, struct field assertions |
+
+**Files modified:**
+
+| File | Change |
+|------|--------|
+| `errors/errors.go` | Added 9 sentinel errors: `ErrArtifactNotFound`, `ErrArtifactUploadFailed`, `ErrArtifactDownloadFailed`, `ErrArtifactDeleteFailed`, `ErrArtifactListFailed`, `ErrArtifactStoreNotFound`, `ErrArtifactStoreInvalidArgs`, `ErrArtifactMetadataFailed`, `ErrArtifactIntegrityFailed` |
+| `pkg/schema/schema.go` | Added `Priority []string` field to `PlanfilesConfig` for backend selection order |
+| `pkg/ci/plugins/terraform/planfile/interface.go` | Added `TerraformVersion` and `TerraformTool` fields to planfile `Metadata` (moved from artifact layer — these are planfile-specific) |
+
+**Design decisions applied:**
+- `Upload` accepts `[]FileEntry` and `Download` returns `[]FileResult` to support multi-file artifact bundles (plan + lock + summaries).
+- `Query` uses `[]string` slices (not single strings) for `Components`, `Stacks`, `SHAs` to support multi-value filtering in CLI commands.
+- `TerraformVersion` and `TerraformTool` live in planfile `Metadata`, not artifact `Metadata` — they are terraform-specific concerns.
+- `EnvironmentChecker.IsAvailable()` takes `context.Context` for consistency; backends without a checker are treated as available.
+- 17 tests pass with 42.2% statement coverage (registry/selector logic fully covered; metadata structs covered via JSON round-trips).
 
 ## Testing Strategy
 
