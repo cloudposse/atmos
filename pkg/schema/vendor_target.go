@@ -3,6 +3,7 @@ package schema
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 )
@@ -66,12 +67,16 @@ func (t *AtmosVendorTargets) UnmarshalYAML(value *yaml.Node) error {
 		switch node.Kind {
 		case yaml.ScalarNode:
 			// Simple string syntax: "vpc/{{.Version}}" -> path only, no version override.
-			target.Path = node.Value
+			target.Path = strings.TrimSpace(node.Value)
+			if target.Path == "" {
+				return fmt.Errorf("%w at index %d", ErrVendorTargetMissingPath, i)
+			}
 		case yaml.MappingNode:
 			// Structured syntax: {path: "vpc/{{.Version}}", version: "2.1.0"}.
 			if err := node.Decode(&target); err != nil {
 				return fmt.Errorf("failed to decode vendor target at index %d: %w", i, err)
 			}
+			target.Path = strings.TrimSpace(target.Path)
 			if target.Path == "" {
 				return fmt.Errorf("%w at index %d", ErrVendorTargetMissingPath, i)
 			}

@@ -104,6 +104,37 @@ func TestAtmosVendorTargets_UnmarshalYAML_MissingPath(t *testing.T) {
 	assert.ErrorIs(t, err, ErrVendorTargetMissingPath)
 }
 
+func TestAtmosVendorTargets_UnmarshalYAML_EmptyScalarPath(t *testing.T) {
+	input := `
+- ""
+`
+	var targets AtmosVendorTargets
+	err := yaml.Unmarshal([]byte(input), &targets)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVendorTargetMissingPath)
+}
+
+func TestAtmosVendorTargets_UnmarshalYAML_WhitespaceScalarPath(t *testing.T) {
+	input := `
+- "   "
+`
+	var targets AtmosVendorTargets
+	err := yaml.Unmarshal([]byte(input), &targets)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVendorTargetMissingPath)
+}
+
+func TestAtmosVendorTargets_UnmarshalYAML_WhitespaceMapPath(t *testing.T) {
+	input := `
+- path: "   "
+  version: "1.0.0"
+`
+	var targets AtmosVendorTargets
+	err := yaml.Unmarshal([]byte(input), &targets)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrVendorTargetMissingPath)
+}
+
 func TestAtmosVendorTargets_UnmarshalYAML_NotASequence(t *testing.T) {
 	input := `"just a string"`
 	var targets AtmosVendorTargets
