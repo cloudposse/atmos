@@ -82,7 +82,7 @@ components:
             retention_days: 7
             owner: cloudposse
             repo: github-action-atmos-terraform-plan
-            artifact_name_pattern: "{{ .Component }}-{{ .Stack }}"
+            # GitHub uses the artifact name from the implementation layer directly
         azure:
           type: azure-blob
           options:
