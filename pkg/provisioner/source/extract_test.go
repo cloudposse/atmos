@@ -670,5 +670,38 @@ func TestExtractSource_MapWithEmptyURI(t *testing.T) {
 	assert.Nil(t, result)
 }
 
+func TestExtractSource_WithTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "main",
+			"ttl":     "1h",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, "github.com/example/repo//module", result.Uri)
+	assert.Equal(t, "main", result.Version)
+	assert.Equal(t, "1h", result.TTL)
+}
+
+func TestExtractSource_WithoutTTL(t *testing.T) {
+	componentConfig := map[string]any{
+		"source": map[string]any{
+			"uri":     "github.com/example/repo//module",
+			"version": "1.0.0",
+		},
+	}
+
+	result, err := ExtractSource(componentConfig)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Empty(t, result.TTL)
+}
+
 func intPtr(i int) *int             { return &i }
 func float64Ptr(f float64) *float64 { return &f }

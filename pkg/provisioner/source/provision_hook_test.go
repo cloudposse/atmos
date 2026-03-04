@@ -332,6 +332,74 @@ func TestNeedsProvisioning(t *testing.T) {
 	}
 }
 
+func TestNeedsProvisioning_TTL(t *testing.T) {
+	tests := []struct {
+		name          string
+		ttl           string
+		updatedAt     time.Time
+		expected      bool
+		expectExpired bool
+	}{
+		{
+			name:          "TTL zero always expires",
+			ttl:           "0s",
+			updatedAt:     time.Now(),
+			expected:      true,
+			expectExpired: true,
+		},
+		{
+			name:          "TTL 1h with recent update does not expire",
+			ttl:           "1h",
+			updatedAt:     time.Now().Add(-30 * time.Minute),
+			expected:      false,
+			expectExpired: false,
+		},
+		{
+			name:          "TTL 1h with old update expires",
+			ttl:           "1h",
+			updatedAt:     time.Now().Add(-2 * time.Hour),
+			expected:      true,
+			expectExpired: true,
+		},
+		{
+			name:          "no TTL does not expire",
+			ttl:           "",
+			updatedAt:     time.Now().Add(-24 * 365 * time.Hour),
+			expected:      false,
+			expectExpired: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			dirPath := filepath.Join(tempDir, "component")
+			require.NoError(t, os.MkdirAll(dirPath, 0o755))
+			require.NoError(t, os.WriteFile(filepath.Join(dirPath, "main.tf"), []byte("# test"), 0o644))
+
+			// Write metadata with matching version/URI so only TTL matters.
+			metadata := &workdir.WorkdirMetadata{
+				SourceURI:     "github.com/test/repo//src",
+				SourceVersion: "main",
+				UpdatedAt:     tt.updatedAt,
+			}
+			require.NoError(t, workdir.WriteMetadata(dirPath, metadata))
+
+			sourceSpec := &schema.VendorComponentSource{
+				Uri:     "github.com/test/repo//src",
+				Version: "main",
+				TTL:     tt.ttl,
+			}
+
+			result, reason := needsProvisioning(dirPath, sourceSpec, true)
+			assert.Equal(t, tt.expected, result)
+			if tt.expectExpired {
+				assert.Contains(t, reason, "Source cache expired")
+			}
+		})
+	}
+}
+
 func TestDetermineSourceTargetDirectory(t *testing.T) {
 	tests := []struct {
 		name            string

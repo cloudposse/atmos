@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/duration"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/provisioner"
 	"github.com/cloudposse/atmos/pkg/provisioner/workdir"
@@ -75,6 +76,11 @@ func AutoProvisionSource(
 	}
 	if sourceSpec == nil {
 		return nil // No source configured - skip.
+	}
+
+	// Apply global TTL default if not set per-component.
+	if sourceSpec.TTL == "" {
+		sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
 	}
 
 	stack, _ := componentConfig["atmos_stack"].(string)
@@ -263,7 +269,20 @@ func needsProvisioning(targetDir string, sourceSpec *schema.VendorComponentSourc
 	}
 
 	// Check for version/URI changes.
-	return checkMetadataChanges(metadata, sourceSpec)
+	changed, reason := checkMetadataChanges(metadata, sourceSpec)
+	if changed {
+		return changed, reason
+	}
+
+	// Check TTL-based cache expiration.
+	if sourceSpec.TTL != "" {
+		expired, ttlReason := isSourceCacheExpired(sourceSpec.TTL, metadata.UpdatedAt)
+		if expired {
+			return true, ttlReason
+		}
+	}
+
+	return false, ""
 }
 
 // isNonEmptyDir checks if the path exists, is a directory, and contains at least one entry
@@ -309,6 +328,32 @@ func checkMetadataChanges(metadata *workdir.WorkdirMetadata, sourceSpec *schema.
 	}
 
 	return false, ""
+}
+
+// isSourceCacheExpired checks if the source cache has expired based on TTL.
+// A TTL of "0" or "0s" means always expired (always re-pull).
+func isSourceCacheExpired(ttl string, updatedAt time.Time) (bool, string) {
+	// Handle zero TTL explicitly (always expired).
+	if isZeroTTL(ttl) {
+		return true, fmt.Sprintf("Source cache expired (TTL: %s, always re-pull)", ttl)
+	}
+
+	ttlDuration, err := duration.ParseDuration(ttl)
+	if err != nil {
+		// Invalid TTL format - skip TTL check rather than failing.
+		return false, ""
+	}
+
+	if time.Since(updatedAt) > ttlDuration {
+		return true, fmt.Sprintf("Source cache expired (TTL: %s, last updated: %s)",
+			ttl, updatedAt.Format(time.RFC3339))
+	}
+	return false, ""
+}
+
+// isZeroTTL checks if the TTL string represents a zero duration.
+func isZeroTTL(ttl string) bool {
+	return ttl == "0" || ttl == "0s" || ttl == "0m" || ttl == "0h" || ttl == "0d"
 }
 
 // isLocalSource determines if a source URI refers to a local path.

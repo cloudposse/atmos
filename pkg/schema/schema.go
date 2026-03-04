@@ -433,6 +433,14 @@ type TemplatesSettingsGomplate struct {
 	Datasources map[string]TemplatesSettingsGomplateDatasource `yaml:"datasources" json:"datasources" mapstructure:"datasources"`
 }
 
+// TerraformSourceSettings holds global source configuration for Terraform components.
+type TerraformSourceSettings struct {
+	// TTL is the default cache duration for JIT-vendored sources.
+	// Applied to all components unless overridden per-component.
+	// If not set, cached sources are reused indefinitely.
+	TTL string `yaml:"ttl,omitempty" json:"ttl,omitempty" mapstructure:"ttl"`
+}
+
 type Terraform struct {
 	BasePath                string `yaml:"base_path" json:"base_path" mapstructure:"base_path"`
 	ApplyAutoApprove        bool   `yaml:"apply_auto_approve" json:"apply_auto_approve" mapstructure:"apply_auto_approve"`
@@ -456,6 +464,8 @@ type Terraform struct {
 	// PluginCacheDir is an optional custom path for the plugin cache.
 	// If empty and PluginCache is true, uses XDG cache: ~/.cache/atmos/terraform/plugins.
 	PluginCacheDir string `yaml:"plugin_cache_dir,omitempty" json:"plugin_cache_dir,omitempty" mapstructure:"plugin_cache_dir"`
+	// Source holds global source configuration defaults for JIT-vendored components.
+	Source TerraformSourceSettings `yaml:"source,omitempty" json:"source,omitempty" mapstructure:"source"`
 }
 
 type TerraformInit struct {

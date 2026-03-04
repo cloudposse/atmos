@@ -89,6 +89,11 @@ func parseSourceMap(sourceMap map[string]any) (*schema.VendorComponentSource, er
 		spec.Retry = parseRetryConfig(retryMap)
 	}
 
+	// Optional: ttl.
+	if ttl, ok := sourceMap["ttl"].(string); ok {
+		spec.TTL = ttl
+	}
+
 	return spec, nil
 }
 

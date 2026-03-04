@@ -125,6 +125,42 @@ components:
 | `random_jitter` | 0.0 | Randomness added to delays (0.1 = 10%) |
 | `max_elapsed_time` | 30m | Maximum total time for all retries |
 
+### Cache TTL for Floating Refs
+
+When using floating refs like branch names, the version string doesn't change even when upstream content does. Use `ttl` to control how long cached sources are reused:
+
+<File title="stacks/dev/us-east-1.yaml">
+```yaml
+components:
+  terraform:
+    my-module:
+      source:
+        uri: git::https://github.com/org/repo.git
+        version: develop
+        ttl: "0s"    # Always re-pull (active development)
+      vars:
+        enabled: true
+```
+</File>
+
+A global default TTL can be set in `atmos.yaml`:
+
+<File title="atmos.yaml">
+```yaml
+components:
+  terraform:
+    source:
+      ttl: "1h"     # Re-pull sources older than 1 hour
+```
+</File>
+
+| TTL Value | Use Case |
+|-----------|----------|
+| Not set | Stable releases — cache indefinitely, only re-pull on version/URI change |
+| `"0s"` | Active development — always get the latest from upstream |
+| `"1h"` | Team collaboration — hourly refresh catches colleagues' pushes |
+| `"7d"` | Slow-moving dependencies — weekly check for updates |
+
 ### Version Inheritance
 
 Define source defaults in a catalog and override versions per environment:

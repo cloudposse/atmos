@@ -131,6 +131,14 @@ source:
   <dt>`excluded_paths`</dt>
   <dd>Glob patterns for files to exclude. Applied after included_paths filtering.</dd>
 
+  <dt>`ttl`</dt>
+  <dd>Cache duration for JIT-vendored sources. Controls how long a cached source is reused before re-pulling from the remote. When set, Atmos checks the source's last update time against this TTL. If expired, the source is re-pulled automatically on the next command invocation. If not set, cached sources are reused indefinitely (only re-pulled on version or URI changes).
+
+  Examples: `"0s"` (always re-pull), `"1h"` (hourly), `"7d"` (weekly), `"daily"`.
+
+  A global default can be set in `atmos.yaml` under `components.packer.source.ttl` and overridden per-component.
+  </dd>
+
   <dt>`retry`</dt>
   <dd>
   Optional retry configuration for handling transient network errors during download. Useful for unreliable networks or when hitting rate limits.
