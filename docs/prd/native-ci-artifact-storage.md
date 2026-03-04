@@ -41,6 +41,7 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 
 **Questions to clarify:**
 - **Artifact types**: Basic artifact storage should support any files as artifacts. Planfile artifact is a group of files: `planfile`, `lock file` + optionally issue summary and drift summary. In the future, other artifact storage implementations will define their own types of artifacts.
+- **Artifact bundling**: A planfile artifact's files are always uploaded and downloaded together as an atomic operation. The packaging format is backend-specific: GitHub uses a zip archive; S3/local use a directory with raw files. The `ArtifactStore` interface abstracts this — callers provide/receive a set of files, and the backend decides how to store them.
 - **CRUD operations**: All of Upload, Download, List, Delete, GetMetadata are required for all artifact types.
 - **Versioning**: Only one version per artifact (same component+stack+SHA). If the backend supports multiple versions, our code will deal only with the latest version.
 - **Retention**: Backend's responsibility, but we can pass retention settings on artifact creation if the backend supports it (e.g., GitHub Artifacts allows defining TTL on upload).
@@ -55,8 +56,9 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 **Questions to clarify:**
 - **Generalization vs. specialization**: `ArtifactStore` should be a generic interface. `PlanfileStore` builds on top of it.
 - **Key schema**: Artifacts are keyed by `component/stack/sha`. Sufficient for now; we do not know additional contexts yet.
-- **Metadata storage**: Depends on the backend implementation, but in general metadata should be stored as a sidecar file/object.
-- **Backend selection**: Configured per-project in `atmos.yaml`. Backends are tried in order defined by `components.terraform.planfiles.priority`. If a backend is not available, the next one in the priority list is used. Example config:
+- **Metadata storage**: Stored as a JSON sidecar file named `{artifact-name}.metadata.json` alongside the artifact. Each backend stores the sidecar using its native mechanism (file for local, object for S3, etc.). For GitHub, metadata is embedded in the artifact archive.
+- **Artifact naming**: The artifact name is defined by the storage implementation layer (e.g., PlanfileStore), not by the backend. For example, PlanfileStore generates names like `{component}-{stack}`. Backends receive this name and decide how to store it: GitHub uses it directly as the GitHub artifact name; Local/S3 backends use their `key_pattern` which can reference the artifact name.
+- **Backend selection**: Configured per-project in `atmos.yaml`. The active backend is selected from `components.terraform.planfiles.priority` based on environment availability — not artifact availability. For example, if `GITHUB_ACTIONS=true` is set, the GitHub backend is selected; if not, the next backend in the priority list is checked. Once a backend is selected, all operations use it exclusively — there is no fallback on artifact-not-found. If an artifact is missing on the selected backend, the behavior is configurable: fail or ignore. The `--store` flag allows explicitly selecting a backend, bypassing priority detection. Example config:
 
 ```yaml
 components:
@@ -66,7 +68,6 @@ components:
         - "github"
         - "s3"
         - "local"
-      key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
       stores:
         s3:
           type: s3
@@ -74,26 +75,31 @@ components:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
             region: "us-east-1"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
         github:
           type: github-artifacts
           options:
             retention_days: 7
             owner: cloudposse
             repo: github-action-atmos-terraform-plan
+            artifact_name_pattern: "{{ .Component }}-{{ .Stack }}"
         azure:
           type: azure-blob
           options:
             account: "mystorageaccount"
             container: "planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
         gcs:
           type: gcs
           options:
             bucket: "my-gcs-bucket"
             prefix: "planfiles/"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
         local:
           type: local
           options:
             path: ".atmos/planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 ```
 - **Multi-backend**: Yes, different artifact types can use different backends, but not a focus for now.
 - **Registry pattern**: Use `pkg/ci/artifacts/registry.go` for backend registration.
@@ -113,10 +119,7 @@ components:
         - "s3"
         - "local"
 
-      # Key pattern for planfile naming (Go template)
-      key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
-
-      # Named stores
+      # Named stores — each backend has its own key/naming pattern
       stores:
         s3:
           type: s3
@@ -124,6 +127,7 @@ components:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
             region: "us-east-1"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         github:
           type: github-artifacts
@@ -131,23 +135,27 @@ components:
             retention_days: 7
             owner: cloudposse
             repo: github-action-atmos-terraform-plan
+            # GitHub uses the artifact name from the implementation layer directly
 
         azure:
           type: azure-blob
           options:
             account: "mystorageaccount"
             container: "planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         gcs:
           type: gcs
           options:
             bucket: "my-gcs-bucket"
             prefix: "planfiles/"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         local:
           type: local
           options:
             path: ".atmos/planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 ```
 
 ## Scope
@@ -216,7 +224,7 @@ Note: Artifact signing/provenance is not needed as a separate feature — SHA-25
 ### Core Interfaces
 
 **Questions to clarify:**
-- **Interface**: Generic `ArtifactStore` interface (as established in Key Design Decisions). `PlanfileStore` builds on top of it.
+- **Interface**: Generic `ArtifactStore` interface (as established in Key Design Decisions). `PlanfileStore` extends `ArtifactStore` — it bundles all planfile-related files (plan, lock, summaries) into a single artifact and delegates to `ArtifactStore` once.
 - **Operations**: Upload, Download, GetMetadata, List, Delete are the right set. The interface should support a query object for filtering to implement the use cases defined in the CLI subcommands section (filter by component, stack, SHA, `--all`).
 - **Upload input**: `io.Reader` (streaming).
 - **Download output**: `io.ReadCloser` (streaming).
@@ -224,9 +232,10 @@ Note: Artifact signing/provenance is not needed as a separate feature — SHA-25
 
 ### Storage Key Format
 
-**Questions to clarify:**
-- **Key format**: `{component}/{stack}/{sha}` by default. The key format should be configurable via `key_pattern` in `atmos.yaml`.
-- **Artifact type in key**: No automatic prefix based on artifact type. The key format depends entirely on the user's `key_pattern` configuration.
+- **Key format**: The key format is an **internal implementation detail** of each storage backend. It is not exposed to the user or displayed in CLI output like `atmos terraform planfile list`.
+  - **Local/S3/Azure/GCS**: Use a configurable `key_pattern` option (e.g., `{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan`) for file/object paths. Listing and filtering use glob/prefix operations native to the backend.
+  - **GitHub Artifacts**: Uses the artifact name provided by the implementation layer (e.g., PlanfileStore provides `{component}-{stack}`). SHA is derived from the workflow run's associated commit, not from the artifact name. Listing works by graph traversal: **SHA → commit statuses → workflow runs → artifacts**, then in-memory filtering by component/stack parsed from artifact names.
+- **Artifact type in key**: No automatic prefix based on artifact type. The key format depends entirely on the backend implementation.
 - **Timestamp/run ID in key**: No. These should be stored in metadata instead.
 - **Key collisions**: Last-write-wins — the artifact is simply overridden.
 
@@ -269,7 +278,9 @@ Note: Artifact signing/provenance is not needed as a separate feature — SHA-25
 - **`--store` flag**: Accepts a named store from config.
 - **`--format` flag**: Yes, support `json`, `yaml`, and `table` output formats.
 - **`list` filtering**: For now, only filtering by SHA (current SHA by default, `--all` for all SHAs).
-- **`download` output**: No stdout piping. Downloads to the local file system only.
+- **`download` output**: No stdout piping. Downloads to the local file system only. Files are placed into the component directory resolved from atmos stacks configuration:
+  - **Plan file**: Uses the planfile name generated by atmos for the given `{component}` + `{stack}` (from stacks config). Can be overridden with `--planfile-name` flag.
+  - **Lock file**: Downloaded as `.terraform.lock.hcl` into the component directory.
 - **Command group**: `atmos terraform planfile` is correct. Artifacts in general do not need a CLI interface — they define a generic framework for artifact storage in atmos. Specific implementations (like planfile) expose their own CLI commands.
 
 ## Storage Backend Requirements
@@ -289,6 +300,8 @@ Note: Artifact signing/provenance is not needed as a separate feature — SHA-25
 - **API version**: Use v4 Artifacts API or higher.
 - **In-progress downloads**: Not a limitation with v4. Artifacts are immediately available for download as soon as they are uploaded, even while the workflow run is still in progress.
 - **Cross-workflow access**: Yes, based on commit SHA. The GitHub storage should support a tricky lookup: it seeks artifacts related to the current SHA, and if the current SHA is the result of a PR merge/squash, it should also seek artifacts for all commits in the PR from the head back to the first commit that has all commit checks successful.
+- **Artifact naming**: The artifact name is provided by the implementation layer (e.g., PlanfileStore provides `{component}-{stack}`). SHA is not part of the artifact name — it comes from the workflow run's associated commit.
+- **Listing mechanism**: Lookup is a graph traversal: SHA → commit statuses → workflow runs → artifacts. The full list is fetched into memory, then filtered by component/stack parsed from artifact names. This is fundamentally different from Local/S3 backends which use filesystem glob or prefix listing.
 
 ### Local File System
 
