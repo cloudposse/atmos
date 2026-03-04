@@ -182,7 +182,6 @@ func (s *Service) createWorkdirDirectory(atmosConfig *schema.AtmosConfiguration,
 		basePath = "."
 	}
 
-	// Use stack-component naming for proper isolation between stacks.
 	workdirName := fmt.Sprintf("%s-%s", stack, component)
 	workdirPath := filepath.Join(basePath, WorkdirPath, "terraform", workdirName)
 

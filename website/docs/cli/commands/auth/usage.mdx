@@ -47,7 +47,7 @@ atmos auth exec -- terraform plan
 # Show current authentication status
 atmos auth whoami
 
-# Open AWS console in browser
+# Open cloud console in browser
 atmos auth console
 
 # Start a shell with authentication
@@ -65,7 +65,7 @@ atmos auth shell
       <li>Empty for interactive selection (e.g., <code>--identity</code>)</li>
       <li><code>false</code> to disable authentication (e.g., <code>--identity=false</code>)</li>
     </ul>
-    When set to <code>false</code>, Atmos skips identity authentication and uses standard AWS credential resolution.
+    When set to <code>false</code>, Atmos skips identity authentication and uses standard cloud provider credential resolution.
   </dd>
 </dl>
 
@@ -79,17 +79,36 @@ atmos auth shell
 
 **Providers** are the upstream systems that Atmos Auth uses to obtain initial credentials:
 
+**AWS**
 - **AWS SSO**: `aws/iam-identity-center`
 - **AWS SAML**: `aws/saml`
 - **GitHub OIDC**: `github/oidc`
+
+**Azure**
+- **Device Code**: `azure/device-code`
+- **OIDC (Workload Identity)**: `azure/oidc`
+- **CLI**: `azure/cli`
+
+**GCP**
+- **Application Default Credentials**: `gcp/adc`
+- **Workload Identity Federation**: `gcp/workload-identity-federation`
 
 ### Identities
 
 **Identities** represent the user accounts or roles available from provider credentials:
 
-- **AWS Permission Set**: `aws/permission-set`
-- **AWS Assume Role**: `aws/assume-role`
-- **AWS User**: `aws/user`
+**AWS**
+- **Permission Set**: `aws/permission-set`
+- **Assume Role**: `aws/assume-role`
+- **Assume Root**: `aws/assume-root`
+- **User (Break-glass)**: `aws/user`
+
+**Azure**
+- **Subscription**: `azure/subscription`
+
+**GCP**
+- **Service Account**: `gcp/service-account`
+- **Project**: `gcp/project`
 
 ### Identity Chaining
 
@@ -140,7 +159,7 @@ atmos terraform plan mycomponent --stack=dev
 
 **Recognized disable values:** `false`, `0`, `no`, `off` (case-insensitive)
 
-When disabled, Atmos skips all identity authentication and falls back to standard cloud provider SDK credential resolution.
+When disabled, Atmos skips all identity authentication and falls back to standard cloud provider SDK credential resolution (AWS, Azure, or GCP).
 
 ## Environment Variable Formats
 

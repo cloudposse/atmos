@@ -21,9 +21,6 @@ import (
 // HookEventBeforeTerraformInit is the hook event for before terraform init.
 const HookEventBeforeTerraformInit = provisioner.HookEvent("before.terraform.init")
 
-// WorkdirPath is the standard workdir directory name.
-const WorkdirPath = ".workdir"
-
 // DirPermissions is the default permission mode for directories.
 const DirPermissions = 0o755
 
@@ -191,11 +188,6 @@ func determineSourceTargetDirectory(
 	component string,
 	componentConfig map[string]any,
 ) (string, bool, error) {
-	basePath := atmosConfig.BasePath
-	if basePath == "" {
-		basePath = "."
-	}
-
 	// Check if workdir is enabled.
 	if isWorkdirEnabled(componentConfig) {
 		// Get stack name for workdir path.
@@ -207,9 +199,12 @@ func determineSourceTargetDirectory(
 				Err()
 		}
 
-		// Build workdir path: .workdir/<componentType>/<stack>-<component>/
-		workdirName := fmt.Sprintf("%s-%s", stack, component)
-		workdirPath := filepath.Join(basePath, WorkdirPath, componentType, workdirName)
+		basePath := atmosConfig.BasePath
+		if basePath == "" {
+			basePath = "."
+		}
+
+		workdirPath := workdir.BuildPath(basePath, componentType, component, stack, componentConfig)
 		return workdirPath, true, nil
 	}
 
