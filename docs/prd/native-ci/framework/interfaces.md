@@ -84,17 +84,20 @@ type BranchStatus struct {
 }
 
 type PRStatus struct {
-    Number    int
-    Title     string
-    Branch    string
-    Checks    []*CheckStatus
-    AllPassed bool
+    Number     int
+    Title      string
+    Branch     string
+    BaseBranch string
+    URL        string
+    Checks     []*CheckStatus
+    AllPassed  bool
 }
 
 type CheckStatus struct {
     Name       string
-    Status     string  // "success", "failure", "pending", "skipped"
-    Conclusion string
+    Status     string  // "queued", "in_progress", "completed"
+    Conclusion string  // "success", "failure", "neutral", etc.
+    DetailsURL string
 }
 ```
 
