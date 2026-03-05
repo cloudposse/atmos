@@ -962,7 +962,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+      - uses: ./.github/actions/atmos-ai
         with:
           prompt: |
             Review this PR for:
@@ -1019,7 +1019,7 @@ strategy:
   matrix:
     provider: [anthropic, openai, gemini]
 steps:
-  - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+  - uses: ./.github/actions/atmos-ai
     with:
       provider: ${{ matrix.provider }}
       prompt: "Review infrastructure changes"

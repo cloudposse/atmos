@@ -1832,7 +1832,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+      - uses: ./.github/actions/atmos-ai
         with:
           prompt: "Review for errors, security issues, and best practices"
           provider: anthropic
@@ -1849,7 +1849,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+      - uses: ./.github/actions/atmos-ai
         with:
           prompt: "Perform comprehensive security audit"
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -1865,7 +1865,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: cloudposse/atmos/.github/actions/atmos-ai@main
+      - uses: ./.github/actions/atmos-ai
         with:
           prompt: "Analyze cost impact and flag expensive changes"
           api-key: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -1883,9 +1883,7 @@ jobs:
 - ✅ No manual Atmos setup required
 
 **Documentation:**
-- Action README: `.github/actions/atmos-ai/README.md`
-- Website docs: `website/docs/integrations/github-actions/atmos-ai.mdx`
-- Example workflows: `.github/workflows/examples/`
+- Website docs: `website/docs/integrations/github-actions/atmos-ai.mdx` (includes action source and example workflows)
 
 **Automatic Context Discovery** - *Completed: October 2025*
 - **Purpose:** Intelligently discover and include relevant project files in AI conversations using glob patterns and gitignore filtering
