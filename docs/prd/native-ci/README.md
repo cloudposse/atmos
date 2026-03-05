@@ -9,6 +9,7 @@ This directory contains focused Product Requirement Documents for the Atmos Nati
 | Document | Description |
 |----------|-------------|
 | [overview.md](./overview.md) | Executive summary, problem statement, desired state, NFRs, success criteria, migration, FAQ |
+| [clarifications.md](./clarifications.md) | Resolved ambiguities, architecture decisions, open questions, and implementation specs for underspecified areas |
 
 ### [Framework](./framework/) — Core CI Infrastructure
 
