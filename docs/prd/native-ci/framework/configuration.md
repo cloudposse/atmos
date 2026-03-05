@@ -75,10 +75,16 @@ ci:
     # Whitelist of variables to export. When omitted, ALL variables are exported.
     # variables:
     #   - has_changes
-    #   - has_additions
-    #   - has_destructions
-    #   - artifact_key
-    #   - plan_summary
+    #   - has_errors
+    #   - exit_code
+    #   - resources_to_create
+    #   - resources_to_change
+    #   - resources_to_replace
+    #   - resources_to_destroy
+    #   - stack
+    #   - component
+    #   - command
+    #   - summary
 
   # Job summary with plan/apply results
   # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts

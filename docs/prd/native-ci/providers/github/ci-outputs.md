@@ -10,7 +10,7 @@
 
 **Behavior**:
 - Write to `$GITHUB_OUTPUT` in GitHub Actions
-- Export standard variables: `has_changes`, `has_additions`, `has_destructions`, `artifact_key`, `plan_summary`
+- Export standard variables: `has_changes`, `has_errors`, `exit_code`, `resources_to_create`, `resources_to_change`, `resources_to_replace`, `resources_to_destroy` (plugin), plus `stack`, `component`, `command`, `summary` (executor)
 - Export terraform outputs after successful apply (prefixed with `output_`)
 - Support filtering via `ci.output.variables` configuration
 

@@ -126,36 +126,45 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 }
 ```
 
-## Per-Plugin Storage
+## Per-Plugin Storage (IMPLEMENTED)
 
 Each plugin owns its artifact storage type, registry, and priority list. The executor brokers store resolution per plugin:
 
-1. During initialization, each plugin registers its stores with the executor
-2. The executor holds per-plugin store registries
-3. When binding hooks, the executor resolves the active store using that plugin's config priority list
-4. The resolved store is passed to the plugin's hook callback
+1. The executor's `createPlanfileStore()` resolves the active store using the plugin's config priority list (`planfilesConfig.Default` → environment detection → local fallback)
+2. The resolved store is used directly by the executor's `executeUploadAction()` and `executeDownloadAction()` handlers
+3. The plugin provides the artifact key via `GetArtifactKey(stack, component)`
+
+> **Current vs target**: In the current enum-based architecture, the executor owns store resolution and upload/download logic. In the target callback-based architecture, the resolved store would be passed to the plugin's hook callback as `(provider, store, opts)`.
 
 ```go
-// Plugin registers its stores during init
-executor.RegisterPluginStores("terraform", planfileStoreRegistry)
+// Current implementation: executor resolves store and executes actions directly
+func (e *Executor) createPlanfileStore(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (planfile.Store, error) {
+    // 1. Check explicit default
+    // 2. Try environment-based detection via priority list
+    // 3. Fall back to local store
+}
 
-// Executor resolves store using terraform's priority config
-store := executor.ResolveStore("terraform", atmosConfig)
-
-// Plugin receives artifact.Store in hook callback, wraps with adapter
-func (p *TerraformPlugin) OnAfterPlan(provider Provider, store artifact.Store, opts ExecuteOptions) error {
-    planStore := planfile.NewAdapter(store)
-    planStore.Upload(key, planfile, metadata)
+func (e *Executor) executeUploadAction(ctx context.Context, ...) error {
+    key := plugin.GetArtifactKey(stack, component)
+    return store.Upload(ctx, key, reader, metadata)
 }
 ```
 
 ## Integration Points
 
-### Files to Modify
+### Current State (IMPLEMENTED)
 
-| File | Changes |
+| File | Role |
+|------|------|
+| `pkg/ci/executor.go` | Action dispatcher: `executeActions()` switches on `HookAction` enum to call self-contained action handlers |
+| `pkg/ci/internal/plugin/types.go` | Plugin interface with 7 passive data methods + HookAction string enum + HookBinding struct |
+| `pkg/ci/plugins/terraform/plugin.go` | Terraform plugin implementing all 7 Plugin methods (data provider, no action logic) |
+| `pkg/hooks/hooks.go` | Calls `RunCIHooks()` which delegates to `ci.Execute()` |
+
+### Future Refactoring (Not Started)
+
+| File | Planned Changes |
 |------|---------|
-| `pkg/ci/executor.go` | Refactor from god-object to thin coordinator; move action logic into plugins |
+| `pkg/ci/executor.go` | Refactor from action dispatcher to thin coordinator; move action logic into plugins |
 | `pkg/ci/internal/plugin/types.go` | Update Plugin interface: remove passive data methods, add callback-based HookAction type |
 | `pkg/ci/plugins/terraform/plugin.go` | Implement hook callbacks (OnAfterPlan, OnBeforeApply, etc.) |
-| `pkg/hooks/hooks.go` | Unchanged — already calls `RunCIHooks()` which delegates to executor |

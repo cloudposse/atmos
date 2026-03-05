@@ -31,8 +31,8 @@ When `--verify-plan` is specified during apply:
 7. If no differences → **proceed** with apply using the fresh planfile
 
 ```bash
-# Download planfile and verify it matches current plan
-atmos terraform apply vpc -s plat-ue2-dev --download-planfile --verify-plan
+# Verify downloaded planfile matches current plan (download is automatic in CI mode)
+atmos terraform apply vpc -s plat-ue2-dev --ci --verify-plan
 ```
 
 ## Performance

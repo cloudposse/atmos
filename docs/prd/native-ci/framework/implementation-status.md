@@ -276,7 +276,7 @@ The executor uses an **enum-based action dispatch** pattern:
 - `FileOutputWriter` (`pkg/ci/internal/provider/output.go`) — writes to `$GITHUB_OUTPUT` (key=value, heredoc for multiline) and `$GITHUB_STEP_SUMMARY` (append)
 - `NoopOutputWriter` — used when not in CI
 - GitHub provider creates `FileOutputWriter` from env vars in `OutputWriter()` method
-- Generic provider creates `FileOutputWriter` from env vars (`CI_OUTPUT`, `CI_STEP_SUMMARY`)
+- Generic provider creates `FileOutputWriter` from env vars (`ATMOS_CI_OUTPUT`, `ATMOS_CI_SUMMARY`)
 - `OutputHelpers.WritePlanOutputs()` and `WriteApplyOutputs()` provide structured output
 
 ## Artifact Storage Implementation Details
@@ -398,6 +398,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.5 | 2026-03-05 | Fourth sync pass: fixed ci-outputs.md Behavior section variable names, updated configuration.md whitelist example, rewrote hooks-integration.md Per-Plugin Storage and Integration Points sections to show current vs target, fixed plan-verification.md --download-planfile flag (automatic in CI), fixed artifact-storage.md generic provider context (no git fallback), fixed generic provider env vars (ATMOS_CI_OUTPUT not CI_OUTPUT), updated status-checks.md context_prefix (hardcoded not from config) |
 | 1.4 | 2026-03-05 | Third sync pass: fixed output variable names (resources_to_create not has_additions_count), updated Files Modified table (plan.go/describe_affected done, --upload-planfile N/A), fixed ci.enabled truth table (--ci bypasses it), updated generic provider capabilities, fixed matrix output key (matrix= not affected=) |
 | 1.3 | 2026-03-05 | Updated to match actual codebase: Plugin interface (7 methods), HookAction as enum, executor actions all implemented (summary/output/upload/download/check), GitHub Artifacts store done, FileOutputWriter done, sentinel errors synced with code |
 | 1.2 | 2026-01-15 | Reorganized PRDs into framework/providers/terraform-plugin directories |

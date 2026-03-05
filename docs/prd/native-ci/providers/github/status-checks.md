@@ -70,7 +70,9 @@ ci:
     context_prefix: "atmos"  # Check name prefix: "atmos/plan — vpc in plat-ue2-dev"
 ```
 
-The `context_prefix` is wired from configuration now (not deferred). Check names follow the pattern: `{context_prefix}/{command} — {component} in {stack}`. For example: `atmos/plan — vpc in plat-ue2-dev`.
+The `context_prefix` is currently **hardcoded** as `"atmos/"` in `FormatCheckRunName()` (`pkg/ci/internal/provider/check.go`), not yet wired from configuration. Check names follow the pattern: `atmos/{command}: {stack}/{component}`. For example: `atmos/plan: plat-ue2-dev/vpc`.
+
+> **Note**: The `ci.checks.context_prefix` config field exists in the schema but is not read by `FormatCheckRunName()`. Wiring it is a future task.
 
 ## `atmos ci status` Command
 

@@ -164,7 +164,7 @@ Implement a registry pattern (following `pkg/store/`) for artifact storage backe
 
 ## Context and Metadata
 
-- **CI context source**: Depends on the current provider from `pkg/ci/providers/*`. GitHub provider relies on environment variables. Generic provider uses environment variables with fallback to git, or leaves fields empty if both fail.
+- **CI context source**: Depends on the current provider from `pkg/ci/providers/*`. GitHub provider relies on environment variables. Generic provider uses environment variables only (no git fallback), leaving fields empty if env vars are not set.
 - **Metadata extensibility**: No user-defined labels/tags. Only storage implementations can extend metadata (e.g., planfile storage adds `has_changes` field).
 - **Metadata struct**: (**IMPLEMENTED**) Base artifact `Metadata` in `pkg/ci/artifact/metadata.go` contains: Stack, Component, SHA, BaseSHA, Branch, PRNumber, RunID, Repository, CreatedAt, ExpiresAt, SHA256, AtmosVersion, Custom. Planfile-specific fields (ComponentPath, PlanSummary, HasChanges, Additions, Changes, Destructions, MD5, TerraformVersion, TerraformTool) remain in the planfile `Metadata` in `pkg/ci/plugins/terraform/planfile/interface.go`.
 - **Atmos version in metadata**: Yes, included as `AtmosVersion` in base artifact metadata.
