@@ -73,6 +73,11 @@ func (c *CICommandProvider) GetGroup() string {
 func (c *CICommandProvider) GetAliases() []internal.CommandAlias {
     return nil
 }
+
+// IsExperimental returns true because CI commands are experimental.
+func (c *CICommandProvider) IsExperimental() bool {
+    return true
+}
 ```
 
 Commands are registered via blank imports in `cmd/root.go`:
