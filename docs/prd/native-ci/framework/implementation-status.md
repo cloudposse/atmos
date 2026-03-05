@@ -26,12 +26,13 @@
 9. Implement GitHub Artifacts store — Phase 4
 10. Azure Blob and GCS stores — Deferred
 
-### Phase 3: Hook Integration
+### Phase 3: Plugin-Executor Integration
 
-1. Create CI hook commands
-2. Register hooks in `pkg/hooks/hooks.go`
-3. Integrate into `internal/exec/terraform.go`
-4. Implement `--verify-plan` using plan-diff
+1. Refactor `pkg/ci/executor.go` from god-object to thin coordinator
+2. Update Plugin interface with hook callback signature `(provider, store, event)`
+3. Implement terraform plugin hook callbacks (OnBeforePlan, OnAfterPlan, OnBeforeApply, OnAfterApply)
+4. Wire `hooks.RunCIHooks()` → `ci.Execute()` → plugin callbacks in lifecycle
+5. Implement `--verify-plan` using plan-diff (download stored planfile to temp, fresh plan, compare)
 
 ### Phase 4: Outputs and Comments
 
@@ -75,10 +76,11 @@
 | | Azure Blob store | Deferred | |
 | | GCS store | Deferred | |
 | | `atmos terraform planfile` commands | Done | |
-| **Phase 3** | Hook Integration | Not Started | 0% |
-| | CI hook commands | Not Started | |
-| | Register hooks in pkg/hooks/hooks.go | Not Started | |
-| | Integrate into internal/exec/terraform.go | Not Started | |
+| **Phase 3** | Plugin-Executor Integration | Not Started | 0% |
+| | Refactor executor to thin coordinator | Not Started | |
+| | Plugin hook callbacks (provider, store, event) | Not Started | |
+| | Terraform plugin OnAfterPlan / OnBeforeApply / OnAfterApply | Not Started | |
+| | Wire RunCIHooks() → ci.Execute() → plugin callbacks | Not Started | |
 | | `--verify-plan` using plan-diff | Not Started | |
 | **Phase 4** | Outputs and Comments | Not Started | 0% |
 | | $GITHUB_OUTPUT writer | Not Started | |
@@ -105,8 +107,8 @@
 | `pkg/ci/output.go` | OutputWriter interface | Done |
 | `pkg/ci/registry.go` | Provider registry (detect and select provider) | Done |
 | `pkg/ci/check.go` | CheckRun types and constants | Done |
-| `pkg/ci/executor.go` | Execute() - unified action executor | Done |
-| `pkg/ci/generic.go` | Generic CI provider fallback | Done |
+| `pkg/ci/executor.go` | Thin coordinator: provider/plugin/store wiring (needs refactor from god-object) | Done (needs refactor) |
+| `pkg/ci/providers/generic/provider.go` | Generic CI provider fallback | Done |
 | `pkg/ci/plugin.go` | Plugin interface | Done |
 | `pkg/ci/plugin_registry.go` | Plugin registry | Done |
 | **pkg/ci/artifact/** | Generic artifact storage layer | |
@@ -127,7 +129,7 @@
 | `pkg/ci/plugins/terraform/planfile/azure/store.go` | Azure Blob implementation | Deferred |
 | `pkg/ci/plugins/terraform/planfile/gcs/store.go` | GCS implementation | Deferred |
 | **pkg/ci/github/** | Implements `ci.Provider` interface for GitHub Actions | |
-| `pkg/ci/github/provider.go` | GitHub Actions Provider (implements ci.Provider) | Done |
+| `pkg/ci/providers/github/provider.go` | GitHub Actions Provider (implements ci.Provider) | Done |
 | `pkg/ci/github/client.go` | GitHub API client wrapper (uses go-github v59) | Done |
 | `pkg/ci/github/status.go` | GetStatus, GetCombinedStatus, GetCheckRuns | Done |
 | `pkg/ci/github/checks.go` | Check runs API | Done |
@@ -135,12 +137,12 @@
 | `pkg/ci/github/user.go` | GetAuthenticatedUser for current user info | Phase 4 |
 | `pkg/ci/github/output.go` | $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer | Phase 4 |
 | `pkg/ci/github/comment.go` | PR comment templates (tfcmt-inspired) | Phase 4 |
-| **pkg/ci/terraform/** | Terraform-specific CI provider | |
-| `pkg/ci/terraform/provider.go` | Terraform CI provider | Done |
-| `pkg/ci/terraform/parser.go` | Parse plan/apply output | Done |
-| `pkg/ci/terraform/context.go` | Terraform template context | Done |
-| `pkg/ci/terraform/templates/plan.md` | Default plan template | Done |
-| `pkg/ci/terraform/templates/apply.md` | Default apply template | Done |
+| **pkg/ci/plugins/terraform/** | Terraform CI plugin | |
+| `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (hook callbacks, output parsing) | Done (needs hook callback impl) |
+| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output | Done |
+| `pkg/ci/plugins/terraform/context.go` | Terraform template context | Done |
+| `pkg/ci/plugins/terraform/templates/plan.md` | Default plan template | Done |
+| `pkg/ci/plugins/terraform/templates/apply.md` | Default apply template | Done |
 | **pkg/ci/templates/** | Template loading system | |
 | `pkg/ci/templates/loader.go` | Template loading with override support | Done |
 | **cmd/terraform/planfile/** | New subcommand group | |
@@ -154,11 +156,12 @@
 | `cmd/ci/ci.go` | CI command group + CICommandProvider | Done |
 | `cmd/ci/status.go` | `atmos ci status` | Done |
 | **pkg/hooks/** | | |
-| `pkg/hooks/ci_upload.go` | CI upload hook command | Phase 3 |
-| `pkg/hooks/ci_download.go` | CI download hook command | Phase 3 |
-| `pkg/hooks/ci_comment.go` | CI comment hook command | Phase 3 |
-| `pkg/hooks/ci_summary.go` | CI summary hook command | Phase 3 |
-| `pkg/hooks/ci_output.go` | CI output hook command | Phase 3 |
+| `pkg/hooks/hooks.go` | Already calls RunCIHooks() which delegates to ci.Execute() | Done |
+| ~~`pkg/hooks/ci_upload.go`~~ | ~~CI upload hook command~~ | **Superseded** — logic moved into plugin callbacks |
+| ~~`pkg/hooks/ci_download.go`~~ | ~~CI download hook command~~ | **Superseded** — logic moved into plugin callbacks |
+| ~~`pkg/hooks/ci_comment.go`~~ | ~~CI comment hook command~~ | **Superseded** — logic moved into plugin callbacks |
+| ~~`pkg/hooks/ci_summary.go`~~ | ~~CI summary hook command~~ | **Superseded** — logic moved into plugin callbacks |
+| ~~`pkg/hooks/ci_output.go`~~ | ~~CI output hook command~~ | **Superseded** — logic moved into plugin callbacks |
 
 ## Files to Modify
 
@@ -223,8 +226,8 @@ ErrGitHubArtifactAPIError     = errors.New("GitHub Artifacts API error")
 | Generic provider | `pkg/ci/generic.go` | Fallback CI provider for non-GitHub environments |
 | Plugin | `pkg/ci/plugin.go` | Plugin interface for terraform/helmfile |
 | Plugin registry | `pkg/ci/plugin_registry.go` | Registry for component-type plugins |
-| Executor | `pkg/ci/executor.go` | Unified action executor |
-| Terraform provider | `pkg/ci/terraform/` | Terraform-specific CI behavior |
+| Executor | `pkg/ci/executor.go` | Thin coordinator: provider/plugin/store wiring (needs refactor) |
+| Terraform plugin | `pkg/ci/plugins/terraform/` | Terraform-specific CI behavior (hook callbacks, parsing, templates) |
 | Template loader | `pkg/ci/templates/loader.go` | Template loading with override support |
 | GitHub checks | `pkg/ci/github/checks.go` | GitHub check runs API |
 

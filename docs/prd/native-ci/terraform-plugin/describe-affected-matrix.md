@@ -21,10 +21,12 @@ atmos describe affected --format=matrix
 atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"
 ```
 
-**Output Format**:
+**Output Format** (fixed schema — `component` and `stack` fields only):
 ```json
 {"include":[{"component":"vpc","stack":"dev"},{"component":"eks","stack":"dev"}]}
 ```
+
+> **Design Decision**: The matrix uses a fixed schema with only `component` and `stack` fields. Additional fields (like `component_path`) are not included — users can derive them from atmos configuration. This keeps the matrix simple and avoids schema bloat.
 
 ## GitHub Actions Integration
 

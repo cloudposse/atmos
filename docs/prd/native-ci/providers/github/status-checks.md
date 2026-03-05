@@ -65,7 +65,10 @@ Status checks require the `checks: write` permission and are enabled via configu
 ci:
   checks:
     enabled: true
+    context_prefix: "atmos"  # Check name prefix: "atmos/plan — vpc in plat-ue2-dev"
 ```
+
+The `context_prefix` is wired from configuration now (not deferred). Check names follow the pattern: `{context_prefix}/{command} — {component} in {stack}`. For example: `atmos/plan — vpc in plat-ue2-dev`.
 
 ## `atmos ci status` Command
 

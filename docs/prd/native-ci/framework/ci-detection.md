@@ -12,9 +12,24 @@
 - Allow explicit override via `--ci` flag for local testing
 - Gracefully degrade when CI features unavailable (e.g., missing `$GITHUB_STEP_SUMMARY`)
 
+**`ci.enabled` is a hard kill switch:**
+
+`ci.enabled` in `atmos.yaml` controls whether native CI support is available at all. When `false`, all CI features are disabled — auto-detection is skipped and `--ci` flag is ignored.
+
+| `ci.enabled` config | `--ci` flag | CI env detected | Result |
+|--------------------:|:-----------:|:---------------:|--------|
+| false | any | any | **CI disabled** — config is a hard kill switch |
+| true | true | any | CI enabled (detected provider or generic fallback) |
+| true | false | yes | CI enabled (auto-detected provider) |
+| true | false | no | CI disabled (no provider available) |
+| unset (default) | true | any | CI enabled (default is enabled) |
+| unset (default) | false | yes | CI enabled (auto-detected) |
+| unset (default) | false | no | CI disabled |
+
 **Validation**:
-- Running in GitHub Actions automatically enables CI mode
+- Running in GitHub Actions automatically enables CI mode (when `ci.enabled` is not `false`)
 - Running locally with `--ci` produces identical output format
+- `ci.enabled: false` disables CI even in CI environments, even with `--ci` flag
 - Missing CI environment variables do not cause errors
 
 ## FR-7: Command Parity

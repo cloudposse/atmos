@@ -91,13 +91,17 @@ Locally, `--ci` produces identical output—same formatting, same behavior. Debu
 
 ### NFR-2: Reliability
 
-**Requirement**: CI feature failures do not block terraform operations.
+**Requirement**: CI feature failures are handled with appropriate severity.
 
 **Behavior**:
+- Planfile upload failure **fails command** (downstream apply depends on it)
+- Planfile download failure **fails command** (apply can't proceed without planfile)
 - Summary write failure logs warning, does not fail command
 - Output variable write failure logs warning per variable
-- Planfile upload failure fails command (data integrity)
 - Status check failure logs warning, does not fail command
+- PR comment failure logs warning, does not fail command
+
+The plugin owns error severity decisions — artifact operations are fatal, all other CI features are best-effort.
 
 ### NFR-3: Security
 
@@ -186,7 +190,7 @@ Users currently using the GitHub Actions can migrate incrementally:
 
 - [Existing CI Detection](../../pkg/telemetry/ci.go) - Detects 24+ CI providers
 - [Lifecycle Hooks](../../pkg/hooks/) - Hook system for terraform events
-- Plan-Diff (`internal/exec/terraform_plan_diff*.go`) - Semantic plan comparison (planned)
+- [Plan-Diff](../../internal/exec/terraform_plan_diff.go) - Semantic plan comparison (implemented)
 - [Store Registry](../../pkg/store/registry.go) - Pattern for planfile stores
 - Terraform Output Package (`pkg/terraform/output/`) - Output formatting (planned, tf-output-format branch)
 - [tfcmt](https://github.com/suzuki-shunsuke/tfcmt) - Inspiration for PR comments

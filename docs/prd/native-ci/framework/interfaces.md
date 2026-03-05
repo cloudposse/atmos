@@ -177,6 +177,44 @@ type Metadata struct {
 }
 ```
 
+## Plugin Interface
+
+The plugin owns its CI behavior. The executor passes `(provider, store)` to the plugin's hook callbacks. See [Hooks Integration](./hooks-integration.md) for the full architecture.
+
+```go
+// pkg/ci/internal/plugin/types.go
+
+// Plugin represents a component-type CI plugin (terraform, helmfile, etc.).
+type Plugin interface {
+    // GetType returns the component type (e.g., "terraform").
+    GetType() string
+
+    // GetHookBindings returns events this plugin subscribes to.
+    GetHookBindings() []HookBinding
+
+    // GetDefaultTemplates returns embedded default templates.
+    GetDefaultTemplates() embed.FS
+
+    // BuildTemplateContext creates a template context from execution results.
+    BuildTemplateContext(info *ConfigAndStacksInfo, ciCtx *Context, output string, command string) (any, error)
+
+    // ParseOutput parses command output into structured results.
+    ParseOutput(output string, command string) (*OutputResult, error)
+
+    // GetOutputVariables returns CI output variables for a command.
+    GetOutputVariables(result *OutputResult, command string) map[string]string
+
+    // GetArtifactKey generates the artifact storage key.
+    GetArtifactKey(info *ConfigAndStacksInfo, command string) string
+}
+
+// HookBinding maps an event to a template name.
+type HookBinding struct {
+    Event    string  // "after.terraform.plan"
+    Template string  // "plan" → templates/plan.md
+}
+```
+
 ## Package Structure
 
 ```
@@ -185,42 +223,47 @@ pkg/ci/
   ├── plugin.go                # Plugin interface
   ├── plugin_registry.go       # Plugin registry
   ├── context.go               # Context struct (run ID, PR, SHA, etc.)
-  ├── executor.go              # Execute() - unified action executor
-  ├── generic.go               # Generic CI provider fallback
+  ├── executor.go              # Thin coordinator: provider/plugin/store wiring
   ├── output.go                # OutputWriter interface
   ├── provider.go              # Provider interface definition
   ├── registry.go              # Provider registry (detect and select provider)
   ├── status.go                # Status, BranchStatus, PRStatus, CheckStatus structs
-  ├── artifact/                # Generic artifact storage layer
+  ├── artifact/                # Base artifact storage layer (common interface)
   │   ├── store.go             # Store interface, FileEntry/FileResult, StoreFactory
-  │   ├── metadata.go          # Metadata, ArtifactInfo structs
+  │   ├── metadata.go          # Metadata, ArtifactInfo structs (SHA, Component, Stack, timestamps, etc.)
   │   ├── query.go             # Query struct for filtering
   │   ├── registry.go          # Backend registry: Register(), NewStore()
-  │   ├── selector.go          # EnvironmentChecker, SelectStore()
+  │   ├── selector.go          # EnvironmentChecker, SelectStore() for priority-based selection
   │   ├── mock_store.go        # Generated mock
   │   └── local/
   │       └── store.go         # Local filesystem backend
   ├── plugins/terraform/
-  │   └── planfile/            # Planfile artifact storage (wraps artifact.Store)
+  │   ├── plugin.go            # Terraform CI plugin (hook callbacks, output parsing)
+  │   ├── parser.go            # Parse plan/apply output
+  │   ├── context.go           # Terraform template context
+  │   ├── templates/
+  │   │   ├── plan.md          # Default plan template
+  │   │   └── apply.md         # Default apply template
+  │   └── planfile/            # Planfile storage (extends artifact.Store)
   │       ├── interface.go     # planfile.Store interface, Metadata
-  │       ├── registry.go      # Storage backend registry
+  │       ├── registry.go      # Planfile-specific storage registry
   │       ├── adapter/         # Adapter: planfile.Store -> artifact.Store
   │       │   ├── store.go     # Adapter implementation
   │       │   └── factory.go   # StoreFactory for registry
-  │       └── s3/
-  │           └── store.go     # S3 store (metadata in S3, no DynamoDB)
-  ├── github/                  # Implements ci.Provider for GitHub Actions
-  │   ├── provider.go          # GitHub Actions Provider
-  │   ├── client.go            # GitHub API client wrapper
-  │   ├── checks.go            # Check runs API
-  │   └── status.go            # GetStatus, GetCombinedStatus
-  ├── terraform/               # Terraform-specific CI provider
-  │   ├── provider.go          # Terraform CI provider
-  │   ├── parser.go            # Parse plan/apply output
-  │   ├── context.go           # Terraform template context
-  │   └── templates/
-  │       ├── plan.md          # Default plan template
-  │       └── apply.md         # Default apply template
+  │       ├── s3/
+  │       │   └── store.go     # S3 store (metadata in S3, no DynamoDB)
+  │       ├── github/
+  │       │   └── store.go     # GitHub Artifacts store (Phase 4)
+  │       └── local/
+  │           └── store.go     # Local filesystem store
+  ├── providers/
+  │   ├── github/              # Implements ci.Provider for GitHub Actions
+  │   │   ├── provider.go      # GitHub Actions Provider
+  │   │   ├── client.go        # GitHub API client wrapper
+  │   │   ├── checks.go        # Check runs API
+  │   │   └── status.go        # GetStatus, GetCombinedStatus
+  │   └── generic/             # Generic CI provider fallback
+  │       └── provider.go      # Detects CI=true, basic context from env vars
   └── templates/
       └── loader.go            # Template loading with override support
 ```

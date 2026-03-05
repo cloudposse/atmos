@@ -59,7 +59,10 @@ components:
 
 # CI-specific settings (provider-agnostic naming)
 ci:
-  # Auto-enabled when CI detected, or explicit
+  # Hard kill switch for all CI features.
+  # When false: ALL CI features disabled — auto-detection skipped, --ci flag ignored.
+  # When true (or unset/default): CI features available via auto-detection or --ci flag.
+  # See ci-detection.md for full precedence table.
   enabled: true
 
   # Output variables for downstream jobs

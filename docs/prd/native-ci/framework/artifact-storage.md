@@ -63,7 +63,15 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 
 ## Key Design Decisions
 
-**Generalization vs. specialization**: `ArtifactStore` should be a generic interface. `PlanfileStore` builds on top of it.
+**Generalization vs. specialization**: `artifact.Store` is a generic base interface defining the minimum contract common to all artifact types. Plugin-specific stores (e.g., `planfile.Store`) extend it with domain-specific fields and behavior.
+
+**Per-plugin storage architecture**: There is no global artifact storage available to all plugins. Each CI plugin defines its own artifact type, storage interface, registry, and priority list:
+
+1. The **plugin** registers its stores with the executor during initialization
+2. The **executor** holds per-plugin store registries and resolves the active store using that plugin's config priority list
+3. The resolved store is passed to the plugin's hook callback as `(provider, store, event)`
+
+For example, the terraform plugin owns `planfile.Store` (which extends `artifact.Store`), registers S3/local/GitHub backends in its own registry, and receives its resolved store in hook callbacks. A future helmfile plugin would define its own artifact type and registry independently.
 
 **Key schema**: Artifacts are keyed by `component/stack/sha`. Sufficient for now; we do not know additional contexts yet.
 
@@ -71,11 +79,11 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 
 **Artifact naming**: The artifact name is defined by the storage implementation layer (e.g., PlanfileStore), not by the backend. For example, PlanfileStore generates names like `{component}-{stack}`. Backends receive this name and decide how to store it: GitHub uses it directly as the GitHub artifact name; Local/S3 backends use their `key_pattern` which can reference the artifact name.
 
-**Backend selection**: Configured per-project in `atmos.yaml`. The active backend is selected from `components.terraform.planfiles.priority` based on environment availability — not artifact availability. For example, if `GITHUB_ACTIONS=true` is set, the GitHub backend is selected; if not, the next backend in the priority list is checked. Once a backend is selected, all operations use it exclusively — there is no fallback on artifact-not-found. If an artifact is missing on the selected backend, the behavior is configurable: fail or ignore. The `--store` flag allows explicitly selecting a backend, bypassing priority detection.
+**Backend selection**: Configured per-plugin in `atmos.yaml` (e.g., `components.terraform.planfiles.priority`). The active backend is selected based on environment availability — not artifact availability. For example, if `GITHUB_ACTIONS=true` is set, the GitHub backend is selected; if not, the next backend in the priority list is checked. Once a backend is selected, all operations use it exclusively — there is no fallback on artifact-not-found. If an artifact is missing on the selected backend, the behavior is configurable: fail or ignore. The `--store` flag allows explicitly selecting a backend, bypassing priority detection.
 
-**Multi-backend**: Yes, different artifact types can use different backends, but not a focus for now.
+**Multi-backend**: Different plugins can use different backends with independent priority lists and registries. This is a natural consequence of per-plugin storage ownership.
 
-**Registry pattern**: Use `pkg/ci/artifacts/registry.go` for backend registration.
+**Registry pattern**: Each plugin has its own store registry (e.g., `pkg/ci/plugins/terraform/planfile/registry.go`). The base `pkg/ci/artifact/registry.go` provides the common registration infrastructure.
 
 ## Architecture
 
@@ -89,7 +97,7 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 
 ### Core Interfaces
 
-**Interface**: Generic `ArtifactStore` interface (as established in Key Design Decisions). `PlanfileStore` extends `ArtifactStore` — it bundles all planfile-related files (plan, lock, summaries) into a single artifact and delegates to `ArtifactStore` once.
+**Interface**: `artifact.Store` is the base interface defining common operations (Upload, Download, Delete, List, Exists, GetMetadata) keyed by SHA/Component/Stack with query-based filtering. Each plugin extends this for its domain — `planfile.Store` bundles planfile-related files (plan, lock, summaries) into a single artifact and delegates to `artifact.Store` via the adapter pattern.
 
 **Operations**: Upload, Download, GetMetadata, List, Delete are the right set. The interface should support a query object for filtering to implement the use cases defined in the CLI subcommands section (filter by component, stack, SHA, `--all`).
 
