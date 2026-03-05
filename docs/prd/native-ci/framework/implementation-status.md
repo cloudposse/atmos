@@ -39,7 +39,9 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 7. Check run action (`executeCheckAction`) — create on before, update on after — Done
 8. Summary action (`executeSummaryAction`) — renders template, writes to `$GITHUB_STEP_SUMMARY` — Done
 9. Output action (`executeOutputAction`) — writes variables to `$GITHUB_OUTPUT` with whitelist filtering — Done
-10. `--verify-plan` using plan-diff — Not Started
+10. `--ci` flag on `terraform apply` command — Done (flag defined with env var bindings `ATMOS_CI`, `CI`)
+11. Apply CI hooks integration (output capture + hook dispatch like plan) — Not Started (flag exists but PostRunE only calls basic hooks, no CI output capture)
+12. `--verify-plan` using plan-diff — Not Started
 
 > **Future refactoring**: The hooks-integration.md PRD describes a callback-based pattern where plugins own all logic via `HookAction` function callbacks. The current enum-based approach works but the executor is a "god-object" that knows about all action types. Refactoring to callbacks would move action logic into plugins for better separation of concerns.
 
@@ -104,6 +106,8 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | | `FileOutputWriter` for `$GITHUB_OUTPUT`/`$GITHUB_STEP_SUMMARY` | Done | |
 | | `OutputHelpers` — `WritePlanOutputs()`, `WriteApplyOutputs()` | Done | |
 | | Config-based action enable/disable (`isActionEnabled()`) | Done | |
+| | `--ci` flag on `terraform apply` (flag + env var bindings) | Done | |
+| | Apply CI hooks integration (output capture + hook dispatch) | Not Started | |
 | | `--verify-plan` using plan-diff | Not Started | |
 | **Phase 4** | PR Comments & TF Output Export | Not Started | 0% |
 | | PR comment action type | Not Started | |
@@ -211,7 +215,9 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | `cmd/terraform/terraform.go` | Register planfile subcommand (`planfile.PlanfileCmd`) | Done |
 | `errors/errors.go` | Add CI + artifact + planfile sentinel errors (22 total) | Done |
 | `internal/exec/clean_adapter_funcs.go` | Export `ConstructTerraformComponentPlanfilePath()` for planfile upload | Done |
-| `cmd/terraform/plan.go` | Add `--ci` and `--skip-planfile` flags | Done |
+| `cmd/terraform/plan.go` | Add `--ci` and `--skip-planfile` flags, full CI output capture + hook dispatch | Done |
+| `cmd/terraform/apply.go` | Add `--ci` flag with env var bindings (`ATMOS_CI`, `CI`) | Done (flag only) |
+| `cmd/terraform/apply.go` | CI output capture + CI hook dispatch (like plan.go) | Not Started |
 | `cmd/describe_affected.go` | Add `--format=matrix` support | Done |
 | `internal/exec/describe_affected.go` | Implement matrix format output (`MatrixOutput`, `MatrixEntry`, `writeMatrixOutput`) | Done |
 | `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
@@ -398,6 +404,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.0 | 2026-03-05 | Ninth sync pass: verified full codebase against PRD. Added: `--ci` flag on `terraform apply` (Done — flag + env vars defined), apply CI hooks integration (Not Started — flag exists but no output capture/CI hook dispatch like plan.go). All other statuses confirmed accurate. |
 | 1.9 | 2026-03-05 | Eighth sync pass: added "current vs target" qualifier to overview.md NFR-2 (upload/download failure currently warn-only, not fatal); verified configuration schema fields, artifact metadata fields, executor sync.Map/check function names, ConstructTerraformComponentPlanfilePath — all correct |
 | 1.8 | 2026-03-05 | Seventh sync pass: fixed artifact-storage.md scope (upload IS a CLI command, all 5 subcommands implemented); fixed ci-detection.md RunCIHooks() location (defined in pkg/hooks/hooks.go, called from cmd/terraform/utils.go); added missing IsExperimental() to provider.md CICommandProvider snippet |
 | 1.7 | 2026-03-05 | Sixth sync pass: fixed ci-outputs.md Behavior bullet (output_* is Phase 4); fixed overview.md auth FAQ (GITHUB_TOKEN/GH_TOKEN, not ATMOS_GITHUB_TOKEN); rewrote planfile-storage.md CLI commands to match actual key-based cobra commands (list [prefix], upload --component --stack, download <key>, delete <key>, show <key>); updated hooks-integration.md Error Severity table to show current vs target behavior (current: all warn-and-continue; target: upload/download fatal) |
