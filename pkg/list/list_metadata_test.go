@@ -401,7 +401,8 @@ func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 
 	// Capture stdout to assert filtering behavior.
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
 	os.Stdout = w
 	defer func() { os.Stdout = oldStdout }()
 
@@ -409,9 +410,10 @@ func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 		Stack: "tenant1-ue2-dev",
 	})
 
-	_ = w.Close()
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	_, _ = goio.Copy(&buf, r)
+	_, copyErr := goio.Copy(&buf, r)
+	require.NoError(t, copyErr)
 	os.Stdout = oldStdout
 
 	require.NoError(t, err)
@@ -439,3 +441,4 @@ func TestExecuteListMetadataCmd_InvalidConfig(t *testing.T) {
 	err := ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{})
 	assert.Error(t, err)
 }
+

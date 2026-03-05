@@ -370,15 +370,17 @@ func TestExecuteListInstancesCmd_WithStackPattern(t *testing.T) {
 
 	// Capture stdout to assert filtering behavior.
 	oldStdout := os.Stdout
-	r, w, _ := os.Pipe()
+	r, w, pipeErr := os.Pipe()
+	require.NoError(t, pipeErr)
 	os.Stdout = w
 	defer func() { os.Stdout = oldStdout }()
 
 	err = executeListInstancesCmd(cmd, []string{}, opts)
 
-	_ = w.Close()
+	require.NoError(t, w.Close())
 	var buf bytes.Buffer
-	_, _ = goio.Copy(&buf, r)
+	_, copyErr := goio.Copy(&buf, r)
+	require.NoError(t, copyErr)
 	os.Stdout = oldStdout
 
 	require.NoError(t, err)
@@ -433,8 +435,7 @@ func TestColumnsCompletionForInstances(t *testing.T) {
 // TestColumnsCompletionForInstances_WithFixture tests completion with a valid fixture config.
 // The fixture has no custom columns defined, so should return ShellCompDirectiveNoFileComp.
 func TestColumnsCompletionForInstances_WithFixture(t *testing.T) {
-	fixtureRelPath := "../../tests/fixtures/scenarios/complete"
-	fixturePath, err := filepath.Abs(fixtureRelPath)
+	fixturePath, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
 	require.NoError(t, err)
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
 
