@@ -20,54 +20,22 @@ func TestPlugin_GetHookBindings(t *testing.T) {
 	p := &Plugin{}
 	bindings := p.GetHookBindings()
 
-	// Should have bindings for before.plan (check), after.plan, after.apply, and before.apply (download).
+	// Should have 4 bindings: before.plan, after.plan, before.apply, after.apply.
 	require.Len(t, bindings, 4)
 
-	// Check before.terraform.plan binding (check).
-	beforePlanBinding := findBinding(bindings, "before.terraform.plan")
-	require.NotNil(t, beforePlanBinding)
-	assert.Empty(t, beforePlanBinding.Template)
-	assert.True(t, beforePlanBinding.HasAction(plugin.ActionCheck))
+	// Verify all bindings have handlers.
+	expectedEvents := []string{
+		"before.terraform.plan",
+		"after.terraform.plan",
+		"before.terraform.apply",
+		"after.terraform.apply",
+	}
 
-	// Check after.terraform.plan binding.
-	planBinding := findBinding(bindings, "after.terraform.plan")
-	require.NotNil(t, planBinding)
-	assert.Equal(t, "plan", planBinding.Template)
-	assert.True(t, planBinding.HasAction(plugin.ActionSummary))
-	assert.True(t, planBinding.HasAction(plugin.ActionOutput))
-	assert.True(t, planBinding.HasAction(plugin.ActionUpload))
-	assert.True(t, planBinding.HasAction(plugin.ActionCheck))
-
-	// Check after.terraform.apply binding.
-	applyBinding := findBinding(bindings, "after.terraform.apply")
-	require.NotNil(t, applyBinding)
-	assert.Equal(t, "apply", applyBinding.Template)
-	assert.True(t, applyBinding.HasAction(plugin.ActionSummary))
-	assert.True(t, applyBinding.HasAction(plugin.ActionOutput))
-	assert.False(t, applyBinding.HasAction(plugin.ActionUpload))
-
-	// Check before.terraform.apply binding (download).
-	downloadBinding := findBinding(bindings, "before.terraform.apply")
-	require.NotNil(t, downloadBinding)
-	assert.Empty(t, downloadBinding.Template)
-	assert.True(t, downloadBinding.HasAction(plugin.ActionDownload))
-}
-
-func TestPlugin_GetDefaultTemplates(t *testing.T) {
-	p := &Plugin{}
-	fs := p.GetDefaultTemplates()
-
-	// Should be able to read plan.md.
-	content, err := fs.ReadFile("templates/plan.md")
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "terraform plan")
-	assert.Contains(t, string(content), ".Resources.Create")
-
-	// Should be able to read apply.md.
-	content, err = fs.ReadFile("templates/apply.md")
-	require.NoError(t, err)
-	assert.Contains(t, string(content), "terraform apply")
-	assert.Contains(t, string(content), ".Outputs")
+	for _, expectedEvent := range expectedEvents {
+		binding := findBinding(bindings, expectedEvent)
+		require.NotNil(t, binding, "binding for %s should exist", expectedEvent)
+		assert.NotNil(t, binding.Handler, "binding for %s should have a handler", expectedEvent)
+	}
 }
 
 func TestPlugin_BuildTemplateContext(t *testing.T) {
@@ -83,7 +51,7 @@ func TestPlugin_BuildTemplateContext(t *testing.T) {
 	}
 	output := "Plan: 1 to add, 0 to change, 0 to destroy."
 
-	result, err := p.BuildTemplateContext(info, ciCtx, output, "plan")
+	result, err := p.buildTemplateContext(info, ciCtx, output, "plan")
 	require.NoError(t, err)
 
 	// Should return TerraformTemplateContext.
@@ -127,7 +95,7 @@ Terraform will perform the following actions:
 
 Plan: 1 to add, 0 to change, 0 to destroy.`
 
-	result, err := p.BuildTemplateContext(info, nil, output, "plan")
+	result, err := p.buildTemplateContext(info, nil, output, "plan")
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -138,7 +106,7 @@ Plan: 1 to add, 0 to change, 0 to destroy.`
 	assert.NotContains(t, ctx.Output, "Reading...")
 	assert.NotContains(t, ctx.Output, "Read complete after")
 
-	// Output SHOULD start from "Terraform used the selected providers" or "Terraform will perform".
+	// Output SHOULD start from after "Terraform will perform the following actions:".
 	assert.NotContains(t, ctx.Output, "Terraform will perform the following actions:")
 	assert.Contains(t, ctx.Output, "null_resource.test")
 	assert.Contains(t, ctx.Output, "Plan: 1 to add, 0 to change, 0 to destroy.")
@@ -154,7 +122,7 @@ func TestPlugin_BuildTemplateContext_ClearsOutputForNoChanges(t *testing.T) {
 	// No-changes output has no plan to display in the summary section.
 	output := "No changes. Your infrastructure matches the configuration."
 
-	result, err := p.BuildTemplateContext(info, nil, output, "plan")
+	result, err := p.buildTemplateContext(info, nil, output, "plan")
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -173,7 +141,7 @@ func TestPlugin_BuildTemplateContext_PreservesOutputWithoutMarkers(t *testing.T)
 	// Output without any known markers should be preserved as-is.
 	output := "Some unknown terraform output"
 
-	result, err := p.BuildTemplateContext(info, nil, output, "plan")
+	result, err := p.buildTemplateContext(info, nil, output, "plan")
 	require.NoError(t, err)
 
 	ctx, ok := result.(*TerraformTemplateContext)
@@ -183,10 +151,8 @@ func TestPlugin_BuildTemplateContext_PreservesOutputWithoutMarkers(t *testing.T)
 }
 
 func TestPlugin_ParseOutput(t *testing.T) {
-	p := &Plugin{}
-
-	result, err := p.ParseOutput("Plan: 5 to add, 2 to change, 1 to destroy.", "plan")
-	require.NoError(t, err)
+	// ParseOutput is now a package-level function.
+	result := ParseOutput("Plan: 5 to add, 2 to change, 1 to destroy.", "plan")
 	assert.True(t, result.HasChanges)
 
 	data, ok := result.Data.(*plugin.TerraformOutputData)
@@ -212,7 +178,7 @@ func TestPlugin_GetOutputVariables(t *testing.T) {
 		},
 	}
 
-	vars := p.GetOutputVariables(result, "plan")
+	vars := p.getOutputVariables(result, "plan")
 
 	assert.Equal(t, "true", vars["has_changes"])
 	assert.Equal(t, "false", vars["has_errors"])
@@ -231,12 +197,12 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 			ComponentFromArg: "vpc",
 			Stack:            "dev-us-east-1",
 		}
-		key := p.GetArtifactKey(info, "plan")
+		key := p.getArtifactKey(info, "plan")
 		assert.Equal(t, "dev-us-east-1/vpc.tfplan", key)
 	})
 
 	t.Run("nil info returns placeholder", func(t *testing.T) {
-		key := p.GetArtifactKey(nil, "plan")
+		key := p.getArtifactKey(nil, "plan")
 		assert.Equal(t, "unknown/unknown.tfplan", key)
 	})
 
@@ -245,7 +211,7 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 			ComponentFromArg: "vpc",
 			Stack:            "",
 		}
-		key := p.GetArtifactKey(info, "plan")
+		key := p.getArtifactKey(info, "plan")
 		assert.Equal(t, "unknown/vpc.tfplan", key)
 	})
 
@@ -254,7 +220,7 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 			ComponentFromArg: "",
 			Stack:            "dev-us-east-1",
 		}
-		key := p.GetArtifactKey(info, "plan")
+		key := p.getArtifactKey(info, "plan")
 		assert.Equal(t, "dev-us-east-1/unknown.tfplan", key)
 	})
 
@@ -263,7 +229,7 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 			ComponentFromArg: "",
 			Stack:            "",
 		}
-		key := p.GetArtifactKey(info, "plan")
+		key := p.getArtifactKey(info, "plan")
 		assert.Equal(t, "unknown/unknown.tfplan", key)
 	})
 }

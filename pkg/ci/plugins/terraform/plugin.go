@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	e "github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -23,11 +22,8 @@ var defaultTemplates embed.FS
 // Plugin implements plugin.Plugin for Terraform.
 type Plugin struct{}
 
-// Ensure Plugin implements Plugin and ComponentConfigurationResolver.
-var (
-	_ plugin.Plugin                         = (*Plugin)(nil)
-	_ plugin.ComponentConfigurationResolver = (*Plugin)(nil)
-)
+// Ensure Plugin implements plugin.Plugin.
+var _ plugin.Plugin = (*Plugin)(nil)
 
 func init() {
 	// Self-register on package import.
@@ -39,55 +35,43 @@ func init() {
 
 // GetType returns the component type.
 func (p *Plugin) GetType() string {
-	defer perf.Track(nil, "terraform.Plugin.GetType")()
-
 	return "terraform"
 }
 
 // GetHookBindings returns the hook bindings for Terraform CI integration.
+// Each binding has a Handler callback that owns all action logic for the event.
 func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 	defer perf.Track(nil, "terraform.Plugin.GetHookBindings")()
 
 	return []plugin.HookBinding{
 		{
-			Event:    "before.terraform.plan",
-			Actions:  []plugin.HookAction{plugin.ActionCheck},
-			Template: "", // No template for check.
+			Event:   "before.terraform.plan",
+			Handler: p.onBeforePlan,
 		},
 		{
-			Event:    "after.terraform.plan",
-			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck},
-			Template: "plan",
+			Event:   "after.terraform.plan",
+			Handler: p.onAfterPlan,
 		},
 		{
-			Event:    "after.terraform.apply",
-			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput},
-			Template: "apply",
+			Event:   "before.terraform.apply",
+			Handler: p.onBeforeApply,
 		},
 		{
-			Event:    "before.terraform.apply",
-			Actions:  []plugin.HookAction{plugin.ActionDownload},
-			Template: "", // No template for download.
+			Event:   "after.terraform.apply",
+			Handler: p.onAfterApply,
 		},
 	}
 }
 
-// GetDefaultTemplates returns the embedded default templates.
-func (p *Plugin) GetDefaultTemplates() embed.FS {
-	defer perf.Track(nil, "terraform.Plugin.GetDefaultTemplates")()
-
-	return defaultTemplates
-}
-
-// BuildTemplateContext creates a TerraformTemplateContext from execution results.
+// buildTemplateContext creates a TerraformTemplateContext from execution results.
 // Returns an extended context with terraform-specific fields for template rendering.
-func (p *Plugin) BuildTemplateContext(
+func (p *Plugin) buildTemplateContext(
 	info *schema.ConfigAndStacksInfo,
 	ciCtx *provider.Context,
 	output string,
 	command string,
 ) (any, error) {
-	defer perf.Track(nil, "terraform.Plugin.BuildTemplateContext")()
+	defer perf.Track(nil, "terraform.Plugin.buildTemplateContext")()
 
 	// Parse the output to get structured data.
 	result := ParseOutput(output, command)
@@ -114,16 +98,9 @@ func (p *Plugin) BuildTemplateContext(
 	return NewTemplateContext(baseCtx, tfData), nil
 }
 
-// ParseOutput parses terraform command output.
-func (p *Plugin) ParseOutput(output string, command string) (*plugin.OutputResult, error) {
-	defer perf.Track(nil, "terraform.Plugin.ParseOutput")()
-
-	return ParseOutput(output, command), nil
-}
-
-// GetOutputVariables returns CI output variables for a command.
-func (p *Plugin) GetOutputVariables(result *plugin.OutputResult, command string) map[string]string {
-	defer perf.Track(nil, "terraform.Plugin.GetOutputVariables")()
+// getOutputVariables returns CI output variables for a command.
+func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string) map[string]string {
+	defer perf.Track(nil, "terraform.Plugin.getOutputVariables")()
 
 	vars := make(map[string]string)
 
@@ -150,59 +127,29 @@ func (p *Plugin) GetOutputVariables(result *plugin.OutputResult, command string)
 	return vars
 }
 
-// GetArtifactKey generates the artifact storage key for a command.
-// TODO: Consider changing Plugin interface to return (string, error)
-// to align with planfile.GenerateKey validation pattern. Currently uses defensive
-// placeholders since the key is only used for debug logging.
-func (p *Plugin) GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
-	defer perf.Track(nil, "terraform.Plugin.GetArtifactKey")()
+// getArtifactKey generates the artifact storage key for a command.
+func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
+	defer perf.Track(nil, "terraform.Plugin.getArtifactKey")()
 
 	// Validate required fields.
 	if info == nil {
-		log.Warn("GetArtifactKey called with nil info, using placeholder key")
+		log.Warn("getArtifactKey called with nil info, using placeholder key")
 		return "unknown/unknown.tfplan"
 	}
 
 	stack := info.Stack
 	component := info.ComponentFromArg
 	if stack == "" {
-		log.Warn("GetArtifactKey called with empty Stack", "component", component)
+		log.Warn("getArtifactKey called with empty Stack", "component", component)
 		stack = "unknown"
 	}
 	if component == "" {
-		log.Warn("GetArtifactKey called with empty ComponentFromArg", "stack", stack)
+		log.Warn("getArtifactKey called with empty ComponentFromArg", "stack", stack)
 		component = "unknown"
 	}
 
 	// Default pattern: stack/component.tfplan
 	return fmt.Sprintf("%s/%s.tfplan", stack, component)
-}
-
-// ResolveArtifactPath derives the planfile path from component and stack information.
-// During `terraform plan`, the planfile path is generated internally but not propagated
-// to PostRunE hooks. This method reconstructs it so CI hooks can find and upload the planfile.
-// It also populates resolved fields on info needed for metadata (ContextPrefix, Component, etc.).
-func (p *Plugin) ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error) {
-	defer perf.Track(atmosConfig, "terraform.Plugin.ResolveArtifactPath")()
-
-	if info.Stack == "" || info.ComponentFromArg == "" {
-		return "", fmt.Errorf("both stack and component are required to resolve planfile path")
-	}
-
-	resolvedInfo, err := e.ProcessStacks(atmosConfig, *info, true, false, false, nil, nil)
-	if err != nil {
-		return "", fmt.Errorf("failed to resolve component path: %w", err)
-	}
-
-	// Carry over resolved fields needed by CI hooks for metadata.
-	info.ContextPrefix = resolvedInfo.ContextPrefix
-	info.Component = resolvedInfo.Component
-	info.FinalComponent = resolvedInfo.FinalComponent
-	info.ComponentFolderPrefix = resolvedInfo.ComponentFolderPrefix
-	info.ComponentFolderPrefixReplaced = resolvedInfo.ComponentFolderPrefixReplaced
-	info.ComponentSection = resolvedInfo.ComponentSection
-
-	return e.ConstructTerraformComponentPlanfilePath(atmosConfig, &resolvedInfo), nil
 }
 
 // planOutputMarkers are searched in order to find where the meaningful plan output starts.

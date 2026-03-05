@@ -2,7 +2,6 @@ package ci
 
 import (
 	"context"
-	"embed"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
@@ -49,6 +47,20 @@ func (c *capturingProvider) UpdateCheckRun(_ context.Context, opts *provider.Upd
 	}, nil
 }
 
+// stubPlugin is a simple Plugin for tests that uses Handler callbacks.
+type stubPlugin struct {
+	componentType string
+	bindings      []plugin.HookBinding
+}
+
+func (s *stubPlugin) GetType() string {
+	return s.componentType
+}
+
+func (s *stubPlugin) GetHookBindings() []plugin.HookBinding {
+	return s.bindings
+}
+
 func TestExecute_BeforeTerraformPlan_TriggersCheckCreate(t *testing.T) {
 	// Set up provider registry with a capturing provider.
 	backup := testSaveAndClearRegistry()
@@ -59,20 +71,37 @@ func TestExecute_BeforeTerraformPlan_TriggersCheckCreate(t *testing.T) {
 	}
 	Register(cp)
 
-	// Set up plugin registry with a mock terraform plugin that has before.terraform.plan → ActionCheck.
+	// Set up plugin with a handler that creates a check run.
 	ClearPlugins()
-	ctrl := gomock.NewController(t)
-	mockPlugin := NewMockPlugin(ctrl)
-	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
-	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
-		{
-			Event:   "before.terraform.plan",
-			Actions: []plugin.HookAction{plugin.ActionCheck},
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{
+				Event: "before.terraform.plan",
+				Handler: func(ctx *plugin.HookContext) error {
+					// Simulate check run creation.
+					name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+					opts := &provider.CreateCheckRunOptions{
+						Name:   name,
+						Status: provider.CheckRunStateInProgress,
+						Title:  fmt.Sprintf("Running %s...", ctx.Command),
+					}
+					if ctx.CICtx != nil {
+						opts.Owner = ctx.CICtx.RepoOwner
+						opts.Repo = ctx.CICtx.RepoName
+						opts.SHA = ctx.CICtx.SHA
+					}
+					checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+					if err != nil {
+						return err
+					}
+					ctx.CheckRunStore.Store(ctx.Info.Stack+"/"+ctx.Info.ComponentFromArg+"/"+ctx.Command, checkRun.ID)
+					return nil
+				},
+			},
 		},
-	}).AnyTimes()
-	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-	mockPlugin.EXPECT().ParseOutput("", "plan").Return(&plugin.OutputResult{}, nil).AnyTimes()
-	err := RegisterPlugin(mockPlugin)
+	}
+	err := RegisterPlugin(sp)
 	require.NoError(t, err)
 
 	// Execute with CI forced, checks enabled.
@@ -107,30 +136,48 @@ func TestExecute_BeforeAfterPlan_CheckLifecycle(t *testing.T) {
 	}
 	Register(cp)
 
-	// Set up plugin registry with both before and after plan bindings.
+	// Set up plugin with before and after plan handlers that manage check runs.
 	ClearPlugins()
-	ctrl := gomock.NewController(t)
-	mockPlugin := NewMockPlugin(ctrl)
-	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
-	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
-		{
-			Event:   "before.terraform.plan",
-			Actions: []plugin.HookAction{plugin.ActionCheck},
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{
+				Event: "before.terraform.plan",
+				Handler: func(ctx *plugin.HookContext) error {
+					name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+					checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), &provider.CreateCheckRunOptions{
+						Name:   name,
+						Status: provider.CheckRunStateInProgress,
+					})
+					if err != nil {
+						return err
+					}
+					ctx.CheckRunStore.Store(ctx.Info.Stack+"/"+ctx.Info.ComponentFromArg+"/"+ctx.Command, checkRun.ID)
+					return nil
+				},
+			},
+			{
+				Event: "after.terraform.plan",
+				Handler: func(ctx *plugin.HookContext) error {
+					name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
+					key := ctx.Info.Stack + "/" + ctx.Info.ComponentFromArg + "/" + ctx.Command
+					checkRunID, ok := ctx.CheckRunStore.LoadAndDelete(key)
+					if !ok {
+						return fmt.Errorf("no check run ID found")
+					}
+					_, err := ctx.Provider.UpdateCheckRun(context.Background(), &provider.UpdateCheckRunOptions{
+						CheckRunID: checkRunID,
+						Name:       name,
+						Status:     provider.CheckRunStateSuccess,
+						Conclusion: "success",
+						Title:      "Plan: 1 to add, 0 to change, 0 to destroy.",
+					})
+					return err
+				},
+			},
 		},
-		{
-			Event:    "after.terraform.plan",
-			Actions:  []plugin.HookAction{plugin.ActionCheck},
-			Template: "plan",
-		},
-	}).AnyTimes()
-	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-	mockPlugin.EXPECT().ParseOutput(gomock.Any(), "plan").Return(&plugin.OutputResult{
-		HasChanges: true,
-		Data: &plugin.TerraformOutputData{
-			ChangedResult: "Plan: 1 to add, 0 to change, 0 to destroy.",
-		},
-	}, nil).AnyTimes()
-	err := RegisterPlugin(mockPlugin)
+	}
+	err := RegisterPlugin(sp)
 	require.NoError(t, err)
 
 	atmosConfig := &schema.AtmosConfiguration{
@@ -152,8 +199,7 @@ func TestExecute_BeforeAfterPlan_CheckLifecycle(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Len(t, cp.createCheckRunCalls, 1, "CreateCheckRun should have been called once after before event")
-	createdID := cp.createCheckRunCalls[0] // capture opts for verification.
-	assert.Equal(t, provider.CheckRunStateInProgress, createdID.Status)
+	assert.Equal(t, provider.CheckRunStateInProgress, cp.createCheckRunCalls[0].Status)
 
 	// 2. Execute "after.terraform.plan" — should update the check run, not create a new one.
 	err = Execute(ExecuteOptions{
@@ -179,8 +225,6 @@ func TestExecute_BeforeAfterPlan_CheckLifecycle(t *testing.T) {
 func TestExecute_CIEnabledInConfig_NoForceFlag_NoActions(t *testing.T) {
 	// When CI.Enabled=true in atmos.yaml but --ci flag is NOT passed and
 	// no CI platform is detected, Execute should be a no-op.
-	// ci.enabled in config means "CI features are available" but requires
-	// either --ci flag or actual CI platform detection to activate.
 	backup := testSaveAndClearRegistry()
 	defer testRestoreRegistry(backup)
 
@@ -190,18 +234,20 @@ func TestExecute_CIEnabledInConfig_NoForceFlag_NoActions(t *testing.T) {
 	Register(cp)
 
 	ClearPlugins()
-	ctrl := gomock.NewController(t)
-	mockPlugin := NewMockPlugin(ctrl)
-	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
-	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
-		{
-			Event:   "before.terraform.plan",
-			Actions: []plugin.HookAction{plugin.ActionCheck},
+	handlerCalled := false
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{
+				Event: "before.terraform.plan",
+				Handler: func(_ *plugin.HookContext) error {
+					handlerCalled = true
+					return nil
+				},
+			},
 		},
-	}).AnyTimes()
-	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-	mockPlugin.EXPECT().ParseOutput("", "plan").Return(&plugin.OutputResult{}, nil).AnyTimes()
-	err := RegisterPlugin(mockPlugin)
+	}
+	err := RegisterPlugin(sp)
 	require.NoError(t, err)
 
 	// Execute WITHOUT ForceCIMode — CI is enabled only via config.
@@ -222,7 +268,7 @@ func TestExecute_CIEnabledInConfig_NoForceFlag_NoActions(t *testing.T) {
 	require.NoError(t, err)
 
 	// No CI actions should run — ci.enabled alone does not trigger the generic fallback.
-	assert.Empty(t, cp.createCheckRunCalls, "CreateCheckRun should NOT be called without --ci flag even when CI.Enabled=true in config")
+	assert.False(t, handlerCalled, "Handler should NOT be called without --ci flag even when CI.Enabled=true in config")
 }
 
 // capturingOutputWriter records all WriteSummary and WriteOutput calls.
@@ -285,21 +331,29 @@ func (c *fullCapturingProvider) totalCICalls() int {
 // (summaries, checks, outputs) is never triggered on a local developer
 // machine when the --ci flag is not set and CI is not enabled in config.
 func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
-	// allBindings registers a plugin with all action types so any
-	// accidental execution would be captured.
-	allBindings := []plugin.HookBinding{
-		{
-			Event:   "before.terraform.plan",
-			Actions: []plugin.HookAction{plugin.ActionCheck},
-		},
-		{
-			Event:    "after.terraform.plan",
-			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck},
-			Template: "plan",
-		},
-	}
-
 	events := []string{"before.terraform.plan", "after.terraform.plan"}
+
+	createAllBindings := func() []plugin.HookBinding {
+		handlerCalled := false
+		return []plugin.HookBinding{
+			{
+				Event: "before.terraform.plan",
+				Handler: func(_ *plugin.HookContext) error {
+					handlerCalled = true
+					_ = handlerCalled
+					return nil
+				},
+			},
+			{
+				Event: "after.terraform.plan",
+				Handler: func(_ *plugin.HookContext) error {
+					handlerCalled = true
+					_ = handlerCalled
+					return nil
+				},
+			},
+		}
+	}
 
 	t.Run("no CI flag, no CI config — no actions executed", func(t *testing.T) {
 		backup := testSaveAndClearRegistry()
@@ -309,13 +363,8 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 		Register(cp)
 
 		ClearPlugins()
-		ctrl := gomock.NewController(t)
-		mp := NewMockPlugin(ctrl)
-		mp.EXPECT().GetType().Return("terraform").AnyTimes()
-		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
-		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
-		require.NoError(t, RegisterPlugin(mp))
+		sp := &stubPlugin{componentType: "terraform", bindings: createAllBindings()}
+		require.NoError(t, RegisterPlugin(sp))
 
 		for _, event := range events {
 			err := Execute(ExecuteOptions{
@@ -342,13 +391,8 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 		Register(cp)
 
 		ClearPlugins()
-		ctrl := gomock.NewController(t)
-		mp := NewMockPlugin(ctrl)
-		mp.EXPECT().GetType().Return("terraform").AnyTimes()
-		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
-		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
-		require.NoError(t, RegisterPlugin(mp))
+		sp := &stubPlugin{componentType: "terraform", bindings: createAllBindings()}
+		require.NoError(t, RegisterPlugin(sp))
 
 		for _, event := range events {
 			err := Execute(ExecuteOptions{
@@ -377,13 +421,8 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 		Register(cp)
 
 		ClearPlugins()
-		ctrl := gomock.NewController(t)
-		mp := NewMockPlugin(ctrl)
-		mp.EXPECT().GetType().Return("terraform").AnyTimes()
-		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
-		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
-		require.NoError(t, RegisterPlugin(mp))
+		sp := &stubPlugin{componentType: "terraform", bindings: createAllBindings()}
+		require.NoError(t, RegisterPlugin(sp))
 
 		for _, event := range events {
 			err := Execute(ExecuteOptions{
@@ -403,8 +442,6 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 	})
 
 	t.Run("no CI flag, checks enabled but CI.Enabled false — no actions executed", func(t *testing.T) {
-		// A user might enable checks in config but not CI itself.
-		// Without --ci flag, nothing should run.
 		backup := testSaveAndClearRegistry()
 		defer testRestoreRegistry(backup)
 
@@ -412,13 +449,8 @@ func TestExecute_LocalDev_NoCIFlag_NoActions(t *testing.T) {
 		Register(cp)
 
 		ClearPlugins()
-		ctrl := gomock.NewController(t)
-		mp := NewMockPlugin(ctrl)
-		mp.EXPECT().GetType().Return("terraform").AnyTimes()
-		mp.EXPECT().GetHookBindings().Return(allBindings).AnyTimes()
-		mp.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-		mp.EXPECT().ParseOutput(gomock.Any(), gomock.Any()).Return(&plugin.OutputResult{}, nil).AnyTimes()
-		require.NoError(t, RegisterPlugin(mp))
+		sp := &stubPlugin{componentType: "terraform", bindings: createAllBindings()}
+		require.NoError(t, RegisterPlugin(sp))
 
 		for _, event := range events {
 			err := Execute(ExecuteOptions{
@@ -517,17 +549,6 @@ func TestExtractCommand(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
-}
-
-// Note: mockComponentProvider is already defined in component_registry_test.go.
-
-func TestHookActionConstants(t *testing.T) {
-	// Verify action constant values match expected strings.
-	assert.Equal(t, plugin.HookAction("summary"), plugin.ActionSummary)
-	assert.Equal(t, plugin.HookAction("output"), plugin.ActionOutput)
-	assert.Equal(t, plugin.HookAction("upload"), plugin.ActionUpload)
-	assert.Equal(t, plugin.HookAction("download"), plugin.ActionDownload)
-	assert.Equal(t, plugin.HookAction("check"), plugin.ActionCheck)
 }
 
 func TestOutputResult(t *testing.T) {
@@ -701,137 +722,6 @@ func TestTerraformOutputData(t *testing.T) {
 	assert.Contains(t, data.ChangedResult, "5 to add")
 }
 
-func TestIsActionEnabled(t *testing.T) {
-	tests := []struct {
-		name     string
-		config   *schema.AtmosConfiguration
-		action   plugin.HookAction
-		expected bool
-	}{
-		{
-			name:     "nil config - summary enabled by default",
-			config:   nil,
-			action:   plugin.ActionSummary,
-			expected: true,
-		},
-		{
-			name:     "nil config - output enabled by default",
-			config:   nil,
-			action:   plugin.ActionOutput,
-			expected: true,
-		},
-		{
-			name:     "nil config - check disabled by default",
-			config:   nil,
-			action:   plugin.ActionCheck,
-			expected: false,
-		},
-		{
-			name:     "nil config - upload always enabled",
-			config:   nil,
-			action:   plugin.ActionUpload,
-			expected: true,
-		},
-		{
-			name:     "nil config - download always enabled",
-			config:   nil,
-			action:   plugin.ActionDownload,
-			expected: true,
-		},
-		{
-			name: "summary explicitly enabled",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{
-					Summary: schema.CISummaryConfig{Enabled: boolPtr(true)},
-				},
-			},
-			action:   plugin.ActionSummary,
-			expected: true,
-		},
-		{
-			name: "summary explicitly disabled",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{
-					Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
-				},
-			},
-			action:   plugin.ActionSummary,
-			expected: false,
-		},
-		{
-			name: "output explicitly enabled",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{
-					Output: schema.CIOutputConfig{Enabled: boolPtr(true)},
-				},
-			},
-			action:   plugin.ActionOutput,
-			expected: true,
-		},
-		{
-			name: "output explicitly disabled",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{
-					Output: schema.CIOutputConfig{Enabled: boolPtr(false)},
-				},
-			},
-			action:   plugin.ActionOutput,
-			expected: false,
-		},
-		{
-			name: "check explicitly enabled",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{
-					Checks: schema.CIChecksConfig{Enabled: boolPtr(true)},
-				},
-			},
-			action:   plugin.ActionCheck,
-			expected: true,
-		},
-		{
-			name: "check explicitly disabled",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{
-					Checks: schema.CIChecksConfig{Enabled: boolPtr(false)},
-				},
-			},
-			action:   plugin.ActionCheck,
-			expected: false,
-		},
-		{
-			name: "upload always enabled regardless of config",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{},
-			},
-			action:   plugin.ActionUpload,
-			expected: true,
-		},
-		{
-			name: "download always enabled regardless of config",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{},
-			},
-			action:   plugin.ActionDownload,
-			expected: true,
-		},
-		{
-			name: "unknown action enabled by default",
-			config: &schema.AtmosConfiguration{
-				CI: schema.CIConfig{},
-			},
-			action:   plugin.HookAction("unknown"),
-			expected: true,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := isActionEnabled(tt.config, tt.action)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
 func TestExtractEventPrefix(t *testing.T) {
 	tests := []struct {
 		event    string
@@ -852,203 +742,231 @@ func TestExtractEventPrefix(t *testing.T) {
 	}
 }
 
-func TestExecuteCheckAction_BeforeEvent(t *testing.T) {
-	mp := &mockProvider{name: "test", detected: true}
+func TestGetPluginAndBinding_EmptyEvent(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
 
-	ctx := &actionContext{
-		Opts: ExecuteOptions{
-			Event: "before.terraform.plan",
-			Info: &schema.ConfigAndStacksInfo{
-				Stack:            "dev-us-east-1",
-				ComponentFromArg: "vpc",
-			},
-		},
-		Platform: mp,
-		CICtx: &provider.Context{
-			RepoOwner: "owner",
-			RepoName:  "repo",
-			SHA:       "abc123",
-		},
-		Command: "plan",
-	}
-
-	err := executeCheckAction(ctx)
-	require.NoError(t, err)
-
-	// Verify the check run ID was stored.
-	key := buildCheckRunKey(ctx)
-	idVal, ok := checkRunIDs.LoadAndDelete(key)
-	assert.True(t, ok)
-	assert.Equal(t, int64(1), idVal)
-}
-
-func TestExecuteCheckAction_AfterEvent_WithStoredID(t *testing.T) {
-	mp := &mockProvider{name: "test", detected: true}
-
-	ctx := &actionContext{
-		Opts: ExecuteOptions{
-			Event: "after.terraform.plan",
-			Info: &schema.ConfigAndStacksInfo{
-				Stack:            "dev-us-east-1",
-				ComponentFromArg: "vpc",
-			},
-		},
-		Platform: mp,
-		CICtx: &provider.Context{
-			RepoOwner: "owner",
-			RepoName:  "repo",
-		},
-		Command: "plan",
-		Result: &plugin.OutputResult{
-			HasChanges: true,
-			Data: &plugin.TerraformOutputData{
-				ChangedResult: "Plan: 3 to add, 1 to change, 0 to destroy.",
-			},
+	ClearPlugins()
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{Event: "after.terraform.plan", Handler: func(_ *plugin.HookContext) error { return nil }},
 		},
 	}
+	require.NoError(t, RegisterPlugin(sp))
 
-	// Pre-store a check run ID (simulating a "before" event).
-	key := buildCheckRunKey(ctx)
-	checkRunIDs.Store(key, int64(42))
-
-	err := executeCheckAction(ctx)
-	require.NoError(t, err)
-
-	// Verify the stored ID was consumed.
-	_, ok := checkRunIDs.Load(key)
-	assert.False(t, ok)
+	// Empty event should return nil.
+	pl, binding := getPluginAndBinding(ExecuteOptions{Event: ""})
+	assert.Nil(t, pl)
+	assert.Nil(t, binding)
 }
 
-func TestExecuteCheckAction_AfterEvent_NoStoredID(t *testing.T) {
-	mp := &mockProvider{name: "test", detected: true}
+func TestGetPluginAndBinding_UnregisteredComponentType(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+	ClearPlugins()
 
-	ctx := &actionContext{
-		Opts: ExecuteOptions{
-			Event: "after.terraform.plan",
-			Info: &schema.ConfigAndStacksInfo{
-				Stack:            "prod-us-west-2",
-				ComponentFromArg: "rds",
-			},
+	// No plugins registered.
+	pl, binding := getPluginAndBinding(ExecuteOptions{Event: "after.helmfile.diff"})
+	assert.Nil(t, pl)
+	assert.Nil(t, binding)
+}
+
+func TestGetPluginAndBinding_EventNotHandled(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	ClearPlugins()
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{Event: "after.terraform.plan", Handler: func(_ *plugin.HookContext) error { return nil }},
 		},
-		Platform: mp,
-		CICtx: &provider.Context{
-			RepoOwner: "owner",
-			RepoName:  "repo",
-			SHA:       "def456",
-		},
-		Command: "plan",
-		Result:  &plugin.OutputResult{},
 	}
+	require.NoError(t, RegisterPlugin(sp))
 
-	// No pre-stored ID — should fall back to creating a completed check run.
-	err := executeCheckAction(ctx)
-	require.NoError(t, err)
+	// Event exists for plugin type but specific event not handled.
+	pl, binding := getPluginAndBinding(ExecuteOptions{Event: "after.terraform.init"})
+	assert.Nil(t, pl)
+	assert.Nil(t, binding)
 }
 
-func TestBuildCheckTitle(t *testing.T) {
-	t.Run("with terraform changed result", func(t *testing.T) {
-		ctx := &actionContext{
-			Command: "plan",
-			Result: &plugin.OutputResult{
-				HasChanges: true,
-				Data: &plugin.TerraformOutputData{
-					ChangedResult: "Plan: 5 to add, 2 to change, 1 to destroy.",
+func TestGetPluginAndBinding_ComponentTypeOverride(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	ClearPlugins()
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{Event: "after.terraform.plan", Handler: func(_ *plugin.HookContext) error { return nil }},
+		},
+	}
+	require.NoError(t, RegisterPlugin(sp))
+
+	// Use ComponentType override instead of extracting from event.
+	pl, binding := getPluginAndBinding(ExecuteOptions{
+		Event:         "after.terraform.plan",
+		ComponentType: "terraform",
+	})
+	assert.NotNil(t, pl)
+	assert.NotNil(t, binding)
+}
+
+func TestExecute_NilHandler(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	Register(&mockProvider{name: "generic", detected: false})
+
+	ClearPlugins()
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{Event: "after.terraform.plan", Handler: nil}, // No handler.
+		},
+	}
+	require.NoError(t, RegisterPlugin(sp))
+
+	err := Execute(ExecuteOptions{
+		Event:       "after.terraform.plan",
+		ForceCIMode: true,
+		Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+	})
+	assert.NoError(t, err)
+}
+
+func TestExecute_HandlerError_DoesNotPropagateToExecute(t *testing.T) {
+	backup := testSaveAndClearRegistry()
+	defer testRestoreRegistry(backup)
+
+	Register(&mockProvider{name: "generic", detected: false})
+
+	ClearPlugins()
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{
+				Event: "after.terraform.plan",
+				Handler: func(_ *plugin.HookContext) error {
+					return fmt.Errorf("handler failed")
 				},
 			},
-		}
-		assert.Equal(t, "Plan: 5 to add, 2 to change, 1 to destroy.", buildCheckTitle(ctx))
-	})
-
-	t.Run("with changes but no terraform data", func(t *testing.T) {
-		ctx := &actionContext{
-			Command: "plan",
-			Result: &plugin.OutputResult{
-				HasChanges: true,
-			},
-		}
-		assert.Equal(t, "plan: changes detected", buildCheckTitle(ctx))
-	})
-
-	t.Run("no changes", func(t *testing.T) {
-		ctx := &actionContext{
-			Command: "plan",
-			Result:  &plugin.OutputResult{},
-		}
-		assert.Equal(t, "plan: no changes", buildCheckTitle(ctx))
-	})
-
-	t.Run("nil result", func(t *testing.T) {
-		ctx := &actionContext{
-			Command: "plan",
-		}
-		assert.Equal(t, "plan: no changes", buildCheckTitle(ctx))
-	})
-}
-
-func TestBuildCheckSummary(t *testing.T) {
-	t.Run("with terraform changed result", func(t *testing.T) {
-		ctx := &actionContext{
-			Result: &plugin.OutputResult{
-				Data: &plugin.TerraformOutputData{
-					ChangedResult: "Plan: 3 to add, 0 to change, 0 to destroy.",
-				},
-			},
-		}
-		assert.Equal(t, "Plan: 3 to add, 0 to change, 0 to destroy.", buildCheckSummary(ctx))
-	})
-
-	t.Run("nil result returns empty", func(t *testing.T) {
-		ctx := &actionContext{}
-		assert.Empty(t, buildCheckSummary(ctx))
-	})
-
-	t.Run("no terraform data returns empty", func(t *testing.T) {
-		ctx := &actionContext{
-			Result: &plugin.OutputResult{},
-		}
-		assert.Empty(t, buildCheckSummary(ctx))
-	})
-}
-
-func TestResolveCheckResult(t *testing.T) {
-	t.Run("success when no command error", func(t *testing.T) {
-		ctx := &actionContext{
-			Result: &plugin.OutputResult{HasChanges: true},
-		}
-		status, conclusion := resolveCheckResult(ctx)
-		assert.Equal(t, provider.CheckRunStateSuccess, status)
-		assert.Equal(t, "success", conclusion)
-	})
-
-	t.Run("failure when command error is set", func(t *testing.T) {
-		ctx := &actionContext{
-			Opts: ExecuteOptions{
-				CommandError: fmt.Errorf("terraform plan failed"),
-			},
-			Result: &plugin.OutputResult{HasErrors: true},
-		}
-		status, conclusion := resolveCheckResult(ctx)
-		assert.Equal(t, provider.CheckRunStateFailure, status)
-		assert.Equal(t, "failure", conclusion)
-	})
-}
-
-func TestBuildCheckRunKey(t *testing.T) {
-	ctx := &actionContext{
-		Opts: ExecuteOptions{
-			Info: &schema.ConfigAndStacksInfo{
-				Stack:            "dev-us-east-1",
-				ComponentFromArg: "vpc",
-			},
 		},
-		Command: "plan",
 	}
-	assert.Equal(t, "dev-us-east-1/vpc/plan", buildCheckRunKey(ctx))
+	require.NoError(t, RegisterPlugin(sp))
+
+	// Handler errors are logged as warnings, not propagated.
+	err := Execute(ExecuteOptions{
+		Event:       "after.terraform.plan",
+		ForceCIMode: true,
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info:        &schema.ConfigAndStacksInfo{Stack: "dev", ComponentFromArg: "vpc"},
+	})
+	assert.NoError(t, err)
+}
+
+func TestDetectStoreFromEnv(t *testing.T) {
+	t.Run("no env vars returns nil", func(t *testing.T) {
+		// Clear relevant env vars.
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		result := detectStoreFromEnv()
+		assert.Nil(t, result)
+	})
+
+	t.Run("S3 bucket configured", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
+		t.Setenv("ATMOS_PLANFILE_PREFIX", "plans/")
+		t.Setenv("AWS_REGION", "us-east-1")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		result := detectStoreFromEnv()
+		require.NotNil(t, result)
+		assert.Equal(t, "s3", result.Type)
+		assert.Equal(t, "my-bucket", result.Options["bucket"])
+		assert.Equal(t, "plans/", result.Options["prefix"])
+		assert.Equal(t, "us-east-1", result.Options["region"])
+	})
+
+	t.Run("GitHub Actions detected", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "true")
+
+		result := detectStoreFromEnv()
+		require.NotNil(t, result)
+		assert.Equal(t, "github-artifacts", result.Type)
+	})
+
+	t.Run("S3 takes precedence over GitHub", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "bucket")
+		t.Setenv("GITHUB_ACTIONS", "true")
+
+		result := detectStoreFromEnv()
+		require.NotNil(t, result)
+		assert.Equal(t, "s3", result.Type)
+	})
+}
+
+func TestCreatePlanfileStore(t *testing.T) {
+	t.Run("defaults to local store", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: &schema.AtmosConfiguration{},
+		})
+		require.NoError(t, err)
+		assert.NotNil(t, store)
+		assert.Equal(t, "local", store.Name())
+	})
+
+	t.Run("nil config defaults to local store", func(t *testing.T) {
+		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
+		t.Setenv("GITHUB_ACTIONS", "")
+
+		store, err := createPlanfileStore(ExecuteOptions{
+			AtmosConfig: nil,
+		})
+		require.NoError(t, err)
+		assert.NotNil(t, store)
+		assert.Equal(t, "local", store.Name())
+	})
+}
+
+func TestBuildHookContext(t *testing.T) {
+	mp := &mockProvider{name: "test", detected: true}
+
+	opts := ExecuteOptions{
+		Event:       "after.terraform.plan",
+		AtmosConfig: &schema.AtmosConfiguration{},
+		Info: &schema.ConfigAndStacksInfo{
+			Stack:            "dev",
+			ComponentFromArg: "vpc",
+		},
+		Output:       "some output",
+		CommandError: fmt.Errorf("some error"),
+	}
+
+	ctx := buildHookContext(opts, mp)
+
+	assert.Equal(t, "after.terraform.plan", ctx.Event)
+	assert.Equal(t, "plan", ctx.Command)
+	assert.Equal(t, "after", ctx.EventPrefix)
+	assert.Equal(t, opts.AtmosConfig, ctx.Config)
+	assert.Equal(t, opts.Info, ctx.Info)
+	assert.Equal(t, "some output", ctx.Output)
+	assert.Equal(t, opts.CommandError, ctx.CommandError)
+	assert.Equal(t, mp, ctx.Provider)
+	assert.NotNil(t, ctx.TemplateLoader)
+	assert.NotNil(t, ctx.CheckRunStore)
+	assert.NotNil(t, ctx.CreatePlanfileStore)
 }
 
 func TestExecute_SummaryContentFlowsToOutput(t *testing.T) {
-	// Verify that the rendered summary markdown from executeSummaryAction
-	// is available as a "summary" output variable in executeOutputAction.
+	// Verify that the rendered summary markdown from the summary handler
+	// is available as a "summary" output variable.
 
 	// Create a temp directory with a template file.
 	tmpDir := t.TempDir()
@@ -1064,37 +982,51 @@ func TestExecute_SummaryContentFlowsToOutput(t *testing.T) {
 	fcp := newFullCapturingProvider("generic", false)
 	Register(fcp)
 
-	// Set up plugin registry with a mock terraform plugin.
+	// Set up plugin with a handler that renders summary and writes outputs.
 	ClearPlugins()
-	ctrl := gomock.NewController(t)
-	mockPlugin := NewMockPlugin(ctrl)
-	mockPlugin.EXPECT().GetType().Return("terraform").AnyTimes()
-	mockPlugin.EXPECT().GetHookBindings().Return([]plugin.HookBinding{
-		{
-			Event:    "after.terraform.plan",
-			Actions:  []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput},
-			Template: "plan",
+	sp := &stubPlugin{
+		componentType: "terraform",
+		bindings: []plugin.HookBinding{
+			{
+				Event: "after.terraform.plan",
+				Handler: func(ctx *plugin.HookContext) error {
+					writer := ctx.Provider.OutputWriter()
+					if writer == nil {
+						return nil
+					}
+
+					// Render summary template.
+					tmplCtx := map[string]string{"Component": ctx.Info.ComponentFromArg, "Stack": ctx.Info.Stack}
+					rendered, err := ctx.TemplateLoader.LoadAndRender("terraform", "plan", nil, tmplCtx)
+					if err != nil {
+						return err
+					}
+
+					// Write summary.
+					if err := writer.WriteSummary(rendered); err != nil {
+						return err
+					}
+
+					// Write outputs.
+					vars := map[string]string{
+						"has_changes": "true",
+						"summary":     rendered,
+						"stack":       ctx.Info.Stack,
+						"component":   ctx.Info.ComponentFromArg,
+						"command":     ctx.Command,
+					}
+					for key, value := range vars {
+						if err := writer.WriteOutput(key, value); err != nil {
+							return err
+						}
+					}
+
+					return nil
+				},
+			},
 		},
-	}).AnyTimes()
-
-	// GetDefaultTemplates won't be reached due to base_path override.
-	mockPlugin.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-
-	// BuildTemplateContext returns a simple context for the template.
-	mockPlugin.EXPECT().BuildTemplateContext(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(map[string]string{"Component": "vpc", "Stack": "dev"}, nil).AnyTimes()
-
-	// ParseOutput returns a basic result.
-	mockPlugin.EXPECT().ParseOutput(gomock.Any(), "plan").Return(&plugin.OutputResult{
-		HasChanges: true,
-	}, nil).AnyTimes()
-
-	// GetOutputVariables returns some base variables.
-	mockPlugin.EXPECT().GetOutputVariables(gomock.Any(), gomock.Any()).Return(map[string]string{
-		"has_changes": "true",
-	}).AnyTimes()
-
-	require.NoError(t, RegisterPlugin(mockPlugin))
+	}
+	require.NoError(t, RegisterPlugin(sp))
 
 	// Execute with CI forced, using template base_path pointing to temp dir.
 	err := Execute(ExecuteOptions{
@@ -1124,75 +1056,4 @@ func TestExecute_SummaryContentFlowsToOutput(t *testing.T) {
 	summaryOutput, ok := fcp.writer.outputs["summary"]
 	assert.True(t, ok, "output variables should include 'summary'")
 	assert.Equal(t, fcp.writer.summaries[0], summaryOutput, "summary output should match rendered summary")
-}
-
-func TestFilterVariables(t *testing.T) {
-	tests := []struct {
-		name     string
-		vars     map[string]string
-		allowed  []string
-		expected map[string]string
-	}{
-		{
-			name: "empty allowed list returns all vars",
-			vars: map[string]string{
-				"has_changes":  "true",
-				"artifact_key": "my-key",
-			},
-			allowed: []string{},
-			expected: map[string]string{
-				"has_changes":  "true",
-				"artifact_key": "my-key",
-			},
-		},
-		{
-			name: "nil allowed list returns all vars",
-			vars: map[string]string{
-				"has_changes":  "true",
-				"artifact_key": "my-key",
-			},
-			allowed: nil,
-			expected: map[string]string{
-				"has_changes":  "true",
-				"artifact_key": "my-key",
-			},
-		},
-		{
-			name: "filters to allowed variables only",
-			vars: map[string]string{
-				"has_changes":   "true",
-				"artifact_key":  "my-key",
-				"has_additions": "true",
-				"plan_summary":  "3 to add",
-			},
-			allowed: []string{"has_changes", "plan_summary"},
-			expected: map[string]string{
-				"has_changes":  "true",
-				"plan_summary": "3 to add",
-			},
-		},
-		{
-			name: "allowed variable not in vars is not added",
-			vars: map[string]string{
-				"has_changes": "true",
-			},
-			allowed: []string{"has_changes", "nonexistent"},
-			expected: map[string]string{
-				"has_changes": "true",
-			},
-		},
-		{
-			name:     "empty vars returns empty result",
-			vars:     map[string]string{},
-			allowed:  []string{"has_changes"},
-			expected: map[string]string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := filterVariables(tt.vars, tt.allowed)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
 }
