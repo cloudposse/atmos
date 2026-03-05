@@ -2,7 +2,7 @@
 
 > Related: [Overview](../overview.md) | [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Artifact Storage](./artifact-storage.md)
 
-## Configuration Schema
+## Configuration Schema (IMPLEMENTED in `pkg/schema/schema.go`)
 
 Configuration is split between `components.terraform` (planfile storage) and `ci` (output behavior) sections in `atmos.yaml`:
 
@@ -13,9 +13,8 @@ components:
   terraform:
     # Planfile storage backends (registry pattern)
     planfiles:
-      # Auto upload/download in CI mode (default: true when CI enabled)
-      auto_upload: true
-      auto_download: true
+      # Default store name (optional — if unset, environment-based detection is used)
+      # default: "s3"
 
       # Stores are tried in priority order; if unavailable, fall through to next
       priority:

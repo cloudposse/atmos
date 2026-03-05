@@ -86,27 +86,26 @@ atmos terraform planfile {component} -s {stack} show         # specific componen
   - **Lock file**: Downloaded as `.terraform.lock.hcl` into the component directory.
 - **Command group**: `atmos terraform planfile` is correct. Artifacts in general do not need a CLI interface — they define a generic framework for artifact storage in atmos. Specific implementations (like planfile) expose their own CLI commands.
 
-### Plan/Deploy Command Flags
+### Automatic Upload/Download (IMPLEMENTED)
 
-**Automatic behavior in CI**: When CI mode is enabled, planfile upload/download happens automatically by default (`ci.planfiles.auto_upload: true`, `ci.planfiles.auto_download: true`). The flags below override this behavior.
+**Upload/download is automatic and event-driven** — no per-command flags needed:
 
-**Plan command:**
+- **Upload**: Automatically triggered by `after.terraform.plan` hook event via `ActionUpload`. The executor resolves the planfile path from `info.PlanFile` (or via `ComponentConfigurationResolver`) and uploads to the configured store.
+- **Download**: Automatically triggered by `before.terraform.apply` hook event via `ActionDownload`. The executor resolves the planfile path and downloads from the configured store.
+- Upload/download are **always enabled** when CI mode is active (`isActionEnabled()` returns true for `ActionUpload`/`ActionDownload`).
 
-| Flag | Description |
-|------|-------------|
-| `--upload-planfile` | Force upload planfile (useful locally without CI mode) |
-| `--no-upload-planfile` | Suppress auto-upload even when enabled in config |
-| `--planfile-key` | Custom planfile key (overrides pattern) |
-
-**Deploy command:**
+**Existing plan command flags (IMPLEMENTED):**
 
 | Flag | Description |
 |------|-------------|
-| `--download-planfile` | Force download planfile (useful locally without CI mode) |
-| `--no-download-planfile` | Suppress auto-download even when enabled in config |
-| `--planfile-key` | Planfile key to download |
-| `--planfile-run-id` | Run ID to download from (GitHub Artifacts) |
-| `--verify-plan` | Verify plan hasn't changed (uses plan-diff). Independent of download — requires planfile to already be downloaded |
+| `--ci` | Enable CI mode (auto-detected from `CI` env var) |
+| `--skip-planfile` | Skip writing the plan to a file |
+
+**Not yet implemented:**
+
+| Flag | Description | Status |
+|------|-------------|--------|
+| `--verify-plan` | Verify plan hasn't changed (uses plan-diff) | Not Started |
 
 ## Backend Configuration Example
 

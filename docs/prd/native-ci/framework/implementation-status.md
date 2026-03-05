@@ -50,11 +50,12 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 3. Add `github/comment.go` with PR comment API — Not Started
 4. Integrate terraform outputs export after apply (using `pkg/terraform/output/`) — Not Started
 
-### Phase 5: Describe Affected Matrix — Not Started
+### Phase 5: Describe Affected Matrix — COMPLETE
 
-1. Add `--format=matrix` flag — Not Started
-2. Implement matrix JSON output — Not Started
-3. Update documentation — Not Started
+1. Add `--format=matrix` flag to `describe affected` — Done (`cmd/describe_affected.go`)
+2. Implement matrix JSON output with `MatrixOutput`/`MatrixEntry` structs — Done (`internal/exec/describe_affected.go`)
+3. Support `--output-file` for writing `matrix=<json>` to `$GITHUB_OUTPUT` — Done
+4. Update documentation — Not Started
 
 ### Phase 6: Documentation — Not Started
 
@@ -109,9 +110,10 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | | Comment upsert behavior | Not Started | |
 | | `github/comment.go` — PR comment API | Not Started | |
 | | Terraform outputs export after apply | Not Started | |
-| **Phase 5** | Describe Affected Matrix | Not Started | 0% |
-| | `--format=matrix` flag | Not Started | |
-| | Matrix JSON output | Not Started | |
+| **Phase 5** | Describe Affected Matrix | Complete | 100% |
+| | `--format=matrix` flag (`cmd/describe_affected.go`) | Done | |
+| | Matrix JSON output (`internal/exec/describe_affected.go`) | Done | |
+| | `--output-file` for `$GITHUB_OUTPUT` (`matrix=<json>`) | Done | |
 | **Phase 6** | Documentation | Not Started | 0% |
 | | Archive old GitHub Actions docs | Not Started | |
 | | Write new CI integration docs | Not Started | |

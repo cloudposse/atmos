@@ -95,16 +95,18 @@ The plugin controls error severity per action — no config needed:
 | Status check | Warn, continue | Nice-to-have CI feature |
 | PR comment | Warn, continue | Nice-to-have CI feature |
 
-## Lifecycle Events
+## Lifecycle Events (IMPLEMENTED)
 
-CI behaviors integrate at existing hook points:
+CI behaviors integrate at existing hook points. Actual actions per event from `pkg/ci/plugins/terraform/plugin.go`:
 
 ```go
-BeforeTerraformPlan  = "before.terraform.plan"  // Create check run (in_progress)
-AfterTerraformPlan   = "after.terraform.plan"   // Upload planfile, write summary, write outputs, update check run
-BeforeTerraformApply = "before.terraform.apply"  // Download planfile, verify plan
-AfterTerraformApply  = "after.terraform.apply"   // Write summary, write outputs, export terraform outputs
+BeforeTerraformPlan  = "before.terraform.plan"  // ActionCheck: create check run (in_progress)
+AfterTerraformPlan   = "after.terraform.plan"   // ActionSummary + ActionOutput + ActionUpload + ActionCheck (template: "plan")
+BeforeTerraformApply = "before.terraform.apply"  // ActionDownload: download planfile from store
+AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput (template: "apply")
 ```
+
+> Note: `before.terraform.apply` does NOT have ActionCheck (no "Apply in progress" check run). `after.terraform.apply` does NOT have ActionCheck (no check run update after apply). These can be added later by modifying the plugin's `GetHookBindings()`.
 
 ## Terraform Plugin Hook Bindings
 

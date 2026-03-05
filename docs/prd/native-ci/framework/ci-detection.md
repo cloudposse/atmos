@@ -59,18 +59,18 @@ atmos terraform plan vpc -s plat-ue2-dev
 atmos terraform plan vpc -s plat-ue2-dev --ci
 ```
 
-## Key Design Decision: Use Atmos Lifecycle Hooks
+## Key Design Decision: Use Atmos Lifecycle Hooks (IMPLEMENTED)
 
-Integrate CI behaviors at existing hook points in `pkg/hooks/`:
+CI behaviors are triggered via `RunCIHooks()` in `cmd/terraform/utils.go`, which calls `ci.Execute()`. The executor dispatches to plugin hook bindings:
 
 ```go
-BeforeTerraformPlan  = "before.terraform.plan"   // Create check run (in_progress)
-AfterTerraformPlan   = "after.terraform.plan"    // Upload planfiles, PR comment, job summary
-BeforeTerraformApply = "before.terraform.apply"  // Download planfiles, verify plan
-AfterTerraformApply  = "after.terraform.apply"   // Update PR comment, job summary, export outputs
+BeforeTerraformPlan  = "before.terraform.plan"   // ActionCheck: create check run (in_progress)
+AfterTerraformPlan   = "after.terraform.plan"    // ActionSummary + ActionOutput + ActionUpload + ActionCheck
+BeforeTerraformApply = "before.terraform.apply"  // ActionDownload: download planfile from store
+AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput
 ```
 
-This keeps CI behaviors modular and allows users to extend or replace them.
+This keeps CI behaviors modular — each plugin defines its own hook bindings.
 
 ## Flag Changes
 

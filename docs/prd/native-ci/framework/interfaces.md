@@ -221,8 +221,8 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
     return []plugin.HookBinding{
         {Event: "before.terraform.plan",  Actions: []plugin.HookAction{plugin.ActionCheck}},
         {Event: "after.terraform.plan",   Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck}, Template: "plan"},
-        {Event: "before.terraform.apply", Actions: []plugin.HookAction{plugin.ActionDownload, plugin.ActionCheck}},
-        {Event: "after.terraform.apply",  Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionCheck}, Template: "apply"},
+        {Event: "before.terraform.apply", Actions: []plugin.HookAction{plugin.ActionDownload}},
+        {Event: "after.terraform.apply",  Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput}, Template: "apply"},
     }
 }
 ```

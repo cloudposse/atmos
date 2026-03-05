@@ -2,9 +2,11 @@
 
 > Related: [Overview](../overview.md) | [CI Outputs](../providers/github/ci-outputs.md)
 
-## FR-8: Describe Affected Matrix Format
+## FR-8: Describe Affected Matrix Format (IMPLEMENTED)
 
 **Requirement**: Output affected components in GitHub Actions matrix format.
+
+**Implementation**: `cmd/describe_affected.go` adds `--format=matrix` flag. `internal/exec/describe_affected.go` implements `MatrixOutput`/`MatrixEntry` structs, `convertAffectedToMatrix()`, and `writeMatrixOutput()` with `--output-file` support for `$GITHUB_OUTPUT` (`matrix=<json>` format).
 
 **Behavior**:
 - `atmos describe affected --format=matrix` outputs JSON matrix to stdout
