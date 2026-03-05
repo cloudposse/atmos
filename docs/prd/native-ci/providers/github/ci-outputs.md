@@ -62,6 +62,12 @@ The terraform outputs use the format options from `pkg/terraform/output/`:
 - Flattening support for nested outputs
 - Uppercase conversion for environment variable compatibility
 
+## Key Design Decision: Last-Writer-Wins, No Prefix
+
+Output variable names use simple names (`has_changes`, `plan_summary`) with **no component/stack prefix**. If two components run in the same job step, the last one's values win.
+
+Users who need per-component isolation should use matrix strategy (one component per job) — which is the recommended workflow pattern via `describe affected --format=matrix`.
+
 ## Key Design Decision: Export Terraform Outputs After Apply
 
 Leverage the `pkg/terraform/output/` package (from `osterman/tf-output-format` branch) to export terraform outputs after a successful apply:

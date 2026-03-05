@@ -136,3 +136,16 @@ components:
 ```
 
 See [Configuration](../framework/configuration.md) for full schema details.
+
+## GitHub Artifacts Lookup Strategy
+
+The GitHub Artifacts store starts with **simple SHA-based lookup** — find artifacts matching the current commit SHA. The lookup logic is encapsulated behind a method so it can later be extended to support:
+
+- **Merge-commit traversal** — walking PR commit history to find artifacts from pre-merge commits
+- **Squash-merge support** — looking up artifacts by PR number when the original SHA no longer exists
+
+**Cross-workflow access**: The GitHub Artifacts store must support downloading artifacts from other workflow runs (e.g., apply workflow downloading planfiles uploaded by the plan workflow). This is the primary use case.
+
+## Store Type Validation
+
+All store types (`s3`, `github-artifacts`, `azure-blob`, `gcs`, `local`) are accepted in configuration validation. Unimplemented backends fail at runtime only when actually selected via `--store` or priority. Users can pre-configure future backends without breaking current functionality.

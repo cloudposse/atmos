@@ -41,6 +41,18 @@ Comments support three modes configured via `ci.comments.behavior`:
 | `update` | Update the existing comment (or create if none exists) |
 | `upsert` | Create or update — default behavior |
 
+## Design Status: Deferred
+
+PR comment design (marker identification, comment granularity, template strategy) is **deferred** until we have more information. Preliminary direction:
+
+- **Marker-based upsert** using HTML comments (`<!-- atmos:ci:plan:{component}:{stack} -->`) — tfcmt pattern. This allows finding and updating existing comments without scanning comment bodies.
+- **One comment per component+stack** as the starting point.
+
+These are directional, not final. A dedicated PR comments PRD should be written before implementation begins, covering:
+- Exact marker format and collision avoidance
+- Comment granularity trade-offs (per-component vs. single-comment-per-PR)
+- Template override strategy and user customization
+
 ## Configuration
 
 ```yaml

@@ -335,6 +335,17 @@ The adapter parses `List(ctx, prefix)` prefixes based on the default key pattern
 - No existing files modified — purely additive package.
 - 16 tests pass with 95.6% statement coverage.
 
+## Testing Strategy (Phases 3–5)
+
+**Mocks + golden files. No real API calls.**
+
+- **Hook integration**: Mock plugin registry and provider to test hooks fire at correct lifecycle points. Test error propagation (command fails → hooks fire with `CommandError`).
+- **PR comments**: Mock GitHub API for upsert tests (list → find marker → create/update).
+- **Templates**: Golden file tests for all default templates (plan, apply, with changes, no changes, errors, with outputs).
+- **Describe affected matrix**: Table-driven tests for JSON generation. Test `--output-file` writes correct `key=value` format.
+
+Coverage target: 80%.
+
 ## Changelog
 
 | Version | Date | Changes |
