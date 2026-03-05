@@ -1,0 +1,173 @@
+---
+title: Multi-Cloud
+slug: /multi-cloud
+sidebar_label: Multi-Cloud
+sidebar_position: 4
+description: Atmos was designed from the ground up to be cloud agnostic. Multi-cloud integrations are community supported.
+---
+import Intro from '@site/src/components/Intro'
+import KeyPoints from '@site/src/components/KeyPoints'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
+import File from '@site/src/components/File'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+Atmos was designed from the ground up to be cloud agnostic. It works with any cloud provider that Terraform supports. Cloud-specific integrations for authentication and stores are community supported.
+</Intro>
+
+Atmos is a framework that helps you orchestrate Terraform — whatever you can do in Terraform, you can do with Atmos. Teams use it across a diverse set of environments, from AWS to Azure to GCP, as well as managing other platforms like Cloudflare, DigitalOcean, GitHub, Hetzner, Akamai, Artifactory, Vercel, and the list goes on.
+
+Atmos itself is not aware of your Terraform components or their providers. Stacks, components, inheritance, vendoring, workflows, and the terminal UI are all completely cloud-agnostic. The only cloud-specific features are [authentication](/cli/configuration/auth) and [stores](/cli/configuration/stores), which have dedicated integrations for each provider. For simplification, many of our examples reference AWS since it is the most widely adopted cloud among our community, but the concepts apply regardless of which cloud you use.
+
+## Design Patterns
+
+Atmos provides design patterns for organizing your stacks across clouds and application repositories.
+
+- **[Multi-Cloud Configuration](/design-patterns/stack-organization/multi-cloud-configuration)** — Organize your stacks so the directory layout mirrors how your cloud provider organizes its resources. Uses cloud-native terminology in folder names (AWS accounts, Azure subscriptions, GCP projects) so engineers immediately understand the layout. Includes a cloud organizational concept mapping table for translating between providers.
+
+- **[Application SDLC Environments](/design-patterns/stack-organization/application-sdlc)** — A minimal flat structure for application repositories that co-locate infrastructure alongside application code. One file per SDLC environment (`dev.yaml`, `staging.yaml`, `prod.yaml`) with support for ephemeral PR preview environments. Ideal for teams that want to get up and running quickly without deep organizational hierarchy.
+
+## Cloud Integrations
+
+To explore how multi-cloud integrations are configured, here are some examples for each provider.
+
+<Tabs>
+  <TabItem value="aws" label="AWS" default>
+
+### Authentication
+
+Atmos supports multiple AWS authentication flows including SSO, SAML, and GitHub OIDC.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    company-sso:
+      kind: aws/iam-identity-center
+      region: us-east-1
+      start_url: https://company.awsapps.com/start
+      auto_provision_identities: true
+
+  identities:
+    dev-admin:
+      kind: aws/permission-set
+      default: true
+      via:
+        provider: company-sso
+      principal:
+        name: AdminAccess
+        account:
+          name: development
+```
+</File>
+
+**Providers:** `aws/iam-identity-center`, `aws/saml`, `github/oidc`
+**Identities:** `aws/permission-set`, `aws/assume-role`, `aws/assume-root`, `aws/user`
+
+### Stores
+
+- **AWS SSM Parameter Store:** `aws-ssm-parameter-store`
+
+### Terraform Backend
+
+- **S3 + DynamoDB** — Remote state with locking
+
+**Learn more:** [Auth Providers](/cli/configuration/auth/providers) · [Identities](/cli/configuration/auth/identities) · [Stores](/cli/configuration/stores)
+
+  </TabItem>
+  <TabItem value="azure" label="Azure">
+
+### Authentication
+
+Atmos supports Azure authentication for interactive and CI/CD workflows.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    azure-interactive:
+      kind: azure/device-code
+      spec:
+        tenant_id: "12345678-1234-1234-1234-123456789012"
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+
+  identities:
+    dev-subscription:
+      kind: azure/subscription
+      via:
+        provider: azure-interactive
+      principal:
+        subscription_id: "87654321-4321-4321-4321-210987654321"
+```
+</File>
+
+**Providers:** `azure/device-code`, `azure/oidc`, `azure/cli`
+**Identities:** `azure/subscription`
+
+### Stores
+
+- **Azure Key Vault:** `azure-key-vault`
+
+### Terraform Backend
+
+- **Azure Blob Storage** — Remote state with native locking
+
+**Learn more:** [Auth Providers](/cli/configuration/auth/providers) · [Azure Tutorial](/tutorials/azure-authentication) · [Stores](/cli/configuration/stores)
+
+  </TabItem>
+  <TabItem value="gcp" label="GCP">
+
+### Authentication
+
+Atmos supports GCP authentication for local development and CI/CD pipelines.
+
+<File title="atmos.yaml">
+```yaml
+auth:
+  providers:
+    gcp-adc:
+      kind: gcp/adc
+      project_id: my-gcp-project
+      region: us-central1
+
+  identities:
+    dev-project:
+      kind: gcp/service-account
+      via:
+        provider: gcp-adc
+      principal:
+        email: deployer@my-gcp-project.iam.gserviceaccount.com
+```
+</File>
+
+**Providers:** `gcp/adc`, `gcp/workload-identity-federation`
+**Identities:** `gcp/service-account`, `gcp/project`
+
+### Stores
+
+- **Google Secret Manager:** `google-secret-manager`
+
+### Terraform Backend
+
+- **Google Cloud Storage (GCS)** — Remote state with native locking
+
+**Learn more:** [Auth Providers](/cli/configuration/auth/providers) · [Identities](/cli/configuration/auth/identities) · [Stores](/cli/configuration/stores)
+
+  </TabItem>
+</Tabs>
+
+## AWS Reference Architecture
+
+[Cloud Posse](https://cloudposse.com) provides a commercial [reference architecture](https://cloudposse.com/accelerator) built on top of Atmos for AWS. If you're using AWS, this is the fastest way to get started with a production-ready foundation that includes hundreds of pre-built components, proven design patterns, and ongoing support.
+
+<ActionCard
+  title="Ready to get started?"
+  primaryCtaText="Install Atmos"
+  primaryCtaLink="/install"
+  secondaryCtaText="Quick Start"
+  secondaryCtaLink="/quick-start"
+>
+Try Atmos with your cloud provider of choice. The quick start guide walks you through your first deployment.
+</ActionCard>

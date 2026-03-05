@@ -71,7 +71,7 @@ auth:
 
 ## Subpages
 
-- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC)
+- **[Providers](/cli/configuration/auth/providers)** - Configure authentication providers (AWS SSO, SAML, GitHub OIDC, GCP, Azure)
 - **[Identities](/cli/configuration/auth/identities)** - Configure identities and identity chaining
 - **[Keyring](/cli/configuration/auth/keyring)** - Configure credential storage backends
 - **[Logs](/cli/configuration/auth/logs)** - Configure auth-specific logging
@@ -254,10 +254,14 @@ ATMOS_PROFILE=ci atmos terraform apply myapp -s prod
   {type: 'link', href: '/cli/commands/auth/shell', label: 'atmos auth shell', description: 'Start a shell with identity credentials'},
   {type: 'link', href: '/cli/commands/auth/exec', label: 'atmos auth exec', description: 'Execute a command with identity credentials'},
   {type: 'link', href: '/cli/commands/auth/env', label: 'atmos auth env', description: 'Export credentials as environment variables'},
-  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open AWS console in browser'},
+  {type: 'link', href: '/cli/commands/auth/console', label: 'atmos auth console', description: 'Open cloud console in browser'},
   {type: 'link', href: '/cli/commands/auth/list', label: 'atmos auth list', description: 'List available identities and providers'},
   {type: 'link', href: '/cli/commands/auth/logout', label: 'atmos auth logout', description: 'Clear cached credentials'},
 ]} />
+
+## Tutorials
+
+- [Azure Authentication](/tutorials/azure-authentication) — Complete guide for Azure device code, OIDC, and CLI authentication
 
 ## See Also
 
