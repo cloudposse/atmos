@@ -93,15 +93,15 @@ Locally, `--ci` produces identical output—same formatting, same behavior. Debu
 
 **Requirement**: CI feature failures are handled with appropriate severity.
 
-**Behavior**:
-- Planfile upload failure **fails command** (downstream apply depends on it)
-- Planfile download failure **fails command** (apply can't proceed without planfile)
+**Behavior** (target — see [Hooks Integration](./framework/hooks-integration.md) for current vs target):
+- Planfile upload failure **fails command** (downstream apply depends on it) — *currently: warn-only*
+- Planfile download failure **fails command** (apply can't proceed without planfile) — *currently: warn-only*
 - Summary write failure logs warning, does not fail command
 - Output variable write failure logs warning per variable
 - Status check failure logs warning, does not fail command
 - PR comment failure logs warning, does not fail command
 
-The plugin owns error severity decisions — artifact operations are fatal, all other CI features are best-effort.
+> **Note**: In the current enum-based executor implementation, ALL CI action failures (including upload/download) are logged as warnings and do not fail the command. Fatal error severity for upload/download will be implemented when the executor is refactored to the callback-based architecture (see [Hooks Integration](./framework/hooks-integration.md#error-severity)).
 
 ### NFR-3: Security
 
