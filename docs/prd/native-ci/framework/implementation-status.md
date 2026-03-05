@@ -4,130 +4,267 @@
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure — COMPLETE
+Phases are organized by PRD workstream and functional requirement (FR). See [Overview](../overview.md) for FR definitions.
 
-1. Create `pkg/ci/` package structure — Done
-2. Implement Provider interface and GitHub provider — Done
-3. Implement Context and detection — Done
-4. Add schema types to `pkg/schema/schema.go` (`CIConfig`, `PlanfilesConfig`) — Done
-5. Add `--ci` flag to terraform commands — Done
-6. Implement `atmos ci status` command — Done
+---
 
-### Phase 2: Artifact & Planfile Storage — COMPLETE
+### Framework: Core Infrastructure — COMPLETE
 
-1. Define generic artifact.Store interface (`pkg/ci/artifact/`) — Done
-2. Implement artifact store registry and priority-based selector — Done
-3. Implement local artifact storage backend (`pkg/ci/artifact/local/`) — Done
-4. Implement planfile adapter wrapping artifact.Store (`planfile/adapter/`) — Done
-5. Implement PlanfileStore interface — Done
-6. Implement S3 store (no DynamoDB) — Done
-7. Implement local filesystem planfile store — Done
-8. Add `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
-9. Implement GitHub Artifacts planfile store — Done
-10. Azure Blob and GCS stores — Deferred
+> PRDs: [CI Detection](./ci-detection.md) | [Interfaces](./interfaces.md) | [Configuration](./configuration.md) | [Hooks Integration](./hooks-integration.md)
 
-### Phase 3: Plugin-Executor Integration — COMPLETE (enum-based)
+**FR-1: CI Environment Detection** — Done
+1. GitHub Actions detection via `GITHUB_ACTIONS=true` — Done
+2. Generic CI detection via `CI=true` — Done
+3. `--ci` flag with `ATMOS_CI` and `CI` env var bindings — Done
+4. `ci.enabled` config gate in `pkg/schema/schema.go` — Done
 
-The executor uses an **enum-based action dispatch** pattern (not the callback-based pattern described in hooks-integration.md):
+**FR-7: Command Parity** — Partial
+1. `--ci` flag on `terraform plan` (full wiring: PreRunE, output capture, PostRunE, error defer) — Done
+2. `--ci` flag on `terraform apply` (flag + env var bindings defined) — Done
+3. Apply `PostRunE` fires `after.terraform.apply` CI hooks (empty output) — Done
+4. Apply `PreRunE` for `before.terraform.apply` (download planfile) — **Not Started** (no PreRunE on applyCmd)
+5. Apply output capture (stdout/stderr like plan.go) — **Not Started**
+6. Apply error defer (check run failure update like plan.go) — **Not Started**
+7. `deploy.go` `--ci` flag — **Not Started** (no `--ci` flag at all on deploy)
 
-1. Executor orchestrates all CI actions via `Execute()` → `executeActions()` → switch on `HookAction` enum — Done
-2. Plugin interface with 7 methods (GetType, GetHookBindings, GetDefaultTemplates, BuildTemplateContext, ParseOutput, GetOutputVariables, GetArtifactKey) — Done
-3. Terraform plugin implements all 7 Plugin methods — Done
-4. Executor wired: `ci.Execute(ExecuteOptions{...})` → detect platform → get plugin → build context → execute actions — Done
+**Core Infrastructure** — Done
+1. `pkg/ci/` package structure — Done
+2. Provider interface (`pkg/ci/internal/provider/types.go`) — Done
+3. Plugin interface with 7 methods (`pkg/ci/internal/plugin/types.go`) — Done
+4. Executor with enum-based action dispatch (`pkg/ci/executor.go`) — Done
+5. Provider registry (`pkg/ci/registry_provider.go`) — Done
+6. Plugin registry (`pkg/ci/plugin_registry.go`) — Done
+7. Schema types (`CIConfig`, `PlanfilesConfig`) in `pkg/schema/schema.go` — Done
+8. Config-based action enable/disable (`isActionEnabled()`) — Done
+9. Template loader with override support (`pkg/ci/templates/loader.go`) — Done
+
+---
+
+### Framework: Artifact Storage — COMPLETE
+
+> PRD: [Artifact Storage](./artifact-storage.md)
+
+1. Generic `artifact.Store` interface (`pkg/ci/artifact/store.go`) — Done
+2. Artifact metadata with `Custom` map (`pkg/ci/artifact/metadata.go`) — Done
+3. Query-based filtering (`pkg/ci/artifact/query.go`) — Done
+4. Backend registry with `Register()` / `NewStore()` (`pkg/ci/artifact/registry.go`) — Done
+5. Priority-based backend selector (`pkg/ci/artifact/selector.go`) — Done
+6. Local filesystem backend (`pkg/ci/artifact/local/`) — Done
+7. Generated mock via mockgen (`pkg/ci/artifact/mock_store.go`) — Done
+
+---
+
+### Providers: GitHub Actions — Mostly Complete
+
+> PRDs: [GitHub Provider](../providers/github/provider.md) | [Job Summaries](../providers/github/job-summaries.md) | [CI Outputs](../providers/github/ci-outputs.md) | [Status Checks](../providers/github/status-checks.md) | [PR Comments](../providers/github/pr-comments.md)
+
+**FR-2: Job Summary Output** — Done
+1. `executeSummaryAction()` renders template via plugin's `BuildTemplateContext()` — Done
+2. Writes to `$GITHUB_STEP_SUMMARY` via `FileOutputWriter.WriteSummary()` — Done
+3. Default templates: `plan.md`, `apply.md` (`pkg/ci/plugins/terraform/templates/`) — Done
+
+**FR-3: CI Output Variables** — Partial
+1. `executeOutputAction()` calls `plugin.GetOutputVariables()` + adds common vars — Done
+2. Writes to `$GITHUB_OUTPUT` via `FileOutputWriter.WriteOutput()` — Done
+3. Whitelist filtering via `ci.output.variables` config — Done
+4. `OutputHelpers` convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) — Done
+5. Terraform output export after apply (`output_*` variables) — **Not Started** (Phase 4)
+
+**FR-4: Status Checks** — Done
+1. `executeCheckAction()` creates check runs on "before" events — Done
+2. Updates check runs on "after" events with result summary — Done
+3. Check run ID correlation via `sync.Map` — Done
+4. `ci.checks.enabled` config (disabled by default) — Done
+5. `FormatCheckRunName()` with hardcoded `"atmos/"` prefix — Done (config wiring deferred)
+
+**FR-9: CI Status Command** — Done
+1. `atmos ci status` command (`cmd/ci/`) — Done
+2. Shows current branch status, PRs by user, review requests — Done
+3. Uses GitHub API (combined commit status + check runs + PRs) — Done
+
+**GitHub Provider Core** — Done
+1. `provider.go` — Detect, Context, OutputWriter — Done
+2. `client.go` — GitHub API client wrapper (go-github) — Done
+3. `checks.go` — CreateCheckRun, UpdateCheckRun — Done
+4. `status.go` — GetStatus implementation — Done
+
+**PR Comments** — Not Started (design deferred)
+1. PR comment action type in executor — **Not Started**
+2. Comment upsert behavior (HTML marker, find-and-update) — **Not Started**
+3. `github/comment.go` — PR comment API — **Not Started**
+
+---
+
+### Providers: Generic CI — COMPLETE
+
+> PRD: [Generic Provider](../providers/generic/generic.md)
+
+1. Generic provider (`pkg/ci/providers/generic/provider.go`) — Done
+2. `CI=true` detection, env var context, OutputWriter — Done
+3. Generic check run support (`check.go`) — Done
+
+---
+
+### Terraform Plugin: Hook Bindings & Executor — COMPLETE (enum-based)
+
+> PRD: [Hooks Integration](./hooks-integration.md)
+
+The executor uses an **enum-based action dispatch** pattern (not the callback-based target described in hooks-integration.md):
+
+1. Terraform plugin implements all 7 Plugin methods — Done
+2. Hook bindings: `before.terraform.plan`, `after.terraform.plan`, `before.terraform.apply`, `after.terraform.apply` — Done
+3. Output parser (`pkg/ci/plugins/terraform/parser.go`) — Done
+4. Template context (`pkg/ci/plugins/terraform/context.go`) — Done
 5. Upload action (`executeUploadAction`) — Done
 6. Download action (`executeDownloadAction`) — Done
-7. Check run action (`executeCheckAction`) — create on before, update on after — Done
-8. Summary action (`executeSummaryAction`) — renders template, writes to `$GITHUB_STEP_SUMMARY` — Done
-9. Output action (`executeOutputAction`) — writes variables to `$GITHUB_OUTPUT` with whitelist filtering — Done
-10. `--ci` flag on `terraform apply` command — Done (flag defined with env var bindings `ATMOS_CI`, `CI`)
-11. Apply `PostRunE` calls `runHooks(h.AfterTerraformApply)` — Done (CI hooks fire via `runHooksWithOutput` but with empty output string)
-12. Apply `PreRunE` for `before.terraform.apply` (triggers `ActionDownload` for planfile) — Not Started (no PreRunE defined on applyCmd)
-13. Apply output capture (stdout/stderr capture like plan.go) — Not Started (no `WithStdoutCapture`/`WithStderrCapture` in apply RunE)
-14. Apply error defer (update check runs to failure on error, like plan.go) — Not Started (no defer calling `runHooksOnErrorWithOutput`)
-15. `--verify-plan` using plan-diff — Not Started
+7. Summary action (`executeSummaryAction`) — Done
+8. Output action (`executeOutputAction`) — Done
+9. Check run action (`executeCheckAction`) — Done
 
 > **Future refactoring**: The hooks-integration.md PRD describes a callback-based pattern where plugins own all logic via `HookAction` function callbacks. The current enum-based approach works but the executor is a "god-object" that knows about all action types. Refactoring to callbacks would move action logic into plugins for better separation of concerns.
 
-### Phase 4: PR Comments & Terraform Output Export — Not Started
+---
 
-1. Implement PR comment action type in executor — Not Started
-2. Implement comment upsert behavior (HTML marker, find-and-update) — Not Started
-3. Add `github/comment.go` with PR comment API — Not Started
-4. Integrate terraform outputs export after apply (using `pkg/terraform/output/`) — Not Started
+### Terraform Plugin: Planfile Storage — COMPLETE
 
-### Phase 5: Describe Affected Matrix — COMPLETE
+> PRDs: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Artifact Storage](./artifact-storage.md)
 
-1. Add `--format=matrix` flag to `describe affected` — Done (`cmd/describe_affected.go`)
-2. Implement matrix JSON output with `MatrixOutput`/`MatrixEntry` structs — Done (`internal/exec/describe_affected.go`)
-3. Support `--output-file` for writing `matrix=<json>` to `$GITHUB_OUTPUT` — Done
-4. Update documentation — Not Started
+**FR-5: Planfile Storage** — Done (Azure/GCS deferred)
+1. `planfile.Store` interface (`pkg/ci/plugins/terraform/planfile/interface.go`) — Done
+2. Planfile adapter wrapping `artifact.Store` (`planfile/adapter/`) — Done
+3. Planfile store registry (`planfile/registry.go`) — Done
+4. S3 store — no DynamoDB (`planfile/s3/`) — Done
+5. GitHub Artifacts store (`planfile/github/`) — Done
+6. Local filesystem store (`planfile/local/`) — Done
+7. Azure Blob store — **Deferred**
+8. GCS store — **Deferred**
+9. `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
+10. Automatic upload on `after.terraform.plan` via `ActionUpload` — Done
+11. Automatic download on `before.terraform.apply` via `ActionDownload` — Done (binding exists, but apply.go `PreRunE` not wired — see FR-7)
 
-### Phase 6: Documentation — Not Started
+---
 
-1. Archive old GitHub Actions docs — Not Started
-2. Write new CI integration docs — Not Started
-3. Update command reference docs — Not Started
+### Terraform Plugin: Plan Verification — Not Started
 
-## Implementation Status Table
+> PRD: [Plan Verification](../terraform-plugin/plan-verification.md)
 
-| Phase | Description | Status | Completion |
-|-------|-------------|--------|------------|
-| **Phase 1** | Core Infrastructure | Complete | 100% |
-| | pkg/ci/ package structure | Done | |
-| | Provider interface (`pkg/ci/internal/provider/types.go`) | Done | |
-| | GitHub provider (`pkg/ci/providers/github/`) | Done | |
-| | Generic provider (`pkg/ci/providers/generic/`) | Done | |
-| | Context and detection | Done | |
-| | Schema types (`pkg/schema/schema.go` — CIConfig, PlanfilesConfig) | Done | |
-| | Provider registry (`pkg/ci/registry_provider.go`) | Done | |
-| | Plugin registry (`pkg/ci/plugin_registry.go`) | Done | |
-| | `atmos ci status` command (`cmd/ci/`) | Done | |
-| **Phase 2** | Artifact & Planfile Storage | Complete | 100% |
-| | Artifact Store interface (`pkg/ci/artifact/`) | Done | |
-| | Artifact local backend (`pkg/ci/artifact/local/`) | Done | |
-| | Artifact store registry + selector | Done | |
-| | PlanfileStore interface | Done | |
-| | PlanfileStore adapter (`planfile/adapter/`) | Done | |
-| | S3 store (`planfile/s3/`) | Done | |
-| | GitHub Artifacts store (`planfile/github/`) | Done | |
-| | Local filesystem store (`planfile/local/`) | Done | |
-| | Azure Blob store | Deferred | |
-| | GCS store | Deferred | |
-| | `atmos terraform planfile` commands (upload/download/list/delete/show) | Done | |
-| **Phase 3** | Plugin-Executor Integration | Complete (enum-based) | ~90% |
-| | Executor action dispatch (`pkg/ci/executor.go`) | Done | |
-| | Plugin interface — 7 methods (`pkg/ci/internal/plugin/types.go`) | Done | |
-| | Terraform plugin (`pkg/ci/plugins/terraform/plugin.go`) | Done | |
-| | Output parser (`pkg/ci/plugins/terraform/parser.go`) | Done | |
-| | Template context (`pkg/ci/plugins/terraform/context.go`) | Done | |
-| | Template loader with override support (`pkg/ci/templates/loader.go`) | Done | |
-| | Summary action (renders template → `$GITHUB_STEP_SUMMARY`) | Done | |
-| | Output action (writes variables → `$GITHUB_OUTPUT` with whitelist filtering) | Done | |
-| | Upload action (uploads planfile to store) | Done | |
-| | Download action (downloads planfile from store) | Done | |
-| | Check run action (create on before, update on after) | Done | |
-| | `FileOutputWriter` for `$GITHUB_OUTPUT`/`$GITHUB_STEP_SUMMARY` | Done | |
-| | `OutputHelpers` — `WritePlanOutputs()`, `WriteApplyOutputs()` | Done | |
-| | Config-based action enable/disable (`isActionEnabled()`) | Done | |
-| | `--ci` flag on `terraform apply` (flag + env var bindings) | Done | |
-| | Apply `PostRunE` → `runHooks(h.AfterTerraformApply)` (CI hooks fire, empty output) | Done | |
-| | Apply `PreRunE` for `before.terraform.apply` (download planfile) | Not Started | |
-| | Apply output capture (stdout/stderr like plan.go) | Not Started | |
-| | Apply error defer (check run failure update like plan.go) | Not Started | |
-| | `--verify-plan` using plan-diff | Not Started | |
-| **Phase 4** | PR Comments & TF Output Export | Not Started | 0% |
-| | PR comment action type | Not Started | |
-| | Comment upsert behavior | Not Started | |
-| | `github/comment.go` — PR comment API | Not Started | |
-| | Terraform outputs export after apply | Not Started | |
-| **Phase 5** | Describe Affected Matrix | Complete | 100% |
-| | `--format=matrix` flag (`cmd/describe_affected.go`) | Done | |
-| | Matrix JSON output (`internal/exec/describe_affected.go`) | Done | |
-| | `--output-file` for `$GITHUB_OUTPUT` (`matrix=<json>`) | Done | |
-| **Phase 6** | Documentation | Not Started | 0% |
-| | Archive old GitHub Actions docs | Not Started | |
-| | Write new CI integration docs | Not Started | |
-| | Update command reference docs | Not Started | |
+**FR-6: Plan Verification** — Not Started
+1. `--verify-plan` flag on `terraform apply` — **Not Started**
+2. Download stored planfile to temp path — **Not Started**
+3. Generate fresh plan, compare via plan-diff — **Not Started**
+4. Fail apply if drift detected — **Not Started**
+
+---
+
+### Terraform Plugin: Describe Affected Matrix — COMPLETE
+
+> PRD: [Describe Affected Matrix](../terraform-plugin/describe-affected-matrix.md)
+
+**FR-8: Describe Affected Matrix** — Done
+1. `--format=matrix` flag (`cmd/describe_affected.go`) — Done
+2. Matrix JSON output with `MatrixOutput`/`MatrixEntry` structs (4 fields: `component`, `stack`, `component_path`, `component_type`) — Done
+3. `--output-file` for `$GITHUB_OUTPUT` (`matrix=<json>` + `affected_count=N`) — Done
+
+---
+
+### Terraform Output Export — Not Started
+
+> PRD: [CI Outputs](../providers/github/ci-outputs.md) (Phase 4 section)
+
+1. Export terraform outputs after successful apply (`output_*` variables) — **Not Started**
+2. Flatten nested outputs, uppercase conversion via `pkg/terraform/output/` — **Not Started**
+
+---
+
+### Documentation — Not Started
+
+1. Archive old GitHub Actions docs — **Not Started**
+2. Write new CI integration docs — **Not Started**
+3. Update command reference docs — **Not Started**
+4. Update JSON schemas in `pkg/datafetcher/schema/` — **Not Started**
+
+## Implementation Status by Functional Requirement
+
+| FR | Requirement | PRD | Status | Completion |
+|----|-------------|-----|--------|------------|
+| **FR-1** | CI Environment Detection | [ci-detection.md](./ci-detection.md) | **Done** | 100% |
+| | GitHub Actions detection (`GITHUB_ACTIONS=true`) | | Done | |
+| | Generic CI detection (`CI=true`) | | Done | |
+| | `--ci` flag with `ATMOS_CI`/`CI` env var bindings | | Done | |
+| | `ci.enabled` config gate | | Done | |
+| **FR-2** | Job Summary Output | [job-summaries.md](../providers/github/job-summaries.md) | **Done** | 100% |
+| | `executeSummaryAction()` with template rendering | | Done | |
+| | `$GITHUB_STEP_SUMMARY` via `FileOutputWriter` | | Done | |
+| | Default `plan.md` and `apply.md` templates | | Done | |
+| **FR-3** | CI Output Variables | [ci-outputs.md](../providers/github/ci-outputs.md) | **Partial** | ~80% |
+| | `executeOutputAction()` with plugin variables | | Done | |
+| | `$GITHUB_OUTPUT` via `FileOutputWriter` | | Done | |
+| | Whitelist filtering via `ci.output.variables` | | Done | |
+| | Terraform output export after apply (`output_*`) | | Not Started | |
+| **FR-4** | Status Checks | [status-checks.md](../providers/github/status-checks.md) | **Done** | 100% |
+| | Create check runs on "before" events | | Done | |
+| | Update check runs on "after" events | | Done | |
+| | `ci.checks.enabled` config (disabled by default) | | Done | |
+| | `context_prefix` wired from config | | Not Started (hardcoded) | |
+| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~90% |
+| | `planfile.Store` interface + adapter | | Done | |
+| | S3 store (no DynamoDB) | | Done | |
+| | GitHub Artifacts store | | Done | |
+| | Local filesystem store | | Done | |
+| | `atmos terraform planfile` CLI commands (5 subcommands) | | Done | |
+| | Automatic upload on `after.terraform.plan` | | Done | |
+| | Automatic download on `before.terraform.apply` | | Done (binding only — apply.go PreRunE not wired) | |
+| | Azure Blob store | | Deferred | |
+| | GCS store | | Deferred | |
+| **FR-6** | Plan Verification | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Not Started** | 0% |
+| | `--verify-plan` flag on `terraform apply` | | Not Started | |
+| | Download stored plan → fresh plan → plan-diff comparison | | Not Started | |
+| **FR-7** | Command Parity | [ci-detection.md](./ci-detection.md) | **Partial** | ~60% |
+| | `plan.go` full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
+| | `apply.go` `--ci` flag defined | | Done | |
+| | `apply.go` PostRunE fires CI hooks (empty output) | | Done | |
+| | `apply.go` PreRunE (download planfile) | | Not Started | |
+| | `apply.go` output capture (stdout/stderr) | | Not Started | |
+| | `apply.go` error defer (check run failure update) | | Not Started | |
+| | `deploy.go` `--ci` flag | | Not Started | |
+| **FR-8** | Describe Affected Matrix | [describe-affected-matrix.md](../terraform-plugin/describe-affected-matrix.md) | **Done** | 100% |
+| | `--format=matrix` flag | | Done | |
+| | Matrix JSON with 4 fields (`component`, `stack`, `component_path`, `component_type`) | | Done | |
+| | `--output-file` for `$GITHUB_OUTPUT` | | Done | |
+| **FR-9** | CI Status Command | [status-checks.md](../providers/github/status-checks.md) | **Done** | 100% |
+| | `atmos ci status` command | | Done | |
+| | Current branch status + PRs + review requests | | Done | |
+| **—** | PR Comments | [pr-comments.md](../providers/github/pr-comments.md) | **Not Started** | 0% |
+| | PR comment action type in executor | | Not Started | |
+| | Comment upsert behavior (HTML marker) | | Not Started | |
+| | `github/comment.go` — PR comment API | | Not Started | |
+| **—** | Terraform Output Export | [ci-outputs.md](../providers/github/ci-outputs.md) | **Not Started** | 0% |
+| | Export terraform outputs after apply (`output_*`) | | Not Started | |
+| | `pkg/terraform/output/` formatting | | Not Started | |
+| **—** | Documentation | — | **Not Started** | 0% |
+| | Archive old GitHub Actions docs | | Not Started | |
+| | Write new CI integration docs | | Not Started | |
+| | Update command reference docs | | Not Started | |
+| | JSON schema updates (`pkg/datafetcher/schema/`) | | Not Started | |
+
+### Summary
+
+| Category | Done | Not Started | Deferred |
+|----------|------|-------------|----------|
+| Framework: Core Infrastructure | 9/9 | 0 | 0 |
+| Framework: CI Detection (FR-1) | 4/4 | 0 | 0 |
+| Framework: Artifact Storage | 7/7 | 0 | 0 |
+| Providers: GitHub (FR-2, FR-3, FR-4, FR-9) | 14/14 | 0 | 0 |
+| Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
+| Providers: Generic | 3/3 | 0 | 0 |
+| Terraform Plugin: Hook Bindings | 9/9 | 0 | 0 |
+| Terraform Plugin: Planfile Storage (FR-5) | 8/11 | 0 | 2 (Azure, GCS) |
+| Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
+| Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
+| Command Parity (FR-7) | 3/7 | 4 | 0 |
+| Terraform Output Export | 0/2 | 2 | 0 |
+| Documentation | 0/4 | 4 | 0 |
+| **Total** | **60/80** | **17** | **2** |
 
 ## Files Created
 
@@ -411,6 +548,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 3.0 | 2026-03-05 | Restructured implementation phases to align with PRD organization. Phases now map to PRD workstreams (Framework, Providers, Terraform Plugin) and functional requirements (FR-1 through FR-9). Replaced Phase 1-6 numbering with descriptive section names matching PRD directory structure. Added FR-level status table with PRD cross-references. Added summary table with counts. No status changes — all Done/Not Started markers preserved from v2.2. |
 | 2.2 | 2026-03-05 | Eleventh sync pass: added missing `ErrAWSConfigLoadFailed` to sentinel errors list, fixed error count (31 total, was 22). Documented critical wiring gap: `apply.go` has no `PreRunE` so `before.terraform.apply` (download planfile) never fires — added notes to ci-detection.md and hooks-integration.md. `deploy.go` has no `--ci` flag at all. All code verified unchanged since last sync. |
 | 2.1 | 2026-03-05 | Tenth sync pass: detailed apply.go CI integration status — PostRunE fires CI hooks (Done, but with empty output), PreRunE for before.terraform.apply download (Not Started), output capture (Not Started), error defer (Not Started). Fixed describe-affected-matrix.md: MatrixEntry has 4 fields (component, stack, component_path, component_type), not 2 as previously documented. |
 | 2.0 | 2026-03-05 | Ninth sync pass: verified full codebase against PRD. Added: `--ci` flag on `terraform apply` (Done — flag + env vars defined), apply CI hooks integration (Not Started — flag exists but no output capture/CI hook dispatch like plan.go). All other statuses confirmed accurate. |
