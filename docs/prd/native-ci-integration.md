@@ -306,7 +306,7 @@ permissions:
 - Download planfile before `terraform apply`
 - Support multiple storage backends (S3, GitHub Artifacts, Azure Blob, GCS, local)
 - Store metadata sidecar with plan details (no DynamoDB)
-- Key pattern configurable via `terraform.planfiles.key_pattern`
+- Key pattern configurable per-store via `components.terraform.planfiles.stores.<name>.options.key_pattern`
 
 **Storage Backends**:
 | Backend | Key | Description |
@@ -444,22 +444,25 @@ This keeps CI behaviors modular and allows users to extend or replace them.
 
 ### 2. Eliminate DynamoDB Dependency
 
-Current GitHub Actions use DynamoDB for planfile metadata. The native implementation stores metadata directly in the same storage backend as the planfile (S3, Azure Blob, GCS, GitHub Artifacts), using JSON sidecar files:
+Current GitHub Actions use DynamoDB for planfile metadata. The native implementation stores metadata directly in the same storage backend as the artifact, using JSON sidecar files:
 
 ```
-s3://bucket/prefix/plat-ue2-dev/vpc/abc123.tfplan           # Planfile
-s3://bucket/prefix/plat-ue2-dev/vpc/abc123.metadata.json    # Metadata
+.atmos/planfiles/plat-ue2-dev/vpc/abc123.tfplan/              # Artifact directory
+.atmos/planfiles/plat-ue2-dev/vpc/abc123.tfplan/plan.tfplan   # Plan file
+.atmos/planfiles/plat-ue2-dev/vpc/abc123.tfplan.metadata.json # Metadata sidecar
 ```
+
+The architecture uses two layers: a generic `artifact.Store` interface (`pkg/ci/artifact/`) and a planfile-specific adapter (`pkg/ci/plugins/terraform/planfile/adapter/`) that wraps artifact.Store, translating between single-file planfile operations and multi-file artifact bundles. See [Artifact Storage PRD](./native-ci-artifact-storage.md) for full details.
 
 ### 3. Support All Plan-Storage Backends
 
-Implement a registry pattern (following `pkg/store/`) for planfile storage:
+Implement a registry pattern (following `pkg/store/`) for artifact storage backends, with planfile storage as an adapter on top:
 
-- **S3** - AWS S3 bucket with metadata sidecar
-- **Azure Blob** - Azure Blob Storage container
-- **GCS** - Google Cloud Storage bucket
-- **GitHub Artifacts** - GitHub Artifacts API v4
-- **Local** - Local filesystem (for development/testing)
+- **S3** - AWS S3 bucket with metadata sidecar (✅ planfile-level)
+- **Azure Blob** - Azure Blob Storage container (⏳ deferred)
+- **GCS** - Google Cloud Storage bucket (⏳ deferred)
+- **GitHub Artifacts** - GitHub Artifacts API v4 (⏳ Phase 4)
+- **Local** - Local filesystem (✅ both artifact and planfile levels)
 
 ### 4. tfcmt-Inspired PR Comments
 
@@ -591,15 +594,24 @@ pkg/ci/
   ├── provider.go              # Provider interface definition (✅ implemented)
   ├── registry.go              # Provider registry (detect and select provider) (✅ implemented)
   ├── status.go                # Status, BranchStatus, PRStatus, CheckStatus structs (✅ implemented)
-  ├── planfile/                # Planfile artifact storage
-  │   ├── interface.go         # PlanfileStore interface (✅ implemented)
-  │   ├── registry.go          # Storage backend registry (✅ implemented)
-  │   ├── s3/
-  │   │   └── store.go         # S3 store (metadata in S3, no DynamoDB) (✅ implemented)
-  │   ├── github/
-  │   │   └── store.go         # GitHub Artifacts store (✅ implemented)
+  ├── artifact/                # Generic artifact storage layer (✅ implemented)
+  │   ├── store.go             # Store interface, FileEntry/FileResult, StoreFactory (✅ implemented)
+  │   ├── metadata.go          # Metadata, ArtifactInfo structs (✅ implemented)
+  │   ├── query.go             # Query struct for filtering (✅ implemented)
+  │   ├── registry.go          # Backend registry: Register(), NewStore() (✅ implemented)
+  │   ├── selector.go          # EnvironmentChecker, SelectStore() (✅ implemented)
+  │   ├── mock_store.go        # Generated mock (✅ implemented)
   │   └── local/
-  │       └── store.go         # Local filesystem (dev/testing) (✅ implemented)
+  │       └── store.go         # Local filesystem backend (✅ implemented)
+  ├── plugins/terraform/
+  │   └── planfile/            # Planfile artifact storage (wraps artifact.Store)
+  │       ├── interface.go     # planfile.Store interface, Metadata (✅ implemented)
+  │       ├── registry.go      # Storage backend registry (✅ implemented)
+  │       ├── adapter/         # Adapter: planfile.Store → artifact.Store (✅ implemented)
+  │       │   ├── store.go     # Adapter implementation (✅ implemented)
+  │       │   └── factory.go   # StoreFactory for registry (✅ implemented)
+  │       └── s3/
+  │           └── store.go     # S3 store (metadata in S3, no DynamoDB) (✅ implemented)
   ├── github/                  # Implements ci.Provider for GitHub Actions
   │   ├── provider.go          # GitHub Actions Provider (✅ implemented)
   │   ├── client.go            # GitHub API client wrapper (✅ implemented)
@@ -722,101 +734,131 @@ type CheckStatus struct {
 }
 ```
 
-#### Planfile Store Interface
+#### Artifact Store Interface (IMPLEMENTED)
 
 ```go
-// pkg/ci/planfile/interface.go
+// pkg/ci/artifact/store.go
 
-// Store interface for planfile storage backends.
+// Store defines the interface for artifact storage backends.
 type Store interface {
-    // Upload stores planfile with metadata.
-    Upload(ctx context.Context, opts UploadOptions) (*UploadResult, error)
+    Name() string
+    Upload(ctx context.Context, name string, files []FileEntry, metadata *Metadata) error
+    Download(ctx context.Context, name string) ([]FileResult, *Metadata, error)
+    Delete(ctx context.Context, name string) error
+    List(ctx context.Context, query Query) ([]ArtifactInfo, error)
+    Exists(ctx context.Context, name string) (bool, error)
+    GetMetadata(ctx context.Context, name string) (*Metadata, error)
+}
 
-    // Download retrieves planfile.
-    Download(ctx context.Context, opts DownloadOptions) (*DownloadResult, error)
+// StoreFactory creates a Store from options.
+type StoreFactory func(opts StoreOptions) (Store, error)
+```
 
-    // GetMetadata retrieves metadata only (for verification).
-    GetMetadata(ctx context.Context, key string) (*Metadata, error)
+#### Planfile Store Interface (IMPLEMENTED)
 
-    // List returns planfiles matching the filter.
-    List(ctx context.Context, opts ListOptions) ([]*Metadata, error)
+```go
+// pkg/ci/plugins/terraform/planfile/interface.go
 
-    // Delete removes a planfile.
+// Store defines the interface for planfile storage backends.
+// PlanfileStore wraps artifact.Store via an adapter, translating between
+// single-file planfile operations and multi-file artifact bundles.
+type Store interface {
+    Name() string
+    Upload(ctx context.Context, key string, data io.Reader, metadata *Metadata) error
+    Download(ctx context.Context, key string) (io.ReadCloser, *Metadata, error)
     Delete(ctx context.Context, key string) error
+    List(ctx context.Context, prefix string) ([]PlanfileInfo, error)
+    Exists(ctx context.Context, key string) (bool, error)
+    GetMetadata(ctx context.Context, key string) (*Metadata, error)
 }
 
 // StoreFactory creates a Store from configuration options.
-type StoreFactory func(options map[string]any) (Store, error)
+type StoreFactory func(opts StoreOptions) (Store, error)
 ```
 
-#### Planfile Metadata
+#### Planfile Metadata (IMPLEMENTED)
 
 ```go
-// pkg/ci/planfile/metadata.go
+// pkg/ci/plugins/terraform/planfile/interface.go
 
 type Metadata struct {
-    Component    string            `json:"component"`
-    Stack        string            `json:"stack"`
-    SHA          string            `json:"sha"`
-    PlanHash     string            `json:"plan_hash"`    // For verification
-    CreatedAt    time.Time         `json:"created_at"`
-    CreatedBy    string            `json:"created_by"`   // Actor
-    RunID        string            `json:"run_id"`
-    HasChanges   bool              `json:"has_changes"`
-    Additions    int               `json:"additions"`
-    Changes      int               `json:"changes"`
-    Destructions int               `json:"destructions"`
-    Labels       map[string]string `json:"labels,omitempty"`
+    Stack            string            `json:"stack"`
+    Component        string            `json:"component"`
+    ComponentPath    string            `json:"component_path"`
+    SHA              string            `json:"sha"`
+    BaseSHA          string            `json:"base_sha,omitempty"`
+    Branch           string            `json:"branch,omitempty"`
+    PRNumber         int               `json:"pr_number,omitempty"`
+    RunID            string            `json:"run_id,omitempty"`
+    Repository       string            `json:"repository,omitempty"`
+    CreatedAt        time.Time         `json:"created_at"`
+    ExpiresAt        *time.Time        `json:"expires_at,omitempty"`
+    PlanSummary      string            `json:"plan_summary,omitempty"`
+    HasChanges       bool              `json:"has_changes"`
+    Additions        int               `json:"additions"`
+    Changes          int               `json:"changes"`
+    Destructions     int               `json:"destructions"`
+    MD5              string            `json:"md5,omitempty"`
+    TerraformVersion string            `json:"terraform_version,omitempty"`
+    TerraformTool    string            `json:"terraform_tool,omitempty"`
+    Custom           map[string]string `json:"custom,omitempty"`
 }
 ```
 
 ## Configuration Schema
 
-Configuration is split between `terraform` (planfile storage) and `ci` (output behavior) sections in `atmos.yaml`:
+Configuration is split between `components.terraform` (planfile storage) and `ci` (output behavior) sections in `atmos.yaml`:
 
 ```yaml
 # atmos.yaml
 
-# Terraform settings including planfile storage
-terraform:
-  # Planfile storage backends (registry pattern)
-  planfiles:
-    # Default store to use (references named store below)
-    default: "s3"
+components:
+  terraform:
+    # Planfile storage backends (registry pattern)
+    planfiles:
+      # Stores are tried in priority order; if unavailable, fall through to next
+      priority:
+        - "github"
+        - "s3"
+        - "local"
 
-    # Key pattern for planfile naming (Go template)
-    key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
+      # Named stores — each backend has its own key/naming pattern
+      stores:
+        s3:
+          type: s3
+          options:
+            bucket: "my-terraform-planfiles"
+            prefix: "atmos/"
+            region: "us-east-1"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
-    # Named stores
-    stores:
-      s3:
-        type: s3
-        options:
-          bucket: "my-terraform-planfiles"
-          prefix: "atmos/"
-          region: "us-east-1"
+        github:
+          type: github-artifacts
+          options:
+            retention_days: 7
+            owner: cloudposse
+            repo: github-action-atmos-terraform-plan
+            # GitHub uses the artifact name from the implementation layer directly
 
-      github:
-        type: github-artifacts
-        options:
-          retention_days: 7
+        azure:
+          type: azure-blob
+          options:
+            account: "mystorageaccount"
+            container: "planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
-      azure:
-        type: azure-blob
-        options:
-          account: "mystorageaccount"
-          container: "planfiles"
+        gcs:
+          type: gcs
+          options:
+            bucket: "my-gcs-bucket"
+            prefix: "planfiles/"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
-      gcs:
-        type: gcs
-        options:
-          bucket: "my-gcs-bucket"
-          prefix: "planfiles/"
-
-      local:
-        type: local
-        options:
-          path: ".atmos/planfiles"
+        local:
+          type: local
+          options:
+            path: ".atmos/planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
 # CI-specific settings (provider-agnostic naming)
 ci:
@@ -1052,14 +1094,23 @@ jobs:
 | `pkg/ci/generic.go` | Generic CI provider fallback | ✅ Done |
 | `pkg/ci/plugin.go` | Plugin interface | ✅ Done |
 | `pkg/ci/plugin_registry.go` | Plugin registry | ✅ Done |
-| **pkg/ci/planfile/** | | |
-| `pkg/ci/planfile/interface.go` | PlanfileStore interface | ✅ Done |
-| `pkg/ci/planfile/registry.go` | Store registry | ✅ Done |
-| `pkg/ci/planfile/s3/store.go` | S3 implementation | ✅ Done |
-| `pkg/ci/planfile/github/store.go` | GitHub Artifacts store | ✅ Done |
-| `pkg/ci/planfile/local/store.go` | Local filesystem store | ✅ Done |
-| `pkg/ci/planfile/azure/store.go` | Azure Blob implementation | ⏳ Phase 2 |
-| `pkg/ci/planfile/gcs/store.go` | GCS implementation | ⏳ Phase 2 |
+| **pkg/ci/artifact/** | Generic artifact storage layer | |
+| `pkg/ci/artifact/store.go` | Store interface, FileEntry/FileResult, StoreFactory | ✅ Done |
+| `pkg/ci/artifact/metadata.go` | Metadata, ArtifactInfo structs | ✅ Done |
+| `pkg/ci/artifact/query.go` | Query struct for filtering | ✅ Done |
+| `pkg/ci/artifact/registry.go` | Backend registry: Register(), NewStore(), GetRegisteredTypes() | ✅ Done |
+| `pkg/ci/artifact/selector.go` | EnvironmentChecker, SelectStore() | ✅ Done |
+| `pkg/ci/artifact/mock_store.go` | Generated mock via mockgen | ✅ Done |
+| `pkg/ci/artifact/local/store.go` | Local filesystem artifact backend | ✅ Done |
+| **pkg/ci/plugins/terraform/planfile/** | Planfile storage (wraps artifact layer) | |
+| `pkg/ci/plugins/terraform/planfile/interface.go` | planfile.Store interface, Metadata | ✅ Done |
+| `pkg/ci/plugins/terraform/planfile/registry.go` | Store registry | ✅ Done |
+| `pkg/ci/plugins/terraform/planfile/adapter/store.go` | Adapter: planfile.Store → artifact.Store | ✅ Done |
+| `pkg/ci/plugins/terraform/planfile/adapter/factory.go` | StoreFactory for registry integration | ✅ Done |
+| `pkg/ci/plugins/terraform/planfile/s3/store.go` | S3 implementation | ✅ Done |
+| `pkg/ci/plugins/terraform/planfile/github/store.go` | GitHub Artifacts store | ⏳ Phase 4 |
+| `pkg/ci/plugins/terraform/planfile/azure/store.go` | Azure Blob implementation | ⏳ Deferred |
+| `pkg/ci/plugins/terraform/planfile/gcs/store.go` | GCS implementation | ⏳ Deferred |
 | **pkg/ci/github/** | Implements `ci.Provider` interface for GitHub Actions | |
 | `pkg/ci/github/provider.go` | GitHub Actions Provider (implements ci.Provider) | ✅ Done |
 | `pkg/ci/github/client.go` | GitHub API client wrapper (uses go-github v59) | ✅ Done |
@@ -1098,7 +1149,7 @@ jobs:
 
 | File | Changes |
 |------|---------|
-| `pkg/schema/schema.go` | Add top-level `CI CIConfig` field |
+| `pkg/schema/schema.go` | Add top-level `CI CIConfig` field; add `Priority []string` to `PlanfilesConfig` (✅ Done) |
 | `pkg/hooks/hooks.go` | Register new CI hook commands |
 | `cmd/root.go` | Add blank import `_ "github.com/cloudposse/atmos/cmd/ci"` for registry |
 | `cmd/terraform/terraform.go` | Add `--ci` persistent flag |
@@ -1107,7 +1158,7 @@ jobs:
 | `cmd/describe/affected.go` | Add `--format=matrix` support |
 | `internal/exec/describe_affected.go` | Implement matrix format output |
 | `internal/exec/terraform.go` | Integrate CI hooks at lifecycle points |
-| `errors/errors.go` | Add CI sentinel errors |
+| `errors/errors.go` | Add CI + artifact + planfile sentinel errors (✅ Done) |
 | `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates |
 
 ## Sentinel Errors
@@ -1119,13 +1170,29 @@ ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
 ErrCIJobSummaryWriteFailed    = errors.New("failed to write job summary")
 ErrCIPRCommentFailed          = errors.New("failed to write PR comment")
 
-// Planfile storage errors
-ErrPlanfileUploadFailed       = errors.New("planfile upload failed")
-ErrPlanfileDownloadFailed     = errors.New("planfile download failed")
+// Artifact storage errors (IMPLEMENTED)
+ErrArtifactNotFound           = errors.New("artifact not found")
+ErrArtifactUploadFailed       = errors.New("failed to upload artifact")
+ErrArtifactDownloadFailed     = errors.New("failed to download artifact")
+ErrArtifactDeleteFailed       = errors.New("failed to delete artifact")
+ErrArtifactListFailed         = errors.New("failed to list artifacts")
+ErrArtifactStoreNotFound      = errors.New("artifact store not found")
+ErrArtifactStoreInvalidArgs   = errors.New("invalid artifact store arguments")
+ErrArtifactMetadataFailed     = errors.New("failed to load artifact metadata")
+ErrArtifactIntegrityFailed    = errors.New("artifact integrity check failed")
+
+// Planfile storage errors (IMPLEMENTED)
 ErrPlanfileNotFound           = errors.New("planfile not found")
-ErrPlanfileExpired            = errors.New("planfile has expired")
-ErrPlanfileStoreNotConfigured = errors.New("planfile store not configured")
-ErrPlanfileVerificationFailed = errors.New("planfile verification failed - plan has changed")
+ErrPlanfileUploadFailed       = errors.New("failed to upload planfile")
+ErrPlanfileDownloadFailed     = errors.New("failed to download planfile")
+ErrPlanfileDeleteFailed       = errors.New("failed to delete planfile")
+ErrPlanfileListFailed         = errors.New("failed to list planfiles")
+ErrPlanfileStoreNotFound      = errors.New("planfile store not found")
+ErrPlanfileKeyInvalid         = errors.New("planfile key generation failed: stack, component, and SHA are required")
+ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
+ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
+ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
+ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
 
 // GitHub errors
 ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
@@ -1144,15 +1211,18 @@ ErrGitHubArtifactAPIError     = errors.New("GitHub Artifacts API error")
 5. Add `--ci` flag to terraform commands
 6. Implement `atmos ci status` command
 
-### Phase 2: Planfile Storage
+### Phase 2: Artifact & Planfile Storage
 
-1. Implement PlanfileStore interface
-2. Implement S3 store (no DynamoDB)
-3. Implement Azure Blob store
-4. Implement GCS store
-5. Implement GitHub Artifacts store
-6. Implement local filesystem store
-7. Add `atmos terraform planfile` commands
+1. Define generic artifact.Store interface (`pkg/ci/artifact/`) — ✅ Done
+2. Implement artifact store registry and priority-based selector — ✅ Done
+3. Implement local artifact storage backend (`pkg/ci/artifact/local/`) — ✅ Done
+4. Implement planfile adapter wrapping artifact.Store (`planfile/adapter/`) — ✅ Done
+5. Implement PlanfileStore interface — ✅ Done
+6. Implement S3 store (no DynamoDB) — ✅ Done
+7. Implement local filesystem planfile store — ✅ Done
+8. Add `atmos terraform planfile` commands — ✅ Done
+9. Implement GitHub Artifacts store — ⏳ Phase 4
+10. Azure Blob and GCS stores — ⏳ Deferred
 
 ### Phase 3: Hook Integration
 
@@ -1243,7 +1313,7 @@ Users currently using the GitHub Actions can migrate incrementally:
 
 ### Q: Can I use different storage backends for different environments?
 
-**A:** Yes, configure multiple named stores in `ci.planfiles` and specify which to use via `--store` flag or per-stack configuration.
+**A:** Yes, configure multiple named stores in `components.terraform.planfiles.stores` and specify which to use via `--store` flag or per-stack configuration. Backend selection uses the `priority` list with environment-based availability detection.
 
 ### Q: How does authentication work?
 
@@ -1277,13 +1347,17 @@ Users currently using the GitHub Actions can migrate incrementally:
 | | Context and detection | ✅ Done | |
 | | Schema types in pkg/schema/ci.go | ✅ Done | |
 | | `atmos ci status` command | ✅ Done | |
-| **Phase 2** | Planfile Storage | 🔄 In Progress | ~70% |
+| **Phase 2** | Planfile Storage | 🔄 In Progress | ~85% |
+| | Artifact Store interface (`pkg/ci/artifact/`) | ✅ Done | |
+| | Artifact local backend (`pkg/ci/artifact/local/`) | ✅ Done | |
+| | Artifact store registry + selector | ✅ Done | |
 | | PlanfileStore interface | ✅ Done | |
+| | PlanfileStore adapter (`planfile/adapter/`) | ✅ Done | |
 | | S3 store | ✅ Done | |
-| | GitHub Artifacts store | ✅ Done | |
+| | GitHub Artifacts store | ⏳ Phase 4 | |
 | | Local filesystem store | ✅ Done | |
-| | Azure Blob store | ⏳ Not Started | |
-| | GCS store | ⏳ Not Started | |
+| | Azure Blob store | ⏳ Deferred | |
+| | GCS store | ⏳ Deferred | |
 | | `atmos terraform planfile` commands | ✅ Done | |
 | **Phase 3** | Hook Integration | ⏳ Not Started | 0% |
 | | CI hook commands | ⏳ Not Started | |
