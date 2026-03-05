@@ -36,10 +36,10 @@
 # Written to $GITHUB_OUTPUT
 has_changes=true
 has_additions=true
-has_additions_count=5
-has_changes_count=2
 has_destructions=false
-has_destructions_count=0
+additions_count=5
+changes_count=2
+destructions_count=0
 artifact_key=plat-ue2-dev/vpc/abc123.tfplan
 plan_exit_code=2
 ```

@@ -38,7 +38,12 @@ Terraform Command (plan/apply)
 The plugin decides what to do on each hook event. The executor resolves the current provider and store, then invokes the plugin's callback:
 
 ```go
-func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, opts ExecuteOptions) error {
+// HookAction signature: func(provider Provider, store artifact.Store, opts ExecuteOptions) error
+// The plugin wraps artifact.Store with its adapter to get domain-specific methods.
+func (p *TerraformPlugin) OnAfterPlan(provider Provider, store artifact.Store, opts ExecuteOptions) error {
+    // Wrap generic artifact.Store with planfile adapter for domain-specific operations
+    planStore := planfile.NewAdapter(store)
+
     // Plugin owns all logic — ParseOutput, BuildTemplateContext are internal helpers
     result := p.ParseOutput(opts.Output)
     ctx := p.BuildTemplateContext(opts.Info, provider.Context(), opts.Output)
@@ -53,7 +58,7 @@ func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, op
     provider.OutputWriter().WriteOutput("has_changes", strconv.FormatBool(result.HasChanges))
 
     // Plugin decides to upload — fatal on failure
-    if err := store.Upload(key, planfile, metadata); err != nil {
+    if err := planStore.Upload(key, planfile, metadata); err != nil {
         return err  // Fails the command
     }
 
@@ -130,9 +135,10 @@ executor.RegisterPluginStores("terraform", planfileStoreRegistry)
 // Executor resolves store using terraform's priority config
 store := executor.ResolveStore("terraform", atmosConfig)
 
-// Plugin receives its resolved store in hook callback
-func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, opts ExecuteOptions) error {
-    store.Upload(key, planfile, metadata)
+// Plugin receives artifact.Store in hook callback, wraps with adapter
+func (p *TerraformPlugin) OnAfterPlan(provider Provider, store artifact.Store, opts ExecuteOptions) error {
+    planStore := planfile.NewAdapter(store)
+    planStore.Upload(key, planfile, metadata)
 }
 ```
 
