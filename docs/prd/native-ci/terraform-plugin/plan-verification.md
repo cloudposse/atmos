@@ -1,6 +1,6 @@
 # Native CI Integration - Plan Verification
 
-> Related: [Planfile Storage](./planfile-storage.md) | [CI Detection](./ci-detection.md)
+> Related: [Planfile Storage](./planfile-storage.md) | [CI Detection](../framework/ci-detection.md)
 
 ## FR-6: Plan Verification
 

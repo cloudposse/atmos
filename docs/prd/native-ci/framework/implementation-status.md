@@ -1,6 +1,6 @@
 # Native CI Integration - Implementation Status
 
-> Related: [Overview](./overview.md) | [Artifact Storage](./artifact-storage.md) | [Planfile Storage](./planfile-storage.md) | [Hooks Integration](./hooks-integration.md)
+> Related: [Overview](../overview.md) | [Artifact Storage](./artifact-storage.md) | [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Hooks Integration](./hooks-integration.md)
 
 ## Implementation Phases
 

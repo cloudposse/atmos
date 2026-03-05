@@ -1,6 +1,6 @@
 # Native CI Integration - Status Checks
 
-> Related: [Overview](./overview.md) | [GitHub Provider](./github-provider.md) | [Configuration](./configuration.md)
+> Related: [Overview](../../overview.md) | [GitHub Provider](./provider.md) | [Configuration](../../framework/configuration.md)
 
 ## FR-4: Status Checks
 

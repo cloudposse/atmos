@@ -1,6 +1,6 @@
 # Native CI Integration - Hooks Integration
 
-> Related: [CI Detection](./ci-detection.md) | [Implementation Status](./implementation-status.md) | [Overview](./overview.md)
+> Related: [CI Detection](./ci-detection.md) | [Implementation Status](./implementation-status.md) | [Overview](../overview.md)
 
 ## Phase 3: CI Hook Commands
 

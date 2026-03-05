@@ -1,6 +1,6 @@
 # Native CI Integration - Configuration
 
-> Related: [Overview](./overview.md) | [Planfile Storage](./planfile-storage.md) | [Artifact Storage](./artifact-storage.md)
+> Related: [Overview](../overview.md) | [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Artifact Storage](./artifact-storage.md)
 
 ## Configuration Schema
 

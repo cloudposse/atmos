@@ -1,6 +1,6 @@
 # Native CI Integration - CI Detection & Command Parity
 
-> Related: [Overview](./overview.md) | [Configuration](./configuration.md) | [Hooks Integration](./hooks-integration.md)
+> Related: [Overview](../overview.md) | [Configuration](./configuration.md) | [Hooks Integration](./hooks-integration.md)
 
 ## FR-1: CI Environment Detection
 

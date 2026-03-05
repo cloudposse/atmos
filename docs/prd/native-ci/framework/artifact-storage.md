@@ -1,6 +1,6 @@
 # Native CI Integration - Artifact Storage
 
-> Related: [Planfile Storage](./planfile-storage.md) | [Configuration](./configuration.md) | [Implementation Status](./implementation-status.md)
+> Related: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Configuration](./configuration.md) | [Implementation Status](./implementation-status.md)
 
 ## Executive Summary
 
@@ -118,7 +118,7 @@ Current GitHub Actions use DynamoDB for planfile metadata. The native implementa
 .atmos/planfiles/plat-ue2-dev/vpc/abc123.tfplan.metadata.json # Metadata sidecar
 ```
 
-The architecture uses two layers: a generic `artifact.Store` interface (`pkg/ci/artifact/`) and a planfile-specific adapter (`pkg/ci/plugins/terraform/planfile/adapter/`) that wraps artifact.Store, translating between single-file planfile operations and multi-file artifact bundles. See [Planfile Storage](./planfile-storage.md) for full details.
+The architecture uses two layers: a generic `artifact.Store` interface (`pkg/ci/artifact/`) and a planfile-specific adapter (`pkg/ci/plugins/terraform/planfile/adapter/`) that wraps artifact.Store, translating between single-file planfile operations and multi-file artifact bundles. See [Planfile Storage](../terraform-plugin/planfile-storage.md) for full details.
 
 ### Support All Plan-Storage Backends
 
@@ -209,7 +209,7 @@ No existing data to migrate. No backwards-compatibility or deprecation concerns.
 
 ## References
 
-- [Planfile Storage PRD](./planfile-storage.md)
+- [Planfile Storage PRD](../terraform-plugin/planfile-storage.md)
 - [Store Registry Pattern](../../pkg/store/registry.go)
 - [CI Provider Detection](../../pkg/telemetry/ci.go)
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)

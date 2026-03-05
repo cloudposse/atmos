@@ -1,6 +1,6 @@
 # Native CI Integration - Planfile Storage
 
-> Related: [Artifact Storage](./artifact-storage.md) | [Configuration](./configuration.md) | [Implementation Status](./implementation-status.md)
+> Related: [Artifact Storage](../framework/artifact-storage.md) | [Configuration](../framework/configuration.md) | [Implementation Status](../framework/implementation-status.md)
 
 ## FR-5: Planfile Storage
 
@@ -135,4 +135,4 @@ components:
             key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 ```
 
-See [Configuration](./configuration.md) for full schema details.
+See [Configuration](../framework/configuration.md) for full schema details.

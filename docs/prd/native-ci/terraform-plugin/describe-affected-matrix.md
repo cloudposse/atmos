@@ -1,6 +1,6 @@
 # Native CI Integration - Describe Affected Matrix Format
 
-> Related: [Overview](./overview.md) | [CI Outputs](./ci-outputs.md)
+> Related: [Overview](../overview.md) | [CI Outputs](../providers/github/ci-outputs.md)
 
 ## FR-8: Describe Affected Matrix Format
 

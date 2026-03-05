@@ -1,6 +1,6 @@
 # Native CI Integration - Job Summaries
 
-> Related: [Overview](./overview.md) | [CI Outputs](./ci-outputs.md) | [Configuration](./configuration.md)
+> Related: [Overview](../../overview.md) | [CI Outputs](./ci-outputs.md) | [Configuration](../../framework/configuration.md)
 
 ## FR-2: Job Summary Output
 

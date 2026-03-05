@@ -1,6 +1,6 @@
 # Native CI Integration - Overview
 
-> Related: [CI Detection](./ci-detection.md) | [Configuration](./configuration.md) | [Implementation Status](./implementation-status.md)
+> Related: [CI Detection](./framework/ci-detection.md) | [Configuration](./framework/configuration.md) | [Implementation Status](./framework/implementation-status.md)
 
 ## Executive Summary
 

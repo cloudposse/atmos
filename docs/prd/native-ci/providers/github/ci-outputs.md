@@ -1,6 +1,6 @@
 # Native CI Integration - CI Output Variables
 
-> Related: [Overview](./overview.md) | [Job Summaries](./job-summaries.md) | [Configuration](./configuration.md)
+> Related: [Overview](../../overview.md) | [Job Summaries](./job-summaries.md) | [Configuration](../../framework/configuration.md)
 
 ## FR-3: CI Output Variables
 
