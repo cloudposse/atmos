@@ -110,24 +110,17 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 
 	// Prepare shell environment with file-based credentials.
 	// Start with current OS environment + global env from atmos.yaml and let PrepareShellEnvironment configure auth.
+	// PrepareShellEnvironment sanitizes the env (removes IRSA/credential vars) and adds auth vars.
 	baseEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
 	envList, err := authManager.PrepareShellEnvironment(ctx, identityName, baseEnv)
 	if err != nil {
 		return fmt.Errorf("failed to prepare command environment: %w", err)
 	}
 
-	// Convert environment list to map for executeCommandWithEnv.
-	envMap := make(map[string]string)
-	for _, envVar := range envList {
-		if idx := strings.IndexByte(envVar, '='); idx >= 0 {
-			key := envVar[:idx]
-			value := envVar[idx+1:]
-			envMap[key] = value
-		}
-	}
-
-	// Execute the command with authentication environment.
-	err = executeCommandWithEnv(commandArgs, envMap)
+	// Execute the command with the sanitized environment directly.
+	// The envList already includes os.Environ() (sanitized) + auth vars,
+	// so we pass it as the complete subprocess environment.
+	err = executeCommandWithEnv(commandArgs, envList)
 	if err != nil {
 		// For any subprocess error, provide a tip about refreshing credentials.
 		// This helps users when AWS tokens are expired or invalid.
@@ -137,29 +130,25 @@ func executeAuthExecCommandCore(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-// executeCommandWithEnv executes a command with additional environment variables.
-func executeCommandWithEnv(args []string, envVars map[string]string) error {
+// executeCommandWithEnv executes a command with a complete environment.
+// The env parameter should be a fully prepared environment (e.g., from PrepareShellEnvironment).
+// It is used directly as the subprocess environment without re-reading os.Environ().
+func executeCommandWithEnv(args []string, env []string) error {
 	if len(args) == 0 {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrNoCommandSpecified, errUtils.ErrInvalidSubcommand)
 	}
 
-	// Prepare the command
+	// Prepare the command.
 	cmdName := args[0]
 	cmdArgs := args[1:]
 
-	// Look for the command in PATH
+	// Look for the command in PATH.
 	cmdPath, err := exec.LookPath(cmdName)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrCommandNotFound, err)
 	}
 
-	// Prepare environment variables
-	env := os.Environ()
-	for key, value := range envVars {
-		env = append(env, fmt.Sprintf("%s=%s", key, value))
-	}
-
-	// Execute the command
+	// Execute the command with the provided environment directly.
 	execCmd := exec.Command(cmdPath, cmdArgs...)
 	execCmd.Env = env
 	execCmd.Stdin = os.Stdin

@@ -222,7 +222,7 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 	tests := []struct {
 		name          string
 		args          []string
-		envVars       map[string]string
+		envVars       []string
 		skipOnWindows bool
 		expectedError string
 		expectedCode  int // Expected exit code if error is ExitCodeError
@@ -230,29 +230,25 @@ func TestExecuteCommandWithEnv(t *testing.T) {
 		{
 			name:          "empty args",
 			args:          []string{},
-			envVars:       map[string]string{},
+			envVars:       []string{},
 			expectedError: "no command specified",
 		},
 		{
-			name: "simple echo command",
-			args: []string{"echo", "hello"},
-			envVars: map[string]string{
-				"TEST_VAR": "test-value",
-			},
+			name:          "simple echo command",
+			args:          []string{"echo", "hello"},
+			envVars:       []string{"TEST_VAR=test-value"},
 			skipOnWindows: true,
 		},
 		{
 			name:          "nonexistent command",
 			args:          []string{"nonexistent-command-xyz"},
-			envVars:       map[string]string{},
+			envVars:       []string{},
 			expectedError: "command not found",
 		},
 		{
-			name: "command with non-zero exit code",
-			args: []string{"sh", "-c", "exit 2"},
-			envVars: map[string]string{
-				"TEST_VAR": "test-value",
-			},
+			name:          "command with non-zero exit code",
+			args:          []string{"sh", "-c", "exit 2"},
+			envVars:       []string{"TEST_VAR=test-value"},
 			skipOnWindows: true,
 			expectedCode:  2,
 		},

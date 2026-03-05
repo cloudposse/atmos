@@ -32,6 +32,28 @@ const (
 	osWindows             = "windows"
 )
 
+// ShellOption configures shell command execution.
+type ShellOption func(*shellExecConfig)
+
+// shellExecConfig holds optional configuration for ExecuteShellCommand.
+type shellExecConfig struct {
+	// processEnv replaces os.Environ() as the process environment.
+	// When set, ExecuteShellCommand uses this instead of re-reading os.Environ().
+	// This is used when auth has already sanitized the environment (e.g., removed IRSA vars).
+	processEnv []string
+}
+
+// WithEnvironment provides a pre-sanitized process environment for subprocess execution.
+// When provided, ExecuteShellCommand uses this instead of re-reading os.Environ().
+// Pass nil to fall back to the default os.Environ() behavior.
+func WithEnvironment(env []string) ShellOption {
+	defer perf.Track(nil, "exec.WithEnvironment")()
+
+	return func(c *shellExecConfig) {
+		c.processEnv = env
+	}
+}
+
 // ExecuteShellCommand prints and executes the provided command with args and flags.
 func ExecuteShellCommand(
 	atmosConfig schema.AtmosConfiguration,
@@ -41,8 +63,14 @@ func ExecuteShellCommand(
 	env []string,
 	dryRun bool,
 	redirectStdError string,
+	opts ...ShellOption,
 ) error {
 	defer perf.Track(&atmosConfig, "exec.ExecuteShellCommand")()
+
+	execCfg := &shellExecConfig{}
+	for _, opt := range opts {
+		opt(execCfg)
+	}
 
 	newShellLevel, err := u.GetNextShellLevel()
 	if err != nil {
@@ -50,9 +78,14 @@ func ExecuteShellCommand(
 	}
 
 	cmd := exec.Command(command, args...)
-	// Build environment: os.Environ() + global env (atmos.yaml) + command-specific env.
-	// Global env has lowest priority after system env, command-specific env overrides both.
-	cmdEnv := envpkg.MergeGlobalEnv(os.Environ(), atmosConfig.Env)
+	// Build environment: process env + global env (atmos.yaml) + command-specific env.
+	// When auth has sanitized the environment, execCfg.processEnv is used instead of
+	// os.Environ() to avoid reintroducing problematic vars (e.g., IRSA credentials).
+	baseEnv := os.Environ()
+	if execCfg.processEnv != nil {
+		baseEnv = execCfg.processEnv
+	}
+	cmdEnv := envpkg.MergeGlobalEnv(baseEnv, atmosConfig.Env)
 	cmdEnv = append(cmdEnv, env...)
 	cmdEnv = append(cmdEnv, fmt.Sprintf("ATMOS_SHLVL=%d", newShellLevel))
 
@@ -324,12 +357,16 @@ func execTerraformShellCommand(
 }
 
 // ExecAuthShellCommand starts a new interactive shell with the provided authentication environment variables.
-// It increments ATMOS_SHLVL for the session, sets ATMOS_IDENTITY plus the supplied auth env vars into the shell environment (merged with the host environment), prints enter/exit messages, and launches the resolved shell command; returns an error if no suitable shell is found or if the shell process fails.
+// It increments ATMOS_SHLVL for the session, sets ATMOS_IDENTITY plus the supplied auth env vars into the shell environment, prints enter/exit messages, and launches the resolved shell command; returns an error if no suitable shell is found or if the shell process fails.
+//
+// The sanitizedEnv parameter should be a complete, pre-sanitized environment from PrepareShellEnvironment.
+// It is used directly without re-reading os.Environ(), ensuring problematic vars (e.g., IRSA credentials)
+// that were removed during auth preparation are not reintroduced.
 func ExecAuthShellCommand(
 	atmosConfig *schema.AtmosConfiguration,
 	identityName string,
 	providerName string,
-	authEnvVars map[string]string,
+	sanitizedEnv []string,
 	shellOverride string,
 	shellArgs []string,
 ) error {
@@ -343,12 +380,17 @@ func ExecAuthShellCommand(
 	// Decrement the value after exiting the shell.
 	defer decrementAtmosShellLevel()
 
-	// Convert auth env vars map to slice format.
-	authEnvList := envpkg.ConvertMapToSlice(authEnvVars)
+	// Append shell-specific env vars to the sanitized environment.
+	// The sanitizedEnv already includes os.Environ() (sanitized) + auth vars.
+	shellEnv := make([]string, 0, len(sanitizedEnv)+2)
+	shellEnv = append(shellEnv, sanitizedEnv...)
+	shellEnv = append(shellEnv, fmt.Sprintf("ATMOS_IDENTITY=%s", identityName))
+	shellEnv = append(shellEnv, fmt.Sprintf("%s=%d", atmosShellLevelEnvVar, atmosShellVal))
 
-	// Set environment variables to indicate the details of the Atmos auth shell configuration.
-	authEnvList = append(authEnvList, fmt.Sprintf("ATMOS_IDENTITY=%s", identityName))
-	authEnvList = append(authEnvList, fmt.Sprintf("%s=%d", atmosShellLevelEnvVar, atmosShellVal))
+	// Append global env from atmos.yaml.
+	for k, v := range atmosConfig.Env {
+		shellEnv = append(shellEnv, fmt.Sprintf("%s=%s", k, v))
+	}
 
 	log.Debug("Starting a new interactive shell with authentication environment variables (type 'exit' to go back)",
 		"identity", identityName)
@@ -364,9 +406,8 @@ func ExecAuthShellCommand(
 	// Print user-facing message about entering the shell.
 	printShellEnterMessage(identityName, providerName)
 
-	// Merge env vars, ensuring authEnvList takes precedence.
-	// Include global env from atmos.yaml (lowest priority after system env).
-	mergedEnv := envpkg.MergeSystemEnvSimpleWithGlobal(authEnvList, atmosConfig.Env)
+	// Use the sanitized environment directly (no re-reading os.Environ()).
+	mergedEnv := shellEnv
 
 	// Determine shell command and args.
 	shellCommand, shellCommandArgs := determineShell(shellOverride, shellArgs)

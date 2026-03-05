@@ -407,7 +407,9 @@ func ExecuteWorkflow(
 
 			ui.Infof("Executing command: `atmos %s`", command)
 			err = retry.With7Params(context.Background(), step.Retry,
-				ExecuteShellCommand,
+				func(ac schema.AtmosConfiguration, cmd string, a []string, dir string, env []string, dr bool, redir string) error {
+					return ExecuteShellCommand(ac, cmd, a, dir, env, dr, redir)
+				},
 				atmosConfig, "atmos", args, ".", stepEnv, dryRun, "")
 		default:
 			return errUtils.Build(errUtils.ErrInvalidWorkflowStepType).

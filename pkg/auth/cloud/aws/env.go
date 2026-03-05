@@ -247,21 +247,19 @@ func PrepareEnvironment(environ map[string]string, profile, credentialsFile, con
 		result[k] = v
 	}
 
-	// Clear problematic credential environment variables by setting them to empty string.
+	// Clear problematic credential environment variables.
 	// When using profile-based authentication, these variables would override
 	// the credentials from AWS_SHARED_CREDENTIALS_FILE, causing auth to fail.
 	//
-	// We set to empty string rather than deleting because the input map may only contain
-	// ComponentEnvSection (stack YAML env vars), not os.Environ(). Pod-injected variables
-	// like AWS_WEB_IDENTITY_TOKEN_FILE (IRSA) live in os.Environ() and are inherited by
-	// subprocesses. Setting empty string ensures these appear in ComponentEnvList and
-	// override the inherited IRSA values (Go subprocess env: last occurrence wins).
-	// AWS SDK treats empty env var values as "not set".
+	// This deletes keys from the map. Callers that pass os.Environ() as input will
+	// get a sanitized result with IRSA/credential vars removed. The sanitized env
+	// should be passed to subprocess execution via WithEnvironment to avoid re-reading
+	// os.Environ() (which would reintroduce the problematic vars).
 	for _, key := range environmentVarsToClear {
 		if _, exists := result[key]; exists {
 			log.Debug("Clearing AWS credential environment variable", "key", key)
+			delete(result, key)
 		}
-		result[key] = ""
 	}
 
 	// Set Atmos-managed credential file paths and profile.

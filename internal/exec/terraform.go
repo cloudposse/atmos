@@ -532,6 +532,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
+			WithEnvironment(info.SanitizedEnv),
 		)
 		if err != nil {
 			return err
@@ -685,6 +686,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 					info.ComponentEnvList,
 					info.DryRun,
 					workspaceSelectRedirectStdErr,
+					WithEnvironment(info.SanitizedEnv),
 				)
 				if err != nil {
 					// Check if it's an ExitCodeError with code 1 (workspace doesn't exist)
@@ -702,6 +704,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 						info.ComponentEnvList,
 						info.DryRun,
 						info.RedirectStdErr,
+						WithEnvironment(info.SanitizedEnv),
 					)
 					if err != nil {
 						return err
@@ -738,6 +741,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			info.ComponentEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
+			WithEnvironment(info.SanitizedEnv),
 		)
 		// Compute exitCode for upload, whether or not err is set.
 		var exitCode int

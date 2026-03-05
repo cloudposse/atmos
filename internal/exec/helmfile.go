@@ -417,6 +417,7 @@ func ExecuteHelmfile(info schema.ConfigAndStacksInfo) error {
 		envVars,
 		info.DryRun,
 		info.RedirectStdErr,
+		WithEnvironment(info.SanitizedEnv),
 	)
 	if err != nil {
 		return err
