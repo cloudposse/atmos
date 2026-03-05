@@ -83,19 +83,32 @@ import (
 )
 ```
 
+## Implementation Status
+
+**IMPLEMENTED** (`pkg/ci/providers/github/`):
+- `provider.go` — Detect, Context (from env vars), OutputWriter (creates `FileOutputWriter` using `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY`)
+- `client.go` — GitHub API client wrapper (go-github)
+- `checks.go` — CreateCheckRun, UpdateCheckRun
+- `status.go` — GetStatus (combined commit status + check runs + PRs)
+
+**NOT IMPLEMENTED** (Phase 4):
+- `comment.go` — PR comment API (create/update/upsert with HTML markers)
+
 ## GitHub API Endpoints
 
 The GitHub provider uses the following API endpoints:
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /repos/{owner}/{repo}/commits/{ref}/status` | Combined commit status |
-| `GET /repos/{owner}/{repo}/commits/{ref}/check-runs` | GitHub Actions check runs |
-| `GET /repos/{owner}/{repo}/pulls?head={owner}:{branch}` | PRs for current branch |
-| `GET /user` | Authenticated user info |
-| `GET /search/issues?q=...` | Search for user's PRs |
-| `POST /repos/{owner}/{repo}/issues/{number}/comments` | Create PR comment |
-| `PATCH /repos/{owner}/{repo}/issues/comments/{id}` | Update PR comment |
+| Endpoint | Purpose | Status |
+|----------|---------|--------|
+| `GET /repos/{owner}/{repo}/commits/{ref}/status` | Combined commit status | Done |
+| `GET /repos/{owner}/{repo}/commits/{ref}/check-runs` | GitHub Actions check runs | Done |
+| `POST /repos/{owner}/{repo}/check-runs` | Create check run | Done |
+| `PATCH /repos/{owner}/{repo}/check-runs/{id}` | Update check run | Done |
+| `GET /repos/{owner}/{repo}/pulls?head={owner}:{branch}` | PRs for current branch | Done |
+| `GET /user` | Authenticated user info | Phase 4 |
+| `GET /search/issues?q=...` | Search for user's PRs | Phase 4 |
+| `POST /repos/{owner}/{repo}/issues/{number}/comments` | Create PR comment | Phase 4 |
+| `PATCH /repos/{owner}/{repo}/issues/comments/{id}` | Update PR comment | Phase 4 |
 
 ## Testing Strategy
 

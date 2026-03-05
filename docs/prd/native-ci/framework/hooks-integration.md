@@ -4,7 +4,9 @@
 
 ## Architecture Overview
 
-CI behaviors are integrated via a **Plugin-Executor** architecture, not individual hook command files. The executor is a thin coordinator; plugins own their behavior.
+CI behaviors are integrated via a **Plugin-Executor** architecture, not individual hook command files.
+
+> **Current vs target architecture**: The current implementation uses an **enum-based action dispatch** pattern — `HookAction` is a string enum (`"summary"`, `"output"`, `"upload"`, `"download"`, `"check"`) and the executor switches on it to call self-contained handler functions. This document describes the **target callback-based** pattern where plugins own all action logic via function callbacks. See [Implementation Status](./implementation-status.md) for current state and refactoring plan.
 
 ### Two Independent Hook Systems
 

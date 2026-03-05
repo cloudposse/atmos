@@ -4,16 +4,16 @@
 
 ## Implementation Phases
 
-### Phase 1: Core Infrastructure
+### Phase 1: Core Infrastructure — COMPLETE
 
-1. Create `pkg/ci/` package structure
-2. Implement Provider interface and GitHub provider
-3. Implement Context and detection
-4. Add schema types to `pkg/schema/ci.go`
-5. Add `--ci` flag to terraform commands
-6. Implement `atmos ci status` command
+1. Create `pkg/ci/` package structure — Done
+2. Implement Provider interface and GitHub provider — Done
+3. Implement Context and detection — Done
+4. Add schema types to `pkg/schema/schema.go` (`CIConfig`, `PlanfilesConfig`) — Done
+5. Add `--ci` flag to terraform commands — Done
+6. Implement `atmos ci status` command — Done
 
-### Phase 2: Artifact & Planfile Storage
+### Phase 2: Artifact & Planfile Storage — COMPLETE
 
 1. Define generic artifact.Store interface (`pkg/ci/artifact/`) — Done
 2. Implement artifact store registry and priority-based selector — Done
@@ -22,37 +22,45 @@
 5. Implement PlanfileStore interface — Done
 6. Implement S3 store (no DynamoDB) — Done
 7. Implement local filesystem planfile store — Done
-8. Add `atmos terraform planfile` commands — Done
-9. Implement GitHub Artifacts store — Phase 4
+8. Add `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
+9. Implement GitHub Artifacts planfile store — Done
 10. Azure Blob and GCS stores — Deferred
 
-### Phase 3: Plugin-Executor Integration
+### Phase 3: Plugin-Executor Integration — COMPLETE (enum-based)
 
-1. Refactor `pkg/ci/executor.go` from god-object to thin coordinator
-2. Update Plugin interface with hook callback signature `(provider, store, event)`
-3. Implement terraform plugin hook callbacks (OnBeforePlan, OnAfterPlan, OnBeforeApply, OnAfterApply)
-4. Wire `hooks.RunCIHooks()` → `ci.Execute()` → plugin callbacks in lifecycle
-5. Implement `--verify-plan` using plan-diff (download stored planfile to temp, fresh plan, compare)
+The executor uses an **enum-based action dispatch** pattern (not the callback-based pattern described in hooks-integration.md):
 
-### Phase 4: Outputs and Comments
+1. Executor orchestrates all CI actions via `Execute()` → `executeActions()` → switch on `HookAction` enum — Done
+2. Plugin interface with 7 methods (GetType, GetHookBindings, GetDefaultTemplates, BuildTemplateContext, ParseOutput, GetOutputVariables, GetArtifactKey) — Done
+3. Terraform plugin implements all 7 Plugin methods — Done
+4. Executor wired: `ci.Execute(ExecuteOptions{...})` → detect platform → get plugin → build context → execute actions — Done
+5. Upload action (`executeUploadAction`) — Done
+6. Download action (`executeDownloadAction`) — Done
+7. Check run action (`executeCheckAction`) — create on before, update on after — Done
+8. Summary action (`executeSummaryAction`) — renders template, writes to `$GITHUB_STEP_SUMMARY` — Done
+9. Output action (`executeOutputAction`) — writes variables to `$GITHUB_OUTPUT` with whitelist filtering — Done
+10. `--verify-plan` using plan-diff — Not Started
 
-1. Implement `$GITHUB_OUTPUT` writer
-2. Implement `$GITHUB_STEP_SUMMARY` writer
-3. Implement PR comment templates
-4. Implement comment upsert behavior
-5. Integrate terraform outputs export (using `pkg/terraform/output/`)
+> **Future refactoring**: The hooks-integration.md PRD describes a callback-based pattern where plugins own all logic via `HookAction` function callbacks. The current enum-based approach works but the executor is a "god-object" that knows about all action types. Refactoring to callbacks would move action logic into plugins for better separation of concerns.
 
-### Phase 5: Describe Affected Matrix
+### Phase 4: PR Comments & Terraform Output Export — Not Started
 
-1. Add `--format=matrix` flag
-2. Implement matrix JSON output
-3. Update documentation
+1. Implement PR comment action type in executor — Not Started
+2. Implement comment upsert behavior (HTML marker, find-and-update) — Not Started
+3. Add `github/comment.go` with PR comment API — Not Started
+4. Integrate terraform outputs export after apply (using `pkg/terraform/output/`) — Not Started
 
-### Phase 6: Documentation
+### Phase 5: Describe Affected Matrix — Not Started
 
-1. Archive old GitHub Actions docs
-2. Write new CI integration docs
-3. Update command reference docs
+1. Add `--format=matrix` flag — Not Started
+2. Implement matrix JSON output — Not Started
+3. Update documentation — Not Started
+
+### Phase 6: Documentation — Not Started
+
+1. Archive old GitHub Actions docs — Not Started
+2. Write new CI integration docs — Not Started
+3. Update command reference docs — Not Started
 
 ## Implementation Status Table
 
@@ -60,34 +68,47 @@
 |-------|-------------|--------|------------|
 | **Phase 1** | Core Infrastructure | Complete | 100% |
 | | pkg/ci/ package structure | Done | |
-| | Provider interface and GitHub provider | Done | |
+| | Provider interface (`pkg/ci/internal/provider/types.go`) | Done | |
+| | GitHub provider (`pkg/ci/providers/github/`) | Done | |
+| | Generic provider (`pkg/ci/providers/generic/`) | Done | |
 | | Context and detection | Done | |
-| | Schema types in pkg/schema/ci.go | Done | |
-| | `atmos ci status` command | Done | |
-| **Phase 2** | Planfile Storage | In Progress | ~85% |
+| | Schema types (`pkg/schema/schema.go` — CIConfig, PlanfilesConfig) | Done | |
+| | Provider registry (`pkg/ci/registry_provider.go`) | Done | |
+| | Plugin registry (`pkg/ci/plugin_registry.go`) | Done | |
+| | `atmos ci status` command (`cmd/ci/`) | Done | |
+| **Phase 2** | Artifact & Planfile Storage | Complete | 100% |
 | | Artifact Store interface (`pkg/ci/artifact/`) | Done | |
 | | Artifact local backend (`pkg/ci/artifact/local/`) | Done | |
 | | Artifact store registry + selector | Done | |
 | | PlanfileStore interface | Done | |
 | | PlanfileStore adapter (`planfile/adapter/`) | Done | |
-| | S3 store | Done | |
-| | GitHub Artifacts store | Phase 4 | |
-| | Local filesystem store | Done | |
+| | S3 store (`planfile/s3/`) | Done | |
+| | GitHub Artifacts store (`planfile/github/`) | Done | |
+| | Local filesystem store (`planfile/local/`) | Done | |
 | | Azure Blob store | Deferred | |
 | | GCS store | Deferred | |
-| | `atmos terraform planfile` commands | Done | |
-| **Phase 3** | Plugin-Executor Integration | Not Started | 0% |
-| | Refactor executor to thin coordinator | Not Started | |
-| | Plugin hook callbacks (provider, store, event) | Not Started | |
-| | Terraform plugin OnAfterPlan / OnBeforeApply / OnAfterApply | Not Started | |
-| | Wire RunCIHooks() → ci.Execute() → plugin callbacks | Not Started | |
+| | `atmos terraform planfile` commands (upload/download/list/delete/show) | Done | |
+| **Phase 3** | Plugin-Executor Integration | Complete (enum-based) | ~90% |
+| | Executor action dispatch (`pkg/ci/executor.go`) | Done | |
+| | Plugin interface — 7 methods (`pkg/ci/internal/plugin/types.go`) | Done | |
+| | Terraform plugin (`pkg/ci/plugins/terraform/plugin.go`) | Done | |
+| | Output parser (`pkg/ci/plugins/terraform/parser.go`) | Done | |
+| | Template context (`pkg/ci/plugins/terraform/context.go`) | Done | |
+| | Template loader with override support (`pkg/ci/templates/loader.go`) | Done | |
+| | Summary action (renders template → `$GITHUB_STEP_SUMMARY`) | Done | |
+| | Output action (writes variables → `$GITHUB_OUTPUT` with whitelist filtering) | Done | |
+| | Upload action (uploads planfile to store) | Done | |
+| | Download action (downloads planfile from store) | Done | |
+| | Check run action (create on before, update on after) | Done | |
+| | `FileOutputWriter` for `$GITHUB_OUTPUT`/`$GITHUB_STEP_SUMMARY` | Done | |
+| | `OutputHelpers` — `WritePlanOutputs()`, `WriteApplyOutputs()` | Done | |
+| | Config-based action enable/disable (`isActionEnabled()`) | Done | |
 | | `--verify-plan` using plan-diff | Not Started | |
-| **Phase 4** | Outputs and Comments | Not Started | 0% |
-| | $GITHUB_OUTPUT writer | Not Started | |
-| | $GITHUB_STEP_SUMMARY writer | Not Started | |
-| | PR comment templates | Not Started | |
+| **Phase 4** | PR Comments & TF Output Export | Not Started | 0% |
+| | PR comment action type | Not Started | |
 | | Comment upsert behavior | Not Started | |
-| | Terraform outputs export | Not Started | |
+| | `github/comment.go` — PR comment API | Not Started | |
+| | Terraform outputs export after apply | Not Started | |
 | **Phase 5** | Describe Affected Matrix | Not Started | 0% |
 | | `--format=matrix` flag | Not Started | |
 | | Matrix JSON output | Not Started | |
@@ -96,21 +117,28 @@
 | | Write new CI integration docs | Not Started | |
 | | Update command reference docs | Not Started | |
 
-## Files to Create
+## Files Created
 
 | File | Purpose | Status |
 |------|---------|--------|
-| **pkg/ci/** | | |
-| `pkg/ci/provider.go` | Provider interface definition | Done |
-| `pkg/ci/context.go` | Context struct (run ID, PR, SHA, etc.) | Done |
-| `pkg/ci/status.go` | Status, BranchStatus, PRStatus, CheckStatus structs | Done |
-| `pkg/ci/output.go` | OutputWriter interface | Done |
-| `pkg/ci/registry.go` | Provider registry (detect and select provider) | Done |
-| `pkg/ci/check.go` | CheckRun types and constants | Done |
-| `pkg/ci/executor.go` | Thin coordinator: provider/plugin/store wiring (needs refactor from god-object) | Done (needs refactor) |
-| `pkg/ci/providers/generic/provider.go` | Generic CI provider fallback | Done |
-| `pkg/ci/plugin.go` | Plugin interface | Done |
-| `pkg/ci/plugin_registry.go` | Plugin registry | Done |
+| **pkg/ci/ (core)** | | |
+| `pkg/ci/executor.go` | CI action orchestrator: detect platform, dispatch actions (summary/output/upload/download/check) | Done |
+| `pkg/ci/executor_test.go` | Executor tests | Done |
+| `pkg/ci/provider.go` | Type alias for `internal/provider.Provider` | Done |
+| `pkg/ci/status.go` | Type aliases for status types | Done |
+| `pkg/ci/registry_provider.go` | Provider registry: Register(), Detect(), DetectOrError(), IsCI() | Done |
+| `pkg/ci/registry_provider_test.go` | Provider registry tests | Done |
+| `pkg/ci/plugin_registry.go` | Plugin registry: RegisterPlugin(), GetPlugin(), GetPluginForEvent() | Done |
+| `pkg/ci/plugin_registry_test.go` | Plugin registry tests | Done |
+| `pkg/ci/mock_plugin_test.go` | Mock plugin for executor tests | Done |
+| **pkg/ci/internal/plugin/** | Plugin interface and types | |
+| `pkg/ci/internal/plugin/types.go` | Plugin interface (7 methods), HookAction enum, HookBinding, OutputResult, TemplateContext, ComponentConfigurationResolver | Done |
+| **pkg/ci/internal/provider/** | Provider interface and types | |
+| `pkg/ci/internal/provider/types.go` | Provider interface, Context, PRInfo, CheckRun structs | Done |
+| `pkg/ci/internal/provider/check.go` | CheckRunState constants, CreateCheckRunOptions, UpdateCheckRunOptions | Done |
+| `pkg/ci/internal/provider/output.go` | OutputWriter interface, FileOutputWriter, NoopOutputWriter, OutputHelpers (WritePlanOutputs, WriteApplyOutputs) | Done |
+| `pkg/ci/internal/provider/output_test.go` | OutputWriter tests | Done |
+| `pkg/ci/internal/provider/status.go` | StatusOptions, Status, BranchStatus, PRStatus, CheckStatus | Done |
 | **pkg/ci/artifact/** | Generic artifact storage layer | |
 | `pkg/ci/artifact/store.go` | Store interface, FileEntry/FileResult, StoreFactory | Done |
 | `pkg/ci/artifact/metadata.go` | Metadata, ArtifactInfo structs | Done |
@@ -119,87 +147,100 @@
 | `pkg/ci/artifact/selector.go` | EnvironmentChecker, SelectStore() | Done |
 | `pkg/ci/artifact/mock_store.go` | Generated mock via mockgen | Done |
 | `pkg/ci/artifact/local/store.go` | Local filesystem artifact backend | Done |
+| `pkg/ci/artifact/*_test.go` | Tests for all artifact packages | Done |
+| **pkg/ci/plugins/terraform/** | Terraform CI plugin | |
+| `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (7 Plugin methods, hook bindings, output variables, artifact keys) | Done |
+| `pkg/ci/plugins/terraform/plugin_test.go` | Plugin tests | Done |
+| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output (regex-based) | Done |
+| `pkg/ci/plugins/terraform/parser_test.go` | Parser tests | Done |
+| `pkg/ci/plugins/terraform/context.go` | TerraformTemplateContext | Done |
+| `pkg/ci/plugins/terraform/template_test.go` | Template rendering tests | Done |
+| `pkg/ci/plugins/terraform/templates/plan.md` | Default plan summary template | Done |
+| `pkg/ci/plugins/terraform/templates/apply.md` | Default apply summary template | Done |
 | **pkg/ci/plugins/terraform/planfile/** | Planfile storage (wraps artifact layer) | |
-| `pkg/ci/plugins/terraform/planfile/interface.go` | planfile.Store interface, Metadata | Done |
+| `pkg/ci/plugins/terraform/planfile/interface.go` | planfile.Store interface, Metadata, KeyPattern, GenerateKey() | Done |
+| `pkg/ci/plugins/terraform/planfile/interface_test.go` | Interface tests | Done |
 | `pkg/ci/plugins/terraform/planfile/registry.go` | Store registry | Done |
-| `pkg/ci/plugins/terraform/planfile/adapter/store.go` | Adapter: planfile.Store -> artifact.Store | Done |
+| `pkg/ci/plugins/terraform/planfile/adapter/store.go` | Adapter: planfile.Store → artifact.Store | Done |
 | `pkg/ci/plugins/terraform/planfile/adapter/factory.go` | StoreFactory for registry integration | Done |
+| `pkg/ci/plugins/terraform/planfile/adapter/store_test.go` | Adapter tests (95.6% coverage) | Done |
 | `pkg/ci/plugins/terraform/planfile/s3/store.go` | S3 implementation | Done |
-| `pkg/ci/plugins/terraform/planfile/github/store.go` | GitHub Artifacts store | Phase 4 |
+| `pkg/ci/plugins/terraform/planfile/s3/store_test.go` | S3 store tests | Done |
+| `pkg/ci/plugins/terraform/planfile/github/store.go` | GitHub Artifacts implementation | Done |
+| `pkg/ci/plugins/terraform/planfile/github/store_test.go` | GitHub store tests | Done |
+| `pkg/ci/plugins/terraform/planfile/local/store.go` | Local filesystem store | Done |
+| `pkg/ci/plugins/terraform/planfile/local/store_test.go` | Local store tests (81.3% coverage) | Done |
 | `pkg/ci/plugins/terraform/planfile/azure/store.go` | Azure Blob implementation | Deferred |
 | `pkg/ci/plugins/terraform/planfile/gcs/store.go` | GCS implementation | Deferred |
-| **pkg/ci/providers/github/** | Implements `ci.Provider` interface for GitHub Actions | |
-| `pkg/ci/providers/github/provider.go` | GitHub Actions Provider (implements ci.Provider) | Done |
-| `pkg/ci/providers/github/client.go` | GitHub API client wrapper (uses go-github v59) | Done |
-| `pkg/ci/providers/github/status.go` | GetStatus, GetCombinedStatus, GetCheckRuns | Done |
-| `pkg/ci/providers/github/checks.go` | Check runs API | Done |
-| `pkg/ci/providers/github/pulls.go` | GetPullRequestsForBranch, GetPullRequestsCreatedByUser, etc. | Phase 4 |
-| `pkg/ci/providers/github/user.go` | GetAuthenticatedUser for current user info | Phase 4 |
-| `pkg/ci/providers/github/output.go` | $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer (concrete implementation of OutputWriter) | Phase 4 |
-| `pkg/ci/providers/github/comment.go` | PR comment templates (tfcmt-inspired) | Phase 4 |
-| **pkg/ci/plugins/terraform/** | Terraform CI plugin | |
-| `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (hook callbacks, output parsing) | Done (needs hook callback impl) |
-| `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output | Done |
-| `pkg/ci/plugins/terraform/context.go` | Terraform template context | Done |
-| `pkg/ci/plugins/terraform/templates/plan.md` | Default plan template | Done |
-| `pkg/ci/plugins/terraform/templates/apply.md` | Default apply template | Done |
+| **pkg/ci/providers/github/** | GitHub Actions provider | |
+| `pkg/ci/providers/github/provider.go` | GitHub Actions Provider (detect, context, OutputWriter via FileOutputWriter) | Done |
+| `pkg/ci/providers/github/client.go` | GitHub API client wrapper (go-github) | Done |
+| `pkg/ci/providers/github/checks.go` | CreateCheckRun, UpdateCheckRun | Done |
+| `pkg/ci/providers/github/checks_test.go` | Check runs tests | Done |
+| `pkg/ci/providers/github/status.go` | GetStatus implementation | Done |
+| `pkg/ci/providers/github/status_test.go` | Status tests | Done |
+| `pkg/ci/providers/github/comment.go` | PR comment API (tfcmt-inspired) | Phase 4 |
+| **pkg/ci/providers/generic/** | Generic CI provider | |
+| `pkg/ci/providers/generic/provider.go` | Generic provider (CI=true detection, env var context, OutputWriter) | Done |
+| `pkg/ci/providers/generic/provider_test.go` | Provider tests | Done |
+| `pkg/ci/providers/generic/check.go` | Generic check run support | Done |
+| `pkg/ci/providers/generic/check_test.go` | Check tests | Done |
 | **pkg/ci/templates/** | Template loading system | |
-| `pkg/ci/templates/loader.go` | Template loading with override support | Done |
-| **cmd/terraform/planfile/** | New subcommand group | |
+| `pkg/ci/templates/loader.go` | Template loading with override support (config > base_path > embedded) | Done |
+| `pkg/ci/templates/loader_test.go` | Loader tests | Done |
+| **cmd/terraform/planfile/** | Planfile subcommand group | |
 | `cmd/terraform/planfile/planfile.go` | Planfile command group | Done |
 | `cmd/terraform/planfile/upload.go` | `atmos terraform planfile upload` | Done |
 | `cmd/terraform/planfile/download.go` | `atmos terraform planfile download` | Done |
 | `cmd/terraform/planfile/list.go` | `atmos terraform planfile list` | Done |
 | `cmd/terraform/planfile/delete.go` | `atmos terraform planfile delete` | Done |
 | `cmd/terraform/planfile/show.go` | `atmos terraform planfile show` | Done |
-| **cmd/ci/** | New command group | |
-| `cmd/ci/ci.go` | CI command group + CICommandProvider | Done |
+| **cmd/ci/** | CI command group | |
+| `cmd/ci/ci.go` | CI command group + CICommandProvider (experimental) | Done |
 | `cmd/ci/status.go` | `atmos ci status` | Done |
-| **pkg/hooks/** | | |
-| `pkg/hooks/hooks.go` | Already calls RunCIHooks() which delegates to ci.Execute() | Done |
-| ~~`pkg/hooks/ci_upload.go`~~ | ~~CI upload hook command~~ | **Superseded** — logic moved into plugin callbacks |
-| ~~`pkg/hooks/ci_download.go`~~ | ~~CI download hook command~~ | **Superseded** — logic moved into plugin callbacks |
-| ~~`pkg/hooks/ci_comment.go`~~ | ~~CI comment hook command~~ | **Superseded** — logic moved into plugin callbacks |
-| ~~`pkg/hooks/ci_summary.go`~~ | ~~CI summary hook command~~ | **Superseded** — logic moved into plugin callbacks |
-| ~~`pkg/hooks/ci_output.go`~~ | ~~CI output hook command~~ | **Superseded** — logic moved into plugin callbacks |
+| `cmd/ci/status_test.go` | Status command tests | Done |
 
-## Files to Modify
+## Files Modified
 
-| File | Changes |
-|------|---------|
-| `pkg/schema/schema.go` | Add top-level `CI CIConfig` field; add `Priority []string` to `PlanfilesConfig` (Done) |
-| `pkg/hooks/hooks.go` | Register new CI hook commands |
-| `cmd/root.go` | Add blank import `_ "github.com/cloudposse/atmos/cmd/ci"` for registry |
-| `cmd/terraform/terraform.go` | Add `--ci` persistent flag |
-| `cmd/terraform/plan.go` | Add `--upload-planfile` flags |
-| `cmd/terraform/deploy.go` | Add `--download-planfile`, `--verify-plan` flags |
-| `cmd/describe/affected.go` | Add `--format=matrix` support |
-| `internal/exec/describe_affected.go` | Implement matrix format output |
-| `internal/exec/terraform.go` | Integrate CI hooks at lifecycle points |
-| `errors/errors.go` | Add CI + artifact + planfile sentinel errors (Done) |
-| `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates |
+| File | Changes | Status |
+|------|---------|--------|
+| `pkg/schema/schema.go` | Add `CI CIConfig` field; add `PlanfilesConfig` with `Priority`, `Stores`, `Default` | Done |
+| `cmd/root.go` | Add blank import `_ "github.com/cloudposse/atmos/cmd/ci"` for registry | Done |
+| `cmd/terraform/terraform.go` | Register planfile subcommand (`planfile.PlanfileCmd`) | Done |
+| `errors/errors.go` | Add CI + artifact + planfile sentinel errors (22 total) | Done |
+| `internal/exec/clean_adapter_funcs.go` | Export `ConstructTerraformComponentPlanfilePath()` for planfile upload | Done |
+| `cmd/terraform/plan.go` | Add `--upload-planfile` flags | Not Started |
+| `cmd/terraform/deploy.go` | Add `--download-planfile`, `--verify-plan` flags | Not Started |
+| `cmd/describe/affected.go` | Add `--format=matrix` support | Not Started |
+| `internal/exec/describe_affected.go` | Implement matrix format output | Not Started |
+| `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates | Not Started |
 
-## Sentinel Errors
+## Sentinel Errors (IMPLEMENTED in `errors/errors.go`)
 
 ```go
 // CI errors
-ErrCIProviderNotDetected      = errors.New("CI provider not detected")
-ErrCIOutputWriteFailed        = errors.New("failed to write CI output")
-ErrCIJobSummaryWriteFailed    = errors.New("failed to write job summary")
-ErrCIPRCommentFailed          = errors.New("failed to write PR comment")
+ErrCIDisabled              = errors.New("CI integration is disabled")
+ErrCIProviderNotDetected   = errors.New("CI provider not detected")
+ErrCIProviderNotFound      = errors.New("CI provider not found")
+ErrCIOperationNotSupported = errors.New("operation not supported by CI provider")
+ErrCICheckRunCreateFailed  = errors.New("failed to create check run")
+ErrCICheckRunUpdateFailed  = errors.New("failed to update check run")
+ErrCIStatusFetchFailed     = errors.New("failed to fetch CI status")
+ErrCIOutputWriteFailed     = errors.New("failed to write CI output")
+ErrCISummaryWriteFailed    = errors.New("failed to write CI summary")
 
-// Artifact storage errors (IMPLEMENTED)
-ErrArtifactNotFound           = errors.New("artifact not found")
-ErrArtifactUploadFailed       = errors.New("failed to upload artifact")
-ErrArtifactDownloadFailed     = errors.New("failed to download artifact")
-ErrArtifactDeleteFailed       = errors.New("failed to delete artifact")
-ErrArtifactListFailed         = errors.New("failed to list artifacts")
-ErrArtifactStoreNotFound      = errors.New("artifact store not found")
-ErrArtifactStoreInvalidArgs   = errors.New("invalid artifact store arguments")
-ErrArtifactMetadataFailed     = errors.New("failed to load artifact metadata")
-ErrArtifactIntegrityFailed    = errors.New("artifact integrity check failed")
+// Artifact storage errors
+ErrArtifactNotFound         = errors.New("artifact not found")
+ErrArtifactUploadFailed     = errors.New("failed to upload artifact")
+ErrArtifactDownloadFailed   = errors.New("failed to download artifact")
+ErrArtifactDeleteFailed     = errors.New("failed to delete artifact")
+ErrArtifactListFailed       = errors.New("failed to list artifacts")
+ErrArtifactStoreNotFound    = errors.New("artifact store not found")
+ErrArtifactStoreInvalidArgs = errors.New("invalid artifact store arguments")
+ErrArtifactMetadataFailed   = errors.New("failed to load artifact metadata")
+ErrArtifactIntegrityFailed  = errors.New("artifact integrity check failed")
 
-// Planfile storage errors (IMPLEMENTED)
+// Planfile storage errors
 ErrPlanfileNotFound           = errors.New("planfile not found")
 ErrPlanfileUploadFailed       = errors.New("failed to upload planfile")
 ErrPlanfileDownloadFailed     = errors.New("failed to download planfile")
@@ -213,23 +254,28 @@ ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
 ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
 
 // GitHub errors
-ErrGitHubTokenNotFound        = errors.New("GitHub token not found")
-ErrGitHubRuntimeURLNotFound   = errors.New("GitHub runtime URL not found")
-ErrGitHubArtifactAPIError     = errors.New("GitHub Artifacts API error")
+ErrGitHubTokenNotFound = errors.New("GitHub token not found")
 ```
 
-## Additional Components Implemented (Beyond Original PRD)
+## Key Implementation Details
 
-| Component | File | Purpose |
-|-----------|------|---------|
-| Check types | `pkg/ci/check.go` | CheckRun types and constants |
-| Generic provider | `pkg/ci/generic.go` | Fallback CI provider for non-GitHub environments |
-| Plugin | `pkg/ci/plugin.go` | Plugin interface for terraform/helmfile |
-| Plugin registry | `pkg/ci/plugin_registry.go` | Registry for component-type plugins |
-| Executor | `pkg/ci/executor.go` | Thin coordinator: provider/plugin/store wiring (needs refactor) |
-| Terraform plugin | `pkg/ci/plugins/terraform/` | Terraform-specific CI behavior (hook callbacks, parsing, templates) |
-| Template loader | `pkg/ci/templates/loader.go` | Template loading with override support |
-| GitHub checks | `pkg/ci/github/checks.go` | GitHub check runs API |
+### Executor Architecture (`pkg/ci/executor.go`)
+
+The executor uses an **enum-based action dispatch** pattern:
+
+1. `Execute(opts)` → detects platform → gets plugin + binding → builds context → executes actions
+2. Actions are `HookAction` string enums: `summary`, `output`, `upload`, `download`, `check`
+3. `executeAction()` switches on the enum to call: `executeSummaryAction()`, `executeOutputAction()`, `executeUploadAction()`, `executeDownloadAction()`, `executeCheckAction()`
+4. Each action handler is self-contained in `executor.go`
+5. `isActionEnabled()` checks `ci.summary.enabled`, `ci.output.enabled`, `ci.checks.enabled` from config
+
+### OutputWriter Implementation
+
+- `FileOutputWriter` (`pkg/ci/internal/provider/output.go`) — writes to `$GITHUB_OUTPUT` (key=value, heredoc for multiline) and `$GITHUB_STEP_SUMMARY` (append)
+- `NoopOutputWriter` — used when not in CI
+- GitHub provider creates `FileOutputWriter` from env vars in `OutputWriter()` method
+- Generic provider creates `FileOutputWriter` from env vars (`CI_OUTPUT`, `CI_STEP_SUMMARY`)
+- `OutputHelpers.WritePlanOutputs()` and `WriteApplyOutputs()` provide structured output
 
 ## Artifact Storage Implementation Details
 
@@ -350,5 +396,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.3 | 2026-03-05 | Updated to match actual codebase: Plugin interface (7 methods), HookAction as enum, executor actions all implemented (summary/output/upload/download/check), GitHub Artifacts store done, FileOutputWriter done, sentinel errors synced with code |
+| 1.2 | 2026-01-15 | Reorganized PRDs into framework/providers/terraform-plugin directories |
 | 1.1 | 2025-12-18 | Updated PRD with implementation status, documented additional components |
 | 1.0 | 2025-12-17 | Initial PRD |

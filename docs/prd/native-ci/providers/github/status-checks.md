@@ -2,9 +2,11 @@
 
 > Related: [Overview](../../overview.md) | [GitHub Provider](./provider.md) | [Configuration](../../framework/configuration.md)
 
-## FR-4: Status Checks
+## FR-4: Status Checks (IMPLEMENTED)
 
 **Requirement**: Post commit status checks showing operation progress.
+
+**Implementation**: The executor's `executeCheckAction()` creates check runs on "before" events (`executeCheckCreate`) and updates them on "after" events (`executeCheckUpdate`). Check run IDs are correlated via `sync.Map` keyed by `stack/component/command`. If no stored ID is found on "after", a new completed check run is created. Uses `provider.CreateCheckRun()` and `provider.UpdateCheckRun()` — GitHub implementation in `pkg/ci/providers/github/checks.go`.
 
 **Behavior**:
 - Create check run when operation starts ("Plan in progress")

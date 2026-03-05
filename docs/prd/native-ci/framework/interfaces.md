@@ -4,49 +4,38 @@
 
 ## Core Interfaces
 
-### Provider Interface
+### Provider Interface (IMPLEMENTED)
 
 ```go
-// pkg/ci/provider.go
+// pkg/ci/internal/provider/types.go
 
 // Provider represents a CI/CD provider (GitHub Actions, GitLab CI, etc.).
 type Provider interface {
-    // Name returns the provider name (e.g., "github", "gitlab").
     Name() string
-
-    // Detect returns true if this provider is active in the current environment.
     Detect() bool
-
-    // Context returns CI metadata (run ID, PR info, etc.).
     Context() (*Context, error)
-
-    // GetStatus returns PR/commit status for the current branch (read).
     GetStatus(ctx context.Context, opts StatusOptions) (*Status, error)
-
-    // CreateCheckRun creates a new check run on a commit (write, like Atlantis).
-    CreateCheckRun(ctx context.Context, opts CreateCheckRunOptions) (*CheckRun, error)
-
-    // UpdateCheckRun updates an existing check run (write).
-    UpdateCheckRun(ctx context.Context, opts UpdateCheckRunOptions) (*CheckRun, error)
-
-    // OutputWriter returns a writer for CI outputs ($GITHUB_OUTPUT, etc.).
+    CreateCheckRun(ctx context.Context, opts *CreateCheckRunOptions) (*CheckRun, error)
+    UpdateCheckRun(ctx context.Context, opts *UpdateCheckRunOptions) (*CheckRun, error)
     OutputWriter() OutputWriter
 }
 
 // OutputWriter writes CI outputs (environment variables, job summaries, etc.).
 type OutputWriter interface {
-    // WriteOutput writes a key-value pair to CI outputs (e.g., $GITHUB_OUTPUT).
     WriteOutput(key, value string) error
-
-    // WriteSummary writes content to the job summary (e.g., $GITHUB_STEP_SUMMARY).
     WriteSummary(content string) error
 }
 ```
 
-### Context Struct
+**Implementations** (IMPLEMENTED):
+- `FileOutputWriter` — writes to `$GITHUB_OUTPUT` and `$GITHUB_STEP_SUMMARY` files (key=value format, heredoc for multiline)
+- `NoopOutputWriter` — used when not in CI or outputs disabled
+- `OutputHelpers` — convenience methods: `WritePlanOutputs()`, `WriteApplyOutputs()`
+
+### Context Struct (IMPLEMENTED)
 
 ```go
-// pkg/ci/context.go
+// pkg/ci/internal/provider/types.go
 
 // Context contains CI run metadata.
 type Context struct {
@@ -58,6 +47,7 @@ type Context struct {
     Actor       string
     EventName   string  // "push", "pull_request"
     Ref         string  // Git ref
+    Branch      string  // Branch name (GITHUB_HEAD_REF or GITHUB_REF_NAME)
     SHA         string  // Git commit SHA
     Repository  string  // owner/repo
     RepoOwner   string
@@ -177,107 +167,143 @@ type Metadata struct {
 }
 ```
 
-## Plugin Interface
+## Plugin Interface (IMPLEMENTED)
 
-The plugin owns its CI behavior. The executor passes `(provider, store, opts)` to the plugin's hook callbacks. See [Hooks Integration](./hooks-integration.md) for the full architecture.
+The plugin owns its CI behavior. The executor calls plugin methods to parse output, build context, get variables, and generate artifact keys. See [Hooks Integration](./hooks-integration.md) for the full architecture.
 
 ```go
 // pkg/ci/internal/plugin/types.go
 
-// HookAction is a callback function invoked by the executor for a lifecycle event.
-// The executor resolves the current provider and store, then passes them to the callback.
-// The store parameter is artifact.Store — plugins use their adapter layer to work with
-// plugin-specific store types (e.g., terraform plugin wraps via planfile/adapter/).
-type HookAction func(provider Provider, store artifact.Store, opts ExecuteOptions) error
+// HookAction represents what CI action to perform (enum, not callback).
+type HookAction string
 
-// HookBinding maps a lifecycle event to a callback function.
+const (
+    ActionSummary  HookAction = "summary"   // Write to job summary ($GITHUB_STEP_SUMMARY)
+    ActionOutput   HookAction = "output"    // Write to CI outputs ($GITHUB_OUTPUT)
+    ActionUpload   HookAction = "upload"    // Upload artifact (e.g., planfile)
+    ActionDownload HookAction = "download"  // Download artifact
+    ActionCheck    HookAction = "check"     // Create/update check run
+)
+
+// HookBinding declares what happens at a specific hook event.
 type HookBinding struct {
-    Event  string      // "after.terraform.plan"
-    Action HookAction  // callback function provided by the plugin
+    Event    string        // "after.terraform.plan"
+    Actions  []HookAction  // CI actions to perform at this event
+    Template string        // Template name for summary action (e.g., "plan")
 }
 
-// Plugin represents a component-type CI plugin (terraform, helmfile, etc.).
-// The interface is generic — no terraform-specific methods. Each plugin wires
-// its own methods as HookAction callbacks in GetHookBindings().
+// Plugin is implemented by component types that support CI integration.
 type Plugin interface {
-    // GetType returns the component type (e.g., "terraform").
     GetType() string
-
-    // GetHookBindings returns lifecycle events this plugin subscribes to,
-    // each with a callback function the executor will invoke.
     GetHookBindings() []HookBinding
-
-    // GetDefaultTemplates returns embedded default templates.
     GetDefaultTemplates() embed.FS
+    BuildTemplateContext(info *schema.ConfigAndStacksInfo, ciCtx *provider.Context, output, command string) (any, error)
+    ParseOutput(output string, command string) (*OutputResult, error)
+    GetOutputVariables(result *OutputResult, command string) map[string]string
+    GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string
+}
+
+// ComponentConfigurationResolver is an optional interface that Plugins can implement
+// to resolve artifact paths (e.g., planfile paths) when not explicitly provided.
+type ComponentConfigurationResolver interface {
+    ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error)
 }
 ```
 
-Methods like `ParseOutput`, `BuildTemplateContext`, `GetOutputVariables`, and `GetArtifactKey` are **internal helpers** on the terraform plugin — not part of the generic Plugin interface. Each plugin calls them from within its own hook callbacks.
+> **Architecture note**: The current implementation uses an **enum-based action dispatch** pattern — `HookAction` is a string enum and the executor's `executeAction()` switches on it to call the appropriate handler (summary, output, upload, download, check). The [Hooks Integration](./hooks-integration.md) PRD describes a **callback-based** pattern as the target for Phase 3 refactoring, where plugins would own all action logic via function callbacks. Both approaches achieve the same result; the callback pattern moves more logic into plugins for better separation of concerns.
 
-Example: terraform plugin wiring its methods as callbacks:
+### Terraform Plugin Hook Bindings (IMPLEMENTED)
 
 ```go
 // pkg/ci/plugins/terraform/plugin.go
 
 func (p *Plugin) GetHookBindings() []plugin.HookBinding {
     return []plugin.HookBinding{
-        {Event: "before.terraform.plan",  Action: p.OnBeforePlan},
-        {Event: "after.terraform.plan",   Action: p.OnAfterPlan},
-        {Event: "before.terraform.apply", Action: p.OnBeforeApply},
-        {Event: "after.terraform.apply",  Action: p.OnAfterApply},
+        {Event: "before.terraform.plan",  Actions: []plugin.HookAction{plugin.ActionCheck}},
+        {Event: "after.terraform.plan",   Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck}, Template: "plan"},
+        {Event: "before.terraform.apply", Actions: []plugin.HookAction{plugin.ActionDownload, plugin.ActionCheck}},
+        {Event: "after.terraform.apply",  Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionCheck}, Template: "apply"},
     }
 }
 ```
 
-## Package Structure
+## Package Structure (IMPLEMENTED)
 
 ```
 pkg/ci/
-  ├── check.go                 # CheckRun types and constants
-  ├── plugin.go                # Plugin interface
-  ├── plugin_registry.go       # Plugin registry
-  ├── context.go               # Context struct (run ID, PR, SHA, etc.)
-  ├── executor.go              # Thin coordinator: provider/plugin/store wiring
-  ├── output.go                # OutputWriter interface
-  ├── provider.go              # Provider interface definition
-  ├── registry.go              # Provider registry (detect and select provider)
-  ├── status.go                # Status, BranchStatus, PRStatus, CheckStatus structs
-  ├── artifact/                # Base artifact storage layer (common interface)
+  ├── executor.go              # CI action orchestrator: detect platform, dispatch actions
+  ├── executor_test.go
+  ├── provider.go              # Type alias for internal/provider.Provider
+  ├── status.go                # Type aliases for status types
+  ├── plugin_registry.go       # Plugin registry: RegisterPlugin(), GetPlugin(), GetPluginForEvent()
+  ├── plugin_registry_test.go
+  ├── registry_provider.go     # Provider registry: Register(), Detect(), DetectOrError(), IsCI()
+  ├── registry_provider_test.go
+  ├── mock_plugin_test.go      # Mock plugin for executor tests
+  ├── internal/
+  │   ├── plugin/
+  │   │   └── types.go         # Plugin interface, HookAction enum, HookBinding, OutputResult, TemplateContext
+  │   └── provider/
+  │       ├── types.go         # Provider interface, Context, PRInfo, CheckRun structs
+  │       ├── check.go         # CheckRunState constants, Create/Update options
+  │       ├── output.go        # OutputWriter interface, FileOutputWriter, NoopOutputWriter, OutputHelpers
+  │       ├── output_test.go
+  │       └── status.go        # StatusOptions, Status, BranchStatus, PRStatus, CheckStatus
+  ├── artifact/                # Base artifact storage layer
   │   ├── store.go             # Store interface, FileEntry/FileResult, StoreFactory
-  │   ├── metadata.go          # Metadata, ArtifactInfo structs (SHA, Component, Stack, timestamps, etc.)
+  │   ├── store_test.go
+  │   ├── metadata.go          # Metadata, ArtifactInfo structs
+  │   ├── metadata_test.go
   │   ├── query.go             # Query struct for filtering
   │   ├── registry.go          # Backend registry: Register(), NewStore()
-  │   ├── selector.go          # EnvironmentChecker, SelectStore() for priority-based selection
+  │   ├── registry_test.go
+  │   ├── selector.go          # EnvironmentChecker, SelectStore()
+  │   ├── selector_test.go
   │   ├── mock_store.go        # Generated mock
   │   └── local/
-  │       └── store.go         # Local filesystem backend
+  │       ├── store.go         # Local filesystem backend
+  │       └── store_test.go
   ├── plugins/terraform/
-  │   ├── plugin.go            # Terraform CI plugin (hook callbacks, output parsing)
-  │   ├── parser.go            # Parse plan/apply output
-  │   ├── context.go           # Terraform template context
+  │   ├── plugin.go            # Terraform CI plugin (hook bindings, parsing, output vars, artifact keys)
+  │   ├── plugin_test.go
+  │   ├── parser.go            # Parse plan/apply output (regex-based)
+  │   ├── parser_test.go
+  │   ├── context.go           # TerraformTemplateContext
+  │   ├── template_test.go
   │   ├── templates/
-  │   │   ├── plan.md          # Default plan template
-  │   │   └── apply.md         # Default apply template
+  │   │   ├── plan.md          # Default plan summary template
+  │   │   └── apply.md         # Default apply summary template
   │   └── planfile/            # Planfile storage (extends artifact.Store)
-  │       ├── interface.go     # planfile.Store interface, Metadata
+  │       ├── interface.go     # planfile.Store interface, Metadata, KeyPattern, GenerateKey()
+  │       ├── interface_test.go
   │       ├── registry.go      # Planfile-specific storage registry
-  │       ├── adapter/         # Adapter: planfile.Store -> artifact.Store
-  │       │   ├── store.go     # Adapter implementation
-  │       │   └── factory.go   # StoreFactory for registry
+  │       ├── adapter/
+  │       │   ├── store.go     # Adapter: planfile.Store -> artifact.Store
+  │       │   ├── store_test.go
+  │       │   └── factory.go   # StoreFactory for registry integration
   │       ├── s3/
-  │       │   └── store.go     # S3 store (metadata in S3, no DynamoDB)
+  │       │   ├── store.go     # S3 store (metadata sidecar, no DynamoDB)
+  │       │   └── store_test.go
   │       ├── github/
-  │       │   └── store.go     # GitHub Artifacts store (Phase 4)
+  │       │   ├── store.go     # GitHub Artifacts store
+  │       │   └── store_test.go
   │       └── local/
-  │           └── store.go     # Local filesystem store
+  │           ├── store.go     # Local filesystem store
+  │           └── store_test.go
   ├── providers/
-  │   ├── github/              # Implements ci.Provider for GitHub Actions
-  │   │   ├── provider.go      # GitHub Actions Provider
-  │   │   ├── client.go        # GitHub API client wrapper
-  │   │   ├── checks.go        # Check runs API
-  │   │   └── status.go        # GetStatus, GetCombinedStatus
-  │   └── generic/             # Generic CI provider fallback
-  │       └── provider.go      # Detects CI=true, basic context from env vars
+  │   ├── github/
+  │   │   ├── provider.go      # GitHub Actions Provider (detect, context, OutputWriter via FileOutputWriter)
+  │   │   ├── client.go        # GitHub API client wrapper (go-github)
+  │   │   ├── checks.go        # CreateCheckRun, UpdateCheckRun
+  │   │   ├── checks_test.go
+  │   │   ├── status.go        # GetStatus implementation
+  │   │   └── status_test.go
+  │   └── generic/
+  │       ├── provider.go      # Generic CI provider (CI=true detection, env var context, OutputWriter)
+  │       ├── provider_test.go
+  │       ├── check.go         # Generic check run support
+  │       └── check_test.go
   └── templates/
-      └── loader.go            # Template loading with override support
+      ├── loader.go            # Template loading with override support (config > base_path > embedded)
+      └── loader_test.go
 ```

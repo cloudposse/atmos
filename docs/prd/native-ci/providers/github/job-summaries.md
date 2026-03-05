@@ -2,9 +2,11 @@
 
 > Related: [Overview](../../overview.md) | [CI Outputs](./ci-outputs.md) | [Configuration](../../framework/configuration.md)
 
-## FR-2: Job Summary Output
+## FR-2: Job Summary Output (IMPLEMENTED)
 
 **Requirement**: Write rich markdown summaries to CI job summary mechanism.
+
+**Implementation**: The executor's `executeSummaryAction()` renders a template via the plugin's `BuildTemplateContext()` and template loader, then writes to `$GITHUB_STEP_SUMMARY` via `FileOutputWriter.WriteSummary()`. Default templates are in `pkg/ci/plugins/terraform/templates/plan.md` and `apply.md`.
 
 **Behavior**:
 - Write to `$GITHUB_STEP_SUMMARY` in GitHub Actions
