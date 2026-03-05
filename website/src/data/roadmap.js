@@ -151,7 +151,7 @@ export const roadmapConfig = {
       tagline: 'Replace a dozen auth tools with one identity layer',
       description:
         'The way humans login with SSO is different from how automation systems authenticate with OIDC. Yet most teams implement this with fragmented approaches. Atmos brings authentication into the core with native support for identity profiles configurable by runtime.',
-      progress: 85,
+      progress: 88,
       status: 'in-progress',
       milestones: [
         { label: 'Added `atmos auth` command framework', status: 'shipped', quarter: 'q2-2025', docs: '/cli/commands/auth/usage', changelog: 'introducing-atmos-auth', version: 'v1.196.0', description: 'Unified command for managing authentication across cloud providers and CI systems.', benefits: 'One command replaces aws-vault, saml2aws, gcloud auth, and azure login. Credentials are managed consistently across all providers.', category: 'featured', priority: 'high' },
@@ -175,15 +175,17 @@ export const roadmapConfig = {
         { label: 'AWS_REGION and AWS_DEFAULT_REGION export from `atmos auth env`', status: 'shipped', quarter: 'q1-2026', pr: 1955, docs: '/cli/commands/auth/env', changelog: 'auth-env-region-export', description: 'Export AWS_REGION and AWS_DEFAULT_REGION environment variables from atmos auth env when region is configured in the identity.', benefits: 'External tools like Terraform and AWS CLI automatically use the correct region without additional configuration.' },
         { label: 'GCP Authentication Support', status: 'shipped', quarter: 'q1-2026', changelog: 'gcp-authentication-support', pr: 2051, description: 'Google Cloud authentication with ADC, Workload Identity Federation, and service account impersonation.', benefits: 'GCP deployments use the same auth workflows as AWS and Azure, with provider-scoped credential isolation.' },
         { label: 'Auth realm isolation for multi-repository workflows', status: 'shipped', quarter: 'q1-2026', pr: 2043, changelog: 'auth-realm-isolation', prd: 'auth-realm-isolation', description: 'Credential isolation using realm-scoped storage paths and keyring keys, preventing collisions when working with multiple repositories using identical identity names.', benefits: 'Safely work across multiple customer repositories without credential leakage. Each project has isolated credentials.' },
+        { label: 'Browser-based authentication for aws/user', status: 'planned', quarter: 'q1-2026', pr: 1887, description: 'OAuth2 browser authentication as fallback for aws/user identity when no static credentials configured.', benefits: 'Zero-config authentication using AWS console credentials. No access keys required to get started.' },
         { label: 'Native Okta Authentication (Device Code Flow)', status: 'planned', quarter: 'q1-2026', prd: 'okta-auth-identity', description: 'Native Okta authentication using OAuth 2.0 Device Authorization Grant. Enables Okta as a central IdP for AWS, Azure, and GCP federation, plus direct Okta API access for Terraform.', benefits: 'Use Okta as your single identity hub. Authenticate once with Okta and federate to any cloud. No browser automation or SAML complexity.' },
         { label: 'Support for `atmos auth` with GitHub Apps', status: 'planned', quarter: 'q1-2026', pr: 1683, description: 'GitHub App authentication for fine-grained repository access and elevated rate limits.', benefits: 'Higher API rate limits and granular permissions for automation that interacts with GitHub.' },
+        { label: 'Identity selection for stores', status: 'shipped', quarter: 'q1-2026', pr: 2099, changelog: 'store-identity-support', description: 'Stores can authenticate using atmos auth identities instead of default credential chains.', benefits: 'Use the same identity system for stores as for Terraform. No separate credential management for secrets access.' },
       ],
       issues: [],
       prs: [
         { number: 1894, title: 'Add Azure OIDC/Workload Identity Federation provider' },
         { number: 1859, title: 'Add ECR authentication' },
         { number: 1884, title: 'Add EKS kubeconfig authentication integration PRD' },
-        { number: 1887, title: 'Add PRD for aws/login provider (native SDK auth)' },
+        { number: 1887, title: 'Browser-based authentication for aws/user' },
         { number: 1683, title: 'Update auth docs and implement GitHub providers' },
       ],
     },
@@ -194,7 +196,7 @@ export const roadmapConfig = {
       tagline: 'Sane defaults, full configurability',
       description:
         'Too many parameters, too much configuration. Everything should just work out of the box while remaining fully customizable.',
-      progress: 88,
+      progress: 90,
       status: 'in-progress',
       milestones: [
         { label: 'Zero-config terminal output (auto TTY/color)', status: 'shipped', quarter: 'q3-2025', docs: '/cli/configuration/settings/terminal', changelog: 'zero-config-terminal-output', version: 'v1.198.0', description: 'Terminal output adapts automatically to your environment—colors when interactive, clean text when piping. Works identically in CI and locally without configuration.', benefits: 'No terminal configuration needed. Output is readable regardless of where commands run—locally, in CI, or piped to files.' },
@@ -226,6 +228,7 @@ export const roadmapConfig = {
         { label: 'Filename-based stack identity (zero-config)', status: 'shipped', quarter: 'q1-2026', pr: 1934, changelog: 'stack-name-identity', description: 'Stacks are identified by filename when no name, name_template, or name_pattern is configured. Newcomers can get started without any naming configuration.', benefits: 'New users can start immediately without configuring stack naming. Just create stack files and reference them by filename.' },
         { label: 'Command aliases for vendor and workflow list', status: 'shipped', quarter: 'q1-2026', changelog: 'vendor-workflow-list-aliases', description: 'Added `atmos vendor list` and `atmos workflow list` as aliases for their `atmos list` counterparts for intuitive command discovery.', benefits: 'Users can use either command form. Natural command structure regardless of preference.' },
         { label: 'Packer directory-based templates', status: 'shipped', quarter: 'q1-2026', pr: 1982, changelog: 'packer-directory-based-templates', description: 'Packer commands now default to directory mode, loading all *.pkr.hcl files from the component directory. Aligns with HashiCorp best practices for multi-file configurations.', benefits: 'Organize Packer configurations across multiple files without explicit template configuration. Just run atmos packer build and it works.' },
+        { label: 'AI Agent Skills (19 domain skills)', status: 'shipped', quarter: 'q1-2026', changelog: 'ai-agent-skills', docs: '/integrations/ai/agent-skills', description: 'Atmos ships 19 domain-specific agent skills covering stacks, components, vendoring, terraform, helmfile, packer, ansible, workflows, custom-commands, auth, stores, schemas, gitops, validation, templates, design-patterns, toolchain, introspection, and devcontainers. Compatible with Claude Code, OpenAI Codex, Gemini CLI, Cursor, Windsurf, GitHub Copilot, and more.', benefits: 'AI coding assistants get deep knowledge of Atmos conventions and patterns. Contributors and users get AI assistance that understands Atmos stack configuration, orchestration, and best practices.' },
       ],
       issues: [],
       prs: [
@@ -341,6 +344,8 @@ export const roadmapConfig = {
         { label: 'Source list command', status: 'shipped', quarter: 'q1-2026', changelog: 'source-list-command', docs: '/cli/commands/terraform/source', description: 'List all components with source configuration in a stack. Available as `atmos terraform source list` and `atmos list sources`.', benefits: 'Quickly discover which components are configured for JIT vendoring. Useful for auditing and debugging source configurations.' },
         { label: 'JIT source provisioning precedence for all terraform commands', status: 'shipped', quarter: 'q1-2026', changelog: 'jit-source-provisioning-precedence', description: 'JIT source provisioning now correctly takes precedence over existing local components for all terraform subcommands when source and workdir are both enabled.', benefits: 'Consistent behavior across all terraform commands. Source configuration is always respected regardless of whether a local component directory already exists.' },
         { label: 'Automatic component refresh on version changes', status: 'shipped', quarter: 'q1-2026', pr: 2010, changelog: 'version-aware-jit-provisioning', description: 'Workdirs automatically refresh when component version or source URI changes. Includes TTL-based cleanup for stale workdirs.', benefits: 'Change a component version and Atmos automatically re-provisions. Clean up old workdirs with --ttl=7d. No manual cleanup required.' },
+        { label: 'Source cache TTL for JIT-vendored components', status: 'shipped', quarter: 'q1-2026', pr: 2138, changelog: 'source-cache-ttl', prd: 'source-cache-ttl', docs: '/cli/commands/terraform/source', description: 'TTL-based cache expiration for JIT-vendored sources. Set ttl on source config to control how long cached sources are reused before re-pulling from the remote.', benefits: 'Floating refs like branch names automatically refresh. Set ttl: 0s for active development or ttl: 1h for team collaboration. No manual cleanup required.' },
+        { label: 'Per-target version overrides', status: 'shipped', quarter: 'q1-2026', pr: 2141, changelog: 'vendor-target-version-overrides', docs: '/design-patterns/version-management/vendoring-components', description: 'Vendor targets now accept both strings and maps with optional version overrides, enabling multiple versions of the same component from a single source entry.', benefits: 'Vendor multiple component versions without duplicating source entries. Cleaner, more maintainable vendor manifests.' },
       ],
       issues: [],
       prs: [
@@ -379,7 +384,7 @@ export const roadmapConfig = {
       tagline: 'Familiar concepts for Terragrunt users',
       description:
         'Users migrating from Terragrunt expect code generation, backend provisioning for cold-start scenarios, and other familiar patterns.',
-      progress: 80,
+      progress: 85,
       status: 'in-progress',
       milestones: [
         { label: 'File-scoped locals', status: 'shipped', quarter: 'q4-2025', docs: '/stacks/locals', changelog: 'file-scoped-locals', version: 'v1.202.0', description: 'Define local variables at the file level for DRY configuration—familiar to Terragrunt users.', category: 'featured', priority: 'high', benefits: 'Avoid repetition with local variables. Terragrunt users can apply the same patterns they know.', experimental: true },
@@ -387,6 +392,7 @@ export const roadmapConfig = {
         { label: 'File generation (`generate` blocks)', status: 'shipped', quarter: 'q4-2025', pr: 1878, docs: '/stacks/generate', changelog: 'declarative-file-generation', description: 'Generate files like backend.tf and provider.tf from stack configuration with inheritance support.', category: 'featured', priority: 'high', benefits: 'Components are pure Terraform. Generated files keep configuration DRY without duplication.', experimental: true },
         { label: 'Automatic backend provisioning', status: 'shipped', quarter: 'q4-2025', docs: '/components/terraform/backend-provisioning', description: 'Provision the backend itself (S3 bucket with native state locking) for cold-start scenarios and one-shot Terraform deployments.', category: 'featured', priority: 'high', benefits: 'Bootstrap new environments without a chicken-and-egg problem. State backends are provisioned automatically.', experimental: true },
         { label: 'AWS context YAML functions', status: 'shipped', quarter: 'q4-2025', docs: '/functions/yaml/aws.account-id', changelog: 'aws-yaml-functions', description: 'Access AWS caller identity in stack configuration.', codeExample: 'account_id: !aws.account-id', category: 'featured', priority: 'high', benefits: 'Reference the current account, region, or identity in configuration dynamically.' },
+        { label: '`!aws.organization_id` YAML function', status: 'shipped', quarter: 'q1-2026', pr: 2117, docs: '/functions/yaml/aws.organization-id', changelog: 'aws-organization-id-yaml-function', description: 'Access the AWS Organization ID in stack configuration without hardcoding.', codeExample: 'org_id: !aws.organization_id', benefits: 'Reference the organization ID dynamically. Avoid hardcoding values across environments.' },
         { label: '`plan --all` and `apply --all`', status: 'shipped', quarter: 'q4-2025', docs: '/cli/commands/terraform/terraform-apply', description: 'Plan or apply all affected components in a single command with dependency ordering.', benefits: 'Deploy entire environments with one command. Dependencies are respected automatically.', demoId: 'terraform-plan' },
         { label: 'Automatic source provisioning', status: 'shipped', quarter: 'q4-2025', pr: 1877, changelog: 'terraform-source-provisioner', docs: '/cli/commands/terraform/source', description: 'Automatically fetch component sources without explicit vendoring—just reference and deploy.', category: 'featured', priority: 'high', benefits: 'Components are fetched on demand like Terraform modules. No vendor step to remember.', experimental: true },
         { label: 'Concurrent component provisioning', status: 'planned', quarter: 'q1-2026', pr: 1876, description: 'Deploy multiple components in parallel with dependency-aware orchestration.', category: 'featured', priority: 'high', benefits: 'Large deployments complete faster. Independent components run in parallel.' },
@@ -410,7 +416,7 @@ export const roadmapConfig = {
       tagline: 'Rigorous testing, AI-assisted development, and stability',
       description:
         '2025 started at <20% test coverage and ended at ~74% — a 54% improvement. Embracing AI-assisted development while maintaining high standards.',
-      progress: 85,
+      progress: 88,
       status: 'in-progress',
       milestones: [
         { label: 'Test coverage from <20% to 74%', status: 'shipped', quarter: 'q1-2025', description: 'Test coverage improved from less than 20% to 74% over the course of 2025.', category: 'featured', priority: 'high', benefits: 'Fewer regressions reach users. Changes can be made confidently knowing tests catch issues.' },
@@ -419,6 +425,7 @@ export const roadmapConfig = {
         { label: 'CodeRabbit review integration', status: 'shipped', quarter: 'q3-2025', description: 'Automated code reviews with AI-powered suggestions and security analysis.', benefits: 'PRs get immediate feedback. Security issues are caught before human review.' },
         { label: 'Nightly releases (RC candidates)', status: 'shipped', quarter: 'q4-2025', description: 'Automated nightly builds for testing upcoming features before stable release.', category: 'featured', priority: 'high', benefits: 'Test new features before they ship. Report issues while fixes are still easy.' },
         { label: 'PR feature releases', status: 'shipped', quarter: 'q4-2025', description: 'Every PR gets a pre-release version for easy testing before merge.', benefits: 'Test the exact changes in a PR without building locally. Validate fixes before they merge.' },
+        { label: 'PR and SHA artifact installation via --use-version', status: 'shipped', quarter: 'q1-2026', pr: 2040, changelog: 'pr-artifact-installation', description: 'Test features from any PR or commit SHA with --use-version (e.g., --use-version 2040 or --use-version sha:ceb7526). Automatically downloads the correct platform binary from GitHub Actions, caches it locally, and re-executes.', benefits: 'Test PR features or specific commits without compiling from source. One command to switch to any PR or commit build.' },
         { label: 'Terraform command registry', status: 'in-progress', quarter: 'q4-2025', pr: 1891, changelog: 'terraform-command-registry-pattern', description: 'Centralized Terraform command configuration for consistent behavior across CI and local.', benefits: 'Terraform commands behave identically everywhere. CI matches local exactly.' },
         { label: 'Multiple terraform output formats', status: 'shipped', quarter: 'q4-2025', description: 'Export terraform outputs in multiple formats (JSON, YAML, HCL, env, dotenv, bash, CSV, TSV) with options for uppercase keys and nested value flattening.', benefits: 'Integrate terraform outputs directly into CI workflows. Export to GitHub Actions env format, source as bash exports, or pipe as CSV without jq gymnastics.' },
         { label: '80%+ test coverage', status: 'in-progress', quarter: 'q1-2026', description: 'Targeting 80%+ test coverage with focus on critical paths and edge cases.', category: 'featured', priority: 'high', benefits: 'Even more confidence in changes. Edge cases are covered before users hit them.' },

@@ -251,9 +251,9 @@ func (m *ChatModel) renderSessionList(content *strings.Builder, styles *sessionL
 		sessionLine.WriteString(badgeStyle.Render(providerBadge))
 
 		// Add metadata
-		sessionLine.WriteString(fmt.Sprintf(" • %s • %d msg",
+		fmt.Fprintf(&sessionLine, " • %s • %d msg",
 			sess.CreatedAt.Format("2006-01-02 15:04"),
-			msgCount))
+			msgCount)
 
 		content.WriteString(style.Render(sessionLine.String()))
 		content.WriteString("\n")
@@ -288,9 +288,9 @@ func (m *ChatModel) renderFilteredSessionList(content *strings.Builder, styles *
 		sessionLine.WriteString(badgeStyle.Render(providerBadge))
 
 		// Add metadata
-		sessionLine.WriteString(fmt.Sprintf(" • %s • %d msg",
+		fmt.Fprintf(&sessionLine, " • %s • %d msg",
 			sess.CreatedAt.Format("2006-01-02 15:04"),
-			msgCount))
+			msgCount)
 
 		content.WriteString(style.Render(sessionLine.String()))
 		content.WriteString("\n")

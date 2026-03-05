@@ -69,6 +69,7 @@ linters:
             - "!**/pkg/ai/**"
             - "!**/internal/aws_utils/**"
             - "!**/pkg/aws/identity/**"
+            - "!**/pkg/aws/organization/**"
             - "!**/pkg/provisioner/backend/**"
             - "!**/pkg/github/**"
             - "$test"

@@ -24,7 +24,6 @@ All other commands:
   modules       Show all declared modules in a working directory
   output        Show output values from your root module
   providers     Show the providers required for this configuration
-  query         Search and list remote infrastructure with Terraform
   refresh       Update the state to match remote systems
   show          Show the current state or a saved plan
   stacks        Manage HCP Terraform stack operations

@@ -58,8 +58,9 @@ demos/audio/
 **/cache.*.txt
 **/.atmos/ai.settings.local.json
 
-# Conductor workspace uses pnpm, but project uses npm
+# Website lock files (CI manages dependencies)
 website/pnpm-lock.yaml
+website/package-lock.json
 
 # Development configs - track only specific files
 .atmos.d/*
@@ -131,6 +132,9 @@ TEST_FAILURE_ANALYSIS.md
 scratch/
 COVERAGE_SUMMARY.md
 TESTABILITY_CHANGES_SUMMARY.md
+
+# Docusaurus build cache
+.docusaurus/
 
 # Conductor scratch/temporary files
 *.log

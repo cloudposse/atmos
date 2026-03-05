@@ -23,6 +23,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	atmosYaml "github.com/cloudposse/atmos/pkg/yaml"
 )
 
 const (
@@ -722,7 +723,13 @@ func ProcessStacks(
 
 	// Process `Go` templates in Atmos manifest sections.
 	if processTemplates {
-		componentSectionStr, err := u.ConvertToYAML(configAndStacksInfo.ComponentSection)
+		// Use delimiter-safe YAML encoding when custom delimiters are configured.
+		// This prevents YAML's single-quote escaping ('') from breaking template delimiters
+		// that contain single-quote characters (e.g., ["'{{", "}}'"]). See #2052.
+		componentSectionStr, err := atmosYaml.ConvertToYAMLPreservingDelimiters(
+			configAndStacksInfo.ComponentSection,
+			atmosConfig.Templates.Settings.Delimiters,
+		)
 		if err != nil {
 			return configAndStacksInfo, err
 		}
@@ -732,6 +739,11 @@ func ProcessStacks(
 		err = mapstructure.Decode(configAndStacksInfo.ComponentSettingsSection, &settingsSectionStruct)
 		if err != nil {
 			return configAndStacksInfo, err
+		}
+
+		// Restore env vars that mapstructure:"-" dropped during Decode.
+		if envMap := extractEnvFromRawMap(configAndStacksInfo.ComponentSettingsSection); len(envMap) > 0 {
+			settingsSectionStruct.Templates.Settings.Env = envMap
 		}
 
 		componentSectionProcessed, err := ProcessTmplWithDatasources(

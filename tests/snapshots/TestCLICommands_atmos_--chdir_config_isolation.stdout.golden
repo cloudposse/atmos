@@ -48,7 +48,7 @@ settings:
   list_merge_strategy: ""
   terminal:
     max_width: 0
-    pager: less
+    pager: "false"
     unicode: false
     syntax_highlighting:
       enabled: false

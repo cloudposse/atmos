@@ -79,7 +79,7 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 
 	// Extract stack names and their components.
 	var output strings.Builder
-	output.WriteString(fmt.Sprintf("Available Stacks (%d):\n\n", len(stacks)))
+	fmt.Fprintf(&output, "Available Stacks (%d):\n\n", len(stacks))
 
 	stackNames := make([]string, 0, len(stacks))
 	for stackName := range stacks {
@@ -89,13 +89,13 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 
 	stackComponents := make(map[string][]string, len(stacks))
 	for _, stackName := range stackNames {
-		output.WriteString(fmt.Sprintf("Stack: %s\n", stackName))
+		fmt.Fprintf(&output, "Stack: %s\n", stackName)
 
 		// Extract component names from the stack data.
 		components := extractComponentNames(stacks[stackName])
 		stackComponents[stackName] = components
 		if len(components) > 0 {
-			output.WriteString(fmt.Sprintf("  Components: %s\n", strings.Join(components, ", ")))
+			fmt.Fprintf(&output, "  Components: %s\n", strings.Join(components, ", "))
 		} else {
 			output.WriteString("  Components: (none)\n")
 		}

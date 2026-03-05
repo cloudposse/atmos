@@ -99,8 +99,8 @@ func (e *DuckDuckGoEngine) fetchAndParse(ctx context.Context, searchURL string) 
 	// Set headers to mimic browser.
 	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; Atmos/1.0; +https://atmos.tools)")
 
-	// Execute request.
-	resp, err := e.client.Do(req)
+	// Execute request (URL is constructed from configured search engine base URL, not user input).
+	resp, err := e.client.Do(req) //nolint:gosec // URL is built from trusted config, not user input.
 	if err != nil {
 		return nil, wrapSearchError(errUtils.ErrWebSearchFailed, err)
 	}
@@ -235,8 +235,8 @@ func (e *GoogleEngine) fetchGoogleResults(ctx context.Context, apiURL string) ([
 		return nil, wrapSearchError(errUtils.ErrWebSearchFailed, err)
 	}
 
-	// Execute request.
-	resp, err := e.client.Do(req)
+	// Execute request (URL is constructed from configured search engine base URL, not user input).
+	resp, err := e.client.Do(req) //nolint:gosec // URL is built from trusted config, not user input.
 	if err != nil {
 		return nil, wrapSearchError(errUtils.ErrWebSearchFailed, err)
 	}

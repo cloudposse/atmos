@@ -122,7 +122,7 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 	if len(stackFiles) > maxFiles {
 		stackFiles = stackFiles[:maxFiles]
-		context.WriteString(fmt.Sprintf("Note: Showing first %d stack files (out of %d total)\n\n", maxFiles, len(stackFiles)))
+		fmt.Fprintf(&context, "Note: Showing first %d stack files (out of %d total)\n\n", maxFiles, len(stackFiles))
 	}
 
 	context.WriteString("=== Atmos Stack Configurations ===\n\n")
@@ -135,7 +135,7 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 	for _, file := range stackFiles {
 		relPath, _ := filepath.Rel(atmosConfig.BasePath, file)
-		context.WriteString(fmt.Sprintf("File: %s\n", relPath))
+		fmt.Fprintf(&context, "File: %s\n", relPath)
 		context.WriteString("```yaml\n")
 
 		content := formatFileContent(file, maxLines)

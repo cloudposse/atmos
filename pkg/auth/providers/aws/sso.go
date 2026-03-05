@@ -16,9 +16,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/internal/tui/templates/term"
 	awsCloud "github.com/cloudposse/atmos/pkg/auth/cloud/aws"
 	authTypes "github.com/cloudposse/atmos/pkg/auth/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
@@ -36,8 +36,12 @@ const (
 // isInteractive checks if we're running in an interactive terminal.
 // For SSO device flow, we need stderr to be a TTY so the user can see the authentication URL.
 // We check stderr (not stdin) because that's where we output the authentication instructions.
+// Respects --force-tty / ATMOS_FORCE_TTY for environments where TTY detection fails.
 func isInteractive() bool {
-	return term.IsTTYSupportForStderr()
+	if viper.GetBool("force-tty") {
+		return true
+	}
+	return isTTY()
 }
 
 // ssoProvider implements AWS IAM Identity Center authentication.
@@ -147,7 +151,7 @@ func (p *ssoProvider) Authenticate(ctx context.Context) (authTypes.ICredentials,
 
 	log.Debug("Loading AWS config for SSO authentication", "region", p.region)
 	// Initialize AWS config for the SSO region with isolated environment
-	// to avoid conflicts with external AWS env vars.
+	// to avoid conflicts with external AWS env vars and shared config files.
 	cfg, err := awsCloud.LoadIsolatedAWSConfig(ctx, configOpts...)
 	if err != nil {
 		return nil, errUtils.Build(errUtils.ErrLoadAWSConfig).

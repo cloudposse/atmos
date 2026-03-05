@@ -218,6 +218,37 @@ workflows:
       - command: echo "before --" -- "after --"
         type: shell
 
+  # Test cases for workflow step retries
+  # These test the retry configuration feature added in GitHub issue #2034
+
+  # Simple retry test - command succeeds on first attempt
+  retry-success:
+    description: |
+      Test retry configuration with a command that succeeds immediately.
+      Verifies that retry config doesn't break normal execution.
+    steps:
+      - command: echo "Success on first try"
+        type: shell
+        retry:
+          max_attempts: 3
+          initial_delay: 100ms
+          backoff_strategy: constant
+
+  # Retry with all options configured
+  retry-full-config:
+    description: |
+      Test retry with all configuration options specified.
+    steps:
+      - command: echo "Testing full retry config"
+        type: shell
+        retry:
+          max_attempts: 2
+          initial_delay: 50ms
+          max_delay: 200ms
+          backoff_strategy: exponential
+          multiplier: 2.0
+          random_jitter: 0.1
+
   # Test cases for environment variable support
   # These test the new env map feature at workflow and step levels
 

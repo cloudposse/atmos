@@ -1,0 +1,62 @@
+---
+slug: aws-organization-id-yaml-function
+title: "New !aws.organization_id YAML Function"
+authors: [aknysh]
+tags: [feature]
+---
+
+Access the AWS Organization ID directly in stack configuration with the new `!aws.organization_id` YAML function.
+
+<!--truncate-->
+
+## What Changed
+
+Atmos now includes a new `!aws.organization_id` YAML function that retrieves the AWS Organization ID by calling
+the AWS Organizations `DescribeOrganization` API. This complements the existing AWS context functions:
+`!aws.account_id`, `!aws.caller_identity_arn`, `!aws.caller_identity_user_id`, and `!aws.region`.
+
+```yaml
+components:
+  terraform:
+    my-component:
+      vars:
+        organization_id: !aws.organization_id
+```
+
+## Why This Matters
+
+The AWS Organization ID is commonly needed for:
+
+- **Service Control Policies (SCPs)** - Scoping policies to the organization
+- **Cross-account trust policies** - Referencing the organization in IAM conditions
+- **Resource tagging** - Tagging resources with the organization ID for cost allocation
+- **Multi-account governance** - Configuring components that operate at the organization level
+
+Previously, users had to hardcode the organization ID or use workarounds. Now it's available dynamically,
+just like other AWS context values.
+
+## How to Use It
+
+Use `!aws.organization_id` anywhere in your stack YAML files:
+
+```yaml
+components:
+  terraform:
+    governance:
+      vars:
+        org_id: !aws.organization_id
+        tags:
+          OrganizationId: !aws.organization_id
+```
+
+The function requires the `organizations:DescribeOrganization` IAM permission and the account must be
+a member of an AWS Organization.
+
+Results are cached for the duration of the CLI invocation, so multiple references only make one API call.
+
+This is equivalent to Terragrunt's `get_aws_org_id()` function.
+
+## Get Involved
+
+- Read the [documentation](/functions/yaml/aws.organization-id) for full details
+- Report issues on [GitHub](https://github.com/cloudposse/atmos/issues)

@@ -113,16 +113,16 @@ func (t *WebSearchTool) Execute(ctx context.Context, params map[string]interface
 
 	// Format output.
 	var output strings.Builder
-	output.WriteString(fmt.Sprintf("Web search results for '%s' (%d results):\n\n", query, response.Count))
+	fmt.Fprintf(&output, "Web search results for '%s' (%d results):\n\n", query, response.Count)
 
 	if response.Count == 0 {
 		output.WriteString("No results found.\n")
 	} else {
 		for i, result := range response.Results {
-			output.WriteString(fmt.Sprintf("%d. %s\n", i+1, result.Title))
-			output.WriteString(fmt.Sprintf("   URL: %s\n", result.URL))
+			fmt.Fprintf(&output, "%d. %s\n", i+1, result.Title)
+			fmt.Fprintf(&output, "   URL: %s\n", result.URL)
 			if result.Description != "" {
-				output.WriteString(fmt.Sprintf("   %s\n", result.Description))
+				fmt.Fprintf(&output, "   %s\n", result.Description)
 			}
 			output.WriteString("\n")
 		}

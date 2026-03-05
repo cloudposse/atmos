@@ -235,7 +235,7 @@ func (m *Manager) GetContext() string {
 			if title == "" {
 				title = section.Name
 			}
-			sb.WriteString(fmt.Sprintf("## %s\n\n%s\n\n", title, section.Content))
+			fmt.Fprintf(&sb, "## %s\n\n%s\n\n", title, section.Content)
 		}
 	}
 
@@ -369,7 +369,7 @@ func (m *Manager) reconstructMarkdown() string {
 		if title == "" {
 			title = section.Name
 		}
-		sb.WriteString(fmt.Sprintf("## %s\n\n", title))
+		fmt.Fprintf(&sb, "## %s\n\n", title)
 		sb.WriteString(section.Content)
 		sb.WriteString("\n\n")
 	}

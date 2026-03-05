@@ -286,10 +286,10 @@ func FormatFilesContext(result *DiscoveryResult) string {
 	var sb strings.Builder
 
 	sb.WriteString("\n\n# Project Files Context\n\n")
-	sb.WriteString(fmt.Sprintf("Auto-discovered %d files (%s total):\n\n", len(result.Files), formatSize(result.TotalSize)))
+	fmt.Fprintf(&sb, "Auto-discovered %d files (%s total):\n\n", len(result.Files), formatSize(result.TotalSize))
 
 	for _, file := range result.Files {
-		sb.WriteString(fmt.Sprintf("## File: %s\n\n", file.RelativePath))
+		fmt.Fprintf(&sb, "## File: %s\n\n", file.RelativePath)
 		sb.WriteString("```\n")
 		sb.Write(file.Content)
 		if !strings.HasSuffix(string(file.Content), "\n") {
@@ -299,9 +299,9 @@ func FormatFilesContext(result *DiscoveryResult) string {
 	}
 
 	if result.FilesSkipped > 0 {
-		sb.WriteString(fmt.Sprintf("*Note: %d files were skipped", result.FilesSkipped))
+		fmt.Fprintf(&sb, "*Note: %d files were skipped", result.FilesSkipped)
 		if result.Reason != "" {
-			sb.WriteString(fmt.Sprintf(" (%s)", result.Reason))
+			fmt.Fprintf(&sb, " (%s)", result.Reason)
 		}
 		sb.WriteString("*\n")
 	}

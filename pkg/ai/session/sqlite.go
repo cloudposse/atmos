@@ -402,15 +402,20 @@ func (s *SQLiteStorage) AddMessage(ctx context.Context, message *Message) error 
 
 // GetMessages retrieves messages for a session.
 func (s *SQLiteStorage) GetMessages(ctx context.Context, sessionID string, limit int) ([]*Message, error) {
-	query := `SELECT id, session_id, role, content, created_at
-	          FROM messages WHERE session_id = ?
-	          ORDER BY created_at ASC`
+	var rows *sql.Rows
+	var err error
 
 	if limit > 0 {
-		query += fmt.Sprintf(" LIMIT %d", limit)
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT id, session_id, role, content, created_at
+			 FROM messages WHERE session_id = ?
+			 ORDER BY created_at ASC LIMIT ?`, sessionID, limit)
+	} else {
+		rows, err = s.db.QueryContext(ctx,
+			`SELECT id, session_id, role, content, created_at
+			 FROM messages WHERE session_id = ?
+			 ORDER BY created_at ASC`, sessionID)
 	}
-
-	rows, err := s.db.QueryContext(ctx, query, sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query messages: %w", err)
 	}

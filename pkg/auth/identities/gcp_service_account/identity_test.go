@@ -428,7 +428,7 @@ func TestSetRealm(t *testing.T) {
 	assert.Equal(t, "custom-realm", id.realm)
 }
 
-func TestRequireRealm_Empty(t *testing.T) {
+func TestRequireRealm_EmptyWithEmail_ReturnsEmpty(t *testing.T) {
 	id := &Identity{
 		principal: &types.GCPServiceAccountIdentityPrincipal{
 			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
@@ -436,9 +436,39 @@ func TestRequireRealm_Empty(t *testing.T) {
 	}
 	id.realm = ""
 	realm, err := id.requireRealm()
-	require.Error(t, err)
-	assert.Empty(t, realm)
-	assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+	require.NoError(t, err)
+	assert.Equal(t, "", realm)
+}
+
+func TestRequireRealm_EmptyWithoutEmail_ReturnsEmpty(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "",
+		},
+	}
+	id.realm = ""
+	realm, err := id.requireRealm()
+	require.NoError(t, err)
+	assert.Equal(t, "", realm)
+}
+
+func TestRequireRealm_EmptyRealmConsistentAcrossEmails(t *testing.T) {
+	id1 := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa1@proj-a.iam.gserviceaccount.com",
+		},
+	}
+	id2 := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa2@proj-b.iam.gserviceaccount.com",
+		},
+	}
+	realm1, err1 := id1.requireRealm()
+	realm2, err2 := id2.requireRealm()
+	require.NoError(t, err1)
+	require.NoError(t, err2)
+	assert.Equal(t, "", realm1)
+	assert.Equal(t, "", realm2)
 }
 
 func TestRequireRealm_Set(t *testing.T) {
@@ -464,6 +494,8 @@ func TestPaths(t *testing.T) {
 	assert.Empty(t, paths)
 }
 
+// TestAuthenticate_Success verifies the service account identity exchanges
+// upstream credentials for impersonated credentials via IAM.
 func TestAuthenticate_Success(t *testing.T) {
 	principal := &types.GCPServiceAccountIdentityPrincipal{
 		ServiceAccountEmail: "sa@my-project.iam.gserviceaccount.com",
@@ -499,6 +531,8 @@ func TestAuthenticate_Success(t *testing.T) {
 	assert.Equal(t, "my-project", gcpCreds.ProjectID)
 }
 
+// TestAuthenticate_ExplicitProjectID verifies explicit project_id overrides
+// project extraction from the service account email during authentication.
 func TestAuthenticate_ExplicitProjectID(t *testing.T) {
 	principal := &types.GCPServiceAccountIdentityPrincipal{
 		ServiceAccountEmail: "sa@other-project.iam.gserviceaccount.com",
@@ -521,6 +555,7 @@ func TestAuthenticate_ExplicitProjectID(t *testing.T) {
 	result, err := id.Authenticate(context.Background(), baseCreds)
 	require.NoError(t, err)
 
+	require.IsType(t, &types.GCPCredentials{}, result)
 	gcpCreds := result.(*types.GCPCredentials)
 	assert.Equal(t, "explicit-project", gcpCreds.ProjectID)
 }
@@ -695,15 +730,15 @@ func TestPrepareEnvironment_NoProviderName(t *testing.T) {
 	assert.Contains(t, err.Error(), "provider name is required")
 }
 
-// TestEmptyRealm_RejectedByFileOperations verifies that all credential file
-// operations fail fast with ErrEmptyRealm when realm has not been set.
-func TestEmptyRealm_RejectedByFileOperations(t *testing.T) {
+// TestEmptyRealm_NoEmail_DoesNotFailForRealm verifies that empty realm does not
+// fail file operations due to realm resolution, even when email is empty.
+func TestEmptyRealm_NoEmail_DoesNotFailForRealm(t *testing.T) {
 	makeIdentity := func() *Identity {
 		return &Identity{
 			name: "test-sa",
-			// realm intentionally left empty.
+			// realm intentionally left empty, no email for auto-generation.
 			principal: &types.GCPServiceAccountIdentityPrincipal{
-				ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+				ServiceAccountEmail: "",
 			},
 			config: &schema.Identity{
 				Via: &schema.IdentityVia{
@@ -717,38 +752,39 @@ func TestEmptyRealm_RejectedByFileOperations(t *testing.T) {
 		id := makeIdentity()
 		_, err := id.PrepareEnvironment(context.Background(), nil)
 		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		assert.NotErrorIs(t, err, errUtils.ErrEmptyRealm)
 	})
 
 	t.Run("PostAuthenticate", func(t *testing.T) {
+		tmp := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", tmp)
+		t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
 		id := makeIdentity()
 		err := id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
 			Credentials:  &types.GCPCredentials{AccessToken: "tok"},
 			ProviderName: "gcp-adc",
 		})
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		require.NoError(t, err)
 	})
 
 	t.Run("Logout", func(t *testing.T) {
 		id := makeIdentity()
 		err := id.Logout(context.Background())
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		require.NoError(t, err)
 	})
 
 	t.Run("CredentialsExist", func(t *testing.T) {
 		id := makeIdentity()
-		_, err := id.CredentialsExist()
-		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		exists, err := id.CredentialsExist()
+		require.NoError(t, err)
+		assert.False(t, exists)
 	})
 
 	t.Run("LoadCredentials", func(t *testing.T) {
 		id := makeIdentity()
 		_, err := id.LoadCredentials(context.Background())
 		require.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrEmptyRealm)
+		assert.NotErrorIs(t, err, errUtils.ErrEmptyRealm)
 	})
 }
 
@@ -828,4 +864,279 @@ func TestNewIdentity_NoDefaultRealm(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Empty(t, id.realm, "new identity must not have a default realm")
+}
+
+// --- ADC + gcp/service-account Critical Path Tests ---
+//
+// These tests verify the full ADC → service-account impersonation flow:
+//   1. ADC provider finds base credentials → GCPCredentials with access token.
+//   2. gcp/service-account identity uses base token to impersonate target SA.
+//   3. Impersonated credentials are stored in files (requires realm).
+//   4. Empty realm uses backward-compatible paths with no realm subdirectory.
+
+// TestADC_ServiceAccount_ImpersonationFlow verifies the full impersonation
+// flow where ADC provides base credentials and the service account identity
+// uses them to impersonate a target service account via IAM API.
+func TestADC_ServiceAccount_ImpersonationFlow(t *testing.T) {
+	principal := &types.GCPServiceAccountIdentityPrincipal{
+		ServiceAccountEmail: "deployer@prod-project.iam.gserviceaccount.com",
+		Scopes:              []string{"https://www.googleapis.com/auth/cloud-platform"},
+		Lifetime:            "3600s",
+	}
+	id, err := New(principal)
+	require.NoError(t, err)
+	id.SetName("prod-deployer")
+
+	// Empty realm uses backward-compatible paths.
+	id.SetRealm("")
+
+	expiry := time.Now().Add(time.Hour).UTC()
+	mockSvc := &mockIAMService{
+		resp: &iamcredentials.GenerateAccessTokenResponse{
+			AccessToken: "impersonated-deployer-token",
+			ExpireTime:  expiry.Format(time.RFC3339),
+		},
+	}
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
+		assert.Equal(t, "adc-base-token", accessToken, "should use ADC token for impersonation")
+		return mockSvc, nil
+	}
+
+	// Simulate ADC credentials (from user's gcloud login).
+	adcBaseCreds := &types.GCPCredentials{
+		AccessToken: "adc-base-token",
+		TokenExpiry: time.Now().Add(2 * time.Hour),
+		ProjectID:   "user-default-project",
+		// User ADC identity from `gcloud auth application-default login` (not a service account).
+		ServiceAccountEmail: "developer@company.com",
+	}
+
+	// Authenticate: ADC → impersonate target SA.
+	result, err := id.Authenticate(context.Background(), adcBaseCreds)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	gcpCreds, ok := result.(*types.GCPCredentials)
+	require.True(t, ok)
+	assert.Equal(t, "impersonated-deployer-token", gcpCreds.AccessToken)
+	assert.Equal(t, "deployer@prod-project.iam.gserviceaccount.com", gcpCreds.ServiceAccountEmail)
+	assert.Equal(t, "prod-project", gcpCreds.ProjectID,
+		"Project should be extracted from SA email")
+	assert.Equal(t, []string{"https://www.googleapis.com/auth/cloud-platform"}, gcpCreds.Scopes)
+}
+
+// TestADC_ServiceAccount_EmptyRealm_WithImpersonation verifies that the complete
+// ADC + service-account flow works end-to-end with empty realm using legacy paths.
+func TestADC_ServiceAccount_EmptyRealm_WithImpersonation(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
+
+	principal := &types.GCPServiceAccountIdentityPrincipal{
+		ServiceAccountEmail: "sa@auto-realm-project.iam.gserviceaccount.com",
+	}
+	id, err := New(principal)
+	require.NoError(t, err)
+	id.SetName("auto-realm-sa")
+	id.SetRealm("") // Empty realm should use legacy paths.
+	id.SetConfig(&schema.Identity{
+		Kind: "gcp/service-account",
+		Via:  &schema.IdentityVia{Provider: "my-adc"},
+	})
+
+	// Verify empty realm is preserved.
+	realm, err := id.requireRealm()
+	require.NoError(t, err)
+	assert.Empty(t, realm)
+
+	// PostAuthenticate with empty realm.
+	creds := &types.GCPCredentials{
+		AccessToken: "auto-realm-token",
+		TokenExpiry: time.Now().Add(time.Hour),
+		ProjectID:   "auto-realm-project",
+	}
+	authCtx := &schema.AuthContext{}
+	err = id.PostAuthenticate(context.Background(), &types.PostAuthenticateParams{
+		Credentials:  creds,
+		ProviderName: "my-adc",
+		AuthContext:  authCtx,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, authCtx.GCP)
+	assert.Equal(t, "auto-realm-project", authCtx.GCP.ProjectID)
+
+	// Verify credentials were stored.
+	exists, err := id.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists, "credentials should exist after PostAuthenticate with empty realm")
+
+	// Load credentials back.
+	loaded, err := id.LoadCredentials(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, loaded)
+	require.IsType(t, &types.GCPCredentials{}, loaded)
+	loadedGCP := loaded.(*types.GCPCredentials)
+	assert.Equal(t, "auto-realm-token", loadedGCP.AccessToken)
+
+	// Logout should clean up.
+	err = id.Logout(context.Background())
+	require.NoError(t, err)
+
+	// Credentials should be gone after logout.
+	exists, err = id.CredentialsExist()
+	require.NoError(t, err)
+	assert.False(t, exists, "credentials should not exist after logout")
+}
+
+// TestADC_ServiceAccount_MultipleAccounts_IsolatedByIdentityName verifies that
+// two different service accounts (same config file) get isolated credential
+// storage via identity names even when realm is empty.
+func TestADC_ServiceAccount_MultipleAccounts_IsolatedByIdentityName(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("ATMOS_GCP_ADC_CLIENT_SECRET", "test-client-secret")
+
+	makeIdentity := func(name, email string) *Identity {
+		return &Identity{
+			name:  name,
+			realm: "",
+			principal: &types.GCPServiceAccountIdentityPrincipal{
+				ServiceAccountEmail: email,
+			},
+			config: &schema.Identity{
+				Kind: "gcp/service-account",
+				Via:  &schema.IdentityVia{Provider: "shared-adc"},
+			},
+		}
+	}
+
+	id1 := makeIdentity("dev-sa", "dev@project-a.iam.gserviceaccount.com")
+	id2 := makeIdentity("prod-sa", "prod@project-b.iam.gserviceaccount.com")
+
+	// Verify both use empty realm (legacy mode).
+	realm1, err := id1.requireRealm()
+	require.NoError(t, err)
+	realm2, err := id2.requireRealm()
+	require.NoError(t, err)
+	assert.Empty(t, realm1)
+	assert.Empty(t, realm2)
+
+	// Store credentials for both.
+	creds1 := &types.GCPCredentials{
+		AccessToken: "dev-token",
+		TokenExpiry: time.Now().Add(time.Hour),
+		ProjectID:   "project-a",
+	}
+	creds2 := &types.GCPCredentials{
+		AccessToken: "prod-token",
+		TokenExpiry: time.Now().Add(time.Hour),
+		ProjectID:   "project-b",
+	}
+
+	ctx := context.Background()
+	err = id1.PostAuthenticate(ctx, &types.PostAuthenticateParams{
+		Credentials:  creds1,
+		ProviderName: "shared-adc",
+		AuthContext:  &schema.AuthContext{},
+	})
+	require.NoError(t, err)
+
+	err = id2.PostAuthenticate(ctx, &types.PostAuthenticateParams{
+		Credentials:  creds2,
+		ProviderName: "shared-adc",
+		AuthContext:  &schema.AuthContext{},
+	})
+	require.NoError(t, err)
+
+	// Both should have isolated credentials.
+	exists1, err := id1.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists1)
+
+	exists2, err := id2.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists2)
+
+	// Load and verify each has its own token.
+	loaded1, err := id1.LoadCredentials(ctx)
+	require.NoError(t, err)
+	require.IsType(t, &types.GCPCredentials{}, loaded1)
+	assert.Equal(t, "dev-token", loaded1.(*types.GCPCredentials).AccessToken)
+
+	loaded2, err := id2.LoadCredentials(ctx)
+	require.NoError(t, err)
+	require.IsType(t, &types.GCPCredentials{}, loaded2)
+	assert.Equal(t, "prod-token", loaded2.(*types.GCPCredentials).AccessToken)
+
+	// Logout dev — should not affect prod.
+	err = id1.Logout(ctx)
+	require.NoError(t, err)
+
+	exists1After, err := id1.CredentialsExist()
+	require.NoError(t, err)
+	assert.False(t, exists1After, "dev credentials should be gone after logout")
+
+	exists2After, err := id2.CredentialsExist()
+	require.NoError(t, err)
+	assert.True(t, exists2After, "prod credentials should survive dev logout")
+}
+
+// TestADC_ServiceAccount_ExplicitRealmOverridesEmpty verifies that when
+// auth.realm is explicitly configured, it takes precedence over empty realm.
+func TestADC_ServiceAccount_ExplicitRealmOverridesEmpty(t *testing.T) {
+	id := &Identity{
+		principal: &types.GCPServiceAccountIdentityPrincipal{
+			ServiceAccountEmail: "sa@proj.iam.gserviceaccount.com",
+		},
+	}
+
+	// Explicit realm set.
+	id.SetRealm("customer-acme")
+	realm, err := id.requireRealm()
+	require.NoError(t, err)
+	assert.Equal(t, "customer-acme", realm, "explicit realm should be used as-is")
+
+	// Empty realm — falls back to legacy mode.
+	id.SetRealm("")
+	realm, err = id.requireRealm()
+	require.NoError(t, err)
+	assert.Equal(t, "", realm)
+}
+
+// TestADC_ServiceAccount_DelegateChain verifies impersonation with a delegate chain
+// (service account A → delegate B → target C).
+func TestADC_ServiceAccount_DelegateChain(t *testing.T) {
+	principal := &types.GCPServiceAccountIdentityPrincipal{
+		ServiceAccountEmail: "target@prod.iam.gserviceaccount.com",
+		Delegates: []string{
+			"intermediate@shared.iam.gserviceaccount.com",
+		},
+		Scopes: []string{"https://www.googleapis.com/auth/cloud-platform"},
+	}
+	id, err := New(principal)
+	require.NoError(t, err)
+
+	mockSvc := &mockIAMService{
+		resp: &iamcredentials.GenerateAccessTokenResponse{
+			AccessToken: "delegated-token",
+			ExpireTime:  time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		},
+	}
+	id.iamServiceFactory = func(ctx context.Context, accessToken string) (gcpCloud.IAMCredentialsService, error) {
+		return mockSvc, nil
+	}
+
+	adcCreds := &types.GCPCredentials{AccessToken: "adc-token"}
+	result, err := id.Authenticate(context.Background(), adcCreds)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	// Verify the delegate chain was formatted correctly.
+	require.NotNil(t, mockSvc.lastReq)
+	assert.Equal(t, []string{
+		"projects/-/serviceAccounts/intermediate@shared.iam.gserviceaccount.com",
+	}, mockSvc.lastReq.Delegates)
+
+	// Verify target SA was set correctly.
+	assert.Equal(t, "projects/-/serviceAccounts/target@prod.iam.gserviceaccount.com", mockSvc.lastName)
 }

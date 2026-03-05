@@ -190,8 +190,8 @@ func (c *DefaultCompactor) buildSummarizationPrompt(messages []*Message) string 
 			roleLabel = "User"
 		}
 
-		conversation.WriteString(fmt.Sprintf("[Message %d] %s: %s\n\n",
-			i+1, roleLabel, msg.Content))
+		fmt.Fprintf(&conversation, "[Message %d] %s: %s\n\n",
+			i+1, roleLabel, msg.Content)
 	}
 
 	// Create summarization prompt.
@@ -237,10 +237,10 @@ func (c *DefaultCompactor) generateSimpleSummary(messages []*Message) string {
 			content = content[:200] + "..."
 		}
 
-		summary.WriteString(fmt.Sprintf("[%s]: %s\n\n", msg.Role, content))
+		fmt.Fprintf(&summary, "[%s]: %s\n\n", msg.Role, content)
 	}
 
-	summary.WriteString(fmt.Sprintf("(Summarized %d messages)\n", len(messages)))
+	fmt.Fprintf(&summary, "(Summarized %d messages)\n", len(messages))
 
 	return summary.String()
 }
