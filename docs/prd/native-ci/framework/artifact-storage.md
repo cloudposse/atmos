@@ -135,7 +135,7 @@ Implement a registry pattern (following `pkg/store/`) for artifact storage backe
 - **S3** - AWS S3 bucket with metadata sidecar (planfile-level)
 - **Azure Blob** - Azure Blob Storage container (deferred)
 - **GCS** - Google Cloud Storage bucket (deferred)
-- **GitHub Artifacts** - GitHub Artifacts API v4 (Phase 4)
+- **GitHub Artifacts** - GitHub Artifacts API v4 (IMPLEMENTED)
 - **Local** - Local filesystem (both artifact and planfile levels)
 
 ## Storage Backend Requirements

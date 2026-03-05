@@ -10,7 +10,7 @@
 
 **Behavior**:
 - `atmos describe affected --format=matrix` outputs JSON matrix to stdout
-- `--output-file=$GITHUB_OUTPUT` writes `affected=<json>` for downstream jobs
+- `--output-file=$GITHUB_OUTPUT` writes `matrix=<json>` for downstream jobs
 - Format directly consumable by GitHub Actions `matrix` strategy
 - Include component and stack for each affected item
 
@@ -38,10 +38,11 @@ Output (stdout):
 {"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
 ```
 
-Output ($GITHUB_OUTPUT):
+Output ($GITHUB_OUTPUT — two variables written):
 
 ```
-affected={"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
+matrix={"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
+affected_count=2
 ```
 
 This format is directly consumable by GitHub Actions matrix strategy:
@@ -51,7 +52,7 @@ jobs:
   affected:
     runs-on: ubuntu-latest
     outputs:
-      matrix: ${{ steps.affected.outputs.affected }}
+      matrix: ${{ steps.affected.outputs.matrix }}
     steps:
       - uses: actions/checkout@v4
       - name: Get affected components

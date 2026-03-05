@@ -6,7 +6,7 @@
 
 **Requirement**: Export plan/apply results as CI output variables.
 
-**Implementation**: The executor's `executeOutputAction()` calls `plugin.GetOutputVariables()` to get plan variables, adds common variables (`stack`, `component`, `command`, `summary`), filters by `ci.output.variables` config whitelist, and writes to `$GITHUB_OUTPUT` via `FileOutputWriter.WriteOutput()`. `OutputHelpers.WritePlanOutputs()` and `WriteApplyOutputs()` provide structured output helpers in `pkg/ci/internal/provider/output.go`.
+**Implementation**: The executor's `executeOutputAction()` calls `plugin.GetOutputVariables()` to get plugin-specific variables, adds common variables (`stack`, `component`, `command`, `summary`), filters by `ci.output.variables` config whitelist, and writes to `$GITHUB_OUTPUT` via the platform's `OutputWriter.WriteOutput()`. Note: `OutputHelpers` in `pkg/ci/internal/provider/output.go` provides convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) but these are NOT used by the executor — the executor calls `plugin.GetOutputVariables()` directly.
 
 **Behavior**:
 - Write to `$GITHUB_OUTPUT` in GitHub Actions
@@ -14,18 +14,22 @@
 - Export terraform outputs after successful apply (prefixed with `output_`)
 - Support filtering via `ci.output.variables` configuration
 
-**Variables (plan)** (**IMPLEMENTED** in `pkg/ci/internal/provider/output.go`):
-| Variable | Type | Description |
-|----------|------|-------------|
-| `has_changes` | bool | Whether plan has any changes |
-| `has_additions` | bool | Whether plan creates resources |
-| `has_destructions` | bool | Whether plan destroys resources |
-| `has_additions_count` | int | Number of resources to create |
-| `has_changes_count` | int | Number of resources to change |
-| `has_destructions_count` | int | Number of resources to destroy |
-| `plan_exit_code` | int | Plan command exit code |
-| `artifact_key` | string | Planfile storage key |
-| `plan_summary` | string | Human-readable summary |
+**Variables (plan)** (**IMPLEMENTED** — plugin variables from `pkg/ci/plugins/terraform/plugin.go` `GetOutputVariables()` + common variables added by `pkg/ci/executor.go`):
+| Variable | Type | Source | Description |
+|----------|------|--------|-------------|
+| `has_changes` | bool | Plugin | Whether plan has any changes |
+| `has_errors` | bool | Plugin | Whether plan had errors |
+| `exit_code` | int | Plugin | Plan command exit code |
+| `resources_to_create` | int | Plugin | Number of resources to create |
+| `resources_to_change` | int | Plugin | Number of resources to change |
+| `resources_to_replace` | int | Plugin | Number of resources to replace |
+| `resources_to_destroy` | int | Plugin | Number of resources to destroy |
+| `stack` | string | Executor | Stack name |
+| `component` | string | Executor | Component name |
+| `command` | string | Executor | Command name (e.g., "plan") |
+| `summary` | string | Executor | Rendered summary markdown (if summary action ran) |
+
+> **Note**: `OutputHelpers.WritePlanOutputs()` in `pkg/ci/internal/provider/output.go` defines a separate set of convenience variable names (`has_additions`, `has_additions_count`, etc.) but is NOT called by the executor. The executor uses `plugin.GetOutputVariables()` directly. `OutputHelpers` exists for potential future use by plugins in the callback-based architecture.
 
 **Variables (apply)**:
 | Variable | Type | Description |
@@ -36,15 +40,18 @@
 ## After `terraform plan`
 
 ```bash
-# Written to $GITHUB_OUTPUT (implemented in pkg/ci/internal/provider/output.go WritePlanOutputs)
+# Written to $GITHUB_OUTPUT (via executor → plugin.GetOutputVariables() + executor common vars)
 has_changes=true
-has_additions=true
-has_destructions=false
-has_additions_count=5
-has_changes_count=2
-has_destructions_count=0
-artifact_key=plat-ue2-dev/vpc/abc123.tfplan
-plan_exit_code=2
+has_errors=false
+exit_code=2
+resources_to_create=5
+resources_to_change=2
+resources_to_replace=0
+resources_to_destroy=0
+stack=plat-ue2-dev
+component=vpc
+command=plan
+summary=## :recycle: Plan: `vpc` in `plat-ue2-dev`...
 ```
 
 ## After `terraform apply`

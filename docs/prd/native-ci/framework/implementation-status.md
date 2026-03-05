@@ -211,10 +211,10 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | `cmd/terraform/terraform.go` | Register planfile subcommand (`planfile.PlanfileCmd`) | Done |
 | `errors/errors.go` | Add CI + artifact + planfile sentinel errors (22 total) | Done |
 | `internal/exec/clean_adapter_funcs.go` | Export `ConstructTerraformComponentPlanfilePath()` for planfile upload | Done |
-| `cmd/terraform/plan.go` | Add `--upload-planfile` flags | Not Started |
-| `cmd/terraform/deploy.go` | Add `--download-planfile`, `--verify-plan` flags | Not Started |
-| `cmd/describe/affected.go` | Add `--format=matrix` support | Not Started |
-| `internal/exec/describe_affected.go` | Implement matrix format output | Not Started |
+| `cmd/terraform/plan.go` | Add `--ci` and `--skip-planfile` flags | Done |
+| `cmd/describe_affected.go` | Add `--format=matrix` support | Done |
+| `internal/exec/describe_affected.go` | Implement matrix format output (`MatrixOutput`, `MatrixEntry`, `writeMatrixOutput`) | Done |
+| `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
 | `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates | Not Started |
 
 ## Sentinel Errors (IMPLEMENTED in `errors/errors.go`)
@@ -398,6 +398,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 1.4 | 2026-03-05 | Third sync pass: fixed output variable names (resources_to_create not has_additions_count), updated Files Modified table (plan.go/describe_affected done, --upload-planfile N/A), fixed ci.enabled truth table (--ci bypasses it), updated generic provider capabilities, fixed matrix output key (matrix= not affected=) |
 | 1.3 | 2026-03-05 | Updated to match actual codebase: Plugin interface (7 methods), HookAction as enum, executor actions all implemented (summary/output/upload/download/check), GitHub Artifacts store done, FileOutputWriter done, sentinel errors synced with code |
 | 1.2 | 2026-01-15 | Reorganized PRDs into framework/providers/terraform-plugin directories |
 | 1.1 | 2025-12-18 | Updated PRD with implementation status, documented additional components |

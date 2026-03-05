@@ -29,11 +29,13 @@ Terraform Command (plan/apply)
 
 ### Roles
 
-| Component | Role |
-|-----------|------|
-| **Executor** | Thin coordinator: registers providers and plugins, detects current CI provider, resolves artifact storage per plugin, passes `(provider, store, opts)` to plugin callbacks. API is an implementation detail. |
-| **Plugin** | Business logic owner: subscribes to events via callback-based `HookBinding`, receives `(provider, store, opts)`, decides what to do — parses output, renders templates, calls provider/store methods, handles errors |
-| **Provider** | Dumb I/O layer: `OutputWriter().WriteSummary(content)`, `OutputWriter().WriteOutput(key, value)`, `CreateCheckRun(ctx, opts)`, `UpdateCheckRun(ctx, opts)`. Does not render templates or know about terraform |
+> **Current implementation** uses enum-based dispatch (executor owns action logic). The target callback-based architecture would move action logic into plugins.
+
+| Component | Current Role | Target Role |
+|-----------|-------------|-------------|
+| **Executor** | Action dispatcher: detects platform, gets plugin + binding, builds context, dispatches actions by switching on `HookAction` enum. Self-contained action handlers (`executeSummaryAction`, `executeOutputAction`, etc.) | Thin coordinator: passes `(provider, store, opts)` to plugin callbacks |
+| **Plugin** | Data provider: 7 methods for parsing output, building context, getting variables, generating artifact keys. Does not execute actions directly | Business logic owner: subscribes to events via callbacks, receives `(provider, store, opts)`, owns all action logic |
+| **Provider** | I/O layer: `OutputWriter().WriteSummary(content)`, `OutputWriter().WriteOutput(key, value)`, `CreateCheckRun(ctx, opts)`, `UpdateCheckRun(ctx, opts)`. Does not render templates or know about terraform | Same |
 
 ### Plugin-Owns-Behavior Pattern
 
@@ -108,17 +110,18 @@ AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput
 
 > Note: `before.terraform.apply` does NOT have ActionCheck (no "Apply in progress" check run). `after.terraform.apply` does NOT have ActionCheck (no check run update after apply). These can be added later by modifying the plugin's `GetHookBindings()`.
 
-## Terraform Plugin Hook Bindings
+## Terraform Plugin Hook Bindings (IMPLEMENTED)
 
-Each plugin wires its own methods as callbacks — the generic Plugin interface has no terraform-specific methods:
+> **Current implementation**: Hook bindings use enum-based `Actions` (not callbacks). The executor dispatches actions by switching on the `HookAction` enum. See [Interfaces](./interfaces.md) for the actual `HookBinding` struct.
 
 ```go
-func (p *TerraformPlugin) GetHookBindings() []plugin.HookBinding {
+// pkg/ci/plugins/terraform/plugin.go — actual implementation
+func (p *Plugin) GetHookBindings() []plugin.HookBinding {
     return []plugin.HookBinding{
-        {Event: "before.terraform.plan",  Action: p.OnBeforePlan},
-        {Event: "after.terraform.plan",   Action: p.OnAfterPlan},
-        {Event: "before.terraform.apply", Action: p.OnBeforeApply},
-        {Event: "after.terraform.apply",  Action: p.OnAfterApply},
+        {Event: "before.terraform.plan",  Actions: []plugin.HookAction{plugin.ActionCheck}},
+        {Event: "after.terraform.plan",   Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck}, Template: "plan"},
+        {Event: "after.terraform.apply",  Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput}, Template: "apply"},
+        {Event: "before.terraform.apply", Actions: []plugin.HookAction{plugin.ActionDownload}},
     }
 }
 ```

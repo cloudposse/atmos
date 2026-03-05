@@ -12,24 +12,36 @@
 - Allow explicit override via `--ci` flag for local testing
 - Gracefully degrade when CI features unavailable (e.g., missing `$GITHUB_STEP_SUMMARY`)
 
-**`ci.enabled` is a hard kill switch:**
+**`ci.enabled` controls auto-detection gate:**
 
-`ci.enabled` in `atmos.yaml` controls whether native CI support is available at all. When `false`, all CI features are disabled — auto-detection is skipped and `--ci` flag is ignored.
+`ci.enabled` in `atmos.yaml` is a `bool` field (not `*bool`), so "unset" and `false` are identical (both `false`). The `RunCIHooks()` check in `pkg/hooks/hooks.go` is:
 
-| `ci.enabled` config | `--ci` flag | CI env detected | Result |
-|--------------------:|:-----------:|:---------------:|--------|
-| false | any | any | **CI disabled** — config is a hard kill switch |
-| true | true | any | CI enabled (detected provider or generic fallback) |
+```go
+if !forceCIMode && atmosConfig != nil && !atmosConfig.CI.Enabled {
+    return nil  // Skip CI hooks
+}
+```
+
+This means `--ci` flag (`forceCIMode`) **bypasses** the `ci.enabled` check. When `forceCIMode` is true, CI hooks run regardless of `ci.enabled`.
+
+> **Note**: The `--ci` flag is bound to `CI` and `ATMOS_CI` env vars via `flags.WithEnvVars("ci", "ATMOS_CI", "CI")`. In CI environments where `CI=true` is set (GitHub Actions, GitLab CI, etc.), `forceCIMode` is automatically true.
+
+| `ci.enabled` config | `--ci` flag / `CI` env var | Platform detected | Result |
+|--------------------:|:--------------------------:|:-----------------:|--------|
+| false/unset | true | yes | CI enabled (detected provider) |
+| false/unset | true | no | CI enabled (generic fallback) |
+| false/unset | false | any | **CI disabled** (both gates fail) |
+| true | true | yes | CI enabled (detected provider) |
+| true | true | no | CI enabled (generic fallback) |
 | true | false | yes | CI enabled (auto-detected provider) |
 | true | false | no | CI disabled (no provider available) |
-| unset (default) | true | any | CI enabled (default is enabled) |
-| unset (default) | false | yes | CI enabled (auto-detected) |
-| unset (default) | false | no | CI disabled |
+
+> **Design note**: The original PRD intended `ci.enabled: false` to be a "hard kill switch" that overrides `--ci`. The current implementation does not enforce this — `--ci` always bypasses `ci.enabled`. This may be revisited in a future refactoring to use `*bool` for `Enabled` and check it independently of `forceCIMode`.
 
 **Validation**:
-- Running in GitHub Actions automatically enables CI mode (when `ci.enabled` is not `false`)
+- Running in GitHub Actions automatically enables CI mode (via `CI=true` env var → `--ci` flag)
 - Running locally with `--ci` produces identical output format
-- `ci.enabled: false` disables CI even in CI environments, even with `--ci` flag
+- `ci.enabled: false` without `--ci` disables CI hooks (but `--ci` bypasses this check)
 - Missing CI environment variables do not cause errors
 
 ## FR-7: Command Parity
