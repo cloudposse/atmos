@@ -1108,15 +1108,15 @@ type ConfigSources map[string]map[string]ConfigSourcesItem
 // Atmos vendoring (`vendor.yaml` file)
 
 type AtmosVendorSource struct {
-	Component     string       `yaml:"component" json:"component" mapstructure:"component"`
-	Source        string       `yaml:"source" json:"source" mapstructure:"source"`
-	Version       string       `yaml:"version" json:"version" mapstructure:"version"`
-	File          string       `yaml:"file" json:"file" mapstructure:"file"`
-	Targets       []string     `yaml:"targets" json:"targets" mapstructure:"targets"`
-	IncludedPaths []string     `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
-	ExcludedPaths []string     `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
-	Tags          []string     `yaml:"tags" json:"tags" mapstructure:"tags"`
-	Retry         *RetryConfig `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
+	Component     string             `yaml:"component" json:"component" mapstructure:"component"`
+	Source        string             `yaml:"source" json:"source" mapstructure:"source"`
+	Version       string             `yaml:"version" json:"version" mapstructure:"version"`
+	File          string             `yaml:"file" json:"file" mapstructure:"file"`
+	Targets       AtmosVendorTargets `yaml:"targets" json:"targets" mapstructure:"targets"`
+	IncludedPaths []string           `yaml:"included_paths,omitempty" json:"included_paths,omitempty" mapstructure:"included_paths"`
+	ExcludedPaths []string           `yaml:"excluded_paths,omitempty" json:"excluded_paths,omitempty" mapstructure:"excluded_paths"`
+	Tags          []string           `yaml:"tags" json:"tags" mapstructure:"tags"`
+	Retry         *RetryConfig       `yaml:"retry,omitempty" json:"retry,omitempty" mapstructure:"retry"`
 }
 
 type AtmosVendorSpec struct {

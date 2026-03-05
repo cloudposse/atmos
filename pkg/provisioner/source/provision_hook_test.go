@@ -189,6 +189,61 @@ func TestIsWorkdirEnabled(t *testing.T) {
 	}
 }
 
+// TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent tests that the JIT source
+// provisioner uses atmos_component (instance name) for the workdir path, not the base component.
+// This prevents workdir mismatch when metadata.component differs from the instance name.
+func TestDetermineSourceTargetDirectory_WorkdirUsesAtmosComponent(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack":     "demo-dev",
+		"atmos_component": "demo-cluster-codepipeline-iac",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	// Pass base component name, expect workdir to use atmos_component (instance name).
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(
+		atmosConfig, "terraform", "demo-cluster-codepipeline", componentConfig,
+	)
+	require.NoError(t, err)
+	assert.True(t, isWorkdir)
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "demo-dev-demo-cluster-codepipeline-iac")
+	assert.Equal(t, expected, targetDir)
+}
+
+// TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent tests that when
+// atmos_component is not set, the workdir path falls back to the passed component name.
+func TestDetermineSourceTargetDirectory_WorkdirFallsBackToComponent(t *testing.T) {
+	tempDir := t.TempDir()
+	atmosConfig := &schema.AtmosConfiguration{
+		BasePath: tempDir,
+	}
+
+	componentConfig := map[string]any{
+		"atmos_stack": "dev",
+		"provision": map[string]any{
+			"workdir": map[string]any{
+				"enabled": true,
+			},
+		},
+	}
+
+	targetDir, isWorkdir, err := determineSourceTargetDirectory(
+		atmosConfig, "terraform", "vpc", componentConfig,
+	)
+	require.NoError(t, err)
+	assert.True(t, isWorkdir)
+	expected := filepath.Join(tempDir, workdir.WorkdirPath, "terraform", "dev-vpc")
+	assert.Equal(t, expected, targetDir)
+}
+
 func TestNeedsProvisioning(t *testing.T) {
 	sourceSpec := &schema.VendorComponentSource{
 		Uri:     "github.com/test/repo//src",
