@@ -60,7 +60,6 @@ func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 	var buf bytes.Buffer
 	_, copyErr := goio.Copy(&buf, r)
 	require.NoError(t, copyErr)
-	os.Stdout = oldStdout
 
 	require.NoError(t, err)
 	output := buf.String()
