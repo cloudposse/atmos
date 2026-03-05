@@ -219,7 +219,7 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | `pkg/schema/schema.go` | Add `CI CIConfig` field; add `PlanfilesConfig` with `Priority`, `Stores`, `Default` | Done |
 | `cmd/root.go` | Add blank import `_ "github.com/cloudposse/atmos/cmd/ci"` for registry | Done |
 | `cmd/terraform/terraform.go` | Register planfile subcommand (`planfile.PlanfileCmd`) | Done |
-| `errors/errors.go` | Add CI + artifact + planfile sentinel errors (22 total) | Done |
+| `errors/errors.go` | Add CI + artifact + planfile + AWS sentinel errors (31 total) | Done |
 | `internal/exec/clean_adapter_funcs.go` | Export `ConstructTerraformComponentPlanfilePath()` for planfile upload | Done |
 | `cmd/terraform/plan.go` | Add `--ci` and `--skip-planfile` flags, full CI output capture + hook dispatch | Done |
 | `cmd/terraform/apply.go` | Add `--ci` flag with env var bindings (`ATMOS_CI`, `CI`); `PostRunE` fires CI hooks (empty output) | Done (partial) |
@@ -266,6 +266,7 @@ ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
 ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
 ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
 ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
+ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")
 
 // GitHub errors
 ErrGitHubTokenNotFound = errors.New("GitHub token not found")
@@ -410,6 +411,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.2 | 2026-03-05 | Eleventh sync pass: added missing `ErrAWSConfigLoadFailed` to sentinel errors list, fixed error count (31 total, was 22). Documented critical wiring gap: `apply.go` has no `PreRunE` so `before.terraform.apply` (download planfile) never fires — added notes to ci-detection.md and hooks-integration.md. `deploy.go` has no `--ci` flag at all. All code verified unchanged since last sync. |
 | 2.1 | 2026-03-05 | Tenth sync pass: detailed apply.go CI integration status — PostRunE fires CI hooks (Done, but with empty output), PreRunE for before.terraform.apply download (Not Started), output capture (Not Started), error defer (Not Started). Fixed describe-affected-matrix.md: MatrixEntry has 4 fields (component, stack, component_path, component_type), not 2 as previously documented. |
 | 2.0 | 2026-03-05 | Ninth sync pass: verified full codebase against PRD. Added: `--ci` flag on `terraform apply` (Done — flag + env vars defined), apply CI hooks integration (Not Started — flag exists but no output capture/CI hook dispatch like plan.go). All other statuses confirmed accurate. |
 | 1.9 | 2026-03-05 | Eighth sync pass: added "current vs target" qualifier to overview.md NFR-2 (upload/download failure currently warn-only, not fatal); verified configuration schema fields, artifact metadata fields, executor sync.Map/check function names, ConstructTerraformComponentPlanfilePath — all correct |

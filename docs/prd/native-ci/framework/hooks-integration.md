@@ -110,6 +110,8 @@ AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput
 
 > Note: `before.terraform.apply` does NOT have ActionCheck (no "Apply in progress" check run). `after.terraform.apply` does NOT have ActionCheck (no check run update after apply). These can be added later by modifying the plugin's `GetHookBindings()`.
 
+> **Wiring gap**: While the terraform plugin defines a `before.terraform.apply` binding for `ActionDownload`, `apply.go` does NOT have a `PreRunE` — so `before.terraform.apply` hooks are **never triggered**. Additionally, `apply.go`'s `PostRunE` fires `after.terraform.apply` but passes empty output (no stdout/stderr capture). The `plan.go` command is fully wired (PreRunE, output capture, error defer); `apply.go` needs the same treatment to complete CI integration.
+
 ## Terraform Plugin Hook Bindings (IMPLEMENTED)
 
 > **Current implementation**: Hook bindings use enum-based `Actions` (not callbacks). The executor dispatches actions by switching on the `HookAction` enum. See [Interfaces](./interfaces.md) for the actual `HookBinding` struct.

@@ -84,6 +84,8 @@ AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput
 
 This keeps CI behaviors modular — each plugin defines its own hook bindings.
 
+> **Current wiring status**: `plan.go` fully wires all CI lifecycle: `PreRunE` fires `before.terraform.plan`, `PostRunE` fires `after.terraform.plan` with captured output, and an error defer updates check runs on failure. `apply.go` only partially wires CI: `PostRunE` fires `after.terraform.apply` but with empty output (no stdout/stderr capture), and there is **no `PreRunE`** — meaning `before.terraform.apply` (download planfile) is **never triggered**. Apply also lacks the error defer for check run failure updates. `deploy.go` has no `--ci` flag at all — its `PostRunE` fires `after.terraform.apply` via `runHooks()` but CI hooks only activate if `ci.enabled: true` (since there's no `--ci` flag to force CI mode).
+
 ## Flag Changes
 
 **Terraform (persistent):**
