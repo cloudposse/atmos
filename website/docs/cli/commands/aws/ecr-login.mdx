@@ -1,8 +1,8 @@
 ---
-title: atmos auth ecr-login
-sidebar_label: ecr-login
+title: atmos aws ecr login
+sidebar_label: ecr login
 sidebar_class_name: command
-sidebar_position: 4
+sidebar_position: 2
 id: ecr-login
 description: Login to AWS ECR registries using Atmos integrations or explicit registry URLs.
 ---
@@ -13,28 +13,28 @@ import Intro from '@site/src/components/Intro'
 Login to AWS Elastic Container Registry (ECR) using a named integration, an identity's linked integrations, or explicit registry URLs. This command writes Docker credentials to the standard Docker config location.
 </Intro>
 
-<Screengrab title="atmos auth ecr-login --help" slug="atmos-auth-ecr-login--help" />
+<Screengrab title="atmos aws ecr login --help" slug="atmos-aws-ecr-login--help" />
 
 ## Usage
 
 ```shell
-atmos auth ecr-login [integration] [flags]
+atmos aws ecr login [integration] [flags]
 ```
 
 ## Examples
 
 ```shell
 # Login using a named integration
-atmos auth ecr-login dev/ecr/primary
+atmos aws ecr login dev/ecr/primary
 
 # Login using an identity's linked integrations
-atmos auth ecr-login --identity dev-admin
+atmos aws ecr login --identity dev-admin
 
 # Login with explicit registry URL (uses current AWS credentials)
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com
 
 # Login to multiple explicit registries
-atmos auth ecr-login \
+atmos aws ecr login \
   --registry 123456789012.dkr.ecr.us-east-1.amazonaws.com \
   --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
 ```
@@ -158,7 +158,7 @@ If you need isolated credentials, set `DOCKER_CONFIG` before running the command
 
 ```bash
 export DOCKER_CONFIG=~/.config/atmos/docker
-atmos auth ecr-login dev/ecr
+atmos aws ecr login dev/ecr
 ```
 
 ## Auto-Provisioning
@@ -183,7 +183,7 @@ integrations:
     via:
       identity: dev-admin
     spec:
-      auto_provision: false  # Only triggered via explicit ecr-login command
+      auto_provision: false  # Only triggered via explicit `atmos aws ecr login` command
       registry:
         account_id: "123456789012"
         region: eu-west-1

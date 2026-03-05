@@ -1,4 +1,4 @@
-package cmd
+package ecr
 
 import (
 	"context"
@@ -20,9 +20,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/ui"
 )
 
-// authECRLoginCmd logs in to AWS ECR registries.
-var authECRLoginCmd = &cobra.Command{
-	Use:   "ecr-login [integration]",
+// loginCmd logs in to AWS ECR registries.
+var loginCmd = &cobra.Command{
+	Use:   "login [integration]",
 	Short: "Login to AWS ECR registries",
 	Long: `Login to AWS ECR registries using a named integration or identity.
 
@@ -32,28 +32,26 @@ to override with explicit registry URLs.
 
 Examples:
   # Login using a named integration
-  atmos auth ecr-login dev/ecr
+  atmos aws ecr login dev/ecr
 
   # Login using an identity's linked integrations
-  atmos auth ecr-login --identity dev-admin
+  atmos aws ecr login --identity dev-admin
 
   # Override with explicit registry URL
-  atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com`,
+  atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com`,
 
 	FParseErrWhitelist: struct{ UnknownFlags bool }{UnknownFlags: false},
 	Args:               cobra.MaximumNArgs(1),
-	RunE:               executeAuthECRLoginCommand,
+	RunE:               executeLoginCommand,
 }
 
-func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
-	handleHelpRequest(cmd, args)
-
+func executeLoginCommand(cmd *cobra.Command, args []string) error {
 	// Load atmos config.
 	atmosConfig, err := cfg.InitCliConfig(schema.ConfigAndStacksInfo{}, false)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitConfig, err)
 	}
-	defer perf.Track(&atmosConfig, "cmd.executeAuthECRLoginCommand")()
+	defer perf.Track(&atmosConfig, "aws.ecr.executeLoginCommand")()
 
 	ctx := context.Background()
 
@@ -73,7 +71,7 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 	}
 
 	// Cases 2 & 3 require auth manager.
-	authManager, err := createECRAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
+	authManager, err := createAuthManager(&atmosConfig.Auth, atmosConfig.CliConfigPath)
 	if err != nil {
 		return fmt.Errorf(errUtils.ErrWrapFormat, errUtils.ErrFailedToInitializeAuthManager, err)
 	}
@@ -95,7 +93,7 @@ func executeAuthECRLoginCommand(cmd *cobra.Command, args []string) error {
 // executeExplicitRegistries performs ECR login for explicit registry URLs.
 // This uses the current AWS credentials from the environment (not Atmos identities).
 func executeExplicitRegistries(ctx context.Context, registries []string) error {
-	defer perf.Track(nil, "cmd.executeExplicitRegistries")()
+	defer perf.Track(nil, "aws.ecr.executeExplicitRegistries")()
 
 	// Load AWS credentials from environment.
 	creds, err := awsCloud.LoadDefaultAWSCredentials(ctx)
@@ -113,7 +111,7 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	for _, registry := range registries {
 		accountID, region, err := awsCloud.ParseRegistryURL(registry)
 		if err != nil {
-			return err // ParseRegistryURL already wraps with ErrECRInvalidRegistry
+			return err // ParseRegistryURL already wraps with ErrECRInvalidRegistry.
 		}
 
 		result, err := awsCloud.GetAuthorizationToken(ctx, creds, accountID, region)
@@ -137,8 +135,8 @@ func executeExplicitRegistries(ctx context.Context, registries []string) error {
 	return nil
 }
 
-// createECRAuthManager creates a new auth manager for ECR operations.
-func createECRAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
+// createAuthManager creates a new auth manager for ECR operations.
+func createAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (auth.AuthManager, error) {
 	authStackInfo := &schema.ConfigAndStacksInfo{
 		AuthContext: &schema.AuthContext{},
 	}
@@ -149,8 +147,18 @@ func createECRAuthManager(authConfig *schema.AuthConfig, cliConfigPath string) (
 }
 
 func init() {
-	// Note: --identity is already a persistent flag on authCmd.
-	// We add --registry as a local flag specific to ecr-login.
-	authECRLoginCmd.Flags().StringArrayP("registry", "r", nil, "ECR registry URL(s) - explicit mode")
-	authCmd.AddCommand(authECRLoginCmd)
+	// Add --identity flag locally since this command is outside the auth command tree.
+	loginCmd.Flags().StringP("identity", "i", "", "Specify the target identity to assume. Use without value to interactively select.")
+
+	// Set NoOptDefVal to enable optional flag value.
+	// When --identity is used without a value, it will receive IdentityFlagSelectValue.
+	identityFlag := loginCmd.Flags().Lookup("identity")
+	if identityFlag != nil {
+		identityFlag.NoOptDefVal = cfg.IdentityFlagSelectValue
+	}
+
+	// Add --registry as a local flag specific to login.
+	loginCmd.Flags().StringArrayP("registry", "r", nil, "ECR registry URL(s) - explicit mode")
+
+	EcrCmd.AddCommand(loginCmd)
 }

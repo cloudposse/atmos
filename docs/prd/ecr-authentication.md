@@ -63,7 +63,7 @@ $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 **Desired Experience (Explicit command with integration name):**
 ```bash
 # Explicitly login to ECR using a named integration
-$ atmos auth ecr-login dev/ecr
+$ atmos aws ecr login dev/ecr
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
@@ -73,7 +73,7 @@ $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 **Desired Experience (Explicit command with identity flag):**
 ```bash
 # Explicitly login to ECR using an identity's linked integrations
-$ atmos auth ecr-login --identity dev-admin
+$ atmos aws ecr login --identity dev-admin
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
@@ -168,20 +168,20 @@ Each integration defines a single registry rather than a list. This approach:
 
 ### 2. Commands
 
-#### `atmos auth ecr-login`
+#### `atmos aws ecr login`
 
 ```bash
 # Login using a named integration
-atmos auth ecr-login dev/ecr
+atmos aws ecr login dev/ecr
 
 # Login using an identity's linked integrations
-atmos auth ecr-login --identity dev-admin
+atmos aws ecr login --identity dev-admin
 
 # Override with explicit registry (uses current AWS credentials)
-atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
 
 # Multiple explicit registries
-atmos auth ecr-login \
+atmos aws ecr login \
   --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com \
   --registry 987654321098.dkr.ecr.us-west-2.amazonaws.com
 ```
@@ -229,7 +229,7 @@ atmos auth ecr-login \
 ```text
 ┌─────────────────────────────────────────────────────────────────┐
 │ 1. User Executes Command                                        │
-│    $ atmos auth ecr-login dev/ecr                               │
+│    $ atmos aws ecr login dev/ecr                               │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
@@ -276,8 +276,9 @@ pkg/auth/
 │       └── ecr.go              # ECR integration implementation
 └── ecr_login.go                # Standalone command implementation
 
-cmd/auth/
-└── ecr_login.go                # atmos auth ecr-login command
+cmd/aws/ecr/
+├── ecr.go                      # ECR parent command
+└── login.go                    # atmos aws ecr login command
 ```
 
 #### 4.2 Integration Interface
@@ -549,13 +550,13 @@ var ecrLoginCmd = &cobra.Command{
 
 Examples:
   # Login using a named integration
-  atmos auth ecr-login dev/ecr
+  atmos aws ecr login dev/ecr
 
   # Login using an identity's linked integrations
-  atmos auth ecr-login --identity dev-admin
+  atmos aws ecr login --identity dev-admin
 
   # Override with explicit registry URL
-  atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com`,
+  atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com`,
     Args: cobra.MaximumNArgs(1),
     RunE: func(cmd *cobra.Command, args []string) error {
         var integrationName string
@@ -788,7 +789,7 @@ Status: Downloaded newer image for my-app:latest
 
 ```bash
 # Login using a named integration
-$ atmos auth ecr-login dev/ecr
+$ atmos aws ecr login dev/ecr
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
@@ -798,7 +799,7 @@ $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 
 ```bash
 # Login using an identity's linked integrations
-$ atmos auth ecr-login --identity dev-admin
+$ atmos aws ecr login --identity dev-admin
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 
 $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
@@ -808,7 +809,7 @@ $ docker pull 123456789012.dkr.ecr.us-east-2.amazonaws.com/my-app:latest
 
 ```bash
 # Override with explicit registry URL (uses current AWS credentials)
-$ atmos auth ecr-login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
+$ atmos aws ecr login --registry 123456789012.dkr.ecr.us-east-2.amazonaws.com
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 ```
 
@@ -846,7 +847,7 @@ $ atmos auth login devops-admin
 ✓ ECR login: 987654321098.dkr.ecr.us-west-2.amazonaws.com (expires in 12h)
 
 # Or explicitly trigger specific integration
-$ atmos auth ecr-login all-envs/ecr/primary
+$ atmos aws ecr login all-envs/ecr/primary
 ✓ ECR login: 123456789012.dkr.ecr.us-east-2.amazonaws.com (expires in 12h)
 ```
 
@@ -866,7 +867,7 @@ jobs:
           atmos auth login aws-ci
 
           # Option B: Explicit integration login
-          atmos auth ecr-login ci/ecr
+          atmos aws ecr login ci/ecr
 
       - name: Build and Push
         run: |
@@ -902,20 +903,20 @@ jobs:
 - [x] Unit tests for ECR token fetcher (`pkg/auth/cloud/aws/ecr_test.go`)
 - [x] Unit tests for ECR integration (`pkg/auth/integrations/aws/ecr_test.go`)
 - [x] Unit tests for manager integration methods (`pkg/auth/manager_integrations_test.go`)
-- [x] Unit tests for `atmos auth ecr-login` command (`cmd/auth_ecr_login_test.go`)
+- [x] Unit tests for `atmos aws ecr login` command (`cmd/auth_ecr_login_test.go`)
 
 ### Phase 6: Documentation
 - [ ] Update `website/docs/cli/commands/auth/login.mdx`
-- [ ] Add `website/docs/cli/commands/auth/ecr-login.mdx`
+- [ ] Add `website/docs/cli/commands/aws/ecr-login.mdx`
 - [ ] Add integration configuration examples to auth docs
 
 ## Success Criteria
 
 1. ✅ `auth.integrations` schema validated and documented
 2. ✅ `atmos auth login <identity>` with linked integrations triggers ECR login
-3. ✅ `atmos auth ecr-login <integration>` works with named integration
-4. ✅ `atmos auth ecr-login --identity <name>` triggers identity's integrations
-5. ✅ `atmos auth ecr-login --registry <url>` works with explicit registries
+3. ✅ `atmos aws ecr login <integration>` works with named integration
+4. ✅ `atmos aws ecr login --identity <name>` triggers identity's integrations
+5. ✅ `atmos aws ecr login --registry <url>` works with explicit registries
 6. ✅ Docker commands use Atmos-managed credentials via `DOCKER_CONFIG`
 7. ✅ Multi-registry support works correctly
 8. ✅ Integration failures don't block identity authentication
