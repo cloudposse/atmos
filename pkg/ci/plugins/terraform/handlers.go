@@ -124,7 +124,7 @@ func (p *Plugin) parseOutputWithError(ctx *plugin.HookContext) *plugin.OutputRes
 }
 
 // writeSummary renders and writes the CI job summary.
-func (p *Plugin) writeSummary(ctx *plugin.HookContext, result *plugin.OutputResult) (string, error) {
+func (p *Plugin) writeSummary(ctx *plugin.HookContext, _ *plugin.OutputResult) (string, error) {
 	defer perf.Track(ctx.Config, "terraform.Plugin.writeSummary")()
 
 	// Get template name - prefer config override, fall back to command name.

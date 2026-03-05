@@ -99,7 +99,7 @@ func (p *Plugin) buildTemplateContext(
 }
 
 // getOutputVariables returns CI output variables for a command.
-func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string) map[string]string {
+func (p *Plugin) getOutputVariables(result *plugin.OutputResult, _ string) map[string]string {
 	defer perf.Track(nil, "terraform.Plugin.getOutputVariables")()
 
 	vars := make(map[string]string)
@@ -128,7 +128,7 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string)
 }
 
 // getArtifactKey generates the artifact storage key for a command.
-func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, command string) string {
+func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, _ string) string {
 	defer perf.Track(nil, "terraform.Plugin.getArtifactKey")()
 
 	// Validate required fields.
