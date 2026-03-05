@@ -23,25 +23,25 @@ atmos describe affected --format=matrix
 atmos describe affected --format=matrix --output-file="$GITHUB_OUTPUT"
 ```
 
-**Output Format** (fixed schema — `component` and `stack` fields only):
+**Output Format** (fixed schema — `component`, `stack`, `component_path`, `component_type` fields):
 ```json
-{"include":[{"component":"vpc","stack":"dev"},{"component":"eks","stack":"dev"}]}
+{"include":[{"component":"vpc","stack":"dev","component_path":"components/terraform/vpc","component_type":"terraform"},{"component":"eks","stack":"dev","component_path":"components/terraform/eks","component_type":"terraform"}]}
 ```
 
-> **Design Decision**: The matrix uses a fixed schema with only `component` and `stack` fields. Additional fields (like `component_path`) are not included — users can derive them from atmos configuration. This keeps the matrix simple and avoids schema bloat.
+> **Design Decision**: The matrix includes `component`, `stack`, `component_path`, and `component_type` fields. The `component_path` and `component_type` fields are included for convenience in downstream workflow steps.
 
 ## GitHub Actions Integration
 
 Output (stdout):
 
 ```json
-{"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
+{"include":[{"component":"vpc","stack":"plat-ue2-dev","component_path":"components/terraform/vpc","component_type":"terraform"},{"component":"eks","stack":"plat-ue2-dev","component_path":"components/terraform/eks","component_type":"terraform"}]}
 ```
 
 Output ($GITHUB_OUTPUT — two variables written):
 
 ```
-matrix={"include":[{"component":"vpc","stack":"plat-ue2-dev"},{"component":"eks","stack":"plat-ue2-dev"}]}
+matrix={"include":[{"component":"vpc","stack":"plat-ue2-dev","component_path":"components/terraform/vpc","component_type":"terraform"},{"component":"eks","stack":"plat-ue2-dev","component_path":"components/terraform/eks","component_type":"terraform"}]}
 affected_count=2
 ```
 

@@ -40,8 +40,11 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 8. Summary action (`executeSummaryAction`) — renders template, writes to `$GITHUB_STEP_SUMMARY` — Done
 9. Output action (`executeOutputAction`) — writes variables to `$GITHUB_OUTPUT` with whitelist filtering — Done
 10. `--ci` flag on `terraform apply` command — Done (flag defined with env var bindings `ATMOS_CI`, `CI`)
-11. Apply CI hooks integration (output capture + hook dispatch like plan) — Not Started (flag exists but PostRunE only calls basic hooks, no CI output capture)
-12. `--verify-plan` using plan-diff — Not Started
+11. Apply `PostRunE` calls `runHooks(h.AfterTerraformApply)` — Done (CI hooks fire via `runHooksWithOutput` but with empty output string)
+12. Apply `PreRunE` for `before.terraform.apply` (triggers `ActionDownload` for planfile) — Not Started (no PreRunE defined on applyCmd)
+13. Apply output capture (stdout/stderr capture like plan.go) — Not Started (no `WithStdoutCapture`/`WithStderrCapture` in apply RunE)
+14. Apply error defer (update check runs to failure on error, like plan.go) — Not Started (no defer calling `runHooksOnErrorWithOutput`)
+15. `--verify-plan` using plan-diff — Not Started
 
 > **Future refactoring**: The hooks-integration.md PRD describes a callback-based pattern where plugins own all logic via `HookAction` function callbacks. The current enum-based approach works but the executor is a "god-object" that knows about all action types. Refactoring to callbacks would move action logic into plugins for better separation of concerns.
 
@@ -107,7 +110,10 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | | `OutputHelpers` — `WritePlanOutputs()`, `WriteApplyOutputs()` | Done | |
 | | Config-based action enable/disable (`isActionEnabled()`) | Done | |
 | | `--ci` flag on `terraform apply` (flag + env var bindings) | Done | |
-| | Apply CI hooks integration (output capture + hook dispatch) | Not Started | |
+| | Apply `PostRunE` → `runHooks(h.AfterTerraformApply)` (CI hooks fire, empty output) | Done | |
+| | Apply `PreRunE` for `before.terraform.apply` (download planfile) | Not Started | |
+| | Apply output capture (stdout/stderr like plan.go) | Not Started | |
+| | Apply error defer (check run failure update like plan.go) | Not Started | |
 | | `--verify-plan` using plan-diff | Not Started | |
 | **Phase 4** | PR Comments & TF Output Export | Not Started | 0% |
 | | PR comment action type | Not Started | |
@@ -216,8 +222,8 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | `errors/errors.go` | Add CI + artifact + planfile sentinel errors (22 total) | Done |
 | `internal/exec/clean_adapter_funcs.go` | Export `ConstructTerraformComponentPlanfilePath()` for planfile upload | Done |
 | `cmd/terraform/plan.go` | Add `--ci` and `--skip-planfile` flags, full CI output capture + hook dispatch | Done |
-| `cmd/terraform/apply.go` | Add `--ci` flag with env var bindings (`ATMOS_CI`, `CI`) | Done (flag only) |
-| `cmd/terraform/apply.go` | CI output capture + CI hook dispatch (like plan.go) | Not Started |
+| `cmd/terraform/apply.go` | Add `--ci` flag with env var bindings (`ATMOS_CI`, `CI`); `PostRunE` fires CI hooks (empty output) | Done (partial) |
+| `cmd/terraform/apply.go` | `PreRunE` for `before.terraform.apply` (download), output capture, error defer | Not Started |
 | `cmd/describe_affected.go` | Add `--format=matrix` support | Done |
 | `internal/exec/describe_affected.go` | Implement matrix format output (`MatrixOutput`, `MatrixEntry`, `writeMatrixOutput`) | Done |
 | `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
@@ -404,6 +410,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 2.1 | 2026-03-05 | Tenth sync pass: detailed apply.go CI integration status — PostRunE fires CI hooks (Done, but with empty output), PreRunE for before.terraform.apply download (Not Started), output capture (Not Started), error defer (Not Started). Fixed describe-affected-matrix.md: MatrixEntry has 4 fields (component, stack, component_path, component_type), not 2 as previously documented. |
 | 2.0 | 2026-03-05 | Ninth sync pass: verified full codebase against PRD. Added: `--ci` flag on `terraform apply` (Done — flag + env vars defined), apply CI hooks integration (Not Started — flag exists but no output capture/CI hook dispatch like plan.go). All other statuses confirmed accurate. |
 | 1.9 | 2026-03-05 | Eighth sync pass: added "current vs target" qualifier to overview.md NFR-2 (upload/download failure currently warn-only, not fatal); verified configuration schema fields, artifact metadata fields, executor sync.Map/check function names, ConstructTerraformComponentPlanfilePath — all correct |
 | 1.8 | 2026-03-05 | Seventh sync pass: fixed artifact-storage.md scope (upload IS a CLI command, all 5 subcommands implemented); fixed ci-detection.md RunCIHooks() location (defined in pkg/hooks/hooks.go, called from cmd/terraform/utils.go); added missing IsExperimental() to provider.md CICommandProvider snippet |
