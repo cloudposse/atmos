@@ -2,6 +2,11 @@
 package list
 
 import (
+	"bytes"
+	goio "io"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -361,7 +366,8 @@ func TestExecuteListMetadataCmd(t *testing.T) {
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
 
-	fixturePath := "../../tests/fixtures/scenarios/complete"
+	fixturePath, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
+	require.NoError(t, err)
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
 
 	cmd := &cobra.Command{}
@@ -375,14 +381,15 @@ func TestExecuteListMetadataCmd(t *testing.T) {
 	assert.NoError(t, err)
 }
 
-// TestExecuteListMetadataCmd_WithStackPattern tests that --stack pattern is respected.
+// TestExecuteListMetadataCmd_WithStackPattern tests that --stack filters output to the target stack.
 func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 	ioCtx, err := iolib.NewContext()
 	require.NoError(t, err)
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
 
-	fixturePath := "../../tests/fixtures/scenarios/complete"
+	fixturePath, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
+	require.NoError(t, err)
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
 
 	cmd := &cobra.Command{}
@@ -392,10 +399,32 @@ func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 		BasePath: fixturePath,
 	}
 
+	// Capture stdout to assert filtering behavior.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
 	err = ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{
 		Stack: "tenant1-ue2-dev",
 	})
-	assert.NoError(t, err)
+
+	_ = w.Close()
+	var buf bytes.Buffer
+	_, _ = goio.Copy(&buf, r)
+	os.Stdout = oldStdout
+
+	require.NoError(t, err)
+	output := buf.String()
+
+	// Every data row must belong to the requested stack.
+	assert.NotEmpty(t, output, "expected non-empty output for tenant1-ue2-dev")
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		assert.Contains(t, line, "tenant1-ue2-dev", "unexpected stack in output line: %q", line)
+	}
 }
 
 // TestExecuteListMetadataCmd_InvalidConfig tests error handling for invalid config.
@@ -404,7 +433,7 @@ func TestExecuteListMetadataCmd_InvalidConfig(t *testing.T) {
 	cmd.Flags().String("format", "table", "Output format")
 
 	info := &schema.ConfigAndStacksInfo{
-		BasePath: "/nonexistent/path",
+		BasePath: filepath.Join(t.TempDir(), "nonexistent", "path"),
 	}
 
 	err := ExecuteListMetadataCmd(info, cmd, []string{}, &MetadataOptions{})

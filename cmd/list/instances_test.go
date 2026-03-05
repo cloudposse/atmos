@@ -1,7 +1,11 @@
 package list
 
 import (
+	"bytes"
+	goio "io"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/cobra"
@@ -303,9 +307,7 @@ func TestExecuteListInstancesCmd_ProvenanceWithTree(t *testing.T) {
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
-	// This requires a valid fixture to initialize config.
-	fixtureRelPath := "../../tests/fixtures/scenarios/complete"
-	fixturePath, err := filepath.Abs(fixtureRelPath)
+	fixturePath, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
 	require.NoError(t, err)
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
 
@@ -339,15 +341,12 @@ func TestExecuteListInstancesCmd_ProvenanceWithTree(t *testing.T) {
 	}
 }
 
-// TestExecuteListInstancesCmd_WithStackPattern tests that --stack pattern is forwarded to the command.
+// TestExecuteListInstancesCmd_WithStackPattern tests that --stack filters output to the target stack.
 func TestExecuteListInstancesCmd_WithStackPattern(t *testing.T) {
-	// Reset Viper to avoid state contamination from other tests.
 	viper.Reset()
 	t.Cleanup(viper.Reset)
 
-	// This requires a valid fixture to initialize config.
-	fixtureRelPath := "../../tests/fixtures/scenarios/complete"
-	fixturePath, err := filepath.Abs(fixtureRelPath)
+	fixturePath, err := filepath.Abs(filepath.Join("..", "..", "tests", "fixtures", "scenarios", "complete"))
 	require.NoError(t, err)
 	tests.RequireFilePath(t, fixturePath, "test fixture directory")
 
@@ -356,13 +355,10 @@ func TestExecuteListInstancesCmd_WithStackPattern(t *testing.T) {
 	ui.InitFormatter(ioCtx)
 	data.InitWriter(ioCtx)
 
-	// Register instance flags and add base-path flag pointing to the fixture.
 	cmd := &cobra.Command{}
 	instancesParser.RegisterFlags(cmd)
 	cmd.Flags().String("base-path", "", "Base path")
 	require.NoError(t, cmd.Flags().Set("base-path", fixturePath))
-
-	// Also need config, config-path, and profile flags required by ProcessCommandLineArgs.
 	cmd.Flags().StringSlice("config", []string{}, "Config files")
 	cmd.Flags().StringSlice("config-path", []string{}, "Config paths")
 	cmd.Flags().StringSlice("profile", []string{}, "Profiles")
@@ -372,9 +368,30 @@ func TestExecuteListInstancesCmd_WithStackPattern(t *testing.T) {
 		Stack:  "tenant1-ue2-dev",
 	}
 
-	// Should succeed with a valid stack pattern and fixture.
+	// Capture stdout to assert filtering behavior.
+	oldStdout := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+
 	err = executeListInstancesCmd(cmd, []string{}, opts)
-	assert.NoError(t, err)
+
+	_ = w.Close()
+	var buf bytes.Buffer
+	_, _ = goio.Copy(&buf, r)
+	os.Stdout = oldStdout
+
+	require.NoError(t, err)
+	output := buf.String()
+
+	// Every data row must belong to the requested stack.
+	assert.NotEmpty(t, output, "expected non-empty output for tenant1-ue2-dev")
+	for _, line := range strings.Split(strings.TrimSpace(output), "\n") {
+		if line == "" {
+			continue
+		}
+		assert.Contains(t, line, "tenant1-ue2-dev", "unexpected stack in output line: %q", line)
+	}
 }
 
 // TestExecuteListInstancesCmd_InvalidBasePath tests error handling for invalid base path.
@@ -386,7 +403,7 @@ func TestExecuteListInstancesCmd_InvalidBasePath(t *testing.T) {
 	cmd := &cobra.Command{}
 	instancesParser.RegisterFlags(cmd)
 	cmd.Flags().String("base-path", "", "Base path")
-	require.NoError(t, cmd.Flags().Set("base-path", "/nonexistent/path"))
+	require.NoError(t, cmd.Flags().Set("base-path", filepath.Join(t.TempDir(), "nonexistent", "path")))
 
 	// Also need config, config-path, and profile flags required by ProcessCommandLineArgs.
 	cmd.Flags().StringSlice("config", []string{}, "Config files")
