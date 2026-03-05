@@ -179,39 +179,51 @@ type Metadata struct {
 
 ## Plugin Interface
 
-The plugin owns its CI behavior. The executor passes `(provider, store)` to the plugin's hook callbacks. See [Hooks Integration](./hooks-integration.md) for the full architecture.
+The plugin owns its CI behavior. The executor passes `(provider, store, opts)` to the plugin's hook callbacks. See [Hooks Integration](./hooks-integration.md) for the full architecture.
 
 ```go
 // pkg/ci/internal/plugin/types.go
 
+// HookAction is a callback function invoked by the executor for a lifecycle event.
+// The executor resolves the current provider and store, then passes them to the callback.
+type HookAction func(provider Provider, store Store, opts ExecuteOptions) error
+
+// HookBinding maps a lifecycle event to a callback function.
+type HookBinding struct {
+    Event  string      // "after.terraform.plan"
+    Action HookAction  // callback function provided by the plugin
+}
+
 // Plugin represents a component-type CI plugin (terraform, helmfile, etc.).
+// The interface is generic — no terraform-specific methods. Each plugin wires
+// its own methods as HookAction callbacks in GetHookBindings().
 type Plugin interface {
     // GetType returns the component type (e.g., "terraform").
     GetType() string
 
-    // GetHookBindings returns events this plugin subscribes to.
+    // GetHookBindings returns lifecycle events this plugin subscribes to,
+    // each with a callback function the executor will invoke.
     GetHookBindings() []HookBinding
 
     // GetDefaultTemplates returns embedded default templates.
     GetDefaultTemplates() embed.FS
-
-    // BuildTemplateContext creates a template context from execution results.
-    BuildTemplateContext(info *ConfigAndStacksInfo, ciCtx *Context, output string, command string) (any, error)
-
-    // ParseOutput parses command output into structured results.
-    ParseOutput(output string, command string) (*OutputResult, error)
-
-    // GetOutputVariables returns CI output variables for a command.
-    GetOutputVariables(result *OutputResult, command string) map[string]string
-
-    // GetArtifactKey generates the artifact storage key.
-    GetArtifactKey(info *ConfigAndStacksInfo, command string) string
 }
+```
 
-// HookBinding maps an event to a template name.
-type HookBinding struct {
-    Event    string  // "after.terraform.plan"
-    Template string  // "plan" → templates/plan.md
+Methods like `ParseOutput`, `BuildTemplateContext`, `GetOutputVariables`, and `GetArtifactKey` are **internal helpers** on the terraform plugin — not part of the generic Plugin interface. Each plugin calls them from within its own hook callbacks.
+
+Example: terraform plugin wiring its methods as callbacks:
+
+```go
+// pkg/ci/plugins/terraform/plugin.go
+
+func (p *Plugin) GetHookBindings() []plugin.HookBinding {
+    return []plugin.HookBinding{
+        {Event: "before.terraform.plan",  Action: p.OnBeforePlan},
+        {Event: "after.terraform.plan",   Action: p.OnAfterPlan},
+        {Event: "before.terraform.apply", Action: p.OnBeforeApply},
+        {Event: "after.terraform.apply",  Action: p.OnAfterApply},
+    }
 }
 ```
 

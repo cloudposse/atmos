@@ -128,15 +128,15 @@
 | `pkg/ci/plugins/terraform/planfile/github/store.go` | GitHub Artifacts store | Phase 4 |
 | `pkg/ci/plugins/terraform/planfile/azure/store.go` | Azure Blob implementation | Deferred |
 | `pkg/ci/plugins/terraform/planfile/gcs/store.go` | GCS implementation | Deferred |
-| **pkg/ci/github/** | Implements `ci.Provider` interface for GitHub Actions | |
+| **pkg/ci/providers/github/** | Implements `ci.Provider` interface for GitHub Actions | |
 | `pkg/ci/providers/github/provider.go` | GitHub Actions Provider (implements ci.Provider) | Done |
-| `pkg/ci/github/client.go` | GitHub API client wrapper (uses go-github v59) | Done |
-| `pkg/ci/github/status.go` | GetStatus, GetCombinedStatus, GetCheckRuns | Done |
-| `pkg/ci/github/checks.go` | Check runs API | Done |
-| `pkg/ci/github/pulls.go` | GetPullRequestsForBranch, GetPullRequestsCreatedByUser, etc. | Phase 4 |
-| `pkg/ci/github/user.go` | GetAuthenticatedUser for current user info | Phase 4 |
-| `pkg/ci/github/output.go` | $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer | Phase 4 |
-| `pkg/ci/github/comment.go` | PR comment templates (tfcmt-inspired) | Phase 4 |
+| `pkg/ci/providers/github/client.go` | GitHub API client wrapper (uses go-github v59) | Done |
+| `pkg/ci/providers/github/status.go` | GetStatus, GetCombinedStatus, GetCheckRuns | Done |
+| `pkg/ci/providers/github/checks.go` | Check runs API | Done |
+| `pkg/ci/providers/github/pulls.go` | GetPullRequestsForBranch, GetPullRequestsCreatedByUser, etc. | Phase 4 |
+| `pkg/ci/providers/github/user.go` | GetAuthenticatedUser for current user info | Phase 4 |
+| `pkg/ci/providers/github/output.go` | $GITHUB_OUTPUT, $GITHUB_STEP_SUMMARY writer (concrete implementation of OutputWriter) | Phase 4 |
+| `pkg/ci/providers/github/comment.go` | PR comment templates (tfcmt-inspired) | Phase 4 |
 | **pkg/ci/plugins/terraform/** | Terraform CI plugin | |
 | `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (hook callbacks, output parsing) | Done (needs hook callback impl) |
 | `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output | Done |

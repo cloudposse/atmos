@@ -29,28 +29,28 @@ Terraform Command (plan/apply)
 
 | Component | Role |
 |-----------|------|
-| **Executor** | Thin coordinator: registers providers and plugins, detects current CI provider, resolves artifact storage per plugin, binds plugin hooks to lifecycle events, passes `(provider, store)` to plugin callbacks |
-| **Plugin** | Business logic owner: subscribes to events, receives `(provider, store, event)`, decides what to do — parses output, renders templates, calls `provider.WriteSummary()`, calls `store.Upload()`, handles errors |
-| **Provider** | Dumb I/O layer: `WriteSummary(renderedMarkdown)`, `WriteOutput(key, value)`, `SetStatus(name, status)`. Does not render templates or know about terraform |
+| **Executor** | Thin coordinator: registers providers and plugins, detects current CI provider, resolves artifact storage per plugin, passes `(provider, store, opts)` to plugin callbacks. API is an implementation detail. |
+| **Plugin** | Business logic owner: subscribes to events via callback-based `HookBinding`, receives `(provider, store, opts)`, decides what to do — parses output, renders templates, calls provider/store methods, handles errors |
+| **Provider** | Dumb I/O layer: `OutputWriter().WriteSummary(content)`, `OutputWriter().WriteOutput(key, value)`, `CreateCheckRun(ctx, opts)`, `UpdateCheckRun(ctx, opts)`. Does not render templates or know about terraform |
 
 ### Plugin-Owns-Behavior Pattern
 
-The plugin decides what to do on each hook event. The executor passes it the provider and store:
+The plugin decides what to do on each hook event. The executor resolves the current provider and store, then invokes the plugin's callback:
 
 ```go
-func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, event HookEvent) error {
-    // Plugin owns all logic
-    result := p.ParseOutput(event.Output)
-    ctx := p.BuildTemplateContext(event.Info, provider.Context(), event.Output)
+func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, opts ExecuteOptions) error {
+    // Plugin owns all logic — ParseOutput, BuildTemplateContext are internal helpers
+    result := p.ParseOutput(opts.Output)
+    ctx := p.BuildTemplateContext(opts.Info, provider.Context(), opts.Output)
 
     // Plugin renders its own template, provider is just a writer
     rendered := p.RenderTemplate("plan", ctx)
-    if err := provider.WriteSummary(rendered); err != nil {
+    if err := provider.OutputWriter().WriteSummary(rendered); err != nil {
         log.Warn("Failed to write summary", "error", err)
     }
 
     // Plugin decides what outputs to write
-    provider.WriteOutput("has_changes", strconv.FormatBool(result.HasChanges))
+    provider.OutputWriter().WriteOutput("has_changes", strconv.FormatBool(result.HasChanges))
 
     // Plugin decides to upload — fatal on failure
     if err := store.Upload(key, planfile, metadata); err != nil {
@@ -58,12 +58,21 @@ func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, ev
     }
 
     // Status check — warn and continue
-    if err := provider.SetStatus("atmos/plan", result.Status()); err != nil {
-        log.Warn("Failed to set status", "error", err)
+    if _, err := provider.CreateCheckRun(ctx, CreateCheckRunOptions{...}); err != nil {
+        log.Warn("Failed to create check run", "error", err)
     }
 
     return nil
 }
+```
+
+The data flow from terraform command to plugin callback:
+
+```
+RunCIHooks(event, atmosConfig, info, output, forceCIMode, cmdErr)
+  → ci.Execute(ExecuteOptions{...})
+    → executor resolves provider + store
+    → executor calls plugin callback: action(provider, store, opts)
 ```
 
 ### Error Severity
@@ -92,13 +101,15 @@ AfterTerraformApply  = "after.terraform.apply"   // Write summary, write outputs
 
 ## Terraform Plugin Hook Bindings
 
+Each plugin wires its own methods as callbacks — the generic Plugin interface has no terraform-specific methods:
+
 ```go
-func (p *TerraformPlugin) GetHookBindings() []HookBinding {
-    return []HookBinding{
-        {Event: "before.terraform.plan",  Template: ""},
-        {Event: "after.terraform.plan",   Template: "plan"},
-        {Event: "before.terraform.apply", Template: ""},
-        {Event: "after.terraform.apply",  Template: "apply"},
+func (p *TerraformPlugin) GetHookBindings() []plugin.HookBinding {
+    return []plugin.HookBinding{
+        {Event: "before.terraform.plan",  Action: p.OnBeforePlan},
+        {Event: "after.terraform.plan",   Action: p.OnAfterPlan},
+        {Event: "before.terraform.apply", Action: p.OnBeforeApply},
+        {Event: "after.terraform.apply",  Action: p.OnAfterApply},
     }
 }
 ```
@@ -120,7 +131,7 @@ executor.RegisterPluginStores("terraform", planfileStoreRegistry)
 store := executor.ResolveStore("terraform", atmosConfig)
 
 // Plugin receives its resolved store in hook callback
-func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, event HookEvent) error {
+func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, opts ExecuteOptions) error {
     store.Upload(key, planfile, metadata)
 }
 ```
@@ -132,6 +143,6 @@ func (p *TerraformPlugin) OnAfterPlan(provider Provider, store PlanfileStore, ev
 | File | Changes |
 |------|---------|
 | `pkg/ci/executor.go` | Refactor from god-object to thin coordinator; move action logic into plugins |
-| `pkg/ci/internal/plugin/types.go` | Update Plugin interface with hook callback signature |
+| `pkg/ci/internal/plugin/types.go` | Update Plugin interface: remove passive data methods, add callback-based HookAction type |
 | `pkg/ci/plugins/terraform/plugin.go` | Implement hook callbacks (OnAfterPlan, OnBeforeApply, etc.) |
 | `pkg/hooks/hooks.go` | Unchanged — already calls `RunCIHooks()` which delegates to executor |

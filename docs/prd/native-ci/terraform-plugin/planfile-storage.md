@@ -88,21 +88,25 @@ atmos terraform planfile {component} -s {stack} show         # specific componen
 
 ### Plan/Deploy Command Flags
 
+**Automatic behavior in CI**: When CI mode is enabled, planfile upload/download happens automatically by default (`ci.planfiles.auto_upload: true`, `ci.planfiles.auto_download: true`). The flags below override this behavior.
+
 **Plan command:**
 
 | Flag | Description |
 |------|-------------|
-| `--upload-planfile` | Upload planfile to configured storage |
+| `--upload-planfile` | Force upload planfile (useful locally without CI mode) |
+| `--no-upload-planfile` | Suppress auto-upload even when enabled in config |
 | `--planfile-key` | Custom planfile key (overrides pattern) |
 
 **Deploy command:**
 
 | Flag | Description |
 |------|-------------|
-| `--download-planfile` | Download planfile from configured storage |
+| `--download-planfile` | Force download planfile (useful locally without CI mode) |
+| `--no-download-planfile` | Suppress auto-download even when enabled in config |
 | `--planfile-key` | Planfile key to download |
 | `--planfile-run-id` | Run ID to download from (GitHub Artifacts) |
-| `--verify-plan` | Verify plan hasn't changed (uses plan-diff) |
+| `--verify-plan` | Verify plan hasn't changed (uses plan-diff). Independent of download — requires planfile to already be downloaded |
 
 ## Backend Configuration Example
 

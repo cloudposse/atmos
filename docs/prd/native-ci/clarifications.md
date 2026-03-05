@@ -1,19 +1,21 @@
-# Native CI Integration - Clarifications
+# Native CI Integration - Clarifications (Round 2)
 
-All decisions from this document have been distributed into the relevant PRD files:
+All decisions from this round have been distributed into the relevant PRD files:
 
-- Q1 (Plugin-Executor architecture) → [hooks-integration.md](./framework/hooks-integration.md), [interfaces.md](./framework/interfaces.md)
-- Q2 (Error severity) → [hooks-integration.md](./framework/hooks-integration.md), [overview.md](./overview.md)
-- Q3–5 (PR comments deferred) → [pr-comments.md](./providers/github/pr-comments.md)
-- Q6 (Output last-writer-wins) → [ci-outputs.md](./providers/github/ci-outputs.md)
-- Q7 (Plan verification workflow) → [plan-verification.md](./terraform-plugin/plan-verification.md)
-- Q8 (Matrix fixed schema) → [describe-affected-matrix.md](./terraform-plugin/describe-affected-matrix.md)
-- Q9 (ci.enabled kill switch) → [ci-detection.md](./framework/ci-detection.md), [configuration.md](./framework/configuration.md)
-- Q10 (Per-plugin storage) → [artifact-storage.md](./framework/artifact-storage.md)
-- Q11 (context_prefix wiring) → [status-checks.md](./providers/github/status-checks.md)
-- Q12 (GitHub Artifacts lookup) → [planfile-storage.md](./terraform-plugin/planfile-storage.md)
-- Q13 (Store type validation) → [planfile-storage.md](./terraform-plugin/planfile-storage.md)
-- Q14 (Testing strategy) → [implementation-status.md](./framework/implementation-status.md)
-- Q15 (Rewrite hooks-integration.md) → Done
+- Q1 (Callback-based HookAction) → [interfaces.md](./framework/interfaces.md), [hooks-integration.md](./framework/hooks-integration.md)
+- Q2 (Use ExecuteOptions, no new struct) → [hooks-integration.md](./framework/hooks-integration.md)
+- Q3 (Use lower-level Provider API) → [hooks-integration.md](./framework/hooks-integration.md)
+- Q4 (Executor API is impl detail) → [hooks-integration.md](./framework/hooks-integration.md)
+- Q5 (RunCIHooks signature correct) → [hooks-integration.md](./framework/hooks-integration.md)
+- Q6 (Configurable auto upload/download) → [configuration.md](./framework/configuration.md), [planfile-storage.md](./terraform-plugin/planfile-storage.md)
+- Q7 (Independent flags) → [planfile-storage.md](./terraform-plugin/planfile-storage.md)
+- Q8 (before.terraform.apply for download) → [ci-detection.md](./framework/ci-detection.md)
+- Q9 (Whitelist, omitted = all) → [configuration.md](./framework/configuration.md)
+- Q10 (Mocks + golden files) → [provider.md](./providers/github/provider.md)
+- Q11 (Fix generic.md path) → [generic.md](./providers/generic.md)
+
+Minor fixes also applied:
+- `implementation-status.md` paths corrected from `pkg/ci/github/` to `pkg/ci/providers/github/`
+- Phase 4 output.go clarified as concrete OutputWriter implementation
 
 This file can be deleted.

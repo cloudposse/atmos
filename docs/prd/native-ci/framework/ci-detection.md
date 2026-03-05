@@ -64,8 +64,9 @@ atmos terraform plan vpc -s plat-ue2-dev --ci
 Integrate CI behaviors at existing hook points in `pkg/hooks/`:
 
 ```go
-BeforeTerraformInit  = "before.terraform.init"   // Download planfiles here
+BeforeTerraformPlan  = "before.terraform.plan"   // Create check run (in_progress)
 AfterTerraformPlan   = "after.terraform.plan"    // Upload planfiles, PR comment, job summary
+BeforeTerraformApply = "before.terraform.apply"  // Download planfiles, verify plan
 AfterTerraformApply  = "after.terraform.apply"   // Update PR comment, job summary, export outputs
 ```
 

@@ -24,4 +24,4 @@ The generic provider populates `ci.Context` from environment variables with git 
 
 ## Implementation
 
-Implemented in `pkg/ci/generic.go`. Satisfies the `ci.Provider` interface with minimal feature set — no status checks, PR comments, or job summaries.
+Implemented in `pkg/ci/providers/generic/provider.go`. Satisfies the `ci.Provider` interface with minimal feature set — no status checks, PR comments, or job summaries.

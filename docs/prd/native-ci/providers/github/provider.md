@@ -99,21 +99,11 @@ The GitHub provider uses the following API endpoints:
 
 ## Testing Strategy
 
-### Unit Tests
+**Mocks + golden files. No real API calls.**
 
 - Mock GitHub API client for provider tests
 - Mock storage backends for planfile store tests
 - Table-driven tests for output formatting
-- Interface-based testing with generated mocks
-
-### Integration Tests
-
-- Test against real GitHub API (with test token)
-- Test against real S3/Azure/GCS (with test credentials)
-- Test CI detection in various environments
-
-### End-to-End Tests
-
-- Test full workflow in GitHub Actions
-- Test planfile upload/download cycle
-- Test PR comment creation/update
+- Interface-based testing with generated mocks (`go.uber.org/mock/mockgen`)
+- Golden file tests for template rendering (plan, apply, with changes, no changes, errors)
+- Coverage target: 80%

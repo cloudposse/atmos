@@ -13,6 +13,10 @@ components:
   terraform:
     # Planfile storage backends (registry pattern)
     planfiles:
+      # Auto upload/download in CI mode (default: true when CI enabled)
+      auto_upload: true
+      auto_download: true
+
       # Stores are tried in priority order; if unavailable, fall through to next
       priority:
         - "github"
@@ -69,12 +73,13 @@ ci:
   # GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts
   output:
     enabled: true
-    variables:
-      - has_changes
-      - has_additions
-      - has_destructions
-      - artifact_key
-      - plan_summary
+    # Whitelist of variables to export. When omitted, ALL variables are exported.
+    # variables:
+    #   - has_changes
+    #   - has_additions
+    #   - has_destructions
+    #   - artifact_key
+    #   - plan_summary
 
   # Job summary with plan/apply results
   # GitHub: $GITHUB_STEP_SUMMARY, GitLab: job artifacts
