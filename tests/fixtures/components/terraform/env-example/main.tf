@@ -1,14 +1,16 @@
 terraform {
   required_providers {
-    environment = {
-      source  = "EppO/environment"
-      version = "1.3.8"
+    external = {
+      source  = "hashicorp/external"
+      version = "~> 2.3"
     }
   }
 }
 
-# Get all environment variables matching patterns.
-# Extended to include test patterns for global env testing.
-data "environment_variables" "required" {
-  filter = "^ATMOS_.*|^EXAMPLE$|^GLOBAL_ENV_.*|^STACK_ENV_.*|^COMPONENT_ENV_.*|^OVERRIDE_ME$"
+# Read environment variables using an external script.
+# This replaces the eppo/environment provider which was hosted on GitHub
+# Releases and subject to download timeouts in CI. The hashicorp/external
+# provider is hosted on releases.hashicorp.com (Cloudflare CDN).
+data "external" "env" {
+  program = ["sh", "${path.module}/read_env.sh"]
 }
