@@ -186,7 +186,9 @@ The plugin owns its CI behavior. The executor passes `(provider, store, opts)` t
 
 // HookAction is a callback function invoked by the executor for a lifecycle event.
 // The executor resolves the current provider and store, then passes them to the callback.
-type HookAction func(provider Provider, store Store, opts ExecuteOptions) error
+// The store parameter is artifact.Store — plugins use their adapter layer to work with
+// plugin-specific store types (e.g., terraform plugin wraps via planfile/adapter/).
+type HookAction func(provider Provider, store artifact.Store, opts ExecuteOptions) error
 
 // HookBinding maps a lifecycle event to a callback function.
 type HookBinding struct {

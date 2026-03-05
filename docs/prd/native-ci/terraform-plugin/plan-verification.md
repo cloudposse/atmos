@@ -23,10 +23,12 @@
 When `--verify-plan` is specified during apply:
 
 1. **Download** the stored planfile from planfile storage to a **temp file** (not the normal planfile path)
-2. **Run `terraform plan`** to generate a **fresh planfile** at the normal path
-3. **Compare** the two planfiles using plan-diff semantic comparison
-4. If differences detected → **fail** with a clear error showing what drifted
-5. If no differences → **proceed** with apply using the fresh planfile
+2. **Show stored plan** — run `terraform show stored.tfplan` to produce text output A
+3. **Run `terraform plan`** to generate a **fresh planfile** at the normal path
+4. **Show fresh plan** — run `terraform show fresh.tfplan` to produce text output B
+5. **Compare** text A vs text B using plan-diff semantic comparison
+6. If differences detected → **fail** with a clear error showing what drifted
+7. If no differences → **proceed** with apply using the fresh planfile
 
 ```bash
 # Download planfile and verify it matches current plan
@@ -47,7 +49,7 @@ The plan-diff implementation exists and is fully implemented:
 - `internal/exec/terraform_plan_diff_comparison.go` — Comparison logic
 - `internal/exec/terraform_plan_diff_preparation.go` — Output normalization
 
-The comparison is **text-based semantic comparison** — it normalizes plan output (strips timestamps, run IDs, ordering noise) and compares resource blocks structurally.
+The comparison is **text-based semantic comparison** — it works on `terraform show` output (not binary `.tfplan` files), normalizes plan output (strips timestamps, run IDs, ordering noise) and compares resource blocks structurally. Both the stored and fresh planfiles must be converted to text via `terraform show` before comparison.
 
 ## Integration Point
 
