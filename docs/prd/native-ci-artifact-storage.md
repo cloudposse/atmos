@@ -324,8 +324,8 @@ Note: Artifact signing/provenance is not needed as a separate feature — SHA-25
 Incremental approach using TDD: create tests, implement to pass tests, refactor (reduce duplication) while verifying tests still pass.
 
 1. **Phase 1**: Define Artifacts Basic Interface/Struct — **SHIPPED**
-2. **Phase 2**: Implement local artifact storage
-3. **Phase 3**: Implement Planfile storage (on top of artifact storage)
+2. **Phase 2**: Implement local artifact storage — **SHIPPED**
+3. **Phase 3**: Implement Planfile storage (on top of artifact storage) — **SHIPPED**
 4. **Phase 4**: Implement GitHub backend
 
 **Questions to clarify:**
@@ -364,6 +364,74 @@ Incremental approach using TDD: create tests, implement to pass tests, refactor 
 - `TerraformVersion` and `TerraformTool` live in planfile `Metadata`, not artifact `Metadata` — they are terraform-specific concerns.
 - `EnvironmentChecker.IsAvailable()` takes `context.Context` for consistency; backends without a checker are treated as available.
 - 17 tests pass with 42.2% statement coverage (registry/selector logic fully covered; metadata structs covered via JSON round-trips).
+
+### Phase 2 Implementation Details (SHIPPED)
+
+**Package**: `pkg/ci/artifact/local/`
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `store.go` | Local filesystem `Store` implementation — all 7 interface methods (Name, Upload, Download, Delete, List, Exists, GetMetadata), configurable `path` option with tilde expansion, SHA-256 integrity checking, metadata sidecar files (`.metadata.json`), multi-file artifact bundles, query-based listing with Components/Stacks/SHAs/All filtering, path traversal protection, empty directory cleanup, auto-registration via `init()` |
+| `store_test.go` | 30 test functions covering: upload/download cycles, single and multi-file artifacts, deletion with cleanup, existence checks, metadata retrieval with and without sidecar, SHA-256 verification, listing with all filter combinations, path traversal security (20 subtests), name validation, full lifecycle integration test |
+
+**Design decisions applied:**
+- Metadata stored as JSON sidecar files (`{artifact-name}.metadata.json`) alongside the artifact directory — consistent with PRD's "sidecar file" decision.
+- Path traversal protection rejects names containing `..` to prevent directory escape attacks.
+- `GetMetadata` falls back to directory modification time when no sidecar exists.
+- `List` returns results sorted newest-first by last modified time.
+- `Delete` is idempotent — safe to call on nonexistent artifacts.
+- Empty parent directories are cleaned up after deletion.
+- Auto-registers with `artifact.Register("local", NewStore)` in `init()`.
+- 30 tests pass with 81.3% statement coverage (exceeds 80% requirement).
+
+### Phase 3 Implementation Details (SHIPPED)
+
+**Package**: `pkg/ci/plugins/terraform/planfile/adapter/`
+
+**Files created:**
+
+| File | Purpose |
+|------|---------|
+| `store.go` | Adapter implementing `planfile.Store` by wrapping `artifact.Store` — wraps single `io.Reader` as `[]artifact.FileEntry{plan.tfplan}` on upload, extracts `plan.tfplan` from `[]artifact.FileResult` on download (closing other file handles), bidirectional metadata conversion via `artifact.Metadata.Custom` with `planfile.*` prefixed keys, prefix-to-query conversion for List, compile-time interface check |
+| `factory.go` | `NewStoreFactory(artifactBackend)` returns a `planfile.StoreFactory` for registry integration |
+| `store_test.go` | 16 tests using `artifact.MockStore`: Name delegation, Upload with metadata verification, Upload with nil metadata, Download with plan extraction, Download with no plan file error, Download not-found propagation, Delete delegation, List with prefix conversion, List empty, Exists delegation, GetMetadata conversion, GetMetadata not-found, metadata round-trip preservation, nil metadata handling, prefix-to-query table-driven tests, factory integration |
+
+**Metadata mapping strategy:**
+
+Planfile-specific fields are stored in `artifact.Metadata.Custom` using `planfile.` prefixed keys:
+
+| Planfile Field | Custom Key | Conversion |
+|---|---|---|
+| `ComponentPath` | `planfile.component_path` | string |
+| `PlanSummary` | `planfile.plan_summary` | string |
+| `HasChanges` | `planfile.has_changes` | `strconv.FormatBool` / `strconv.ParseBool` |
+| `Additions` | `planfile.additions` | `strconv.Itoa` / `strconv.Atoi` |
+| `Changes` | `planfile.changes` | `strconv.Itoa` / `strconv.Atoi` |
+| `Destructions` | `planfile.destructions` | `strconv.Itoa` / `strconv.Atoi` |
+| `TerraformVersion` | `planfile.terraform_version` | string |
+| `TerraformTool` | `planfile.terraform_tool` | string |
+
+**Prefix-to-query conversion:**
+
+The adapter parses `List(ctx, prefix)` prefixes based on the default key pattern `{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan`:
+
+| Prefix | Query |
+|---|---|
+| `""` (empty) | `Query{All: true}` |
+| `"stack1"` | `Query{Stacks: ["stack1"]}` |
+| `"stack1/component1"` | `Query{Stacks: ["stack1"], Components: ["component1"]}` |
+| `"stack1/component1/sha"` | `Query{Stacks: ["stack1"], Components: ["component1"], SHAs: ["sha"]}` |
+
+**Design decisions applied:**
+- Adapter pattern chosen over rewrite — existing `planfile.Store` consumers (6+ locations) remain unchanged.
+- Each adapter method makes exactly one backend call, then translates the result.
+- Non-plan file handles are closed on download to prevent resource leaks.
+- Common metadata fields (Stack, Component, SHA, etc.) map directly between interfaces; planfile-specific fields use the `Custom` map.
+- `NewStoreFactory` enables registry integration so the adapter can be registered as a planfile store type.
+- No existing files modified — purely additive package.
+- 16 tests pass with 95.6% statement coverage.
 
 ## Testing Strategy
 
