@@ -403,6 +403,7 @@ func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 	oldStdout := os.Stdout
 	r, w, pipeErr := os.Pipe()
 	require.NoError(t, pipeErr)
+	defer func() { _ = r.Close() }()
 	os.Stdout = w
 	defer func() { os.Stdout = oldStdout }()
 
