@@ -76,22 +76,7 @@ func AutoProvisionSource(
 	}
 
 	// Apply global TTL default if not set per-component.
-	if sourceSpec.TTL == "" {
-		switch componentType {
-		case cfg.TerraformComponentType:
-			if atmosConfig.Components.Terraform.Source != nil {
-				sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
-			}
-		case cfg.HelmfileComponentType:
-			if atmosConfig.Components.Helmfile.Source != nil {
-				sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
-			}
-		case cfg.PackerComponentType:
-			if atmosConfig.Components.Packer.Source != nil {
-				sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
-			}
-		}
-	}
+	applyGlobalTTLDefault(sourceSpec, atmosConfig, componentType)
 
 	stack, _ := componentConfig["atmos_stack"].(string)
 
@@ -133,6 +118,27 @@ func AutoProvisionSource(
 		componentConfig[workdir.WorkdirPathKey] = targetDir
 	}
 	return nil
+}
+
+// applyGlobalTTLDefault sets the source TTL from the global config if not already set per-component.
+func applyGlobalTTLDefault(sourceSpec *schema.VendorComponentSource, atmosConfig *schema.AtmosConfiguration, componentType string) {
+	if sourceSpec.TTL != "" {
+		return
+	}
+	switch componentType {
+	case cfg.TerraformComponentType:
+		if atmosConfig.Components.Terraform.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Terraform.Source.TTL
+		}
+	case cfg.HelmfileComponentType:
+		if atmosConfig.Components.Helmfile.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Helmfile.Source.TTL
+		}
+	case cfg.PackerComponentType:
+		if atmosConfig.Components.Packer.Source != nil {
+			sourceSpec.TTL = atmosConfig.Components.Packer.Source.TTL
+		}
+	}
 }
 
 // extractSourceAndComponent extracts source spec and component name from config.
