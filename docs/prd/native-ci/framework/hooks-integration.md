@@ -86,16 +86,16 @@ RunCIHooks(event, atmosConfig, info, output, forceCIMode, cmdErr)
 
 ### Error Severity
 
-The plugin controls error severity per action — no config needed:
+> **Current vs target**: In the current enum-based implementation, `executeActions()` in `pkg/ci/executor.go` logs all action failures with `log.Warn` and continues — **no action is fatal**. The target callback-based architecture (Phase 3 refactoring) will move error severity decisions into plugins, where upload/download would be fatal.
 
-| Action | On Failure | Rationale |
-|--------|-----------|-----------|
-| Upload | **Fatal** — return error | Apply workflow depends on artifacts |
-| Download | **Fatal** — return error | Apply can't proceed without planfile |
-| Summary | Warn, continue | Nice-to-have CI feature |
-| Output | Warn, continue | Nice-to-have CI feature |
-| Status check | Warn, continue | Nice-to-have CI feature |
-| PR comment | Warn, continue | Nice-to-have CI feature |
+| Action | Current Behavior | Target Behavior | Rationale |
+|--------|-----------------|-----------------|-----------|
+| Upload | Warn, continue | **Fatal** — return error | Apply workflow depends on artifacts |
+| Download | Warn, continue | **Fatal** — return error | Apply can't proceed without planfile |
+| Summary | Warn, continue | Warn, continue | Nice-to-have CI feature |
+| Output | Warn, continue | Warn, continue | Nice-to-have CI feature |
+| Status check | Warn, continue | Warn, continue | Nice-to-have CI feature |
+| PR comment | Warn, continue | Warn, continue | Nice-to-have CI feature |
 
 ## Lifecycle Events (IMPLEMENTED)
 

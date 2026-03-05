@@ -22,68 +22,76 @@
 | `gcs` | `gs://bucket/...` | Google Cloud Storage |
 | `local` | File path | Local filesystem (dev/testing) |
 
-## CLI Commands
+## CLI Commands (IMPLEMENTED)
 
 ### `atmos terraform planfile` Subcommand Group
 
+All subcommands use **key-based addressing** — the storage key identifies artifacts, not component/stack positional arguments.
+
 ```bash
 # Upload planfile to configured storage
-atmos terraform planfile upload <component> -s <stack> [--store default]
+atmos terraform planfile upload [--component vpc --stack plat-ue2-dev --sha abc123 --planfile plan.tfplan --key custom/key --store s3]
 
 # Download planfile from storage
-atmos terraform planfile download <component> -s <stack> [--store default] [--run-id 123]
+atmos terraform planfile download <key> [output-path] [--store s3]
 
-# List planfiles for a component/stack
-atmos terraform planfile list <component> -s <stack> [--store default]
+# List planfiles in storage
+atmos terraform planfile list [prefix] [--store s3 --format table]
 
 # Delete planfile from storage
-atmos terraform planfile delete <component> -s <stack> [--sha abc123] [--store default]
+atmos terraform planfile delete <key> [--store s3 --force]
 
 # Show planfile metadata
-atmos terraform planfile show <component> -s <stack> [--sha abc123] [--store default]
+atmos terraform planfile show <key> [--store s3 --format yaml]
 ```
 
-### CLI Subcommand Details
+### CLI Subcommand Details (IMPLEMENTED)
 
-**list** — Lists planfile artifacts with filtering by component, stack, and SHA:
+**list** (`list [prefix]`) — Lists planfile artifacts, optionally filtered by prefix:
 ```bash
-atmos terraform planfile {component} -s {stack} list        # specific component+stack, current SHA
-atmos terraform planfile {component} -s {stack} list --all  # specific component+stack, all SHAs
-atmos terraform planfile list                                # all components+stacks, current SHA
-atmos terraform planfile list --all                          # all components+stacks, all SHAs
-atmos terraform planfile -s {stack} list                     # all components, specific stack, current SHA
-atmos terraform planfile -s {stack} list --all               # all components, specific stack, all SHAs
+atmos terraform planfile list                            # all planfiles
+atmos terraform planfile list plat-ue2-dev/vpc           # filter by prefix
+atmos terraform planfile list --format json              # JSON output
+atmos terraform planfile list --store s3                 # use specific store
 ```
+Flags: `--store`, `--format` (table, json, yaml, csv, tsv)
 
-**download** — Downloads a planfile artifact:
+**upload** (`upload [options]`) — Uploads a planfile with metadata:
 ```bash
-atmos terraform planfile {component} -s {stack} download    # specific component+stack, current SHA
+atmos terraform planfile upload --component vpc --stack plat-ue2-dev
+atmos terraform planfile upload --planfile plan.tfplan --key custom/key
+atmos terraform planfile upload --sha abc123 --store s3
 ```
+Flags: `--store`, `--planfile`, `--key`, `--stack`, `--component`, `--sha`
+When `--planfile` is omitted, the path is derived from `--component` and `--stack`.
 
-**delete** — Deletes planfile artifacts with confirmation prompt (skippable with `--yes`):
+**download** (`download <key> [output-path]`) — Downloads a planfile by storage key:
 ```bash
-atmos terraform planfile {component} -s {stack} delete        # specific component+stack, current SHA
-atmos terraform planfile {component} -s {stack} delete --all  # specific component+stack, all SHAs
-atmos terraform planfile {component} delete                   # specific component, all stacks, current SHA
-atmos terraform planfile {component} delete --all             # specific component, all stacks, all SHAs
-atmos terraform planfile delete                                # all components+stacks, current SHA
-atmos terraform planfile delete --all                          # all components+stacks, all SHAs
+atmos terraform planfile download plat-ue2-dev/vpc/abc123.tfplan
+atmos terraform planfile download plat-ue2-dev/vpc/abc123.tfplan ./local-plan.tfplan
 ```
-Before delete, show the list of artifacts to be removed and ask for confirmation. Skip with `--yes` flag.
+Flags: `--store`
+If output-path is not specified, file is written to current directory with the key's basename.
 
-**show** — Shows planfile artifact metadata:
+**delete** (`delete <key>`) — Deletes a planfile by storage key with confirmation:
 ```bash
-atmos terraform planfile {component} -s {stack} show         # specific component+stack, current SHA
+atmos terraform planfile delete plat-ue2-dev/vpc/abc123.tfplan
+atmos terraform planfile delete plat-ue2-dev/vpc/abc123.tfplan --force
 ```
+Flags: `--store`, `--force` (`-f`) to skip confirmation prompt
+
+**show** (`show <key>`) — Shows planfile metadata:
+```bash
+atmos terraform planfile show plat-ue2-dev/vpc/abc123.tfplan
+atmos terraform planfile show plat-ue2-dev/vpc/abc123.tfplan --format json
+```
+Flags: `--store`, `--format` (json, yaml)
 
 ### Flags
 
-- **`--store` flag**: Accepts a named store from config.
-- **`--format` flag**: Yes, support `json`, `yaml`, and `table` output formats.
-- **`list` filtering**: For now, only filtering by SHA (current SHA by default, `--all` for all SHAs).
-- **`download` output**: No stdout piping. Downloads to the local file system only. Files are placed into the component directory resolved from atmos stacks configuration:
-  - **Plan file**: Uses the planfile name generated by atmos for the given `{component}` + `{stack}` (from stacks config). Can be overridden with `--planfile-name` flag.
-  - **Lock file**: Downloaded as `.terraform.lock.hcl` into the component directory.
+- **`--store` flag**: Accepts a named store from config. Available on all subcommands.
+- **`--format` flag**: Available on `list` (table, json, yaml, csv, tsv) and `show` (json, yaml).
+- **`--force` / `-f` flag**: Available on `delete` to skip confirmation prompt.
 - **Command group**: `atmos terraform planfile` is correct. Artifacts in general do not need a CLI interface — they define a generic framework for artifact storage in atmos. Specific implementations (like planfile) expose their own CLI commands.
 
 ### Automatic Upload/Download (IMPLEMENTED)

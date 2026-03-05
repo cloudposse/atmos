@@ -154,7 +154,7 @@ Users currently using the GitHub Actions can migrate incrementally:
 
 ### Q: How does authentication work?
 
-**A:** Uses existing Atmos auth infrastructure (`atmos auth`). For GitHub API, uses `GITHUB_TOKEN` or `ATMOS_GITHUB_TOKEN`. For cloud storage, uses standard SDK credential chains.
+**A:** Uses existing Atmos auth infrastructure (`atmos auth`). For GitHub API, uses `GITHUB_TOKEN` or `GH_TOKEN` (fallback). For cloud storage, uses standard SDK credential chains.
 
 ### Q: What about GitLab CI?
 

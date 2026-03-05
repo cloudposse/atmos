@@ -11,7 +11,7 @@
 **Behavior**:
 - Write to `$GITHUB_OUTPUT` in GitHub Actions
 - Export standard variables: `has_changes`, `has_errors`, `exit_code`, `resources_to_create`, `resources_to_change`, `resources_to_replace`, `resources_to_destroy` (plugin), plus `stack`, `component`, `command`, `summary` (executor)
-- Export terraform outputs after successful apply (prefixed with `output_`)
+- Export terraform outputs after successful apply (prefixed with `output_`) — **Phase 4, not yet implemented**
 - Support filtering via `ci.output.variables` configuration
 
 **Variables (plan)** (**IMPLEMENTED** — plugin variables from `pkg/ci/plugins/terraform/plugin.go` `GetOutputVariables()` + common variables added by `pkg/ci/executor.go`):
