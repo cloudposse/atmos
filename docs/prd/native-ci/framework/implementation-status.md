@@ -18,14 +18,14 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 3. `--ci` flag with `ATMOS_CI` and `CI` env var bindings — Done
 4. `ci.enabled` config gate in `pkg/schema/schema.go` — Done
 
-**FR-7: Command Parity** — Partial
+**FR-7: Command Parity** — Done
 1. `--ci` flag on `terraform plan` (full wiring: PreRunE, output capture, PostRunE, error defer) — Done
 2. `--ci` flag on `terraform apply` (flag + env var bindings defined) — Done
-3. Apply `PostRunE` fires `after.terraform.apply` CI hooks (empty output) — Done
-4. Apply `PreRunE` for `before.terraform.apply` (download planfile) — **Not Started** (no PreRunE on applyCmd)
-5. Apply output capture (stdout/stderr like plan.go) — **Not Started**
-6. Apply error defer (check run failure update like plan.go) — **Not Started**
-7. `deploy.go` `--ci` flag — **Not Started** (no `--ci` flag at all on deploy)
+3. Apply `PostRunE` fires `after.terraform.apply` CI hooks with captured output — Done
+4. Apply `PreRunE` for `before.terraform.apply` (download planfile) — Done
+5. Apply output capture (stdout/stderr like plan.go) — Done
+6. Apply error defer (check run failure update like plan.go) — Done
+7. `deploy.go` `--ci` flag with full CI wiring (PreRunE, output capture, error defer, PostRunE) — Done
 
 **Core Infrastructure** — Done
 1. `pkg/ci/` package structure — Done
