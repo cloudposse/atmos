@@ -151,12 +151,10 @@ func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat, owner, repo
 			item["stack"] = f.Metadata.Stack
 			item["component"] = f.Metadata.Component
 			item["sha"] = f.Metadata.SHA
-			item["md5"] = f.Metadata.MD5
 		} else {
 			item["stack"] = ""
 			item["component"] = ""
 			item["sha"] = ""
-			item["md5"] = ""
 		}
 		if owner != "" || repo != "" {
 			item["owner"] = owner
@@ -177,7 +175,6 @@ func renderWithRenderer(data []map[string]any, outputFormat, owner, repo string)
 		{Name: "SHA", Value: "{{ .sha }}"},
 		{Name: "SIZE", Value: "{{ .size }}"},
 		{Name: "MODIFIED", Value: "{{ .last_modified }}"},
-		{Name: "MD5", Value: "{{ .md5 }}"},
 	}
 
 	// Add OWNER and REPO columns when they are available from context.

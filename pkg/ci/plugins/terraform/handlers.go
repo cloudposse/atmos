@@ -1,10 +1,11 @@
 package terraform
 
 import (
+	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
+	"path/filepath"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -258,20 +259,42 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 			WithExplanation("Invalid planfile store type").Err()
 	}
 
-	f, err := os.Open(planfilePath)
+	planFile, err := os.Open(planfilePath)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
 			WithExplanation("Failed to open planfile for upload").WithContext("path", planfilePath).Err()
 	}
-	defer f.Close()
+	defer planFile.Close()
+
+	// Open lock file if it exists alongside the planfile.
+	var lockReader *os.File
+	lockPath := filepath.Join(filepath.Dir(planfilePath), planfile.BundleLockFilename)
+	if lf, err := os.Open(lockPath); err == nil {
+		lockReader = lf
+		defer lf.Close()
+	}
+
+	// Create tar bundle.
+	var bundleData []byte
+	var sha256Hex string
+	if lockReader != nil {
+		bundleData, sha256Hex, err = planfile.CreateBundle(planFile, lockReader)
+	} else {
+		bundleData, sha256Hex, err = planfile.CreateBundle(planFile, nil)
+	}
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
+			WithExplanation("Failed to create planfile bundle").Err()
+	}
 
 	metadata := p.buildPlanfileMetadata(ctx)
+	metadata.SHA256 = sha256Hex
 	if err := metadata.Validate(); err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
 			WithExplanation("Planfile metadata validation failed").Err()
 	}
 
-	if err := store.Upload(context.Background(), key, f, metadata); err != nil {
+	if err := store.Upload(context.Background(), key, bytes.NewReader(bundleData), metadata); err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
 			WithExplanation("Failed to upload planfile to store").
 			WithContext("key", key).WithContext("store", store.Name()).Err()
@@ -320,16 +343,26 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 	}
 	defer reader.Close()
 
-	f, err := os.Create(planfilePath)
+	// Extract bundle.
+	planData, lockData, err := planfile.ExtractBundle(reader)
 	if err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
-			WithExplanation("Failed to create local planfile").WithContext("path", planfilePath).Err()
+			WithExplanation("Failed to extract planfile bundle").Err()
 	}
-	defer f.Close()
 
-	if _, err := io.Copy(f, reader); err != nil {
+	// Write plan to planfile path.
+	if err := os.WriteFile(planfilePath, planData, 0o644); err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
 			WithExplanation("Failed to write planfile to disk").WithContext("path", planfilePath).Err()
+	}
+
+	// Write lock file alongside the plan if present.
+	if lockData != nil {
+		lockPath := filepath.Join(filepath.Dir(planfilePath), planfile.BundleLockFilename)
+		if err := os.WriteFile(lockPath, lockData, 0o644); err != nil {
+			return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+				WithExplanation("Failed to write lock file to disk").WithContext("path", lockPath).Err()
+		}
 	}
 
 	logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)

@@ -58,9 +58,6 @@ type Metadata struct {
 	// Destructions is the number of resources to destroy.
 	Destructions int `json:"destructions"`
 
-	// MD5 is the MD5 checksum of the planfile content.
-	MD5 string `json:"md5,omitempty"`
-
 	// TerraformVersion is the version of Terraform used.
 	TerraformVersion string `json:"terraform_version,omitempty"`
 
@@ -118,7 +115,7 @@ func DefaultKeyPattern() KeyPattern {
 	defer perf.Track(nil, "planfile.DefaultKeyPattern")()
 
 	return KeyPattern{
-		Pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan",
+		Pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan.tar",
 	}
 }
 

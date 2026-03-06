@@ -3,7 +3,6 @@ package planfile
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -127,7 +126,7 @@ func getOutputPath(args []string) string {
 	return baseName(args[0])
 }
 
-// downloadToFile downloads the planfile and writes it to the output path.
+// downloadToFile downloads the planfile bundle and writes plan + lock to disk.
 func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Metadata, error) {
 	ctx := context.Background()
 	reader, metadata, err := store.Download(ctx, key)
@@ -136,24 +135,26 @@ func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Met
 	}
 	defer reader.Close()
 
-	if err := writeToFile(outputPath, reader); err != nil {
-		return nil, err
-	}
-	return metadata, nil
-}
-
-// writeToFile writes the reader contents to the output path.
-func writeToFile(outputPath string, reader io.Reader) error {
-	f, err := os.Create(outputPath)
+	// Extract bundle.
+	planData, lockData, err := planfile.ExtractBundle(reader)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create output file %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
+		return nil, fmt.Errorf("%w: failed to extract planfile bundle: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
-	defer f.Close()
 
-	if _, err := io.Copy(f, reader); err != nil {
-		return fmt.Errorf("%w: failed to write planfile to %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
+	// Write plan to output path.
+	if err := os.WriteFile(outputPath, planData, 0o644); err != nil {
+		return nil, fmt.Errorf("%w: failed to write planfile to %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
 	}
-	return nil
+
+	// Write lock file alongside the plan if present.
+	if lockData != nil {
+		lockPath := filepath.Join(filepath.Dir(outputPath), planfile.BundleLockFilename)
+		if err := os.WriteFile(lockPath, lockData, 0o644); err != nil {
+			return nil, fmt.Errorf("%w: failed to write lock file to %s: %w", errUtils.ErrPlanfileDownloadFailed, lockPath, err)
+		}
+	}
+
+	return metadata, nil
 }
 
 // printDownloadSuccess prints the success message for a download.

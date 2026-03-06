@@ -4,9 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,9 +25,9 @@ import (
 const (
 	storeName = "github-artifacts"
 
-	// Metadata is stored as a JSON file within the artifact.
+	// Metadata is stored as a JSON sidecar within the artifact zip.
 	metadataFilename = "metadata.json"
-	planFilename     = "plan.tfplan"
+	bundleFilename   = "bundle.tar"
 
 	// Default retention for artifacts.
 	defaultRetentionDays = 7
@@ -245,21 +243,14 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		return fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
-	// Read the planfile data.
-	planData, err := io.ReadAll(data)
+	// Read the bundle data (opaque tar blob — SHA256 is set by the caller).
+	bundleData, err := io.ReadAll(data)
 	if err != nil {
-		return fmt.Errorf("%w: failed to read planfile data: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to read bundle data: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
-	// Compute SHA256 checksum.
-	if metadata == nil {
-		metadata = &planfile.Metadata{}
-	}
-	hash := sha256.Sum256(planData)
-	metadata.SHA256 = hex.EncodeToString(hash[:])
-
-	// Create a zip archive containing the plan and metadata.
-	zipData, err := createArtifactZip(planData, metadata)
+	// Create a zip archive wrapping the tar bundle (GitHub Actions API requires zip).
+	zipData, err := createArtifactZip(bundleData, metadata)
 	if err != nil {
 		return err
 	}
@@ -306,21 +297,23 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	return nil
 }
 
-// createArtifactZip creates a zip archive containing the plan and metadata.
-func createArtifactZip(planData []byte, metadata *planfile.Metadata) ([]byte, error) {
+// createArtifactZip creates a zip archive wrapping the tar bundle as a single entry.
+// The GitHub Actions runtime API requires zip format, so the tar bundle is wrapped
+// in an outer zip. Metadata is stored as a sidecar entry for convenience.
+func createArtifactZip(bundleData []byte, metadata *planfile.Metadata) ([]byte, error) {
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
 
-	// Add the planfile.
-	planWriter, err := zipWriter.Create(planFilename)
+	// Add the tar bundle as a single entry.
+	bundleWriter, err := zipWriter.Create(bundleFilename)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create zip entry for plan: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return nil, fmt.Errorf("%w: failed to create zip entry for bundle: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
-	if _, err := planWriter.Write(planData); err != nil {
-		return nil, fmt.Errorf("%w: failed to write plan to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
+	if _, err := bundleWriter.Write(bundleData); err != nil {
+		return nil, fmt.Errorf("%w: failed to write bundle to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
 
-	// Add metadata if provided.
+	// Add metadata as a sidecar entry.
 	if metadata != nil {
 		metadataWriter, err := zipWriter.Create(metadataFilename)
 		if err != nil {
@@ -495,7 +488,7 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 		return nil, nil, err
 	}
 
-	return extractPlanFromZip(zipData)
+	return extractBundleFromZip(zipData)
 }
 
 // findArtifact finds an artifact by key.
@@ -542,20 +535,21 @@ func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) (
 	return zipData, nil
 }
 
-// extractPlanFromZip extracts the plan and metadata from zip data.
-func extractPlanFromZip(zipData []byte) (io.ReadCloser, *planfile.Metadata, error) {
+// extractBundleFromZip extracts the tar bundle and metadata from the outer zip.
+// Returns the tar bundle data as an io.ReadCloser and metadata.
+func extractBundleFromZip(zipData []byte) (io.ReadCloser, *planfile.Metadata, error) {
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: failed to open artifact zip: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
-	var planData []byte
+	var bundleData []byte
 	var metadata *planfile.Metadata
 
 	for _, file := range zipReader.File {
 		switch file.Name {
-		case planFilename:
-			planData, err = readZipFile(file)
+		case bundleFilename:
+			bundleData, err = readZipFile(file)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -564,11 +558,11 @@ func extractPlanFromZip(zipData []byte) (io.ReadCloser, *planfile.Metadata, erro
 		}
 	}
 
-	if planData == nil {
-		return nil, nil, fmt.Errorf("%w: plan file not found in artifact", errUtils.ErrPlanfileDownloadFailed)
+	if bundleData == nil {
+		return nil, nil, fmt.Errorf("%w: bundle not found in artifact zip", errUtils.ErrPlanfileDownloadFailed)
 	}
 
-	return io.NopCloser(bytes.NewReader(planData)), metadata, nil
+	return io.NopCloser(bytes.NewReader(bundleData)), metadata, nil
 }
 
 // readZipFile reads a file from the zip archive.

@@ -557,10 +557,10 @@ func TestNewStore(t *testing.T) {
 	})
 }
 
-func TestExtractPlanFromZip(t *testing.T) {
-	t.Run("valid zip with plan and metadata", func(t *testing.T) {
+func TestExtractBundleFromZip(t *testing.T) {
+	t.Run("valid zip with bundle and metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			planFilename: []byte("plan content"),
+			bundleFilename: []byte("tar bundle content"),
 			metadataFilename: func() []byte {
 				m := &planfile.Metadata{}
 				m.Stack = "test-stack"
@@ -571,14 +571,14 @@ func TestExtractPlanFromZip(t *testing.T) {
 			}(),
 		})
 
-		reader, metadata, err := extractPlanFromZip(zipData)
+		reader, metadata, err := extractBundleFromZip(zipData)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, "plan content", string(content))
+		assert.Equal(t, "tar bundle content", string(content))
 
 		require.NotNil(t, metadata)
 		assert.Equal(t, "test-stack", metadata.Stack)
@@ -589,50 +589,50 @@ func TestExtractPlanFromZip(t *testing.T) {
 
 	t.Run("valid zip without metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			planFilename: []byte("plan content"),
+			bundleFilename: []byte("tar bundle content"),
 		})
 
-		reader, metadata, err := extractPlanFromZip(zipData)
+		reader, metadata, err := extractBundleFromZip(zipData)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, "plan content", string(content))
+		assert.Equal(t, "tar bundle content", string(content))
 		assert.Nil(t, metadata)
 	})
 
-	t.Run("zip without plan file", func(t *testing.T) {
+	t.Run("zip without bundle file", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
 			metadataFilename: []byte("{}"),
 		})
 
-		_, _, err := extractPlanFromZip(zipData)
+		_, _, err := extractBundleFromZip(zipData)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrPlanfileDownloadFailed)
 	})
 
 	t.Run("invalid zip data", func(t *testing.T) {
-		_, _, err := extractPlanFromZip([]byte("not a zip"))
+		_, _, err := extractBundleFromZip([]byte("not a zip"))
 		assert.Error(t, err)
 	})
 
 	t.Run("zip with invalid metadata JSON", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			planFilename:     []byte("plan content"),
+			bundleFilename:   []byte("tar bundle content"),
 			metadataFilename: []byte("not valid json"),
 		})
 
-		reader, metadata, err := extractPlanFromZip(zipData)
+		reader, metadata, err := extractBundleFromZip(zipData)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
-		// Plan should still be readable.
+		// Bundle should still be readable.
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, "plan content", string(content))
+		assert.Equal(t, "tar bundle content", string(content))
 
 		// Metadata should be nil due to JSON parse error.
 		assert.Nil(t, metadata)
@@ -786,14 +786,15 @@ func TestStore_Upload(t *testing.T) {
 		assert.Equal(t, 4, capturedCreateReq.Version)
 		assert.Equal(t, "14d", capturedCreateReq.ExpiresAfter)
 
-		// Verify uploaded data is a valid zip containing plan and metadata.
+		// Verify uploaded data is a valid zip containing bundle.tar and metadata.
 		require.NotEmpty(t, capturedUploadData)
-		reader, meta, err := extractPlanFromZip(capturedUploadData)
+		bundleReader, meta, err := extractBundleFromZip(capturedUploadData)
 		require.NoError(t, err)
-		defer reader.Close()
-		extractedPlan, err := io.ReadAll(reader)
+		defer bundleReader.Close()
+		bundleBytes, err := io.ReadAll(bundleReader)
 		require.NoError(t, err)
-		assert.Equal(t, planContent, extractedPlan)
+		// The bundle should be the exact bytes passed to Upload (opaque blob).
+		assert.Equal(t, planContent, bundleBytes)
 		require.NotNil(t, meta)
 		assert.Equal(t, "dev", meta.Stack)
 		assert.Equal(t, "vpc", meta.Component)
@@ -841,15 +842,15 @@ func TestStore_Upload(t *testing.T) {
 		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
 		require.NoError(t, err)
 
-		// Verify the zip contains plan and auto-generated metadata with SHA256.
-		reader, meta, err := extractPlanFromZip(capturedUploadData)
+		// Verify the zip contains the bundle data (opaque blob) and no metadata sidecar.
+		bundleReader, meta, err := extractBundleFromZip(capturedUploadData)
 		require.NoError(t, err)
-		defer reader.Close()
-		content, err := io.ReadAll(reader)
+		defer bundleReader.Close()
+		content, err := io.ReadAll(bundleReader)
 		require.NoError(t, err)
 		assert.Equal(t, "plan", string(content))
-		require.NotNil(t, meta)
-		assert.NotEmpty(t, meta.SHA256)
+		// When nil metadata is passed, the store does not generate metadata.
+		assert.Nil(t, meta)
 	})
 
 	t.Run("create artifact fails", func(t *testing.T) {
@@ -1505,25 +1506,25 @@ func TestGetBackendIDsFromToken(t *testing.T) {
 }
 
 func TestCreateArtifactZip(t *testing.T) {
-	t.Run("with plan and metadata", func(t *testing.T) {
-		planData := []byte("terraform plan output")
+	t.Run("with bundle and metadata", func(t *testing.T) {
+		bundleData := []byte("tar bundle data")
 		metadata := &planfile.Metadata{}
 		metadata.Stack = "prod"
 		metadata.Component = "vpc"
 		metadata.SHA = "abc123"
 
-		zipData, err := createArtifactZip(planData, metadata)
+		zipData, err := createArtifactZip(bundleData, metadata)
 		require.NoError(t, err)
 		require.NotEmpty(t, zipData)
 
 		// Verify the zip contents.
-		reader, meta, err := extractPlanFromZip(zipData)
+		reader, meta, err := extractBundleFromZip(zipData)
 		require.NoError(t, err)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, planData, content)
+		assert.Equal(t, bundleData, content)
 
 		require.NotNil(t, meta)
 		assert.Equal(t, "prod", meta.Stack)
@@ -1532,26 +1533,26 @@ func TestCreateArtifactZip(t *testing.T) {
 	})
 
 	t.Run("without metadata", func(t *testing.T) {
-		planData := []byte("plan content")
+		bundleData := []byte("tar bundle content")
 
-		zipData, err := createArtifactZip(planData, nil)
+		zipData, err := createArtifactZip(bundleData, nil)
 		require.NoError(t, err)
 
-		reader, meta, err := extractPlanFromZip(zipData)
+		reader, meta, err := extractBundleFromZip(zipData)
 		require.NoError(t, err)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, planData, content)
+		assert.Equal(t, bundleData, content)
 		assert.Nil(t, meta)
 	})
 
-	t.Run("empty plan data", func(t *testing.T) {
+	t.Run("empty bundle data", func(t *testing.T) {
 		zipData, err := createArtifactZip([]byte{}, nil)
 		require.NoError(t, err)
 
-		reader, _, err := extractPlanFromZip(zipData)
+		reader, _, err := extractBundleFromZip(zipData)
 		require.NoError(t, err)
 		defer reader.Close()
 

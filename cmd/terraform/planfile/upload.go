@@ -1,9 +1,11 @@
 package planfile
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -34,6 +36,7 @@ var uploadParser *flags.StandardParser
 type UploadOptions struct {
 	BaseOptions
 	PlanfilePath string
+	LockfilePath string
 	Key          string
 	Stack        string
 	Component    string
@@ -62,12 +65,14 @@ func init() {
 		flags.WithStringFlag("stack", "", "", "Stack name for metadata"),
 		flags.WithStringFlag("component", "", "", "Component name for metadata"),
 		flags.WithStringFlag("sha", "", "", "Git SHA for metadata (default: current HEAD)"),
+		flags.WithStringFlag("lockfile", "", "", "Path to .terraform.lock.hcl (default: auto-detected from planfile path)"),
 		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
 		flags.WithEnvVars("planfile", "ATMOS_PLANFILE_PATH"),
 		flags.WithEnvVars("key", "ATMOS_PLANFILE_KEY"),
 		flags.WithEnvVars("stack", "ATMOS_PLANFILE_STACK"),
 		flags.WithEnvVars("component", "ATMOS_PLANFILE_COMPONENT"),
 		flags.WithEnvVars("sha", "ATMOS_PLANFILE_SHA"),
+		flags.WithEnvVars("lockfile", "ATMOS_PLANFILE_LOCKFILE"),
 	)
 
 	// Register flags with the command.
@@ -87,6 +92,7 @@ func parseUploadOptions(cmd *cobra.Command, v *viper.Viper) *UploadOptions {
 	return &UploadOptions{
 		BaseOptions:  parseBaseOptions(cmd, v),
 		PlanfilePath: v.GetString("planfile"),
+		LockfilePath: v.GetString("lockfile"),
 		Key:          v.GetString("key"),
 		Stack:        v.GetString("stack"),
 		Component:    v.GetString("component"),
@@ -125,22 +131,45 @@ func runUpload(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Open the planfile.
-	f, err := os.Open(planfilePath)
+	planFile, err := os.Open(planfilePath)
 	if err != nil {
 		return fmt.Errorf("%w: failed to open planfile %s: %w", errUtils.ErrPlanfileUploadFailed, planfilePath, err)
 	}
-	defer f.Close()
+	defer planFile.Close()
+
+	// Resolve lock file path.
+	lockfilePath := resolveLockfilePath(opts.LockfilePath, planfilePath)
+	var lockReader *os.File
+	if lockfilePath != "" {
+		if lf, err := os.Open(lockfilePath); err == nil {
+			lockReader = lf
+			defer lf.Close()
+		}
+	}
+
+	// Create tar bundle.
+	var bundleData []byte
+	var sha256Hex string
+	if lockReader != nil {
+		bundleData, sha256Hex, err = planfile.CreateBundle(planFile, lockReader)
+	} else {
+		bundleData, sha256Hex, err = planfile.CreateBundle(planFile, nil)
+	}
+	if err != nil {
+		return fmt.Errorf("%w: failed to create planfile bundle: %w", errUtils.ErrPlanfileUploadFailed, err)
+	}
 
 	// Build metadata and generate key.
 	metadata := buildUploadMetadata(opts)
+	metadata.SHA256 = sha256Hex
 	key, err := resolveUploadKey(opts)
 	if err != nil {
 		return err
 	}
 
-	// Upload.
+	// Upload the bundle.
 	ctx := context.Background()
-	if err := store.Upload(ctx, key, f, metadata); err != nil {
+	if err := store.Upload(ctx, key, bytes.NewReader(bundleData), metadata); err != nil {
 		return err
 	}
 
@@ -244,6 +273,20 @@ func resolveUploadPlanfilePath(opts *UploadOptions, atmosConfig *schema.AtmosCon
 
 	planfilePath := exec.ConstructTerraformComponentPlanfilePath(atmosConfig, &info)
 	return planfilePath, nil
+}
+
+// resolveLockfilePath returns the lock file path from the explicit flag or auto-detected
+// from the planfile's directory.
+func resolveLockfilePath(explicit, planfilePath string) string {
+	if explicit != "" {
+		return explicit
+	}
+	// Auto-detect: look for .terraform.lock.hcl in the same directory as the planfile.
+	candidate := filepath.Join(filepath.Dir(planfilePath), planfile.BundleLockFilename)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return ""
 }
 
 // getStoreOptions builds StoreOptions from atmos configuration.

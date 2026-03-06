@@ -201,7 +201,7 @@ func TestPlugin_GetArtifactKey(t *testing.T) {
 		ciCtx := &provider.Context{SHA: "abc123"}
 		key, err := p.getArtifactKey(info, ciCtx)
 		require.NoError(t, err)
-		assert.Equal(t, "dev-us-east-1/vpc/abc123.tfplan", key)
+		assert.Equal(t, "dev-us-east-1/vpc/abc123.tfplan.tar", key)
 	})
 
 	t.Run("nil info returns error", func(t *testing.T) {

@@ -2,9 +2,6 @@ package local
 
 import (
 	"context"
-	"crypto/md5"  //nolint:gosec // MD5 used for content identification, not security.
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -99,29 +96,22 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		return fmt.Errorf("%w: failed to create directory for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
-	// Write the planfile while computing checksums.
+	// Write the planfile data (opaque blob — the bundle's SHA256 is set by the caller).
 	f, err := os.Create(fullPath)
 	if err != nil {
 		return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 	defer f.Close()
 
-	md5Hash := md5.New()    //nolint:gosec // MD5 used for content identification, not security.
-	sha256Hash := sha256.New()
-	multiWriter := io.MultiWriter(md5Hash, sha256Hash)
-	tee := io.TeeReader(data, multiWriter)
-
-	if _, err := io.Copy(f, tee); err != nil {
+	if _, err := io.Copy(f, data); err != nil {
 		return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
-	// Store checksums in metadata.
+	// Ensure metadata exists for serialization.
 	if metadata == nil {
 		metadata = &planfile.Metadata{}
 		metadata.CreatedAt = time.Now()
 	}
-	metadata.MD5 = hex.EncodeToString(md5Hash.Sum(nil))
-	metadata.SHA256 = hex.EncodeToString(sha256Hash.Sum(nil))
 
 	// Write metadata.
 	metadataPath := fullPath + metadataSuffix

@@ -85,7 +85,7 @@ func TestMetadataValidate(t *testing.T) {
 
 func TestDefaultKeyPattern(t *testing.T) {
 	pattern := DefaultKeyPattern()
-	assert.Equal(t, "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan", pattern.Pattern)
+	assert.Equal(t, "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan.tar", pattern.Pattern)
 }
 
 func TestKeyPatternGenerateKey(t *testing.T) {

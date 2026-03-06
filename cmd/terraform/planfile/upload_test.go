@@ -75,7 +75,7 @@ func TestResolveUploadKey(t *testing.T) {
 
 		key, err := resolveUploadKey(opts)
 		require.NoError(t, err)
-		assert.Equal(t, "my-stack/my-component/def456.tfplan", key)
+		assert.Equal(t, "my-stack/my-component/def456.tfplan.tar", key)
 	})
 
 	t.Run("missing required fields for generated key", func(t *testing.T) {
