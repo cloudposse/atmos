@@ -97,6 +97,21 @@ func (i *userIdentity) Authenticate(ctx context.Context, _ types.ICredentials) (
 	// No valid existing credentials - resolve base credentials and generate new session tokens.
 	longLivedCreds, err := i.resolveLongLivedCredentials(ctx)
 	if err != nil {
+		// Try browser webflow as final fallback when no long-lived credentials available.
+		if i.isWebflowEnabled() {
+			webflowCreds, webflowErr := i.resolveCredentialsViaWebflow(ctx)
+			if webflowErr == nil {
+				region := i.resolveRegion()
+				if webflowCreds.Region == "" {
+					webflowCreds.Region = region
+				}
+				if writeErr := i.writeAWSFiles(webflowCreds, region); writeErr != nil {
+					return nil, fmt.Errorf("%w: failed to write AWS files: %w", errUtils.ErrAwsAuth, writeErr)
+				}
+				return webflowCreds, nil
+			}
+			log.Debug("Browser webflow failed", logKeyIdentity, i.name, "error", webflowErr)
+		}
 		return nil, err
 	}
 

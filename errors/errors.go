@@ -673,6 +673,14 @@ var (
 	ErrSSOProvisioningFailed  = errors.New("aws sso identity provisioning failed")
 	ErrSSOInvalidToken        = errors.New("invalid aws sso token")
 
+	// AWS browser webflow errors.
+	ErrWebflowAuthFailed     = errors.New("browser authentication failed")
+	ErrWebflowDisabled       = errors.New("browser authentication is disabled")
+	ErrWebflowTokenExchange  = errors.New("failed to exchange authorization code for credentials")
+	ErrWebflowCallbackServer = errors.New("failed to start local callback server")
+	ErrWebflowTimeout        = errors.New("browser authentication timed out")
+	ErrWebflowRefreshFailed  = errors.New("failed to refresh browser credentials")
+
 	// Credential errors.
 	ErrCredentialsInvalid = errors.New("credentials are invalid or have been revoked")
 	ErrInvalidDuration    = errors.New("invalid duration format")
