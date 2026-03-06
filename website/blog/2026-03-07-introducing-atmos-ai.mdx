@@ -1,0 +1,279 @@
+---
+slug: introducing-atmos-ai
+title: "Introducing Atmos AI: Your Infrastructure-Aware AI Assistant"
+authors: [atmos]
+tags: [feature, dx]
+---
+
+import File from '@site/src/components/File'
+import Terminal from '@site/src/components/Terminal'
+
+We're excited to introduce **Atmos AI**, an intelligent assistant built directly into Atmos CLI that understands your infrastructure-as-code like no other AI assistant can.
+
+Unlike general-purpose AI coding assistants, Atmos AI has deep, native understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows. It's not just an AI that knows about code—it's an AI that truly understands *your infrastructure*.
+
+With support for 7 AI providers (including local/offline Ollama), persistent sessions with full conversation memory, tool execution with granular permissions and persistent permission cache, specialized skills for specific tasks, and seamless IDE integration via MCP—Atmos AI brings the productivity patterns of industry-leading AI systems to infrastructure management.
+
+<!--truncate-->
+
+## The Problem
+
+Infrastructure-as-code management is complex. Engineers lose hours searching documentation, debugging YAML configurations, understanding stack inheritance across dozens of files, and onboarding team members. The problem isn't lack of tools—it's the **cognitive overhead** of managing complex infrastructure.
+
+## The Solution: Atmos AI
+
+Atmos AI solves this through **infrastructure-aware intelligence**. It's like having an expert Atmos engineer available 24/7, ready to analyze your stacks, validate configurations, answer questions, and help with best practices.
+
+### What Makes Atmos AI Different?
+
+- **Deep Atmos Understanding** — Knows stack structure, inheritance patterns, component relationships, and provides context-aware recommendations.
+- **Full Conversation Memory** — Remembers entire chat history within sessions. Resume conversations days or weeks later with full context.
+- **Tool Execution** — Analyzes infrastructure automatically via read-only operations, real-time YAML/Terraform validation, and a granular permission system.
+- **Multi-Provider Support** — 7 providers including local/offline Ollama. Switch providers mid-conversation with Ctrl+P.
+- **Persistent Sessions** — SQLite-backed storage with named sessions, auto-compact, and cross-platform support.
+- **Non-Interactive Execution** — Run AI prompts programmatically for scripting and CI/CD with structured JSON output.
+
+## Key Features
+
+### 1. Infrastructure-Aware Intelligence
+
+Atmos AI has **native tools** to inspect your infrastructure:
+
+```bash
+You: What VPC CIDR does production use?
+
+AI: Let me check your configuration...
+    [Executes: atmos describe component vpc -s prod-use1-network]
+
+    Your production VPC uses CIDR 10.2.0.0/16 with public subnets,
+    private subnets, and NAT Gateways enabled in all AZs.
+```
+
+Available tools include `atmos_describe_component`, `atmos_list_stacks`, `atmos_validate_stacks`, `validate_file_lsp`, file operations, and web search. See [Tool System documentation](/ai/tools) for the full list.
+
+### 2. Real-Time Validation with LSP
+
+Atmos AI integrates with Language Server Protocol to provide **IDE-quality validation** directly in the chat — catching typos, deprecated properties, and schema violations in YAML, Terraform, and HCL files.
+
+### 3. Persistent Sessions with Full Memory
+
+Unlike basic chatbots that forget context, Atmos AI **remembers everything** within a session. Start an architecture discussion on Monday, resume Tuesday with full context, and reference earlier decisions a week later — all with the same named session.
+
+```bash
+atmos ai chat --session vpc-migration
+```
+
+Sessions are stored in SQLite with visual session picker (Ctrl+L), provider awareness, and auto-compact for extended conversations. See [Sessions documentation](/ai/sessions).
+
+### 4. Specialized AI Skills
+
+Atmos AI provides **21+ specialized skills** you can install from the marketplace:
+
+```bash
+# Install all official skills with one command
+atmos ai skill install cloudposse/atmos
+```
+
+Skills include **atmos-terraform**, **atmos-stacks**, **atmos-validation**, **atmos-components**, **atmos-config**, and many more — each with tailored prompts and tool access for its domain.
+
+**Switch skills with Ctrl+A** during conversations! See [AI Skills documentation](/ai/skills).
+
+### 5. Multi-Provider Support
+
+Choose the right AI for your needs:
+
+| Provider | Best For | Privacy |
+|----------|----------|---------|
+| **Anthropic (Claude)** | Complex reasoning, analysis | Cloud |
+| **OpenAI (GPT)** | Code generation, refactoring | Cloud |
+| **Google (Gemini)** | Large context windows | Cloud |
+| **xAI (Grok)** | Real-time knowledge | Cloud |
+| **Ollama (Local)** | **Complete privacy, offline** | **100% Local** |
+| **AWS Bedrock** | Enterprise, AWS-native | AWS |
+| **Azure OpenAI** | Enterprise, Azure-native | Azure |
+
+[Ollama](/ai/providers#ollama) runs AI models **entirely on your machine** — zero API costs, complete privacy, offline capable, and compliance ready. Enterprise teams can use AWS Bedrock or Azure OpenAI for data residency, VPC isolation, and audit logging.
+
+See [AI Providers documentation](/ai/providers) for setup instructions.
+
+### 6. Project Instructions (ATMOS.md)
+
+Provide **project-specific context** to the AI across all sessions via an `ATMOS.md` file — human-readable Markdown that's version-controlled with your repo. Include your organization's naming conventions, common commands, stack patterns, and CIDR allocations.
+
+See [Project Instructions documentation](/ai/instructions).
+
+### 7. Model Context Protocol (MCP) Integration
+
+Use Atmos tools from **any MCP-compatible client** — Claude Desktop, VSCode/Cursor, or custom clients:
+
+```json
+{
+  "mcpServers": {
+    "atmos": {
+      "command": "atmos",
+      "args": ["mcp", "start"]
+    }
+  }
+}
+```
+
+Learn more: [MCP Server documentation](/ai/mcp-server)
+
+### 8. Permission System
+
+A **three-tier security model** protects your infrastructure:
+
+- **Allowed Tools** — Execute without prompting (e.g., `atmos_describe_*`, `atmos_list_*`, `file_read`)
+- **Restricted Tools** — Require confirmation (e.g., `file_write`, `atmos_terraform_plan`)
+- **Blocked Tools** — Never execute (e.g., `atmos_terraform_apply`, `atmos_terraform_destroy`)
+
+Permission decisions persist across sessions in `.atmos/ai.settings.local.json`, reducing prompt fatigue by 80%+. Every tool execution is logged with timestamp, user, and context.
+
+See [Tool System documentation](/ai/tools) for configuration details.
+
+### 9. Non-Interactive Execution and CI/CD Integration
+
+Execute AI prompts programmatically with structured output:
+
+```bash
+# Simple execution
+atmos ai exec "List all production stacks"
+
+# JSON output for parsing
+atmos ai exec "Analyze VPC configuration" --format json > analysis.json
+
+# CI/CD integration
+result=$(atmos ai exec "Check for security issues" --format json)
+if echo "$result" | jq -e '.success == false'; then
+  exit 1
+fi
+```
+
+**JSON Output Structure:**
+```json
+{
+  "success": true,
+  "response": "Analysis complete...",
+  "tool_calls": [{"tool": "atmos_list_stacks", "success": true}],
+  "tokens": {"prompt": 120, "completion": 80, "cached": 50},
+  "metadata": {"model": "claude-sonnet-4-5-20250929", "provider": "anthropic"}
+}
+```
+
+Supports multiple output formats (JSON, text, markdown), standard exit codes, stdin piping, and session context for multi-turn scripts. Learn more: [atmos ai exec documentation](/cli/commands/ai/exec)
+
+### 10. Token Caching for Cost Savings
+
+Atmos AI supports **prompt caching** to dramatically reduce API costs — up to 90% savings by reusing frequently-sent content like system prompts and project instructions.
+
+| Provider | Caching Discount |
+|----------|-----------------|
+| **Anthropic** | 90% |
+| **OpenAI / Azure** | 50% |
+| **Gemini** | Free |
+| **Grok** | 75% |
+| **Bedrock** | Up to 90% |
+
+Most providers cache automatically. For Anthropic, enable explicit cache markers in `atmos.yaml`:
+
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        cache:
+          enabled: true
+          cache_system_prompt: true
+          cache_project_instructions: true
+```
+
+Learn more: [Token Caching documentation](/ai/providers#token-caching-prompt-caching)
+
+## Getting Started
+
+### 1. Configure Atmos AI
+
+Add to your `atmos.yaml`:
+
+<File title="atmos.yaml">
+    ```yaml
+    settings:
+      ai:
+        enabled: true
+        default_provider: "anthropic"
+        providers:
+          anthropic:
+            model: "claude-sonnet-4-5-20250929"
+            api_key_env: "ANTHROPIC_API_KEY"
+    ```
+</File>
+
+### 2. Set Up Your Provider
+
+```bash
+# For Claude (Anthropic)
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# For Ollama (Local/Offline) - no API key needed
+ollama pull llama3.3:70b
+```
+
+See [AI Providers](/ai/providers) for all provider setup instructions.
+
+### 3. Start Using Atmos AI
+
+```bash
+# Interactive chat
+atmos ai chat
+
+# Named session
+atmos ai chat --session infrastructure-review
+
+# Quick question
+atmos ai ask "What components are in production?"
+
+# Non-interactive execution
+atmos ai exec "List all production stacks" --format json
+
+# MCP server for Claude Desktop
+atmos mcp start
+```
+
+## What's Next?
+
+We're continuously improving Atmos AI. Here's what's shipped and what's coming:
+
+**Recently Completed:**
+- Non-Interactive Execution (`atmos ai exec`)
+- Structured JSON Output with standard exit codes
+- Token Caching (Prompt Caching) — up to 90% cost savings
+- Conversation Checkpointing — export/import sessions
+- Automatic Context Discovery with .gitignore support
+- Skill Marketplace — install community skills from the Agent Skills registry
+
+**Coming Soon:**
+- Enhanced LSP (HCL, JSON Schema)
+- Advanced Analytics — token usage tracking, cost analysis
+- Multi-Skill Workflows — skill delegation and collaboration
+- IDE Plugins — native VSCode/JetBrains integration
+- Private Skill Registries and advanced security
+
+## Learn More
+
+- [Configuration Guide](/ai/configuration) - Complete configuration reference
+- [AI Providers](/ai/providers) - All 7 providers with setup instructions
+- [Tool System](/ai/tools) - Tool execution and permissions
+- [AI Skills](/ai/skills) - Marketplace-installed skills
+- [Sessions](/ai/sessions) - Session management and auto-compact
+- [Project Instructions](/ai/instructions) - ATMOS.md documentation
+- [MCP Server](/ai/mcp-server) - Claude Desktop integration
+- [Troubleshooting](/ai/troubleshooting) - Common issues and solutions
+- [Atmos Documentation](https://atmos.tools)
+
+**Get Involved:**
+- [GitHub Issues](https://github.com/cloudposse/atmos/issues)
+- [Community Discussions](https://github.com/cloudposse/atmos/discussions)
+
+---
+
+Happy infrastructure engineering!
