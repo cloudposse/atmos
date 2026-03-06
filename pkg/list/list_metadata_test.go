@@ -401,6 +401,7 @@ func TestExecuteListMetadataCmd_WithStackPattern(t *testing.T) {
 
 	// Capture stdout to assert filtering behavior.
 	oldStdout := os.Stdout
+	oldStdout := os.Stdout
 	r, w, pipeErr := os.Pipe()
 	require.NoError(t, pipeErr)
 	defer func() { _ = r.Close() }()
