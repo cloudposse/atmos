@@ -66,6 +66,7 @@ func init() {
 		flags.WithBoolFlag("dry-run", "", false, "Perform a dry run to simulate updating the kubeconfig without making any changes."),
 		flags.WithBoolFlag("verbose", "", false, "Enable verbose logging to provide detailed output during the kubeconfig update process."),
 		flags.WithStringFlag("alias", "", "", "Specify an alias to use for the cluster context name in the kubeconfig file."),
+		flags.WithStringFlag("integration", "", "", "Named integration from auth.integrations (uses Go SDK instead of AWS CLI)"),
 		// Environment variable bindings.
 		flags.WithEnvVars("stack", "ATMOS_STACK"),
 		flags.WithEnvVars("profile", "ATMOS_AWS_PROFILE", "AWS_PROFILE"),

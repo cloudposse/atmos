@@ -140,10 +140,39 @@ type IntegrationVia struct {
 type IntegrationSpec struct {
 	AutoProvision *bool        `yaml:"auto_provision,omitempty" json:"auto_provision,omitempty" mapstructure:"auto_provision"` // Whether to auto-provision on identity login. Defaults to true.
 	Registry      *ECRRegistry `yaml:"registry,omitempty" json:"registry,omitempty" mapstructure:"registry"`                   // Single ECR registry for aws/ecr integrations.
+	Cluster       *EKSCluster  `yaml:"cluster,omitempty" json:"cluster,omitempty" mapstructure:"cluster"`                      // EKS cluster for aws/eks integrations.
 }
 
 // ECRRegistry represents an ECR registry configuration for aws/ecr integrations.
 type ECRRegistry struct {
 	AccountID string `yaml:"account_id" json:"account_id" mapstructure:"account_id"`
 	Region    string `yaml:"region" json:"region" mapstructure:"region"`
+}
+
+// EKSCluster represents an EKS cluster configuration for aws/eks integrations.
+type EKSCluster struct {
+	// Name is the EKS cluster name (required).
+	Name string `yaml:"name" json:"name" mapstructure:"name"`
+
+	// Region is the AWS region where the cluster is located (required).
+	Region string `yaml:"region" json:"region" mapstructure:"region"`
+
+	// Alias is the context name in kubeconfig (optional, defaults to cluster ARN).
+	Alias string `yaml:"alias,omitempty" json:"alias,omitempty" mapstructure:"alias"`
+
+	// Kubeconfig contains kubeconfig file settings (optional).
+	Kubeconfig *KubeconfigSettings `yaml:"kubeconfig,omitempty" json:"kubeconfig,omitempty" mapstructure:"kubeconfig"`
+}
+
+// KubeconfigSettings configures kubeconfig file behavior.
+type KubeconfigSettings struct {
+	// Path is a custom kubeconfig file path (optional, defaults to XDG path).
+	Path string `yaml:"path,omitempty" json:"path,omitempty" mapstructure:"path"`
+
+	// Mode is the file permission mode as an octal string (optional, defaults to "0600").
+	// Parsed via strconv.ParseUint(mode, 8, 32) at config-load time.
+	Mode string `yaml:"mode,omitempty" json:"mode,omitempty" mapstructure:"mode"`
+
+	// Update determines how to handle existing kubeconfig: "merge" (default), "replace", or "error".
+	Update string `yaml:"update,omitempty" json:"update,omitempty" mapstructure:"update"`
 }
