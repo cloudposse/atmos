@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/data"
@@ -22,16 +23,18 @@ var showParser *flags.StandardParser
 // ShowOptions contains parsed flags for the show command.
 type ShowOptions struct {
 	BaseOptions
-	Key    string
-	Format string
+	Component string
+	Format    string
 }
 
 var showCmd = &cobra.Command{
-	Use:   "show <key>",
+	Use:   "show <component>",
 	Short: "Show metadata for a Terraform plan file",
-	Long:  `Show metadata for a Terraform plan file from the configured storage backend.`,
-	Args:  cobra.ExactArgs(1),
-	RunE:  runShow,
+	Long: `Show metadata for a Terraform plan file from the configured storage backend.
+
+The component is specified as a positional argument and the stack via -s/--stack.`,
+	Args: cobra.ExactArgs(1),
+	RunE: runShow,
 }
 
 func init() {
@@ -59,7 +62,7 @@ func init() {
 func parseShowOptions(cmd *cobra.Command, v *viper.Viper, args []string) *ShowOptions {
 	return &ShowOptions{
 		BaseOptions: parseBaseOptions(cmd, v),
-		Key:         args[0],
+		Component:   args[0],
 		Format:      v.GetString("format"),
 	}
 }
@@ -73,8 +76,18 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Bind persistent parent flags too.
+	if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
 	// Parse options.
 	opts := parseShowOptions(cmd, v, args)
+
+	// Validate that stack is provided.
+	if opts.Stack == "" {
+		return fmt.Errorf("%w: --stack/-s is required for show", errUtils.ErrPlanfileStoreInvalidArgs)
+	}
 
 	// Build ConfigAndStacksInfo from global flags to honor config selection flags.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
@@ -96,14 +109,26 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get metadata.
-	ctx := context.Background()
-	metadata, err := store.GetMetadata(ctx, opts.Key)
+	// Resolve SHA from context.
+	resolved, err := resolveContext(false)
 	if err != nil {
 		return err
 	}
 
-	return formatShowOutput(opts.Key, store.Name(), metadata, opts.Format)
+	// Generate the key.
+	key, err := resolveKey(opts.Component, opts.Stack, resolved.SHA)
+	if err != nil {
+		return err
+	}
+
+	// Get metadata.
+	ctx := context.Background()
+	metadata, err := store.GetMetadata(ctx, key)
+	if err != nil {
+		return err
+	}
+
+	return formatShowOutput(key, store.Name(), metadata, opts.Format)
 }
 
 // formatShowOutput formats and outputs the planfile metadata in the specified format.

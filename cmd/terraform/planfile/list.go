@@ -3,7 +3,6 @@ package planfile
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,16 +23,18 @@ var listParser *flags.StandardParser
 // ListOptions contains parsed flags for the list command.
 type ListOptions struct {
 	BaseOptions
-	Format string
-	Prefix string
+	Format    string
+	Component string
+	All       bool
 }
 
 var listCmd = &cobra.Command{
-	Use:   "list [prefix]",
+	Use:   "list [component]",
 	Short: "List Terraform plan files in storage",
 	Long: `List Terraform plan files from the configured storage backend.
 
-Optionally filter by prefix (e.g., stack name or component).`,
+Optionally filter by component (positional arg) and/or stack (-s flag).
+By default, only planfiles for the current SHA are shown. Use --all to show all SHAs.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runList,
 }
@@ -43,6 +44,7 @@ func init() {
 	listParser = flags.NewStandardParser(
 		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
 		flags.WithStringFlag("format", "", "table", "Output format: table, json, yaml, csv, tsv"),
+		flags.WithBoolFlag("all", "", false, "Show planfiles for all SHAs (bypass SHA filter)"),
 		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
 		flags.WithEnvVars("format", "ATMOS_PLANFILE_FORMAT"),
 	)
@@ -61,15 +63,16 @@ func init() {
 
 // parseListOptions parses command flags into ListOptions.
 func parseListOptions(cmd *cobra.Command, v *viper.Viper, args []string) *ListOptions {
-	prefix := ""
+	component := ""
 	if len(args) > 0 {
-		prefix = args[0]
+		component = args[0]
 	}
 
 	return &ListOptions{
 		BaseOptions: parseBaseOptions(cmd, v),
 		Format:      v.GetString("format"),
-		Prefix:      prefix,
+		Component:   component,
+		All:         v.GetBool("all"),
 	}
 }
 
@@ -79,6 +82,11 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Bind flags to Viper for proper precedence.
 	v := viper.GetViper()
 	if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Bind persistent parent flags too.
+	if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
 		return err
 	}
 
@@ -114,8 +122,15 @@ func runList(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Convert prefix to query.
-	query := prefixToQuery(opts.Prefix)
+	// Resolve SHA context.
+	resolved, err := resolveContext(opts.All)
+	if err != nil {
+		return err
+	}
+
+	// Build query from component, stack, and SHA.
+	query := buildQuery(opts.Component, opts.Stack, resolved.SHA)
+
 
 	// List planfiles.
 	ctx := context.Background()
@@ -134,22 +149,6 @@ func extractOwnerRepo(opts planfile.StoreOptions) (string, string) {
 	owner, _ := opts.Options["owner"].(string)
 	repo, _ := opts.Options["repo"].(string)
 	return owner, repo
-}
-
-// prefixToQuery converts a prefix string to a planfile.Query.
-func prefixToQuery(prefix string) planfile.Query {
-	if prefix == "" {
-		return planfile.Query{All: true}
-	}
-
-	parts := strings.SplitN(prefix, "/", 2)
-	q := planfile.Query{
-		Stacks: []string{parts[0]},
-	}
-	if len(parts) > 1 && parts[1] != "" {
-		q.Components = []string{parts[1]}
-	}
-	return q
 }
 
 // renderPlanfileList formats and outputs the planfile list using pkg/list infrastructure.

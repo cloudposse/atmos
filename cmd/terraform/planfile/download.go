@@ -25,18 +25,18 @@ var downloadParser *flags.StandardParser
 // DownloadOptions contains parsed flags for the download command.
 type DownloadOptions struct {
 	BaseOptions
-	Key        string
+	Component  string
 	OutputPath string
 }
 
 var downloadCmd = &cobra.Command{
-	Use:   "download <key> [output-path]",
+	Use:   "download <component>",
 	Short: "Download a Terraform plan file from storage",
 	Long: `Download a Terraform plan file from the configured storage backend.
 
-If output-path is not specified, the file is written to the current directory
-with the basename of the key.`,
-	Args: cobra.RangeArgs(1, 2),
+The component is specified as a positional argument and the stack via -s/--stack.
+Use --output to specify the output path (defaults to plan.tfplan in current directory).`,
+	Args: cobra.ExactArgs(1),
 	RunE: runDownload,
 }
 
@@ -44,6 +44,7 @@ func init() {
 	// Create parser with download-specific flags using functional options.
 	downloadParser = flags.NewStandardParser(
 		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
+		flags.WithStringFlag("output", "o", planfile.PlanFilename, "Output path for the downloaded planfile"),
 		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
 	)
 
@@ -61,13 +62,10 @@ func init() {
 
 // parseDownloadOptions parses command flags into DownloadOptions.
 func parseDownloadOptions(cmd *cobra.Command, v *viper.Viper, args []string) *DownloadOptions {
-	key := args[0]
-	outputPath := getOutputPath(args)
-
 	return &DownloadOptions{
 		BaseOptions: parseBaseOptions(cmd, v),
-		Key:         key,
-		OutputPath:  outputPath,
+		Component:   args[0],
+		OutputPath:  v.GetString("output"),
 	}
 }
 
@@ -80,8 +78,18 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Bind persistent parent flags too.
+	if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
 	// Parse options.
 	opts := parseDownloadOptions(cmd, v, args)
+
+	// Validate that stack is provided.
+	if opts.Stack == "" {
+		return fmt.Errorf("%w: --stack/-s is required for download", errUtils.ErrPlanfileStoreInvalidArgs)
+	}
 
 	// Build ConfigAndStacksInfo from global flags to honor config selection flags.
 	configAndStacksInfo := schema.ConfigAndStacksInfo{
@@ -103,22 +111,26 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Download and write to file.
-	metadata, err := downloadToFile(store, opts.Key, opts.OutputPath)
+	// Resolve SHA from context.
+	resolved, err := resolveContext(false)
 	if err != nil {
 		return err
 	}
 
-	printDownloadSuccess(store.Name(), opts.Key, opts.OutputPath, metadata)
-	return nil
-}
-
-// getOutputPath extracts output path from args or defaults to key basename.
-func getOutputPath(args []string) string {
-	if len(args) > 1 {
-		return args[1]
+	// Generate the key.
+	key, err := resolveKey(opts.Component, opts.Stack, resolved.SHA)
+	if err != nil {
+		return err
 	}
-	return baseName(args[0])
+
+	// Download and write to file.
+	metadata, err := downloadToFile(store, key, opts.OutputPath)
+	if err != nil {
+		return err
+	}
+
+	printDownloadSuccess(store.Name(), key, opts.OutputPath, metadata)
+	return nil
 }
 
 // downloadToFile downloads the planfile and writes plan + lock to disk.
@@ -164,9 +176,4 @@ func printDownloadSuccess(storeName, key, outputPath string, metadata *planfile.
 	if metadata != nil && metadata.Stack != "" {
 		ui.Info(fmt.Sprintf("Stack: %s, Component: %s, SHA: %s", metadata.Stack, metadata.Component, metadata.SHA))
 	}
-}
-
-// baseName extracts the basename from a path/key.
-func baseName(path string) string {
-	return filepath.Base(path)
 }
