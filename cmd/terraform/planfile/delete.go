@@ -124,10 +124,5 @@ func initDeleteStore(opts *DeleteOptions) (planfile.Store, error) {
 		return nil, err
 	}
 
-	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
-	if err != nil {
-		return nil, err
-	}
-
-	return planfile.NewStore(storeOpts)
+	return createStore(&atmosConfig, opts.Store)
 }

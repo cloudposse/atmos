@@ -90,14 +90,8 @@ func runShow(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
-	if err != nil {
-		return err
-	}
-
 	// Create the store.
-	store, err := planfile.NewStore(storeOpts)
+	store, err := createStore(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}

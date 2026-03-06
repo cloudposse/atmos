@@ -18,7 +18,7 @@ import (
 	"golang.org/x/oauth2"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -27,7 +27,6 @@ const (
 
 	// Metadata is stored as a JSON sidecar within the artifact zip.
 	metadataFilename = "metadata.json"
-	bundleFilename   = "bundle.tar"
 
 	// Default retention for artifacts.
 	defaultRetentionDays = 7
@@ -100,8 +99,8 @@ type backendIDs struct {
 	WorkflowJobRunBackendID string
 }
 
-// artifact represents a GitHub Actions artifact from the REST API.
-type artifact struct {
+// githubArtifact represents a GitHub Actions artifact from the REST API.
+type githubArtifact struct {
 	ID          int64     `json:"id"`
 	Name        string    `json:"name"`
 	SizeInBytes int64     `json:"size_in_bytes"`
@@ -111,11 +110,11 @@ type artifact struct {
 
 // listArtifactsResponse is the response from the list artifacts REST API.
 type listArtifactsResponse struct {
-	TotalCount int        `json:"total_count"`
-	Artifacts  []artifact `json:"artifacts"`
+	TotalCount int              `json:"total_count"`
+	Artifacts  []githubArtifact `json:"artifacts"`
 }
 
-// Store implements the planfile.Store interface using GitHub Actions Artifacts.
+// Store implements the artifact.Store interface using GitHub Actions Artifacts.
 type Store struct {
 	httpClient    *http.Client
 	baseURL       string
@@ -126,7 +125,7 @@ type Store struct {
 }
 
 // NewStore creates a new GitHub Artifacts store.
-func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
+func NewStore(opts artifact.StoreOptions) (artifact.Store, error) {
 	defer perf.Track(opts.AtmosConfig, "github.NewStore")()
 
 	token := getGitHubToken()
@@ -136,7 +135,7 @@ func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
 
 	owner, repo := getRepoInfo(opts.Options)
 	if owner == "" || repo == "" {
-		return nil, fmt.Errorf("%w: owner and repo are required for GitHub Artifacts store", errUtils.ErrPlanfileStoreNotFound)
+		return nil, fmt.Errorf("%w: owner and repo are required for GitHub Artifacts store", errUtils.ErrArtifactStoreNotFound)
 	}
 
 	retentionDays := getRetentionDays(opts.Options)
@@ -226,10 +225,10 @@ func (s *Store) artifactName(key string) string {
 	return "planfile-" + sanitizeKey(key)
 }
 
-// Upload uploads a planfile as a GitHub artifact.
+// Upload uploads an artifact bundle as a GitHub artifact.
 // This requires running within GitHub Actions with ACTIONS_RUNTIME_TOKEN and
 // ACTIONS_RESULTS_URL environment variables set.
-func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata *planfile.Metadata) error {
+func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEntry, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "github.Upload")()
 
 	if s.uploader == nil {
@@ -240,17 +239,11 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	runtimeToken := os.Getenv("ACTIONS_RUNTIME_TOKEN")
 	ids, err := getBackendIDsFromToken(runtimeToken)
 	if err != nil {
-		return fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
-	// Read the bundle data (opaque tar blob — SHA256 is set by the caller).
-	bundleData, err := io.ReadAll(data)
-	if err != nil {
-		return fmt.Errorf("%w: failed to read bundle data: %w", errUtils.ErrPlanfileUploadFailed, err)
-	}
-
-	// Create a zip archive wrapping the tar bundle (GitHub Actions API requires zip).
-	zipData, err := createArtifactZip(bundleData, metadata)
+	// Create a zip archive with individual file entries + metadata.
+	zipData, err := createArtifactZip(files, metadata)
 	if err != nil {
 		return err
 	}
@@ -270,16 +263,16 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 
 	createResp, err := s.uploader.CreateArtifact(ctx, createReq)
 	if err != nil {
-		return fmt.Errorf("%w: failed to create artifact: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to create artifact: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	if createResp.SignedUploadURL == "" {
-		return fmt.Errorf("%w: artifact service returned empty upload URL", errUtils.ErrPlanfileUploadFailed)
+		return fmt.Errorf("%w: artifact service returned empty upload URL", errUtils.ErrArtifactUploadFailed)
 	}
 
 	// Step 2: Upload the zip data to the signed URL.
 	if err := s.uploader.UploadBlob(ctx, createResp.SignedUploadURL, zipData); err != nil {
-		return fmt.Errorf("%w: failed to upload artifact data: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to upload artifact data: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	// Step 3: Finalize the artifact.
@@ -291,45 +284,52 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	}
 
 	if _, err := s.uploader.FinalizeArtifact(ctx, finalizeReq); err != nil {
-		return fmt.Errorf("%w: failed to finalize artifact: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to finalize artifact: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	return nil
 }
 
-// createArtifactZip creates a zip archive wrapping the tar bundle as a single entry.
-// The GitHub Actions runtime API requires zip format, so the tar bundle is wrapped
-// in an outer zip. Metadata is stored as a sidecar entry for convenience.
-func createArtifactZip(bundleData []byte, metadata *planfile.Metadata) ([]byte, error) {
+// createArtifactZip creates a zip archive with individual file entries and metadata.
+// The GitHub Actions runtime API requires zip format.
+func createArtifactZip(files []artifact.FileEntry, metadata *artifact.Metadata) ([]byte, error) {
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
 
-	// Add the tar bundle as a single entry.
-	bundleWriter, err := zipWriter.Create(bundleFilename)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create zip entry for bundle: %w", errUtils.ErrPlanfileUploadFailed, err)
-	}
-	if _, err := bundleWriter.Write(bundleData); err != nil {
-		return nil, fmt.Errorf("%w: failed to write bundle to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
+	// Add each file entry.
+	for _, entry := range files {
+		fileWriter, err := zipWriter.Create(entry.Name)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to create zip entry for %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
+		}
+
+		data, err := io.ReadAll(entry.Data)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to read file %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
+		}
+
+		if _, err := fileWriter.Write(data); err != nil {
+			return nil, fmt.Errorf("%w: failed to write %s to zip: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
+		}
 	}
 
 	// Add metadata as a sidecar entry.
 	if metadata != nil {
 		metadataWriter, err := zipWriter.Create(metadataFilename)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to create zip entry for metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return nil, fmt.Errorf("%w: failed to create zip entry for metadata: %w", errUtils.ErrArtifactUploadFailed, err)
 		}
 		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return nil, fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrArtifactUploadFailed, err)
 		}
 		if _, err := metadataWriter.Write(metadataJSON); err != nil {
-			return nil, fmt.Errorf("%w: failed to write metadata to zip: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return nil, fmt.Errorf("%w: failed to write metadata to zip: %w", errUtils.ErrArtifactUploadFailed, err)
 		}
 	}
 
 	if err := zipWriter.Close(); err != nil {
-		return nil, fmt.Errorf("%w: failed to close zip archive: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return nil, fmt.Errorf("%w: failed to close zip archive: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	return buf.Bytes(), nil
@@ -474,8 +474,8 @@ func parseNextPage(linkHeader string) int {
 	return 0
 }
 
-// Download downloads a planfile from GitHub artifacts.
-func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planfile.Metadata, error) {
+// Download downloads an artifact and extracts individual files from the zip.
+func (s *Store) Download(ctx context.Context, key string) ([]artifact.FileResult, *artifact.Metadata, error) {
 	defer perf.Track(nil, "github.Download")()
 
 	a, err := s.findArtifact(ctx, key)
@@ -488,16 +488,16 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 		return nil, nil, err
 	}
 
-	return extractBundleFromZip(zipData)
+	return extractFilesFromZip(zipData)
 }
 
 // findArtifact finds an artifact by key.
-func (s *Store) findArtifact(ctx context.Context, key string) (*artifact, error) {
+func (s *Store) findArtifact(ctx context.Context, key string) (*githubArtifact, error) {
 	artifactName := s.artifactName(key)
 
 	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to list artifacts for download: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to list artifacts for download: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	for i := range resp.Artifacts {
@@ -506,96 +506,101 @@ func (s *Store) findArtifact(ctx context.Context, key string) (*artifact, error)
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 }
 
 // downloadArtifactContent downloads artifact content as zip data.
 func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) ([]byte, error) {
 	downloadURL, err := s.downloadArtifactURL(ctx, artifactID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get artifact download URL: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to get artifact download URL: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, downloadURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to create download request: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to create download request: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to download artifact: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to download artifact: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 	defer resp.Body.Close()
 
 	zipData, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read artifact content: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to read artifact content: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	return zipData, nil
 }
 
-// extractBundleFromZip extracts the tar bundle and metadata from the outer zip.
-// Returns the tar bundle data as an io.ReadCloser and metadata.
-func extractBundleFromZip(zipData []byte) (io.ReadCloser, *planfile.Metadata, error) {
+// extractFilesFromZip extracts individual files and metadata from the zip archive.
+// Returns file results and metadata.
+func extractFilesFromZip(zipData []byte) ([]artifact.FileResult, *artifact.Metadata, error) {
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
-		return nil, nil, fmt.Errorf("%w: failed to open artifact zip: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, nil, fmt.Errorf("%w: failed to open artifact zip: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
-	var bundleData []byte
-	var metadata *planfile.Metadata
+	var results []artifact.FileResult
+	var metadata *artifact.Metadata
 
 	for _, file := range zipReader.File {
 		switch file.Name {
-		case bundleFilename:
-			bundleData, err = readZipFile(file)
+		case metadataFilename:
+			metadata = readMetadataFile(file)
+		default:
+			data, err := readZipFile(file)
 			if err != nil {
 				return nil, nil, err
 			}
-		case metadataFilename:
-			metadata = readMetadataFile(file)
+			results = append(results, artifact.FileResult{
+				Name: file.Name,
+				Data: io.NopCloser(bytes.NewReader(data)),
+				Size: int64(len(data)),
+			})
 		}
 	}
 
-	if bundleData == nil {
-		return nil, nil, fmt.Errorf("%w: bundle not found in artifact zip", errUtils.ErrPlanfileDownloadFailed)
+	if len(results) == 0 {
+		return nil, nil, fmt.Errorf("%w: no files found in artifact zip", errUtils.ErrArtifactDownloadFailed)
 	}
 
-	return io.NopCloser(bytes.NewReader(bundleData)), metadata, nil
+	return results, metadata, nil
 }
 
 // readZipFile reads a file from the zip archive.
 func readZipFile(file *zip.File) ([]byte, error) {
 	rc, err := file.Open()
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to open plan file in zip: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to open file in zip: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 	defer rc.Close()
 
 	data, err := io.ReadAll(rc)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to read plan file: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, fmt.Errorf("%w: failed to read file: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 	return data, nil
 }
 
 // readMetadataFile reads metadata from a zip file (returns nil on error).
-func readMetadataFile(file *zip.File) *planfile.Metadata {
+func readMetadataFile(file *zip.File) *artifact.Metadata {
 	rc, err := file.Open()
 	if err != nil {
 		return nil
 	}
 	defer rc.Close()
 
-	var m planfile.Metadata
+	var m artifact.Metadata
 	if err := json.NewDecoder(rc).Decode(&m); err != nil {
 		return nil
 	}
 	return &m
 }
 
-// Delete deletes a planfile artifact.
+// Delete deletes an artifact.
 func (s *Store) Delete(ctx context.Context, key string) error {
 	defer perf.Track(nil, "github.Delete")()
 
@@ -604,13 +609,13 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	// List artifacts to find the one matching our key.
 	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
-		return fmt.Errorf("%w: failed to list artifacts for deletion: %w", errUtils.ErrPlanfileDeleteFailed, err)
+		return fmt.Errorf("%w: failed to list artifacts for deletion: %w", errUtils.ErrArtifactDeleteFailed, err)
 	}
 
 	for _, a := range resp.Artifacts {
 		if a.Name == artifactName {
 			if err := s.deleteArtifact(ctx, a.ID); err != nil {
-				return fmt.Errorf("%w: failed to delete artifact: %w", errUtils.ErrPlanfileDeleteFailed, err)
+				return fmt.Errorf("%w: failed to delete artifact: %w", errUtils.ErrArtifactDeleteFailed, err)
 			}
 			return nil
 		}
@@ -619,17 +624,20 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	return nil // Already deleted or never existed.
 }
 
-// List lists planfile artifacts.
-func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInfo, error) {
+// List lists artifacts matching the given query.
+func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
 	defer perf.Track(nil, "github.List")()
 
-	var files []planfile.PlanfileInfo
+	// Convert query to a prefix for filtering.
+	prefix := s.queryToPrefix(query)
+
+	var files []artifact.ArtifactInfo
 	page := 1
 
 	for {
 		resp, nextPage, err := s.listArtifacts(ctx, githubPaginationLimit, page)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrPlanfileListFailed, err)
+			return nil, fmt.Errorf("%w: failed to list artifacts: %w", errUtils.ErrArtifactListFailed, err)
 		}
 
 		for _, a := range resp.Artifacts {
@@ -647,8 +655,8 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 				continue
 			}
 
-			files = append(files, planfile.PlanfileInfo{
-				Key:          key,
+			files = append(files, artifact.ArtifactInfo{
+				Name:         key,
 				Size:         a.SizeInBytes,
 				LastModified: a.CreatedAt,
 			})
@@ -668,7 +676,24 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 	return files, nil
 }
 
-// Exists checks if a planfile artifact exists.
+// queryToPrefix converts an artifact.Query to a prefix string for filtering.
+func (s *Store) queryToPrefix(query artifact.Query) string {
+	if query.All {
+		return ""
+	}
+
+	var prefix string
+	if len(query.Stacks) > 0 {
+		prefix = query.Stacks[0]
+	}
+	if len(query.Components) > 0 && prefix != "" {
+		prefix += "/" + query.Components[0]
+	}
+
+	return prefix
+}
+
+// Exists checks if an artifact exists.
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	defer perf.Track(nil, "github.Exists")()
 
@@ -676,7 +701,7 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 
 	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
-		return false, fmt.Errorf("%w: failed to check artifact existence: %w", errUtils.ErrPlanfileListFailed, err)
+		return false, fmt.Errorf("%w: failed to check artifact existence: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
 	for _, a := range resp.Artifacts {
@@ -688,22 +713,22 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	return false, nil
 }
 
-// GetMetadata retrieves metadata for a planfile artifact.
-func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata, error) {
+// GetMetadata retrieves metadata for an artifact.
+func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata, error) {
 	defer perf.Track(nil, "github.GetMetadata")()
 
 	artifactName := s.artifactName(key)
 
 	resp, _, err := s.listArtifacts(ctx, githubPaginationLimit, 1)
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get artifact metadata: %w", errUtils.ErrPlanfileListFailed, err)
+		return nil, fmt.Errorf("%w: failed to get artifact metadata: %w", errUtils.ErrArtifactListFailed, err)
 	}
 
 	for _, a := range resp.Artifacts {
 		if a.Name == artifactName {
 			// Return basic metadata from artifact info.
 			// Full metadata would require downloading the artifact.
-			meta := &planfile.Metadata{}
+			meta := &artifact.Metadata{}
 			meta.CreatedAt = a.CreatedAt
 			meta.ExpiresAt = func() *time.Time {
 				t := a.ExpiresAt
@@ -713,7 +738,7 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		}
 	}
 
-	return nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
+	return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 }
 
 // sanitizeKey converts a storage key to a valid artifact name.
@@ -930,8 +955,8 @@ func getBackendIDsFromToken(token string) (*backendIDs, error) {
 }
 
 func init() {
-	planfile.Register(storeName, NewStore)
+	artifact.Register(storeName, NewStore)
 }
 
-// Ensure Store implements planfile.Store.
-var _ planfile.Store = (*Store)(nil)
+// Ensure Store implements artifact.Store.
+var _ artifact.Store = (*Store)(nil)

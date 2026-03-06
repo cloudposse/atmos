@@ -17,7 +17,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
 func TestStore_Name(t *testing.T) {
@@ -497,7 +497,7 @@ func TestNewStore(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
 
-		_, err := NewStore(planfile.StoreOptions{
+		_, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",
@@ -510,17 +510,17 @@ func TestNewStore(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		t.Setenv("GITHUB_REPOSITORY", "")
 
-		_, err := NewStore(planfile.StoreOptions{
+		_, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{},
 		})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileStoreNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactStoreNotFound)
 	})
 
 	t.Run("valid configuration", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner":          "testowner",
 				"repo":           "testrepo",
@@ -544,7 +544,7 @@ func TestNewStore(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		t.Setenv("GITHUB_REPOSITORY", "envowner/envrepo")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{},
 		})
 		require.NoError(t, err)
@@ -557,82 +557,100 @@ func TestNewStore(t *testing.T) {
 	})
 }
 
-func TestExtractBundleFromZip(t *testing.T) {
-	t.Run("valid zip with bundle and metadata", func(t *testing.T) {
+func TestExtractFilesFromZip(t *testing.T) {
+	t.Run("valid zip with files and metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			bundleFilename: []byte("tar bundle content"),
+			"plan.tfplan": []byte("plan file content"),
 			metadataFilename: func() []byte {
-				m := &planfile.Metadata{}
+				m := &artifact.Metadata{}
 				m.Stack = "test-stack"
 				m.Component = "test-component"
 				m.SHA = "abc123"
-				m.HasChanges = true
 				return marshalJSON(t, m)
 			}(),
 		})
 
-		reader, metadata, err := extractBundleFromZip(zipData)
+		results, metadata, err := extractFilesFromZip(zipData)
 		require.NoError(t, err)
-		require.NotNil(t, reader)
-		defer reader.Close()
+		require.NotEmpty(t, results)
 
-		content, err := io.ReadAll(reader)
+		// Find the plan file result.
+		var planResult *artifact.FileResult
+		for i := range results {
+			if results[i].Name == "plan.tfplan" {
+				planResult = &results[i]
+				break
+			}
+		}
+		require.NotNil(t, planResult)
+		defer planResult.Data.Close()
+
+		content, err := io.ReadAll(planResult.Data)
 		require.NoError(t, err)
-		assert.Equal(t, "tar bundle content", string(content))
+		assert.Equal(t, "plan file content", string(content))
 
 		require.NotNil(t, metadata)
 		assert.Equal(t, "test-stack", metadata.Stack)
 		assert.Equal(t, "test-component", metadata.Component)
 		assert.Equal(t, "abc123", metadata.SHA)
-		assert.True(t, metadata.HasChanges)
 	})
 
 	t.Run("valid zip without metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			bundleFilename: []byte("tar bundle content"),
+			"plan.tfplan": []byte("plan file content"),
 		})
 
-		reader, metadata, err := extractBundleFromZip(zipData)
+		results, metadata, err := extractFilesFromZip(zipData)
 		require.NoError(t, err)
-		require.NotNil(t, reader)
-		defer reader.Close()
+		require.NotEmpty(t, results)
+		defer results[0].Data.Close()
 
-		content, err := io.ReadAll(reader)
+		content, err := io.ReadAll(results[0].Data)
 		require.NoError(t, err)
-		assert.Equal(t, "tar bundle content", string(content))
+		assert.Equal(t, "plan file content", string(content))
 		assert.Nil(t, metadata)
 	})
 
-	t.Run("zip without bundle file", func(t *testing.T) {
+	t.Run("zip without any files (only metadata)", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
 			metadataFilename: []byte("{}"),
 		})
 
-		_, _, err := extractBundleFromZip(zipData)
+		_, _, err := extractFilesFromZip(zipData)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileDownloadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
 	})
 
 	t.Run("invalid zip data", func(t *testing.T) {
-		_, _, err := extractBundleFromZip([]byte("not a zip"))
+		_, _, err := extractFilesFromZip([]byte("not a zip"))
 		assert.Error(t, err)
 	})
 
 	t.Run("zip with invalid metadata JSON", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			bundleFilename:   []byte("tar bundle content"),
+			"plan.tfplan":    []byte("plan file content"),
 			metadataFilename: []byte("not valid json"),
 		})
 
-		reader, metadata, err := extractBundleFromZip(zipData)
+		results, metadata, err := extractFilesFromZip(zipData)
 		require.NoError(t, err)
-		require.NotNil(t, reader)
-		defer reader.Close()
+		require.NotEmpty(t, results)
 
-		// Bundle should still be readable.
-		content, err := io.ReadAll(reader)
+		// Find the plan file result.
+		var planResult *artifact.FileResult
+		for i := range results {
+			if results[i].Name == "plan.tfplan" {
+				planResult = &results[i]
+				break
+			}
+		}
+		require.NotNil(t, planResult)
+		defer planResult.Data.Close()
+
+		// File should still be readable.
+		content, err := io.ReadAll(planResult.Data)
 		require.NoError(t, err)
-		assert.Equal(t, "tar bundle content", string(content))
+		assert.Equal(t, "plan file content", string(content))
 
 		// Metadata should be nil due to JSON parse error.
 		assert.Nil(t, metadata)
@@ -657,7 +675,7 @@ func TestReadMetadataFile(t *testing.T) {
 	t.Run("valid metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
 			metadataFilename: func() []byte {
-				m := &planfile.Metadata{}
+				m := &artifact.Metadata{}
 				m.Stack = "test"
 				m.Component = "comp"
 				return marshalJSON(t, m)
@@ -717,12 +735,14 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		data := bytes.NewReader([]byte("plan data"))
-		metadata := &planfile.Metadata{}
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan data")), Size: 9},
+		}
+		metadata := &artifact.Metadata{}
 		metadata.Stack = "test"
 		metadata.Component = "comp"
 
-		err := store.Upload(ctx, "test/key.tfplan", data, metadata)
+		err := store.Upload(ctx, "test/key.tfplan", files, metadata)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
@@ -768,14 +788,15 @@ func TestStore_Upload(t *testing.T) {
 
 		ctx := context.Background()
 		planContent := []byte("terraform plan binary content")
-		data := bytes.NewReader(planContent)
-		metadata := &planfile.Metadata{}
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader(planContent), Size: int64(len(planContent))},
+		}
+		metadata := &artifact.Metadata{}
 		metadata.Stack = "dev"
 		metadata.Component = "vpc"
 		metadata.SHA = "abc123"
-		metadata.HasChanges = true
 
-		err := store.Upload(ctx, "dev/vpc/abc123.tfplan", data, metadata)
+		err := store.Upload(ctx, "dev/vpc/abc123.tfplan", files, metadata)
 		require.NoError(t, err)
 
 		// Verify CreateArtifact request.
@@ -786,19 +807,29 @@ func TestStore_Upload(t *testing.T) {
 		assert.Equal(t, 4, capturedCreateReq.Version)
 		assert.Equal(t, "14d", capturedCreateReq.ExpiresAfter)
 
-		// Verify uploaded data is a valid zip containing bundle.tar and metadata.
+		// Verify uploaded data is a valid zip containing the plan file and metadata.
 		require.NotEmpty(t, capturedUploadData)
-		bundleReader, meta, err := extractBundleFromZip(capturedUploadData)
+		fileResults, meta, err := extractFilesFromZip(capturedUploadData)
 		require.NoError(t, err)
-		defer bundleReader.Close()
-		bundleBytes, err := io.ReadAll(bundleReader)
+		require.NotEmpty(t, fileResults)
+
+		// Find the plan file in results.
+		var planResult *artifact.FileResult
+		for i := range fileResults {
+			if fileResults[i].Name == "plan.tfplan" {
+				planResult = &fileResults[i]
+				break
+			}
+		}
+		require.NotNil(t, planResult)
+		defer planResult.Data.Close()
+		planBytes, err := io.ReadAll(planResult.Data)
 		require.NoError(t, err)
-		// The bundle should be the exact bytes passed to Upload (opaque blob).
-		assert.Equal(t, planContent, bundleBytes)
+		// The plan file should contain the exact bytes passed to Upload.
+		assert.Equal(t, planContent, planBytes)
 		require.NotNil(t, meta)
 		assert.Equal(t, "dev", meta.Stack)
 		assert.Equal(t, "vpc", meta.Component)
-		assert.True(t, meta.HasChanges)
 
 		// Verify FinalizeArtifact request.
 		require.NotNil(t, capturedFinalizeReq)
@@ -839,14 +870,18 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		require.NoError(t, err)
 
-		// Verify the zip contains the bundle data (opaque blob) and no metadata sidecar.
-		bundleReader, meta, err := extractBundleFromZip(capturedUploadData)
+		// Verify the zip contains the file data and no metadata sidecar.
+		fileResults, meta, err := extractFilesFromZip(capturedUploadData)
 		require.NoError(t, err)
-		defer bundleReader.Close()
-		content, err := io.ReadAll(bundleReader)
+		require.NotEmpty(t, fileResults)
+		defer fileResults[0].Data.Close()
+		content, err := io.ReadAll(fileResults[0].Data)
 		require.NoError(t, err)
 		assert.Equal(t, "plan", string(content))
 		// When nil metadata is passed, the store does not generate metadata.
@@ -874,9 +909,12 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "service unavailable")
 	})
 
@@ -901,9 +939,12 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "empty upload URL")
 	})
 
@@ -930,9 +971,12 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "blob storage error")
 	})
 
@@ -961,9 +1005,12 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "finalize failed")
 	})
 
@@ -985,9 +1032,12 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 	})
 
 	t.Run("zero retention days omits expiration", func(t *testing.T) {
@@ -1016,7 +1066,10 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader([]byte("plan")), Size: 4},
+		}
+		err := store.Upload(ctx, "test/key.tfplan", files, nil)
 		require.NoError(t, err)
 		assert.Empty(t, capturedCreateReq.ExpiresAfter)
 	})
@@ -1042,7 +1095,7 @@ func TestStore_Download(t *testing.T) {
 		ctx := context.Background()
 		_, _, err := store.Download(ctx, "nonexistent/key.tfplan")
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 	})
 }
 
@@ -1087,7 +1140,7 @@ func TestStore_List(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "")
+		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
 		assert.Empty(t, files)
 	})
@@ -1133,14 +1186,14 @@ func TestStore_List(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "")
+		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
 		// Should only include planfile-* artifacts.
 		assert.Len(t, files, 2)
 
 		// Should be sorted by last modified (newest first).
-		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Key)
-		assert.Equal(t, "stack2/component2/sha2.tfplan", files[1].Key)
+		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, "stack2/component2/sha2.tfplan", files[1].Name)
 	})
 
 	t.Run("with pagination", func(t *testing.T) {
@@ -1194,14 +1247,14 @@ func TestStore_List(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "")
+		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
 		assert.Len(t, files, 2)
 		assert.Equal(t, 2, callCount, "should have made 2 API calls for pagination")
 
 		// Should be sorted by last modified (newest first).
-		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Key)
-		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Key)
+		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Name)
 	})
 
 	t.Run("with prefix filter", func(t *testing.T) {
@@ -1239,10 +1292,10 @@ func TestStore_List(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "stack1")
+		files, err := store.List(ctx, artifact.Query{Stacks: []string{"stack1"}})
 		require.NoError(t, err)
 		assert.Len(t, files, 1)
-		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Key)
+		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Name)
 	})
 }
 
@@ -1355,7 +1408,7 @@ func TestStore_GetMetadata(t *testing.T) {
 		ctx := context.Background()
 		_, err := store.GetMetadata(ctx, "nonexistent/key.tfplan")
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 	})
 }
 
@@ -1506,25 +1559,40 @@ func TestGetBackendIDsFromToken(t *testing.T) {
 }
 
 func TestCreateArtifactZip(t *testing.T) {
-	t.Run("with bundle and metadata", func(t *testing.T) {
-		bundleData := []byte("tar bundle data")
-		metadata := &planfile.Metadata{}
+	t.Run("with files and metadata", func(t *testing.T) {
+		fileContent := []byte("plan file data")
+		metadata := &artifact.Metadata{}
 		metadata.Stack = "prod"
 		metadata.Component = "vpc"
 		metadata.SHA = "abc123"
 
-		zipData, err := createArtifactZip(bundleData, metadata)
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader(fileContent), Size: int64(len(fileContent))},
+		}
+
+		zipData, err := createArtifactZip(files, metadata)
 		require.NoError(t, err)
 		require.NotEmpty(t, zipData)
 
 		// Verify the zip contents.
-		reader, meta, err := extractBundleFromZip(zipData)
+		results, meta, err := extractFilesFromZip(zipData)
 		require.NoError(t, err)
-		defer reader.Close()
+		require.NotEmpty(t, results)
 
-		content, err := io.ReadAll(reader)
+		// Find the plan file result.
+		var planResult *artifact.FileResult
+		for i := range results {
+			if results[i].Name == "plan.tfplan" {
+				planResult = &results[i]
+				break
+			}
+		}
+		require.NotNil(t, planResult)
+		defer planResult.Data.Close()
+
+		content, err := io.ReadAll(planResult.Data)
 		require.NoError(t, err)
-		assert.Equal(t, bundleData, content)
+		assert.Equal(t, fileContent, content)
 
 		require.NotNil(t, meta)
 		assert.Equal(t, "prod", meta.Stack)
@@ -1533,30 +1601,38 @@ func TestCreateArtifactZip(t *testing.T) {
 	})
 
 	t.Run("without metadata", func(t *testing.T) {
-		bundleData := []byte("tar bundle content")
+		fileContent := []byte("plan file content")
+		files := []artifact.FileEntry{
+			{Name: "plan.tfplan", Data: bytes.NewReader(fileContent), Size: int64(len(fileContent))},
+		}
 
-		zipData, err := createArtifactZip(bundleData, nil)
+		zipData, err := createArtifactZip(files, nil)
 		require.NoError(t, err)
 
-		reader, meta, err := extractBundleFromZip(zipData)
+		results, meta, err := extractFilesFromZip(zipData)
 		require.NoError(t, err)
-		defer reader.Close()
+		require.NotEmpty(t, results)
+		defer results[0].Data.Close()
 
-		content, err := io.ReadAll(reader)
+		content, err := io.ReadAll(results[0].Data)
 		require.NoError(t, err)
-		assert.Equal(t, bundleData, content)
+		assert.Equal(t, fileContent, content)
 		assert.Nil(t, meta)
 	})
 
-	t.Run("empty bundle data", func(t *testing.T) {
-		zipData, err := createArtifactZip([]byte{}, nil)
+	t.Run("empty file entry", func(t *testing.T) {
+		files := []artifact.FileEntry{
+			{Name: "empty.tfplan", Data: bytes.NewReader([]byte{}), Size: 0},
+		}
+		zipData, err := createArtifactZip(files, nil)
 		require.NoError(t, err)
 
-		reader, _, err := extractBundleFromZip(zipData)
+		results, _, err := extractFilesFromZip(zipData)
 		require.NoError(t, err)
-		defer reader.Close()
+		require.NotEmpty(t, results)
+		defer results[0].Data.Close()
 
-		content, err := io.ReadAll(reader)
+		content, err := io.ReadAll(results[0].Data)
 		require.NoError(t, err)
 		assert.Empty(t, content)
 	})
@@ -1730,7 +1806,7 @@ func TestNewStore_WithRuntimeEnv(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", runtimeToken)
 		t.Setenv("ACTIONS_RESULTS_URL", "https://results.example.com")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",
@@ -1747,7 +1823,7 @@ func TestNewStore_WithRuntimeEnv(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
 		t.Setenv("ACTIONS_RESULTS_URL", "")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",
@@ -1764,7 +1840,7 @@ func TestNewStore_WithRuntimeEnv(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", "some-token")
 		t.Setenv("ACTIONS_RESULTS_URL", "")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",

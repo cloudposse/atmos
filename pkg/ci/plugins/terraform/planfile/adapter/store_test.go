@@ -31,7 +31,11 @@ func TestStore_Upload(t *testing.T) {
 	mockBackend := artifact.NewMockStore(ctrl)
 	store := NewStore(mockBackend)
 
-	data := bytes.NewReader([]byte("plan data"))
+	files := []planfile.FileEntry{
+		{Name: planfile.PlanFilename, Data: bytes.NewReader([]byte("plan data")), Size: -1},
+		{Name: planfile.LockFilename, Data: bytes.NewReader([]byte("lock data")), Size: -1},
+	}
+
 	meta := &planfile.Metadata{
 		HasChanges:       true,
 		Additions:        3,
@@ -47,12 +51,12 @@ func TestStore_Upload(t *testing.T) {
 	mockBackend.EXPECT().Upload(
 		gomock.Any(),
 		"dev/vpc/abc123.tfplan",
-		gomock.Len(1),
+		gomock.Len(2),
 		gomock.Any(),
-	).DoAndReturn(func(_ context.Context, _ string, files []artifact.FileEntry, artMeta *artifact.Metadata) error {
-		// Verify the file entry.
-		assert.Equal(t, planFilename, files[0].Name)
-		assert.Equal(t, int64(-1), files[0].Size)
+	).DoAndReturn(func(_ context.Context, _ string, f []artifact.FileEntry, artMeta *artifact.Metadata) error {
+		// Verify the file entries are passed through.
+		assert.Equal(t, planfile.PlanFilename, f[0].Name)
+		assert.Equal(t, planfile.LockFilename, f[1].Name)
 
 		// Verify metadata conversion.
 		assert.Equal(t, "dev", artMeta.Stack)
@@ -68,7 +72,7 @@ func TestStore_Upload(t *testing.T) {
 		return nil
 	})
 
-	err := store.Upload(context.Background(), "dev/vpc/abc123.tfplan", data, meta)
+	err := store.Upload(context.Background(), "dev/vpc/abc123.tfplan", files, meta)
 	require.NoError(t, err)
 }
 
@@ -77,7 +81,9 @@ func TestStore_Upload_NilMetadata(t *testing.T) {
 	mockBackend := artifact.NewMockStore(ctrl)
 	store := NewStore(mockBackend)
 
-	data := bytes.NewReader([]byte("plan data"))
+	files := []planfile.FileEntry{
+		{Name: planfile.PlanFilename, Data: bytes.NewReader([]byte("plan data")), Size: -1},
+	}
 
 	mockBackend.EXPECT().Upload(
 		gomock.Any(),
@@ -86,7 +92,7 @@ func TestStore_Upload_NilMetadata(t *testing.T) {
 		nil,
 	).Return(nil)
 
-	err := store.Upload(context.Background(), "key", data, nil)
+	err := store.Upload(context.Background(), "key", files, nil)
 	require.NoError(t, err)
 }
 
@@ -113,21 +119,25 @@ func TestStore_Download(t *testing.T) {
 
 	mockBackend.EXPECT().Download(gomock.Any(), "dev/vpc/abc123.tfplan").Return(
 		[]artifact.FileResult{
-			{Name: "lock.hcl", Data: lockData, Size: 12},
-			{Name: planFilename, Data: planData, Size: 12},
+			{Name: planfile.LockFilename, Data: lockData, Size: 12},
+			{Name: planfile.PlanFilename, Data: planData, Size: 12},
 		},
 		artMeta,
 		nil,
 	)
 
-	reader, meta, err := store.Download(context.Background(), "dev/vpc/abc123.tfplan")
+	results, meta, err := store.Download(context.Background(), "dev/vpc/abc123.tfplan")
 	require.NoError(t, err)
-	require.NotNil(t, reader)
-	defer reader.Close()
+	require.Len(t, results, 2)
 
-	content, _ := io.ReadAll(reader)
-	assert.Equal(t, "plan content", string(content))
+	// Close all results when done.
+	defer func() {
+		for _, r := range results {
+			r.Data.Close()
+		}
+	}()
 
+	// Verify metadata conversion.
 	assert.Equal(t, "dev", meta.Stack)
 	assert.Equal(t, "vpc", meta.Component)
 	assert.Equal(t, "abc123", meta.SHA)
@@ -138,27 +148,6 @@ func TestStore_Download(t *testing.T) {
 	assert.Equal(t, "1.5.0", meta.TerraformVersion)
 }
 
-func TestStore_Download_NoPlanFile(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockBackend := artifact.NewMockStore(ctrl)
-	store := NewStore(mockBackend)
-
-	otherData := io.NopCloser(bytes.NewReader([]byte("other")))
-
-	mockBackend.EXPECT().Download(gomock.Any(), "key").Return(
-		[]artifact.FileResult{
-			{Name: "other.txt", Data: otherData, Size: 5},
-		},
-		&artifact.Metadata{},
-		nil,
-	)
-
-	reader, _, err := store.Download(context.Background(), "key")
-	assert.Nil(t, reader)
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), planFilename)
-}
-
 func TestStore_Download_NotFound(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	mockBackend := artifact.NewMockStore(ctrl)
@@ -167,8 +156,8 @@ func TestStore_Download_NotFound(t *testing.T) {
 	backendErr := errors.New("not found")
 	mockBackend.EXPECT().Download(gomock.Any(), "key").Return(nil, nil, backendErr)
 
-	reader, _, err := store.Download(context.Background(), "key")
-	assert.Nil(t, reader)
+	results, _, err := store.Download(context.Background(), "key")
+	assert.Nil(t, results)
 	assert.Error(t, err)
 	assert.ErrorIs(t, err, backendErr)
 }
@@ -190,9 +179,9 @@ func TestStore_List(t *testing.T) {
 	store := NewStore(mockBackend)
 
 	now := time.Now()
-	mockBackend.EXPECT().List(gomock.Any(), artifact.Query{
-		Stacks: []string{"dev"},
-	}).Return([]artifact.ArtifactInfo{
+	query := artifact.Query{Stacks: []string{"dev"}}
+
+	mockBackend.EXPECT().List(gomock.Any(), query).Return([]artifact.ArtifactInfo{
 		{
 			Name:         "dev/vpc/abc123.tfplan",
 			Size:         1024,
@@ -208,7 +197,7 @@ func TestStore_List(t *testing.T) {
 		},
 	}, nil)
 
-	infos, err := store.List(context.Background(), "dev")
+	infos, err := store.List(context.Background(), query)
 	require.NoError(t, err)
 	require.Len(t, infos, 1)
 
@@ -227,7 +216,7 @@ func TestStore_List_Empty(t *testing.T) {
 
 	mockBackend.EXPECT().List(gomock.Any(), artifact.Query{All: true}).Return([]artifact.ArtifactInfo{}, nil)
 
-	infos, err := store.List(context.Background(), "")
+	infos, err := store.List(context.Background(), artifact.Query{All: true})
 	require.NoError(t, err)
 	assert.Empty(t, infos)
 }
@@ -350,63 +339,4 @@ func TestMetadataConversion_RoundTrip(t *testing.T) {
 func TestMetadataConversion_NilInput(t *testing.T) {
 	assert.Nil(t, planfileToArtifactMeta(nil))
 	assert.Nil(t, artifactToPlanfileMeta(nil))
-}
-
-func TestPrefixToQuery(t *testing.T) {
-	tests := []struct {
-		name     string
-		prefix   string
-		expected artifact.Query
-	}{
-		{
-			name:     "empty prefix matches all",
-			prefix:   "",
-			expected: artifact.Query{All: true},
-		},
-		{
-			name:     "stack only",
-			prefix:   "stack1",
-			expected: artifact.Query{Stacks: []string{"stack1"}},
-		},
-		{
-			name:   "stack and component",
-			prefix: "stack1/component1",
-			expected: artifact.Query{
-				Stacks:     []string{"stack1"},
-				Components: []string{"component1"},
-			},
-		},
-		{
-			name:   "stack, component, and sha",
-			prefix: "stack1/component1/sha123",
-			expected: artifact.Query{
-				Stacks:     []string{"stack1"},
-				Components: []string{"component1"},
-				SHAs:       []string{"sha123"},
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := prefixToQuery(tt.prefix)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
-}
-
-func TestNewStoreFactory(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockBackend := artifact.NewMockStore(ctrl)
-
-	factory := NewStoreFactory(mockBackend)
-	require.NotNil(t, factory)
-
-	store, err := factory(planfile.StoreOptions{Type: "adapter"})
-	require.NoError(t, err)
-	require.NotNil(t, store)
-
-	// Verify the created store delegates to the mock backend.
-	mockBackend.EXPECT().Name().Return("local")
-	assert.Equal(t, "local", store.Name())
 }

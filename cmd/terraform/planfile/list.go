@@ -3,6 +3,7 @@ package planfile
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -108,14 +109,17 @@ func runList(cmd *cobra.Command, args []string) error {
 	owner, repo := extractOwnerRepo(storeOpts)
 
 	// Create the store.
-	store, err := planfile.NewStore(storeOpts)
+	store, err := createStore(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
 
+	// Convert prefix to query.
+	query := prefixToQuery(opts.Prefix)
+
 	// List planfiles.
 	ctx := context.Background()
-	files, err := store.List(ctx, opts.Prefix)
+	files, err := store.List(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -130,6 +134,22 @@ func extractOwnerRepo(opts planfile.StoreOptions) (string, string) {
 	owner, _ := opts.Options["owner"].(string)
 	repo, _ := opts.Options["repo"].(string)
 	return owner, repo
+}
+
+// prefixToQuery converts a prefix string to a planfile.Query.
+func prefixToQuery(prefix string) planfile.Query {
+	if prefix == "" {
+		return planfile.Query{All: true}
+	}
+
+	parts := strings.SplitN(prefix, "/", 2)
+	q := planfile.Query{
+		Stacks: []string{parts[0]},
+	}
+	if len(parts) > 1 && parts[1] != "" {
+		q.Components = []string{parts[1]}
+	}
+	return q
 }
 
 // renderPlanfileList formats and outputs the planfile list using pkg/list infrastructure.

@@ -2,7 +2,6 @@ package planfile
 
 import (
 	"context"
-	"io"
 	"strings"
 	"time"
 
@@ -12,6 +11,21 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// Type aliases to align planfile types with artifact types.
+type FileEntry = artifact.FileEntry
+type FileResult = artifact.FileResult
+type Query = artifact.Query
+type StoreOptions = artifact.StoreOptions
+type StoreFactory = artifact.StoreFactory
+
+const (
+	// PlanFilename is the well-known name for the plan file within a bundle.
+	PlanFilename = "plan.tfplan"
+
+	// LockFilename is the well-known name for the lock file within a bundle.
+	LockFilename = ".terraform.lock.hcl"
+)
+
 // Store defines the interface for planfile storage backends.
 // Implementations include S3, Azure Blob, GCS, GitHub Artifacts, and local filesystem.
 type Store interface {
@@ -19,22 +33,22 @@ type Store interface {
 	Name() string
 
 	// Upload uploads a planfile to the store.
-	Upload(ctx context.Context, key string, data io.Reader, metadata *Metadata) error
+	Upload(ctx context.Context, name string, files []FileEntry, metadata *Metadata) error
 
 	// Download downloads a planfile from the store.
-	Download(ctx context.Context, key string) (io.ReadCloser, *Metadata, error)
+	Download(ctx context.Context, name string) ([]FileResult, *Metadata, error)
 
 	// Delete deletes a planfile from the store.
-	Delete(ctx context.Context, key string) error
+	Delete(ctx context.Context, name string) error
 
-	// List lists planfiles matching the given prefix.
-	List(ctx context.Context, prefix string) ([]PlanfileInfo, error)
+	// List lists planfiles matching the given query.
+	List(ctx context.Context, query Query) ([]PlanfileInfo, error)
 
 	// Exists checks if a planfile exists.
-	Exists(ctx context.Context, key string) (bool, error)
+	Exists(ctx context.Context, name string) (bool, error)
 
 	// GetMetadata retrieves metadata for a planfile without downloading the content.
-	GetMetadata(ctx context.Context, key string) (*Metadata, error)
+	GetMetadata(ctx context.Context, name string) (*Metadata, error)
 }
 
 // Metadata contains metadata about a stored planfile.
@@ -89,21 +103,6 @@ type PlanfileInfo struct {
 	// Metadata contains the planfile metadata if available.
 	Metadata *Metadata `json:"metadata,omitempty"`
 }
-
-// StoreOptions contains options for creating a store.
-type StoreOptions struct {
-	// Type is the store type (s3, azure, gcs, github, local).
-	Type string
-
-	// Options contains type-specific configuration options.
-	Options map[string]any
-
-	// AtmosConfig is the Atmos configuration.
-	AtmosConfig *schema.AtmosConfiguration
-}
-
-// StoreFactory is a function that creates a Store from options.
-type StoreFactory func(opts StoreOptions) (Store, error)
 
 // KeyPattern holds the pattern configuration for generating planfile keys.
 type KeyPattern struct {
@@ -175,4 +174,14 @@ func validateKeyContext(pattern string, ctx *KeyContext) error {
 		return errUtils.ErrPlanfileKeyInvalid
 	}
 	return nil
+}
+
+// NewAtmosConfig is a helper to build StoreOptions with an AtmosConfiguration.
+// This is used to bridge from planfile-specific config to artifact StoreOptions.
+func NewAtmosConfig(storeType string, options map[string]any, atmosConfig *schema.AtmosConfiguration) StoreOptions {
+	return StoreOptions{
+		Type:        storeType,
+		Options:     options,
+		AtmosConfig: atmosConfig,
+	}
 }

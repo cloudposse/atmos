@@ -4,12 +4,14 @@ import (
 	"os"
 	"strings"
 
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local" // Register local artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github" // Register github store.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"  // Register local store.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"     // Register s3 store.
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github" // Register github artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"     // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -164,7 +166,7 @@ func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.H
 func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 	defer perf.Track(opts.AtmosConfig, "ci.createPlanfileStore")()
 
-	storeOpts := planfile.StoreOptions{
+	artOpts := artifact.StoreOptions{
 		AtmosConfig: opts.AtmosConfig,
 	}
 
@@ -173,9 +175,13 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 		planfilesConfig := opts.AtmosConfig.Components.Terraform.Planfiles
 		if planfilesConfig.Default != "" {
 			if storeSpec, ok := planfilesConfig.Stores[planfilesConfig.Default]; ok {
-				storeOpts.Type = storeSpec.Type
-				storeOpts.Options = storeSpec.Options
-				return planfile.NewStore(storeOpts)
+				artOpts.Type = storeSpec.Type
+				artOpts.Options = storeSpec.Options
+				backend, err := artifact.NewStore(artOpts)
+				if err != nil {
+					return nil, err
+				}
+				return adapter.NewStore(backend), nil
 			}
 		}
 	}
@@ -183,24 +189,32 @@ func createPlanfileStore(opts ExecuteOptions) (planfile.Store, error) {
 	// Fall back to environment-based detection.
 	if envOpts := detectStoreFromEnv(); envOpts != nil {
 		envOpts.AtmosConfig = opts.AtmosConfig
-		return planfile.NewStore(*envOpts)
+		backend, err := artifact.NewStore(*envOpts)
+		if err != nil {
+			return nil, err
+		}
+		return adapter.NewStore(backend), nil
 	}
 
 	// Default to local storage.
-	storeOpts.Type = "local"
-	storeOpts.Options = map[string]any{
+	artOpts.Type = "local"
+	artOpts.Options = map[string]any{
 		"path": ".atmos/planfiles",
 	}
-	return planfile.NewStore(storeOpts)
+	backend, err := artifact.NewStore(artOpts)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
 }
 
-// detectStoreFromEnv detects the planfile store from environment variables.
-func detectStoreFromEnv() *planfile.StoreOptions {
+// detectStoreFromEnv detects the artifact store from environment variables.
+func detectStoreFromEnv() *artifact.StoreOptions {
 	defer perf.Track(nil, "ci.detectStoreFromEnv")()
 
 	// Check for S3 configuration.
 	if bucket := os.Getenv("ATMOS_PLANFILE_BUCKET"); bucket != "" {
-		return &planfile.StoreOptions{
+		return &artifact.StoreOptions{
 			Type: "s3",
 			Options: map[string]any{
 				"bucket": bucket,
@@ -212,7 +226,7 @@ func detectStoreFromEnv() *planfile.StoreOptions {
 
 	// Check for GitHub Actions.
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
-		return &planfile.StoreOptions{
+		return &artifact.StoreOptions{
 			Type:    "github-artifacts",
 			Options: map[string]any{},
 		}

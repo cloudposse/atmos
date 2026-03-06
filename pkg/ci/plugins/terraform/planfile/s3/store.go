@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"path"
 	"time"
 
@@ -16,18 +15,18 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
 const (
 	storeName = "s3"
 
-	// Metadata is stored as a JSON file alongside the planfile.
+	// Metadata is stored as a JSON file alongside the artifact.
 	metadataSuffix = ".metadata.json"
 )
 
-// Store implements the planfile.Store interface using AWS S3.
+// Store implements the artifact.Store interface using AWS S3.
 type Store struct {
 	client *s3.Client
 	bucket string
@@ -35,12 +34,12 @@ type Store struct {
 }
 
 // NewStore creates a new S3 store.
-func NewStore(opts planfile.StoreOptions) (planfile.Store, error) {
+func NewStore(opts artifact.StoreOptions) (artifact.Store, error) {
 	defer perf.Track(opts.AtmosConfig, "s3.NewStore")()
 
 	bucket, ok := opts.Options["bucket"].(string)
 	if !ok || bucket == "" {
-		return nil, fmt.Errorf("%w: bucket is required for S3 store", errUtils.ErrPlanfileStoreNotFound)
+		return nil, fmt.Errorf("%w: bucket is required for S3 store", errUtils.ErrArtifactStoreNotFound)
 	}
 
 	prefix, _ := opts.Options["prefix"].(string)
@@ -82,27 +81,27 @@ func (s *Store) fullKey(key string) string {
 	return path.Join(s.prefix, key)
 }
 
-// Upload uploads a planfile to S3.
-func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata *planfile.Metadata) error {
+// Upload uploads an artifact bundle to S3 as a tar archive with a metadata sidecar.
+func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEntry, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "s3.Upload")()
 
 	fullKey := s.fullKey(key)
 
-	// Read data into buffer (S3 requires knowing content length or using multipart).
-	buf, err := io.ReadAll(data)
+	// Create tar archive from files.
+	tarData, err := artifact.CreateTarArchive(files)
 	if err != nil {
-		return fmt.Errorf("%w: failed to read planfile data: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
-	// Upload the planfile.
+	// Upload the tar archive.
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
 		Key:           aws.String(fullKey),
-		Body:          bytes.NewReader(buf),
-		ContentLength: aws.Int64(int64(len(buf))),
+		Body:          bytes.NewReader(tarData),
+		ContentLength: aws.Int64(int64(len(tarData))),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: failed to upload planfile to S3: %w", errUtils.ErrPlanfileUploadFailed, err)
+		return fmt.Errorf("%w: failed to upload artifact to S3: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
 	// Upload metadata if provided.
@@ -110,7 +109,7 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		metadataKey := fullKey + metadataSuffix
 		metadataJSON, err := json.MarshalIndent(metadata, "", "  ")
 		if err != nil {
-			return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return fmt.Errorf("%w: failed to marshal metadata: %w", errUtils.ErrArtifactUploadFailed, err)
 		}
 
 		_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
@@ -121,50 +120,57 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 			ContentType:   aws.String("application/json"),
 		})
 		if err != nil {
-			return fmt.Errorf("%w: failed to upload metadata to S3: %w", errUtils.ErrPlanfileUploadFailed, err)
+			return fmt.Errorf("%w: failed to upload metadata to S3: %w", errUtils.ErrArtifactUploadFailed, err)
 		}
 	}
 
 	return nil
 }
 
-// Download downloads a planfile from S3.
-func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planfile.Metadata, error) {
+// Download downloads an artifact bundle from S3 and extracts files from the tar archive.
+func (s *Store) Download(ctx context.Context, key string) ([]artifact.FileResult, *artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.Download")()
 
 	fullKey := s.fullKey(key)
 
-	// Download the planfile.
+	// Download the tar archive.
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
 		if isNoSuchKeyError(err) {
-			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
+			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 		}
-		return nil, nil, fmt.Errorf("%w: failed to download planfile from S3: %w", errUtils.ErrPlanfileDownloadFailed, err)
+		return nil, nil, fmt.Errorf("%w: failed to download artifact from S3: %w", errUtils.ErrArtifactDownloadFailed, err)
+	}
+	defer result.Body.Close()
+
+	// Extract files from tar.
+	files, err := artifact.ExtractTarArchive(result.Body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
 	// Try to load metadata.
 	metadata, _ := s.loadMetadata(ctx, fullKey)
 
-	return result.Body, metadata, nil
+	return files, metadata, nil
 }
 
-// Delete deletes a planfile from S3.
+// Delete deletes an artifact from S3.
 func (s *Store) Delete(ctx context.Context, key string) error {
 	defer perf.Track(nil, "s3.Delete")()
 
 	fullKey := s.fullKey(key)
 
-	// Delete the planfile.
+	// Delete the artifact.
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
-		return fmt.Errorf("%w: failed to delete planfile from S3: %w", errUtils.ErrPlanfileDeleteFailed, err)
+		return fmt.Errorf("%w: failed to delete artifact from S3: %w", errUtils.ErrArtifactDeleteFailed, err)
 	}
 
 	// Try to delete metadata (ignore errors).
@@ -176,13 +182,15 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// List lists planfiles matching the given prefix.
-func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInfo, error) {
+// List lists artifacts matching the given query.
+func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
 	defer perf.Track(nil, "s3.List")()
 
+	// Convert query to prefix-based S3 listing.
+	prefix := s.queryToPrefix(query)
 	fullPrefix := s.fullKey(prefix)
 
-	var files []planfile.PlanfileInfo
+	var files []artifact.ArtifactInfo
 	paginator := s3.NewListObjectsV2Paginator(s.client, &s3.ListObjectsV2Input{
 		Bucket: aws.String(s.bucket),
 		Prefix: aws.String(fullPrefix),
@@ -191,7 +199,7 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("%w: failed to list planfiles in S3: %w", errUtils.ErrPlanfileListFailed, err)
+			return nil, fmt.Errorf("%w: failed to list artifacts in S3: %w", errUtils.ErrArtifactListFailed, err)
 		}
 
 		for _, obj := range page.Contents {
@@ -216,8 +224,8 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 				lastModified = *obj.LastModified
 			}
 
-			files = append(files, planfile.PlanfileInfo{
-				Key:          relKey,
+			files = append(files, artifact.ArtifactInfo{
+				Name:         relKey,
 				Size:         aws.ToInt64(obj.Size),
 				LastModified: lastModified,
 				Metadata:     metadata,
@@ -228,7 +236,7 @@ func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInf
 	return files, nil
 }
 
-// Exists checks if a planfile exists.
+// Exists checks if an artifact exists.
 func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 	defer perf.Track(nil, "s3.Exists")()
 
@@ -242,35 +250,35 @@ func (s *Store) Exists(ctx context.Context, key string) (bool, error) {
 		if isNotFoundError(err) {
 			return false, nil
 		}
-		return false, fmt.Errorf("%w: failed to check if %s exists in S3: %w", errUtils.ErrPlanfileStatFailed, key, err)
+		return false, fmt.Errorf("%w: failed to check if %s exists in S3: %w", errUtils.ErrArtifactListFailed, key, err)
 	}
 
 	return true, nil
 }
 
-// GetMetadata retrieves metadata for a planfile without downloading the content.
-func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata, error) {
+// GetMetadata retrieves metadata for an artifact without downloading the content.
+func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.GetMetadata")()
 
 	fullKey := s.fullKey(key)
 
-	// Check if the planfile exists.
+	// Check if the artifact exists.
 	headResult, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(fullKey),
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			return nil, fmt.Errorf("%w: %s", errUtils.ErrPlanfileNotFound, key)
+			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
 		}
-		return nil, fmt.Errorf("%w: failed to get metadata for %s from S3: %w", errUtils.ErrPlanfileStatFailed, key, err)
+		return nil, fmt.Errorf("%w: failed to get metadata for %s from S3: %w", errUtils.ErrArtifactMetadataFailed, key, err)
 	}
 
 	// Try to load metadata from separate file.
 	metadata, err := s.loadMetadata(ctx, fullKey)
 	if err != nil || metadata == nil {
 		// Return minimal metadata from S3 object.
-		metadata = &planfile.Metadata{}
+		metadata = &artifact.Metadata{}
 		if headResult.LastModified != nil {
 			metadata.CreatedAt = *headResult.LastModified
 		}
@@ -280,24 +288,41 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 }
 
 // loadMetadata loads metadata from the metadata file in S3.
-func (s *Store) loadMetadata(ctx context.Context, planfileKey string) (*planfile.Metadata, error) {
-	metadataKey := planfileKey + metadataSuffix
+func (s *Store) loadMetadata(ctx context.Context, artifactKey string) (*artifact.Metadata, error) {
+	metadataKey := artifactKey + metadataSuffix
 
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(metadataKey),
 	})
 	if err != nil {
-		return nil, fmt.Errorf("%w: failed to get metadata from S3: %w", errUtils.ErrPlanfileMetadataFailed, err)
+		return nil, fmt.Errorf("%w: failed to get metadata from S3: %w", errUtils.ErrArtifactMetadataFailed, err)
 	}
 	defer result.Body.Close()
 
-	var metadata planfile.Metadata
+	var metadata artifact.Metadata
 	if err := json.NewDecoder(result.Body).Decode(&metadata); err != nil {
-		return nil, fmt.Errorf("%w: failed to decode metadata JSON: %w", errUtils.ErrPlanfileMetadataFailed, err)
+		return nil, fmt.Errorf("%w: failed to decode metadata JSON: %w", errUtils.ErrArtifactMetadataFailed, err)
 	}
 
 	return &metadata, nil
+}
+
+// queryToPrefix converts an artifact.Query to an S3 prefix string.
+func (s *Store) queryToPrefix(query artifact.Query) string {
+	if query.All {
+		return ""
+	}
+
+	var prefix string
+	if len(query.Stacks) > 0 {
+		prefix = query.Stacks[0]
+	}
+	if len(query.Components) > 0 && prefix != "" {
+		prefix += "/" + query.Components[0]
+	}
+
+	return prefix
 }
 
 // isNoSuchKeyError checks if the error is a NoSuchKey error.
@@ -313,8 +338,8 @@ func isNotFoundError(err error) bool {
 }
 
 func init() {
-	planfile.Register(storeName, NewStore)
+	artifact.Register(storeName, NewStore)
 }
 
-// Ensure Store implements planfile.Store.
-var _ planfile.Store = (*Store)(nil)
+// Ensure Store implements artifact.Store.
+var _ artifact.Store = (*Store)(nil)

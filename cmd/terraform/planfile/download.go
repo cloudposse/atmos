@@ -3,6 +3,7 @@ package planfile
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -96,14 +97,8 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Get the storage configuration.
-	storeOpts, err := getStoreOptions(&atmosConfig, opts.Store)
-	if err != nil {
-		return err
-	}
-
 	// Create the store.
-	store, err := planfile.NewStore(storeOpts)
+	store, err := createStore(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
@@ -126,31 +121,37 @@ func getOutputPath(args []string) string {
 	return baseName(args[0])
 }
 
-// downloadToFile downloads the planfile bundle and writes plan + lock to disk.
+// downloadToFile downloads the planfile and writes plan + lock to disk.
 func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Metadata, error) {
 	ctx := context.Background()
-	reader, metadata, err := store.Download(ctx, key)
+	results, metadata, err := store.Download(ctx, key)
 	if err != nil {
 		return nil, err
 	}
-	defer reader.Close()
+	defer func() {
+		for _, r := range results {
+			r.Data.Close()
+		}
+	}()
 
-	// Extract bundle.
-	planData, lockData, err := planfile.ExtractBundle(reader)
-	if err != nil {
-		return nil, fmt.Errorf("%w: failed to extract planfile bundle: %w", errUtils.ErrPlanfileDownloadFailed, err)
-	}
+	// Write each file to disk.
+	for _, r := range results {
+		var destPath string
+		switch r.Name {
+		case planfile.PlanFilename:
+			destPath = outputPath
+		case planfile.LockFilename:
+			destPath = filepath.Join(filepath.Dir(outputPath), planfile.LockFilename)
+		default:
+			continue
+		}
 
-	// Write plan to output path.
-	if err := os.WriteFile(outputPath, planData, 0o644); err != nil {
-		return nil, fmt.Errorf("%w: failed to write planfile to %s: %w", errUtils.ErrPlanfileDownloadFailed, outputPath, err)
-	}
-
-	// Write lock file alongside the plan if present.
-	if lockData != nil {
-		lockPath := filepath.Join(filepath.Dir(outputPath), planfile.BundleLockFilename)
-		if err := os.WriteFile(lockPath, lockData, 0o644); err != nil {
-			return nil, fmt.Errorf("%w: failed to write lock file to %s: %w", errUtils.ErrPlanfileDownloadFailed, lockPath, err)
+		fileData, err := io.ReadAll(r.Data)
+		if err != nil {
+			return nil, fmt.Errorf("%w: failed to read %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, err)
+		}
+		if err := os.WriteFile(destPath, fileData, 0o644); err != nil {
+			return nil, fmt.Errorf("%w: failed to write %s to %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, destPath, err)
 		}
 	}
 

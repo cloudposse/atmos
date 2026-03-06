@@ -3,10 +3,8 @@ package adapter
 import (
 	"context"
 	"fmt"
-	"io"
 	"maps"
 	"strconv"
-	"strings"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
@@ -15,9 +13,6 @@ import (
 )
 
 const (
-	// planFilename is the well-known name for the plan file within an artifact bundle.
-	planFilename = "plan.tfplan"
-
 	// Metadata custom key prefixes for planfile-specific fields.
 	customKeyPlanSummary      = "planfile.plan_summary"
 	customKeyHasChanges       = "planfile.has_changes"
@@ -32,7 +27,7 @@ const (
 var _ planfile.Store = (*Store)(nil)
 
 // Store adapts an artifact.Store to implement planfile.Store.
-// It wraps single plan files as artifact bundles and converts metadata between formats.
+// It passes file entries through directly and converts metadata between formats.
 type Store struct {
 	backend artifact.Store
 }
@@ -49,17 +44,9 @@ func (s *Store) Name() string {
 	return s.backend.Name()
 }
 
-// Upload uploads a planfile by wrapping it as a single-file artifact bundle.
-func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata *planfile.Metadata) error {
+// Upload uploads planfile entries by converting metadata and delegating to the backend.
+func (s *Store) Upload(ctx context.Context, key string, files []planfile.FileEntry, metadata *planfile.Metadata) error {
 	defer perf.Track(nil, "adapter.Store.Upload")()
-
-	files := []artifact.FileEntry{
-		{
-			Name: planFilename,
-			Data: data,
-			Size: -1,
-		},
-	}
 
 	artMeta := planfileToArtifactMeta(metadata)
 
@@ -70,9 +57,8 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	return nil
 }
 
-// Download downloads a planfile from the artifact bundle.
-// It extracts the plan.tfplan file and closes all other file handles.
-func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planfile.Metadata, error) {
+// Download downloads planfile entries from the backend and converts metadata.
+func (s *Store) Download(ctx context.Context, key string) ([]planfile.FileResult, *planfile.Metadata, error) {
 	defer perf.Track(nil, "adapter.Store.Download")()
 
 	results, artMeta, err := s.backend.Download(ctx, key)
@@ -80,23 +66,9 @@ func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *planf
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrPlanfileDownloadFailed, err)
 	}
 
-	var planReader io.ReadCloser
-	for _, r := range results {
-		if r.Name == planFilename {
-			planReader = r.Data
-		} else {
-			// Close non-plan file handles.
-			r.Data.Close()
-		}
-	}
-
-	if planReader == nil {
-		return nil, nil, fmt.Errorf("%w: %s not found in artifact bundle", errUtils.ErrPlanfileDownloadFailed, planFilename)
-	}
-
 	meta := artifactToPlanfileMeta(artMeta)
 
-	return planReader, meta, nil
+	return results, meta, nil
 }
 
 // Delete deletes a planfile artifact.
@@ -110,11 +82,9 @@ func (s *Store) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-// List lists planfiles matching the given prefix by converting it to an artifact query.
-func (s *Store) List(ctx context.Context, prefix string) ([]planfile.PlanfileInfo, error) {
+// List lists planfiles matching the given query.
+func (s *Store) List(ctx context.Context, query planfile.Query) ([]planfile.PlanfileInfo, error) {
 	defer perf.Track(nil, "adapter.Store.List")()
-
-	query := prefixToQuery(prefix)
 
 	infos, err := s.backend.List(ctx, query)
 	if err != nil {
@@ -232,30 +202,4 @@ func artifactToPlanfileMeta(meta *artifact.Metadata) *planfile.Metadata {
 
 	result.Custom = cleanCustom
 	return result
-}
-
-// prefixToQuery converts a prefix string to an artifact query.
-// The prefix follows the default key pattern: {{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan.
-func prefixToQuery(prefix string) artifact.Query {
-	if prefix == "" {
-		return artifact.Query{All: true}
-	}
-
-	parts := strings.SplitN(prefix, "/", 3)
-
-	query := artifact.Query{}
-
-	if len(parts) >= 1 && parts[0] != "" {
-		query.Stacks = []string{parts[0]}
-	}
-
-	if len(parts) >= 2 && parts[1] != "" {
-		query.Components = []string{parts[1]}
-	}
-
-	if len(parts) >= 3 && parts[2] != "" {
-		query.SHAs = []string{parts[2]}
-	}
-
-	return query
 }

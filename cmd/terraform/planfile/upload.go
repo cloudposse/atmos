@@ -1,7 +1,6 @@
 package planfile
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -14,13 +13,13 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local" // Register local artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github" // Register github artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"     // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
-
-	// Import planfile store implementations to register them.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
@@ -137,39 +136,30 @@ func runUpload(cmd *cobra.Command, _ []string) error {
 	}
 	defer planFile.Close()
 
-	// Resolve lock file path.
-	lockfilePath := resolveLockfilePath(opts.LockfilePath, planfilePath)
-	var lockReader *os.File
-	if lockfilePath != "" {
-		if lf, err := os.Open(lockfilePath); err == nil {
-			lockReader = lf
-			defer lf.Close()
-		}
+	// Build file entries for upload.
+	files := []planfile.FileEntry{
+		{Name: planfile.PlanFilename, Data: planFile, Size: -1},
 	}
 
-	// Create tar bundle.
-	var bundleData []byte
-	var sha256Hex string
-	if lockReader != nil {
-		bundleData, sha256Hex, err = planfile.CreateBundle(planFile, lockReader)
-	} else {
-		bundleData, sha256Hex, err = planfile.CreateBundle(planFile, nil)
-	}
-	if err != nil {
-		return fmt.Errorf("%w: failed to create planfile bundle: %w", errUtils.ErrPlanfileUploadFailed, err)
+	// Resolve lock file path.
+	lockfilePath := resolveLockfilePath(opts.LockfilePath, planfilePath)
+	if lockfilePath != "" {
+		if lf, err := os.Open(lockfilePath); err == nil {
+			defer lf.Close()
+			files = append(files, planfile.FileEntry{Name: planfile.LockFilename, Data: lf, Size: -1})
+		}
 	}
 
 	// Build metadata and generate key.
 	metadata := buildUploadMetadata(opts)
-	metadata.SHA256 = sha256Hex
 	key, err := resolveUploadKey(opts)
 	if err != nil {
 		return err
 	}
 
-	// Upload the bundle.
+	// Upload the files.
 	ctx := context.Background()
-	if err := store.Upload(ctx, key, bytes.NewReader(bundleData), metadata); err != nil {
+	if err := store.Upload(ctx, key, files, metadata); err != nil {
 		return err
 	}
 
@@ -191,11 +181,15 @@ func initAtmosConfig(opts *UploadOptions) (schema.AtmosConfiguration, error) {
 
 // createStore creates a planfile store from configuration.
 func createStore(atmosConfig *schema.AtmosConfiguration, storeName string) (planfile.Store, error) {
-	storeOpts, err := getStoreOptions(atmosConfig, storeName)
+	artOpts, err := getStoreOptions(atmosConfig, storeName)
 	if err != nil {
 		return nil, err
 	}
-	return planfile.NewStore(storeOpts)
+	backend, err := artifact.NewStore(artOpts)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
 }
 
 // buildUploadMetadata creates metadata for the planfile upload.
@@ -282,7 +276,7 @@ func resolveLockfilePath(explicit, planfilePath string) string {
 		return explicit
 	}
 	// Auto-detect: look for .terraform.lock.hcl in the same directory as the planfile.
-	candidate := filepath.Join(filepath.Dir(planfilePath), planfile.BundleLockFilename)
+	candidate := filepath.Join(filepath.Dir(planfilePath), planfile.LockFilename)
 	if _, err := os.Stat(candidate); err == nil {
 		return candidate
 	}
