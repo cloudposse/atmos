@@ -1,0 +1,141 @@
+---
+title: AI Configuration
+sidebar_label: ai
+sidebar_class_name: command
+sidebar_position: 2
+id: ai
+description: Configure the Atmos AI assistant in your `atmos.yaml` with providers, skills, tools, and sessions.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `settings.ai` section of the `atmos.yaml` configures the built-in AI assistant, including providers,
+skills, tool execution, sessions, and project instructions.
+</Intro>
+
+<Experimental />
+
+## Quick Start
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+```
+</File>
+
+## Configuration Reference
+
+### Top-Level Structure
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true                         # Enable AI features
+    default_provider: "anthropic"         # Default provider for CLI commands
+    default_skill: "general"              # Default AI skill
+
+    # Provider connections
+    providers:
+      <provider-name>:
+        model: "model-id"
+        api_key_env: "ENV_VAR_NAME"
+        max_tokens: 4096
+        base_url: ""                      # Custom endpoint (optional)
+        timeout_seconds: 60
+
+    # Tool execution
+    tools:
+      enabled: true
+      require_confirmation: true
+      allowed_tools: []
+      restricted_tools: []
+      blocked_tools: []
+
+    # Session persistence
+    sessions:
+      enabled: true
+      storage: "sqlite"
+      path: ".atmos/sessions"
+      max_sessions: 10
+      retention_days: 30
+
+    # Project instructions
+    instructions:
+      enabled: true
+      file: "ATMOS.md"
+
+    # Custom skills
+    skills:
+      <skill-name>:
+        display_name: "Display Name"
+        description: "What this skill does"
+        system_prompt: "..."
+        allowed_tools: []
+```
+</File>
+
+### Global Settings
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable AI features (default: `false`)</dd>
+
+  <dt>`default_provider`</dt>
+  <dd>Default AI provider: `anthropic`, `openai`, `gemini`, `grok`, `ollama`, `bedrock`, or `azureopenai`</dd>
+
+  <dt>`default_skill`</dt>
+  <dd>Default skill to activate (default: `general`)</dd>
+
+  <dt>`send_context`</dt>
+  <dd>Automatically send stack configurations to AI for context-aware answers (default: `false`)</dd>
+
+  <dt>`max_history_messages`</dt>
+  <dd>Maximum conversation messages to keep (default: `0` = unlimited)</dd>
+
+  <dt>`max_history_tokens`</dt>
+  <dd>Maximum tokens in conversation history (default: `0` = unlimited)</dd>
+
+  <dt>`timeout_seconds`</dt>
+  <dd>Request timeout in seconds (default: `60`)</dd>
+</dl>
+
+### Provider Settings
+
+Each provider in the `providers` map supports:
+
+<dl>
+  <dt>`model`</dt>
+  <dd>Model identifier (defaults vary by provider)</dd>
+
+  <dt>`api_key_env`</dt>
+  <dd>Environment variable containing the API key</dd>
+
+  <dt>`max_tokens`</dt>
+  <dd>Maximum tokens per response</dd>
+
+  <dt>`base_url`</dt>
+  <dd>Custom API endpoint (required for Grok, Azure OpenAI; AWS region for Bedrock)</dd>
+
+  <dt>`timeout_seconds`</dt>
+  <dd>Per-provider request timeout override</dd>
+</dl>
+
+## Detailed Documentation
+
+- **[AI Configuration](/ai/configuration)** - Full configuration guide with multi-provider setup, migration, and examples
+- **[AI Providers](/ai/providers)** - Provider-specific setup, model options, and comparison
+- **[AI Tools](/ai/tools)** - Tool execution, permission flow, and security
+- **[AI Skills](/ai/skills)** - Marketplace skills and custom skill creation
+- **[AI Sessions](/ai/sessions)** - Session management and auto-compact
+- **[Project Instructions](/ai/instructions)** - ATMOS.md file structure and best practices
