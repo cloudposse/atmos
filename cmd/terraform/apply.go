@@ -112,8 +112,10 @@ func init() {
 		flags.WithBoolFlag("affected", "", false, "Apply the affected components in dependency order"),
 		flags.WithBoolFlag("all", "", false, "Apply all components in all stacks"),
 		flags.WithBoolFlag("ci", "", false, "Enable CI mode for automated pipelines (writes job summary, outputs)"),
+		flags.WithBoolFlag("verify-plan", "", false, "Verify stored planfile matches current state before applying"),
 		flags.WithEnvVars("from-plan", "ATMOS_TERRAFORM_APPLY_FROM_PLAN"),
 		flags.WithEnvVars("planfile", "ATMOS_TERRAFORM_APPLY_PLANFILE"),
+		flags.WithEnvVars("verify-plan", "ATMOS_TERRAFORM_VERIFY_PLAN"),
 		flags.WithEnvVars("ci", "ATMOS_CI", "CI"),
 	)
 

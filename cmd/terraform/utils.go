@@ -284,6 +284,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
+	info.VerifyPlan = opts.VerifyPlan
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -340,6 +341,14 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
+
+	// Verify stored planfile matches current state before applying.
+	if subCommand == "apply" && info.VerifyPlan && info.UseTerraformPlan {
+		if verifyErr := e.VerifyPlanfile(&info); verifyErr != nil {
+			return verifyErr
+		}
+	}
+
 	return executeSingleComponent(&info, shellOpts...)
 }
 

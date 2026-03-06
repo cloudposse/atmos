@@ -945,6 +945,7 @@ type ConfigAndStacksInfo struct {
 	AutoGenerateBackendFile   string
 	UseTerraformPlan          bool
 	PlanFile                  string
+	VerifyPlan                bool
 	DryRun                    bool
 	SkipInit                  bool
 	ComponentInheritanceChain []string
