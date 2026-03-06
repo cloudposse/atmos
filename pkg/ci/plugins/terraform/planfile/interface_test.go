@@ -16,47 +16,57 @@ func TestMetadataValidate(t *testing.T) {
 	}{
 		{
 			name: "valid metadata",
-			metadata: &Metadata{
-				Stack:     "dev",
-				Component: "vpc",
-				SHA:       "abc123",
-			},
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = "dev"
+				m.Component = "vpc"
+				m.SHA = "abc123"
+				return m
+			}(),
 			expectError: false,
 		},
 		{
 			name: "empty stack",
-			metadata: &Metadata{
-				Stack:     "",
-				Component: "vpc",
-				SHA:       "abc123",
-			},
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = ""
+				m.Component = "vpc"
+				m.SHA = "abc123"
+				return m
+			}(),
 			expectError: true,
 		},
 		{
 			name: "empty component",
-			metadata: &Metadata{
-				Stack:     "dev",
-				Component: "",
-				SHA:       "abc123",
-			},
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = "dev"
+				m.Component = ""
+				m.SHA = "abc123"
+				return m
+			}(),
 			expectError: true,
 		},
 		{
 			name: "empty SHA",
-			metadata: &Metadata{
-				Stack:     "dev",
-				Component: "vpc",
-				SHA:       "",
-			},
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = "dev"
+				m.Component = "vpc"
+				m.SHA = ""
+				return m
+			}(),
 			expectError: true,
 		},
 		{
 			name: "all empty",
-			metadata: &Metadata{
-				Stack:     "",
-				Component: "",
-				SHA:       "",
-			},
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = ""
+				m.Component = ""
+				m.SHA = ""
+				return m
+			}(),
 			expectError: true,
 		},
 	}

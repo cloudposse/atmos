@@ -707,7 +707,6 @@ func TestBuildPlanfileMetadata(t *testing.T) {
 		metadata := p.buildPlanfileMetadata(ctx)
 		assert.Equal(t, "dev", metadata.Stack)
 		assert.Equal(t, "vpc", metadata.Component)
-		assert.Equal(t, "components/terraform/vpc", metadata.ComponentPath)
 		assert.Equal(t, "abc123", metadata.SHA)
 		assert.Equal(t, "main", metadata.Branch)
 		assert.Equal(t, "run-42", metadata.RunID)

@@ -561,12 +561,14 @@ func TestExtractPlanFromZip(t *testing.T) {
 	t.Run("valid zip with plan and metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
 			planFilename: []byte("plan content"),
-			metadataFilename: marshalJSON(t, &planfile.Metadata{
-				Stack:      "test-stack",
-				Component:  "test-component",
-				SHA:        "abc123",
-				HasChanges: true,
-			}),
+			metadataFilename: func() []byte {
+				m := &planfile.Metadata{}
+				m.Stack = "test-stack"
+				m.Component = "test-component"
+				m.SHA = "abc123"
+				m.HasChanges = true
+				return marshalJSON(t, m)
+			}(),
 		})
 
 		reader, metadata, err := extractPlanFromZip(zipData)
@@ -654,10 +656,12 @@ func TestReadZipFile(t *testing.T) {
 func TestReadMetadataFile(t *testing.T) {
 	t.Run("valid metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			metadataFilename: marshalJSON(t, &planfile.Metadata{
-				Stack:     "test",
-				Component: "comp",
-			}),
+			metadataFilename: func() []byte {
+				m := &planfile.Metadata{}
+				m.Stack = "test"
+				m.Component = "comp"
+				return marshalJSON(t, m)
+			}(),
 		})
 
 		zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
@@ -714,10 +718,9 @@ func TestStore_Upload(t *testing.T) {
 
 		ctx := context.Background()
 		data := bytes.NewReader([]byte("plan data"))
-		metadata := &planfile.Metadata{
-			Stack:     "test",
-			Component: "comp",
-		}
+		metadata := &planfile.Metadata{}
+		metadata.Stack = "test"
+		metadata.Component = "comp"
 
 		err := store.Upload(ctx, "test/key.tfplan", data, metadata)
 		assert.Error(t, err)
@@ -766,12 +769,11 @@ func TestStore_Upload(t *testing.T) {
 		ctx := context.Background()
 		planContent := []byte("terraform plan binary content")
 		data := bytes.NewReader(planContent)
-		metadata := &planfile.Metadata{
-			Stack:      "dev",
-			Component:  "vpc",
-			SHA:        "abc123",
-			HasChanges: true,
-		}
+		metadata := &planfile.Metadata{}
+		metadata.Stack = "dev"
+		metadata.Component = "vpc"
+		metadata.SHA = "abc123"
+		metadata.HasChanges = true
 
 		err := store.Upload(ctx, "dev/vpc/abc123.tfplan", data, metadata)
 		require.NoError(t, err)
@@ -839,14 +841,15 @@ func TestStore_Upload(t *testing.T) {
 		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
 		require.NoError(t, err)
 
-		// Verify the zip only contains plan, no metadata.
+		// Verify the zip contains plan and auto-generated metadata with SHA256.
 		reader, meta, err := extractPlanFromZip(capturedUploadData)
 		require.NoError(t, err)
 		defer reader.Close()
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
 		assert.Equal(t, "plan", string(content))
-		assert.Nil(t, meta)
+		require.NotNil(t, meta)
+		assert.NotEmpty(t, meta.SHA256)
 	})
 
 	t.Run("create artifact fails", func(t *testing.T) {
@@ -1504,11 +1507,10 @@ func TestGetBackendIDsFromToken(t *testing.T) {
 func TestCreateArtifactZip(t *testing.T) {
 	t.Run("with plan and metadata", func(t *testing.T) {
 		planData := []byte("terraform plan output")
-		metadata := &planfile.Metadata{
-			Stack:     "prod",
-			Component: "vpc",
-			SHA:       "abc123",
-		}
+		metadata := &planfile.Metadata{}
+		metadata.Stack = "prod"
+		metadata.Component = "vpc"
+		metadata.SHA = "abc123"
 
 		zipData, err := createArtifactZip(planData, metadata)
 		require.NoError(t, err)

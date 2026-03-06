@@ -7,6 +7,7 @@ import (
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -37,39 +38,10 @@ type Store interface {
 }
 
 // Metadata contains metadata about a stored planfile.
+// It embeds artifact.Metadata for common CI artifact fields and adds
+// planfile-specific fields for Terraform plan data.
 type Metadata struct {
-	// Stack is the stack name.
-	Stack string `json:"stack"`
-
-	// Component is the component name.
-	Component string `json:"component"`
-
-	// ComponentPath is the path to the component.
-	ComponentPath string `json:"component_path"`
-
-	// SHA is the git commit SHA this plan was generated for.
-	SHA string `json:"sha"`
-
-	// BaseSHA is the base commit SHA (target branch) for comparison.
-	BaseSHA string `json:"base_sha,omitempty"`
-
-	// Branch is the git branch this plan was generated from.
-	Branch string `json:"branch,omitempty"`
-
-	// PRNumber is the pull request number if applicable.
-	PRNumber int `json:"pr_number,omitempty"`
-
-	// RunID is the CI run ID.
-	RunID string `json:"run_id,omitempty"`
-
-	// Repository is the repository URL or identifier.
-	Repository string `json:"repository,omitempty"`
-
-	// CreatedAt is when the planfile was created.
-	CreatedAt time.Time `json:"created_at"`
-
-	// ExpiresAt is when the planfile should be considered expired (optional).
-	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	artifact.Metadata
 
 	// PlanSummary contains a human-readable summary of the plan.
 	PlanSummary string `json:"plan_summary,omitempty"`
@@ -94,15 +66,13 @@ type Metadata struct {
 
 	// TerraformTool is the Terraform tool used (e.g., "terraform", "tofu").
 	TerraformTool string `json:"terraform_tool,omitempty"`
-
-	// Custom allows arbitrary key-value pairs for provider-specific metadata.
-	Custom map[string]string `json:"custom,omitempty"`
 }
 
 // Validate checks that required metadata fields are present.
-// Returns ErrPlanfileMetadataInvalid if Stack, Component, or SHA is empty.
+// Delegates to the embedded artifact.Metadata.Validate() for base field validation,
+// then wraps the error as ErrPlanfileMetadataInvalid for planfile-specific context.
 func (m *Metadata) Validate() error {
-	if m.Stack == "" || m.Component == "" || m.SHA == "" {
+	if err := m.Metadata.Validate(); err != nil {
 		return errUtils.ErrPlanfileMetadataInvalid
 	}
 	return nil

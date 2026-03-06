@@ -33,10 +33,6 @@ func TestStore_Upload(t *testing.T) {
 
 	data := bytes.NewReader([]byte("plan data"))
 	meta := &planfile.Metadata{
-		Stack:            "dev",
-		Component:        "vpc",
-		ComponentPath:    "components/terraform/vpc",
-		SHA:              "abc123",
 		HasChanges:       true,
 		Additions:        3,
 		Changes:          1,
@@ -44,6 +40,9 @@ func TestStore_Upload(t *testing.T) {
 		TerraformVersion: "1.5.0",
 		TerraformTool:    "terraform",
 	}
+	meta.Stack = "dev"
+	meta.Component = "vpc"
+	meta.SHA = "abc123"
 
 	mockBackend.EXPECT().Upload(
 		gomock.Any(),
@@ -59,7 +58,6 @@ func TestStore_Upload(t *testing.T) {
 		assert.Equal(t, "dev", artMeta.Stack)
 		assert.Equal(t, "vpc", artMeta.Component)
 		assert.Equal(t, "abc123", artMeta.SHA)
-		assert.Equal(t, "components/terraform/vpc", artMeta.Custom[customKeyComponentPath])
 		assert.Equal(t, "true", artMeta.Custom[customKeyHasChanges])
 		assert.Equal(t, "3", artMeta.Custom[customKeyAdditions])
 		assert.Equal(t, "1", artMeta.Custom[customKeyChanges])
@@ -105,7 +103,6 @@ func TestStore_Download(t *testing.T) {
 		Component: "vpc",
 		SHA:       "abc123",
 		Custom: map[string]string{
-			customKeyComponentPath:    "components/terraform/vpc",
 			customKeyHasChanges:       "true",
 			customKeyAdditions:        "5",
 			customKeyChanges:          "2",
@@ -134,7 +131,6 @@ func TestStore_Download(t *testing.T) {
 	assert.Equal(t, "dev", meta.Stack)
 	assert.Equal(t, "vpc", meta.Component)
 	assert.Equal(t, "abc123", meta.SHA)
-	assert.Equal(t, "components/terraform/vpc", meta.ComponentPath)
 	assert.True(t, meta.HasChanges)
 	assert.Equal(t, 5, meta.Additions)
 	assert.Equal(t, 2, meta.Changes)
@@ -258,7 +254,6 @@ func TestStore_GetMetadata(t *testing.T) {
 		Component: "rds",
 		SHA:       "def456",
 		Custom: map[string]string{
-			customKeyComponentPath:    "components/terraform/rds",
 			customKeyPlanSummary:      "Plan: 2 to add",
 			customKeyHasChanges:       "true",
 			customKeyAdditions:        "2",
@@ -277,7 +272,6 @@ func TestStore_GetMetadata(t *testing.T) {
 	assert.Equal(t, "staging", meta.Stack)
 	assert.Equal(t, "rds", meta.Component)
 	assert.Equal(t, "def456", meta.SHA)
-	assert.Equal(t, "components/terraform/rds", meta.ComponentPath)
 	assert.Equal(t, "Plan: 2 to add", meta.PlanSummary)
 	assert.True(t, meta.HasChanges)
 	assert.Equal(t, 2, meta.Additions)
@@ -307,17 +301,6 @@ func TestMetadataConversion_RoundTrip(t *testing.T) {
 	expires := now.Add(24 * time.Hour)
 
 	original := &planfile.Metadata{
-		Stack:            "prod",
-		Component:        "eks",
-		ComponentPath:    "components/terraform/eks",
-		SHA:              "abc123",
-		BaseSHA:          "def456",
-		Branch:           "feature/test",
-		PRNumber:         42,
-		RunID:            "run-123",
-		Repository:       "org/repo",
-		CreatedAt:        now,
-		ExpiresAt:        &expires,
 		PlanSummary:      "Plan: 1 to add, 2 to change",
 		HasChanges:       true,
 		Additions:        1,
@@ -325,9 +308,19 @@ func TestMetadataConversion_RoundTrip(t *testing.T) {
 		Destructions:     3,
 		TerraformVersion: "1.5.0",
 		TerraformTool:    "terraform",
-		Custom: map[string]string{
-			"user_key": "user_value",
-		},
+	}
+	original.Stack = "prod"
+	original.Component = "eks"
+	original.SHA = "abc123"
+	original.BaseSHA = "def456"
+	original.Branch = "feature/test"
+	original.PRNumber = 42
+	original.RunID = "run-123"
+	original.Repository = "org/repo"
+	original.CreatedAt = now
+	original.ExpiresAt = &expires
+	original.Custom = map[string]string{
+		"user_key": "user_value",
 	}
 
 	// Convert planfile → artifact → planfile.
@@ -336,7 +329,6 @@ func TestMetadataConversion_RoundTrip(t *testing.T) {
 
 	assert.Equal(t, original.Stack, roundTripped.Stack)
 	assert.Equal(t, original.Component, roundTripped.Component)
-	assert.Equal(t, original.ComponentPath, roundTripped.ComponentPath)
 	assert.Equal(t, original.SHA, roundTripped.SHA)
 	assert.Equal(t, original.BaseSHA, roundTripped.BaseSHA)
 	assert.Equal(t, original.Branch, roundTripped.Branch)

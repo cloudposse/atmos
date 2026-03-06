@@ -67,14 +67,13 @@ func TestStore_UploadDownload(t *testing.T) {
 	// Test data.
 	key := "test-stack/test-component/abc123.tfplan"
 	content := "plan file content"
-	metadata := &planfile.Metadata{
-		Stack:      "test-stack",
-		Component:  "test-component",
-		SHA:        "abc123",
-		CreatedAt:  time.Now(),
-		HasChanges: true,
-		Additions:  5,
-	}
+	metadata := &planfile.Metadata{}
+	metadata.Stack = "test-stack"
+	metadata.Component = "test-component"
+	metadata.SHA = "abc123"
+	metadata.CreatedAt = time.Now()
+	metadata.HasChanges = true
+	metadata.Additions = 5
 
 	// Upload.
 	err := store.Upload(ctx, key, strings.NewReader(content), metadata)
@@ -198,15 +197,14 @@ func TestStore_GetMetadata(t *testing.T) {
 
 	// Upload with metadata.
 	key := "meta.tfplan"
-	metadata := &planfile.Metadata{
-		Stack:        "test-stack",
-		Component:    "test-component",
-		SHA:          "sha123",
-		HasChanges:   true,
-		Additions:    3,
-		Changes:      2,
-		Destructions: 1,
-	}
+	metadata := &planfile.Metadata{}
+	metadata.Stack = "test-stack"
+	metadata.Component = "test-component"
+	metadata.SHA = "sha123"
+	metadata.HasChanges = true
+	metadata.Additions = 3
+	metadata.Changes = 2
+	metadata.Destructions = 1
 	err := store.Upload(ctx, key, strings.NewReader("content"), metadata)
 	require.NoError(t, err)
 
@@ -391,12 +389,11 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 	key := "integration/test/lifecycle.tfplan"
 
 	// 1. Upload.
-	metadata := &planfile.Metadata{
-		Stack:      "integration",
-		Component:  "test",
-		SHA:        "lifecycle",
-		HasChanges: true,
-	}
+	metadata := &planfile.Metadata{}
+	metadata.Stack = "integration"
+	metadata.Component = "test"
+	metadata.SHA = "lifecycle"
+	metadata.HasChanges = true
 	err = store.Upload(ctx, key, strings.NewReader("plan data"), metadata)
 	assert.NoError(t, err)
 

@@ -4,7 +4,9 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -248,6 +250,13 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 	if err != nil {
 		return fmt.Errorf("%w: failed to read planfile data: %w", errUtils.ErrPlanfileUploadFailed, err)
 	}
+
+	// Compute SHA256 checksum.
+	if metadata == nil {
+		metadata = &planfile.Metadata{}
+	}
+	hash := sha256.Sum256(planData)
+	metadata.SHA256 = hex.EncodeToString(hash[:])
 
 	// Create a zip archive containing the plan and metadata.
 	zipData, err := createArtifactZip(planData, metadata)
@@ -700,13 +709,13 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		if a.Name == artifactName {
 			// Return basic metadata from artifact info.
 			// Full metadata would require downloading the artifact.
-			return &planfile.Metadata{
-				CreatedAt: a.CreatedAt,
-				ExpiresAt: func() *time.Time {
-					t := a.ExpiresAt
-					return &t
-				}(),
-			}, nil
+			meta := &planfile.Metadata{}
+			meta.CreatedAt = a.CreatedAt
+			meta.ExpiresAt = func() *time.Time {
+				t := a.ExpiresAt
+				return &t
+			}()
+			return meta, nil
 		}
 	}
 

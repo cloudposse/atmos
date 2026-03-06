@@ -13,6 +13,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
 
 	// Import planfile store implementations to register them.
 	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github"
@@ -23,6 +24,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // uploadParser handles flag parsing with Viper precedence for the upload command.
@@ -168,13 +170,32 @@ func createStore(atmosConfig *schema.AtmosConfiguration, storeName string) (plan
 }
 
 // buildUploadMetadata creates metadata for the planfile upload.
+// Populates CI context fields (Branch, RunID, Repository, etc.) from
+// environment variables via the generic CI provider.
 func buildUploadMetadata(opts *UploadOptions) *planfile.Metadata {
-	return &planfile.Metadata{
-		Stack:     opts.Stack,
-		Component: opts.Component,
-		SHA:       opts.SHA,
-		CreatedAt: time.Now(),
+	defer perf.Track(nil, "planfile.buildUploadMetadata")()
+
+	metadata := &planfile.Metadata{}
+	metadata.Stack = opts.Stack
+	metadata.Component = opts.Component
+	metadata.SHA = opts.SHA
+	metadata.CreatedAt = time.Now()
+	metadata.AtmosVersion = version.Version
+
+	// Populate CI context fields from environment.
+	ciProvider := generic.NewProvider()
+	ciCtx, err := ciProvider.Context()
+	if err == nil && ciCtx != nil {
+		// Use CI context SHA if not explicitly provided via flag.
+		if metadata.SHA == "" {
+			metadata.SHA = ciCtx.SHA
+		}
+		metadata.Branch = ciCtx.Branch
+		metadata.RunID = ciCtx.RunID
+		metadata.Repository = ciCtx.Repository
 	}
+
+	return metadata
 }
 
 // resolveUploadKey returns the upload key, generating one if not provided.

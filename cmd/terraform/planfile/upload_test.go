@@ -10,6 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestBuildUploadMetadata(t *testing.T) {
@@ -24,13 +25,16 @@ func TestBuildUploadMetadata(t *testing.T) {
 		require.NotNil(t, metadata)
 		assert.Equal(t, "test-stack", metadata.Stack)
 		assert.Equal(t, "test-component", metadata.Component)
+		// Explicit SHA from flag takes precedence over auto-detected SHA.
 		assert.Equal(t, "abc123", metadata.SHA)
 		assert.False(t, metadata.CreatedAt.IsZero())
 		// CreatedAt should be recent.
 		assert.WithinDuration(t, time.Now(), metadata.CreatedAt, 5*time.Second)
+		// AtmosVersion is always populated.
+		assert.NotEmpty(t, metadata.AtmosVersion)
 	})
 
-	t.Run("with empty fields", func(t *testing.T) {
+	t.Run("with empty fields auto-detects CI context", func(t *testing.T) {
 		opts := &UploadOptions{
 			Stack:     "",
 			Component: "",
@@ -41,7 +45,9 @@ func TestBuildUploadMetadata(t *testing.T) {
 		require.NotNil(t, metadata)
 		assert.Empty(t, metadata.Stack)
 		assert.Empty(t, metadata.Component)
-		assert.Empty(t, metadata.SHA)
+		// SHA is auto-detected from git when not provided via flag.
+		// Branch and AtmosVersion are also populated from CI context.
+		assert.NotEmpty(t, metadata.AtmosVersion)
 	})
 }
 
@@ -143,7 +149,7 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		opts, err := getStoreOptions(nil, "s3")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "s3")
 		require.NoError(t, err)
 		assert.Equal(t, "s3", opts.Type)
 	})
@@ -152,7 +158,7 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		opts, err := getStoreOptions(nil, "local")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local")
 		require.NoError(t, err)
 		assert.Equal(t, "local", opts.Type)
 	})
@@ -203,7 +209,7 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
 		t.Setenv("GITHUB_ACTIONS", "true")
 
-		opts, err := getStoreOptions(nil, "local")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local")
 		require.NoError(t, err)
 		assert.Equal(t, "local", opts.Type)
 	})

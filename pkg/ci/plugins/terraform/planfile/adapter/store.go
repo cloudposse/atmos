@@ -19,7 +19,6 @@ const (
 	planFilename = "plan.tfplan"
 
 	// Metadata custom key prefixes for planfile-specific fields.
-	customKeyComponentPath    = "planfile.component_path"
 	customKeyPlanSummary      = "planfile.plan_summary"
 	customKeyHasChanges       = "planfile.has_changes"
 	customKeyAdditions        = "planfile.additions"
@@ -160,21 +159,21 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 }
 
 // planfileToArtifactMeta converts planfile metadata to artifact metadata.
-// Planfile-specific fields are stored in the Custom map with "planfile." prefixed keys.
+// Shared fields come from the embedded artifact.Metadata; planfile-specific fields
+// are stored in the Custom map with "planfile." prefixed keys.
 func planfileToArtifactMeta(meta *planfile.Metadata) *artifact.Metadata {
 	if meta == nil {
 		return nil
 	}
 
-	custom := make(map[string]string)
+	// Start from the embedded base — all shared fields come for free.
+	artMeta := meta.Metadata // copy the embedded artifact.Metadata.
 
-	// Copy existing custom entries.
-	maps.Copy(custom, meta.Custom)
+	// Ensure Custom map exists (don't mutate the original).
+	custom := make(map[string]string)
+	maps.Copy(custom, artMeta.Custom)
 
 	// Store planfile-specific fields.
-	if meta.ComponentPath != "" {
-		custom[customKeyComponentPath] = meta.ComponentPath
-	}
 	if meta.PlanSummary != "" {
 		custom[customKeyPlanSummary] = meta.PlanSummary
 	}
@@ -189,47 +188,28 @@ func planfileToArtifactMeta(meta *planfile.Metadata) *artifact.Metadata {
 		custom[customKeyTerraformTool] = meta.TerraformTool
 	}
 
-	return &artifact.Metadata{
-		Stack:      meta.Stack,
-		Component:  meta.Component,
-		SHA:        meta.SHA,
-		BaseSHA:    meta.BaseSHA,
-		Branch:     meta.Branch,
-		PRNumber:   meta.PRNumber,
-		RunID:      meta.RunID,
-		Repository: meta.Repository,
-		CreatedAt:  meta.CreatedAt,
-		ExpiresAt:  meta.ExpiresAt,
-		Custom:     custom,
-	}
+	artMeta.Custom = custom
+	return &artMeta
 }
 
 // artifactToPlanfileMeta converts artifact metadata to planfile metadata.
-// Planfile-specific fields are extracted from the Custom map.
+// Shared fields are preserved via embedding; planfile-specific fields are extracted from Custom.
 func artifactToPlanfileMeta(meta *artifact.Metadata) *planfile.Metadata {
 	if meta == nil {
 		return nil
 	}
 
+	// Embed the full artifact metadata — SHA256, AtmosVersion, etc. are preserved.
 	result := &planfile.Metadata{
-		Stack:      meta.Stack,
-		Component:  meta.Component,
-		SHA:        meta.SHA,
-		BaseSHA:    meta.BaseSHA,
-		Branch:     meta.Branch,
-		PRNumber:   meta.PRNumber,
-		RunID:      meta.RunID,
-		Repository: meta.Repository,
-		CreatedAt:  meta.CreatedAt,
-		ExpiresAt:  meta.ExpiresAt,
-		Custom:     make(map[string]string),
+		Metadata: *meta,
 	}
+
+	// Replace Custom with a clean map (planfile-specific keys will be extracted).
+	cleanCustom := make(map[string]string)
 
 	// Extract planfile-specific fields from custom map.
 	for k, v := range meta.Custom {
 		switch k {
-		case customKeyComponentPath:
-			result.ComponentPath = v
 		case customKeyPlanSummary:
 			result.PlanSummary = v
 		case customKeyHasChanges:
@@ -246,10 +226,11 @@ func artifactToPlanfileMeta(meta *artifact.Metadata) *planfile.Metadata {
 			result.TerraformTool = v
 		default:
 			// Pass through non-planfile custom entries.
-			result.Custom[k] = v
+			cleanCustom[k] = v
 		}
 	}
 
+	result.Custom = cleanCustom
 	return result
 }
 

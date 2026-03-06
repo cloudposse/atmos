@@ -135,7 +135,6 @@ func formatShowYAML(key, storeName string, metadata *planfile.Metadata) {
 	_ = data.Writeln("metadata:")
 	_ = data.Writef("  stack: %s\n", metadata.Stack)
 	_ = data.Writef("  component: %s\n", metadata.Component)
-	_ = data.Writef("  component_path: %s\n", metadata.ComponentPath)
 	_ = data.Writef("  sha: %s\n", metadata.SHA)
 	_ = data.Writef("  base_sha: %s\n", metadata.BaseSHA)
 	_ = data.Writef("  branch: %s\n", metadata.Branch)

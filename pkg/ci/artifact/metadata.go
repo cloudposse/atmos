@@ -1,6 +1,10 @@
 package artifact
 
-import "time"
+import (
+	"time"
+
+	errUtils "github.com/cloudposse/atmos/errors"
+)
 
 // Metadata contains metadata about a stored artifact.
 type Metadata struct {
@@ -42,6 +46,15 @@ type Metadata struct {
 
 	// Custom allows arbitrary key-value pairs for provider-specific metadata.
 	Custom map[string]string `json:"custom,omitempty"`
+}
+
+// Validate checks that required metadata fields are present.
+// Returns ErrArtifactMetadataInvalid if Stack, Component, or SHA is empty.
+func (m *Metadata) Validate() error {
+	if m.Stack == "" || m.Component == "" || m.SHA == "" {
+		return errUtils.ErrArtifactMetadataInvalid
+	}
+	return nil
 }
 
 // ArtifactInfo contains basic information about a stored artifact.

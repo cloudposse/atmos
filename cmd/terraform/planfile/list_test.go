@@ -89,17 +89,17 @@ func TestRenderPlanfileListWithMetadata(t *testing.T) {
 	initTestIO(t)
 
 	t.Run("with metadata includes sha and md5", func(t *testing.T) {
+		m := &planfile.Metadata{MD5: "abc123md5"}
+		m.Stack = "test-stack"
+		m.Component = "test-component"
+		m.SHA = "abc123"
+
 		files := []planfile.PlanfileInfo{
 			{
 				Key:          "key1.tfplan",
 				Size:         1024,
 				LastModified: time.Now(),
-				Metadata: &planfile.Metadata{
-					Stack:     "test-stack",
-					Component: "test-component",
-					SHA:       "abc123",
-					MD5:       "abc123md5",
-				},
+				Metadata:     m,
 			},
 		}
 		err := renderPlanfileList(files, "json", "", "")
@@ -122,17 +122,17 @@ func TestRenderPlanfileListWithMetadata(t *testing.T) {
 func TestRenderPlanfileListWithOwnerRepo(t *testing.T) {
 	initTestIO(t)
 
+	m := &planfile.Metadata{MD5: "d41d8cd98f00b204e9800998ecf8427e"}
+	m.Stack = "stack1"
+	m.Component = "component1"
+	m.SHA = "sha1"
+
 	files := []planfile.PlanfileInfo{
 		{
 			Key:          "stack1/component1/sha1.tfplan",
 			Size:         1024,
 			LastModified: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				Stack:     "stack1",
-				Component: "component1",
-				SHA:       "sha1",
-				MD5:       "d41d8cd98f00b204e9800998ecf8427e",
-			},
+			Metadata:     m,
 		},
 	}
 
@@ -161,17 +161,17 @@ func TestRenderPlanfileListMD5Column(t *testing.T) {
 	initTestIO(t)
 
 	t.Run("md5 present in output from metadata", func(t *testing.T) {
+		m := &planfile.Metadata{MD5: "d41d8cd98f00b204e9800998ecf8427e"}
+		m.Stack = "test-stack"
+		m.Component = "test-component"
+		m.SHA = "abc123def456"
+
 		files := []planfile.PlanfileInfo{
 			{
 				Key:          "test/key.tfplan",
 				Size:         512,
 				LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-				Metadata: &planfile.Metadata{
-					Stack:     "test-stack",
-					Component: "test-component",
-					SHA:       "abc123def456",
-					MD5:       "d41d8cd98f00b204e9800998ecf8427e",
-				},
+				Metadata:     m,
 			},
 		}
 		err := renderPlanfileList(files, "table", "", "")
@@ -203,20 +203,22 @@ func TestOutputFormats(t *testing.T) {
 	initTestIO(t)
 
 	// Verify all output format options work without panicking.
+	m := &planfile.Metadata{
+		MD5:        "abcdef1234567890",
+		HasChanges: true,
+		Additions:  5,
+		Changes:    3,
+	}
+	m.Stack = "test-stack"
+	m.Component = "test-component"
+	m.SHA = "abc123def456"
+
 	files := []planfile.PlanfileInfo{
 		{
 			Key:          "test/key.tfplan",
 			Size:         512,
 			LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				Stack:      "test-stack",
-				Component:  "test-component",
-				SHA:        "abc123def456",
-				MD5:        "abcdef1234567890",
-				HasChanges: true,
-				Additions:  5,
-				Changes:    3,
-			},
+			Metadata:     m,
 		},
 	}
 
@@ -233,17 +235,17 @@ func TestOutputFormats(t *testing.T) {
 func TestOutputFormatsWithOwnerRepo(t *testing.T) {
 	initTestIO(t)
 
+	m := &planfile.Metadata{MD5: "abcdef1234567890"}
+	m.Stack = "test-stack"
+	m.Component = "test-component"
+	m.SHA = "abc123def456"
+
 	files := []planfile.PlanfileInfo{
 		{
 			Key:          "test/key.tfplan",
 			Size:         512,
 			LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				Stack:     "test-stack",
-				Component: "test-component",
-				SHA:       "abc123def456",
-				MD5:       "abcdef1234567890",
-			},
+			Metadata:     m,
 		},
 	}
 

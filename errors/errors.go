@@ -859,6 +859,7 @@ var (
 	ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
 	ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
 	ErrPlanfileMetadataInvalid    = errors.New("planfile metadata validation failed: stack, component, and SHA are required")
+	ErrArtifactMetadataInvalid    = errors.New("artifact metadata validation failed: stack, component, and SHA are required")
 	ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
 	ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
 	ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")

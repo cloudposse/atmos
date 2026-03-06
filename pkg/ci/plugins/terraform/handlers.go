@@ -15,6 +15,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // onBeforePlan handles the before.terraform.plan event.
@@ -435,12 +436,11 @@ func (p *Plugin) buildPlanfileMetadata(ctx *plugin.HookContext) *planfile.Metada
 
 	result := ParseOutput(ctx.Output, ctx.Command)
 
-	metadata := &planfile.Metadata{
-		Stack:         ctx.Info.Stack,
-		Component:     ctx.Info.ComponentFromArg,
-		ComponentPath: ctx.Info.ComponentFolderPrefix,
-		CreatedAt:     time.Now(),
-	}
+	metadata := &planfile.Metadata{}
+	metadata.Stack = ctx.Info.Stack
+	metadata.Component = ctx.Info.ComponentFromArg
+	metadata.CreatedAt = time.Now()
+	metadata.AtmosVersion = version.Version
 
 	// Add CI context if available.
 	if ctx.CICtx != nil {

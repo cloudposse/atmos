@@ -2,7 +2,8 @@ package local
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec // MD5 used for content identification, not security.
+	"crypto/md5"  //nolint:gosec // MD5 used for content identification, not security.
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -98,27 +99,29 @@ func (s *Store) Upload(ctx context.Context, key string, data io.Reader, metadata
 		return fmt.Errorf("%w: failed to create directory for %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
-	// Write the planfile while computing MD5.
+	// Write the planfile while computing checksums.
 	f, err := os.Create(fullPath)
 	if err != nil {
 		return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 	defer f.Close()
 
-	h := md5.New() //nolint:gosec // MD5 used for content identification, not security.
-	tee := io.TeeReader(data, h)
+	md5Hash := md5.New()    //nolint:gosec // MD5 used for content identification, not security.
+	sha256Hash := sha256.New()
+	multiWriter := io.MultiWriter(md5Hash, sha256Hash)
+	tee := io.TeeReader(data, multiWriter)
 
 	if _, err := io.Copy(f, tee); err != nil {
 		return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrPlanfileUploadFailed, key, err)
 	}
 
-	// Store MD5 in metadata.
+	// Store checksums in metadata.
 	if metadata == nil {
-		metadata = &planfile.Metadata{
-			CreatedAt: time.Now(),
-		}
+		metadata = &planfile.Metadata{}
+		metadata.CreatedAt = time.Now()
 	}
-	metadata.MD5 = hex.EncodeToString(h.Sum(nil))
+	metadata.MD5 = hex.EncodeToString(md5Hash.Sum(nil))
+	metadata.SHA256 = hex.EncodeToString(sha256Hash.Sum(nil))
 
 	// Write metadata.
 	metadataPath := fullPath + metadataSuffix
@@ -297,9 +300,8 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*planfile.Metadata
 		if err != nil {
 			return nil, fmt.Errorf("%w: failed to get file info for %s: %w", errUtils.ErrPlanfileStatFailed, key, err)
 		}
-		metadata = &planfile.Metadata{
-			CreatedAt: info.ModTime(),
-		}
+		metadata = &planfile.Metadata{}
+		metadata.CreatedAt = info.ModTime()
 	}
 
 	return metadata, nil
