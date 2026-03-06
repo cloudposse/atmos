@@ -40,6 +40,20 @@ The `overrides` section can be used in the global scope or in the Terraform and 
 
 The [Component Overrides](/design-patterns/configuration-composition/component-overrides) Design Pattern goes into further details on how to use this effectively.
 
+## Merge Order
+
+When multiple sources define the same variable, more specific levels win:
+
+1. Global `vars` (lowest priority)
+2. Component-type `terraform.vars` / `helmfile.vars`
+3. Inherited base component `vars` (via `metadata.inherits`)
+4. Component-level `vars`
+5. `overrides.vars` (highest priority — file-scoped)
+
+Terraform-level and Helmfile-level overrides are merged with global overrides, with the more specific level winning on conflicts.
+
+See [Configure Variables](/stacks/vars#merge-behavior) for the full explanation with examples.
+
 ## Overrides Schema
 
 The `overrides` section schema at the global scope is as follows:
@@ -81,9 +95,7 @@ helmfile:
     command: "<command to execute>"
 ```
 
-You can include the `overrides`, `terraform.overrides` and `helmfile.overrides` sections in any Atmos stack manifest at any level of inheritance.
-The scope of the `override` configuration is limited to all the Atmos components defined within the manifest and all its imports up until that point.
-In other words, the `overrides` configuration defined within a stack manifest does not affect any other components defined in different stack manifests for the same top-level stack.
+You can include `overrides`, `terraform.overrides`, and `helmfile.overrides` in any stack manifest at any level of inheritance. Overrides only affect components in the current file and its imports — not components from other files in the same stack.
 
 :::tip
 Refer to [Atmos Component Inheritance](/howto/inheritance) for more information on all types of component inheritance
@@ -94,18 +106,13 @@ supported by Atmos
 
 ### Overrides for Teams
 
-The **overrides** pattern is used to override the components only in a particular Atmos stack manifest and all the imported
-manifests. This is different from the other configuration sections (e.g. `vars`, `settings`, `env`). If we define a `vars`, `settings` or `env`
-section at the global, Terraform or Helmfile levels, all the components in the top-level stack will get the updated configurations. On
-the other hand, if we define an `overrides` section in a stack manifest, only the components directly defined in the manifest and its imports will get
-the overridden values, not all the components in the top-level Atmos stack.
+When stack manifests are split per team, each team manages its own set of components. Overrides let you change configuration for one team's components without affecting another team's.
 
-Note: The [`locals`](/stacks/locals) section is also file-scoped and does not inherit across imports, similar to `overrides`.
+:::note
+The [`locals`](/stacks/locals) section is also file-scoped and does not inherit across imports, similar to `overrides`.
+:::
 
-This is especially useful when you have Atmos stack manifests split per Teams. Each Team manages a set of components, and you need to define a common
-configuration (or override the existing one) for the components that only a particular Team manages.
-
-For example, we have two Teams: `devops` and `testing`.
+For example, we have two teams: `devops` and `testing`.
 
 The `devops` Team manifest is defined in `stacks/teams/devops.yaml`:
 
@@ -142,75 +149,47 @@ import:
 ```
 </File>
 
-Suppose that we want to change some variables in the `vars` and `env` sections and some config in the `settings` section for all the components that the `testing` Team manages, but we don't want to affect any components that the `devops` Team manages.
-
-If we added a global or Terraform level `vars`, `env` or `settings` sections to the top-level manifest `stacks/orgs/cp/tenant1/dev/us-west-2.yaml` or to the Team manifest `stacks/teams/testing.yaml`, then all the components in the `tenant1/dev/us-west-2` top-level stack would be modified, including those managed by the `devops` Team.
-
-To solve this, we could individually modify the `vars`, `env` and `settings` sections in all the components managed by the `testing` Team, but the entire configuration would not be DRY and reusable. That's where the __overrides__ pattern comes into play. To make the configuration DRY and configured only in one place, use the `overrides` section.
-
-For example, we want to override some values in the `env`, `vars` and `settings` sections for all the components managed by the `testing` Team:
+We want to override `env`, `vars`, and `settings` for all components the `testing` team manages — without affecting the `devops` team. Adding global-level `vars` would leak into both teams. Instead, use `overrides`:
 
 <File title="stacks/teams/testing.yaml">
 ```yaml
 import:
-  # The `testing` Team manages all the components defined in the following stack manifests:
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
-# Global overrides.
-# Override the variables, env, command and settings ONLY in the components managed by the `testing` Team.
+# Global overrides — apply to all components in this file and its imports
 overrides:
   env:
-    # This ENV variable will be added or overridden in all the components managed by the `testing` Team
     TEST_ENV_VAR1: "test-env-var1-overridden"
   settings: {}
   vars: {}
 
-# Terraform overrides.
-# Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
-# The Terraform `overrides` are deep-merged with the global `overrides`
-# and takes higher priority (it will override the same keys from the global `overrides`).
+# Terraform overrides (deep-merged with global, higher priority)
 terraform:
   overrides:
     settings:
       spacelift:
-        # All the components managed by the `testing` Team will have the Spacelift stacks auto-applied
-        # if the planning phase was successful and there are no plan policy warnings
-        # https://docs.spacelift.io/concepts/stack/stack-settings#autodeploy
         autodeploy: true
     vars:
-      # This variable will be added or overridden in all the Terraform components managed by the `testing` Team
       test_1: 1
-    # The `testing` Team uses `tofu` instead of `terraform`
-    # https://opentofu.org
-    # The commands `atmos terraform <sub-command> ...` will execute the `tofu` binary
+    # Use tofu instead of terraform (https://opentofu.org)
     command: tofu
 
-# Helmfile overrides.
-# Override the variables, env, command and settings ONLY in the Helmfile components managed by the `testing` Team.
-# The Helmfile `overrides` are deep-merged with the global `overrides`
-# and takes higher priority (it will override the same keys from the global `overrides`).
+# Helmfile overrides (deep-merged with global, higher priority)
 helmfile:
   overrides:
     env:
-      # This ENV variable will be added or overridden in all the Helmfile components managed by the `testing` Team
       TEST_ENV_VAR2: "test-env-var2-overridden"
 ```
 </File>
 
-In the manifest above, we configure the following:
+The manifest above configures three levels of overrides:
 
-- The global `overrides` section to override the `TEST_ENV_VAR1` ENV variable in the `env` section. All the Terraform and Helmfile components
-  managed by the `testing` Team will get the ENV vars updated to `test-env-var1-overridden`.
+- **Global `overrides`** — sets `TEST_ENV_VAR1` for all components (Terraform and Helmfile) managed by the `testing` team.
+- **`terraform.overrides`** — sets Spacelift autodeploy, a variable, and switches the command to `tofu`. Applies only to Terraform components.
+- **`helmfile.overrides`** — sets `TEST_ENV_VAR2`. Applies only to Helmfile components.
 
-- The Terraform-level `terraform.overrides` section to override some Spacelift configuration in the `settings` section, a variable in the `vars`
-  section, and the `tofu` command to execute instead of `terraform` in the `command` section. All the Terraform components managed by the `testing`
-  Team will be affected by the new values (but not the Helmfile components). The Terraform `overrides` are deep-merged with the global `overrides`
-  and takes higher priority (it will override the same keys from the global `overrides`).
-
-- The Helmfile-level `helmfile.overrides` section to override an ENV variable in the `env` section. All the Helmfile components managed by
-  the `testing` Team will get the new ENV variable value (but not the Terraform components). The Helmfile `overrides` are deep-merged with the
-  global `overrides` and takes higher priority (it will override the same keys from the global `overrides`).
+Terraform-level and Helmfile-level overrides are deep-merged with global overrides, with the more specific level winning on conflicts.
 
 To confirm that the components managed by the `testing` Team get the new values from the `overrides` sections, execute the following
 commands:
@@ -224,7 +203,6 @@ You should see the following output:
 
 <Terminal title="atmos describe component test/test-component-override -s tenant1-uw2-dev">
 ```yaml
-# Final deep-merged `overrides` from all the global `overrides` and Terraform `overrides` sections
 overrides:
   command: tofu
   env:
@@ -235,19 +213,15 @@ overrides:
   vars:
     test_1: 1
 
-# The `command` was overridden with the value from `terraform.overrides.command`
-command: tofu
+command: tofu                           # from terraform.overrides.command
 
 env:
-  # The `TEST_ENV_VAR1` ENV variable was overridden with the value from `overrides.env.TEST_ENV_VAR1`
-  TEST_ENV_VAR1: test-env-var1-overridden
+  TEST_ENV_VAR1: test-env-var1-overridden  # from overrides.env
   TEST_ENV_VAR2: val2
 
 settings:
   spacelift:
-    # The `autodeploy` setting was overridden with the value
-    # from `terraform.overrides.settings.spacelift.autodeploy`
-    autodeploy: true
+    autodeploy: true                    # from terraform.overrides.settings
     workspace_enabled: true
 
 vars:
@@ -256,8 +230,7 @@ vars:
   region: us-west-2
   stage: dev
   tenant: tenant1
-  # The `test_1` variable was overridden with the value from `terraform.overrides.vars.test_1`
-  test_1: 1
+  test_1: 1                            # from terraform.overrides.vars
 ```
 </Terminal>
 
@@ -266,12 +239,8 @@ command:
 
 <Terminal title="atmos describe component top-level-component1 -s tenant1-uw2-dev">
 ```yaml
-# The `command` is not overridden
-command: terraform
-
-# The component does not get the `overrides` section since it's not defined
-# for the components managed by the `devops` Team
-overrides: {}
+command: terraform    # not overridden
+overrides: {}         # no overrides apply to this component
 
 vars:
   <variables for 'top-level-component1' in the stack 'tenant1-uw2-dev'>
@@ -284,100 +253,63 @@ settings:
 ```
 </Terminal>
 
-The `top-level-component1` component managed by the `devops` Team does not get affected by the `overrides` sections for the `testing` Team,
-and the sections `vars`, `env`, `settings` and `command` are not updated with the values from the `overrides` configuration.
+The `top-level-component1` component (managed by `devops`) is unaffected — its `vars`, `env`, `settings`, and `command` remain unchanged.
 
 ## Importing the Overrides
 
-To make the `overrides` configuration DRY and reusable, you can place the `overrides` sections into a separate stack manifest,
-and then import it into other stacks.
+You can place `overrides` in a separate manifest and import it into other stacks for reuse.
 
-For example:
-
-Define the `overrides` sections in a separate manifest `stacks/teams/testing-overrides.yaml`:
+Define the overrides in `stacks/teams/testing-overrides.yaml`:
 
 <File title="stacks/teams/testing-overrides.yaml">
 ```yaml
-# Global overrides
-# Override the variables, env, command and settings ONLY in the components managed by the `testing` Team.
+# Global overrides for the testing team
 overrides:
   env:
-    # This ENV variable will be added or overridden in all the components managed by the `testing` Team
     TEST_ENV_VAR1: "test-env-var1-overridden"
   settings: {}
   vars: {}
 
-# Terraform overrides
-# Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
-# The Terraform `overrides` are deep-merged with the global `overrides`
-# and takes higher priority (it will override the same keys from the global `overrides`).
+# Terraform overrides (deep-merged with global, higher priority)
 terraform:
   overrides:
     settings:
       spacelift:
-        # All the components managed by the `testing` Team will have the Spacelift stacks auto-applied
-        # if the planning phase was successful and there are no plan policy warnings
-        # https://docs.spacelift.io/concepts/stack/stack-settings#autodeploy
         autodeploy: true
     vars:
-      # This variable will be added or overridden in all the Terraform components managed by the `testing` Team
       test_1: 1
-    # The `testing` Team uses `tofu` instead of `terraform`
-    # https://opentofu.org
-    # The commands `atmos terraform <sub-command> ...` will execute the `tofu` binary
     command: tofu
 ```
 </File>
 
-Import the `stacks/teams/testing-overrides.yaml` manifest into the stack `stacks/teams/testing.yaml`:
+Import the overrides manifest into `stacks/teams/testing.yaml`:
 
 <File title="stacks/teams/testing.yaml">
 ```yaml
 import:
-  # The `testing` Team manages all the components defined in this stack manifest and imported from the catalog
   - catalog/terraform/test-component-2
-  # The `overrides` in `teams/testing-overrides` will affect all the components in this stack manifest
-  # and all the components that are imported AFTER the `overrides` from `teams/testing-overrides`.
-  # It will affect the components imported from `catalog/terraform/test-component-2`.
-  # The `overrides` defined in this manifest will affect all the imported components, including `catalog/terraform/test-component-2`.
   - teams/testing-overrides
   - catalog/terraform/test-component
   - catalog/terraform/test-component-override
 
-# The `overrides` in this stack manifest take precedence over the `overrides` imported from `teams/testing-overrides`
-
-# Global overrides
-# Override the variables, env, command and settings ONLY in the components managed by the `testing` Team.
+# Inline overrides take precedence over imported overrides
 overrides:
   env:
-    # This ENV variable will be added or overridden in all the components managed by the `testing` Team
     TEST_ENV_VAR1: "test-env-var1-overridden-2"
   settings: {}
   vars: {}
 
-# Terraform overrides
-# Override the variables, env, command and settings ONLY in the Terraform components managed by the `testing` Team.
-# The Terraform `overrides` are deep-merged with the global `overrides`
-# and takes higher priority (it will override the same keys from the global `overrides`).
 terraform:
   overrides:
     vars:
-      # This variable will be added or overridden in all the Terraform components managed by the `testing` Team
       test_1: 2
 ```
 </File>
 
-:::important
-- The order of the imports is important. The `overrides` in `teams/testing-overrides` will affect all the components in
-  this stack manifest and all the components that are imported __after__ the `overrides` from `teams/testing-overrides`.
-  In other words, the `overrides` in `teams/testing-overrides` will be applied to the `catalog/terraform/test-component`
-  and `catalog/terraform/test-component-override` components, but not to `catalog/terraform/test-component-2`
-
-- On the other hand, the `overrides` defined in this stack manifest `stacks/teams/testing.yaml` will be applied to __all__
-  components defined inline in `stacks/teams/testing.yaml` and all the imported components, including `catalog/terraform/test-component-2`
-
-- The `overrides` defined inline in the stack manifest `stacks/teams/testing.yaml` take precedence over the `overrides`
-  imported from `teams/testing-overrides` (they will override the same values defined in `teams/testing-overrides`)
+:::important Import order matters
+- **Imported overrides** apply to components imported _after_ them. In the example above, `teams/testing-overrides` applies to `test-component` and `test-component-override`, but **not** to `test-component-2` (listed before it).
+- **Inline overrides** apply to _all_ components in the file and its imports, regardless of order.
+- **Inline wins** over imported overrides when they conflict.
 :::
 
 :::tip

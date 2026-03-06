@@ -1,0 +1,282 @@
+{
+  "atmos_cli_config": {
+    "base_path": "./",
+    "components": {
+      "terraform": {
+        "base_path": "components/terraform",
+        "apply_auto_approve": false,
+        "append_user_agent": "Atmos/test (Cloud Posse; +https://atmos.tools)",
+        "deploy_run_init": true,
+        "init_run_reconfigure": true,
+        "auto_generate_backend_file": false,
+        "auto_generate_files": false,
+        "command": "",
+        "shell": {
+          "prompt": ""
+        },
+        "init": {
+          "pass_vars": false
+        },
+        "plan": {
+          "skip_planfile": false
+        },
+        "plugin_cache": true
+      },
+      "helmfile": {
+        "base_path": "",
+        "use_eks": true,
+        "kubeconfig_path": "",
+        "helm_aws_profile_pattern": "",
+        "cluster_name_pattern": "",
+        "cluster_name_template": "",
+        "cluster_name": "",
+        "command": "",
+        "auto_generate_files": false
+      },
+      "packer": {
+        "base_path": "",
+        "command": "",
+        "auto_generate_files": false
+      },
+      "ansible": {
+        "base_path": "",
+        "command": "",
+        "auto_generate_files": false
+      },
+      "list": {
+        "format": "",
+        "columns": null
+      },
+      "Plugins": null
+    },
+    "stacks": {
+      "base_path": "stacks",
+      "included_paths": [
+        "**/*"
+      ],
+      "excluded_paths": [
+        "**/_defaults.yaml"
+      ],
+      "name_pattern": "",
+      "name_template": "",
+      "list": {
+        "format": "",
+        "columns": null
+      },
+      "inherit": {}
+    },
+    "workflows": {
+      "base_path": "",
+      "list": {
+        "format": "",
+        "columns": null
+      }
+    }
+  },
+  "atmos_component": "vpc",
+  "atmos_manifest": "prod",
+  "atmos_stack": "production",
+  "atmos_stack_file": "prod",
+  "auth": {},
+  "backend": {},
+  "backend_type": "",
+  "cli_args": [
+    "describe",
+    "component"
+  ],
+  "command": "terraform",
+  "component": "vpc",
+  "component_info": {
+    "component_path": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc",
+    "component_type": "terraform",
+    "terraform_config": {
+      "path": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc",
+      "variables": {
+        "cidr_block": {
+          "name": "cidr_block",
+          "type": "string",
+          "description": "The CIDR block for the VPC",
+          "default": null,
+          "required": true,
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/variables.tf",
+            "line": 1
+          }
+        },
+        "enable_dns_hostnames": {
+          "name": "enable_dns_hostnames",
+          "type": "bool",
+          "description": "Whether to enable DNS hostnames in the VPC",
+          "default": true,
+          "required": false,
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/variables.tf",
+            "line": 11
+          }
+        },
+        "environment": {
+          "name": "environment",
+          "type": "string",
+          "description": "The environment name",
+          "default": null,
+          "required": true,
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/variables.tf",
+            "line": 6
+          }
+        },
+        "tags": {
+          "name": "tags",
+          "type": "map(string)",
+          "description": "Tags to apply to the VPC",
+          "default": {},
+          "required": false,
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/variables.tf",
+            "line": 17
+          }
+        }
+      },
+      "outputs": {
+        "environment": {
+          "name": "environment",
+          "description": "The environment name",
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/outputs.tf",
+            "line": 6
+          }
+        },
+        "vpc_cidr": {
+          "name": "vpc_cidr",
+          "description": "The CIDR block of the VPC",
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/outputs.tf",
+            "line": 1
+          }
+        }
+      },
+      "required_providers": {
+        "null": {}
+      },
+      "managed_resources": {
+        "null_resource.vpc": {
+          "mode": "managed",
+          "type": "null_resource",
+          "name": "vpc",
+          "provider": {
+            "name": "null"
+          },
+          "pos": {
+            "filename": "/absolute/path/to/repo/examples/native-terraform/components/terraform/vpc/main.tf",
+            "line": 4
+          }
+        }
+      },
+      "data_resources": {},
+      "module_calls": {}
+    }
+  },
+  "component_type": "terraform",
+  "deps": [
+    "_defaults",
+    "prod"
+  ],
+  "deps_all": [
+    "_defaults",
+    "prod"
+  ],
+  "env": {},
+  "generate": {},
+  "hooks": {},
+  "imports": [
+    "_defaults"
+  ],
+  "inheritance": [],
+  "metadata": {},
+  "overrides": {},
+  "providers": {},
+  "provision": {},
+  "remote_state_backend": {},
+  "remote_state_backend_type": "",
+  "settings": {},
+  "source": {},
+  "sources": {
+    "backend": {},
+    "env": {},
+    "settings": {},
+    "vars": {
+      "cidr_block": {
+        "final_value": "10.1.0.0/16",
+        "name": "cidr_block",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "prod",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": "10.1.0.0/16"
+          }
+        ]
+      },
+      "enable_dns_hostnames": {
+        "final_value": true,
+        "name": "enable_dns_hostnames",
+        "stack_dependencies": [
+          {
+            "dependency_type": "import",
+            "stack_file": "_defaults",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": true
+          }
+        ]
+      },
+      "environment": {
+        "final_value": "prod",
+        "name": "environment",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "prod",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": "prod"
+          },
+          {
+            "dependency_type": "inline",
+            "stack_file": "prod",
+            "stack_file_section": "vars",
+            "variable_value": "prod"
+          }
+        ]
+      },
+      "tags": {
+        "final_value": {
+          "Environment": "Production",
+          "Team": "platform"
+        },
+        "name": "tags",
+        "stack_dependencies": [
+          {
+            "dependency_type": "inline",
+            "stack_file": "prod",
+            "stack_file_section": "components.terraform.vars",
+            "variable_value": {
+              "Environment": "Production",
+              "Team": "platform"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "stack": "production",
+  "tf_cli_vars": {},
+  "vars": {
+    "cidr_block": "10.1.0.0/16",
+    "enable_dns_hostnames": true,
+    "environment": "prod",
+    "tags": {
+      "Environment": "Production",
+      "Team": "platform"
+    }
+  },
+  "workspace": "production"
+}
