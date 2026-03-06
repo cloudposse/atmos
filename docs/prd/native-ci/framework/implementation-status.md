@@ -140,7 +140,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 8. GCS store — **Deferred**
 9. `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
 10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler — Done
-11. Automatic download on `before.terraform.apply` via `downloadPlanfile()` handler — Done (binding exists, but apply.go `PreRunE` not wired — see FR-7)
+11. Automatic download on `before.terraform.apply` via `downloadPlanfile()` handler — Done
 12. CLI component/stack addressing (`<component> -s <stack>` pattern, SHA resolution, `--all` flag) — Done (see [CLI Addressing](../phases/planfile-cli-component-stack-addressing.md))
 
 ---
@@ -220,20 +220,16 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | Plan + lock file bundled as tar archive | | Done | |
 | | Unified artifact store registry (`artifact.Register()`) | | Done | |
 | | Automatic upload on `after.terraform.plan` | | Done | |
-| | Automatic download on `before.terraform.apply` | | Done (binding only — apply.go PreRunE not wired) | |
+| | Automatic download on `before.terraform.apply` | | Done | |
 | | Azure Blob store | | Deferred | |
 | | GCS store | | Deferred | |
 | **FR-6** | Plan Verification | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Not Started** | 0% |
 | | `--verify-plan` flag on `terraform apply` | | Not Started | |
 | | Download stored plan → fresh plan → plan-diff comparison | | Not Started | |
-| **FR-7** | Command Parity | [ci-detection.md](./ci-detection.md) | **Partial** | ~60% |
+| **FR-7** | Command Parity | [ci-detection.md](./ci-detection.md) | **Done** | 100% |
 | | `plan.go` full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
-| | `apply.go` `--ci` flag defined | | Done | |
-| | `apply.go` PostRunE fires CI hooks (empty output) | | Done | |
-| | `apply.go` PreRunE (download planfile) | | Not Started | |
-| | `apply.go` output capture (stdout/stderr) | | Not Started | |
-| | `apply.go` error defer (check run failure update) | | Not Started | |
-| | `deploy.go` `--ci` flag | | Not Started | |
+| | `apply.go` `--ci` flag with full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
+| | `deploy.go` `--ci` flag with full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
 | **FR-8** | Describe Affected Matrix | [describe-affected-matrix.md](../terraform-plugin/describe-affected-matrix.md) | **Done** | 100% |
 | | `--format=matrix` flag | | Done | |
 | | Matrix JSON with 4 fields (`component`, `stack`, `component_path`, `component_type`) | | Done | |
@@ -268,7 +264,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Terraform Plugin: Planfile Storage (FR-5) | 13/16 | 0 | 2 (Azure, GCS) |
 | Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
 | Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
-| Command Parity (FR-7) | 3/7 | 4 | 0 |
+| Command Parity (FR-7) | 3/3 | 0 | 0 |
 | Terraform Output Export | 0/2 | 2 | 0 |
 | Documentation | 0/4 | 4 | 0 |
 | Phases: Planfile Storage Validation | 4/4 | 0 | 0 |
@@ -276,7 +272,8 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Phases: Bundle with Lock File | 8/8 | 0 | 0 |
 | Phases: Unify Artifact Stores | 8/8 | 0 | 0 |
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
-| **Total** | **103/120** | **17** | **2** |
+| Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
+| **Total** | **110/123** | **13** | **2** |
 
 ## Implementation Phases (Incremental)
 
@@ -344,6 +341,18 @@ These are incremental improvements shipped as focused PRDs.
 8. `show` updated: `<component>` positional arg, key from `resolveKey()` — Done
 9. `delete` updated: optional component, `--all`/`--force` flags, list-then-delete with confirmation — Done
 10. Tests for resolve helpers and updated command patterns — Done
+
+### Apply Command Parity (FR-7) — SHIPPED
+
+> PRD: [apply-command-parity.md](../phases/apply-command-parity.md)
+
+1. `apply.go` `PreRunE` fires `before.terraform.apply` hooks — Done
+2. `apply.go` stdout/stderr capture with ANSI stripping — Done
+3. `apply.go` error defer fires hooks on `RunE` failure — Done
+4. `deploy.go` `--ci` flag with `ATMOS_CI`/`CI` env var bindings — Done
+5. `deploy.go` `PreRunE` fires `before.terraform.apply` hooks — Done
+6. `deploy.go` stdout/stderr capture with ANSI stripping — Done
+7. `deploy.go` error defer fires hooks on `RunE` failure — Done
 
 ---
 
@@ -450,10 +459,10 @@ These are incremental improvements shipped as focused PRDs.
 | `errors/errors.go` | Add CI + artifact + planfile + AWS sentinel errors (31 total) | Done |
 | `internal/exec/clean_adapter_funcs.go` | Export `ConstructTerraformComponentPlanfilePath()` for planfile upload | Done |
 | `cmd/terraform/plan.go` | Add `--ci` and `--skip-planfile` flags, full CI output capture + hook dispatch | Done |
-| `cmd/terraform/apply.go` | Add `--ci` flag with env var bindings (`ATMOS_CI`, `CI`); `PostRunE` fires CI hooks (empty output) | Done (partial) |
-| `cmd/terraform/apply.go` | `PreRunE` for `before.terraform.apply` (download), output capture, error defer | Not Started |
+| `cmd/terraform/apply.go` | Full CI wiring: `--ci` flag, `PreRunE` (`before.terraform.apply`), stdout/stderr capture, error defer, `PostRunE` with captured output | Done |
 | `cmd/describe_affected.go` | Add `--format=matrix` support | Done |
 | `internal/exec/describe_affected.go` | Implement matrix format output (`MatrixOutput`, `MatrixEntry`, `writeMatrixOutput`) | Done |
+| `cmd/terraform/deploy.go` | Full CI wiring: `--ci` flag, `PreRunE` (`before.terraform.apply`), stdout/stderr capture, error defer, `PostRunE` with captured output | Done |
 | `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
 | `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates | Not Started |
 
@@ -640,6 +649,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 6.0 | 2026-03-06 | FR-7 Command Parity COMPLETE. `apply.go` now has full CI wiring: PreRunE (`before.terraform.apply`), stdout/stderr capture, error defer, PostRunE with captured output. `deploy.go` gained `--ci` flag with identical full CI wiring. FR-7 status updated from Partial (~60%) to Done (100%). FR-5 planfile download note removed (apply PreRunE now wired). Summary table updated: 103/116 done (was 103/120 — consolidated FR-7 line items from 7 to 3). |
 | 5.0 | 2026-03-06 | Added Implementation Phases section tracking 5 shipped incremental PRDs: Planfile Storage Validation (SHA resolution), Metadata Embed Artifact, Bundle with Lock File, Unify Artifact Stores, CLI Component/Stack Addressing. Updated FR-5 planfile storage status from ~90% to ~95% with 13/16 items (from 8/11). Updated Files Created to reflect artifact store unification: S3/GitHub moved to `artifact/`, planfile local/registry deleted, tar helpers added, resolve.go added. Updated summary table from 62/82 to 103/120 with phase counts. |
 | 4.0 | 2026-03-06 | Callback-based refactoring COMPLETE. Executor refactored from ~850-line enum-based god-object to ~250-line thin coordinator. Plugin interface slimmed from 7 methods to 2 (GetType, GetHookBindings). Added HookHandler callback type, HookContext dependency bag, CheckRunStore interface. All action logic moved from executor into `plugins/terraform/handlers.go`. Error severity now handler-controlled (upload/download fatal, summary/output/check warn-only). New files: `checkrun_store.go`, `handlers.go`, `handlers_test.go`. Removed: HookAction enum, Actions field, Template field, ComponentConfigurationResolver interface, 5 Plugin methods. Coverage: executor 91%, terraform plugin 81%. |
 | 3.0 | 2026-03-05 | Restructured implementation phases to align with PRD organization. Phases now map to PRD workstreams (Framework, Providers, Terraform Plugin) and functional requirements (FR-1 through FR-9). Replaced Phase 1-6 numbering with descriptive section names matching PRD directory structure. Added FR-level status table with PRD cross-references. Added summary table with counts. No status changes — all Done/Not Started markers preserved from v2.2. |
