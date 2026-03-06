@@ -14,6 +14,16 @@ import Intro from '@site/src/components/Intro'
 The **Blueprint Configuration** pattern creates reusable deployment templates that bundle multiple components with sensible defaults. Top-level stacks import a blueprint and customize only what differs per deployment.
 </Intro>
 
+## What Is a Blueprint?
+
+A **blueprint** is a stack manifest that bundles multiple components into a reusable deployment template. It sits above catalogs and archetypes in the abstraction hierarchy:
+
+- A **[catalog](/design-patterns/component-catalog)** defines defaults for a single component (e.g., `catalog/vpc/defaults.yaml`)
+- An **archetype** is a pre-configured variant of a single component for a specific use case (e.g., `catalog/s3-bucket/logging.yaml`), typically using [`metadata.inherits`](/howto/inheritance)
+- A **blueprint** composes multiple components together into a complete deployment type (e.g., networking + compute + storage for a multi-tenant platform)
+
+Catalogs and archetypes answer "how should this component be configured?" Blueprints answer "what components make up this type of deployment, and what are the sensible defaults?"
+
 ## Use-cases
 
 Use the **Blueprint Configuration** pattern when:
@@ -37,6 +47,8 @@ Use the **Blueprint Configuration** pattern when:
 - **No `overrides` needed** — plain `vars` at the same scope level handles customization
 
 ## Example
+
+The following is one opinionated implementation using dedicated `layers/` and `blueprints/` directories. Your project may organize these differently — what matters is the pattern of composing component catalogs into a reusable template that deployment stacks import.
 
 ### Directory Structure
 
