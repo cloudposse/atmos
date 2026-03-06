@@ -2,8 +2,6 @@ package local
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -27,13 +25,14 @@ const (
 	defaultFilePerms = 0o644
 )
 
-// Store implements the artifact.Store interface using the local filesystem.
+// Store implements the artifact.Backend interface using the local filesystem.
+// It stores each artifact as a single file with a metadata JSON sidecar.
 type Store struct {
 	basePath string
 }
 
-// NewStore creates a new local filesystem artifact store.
-func NewStore(opts artifact.StoreOptions) (artifact.Store, error) {
+// NewStore creates a new local filesystem artifact backend.
+func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	defer perf.Track(opts.AtmosConfig, "artifact.local.NewStore")()
 
 	path, ok := opts.Options["path"].(string)
@@ -63,56 +62,41 @@ func (s *Store) Name() string {
 	return storeName
 }
 
-// Upload uploads an artifact bundle to the local filesystem.
-// Creates a directory for the artifact and writes each file entry into it.
-// Computes SHA-256 checksum across all files and stores it in metadata.
-func (s *Store) Upload(ctx context.Context, name string, files []artifact.FileEntry, metadata *artifact.Metadata) error {
+// Upload uploads a single data stream to the local filesystem.
+// Writes the data as a single file and the metadata as a JSON sidecar.
+func (s *Store) Upload(ctx context.Context, name string, data io.Reader, size int64, metadata *Metadata) error {
 	defer perf.Track(nil, "artifact.local.Upload")()
 
 	if err := s.validateName(name); err != nil {
 		return err
 	}
 
-	artifactDir := filepath.Join(s.basePath, name)
+	filePath := filepath.Join(s.basePath, name)
 
-	// Create the artifact directory.
-	if err := os.MkdirAll(artifactDir, defaultDirPerms); err != nil {
+	// Create parent directories for the artifact file.
+	if err := os.MkdirAll(filepath.Dir(filePath), defaultDirPerms); err != nil {
 		return fmt.Errorf("%w: failed to create directory for %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
 	}
 
-	// Write each file and compute SHA-256 across all content.
-	h := sha256.New()
-	for _, entry := range files {
-		filePath := filepath.Join(artifactDir, entry.Name)
-
-		// Create parent directories for nested files.
-		if err := os.MkdirAll(filepath.Dir(filePath), defaultDirPerms); err != nil {
-			return fmt.Errorf("%w: failed to create directory for file %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
-		}
-
-		f, err := os.Create(filePath)
-		if err != nil {
-			return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
-		}
-
-		// Write content while computing hash.
-		tee := io.TeeReader(entry.Data, h)
-		if _, err := io.Copy(f, tee); err != nil {
-			f.Close()
-			return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
-		}
-		f.Close()
+	// Write the data stream to a single file.
+	f, err := os.Create(filePath)
+	if err != nil {
+		return fmt.Errorf("%w: failed to create file %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
 	}
 
-	// Store SHA-256 in metadata.
+	if _, err := io.Copy(f, data); err != nil {
+		f.Close()
+		return fmt.Errorf("%w: failed to write file %s: %w", errUtils.ErrArtifactUploadFailed, name, err)
+	}
+	f.Close()
+
+	// Write metadata sidecar.
 	if metadata == nil {
-		metadata = &artifact.Metadata{
+		metadata = &Metadata{
 			CreatedAt: time.Now(),
 		}
 	}
-	metadata.SHA256 = hex.EncodeToString(h.Sum(nil))
 
-	// Write metadata sidecar.
 	metadataPath := filepath.Join(s.basePath, name+metadataSuffix)
 
 	// Create parent directories for metadata file.
@@ -131,79 +115,46 @@ func (s *Store) Upload(ctx context.Context, name string, files []artifact.FileEn
 	return nil
 }
 
-// Download downloads an artifact bundle from the local filesystem.
-// Returns file handles for all files in the artifact directory.
-// Callers must close all returned FileResult.Data readers when done.
-func (s *Store) Download(ctx context.Context, name string) ([]artifact.FileResult, *artifact.Metadata, error) {
+// Metadata is an alias for artifact.Metadata used in the local backend.
+type Metadata = artifact.Metadata
+
+// Download downloads a single data stream from the local filesystem.
+// Returns an io.ReadCloser for the file and the metadata sidecar.
+// Callers must close the returned reader when done.
+func (s *Store) Download(ctx context.Context, name string) (io.ReadCloser, *artifact.Metadata, error) {
 	defer perf.Track(nil, "artifact.local.Download")()
 
 	if err := s.validateName(name); err != nil {
 		return nil, nil, err
 	}
 
-	artifactDir := filepath.Join(s.basePath, name)
+	filePath := filepath.Join(s.basePath, name)
 
-	// Check if artifact directory exists.
-	info, err := os.Stat(artifactDir)
+	// Check if artifact file exists and is not a directory.
+	info, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, name)
 		}
 		return nil, nil, fmt.Errorf("%w: failed to stat artifact %s: %w", errUtils.ErrArtifactDownloadFailed, name, err)
 	}
-	if !info.IsDir() {
-		return nil, nil, fmt.Errorf("%w: %s is not a directory", errUtils.ErrArtifactDownloadFailed, name)
+	if info.IsDir() {
+		return nil, nil, fmt.Errorf("%w: %s is a directory, not a file", errUtils.ErrArtifactDownloadFailed, name)
 	}
 
-	// Collect all files in the artifact directory.
-	var results []artifact.FileResult
-	err = filepath.WalkDir(artifactDir, func(path string, d os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if d.IsDir() {
-			return nil
-		}
-
-		relPath, err := filepath.Rel(artifactDir, path)
-		if err != nil {
-			return err
-		}
-
-		f, err := os.Open(path)
-		if err != nil {
-			return fmt.Errorf("failed to open file %s: %w", relPath, err)
-		}
-
-		fileInfo, err := f.Stat()
-		if err != nil {
-			f.Close()
-			return fmt.Errorf("failed to stat file %s: %w", relPath, err)
-		}
-
-		results = append(results, artifact.FileResult{
-			Name: relPath,
-			Data: f,
-			Size: fileInfo.Size(),
-		})
-		return nil
-	})
+	f, err := os.Open(filePath)
 	if err != nil {
-		// Close any already-opened files on error.
-		for _, r := range results {
-			r.Data.Close()
-		}
-		return nil, nil, fmt.Errorf("%w: failed to read artifact %s: %w", errUtils.ErrArtifactDownloadFailed, name, err)
+		return nil, nil, fmt.Errorf("%w: failed to open artifact %s: %w", errUtils.ErrArtifactDownloadFailed, name, err)
 	}
 
 	// Load metadata.
 	metadata, _ := s.loadMetadata(filepath.Join(s.basePath, name+metadataSuffix))
 
-	return results, metadata, nil
+	return f, metadata, nil
 }
 
 // Delete deletes an artifact from the local filesystem.
-// Removes both the artifact directory and its metadata sidecar.
+// Removes both the artifact file and its metadata sidecar.
 // Idempotent — returns nil if the artifact does not exist.
 func (s *Store) Delete(ctx context.Context, name string) error {
 	defer perf.Track(nil, "artifact.local.Delete")()
@@ -212,10 +163,10 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		return err
 	}
 
-	artifactDir := filepath.Join(s.basePath, name)
+	filePath := filepath.Join(s.basePath, name)
 
-	// Delete the artifact directory.
-	if err := os.RemoveAll(artifactDir); err != nil {
+	// Delete the artifact file.
+	if err := os.Remove(filePath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("%w: failed to delete artifact %s: %w", errUtils.ErrArtifactDeleteFailed, name, err)
 	}
 
@@ -223,13 +174,13 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	_ = os.Remove(filepath.Join(s.basePath, name+metadataSuffix))
 
 	// Try to clean up empty parent directories.
-	s.cleanupEmptyDirs(filepath.Dir(artifactDir))
+	s.cleanupEmptyDirs(filepath.Dir(filePath))
 
 	return nil
 }
 
 // List lists artifacts matching the given query.
-// Walks basePath one level deep, finds artifact directories (those with a .metadata.json sidecar),
+// Walks basePath looking for metadata sidecar files with a corresponding artifact file (not dir),
 // applies Query filters, and sorts newest first.
 func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.ArtifactInfo, error) {
 	defer perf.Track(nil, "artifact.local.List")()
@@ -254,10 +205,10 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 		}
 		artifactName := strings.TrimSuffix(relPath, metadataSuffix)
 
-		// Verify the artifact directory exists.
-		artifactDir := filepath.Join(s.basePath, artifactName)
-		dirInfo, err := os.Stat(artifactDir)
-		if err != nil || !dirInfo.IsDir() {
+		// Verify the artifact file exists and is not a directory.
+		artifactFile := filepath.Join(s.basePath, artifactName)
+		fileInfo, err := os.Stat(artifactFile)
+		if err != nil || fileInfo.IsDir() {
 			return nil
 		}
 
@@ -272,21 +223,10 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 			return nil
 		}
 
-		// Compute total size of the artifact directory.
-		var totalSize int64
-		_ = filepath.WalkDir(artifactDir, func(_ string, entry os.DirEntry, _ error) error {
-			if entry != nil && !entry.IsDir() {
-				if info, err := entry.Info(); err == nil {
-					totalSize += info.Size()
-				}
-			}
-			return nil
-		})
-
 		artifacts = append(artifacts, artifact.ArtifactInfo{
 			Name:         artifactName,
-			Size:         totalSize,
-			LastModified: dirInfo.ModTime(),
+			Size:         fileInfo.Size(),
+			LastModified: fileInfo.ModTime(),
 			Metadata:     metadata,
 		})
 
@@ -304,7 +244,7 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 	return artifacts, nil
 }
 
-// Exists checks if an artifact exists.
+// Exists checks if an artifact exists as a file (not directory).
 func (s *Store) Exists(ctx context.Context, name string) (bool, error) {
 	defer perf.Track(nil, "artifact.local.Exists")()
 
@@ -312,15 +252,15 @@ func (s *Store) Exists(ctx context.Context, name string) (bool, error) {
 		return false, err
 	}
 
-	artifactDir := filepath.Join(s.basePath, name)
-	info, err := os.Stat(artifactDir)
+	filePath := filepath.Join(s.basePath, name)
+	info, err := os.Stat(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to check if artifact %s exists: %w", name, err)
 	}
-	return info.IsDir(), nil
+	return !info.IsDir(), nil
 }
 
 // GetMetadata retrieves metadata for an artifact without downloading the content.
@@ -331,13 +271,17 @@ func (s *Store) GetMetadata(ctx context.Context, name string) (*artifact.Metadat
 		return nil, err
 	}
 
-	// Check if the artifact directory exists.
-	artifactDir := filepath.Join(s.basePath, name)
-	if _, err := os.Stat(artifactDir); err != nil {
+	// Check if the artifact file exists.
+	filePath := filepath.Join(s.basePath, name)
+	fileInfo, err := os.Stat(filePath)
+	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, name)
 		}
 		return nil, fmt.Errorf("%w: failed to stat artifact %s: %w", errUtils.ErrArtifactMetadataFailed, name, err)
+	}
+	if fileInfo.IsDir() {
+		return nil, fmt.Errorf("%w: %s is a directory, not a file", errUtils.ErrArtifactNotFound, name)
 	}
 
 	metadataPath := filepath.Join(s.basePath, name+metadataSuffix)
@@ -346,13 +290,9 @@ func (s *Store) GetMetadata(ctx context.Context, name string) (*artifact.Metadat
 		return nil, fmt.Errorf("%w: failed to load metadata for %s: %w", errUtils.ErrArtifactMetadataFailed, name, err)
 	}
 	if metadata == nil {
-		// Return minimal metadata from directory info.
-		info, err := os.Stat(artifactDir)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to get directory info for %s: %w", errUtils.ErrArtifactMetadataFailed, name, err)
-		}
+		// Return minimal metadata from file info.
 		metadata = &artifact.Metadata{
-			CreatedAt: info.ModTime(),
+			CreatedAt: fileInfo.ModTime(),
 		}
 	}
 
@@ -434,5 +374,5 @@ func init() {
 	artifact.Register(storeName, NewStore)
 }
 
-// Ensure Store implements artifact.Store.
-var _ artifact.Store = (*Store)(nil)
+// Ensure Store implements artifact.Backend.
+var _ artifact.Backend = (*Store)(nil)

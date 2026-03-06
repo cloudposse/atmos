@@ -13,7 +13,7 @@ func TestRegisterAndNewStore(t *testing.T) {
 	// Clean up registry state for this test.
 	registryMu.Lock()
 	oldFactories := factories
-	factories = make(map[string]StoreFactory)
+	factories = make(map[string]BackendFactory)
 	registryMu.Unlock()
 	defer func() {
 		registryMu.Lock()
@@ -22,7 +22,7 @@ func TestRegisterAndNewStore(t *testing.T) {
 	}()
 
 	called := false
-	Register("test", func(opts StoreOptions) (Store, error) {
+	Register("test", func(opts StoreOptions) (Backend, error) {
 		called = true
 		return nil, nil
 	})
@@ -36,7 +36,7 @@ func TestNewStoreNotFound(t *testing.T) {
 	// Clean up registry state for this test.
 	registryMu.Lock()
 	oldFactories := factories
-	factories = make(map[string]StoreFactory)
+	factories = make(map[string]BackendFactory)
 	registryMu.Unlock()
 	defer func() {
 		registryMu.Lock()
@@ -51,7 +51,7 @@ func TestNewStoreNotFound(t *testing.T) {
 
 func TestRegisterPanicsOnEmptyType(t *testing.T) {
 	assert.Panics(t, func() {
-		Register("", func(opts StoreOptions) (Store, error) {
+		Register("", func(opts StoreOptions) (Backend, error) {
 			return nil, nil
 		})
 	})
@@ -67,7 +67,7 @@ func TestGetRegisteredTypes(t *testing.T) {
 	// Clean up registry state for this test.
 	registryMu.Lock()
 	oldFactories := factories
-	factories = make(map[string]StoreFactory)
+	factories = make(map[string]BackendFactory)
 	registryMu.Unlock()
 	defer func() {
 		registryMu.Lock()
@@ -75,7 +75,7 @@ func TestGetRegisteredTypes(t *testing.T) {
 		registryMu.Unlock()
 	}()
 
-	dummyFactory := func(opts StoreOptions) (Store, error) { return nil, nil }
+	dummyFactory := func(opts StoreOptions) (Backend, error) { return nil, nil }
 	Register("s3", dummyFactory)
 	Register("gcs", dummyFactory)
 

@@ -80,83 +80,54 @@ func TestStore_UploadDownload(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	name := "my-artifact"
-	files := []artifact.FileEntry{
-		{Name: "plan.tfplan", Data: strings.NewReader("plan content"), Size: 12},
-		{Name: ".terraform.lock.hcl", Data: strings.NewReader("lock content"), Size: 12},
-	}
+	name := "my-artifact.tar"
+	data := "tar archive content here"
 	metadata := &artifact.Metadata{
 		Stack:     "dev-us-east-1",
 		Component: "vpc",
 		SHA:       "abc123",
+		SHA256:    "precomputed-sha256",
 		CreatedAt: time.Now(),
 	}
 
 	// Upload.
-	err := store.Upload(ctx, name, files, metadata)
+	err := store.Upload(ctx, name, strings.NewReader(data), int64(len(data)), metadata)
 	require.NoError(t, err)
 
 	// Download.
-	results, downloadedMeta, err := store.Download(ctx, name)
+	reader, downloadedMeta, err := store.Download(ctx, name)
 	require.NoError(t, err)
-	defer func() {
-		for _, r := range results {
-			r.Data.Close()
-		}
-	}()
+	defer reader.Close()
 
-	// Verify file count.
-	assert.Len(t, results, 2)
-
-	// Verify files.
-	fileMap := make(map[string]string)
-	for _, r := range results {
-		data, err := io.ReadAll(r.Data)
-		require.NoError(t, err)
-		fileMap[r.Name] = string(data)
-	}
-	assert.Equal(t, "plan content", fileMap["plan.tfplan"])
-	assert.Equal(t, "lock content", fileMap[".terraform.lock.hcl"])
+	// Verify data.
+	downloaded, err := io.ReadAll(reader)
+	require.NoError(t, err)
+	assert.Equal(t, data, string(downloaded))
 
 	// Verify metadata.
 	require.NotNil(t, downloadedMeta)
 	assert.Equal(t, metadata.Stack, downloadedMeta.Stack)
 	assert.Equal(t, metadata.Component, downloadedMeta.Component)
 	assert.Equal(t, metadata.SHA, downloadedMeta.SHA)
-	assert.NotEmpty(t, downloadedMeta.SHA256)
+	assert.Equal(t, metadata.SHA256, downloadedMeta.SHA256)
 }
 
-func TestStore_UploadSingleFile(t *testing.T) {
+func TestStore_UploadNilMetadata(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	name := "single-file-artifact"
-	files := []artifact.FileEntry{
-		{Name: "output.txt", Data: strings.NewReader("hello"), Size: 5},
-	}
+	name := "nil-meta-artifact.tar"
+	data := "some data"
 
-	err := store.Upload(ctx, name, files, nil)
+	err := store.Upload(ctx, name, strings.NewReader(data), int64(len(data)), nil)
 	require.NoError(t, err)
 
-	results, meta, err := store.Download(ctx, name)
+	// Metadata should be auto-created.
+	meta, err := store.GetMetadata(ctx, name)
 	require.NoError(t, err)
-	defer func() {
-		for _, r := range results {
-			r.Data.Close()
-		}
-	}()
-
-	assert.Len(t, results, 1)
-	assert.Equal(t, "output.txt", results[0].Name)
-
-	data, err := io.ReadAll(results[0].Data)
-	require.NoError(t, err)
-	assert.Equal(t, "hello", string(data))
-
-	// Metadata should be auto-created with SHA256.
 	require.NotNil(t, meta)
-	assert.NotEmpty(t, meta.SHA256)
+	assert.False(t, meta.CreatedAt.IsZero())
 }
 
 func TestStore_Delete(t *testing.T) {
@@ -164,10 +135,8 @@ func TestStore_Delete(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	name := "to-delete"
-	err := store.Upload(ctx, name, []artifact.FileEntry{
-		{Name: "file.txt", Data: strings.NewReader("content"), Size: 7},
-	}, nil)
+	name := "to-delete.tar"
+	err := store.Upload(ctx, name, strings.NewReader("content"), 7, nil)
 	require.NoError(t, err)
 
 	// Verify it exists.
@@ -195,7 +164,7 @@ func TestStore_Delete_NotExists(t *testing.T) {
 	ctx := context.Background()
 
 	// Delete should be idempotent.
-	err := store.Delete(ctx, "nonexistent-artifact")
+	err := store.Delete(ctx, "nonexistent-artifact.tar")
 	assert.NoError(t, err)
 }
 
@@ -205,12 +174,12 @@ func TestStore_List(t *testing.T) {
 	ctx := context.Background()
 
 	// Upload artifacts with different metadata.
-	artifacts := []struct {
+	testArtifacts := []struct {
 		name     string
 		metadata *artifact.Metadata
 	}{
 		{
-			name: "artifact-1",
+			name: "artifact-1.tar",
 			metadata: &artifact.Metadata{
 				Stack:     "dev",
 				Component: "vpc",
@@ -219,7 +188,7 @@ func TestStore_List(t *testing.T) {
 			},
 		},
 		{
-			name: "artifact-2",
+			name: "artifact-2.tar",
 			metadata: &artifact.Metadata{
 				Stack:     "staging",
 				Component: "vpc",
@@ -228,7 +197,7 @@ func TestStore_List(t *testing.T) {
 			},
 		},
 		{
-			name: "artifact-3",
+			name: "artifact-3.tar",
 			metadata: &artifact.Metadata{
 				Stack:     "dev",
 				Component: "rds",
@@ -238,10 +207,8 @@ func TestStore_List(t *testing.T) {
 		},
 	}
 
-	for _, a := range artifacts {
-		err := store.Upload(ctx, a.name, []artifact.FileEntry{
-			{Name: "file.txt", Data: strings.NewReader("data"), Size: 4},
-		}, a.metadata)
+	for _, a := range testArtifacts {
+		err := store.Upload(ctx, a.name, strings.NewReader("data"), 4, a.metadata)
 		require.NoError(t, err)
 	}
 
@@ -264,13 +231,13 @@ func TestStore_List(t *testing.T) {
 	list, err = store.List(ctx, artifact.Query{SHAs: []string{"sha2"}})
 	require.NoError(t, err)
 	assert.Len(t, list, 1)
-	assert.Equal(t, "artifact-2", list[0].Name)
+	assert.Equal(t, "artifact-2.tar", list[0].Name)
 
 	// Filter by stack AND component.
 	list, err = store.List(ctx, artifact.Query{Stacks: []string{"dev"}, Components: []string{"vpc"}})
 	require.NoError(t, err)
 	assert.Len(t, list, 1)
-	assert.Equal(t, "artifact-1", list[0].Name)
+	assert.Equal(t, "artifact-1.tar", list[0].Name)
 }
 
 func TestStore_List_Empty(t *testing.T) {
@@ -289,10 +256,8 @@ func TestStore_List_AllFlag(t *testing.T) {
 	ctx := context.Background()
 
 	// Upload artifacts with metadata.
-	for _, name := range []string{"a1", "a2"} {
-		err := store.Upload(ctx, name, []artifact.FileEntry{
-			{Name: "f.txt", Data: strings.NewReader("d"), Size: 1},
-		}, &artifact.Metadata{
+	for _, name := range []string{"a1.tar", "a2.tar"} {
+		err := store.Upload(ctx, name, strings.NewReader("d"), 1, &artifact.Metadata{
 			Stack:     "dev",
 			Component: "vpc",
 			SHA:       "sha1",
@@ -315,10 +280,8 @@ func TestStore_Exists(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	name := "exists-test"
-	err := store.Upload(ctx, name, []artifact.FileEntry{
-		{Name: "file.txt", Data: strings.NewReader("content"), Size: 7},
-	}, nil)
+	name := "exists-test.tar"
+	err := store.Upload(ctx, name, strings.NewReader("content"), 7, nil)
 	require.NoError(t, err)
 
 	// Exists.
@@ -327,7 +290,7 @@ func TestStore_Exists(t *testing.T) {
 	assert.True(t, exists)
 
 	// Not exists.
-	exists, err = store.Exists(ctx, "nonexistent")
+	exists, err = store.Exists(ctx, "nonexistent.tar")
 	assert.NoError(t, err)
 	assert.False(t, exists)
 }
@@ -337,18 +300,17 @@ func TestStore_GetMetadata(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	name := "meta-test"
+	name := "meta-test.tar"
 	metadata := &artifact.Metadata{
 		Stack:     "production",
 		Component: "database",
 		SHA:       "def456",
+		SHA256:    "abc123sha256",
 		Branch:    "main",
 		PRNumber:  42,
 		CreatedAt: time.Now(),
 	}
-	err := store.Upload(ctx, name, []artifact.FileEntry{
-		{Name: "plan.bin", Data: strings.NewReader("binary data"), Size: 11},
-	}, metadata)
+	err := store.Upload(ctx, name, strings.NewReader("binary data"), 11, metadata)
 	require.NoError(t, err)
 
 	retrieved, err := store.GetMetadata(ctx, name)
@@ -358,7 +320,7 @@ func TestStore_GetMetadata(t *testing.T) {
 	assert.Equal(t, metadata.SHA, retrieved.SHA)
 	assert.Equal(t, metadata.Branch, retrieved.Branch)
 	assert.Equal(t, metadata.PRNumber, retrieved.PRNumber)
-	assert.NotEmpty(t, retrieved.SHA256)
+	assert.Equal(t, metadata.SHA256, retrieved.SHA256)
 }
 
 func TestStore_GetMetadata_NotFound(t *testing.T) {
@@ -366,7 +328,7 @@ func TestStore_GetMetadata_NotFound(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	_, err := store.GetMetadata(ctx, "nonexistent")
+	_, err := store.GetMetadata(ctx, "nonexistent.tar")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 }
@@ -376,7 +338,7 @@ func TestStore_Download_NotFound(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	_, _, err := store.Download(ctx, "nonexistent")
+	_, _, err := store.Download(ctx, "nonexistent.tar")
 	require.Error(t, err)
 	assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 }
@@ -395,9 +357,7 @@ func TestStore_PathTraversal(t *testing.T) {
 
 	for _, name := range maliciousNames {
 		t.Run("Upload_"+name, func(t *testing.T) {
-			err := store.Upload(ctx, name, []artifact.FileEntry{
-				{Name: "file.txt", Data: strings.NewReader("data"), Size: 4},
-			}, nil)
+			err := store.Upload(ctx, name, strings.NewReader("data"), 4, nil)
 			require.Error(t, err)
 			assert.ErrorIs(t, err, errUtils.ErrArtifactStoreInvalidArgs)
 			assert.Contains(t, err.Error(), "path traversal")
@@ -438,8 +398,8 @@ func TestStore_ValidateName(t *testing.T) {
 		input   string
 		wantErr bool
 	}{
-		{name: "simple name", input: "my-artifact", wantErr: false},
-		{name: "nested name", input: "stack/component/sha", wantErr: false},
+		{name: "simple name", input: "my-artifact.tar", wantErr: false},
+		{name: "nested name", input: "stack/component/sha.tar", wantErr: false},
 		{name: "deeply nested", input: "a/b/c/d/e", wantErr: false},
 		{name: "with dots", input: "my.artifact.v1", wantErr: false},
 		{name: "parent escape", input: "../escape", wantErr: true},
@@ -461,42 +421,20 @@ func TestStore_ValidateName(t *testing.T) {
 	}
 }
 
-func TestStore_Upload_SHA256(t *testing.T) {
-	tmpDir := t.TempDir()
-	store := &Store{basePath: tmpDir}
-	ctx := context.Background()
-
-	name := "sha-test"
-	files := []artifact.FileEntry{
-		{Name: "a.txt", Data: strings.NewReader("hello"), Size: 5},
-		{Name: "b.txt", Data: strings.NewReader("world"), Size: 5},
-	}
-
-	err := store.Upload(ctx, name, files, nil)
-	require.NoError(t, err)
-
-	meta, err := store.GetMetadata(ctx, name)
-	require.NoError(t, err)
-	assert.NotEmpty(t, meta.SHA256)
-	// SHA256 should be a 64-char hex string.
-	assert.Len(t, meta.SHA256, 64)
-}
-
 func TestStore_GetMetadata_NoSidecar(t *testing.T) {
 	tmpDir := t.TempDir()
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	// Create artifact directory without metadata sidecar.
-	name := "no-sidecar"
-	artifactDir := filepath.Join(tmpDir, name)
-	require.NoError(t, os.MkdirAll(artifactDir, defaultDirPerms))
-	require.NoError(t, os.WriteFile(filepath.Join(artifactDir, "file.txt"), []byte("data"), defaultFilePerms))
+	// Create artifact file without metadata sidecar.
+	name := "no-sidecar.tar"
+	filePath := filepath.Join(tmpDir, name)
+	require.NoError(t, os.WriteFile(filePath, []byte("data"), defaultFilePerms))
 
 	meta, err := store.GetMetadata(ctx, name)
 	require.NoError(t, err)
 	assert.NotNil(t, meta)
-	// Should have CreatedAt from directory modtime.
+	// Should have CreatedAt from file modtime.
 	assert.False(t, meta.CreatedAt.IsZero())
 }
 
@@ -506,10 +444,8 @@ func TestStore_Delete_CleansUpEmptyDirs(t *testing.T) {
 	ctx := context.Background()
 
 	// Upload to a nested path.
-	name := "nested/deep/artifact"
-	err := store.Upload(ctx, name, []artifact.FileEntry{
-		{Name: "file.txt", Data: strings.NewReader("content"), Size: 7},
-	}, nil)
+	name := "nested/deep/artifact.tar"
+	err := store.Upload(ctx, name, strings.NewReader("content"), 7, nil)
 	require.NoError(t, err)
 
 	// Delete.
@@ -526,9 +462,7 @@ func TestStore_List_NoMatchingFilters(t *testing.T) {
 	store := &Store{basePath: tmpDir}
 	ctx := context.Background()
 
-	err := store.Upload(ctx, "filtered", []artifact.FileEntry{
-		{Name: "f.txt", Data: strings.NewReader("d"), Size: 1},
-	}, &artifact.Metadata{
+	err := store.Upload(ctx, "filtered.tar", strings.NewReader("d"), 1, &artifact.Metadata{
 		Stack:     "dev",
 		Component: "vpc",
 		SHA:       "sha1",
@@ -545,7 +479,7 @@ func TestStore_List_NoMatchingFilters(t *testing.T) {
 func TestIntegration_FullLifecycle(t *testing.T) {
 	tmpDir := t.TempDir()
 
-	store, err := NewStore(artifact.StoreOptions{
+	backend, err := NewStore(artifact.StoreOptions{
 		Options: map[string]any{
 			"path": tmpDir,
 		},
@@ -553,58 +487,53 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 	require.NoError(t, err)
 
 	ctx := context.Background()
-	name := "lifecycle-test"
+	name := "lifecycle-test.tar"
 	metadata := &artifact.Metadata{
 		Stack:     "production",
 		Component: "vpc",
 		SHA:       "abc123",
+		SHA256:    "precomputed",
 		CreatedAt: time.Now(),
 	}
-	files := []artifact.FileEntry{
-		{Name: "plan.tfplan", Data: strings.NewReader("terraform plan"), Size: 14},
-		{Name: "lock.hcl", Data: strings.NewReader("lock file"), Size: 9},
-	}
+	data := "terraform plan data"
 
 	// 1. Upload.
-	err = store.Upload(ctx, name, files, metadata)
+	err = backend.Upload(ctx, name, strings.NewReader(data), int64(len(data)), metadata)
 	require.NoError(t, err)
 
 	// 2. Exists.
-	exists, err := store.Exists(ctx, name)
+	exists, err := backend.Exists(ctx, name)
 	require.NoError(t, err)
 	assert.True(t, exists)
 
 	// 3. GetMetadata.
-	meta, err := store.GetMetadata(ctx, name)
+	meta, err := backend.GetMetadata(ctx, name)
 	require.NoError(t, err)
 	assert.Equal(t, "production", meta.Stack)
 	assert.Equal(t, "vpc", meta.Component)
-	assert.NotEmpty(t, meta.SHA256)
+	assert.Equal(t, "precomputed", meta.SHA256)
 
 	// 4. List.
-	list, err := store.List(ctx, artifact.Query{Components: []string{"vpc"}})
+	list, err := backend.List(ctx, artifact.Query{Components: []string{"vpc"}})
 	require.NoError(t, err)
 	assert.Len(t, list, 1)
 	assert.Equal(t, name, list[0].Name)
 
 	// 5. Download.
-	results, downloadedMeta, err := store.Download(ctx, name)
+	reader, downloadedMeta, err := backend.Download(ctx, name)
 	require.NoError(t, err)
-	assert.Len(t, results, 2)
 	assert.NotNil(t, downloadedMeta)
-	for _, r := range results {
-		data, readErr := io.ReadAll(r.Data)
-		require.NoError(t, readErr)
-		assert.NotEmpty(t, data)
-		r.Data.Close()
-	}
+	downloaded, readErr := io.ReadAll(reader)
+	require.NoError(t, readErr)
+	assert.Equal(t, data, string(downloaded))
+	reader.Close()
 
 	// 6. Delete.
-	err = store.Delete(ctx, name)
+	err = backend.Delete(ctx, name)
 	require.NoError(t, err)
 
 	// 7. Verify deleted.
-	exists, err = store.Exists(ctx, name)
+	exists, err = backend.Exists(ctx, name)
 	require.NoError(t, err)
 	assert.False(t, exists)
 

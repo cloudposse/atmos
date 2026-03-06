@@ -71,4 +71,5 @@ type StoreOptions struct {
 }
 
 // StoreFactory is a function that creates a Store from options.
+// Deprecated: Use BackendFactory instead. Backends are wrapped in BundledStore by the registry.
 type StoreFactory func(opts StoreOptions) (Store, error)

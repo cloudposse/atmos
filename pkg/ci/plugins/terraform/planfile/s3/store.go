@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"time"
 
@@ -26,15 +27,15 @@ const (
 	metadataSuffix = ".metadata.json"
 )
 
-// Store implements the artifact.Store interface using AWS S3.
+// Store implements the artifact.Backend interface using AWS S3.
 type Store struct {
 	client *s3.Client
 	bucket string
 	prefix string
 }
 
-// NewStore creates a new S3 store.
-func NewStore(opts artifact.StoreOptions) (artifact.Store, error) {
+// NewStore creates a new S3 backend.
+func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	defer perf.Track(opts.AtmosConfig, "s3.NewStore")()
 
 	bucket, ok := opts.Options["bucket"].(string)
@@ -81,24 +82,24 @@ func (s *Store) fullKey(key string) string {
 	return path.Join(s.prefix, key)
 }
 
-// Upload uploads an artifact bundle to S3 as a tar archive with a metadata sidecar.
-func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEntry, metadata *artifact.Metadata) error {
+// Upload uploads a single data stream to S3 with a metadata sidecar.
+func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int64, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "s3.Upload")()
 
 	fullKey := s.fullKey(key)
 
-	// Create tar archive from files.
-	tarData, err := artifact.CreateTarArchive(files)
+	// Read all data into memory for S3 PutObject (needs content length).
+	dataBytes, err := io.ReadAll(data)
 	if err != nil {
-		return fmt.Errorf("%w: %w", errUtils.ErrArtifactUploadFailed, err)
+		return fmt.Errorf("%w: failed to read data: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
-	// Upload the tar archive.
+	// Upload the data.
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
 		Key:           aws.String(fullKey),
-		Body:          bytes.NewReader(tarData),
-		ContentLength: aws.Int64(int64(len(tarData))),
+		Body:          bytes.NewReader(dataBytes),
+		ContentLength: aws.Int64(int64(len(dataBytes))),
 	})
 	if err != nil {
 		return fmt.Errorf("%w: failed to upload artifact to S3: %w", errUtils.ErrArtifactUploadFailed, err)
@@ -127,13 +128,14 @@ func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEnt
 	return nil
 }
 
-// Download downloads an artifact bundle from S3 and extracts files from the tar archive.
-func (s *Store) Download(ctx context.Context, key string) ([]artifact.FileResult, *artifact.Metadata, error) {
+// Download downloads a single data stream from S3.
+// Returns an io.ReadCloser for the data and the metadata sidecar.
+func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artifact.Metadata, error) {
 	defer perf.Track(nil, "s3.Download")()
 
 	fullKey := s.fullKey(key)
 
-	// Download the tar archive.
+	// Download the data.
 	result, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(fullKey),
@@ -144,18 +146,11 @@ func (s *Store) Download(ctx context.Context, key string) ([]artifact.FileResult
 		}
 		return nil, nil, fmt.Errorf("%w: failed to download artifact from S3: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
-	defer result.Body.Close()
-
-	// Extract files from tar.
-	files, err := artifact.ExtractTarArchive(result.Body)
-	if err != nil {
-		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
-	}
 
 	// Try to load metadata.
 	metadata, _ := s.loadMetadata(ctx, fullKey)
 
-	return files, metadata, nil
+	return result.Body, metadata, nil
 }
 
 // Delete deletes an artifact from S3.
@@ -341,5 +336,5 @@ func init() {
 	artifact.Register(storeName, NewStore)
 }
 
-// Ensure Store implements artifact.Store.
-var _ artifact.Store = (*Store)(nil)
+// Ensure Store implements artifact.Backend.
+var _ artifact.Backend = (*Store)(nil)

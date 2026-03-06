@@ -28,6 +28,9 @@ const (
 	// Metadata is stored as a JSON sidecar within the artifact zip.
 	metadataFilename = "metadata.json"
 
+	// archiveFilename is the name of the tar archive within the zip.
+	archiveFilename = "archive.tar"
+
 	// Default retention for artifacts.
 	defaultRetentionDays = 7
 
@@ -114,7 +117,7 @@ type listArtifactsResponse struct {
 	Artifacts  []githubArtifact `json:"artifacts"`
 }
 
-// Store implements the artifact.Store interface using GitHub Actions Artifacts.
+// Store implements the artifact.Backend interface using GitHub Actions Artifacts.
 type Store struct {
 	httpClient    *http.Client
 	baseURL       string
@@ -124,8 +127,8 @@ type Store struct {
 	retentionDays int
 }
 
-// NewStore creates a new GitHub Artifacts store.
-func NewStore(opts artifact.StoreOptions) (artifact.Store, error) {
+// NewStore creates a new GitHub Artifacts backend.
+func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	defer perf.Track(opts.AtmosConfig, "github.NewStore")()
 
 	token := getGitHubToken()
@@ -225,10 +228,11 @@ func (s *Store) artifactName(key string) string {
 	return "planfile-" + sanitizeKey(key)
 }
 
-// Upload uploads an artifact bundle as a GitHub artifact.
+// Upload uploads a single data stream as a GitHub artifact.
+// Creates a zip containing archive.tar (the data stream) + metadata.json.
 // This requires running within GitHub Actions with ACTIONS_RUNTIME_TOKEN and
 // ACTIONS_RESULTS_URL environment variables set.
-func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEntry, metadata *artifact.Metadata) error {
+func (s *Store) Upload(ctx context.Context, key string, data io.Reader, size int64, metadata *artifact.Metadata) error {
 	defer perf.Track(nil, "github.Upload")()
 
 	if s.uploader == nil {
@@ -242,8 +246,8 @@ func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEnt
 		return fmt.Errorf("%w: failed to parse runtime token: %w", errUtils.ErrArtifactUploadFailed, err)
 	}
 
-	// Create a zip archive with individual file entries + metadata.
-	zipData, err := createArtifactZip(files, metadata)
+	// Create a zip archive with the tar stream + metadata.
+	zipData, err := createArtifactZip(data, metadata)
 	if err != nil {
 		return err
 	}
@@ -290,27 +294,25 @@ func (s *Store) Upload(ctx context.Context, key string, files []artifact.FileEnt
 	return nil
 }
 
-// createArtifactZip creates a zip archive with individual file entries and metadata.
+// createArtifactZip creates a zip archive containing archive.tar (data stream) and metadata.json.
 // The GitHub Actions runtime API requires zip format.
-func createArtifactZip(files []artifact.FileEntry, metadata *artifact.Metadata) ([]byte, error) {
+func createArtifactZip(data io.Reader, metadata *artifact.Metadata) ([]byte, error) {
 	var buf bytes.Buffer
 	zipWriter := zip.NewWriter(&buf)
 
-	// Add each file entry.
-	for _, entry := range files {
-		fileWriter, err := zipWriter.Create(entry.Name)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to create zip entry for %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
-		}
+	// Add the tar stream as archive.tar.
+	archiveWriter, err := zipWriter.Create(archiveFilename)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to create zip entry for %s: %w", errUtils.ErrArtifactUploadFailed, archiveFilename, err)
+	}
 
-		data, err := io.ReadAll(entry.Data)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to read file %s: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
-		}
+	dataBytes, err := io.ReadAll(data)
+	if err != nil {
+		return nil, fmt.Errorf("%w: failed to read data: %w", errUtils.ErrArtifactUploadFailed, err)
+	}
 
-		if _, err := fileWriter.Write(data); err != nil {
-			return nil, fmt.Errorf("%w: failed to write %s to zip: %w", errUtils.ErrArtifactUploadFailed, entry.Name, err)
-		}
+	if _, err := archiveWriter.Write(dataBytes); err != nil {
+		return nil, fmt.Errorf("%w: failed to write %s to zip: %w", errUtils.ErrArtifactUploadFailed, archiveFilename, err)
 	}
 
 	// Add metadata as a sidecar entry.
@@ -474,8 +476,8 @@ func parseNextPage(linkHeader string) int {
 	return 0
 }
 
-// Download downloads an artifact and extracts individual files from the zip.
-func (s *Store) Download(ctx context.Context, key string) ([]artifact.FileResult, *artifact.Metadata, error) {
+// Download downloads an artifact and extracts the tar stream from the zip.
+func (s *Store) Download(ctx context.Context, key string) (io.ReadCloser, *artifact.Metadata, error) {
 	defer perf.Track(nil, "github.Download")()
 
 	a, err := s.findArtifact(ctx, key)
@@ -488,7 +490,7 @@ func (s *Store) Download(ctx context.Context, key string) ([]artifact.FileResult
 		return nil, nil, err
 	}
 
-	return extractFilesFromZip(zipData)
+	return extractFromZip(zipData)
 }
 
 // findArtifact finds an artifact by key.
@@ -535,39 +537,35 @@ func (s *Store) downloadArtifactContent(ctx context.Context, artifactID int64) (
 	return zipData, nil
 }
 
-// extractFilesFromZip extracts individual files and metadata from the zip archive.
-// Returns file results and metadata.
-func extractFilesFromZip(zipData []byte) ([]artifact.FileResult, *artifact.Metadata, error) {
+// extractFromZip extracts the archive.tar stream and metadata from the zip archive.
+// Returns an io.ReadCloser for the tar data and the parsed metadata.
+func extractFromZip(zipData []byte) (io.ReadCloser, *artifact.Metadata, error) {
 	zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: failed to open artifact zip: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}
 
-	var results []artifact.FileResult
+	var tarData []byte
 	var metadata *artifact.Metadata
 
 	for _, file := range zipReader.File {
 		switch file.Name {
 		case metadataFilename:
 			metadata = readMetadataFile(file)
-		default:
+		case archiveFilename:
 			data, err := readZipFile(file)
 			if err != nil {
 				return nil, nil, err
 			}
-			results = append(results, artifact.FileResult{
-				Name: file.Name,
-				Data: io.NopCloser(bytes.NewReader(data)),
-				Size: int64(len(data)),
-			})
+			tarData = data
 		}
 	}
 
-	if len(results) == 0 {
-		return nil, nil, fmt.Errorf("%w: no files found in artifact zip", errUtils.ErrArtifactDownloadFailed)
+	if tarData == nil {
+		return nil, nil, fmt.Errorf("%w: no %s found in artifact zip", errUtils.ErrArtifactDownloadFailed, archiveFilename)
 	}
 
-	return results, metadata, nil
+	return io.NopCloser(bytes.NewReader(tarData)), metadata, nil
 }
 
 // readZipFile reads a file from the zip archive.
@@ -958,5 +956,5 @@ func init() {
 	artifact.Register(storeName, NewStore)
 }
 
-// Ensure Store implements artifact.Store.
-var _ artifact.Store = (*Store)(nil)
+// Ensure Store implements artifact.Backend.
+var _ artifact.Backend = (*Store)(nil)

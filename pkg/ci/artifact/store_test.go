@@ -7,7 +7,7 @@ import (
 )
 
 // Compile-time interface checks.
-var _ Store = (*testStore)(nil)
+var _ Backend = (*testBackend)(nil)
 
 func TestStoreOptionsDefaults(t *testing.T) {
 	opts := StoreOptions{

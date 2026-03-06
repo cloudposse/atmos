@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"context"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -19,34 +20,34 @@ func (c *testChecker) IsAvailable(_ context.Context) bool {
 	return c.available
 }
 
-// testStore is a minimal Store implementation for testing.
-type testStore struct {
+// testBackend is a minimal Backend implementation for testing.
+type testBackend struct {
 	name string
 }
 
-func (s *testStore) Name() string { return s.name }
-func (s *testStore) Upload(_ context.Context, _ string, _ []FileEntry, _ *Metadata) error {
+func (s *testBackend) Name() string { return s.name }
+func (s *testBackend) Upload(_ context.Context, _ string, _ io.Reader, _ int64, _ *Metadata) error {
 	return nil
 }
-func (s *testStore) Download(_ context.Context, _ string) ([]FileResult, *Metadata, error) {
+func (s *testBackend) Download(_ context.Context, _ string) (io.ReadCloser, *Metadata, error) {
 	return nil, nil, nil
 }
-func (s *testStore) Delete(_ context.Context, _ string) error                     { return nil }
-func (s *testStore) List(_ context.Context, _ Query) ([]ArtifactInfo, error)      { return nil, nil }
-func (s *testStore) Exists(_ context.Context, _ string) (bool, error)             { return false, nil }
-func (s *testStore) GetMetadata(_ context.Context, _ string) (*Metadata, error)   { return nil, nil }
+func (s *testBackend) Delete(_ context.Context, _ string) error                     { return nil }
+func (s *testBackend) List(_ context.Context, _ Query) ([]ArtifactInfo, error)      { return nil, nil }
+func (s *testBackend) Exists(_ context.Context, _ string) (bool, error)             { return false, nil }
+func (s *testBackend) GetMetadata(_ context.Context, _ string) (*Metadata, error)   { return nil, nil }
 
 func setupTestRegistry(t *testing.T, storeNames ...string) func() {
 	t.Helper()
 	registryMu.Lock()
 	oldFactories := factories
-	factories = make(map[string]StoreFactory)
+	factories = make(map[string]BackendFactory)
 	registryMu.Unlock()
 
 	for _, name := range storeNames {
 		n := name
-		Register(n, func(opts StoreOptions) (Store, error) {
-			return &testStore{name: n}, nil
+		Register(n, func(opts StoreOptions) (Backend, error) {
+			return &testBackend{name: n}, nil
 		})
 	}
 

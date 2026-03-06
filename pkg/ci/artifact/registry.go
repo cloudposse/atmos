@@ -10,12 +10,12 @@ import (
 
 var (
 	registryMu sync.RWMutex
-	factories  = make(map[string]StoreFactory)
+	factories  = make(map[string]BackendFactory)
 )
 
-// Register registers a store factory for the given type.
+// Register registers a backend factory for the given type.
 // Both storeType and factory must be non-empty/non-nil.
-func Register(storeType string, factory StoreFactory) {
+func Register(storeType string, factory BackendFactory) {
 	defer perf.Track(nil, "artifact.Register")()
 
 	if storeType == "" {
@@ -31,6 +31,7 @@ func Register(storeType string, factory StoreFactory) {
 }
 
 // NewStore creates a new store from the given options.
+// It creates a Backend via the registered factory and wraps it in a BundledStore.
 func NewStore(opts StoreOptions) (Store, error) {
 	defer perf.Track(opts.AtmosConfig, "artifact.NewStore")()
 
@@ -42,7 +43,12 @@ func NewStore(opts StoreOptions) (Store, error) {
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactStoreNotFound, opts.Type)
 	}
 
-	return factory(opts)
+	backend, err := factory(opts)
+	if err != nil {
+		return nil, err
+	}
+
+	return NewBundledStore(backend), nil
 }
 
 // GetRegisteredTypes returns a list of registered store types.
