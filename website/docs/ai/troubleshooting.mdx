@@ -1655,9 +1655,9 @@ tools:
 
 See [Claude Code Integration](/ai/claude-code-integration) for complete setup guide.
 
-## Project Memory Issues
+## Project Instructions Issues
 
-### Memory File Not Created
+### Instructions File Not Created
 
 **Problem**: `ATMOS.md` file doesn't get created automatically.
 
@@ -1667,7 +1667,7 @@ See [Claude Code Integration](/ai/claude-code-integration) for complete setup gu
 ```yaml
 settings:
   ai:
-    memory:
+    instructions:
       enabled: true
       create_if_missing: true  # Must be true
 ```
@@ -1688,24 +1688,24 @@ settings:
     ```
 </Terminal>
 
-### AI Not Using Memory Context
+### AI Not Using Project Instructions
 
 **Problem**: AI responses don't reflect project-specific knowledge.
 
 **Solutions**:
 
-1. **Verify memory is enabled**:
+1. **Verify instructions are enabled**:
 <Terminal title="shell">
     ```bash
-    grep -A 5 "memory:" atmos.yaml
+    grep -A 5 "instructions:" atmos.yaml
     ```
 </Terminal>
 
 Expected output:
 ```yaml
-memory:
+instructions:
   enabled: true
-  file_path: "ATMOS.md"
+  file: "ATMOS.md"
 ```
 
 2. **Check file exists**:
@@ -1724,7 +1724,7 @@ Ensure sections use level 2 headers (`##`):
 # Project Context     ❌ Wrong (level 1)
 ```
 
-### Memory File Load Errors
+### Instructions File Load Errors
 
 **Problem**: Error loading `ATMOS.md` file.
 
@@ -1741,7 +1741,7 @@ Ensure sections use level 2 headers (`##`):
 <Terminal title="shell">
     ```bash
     # Check for parsing issues
-    atmos ai chat  # Look for memory-related warnings in logs
+    atmos ai chat  # Look for instructions-related warnings in logs
     ```
 </Terminal>
 
@@ -1749,15 +1749,15 @@ Ensure sections use level 2 headers (`##`):
 ```yaml
 settings:
   ai:
-    memory:
+    instructions:
       # Use relative path (recommended)
-      file_path: "ATMOS.md"
+      file: "ATMOS.md"
 
       # Or absolute path
-      file_path: "/absolute/path/to/ATMOS.md"
+      file: "/absolute/path/to/ATMOS.md"
 ```
 
-### Memory Sections Not Appearing
+### Instruction Sections Not Appearing
 
 **Problem**: Some sections missing from AI context.
 
@@ -1766,7 +1766,7 @@ settings:
 ```yaml
 settings:
   ai:
-    memory:
+    instructions:
       sections:
         - project_context         # Matches: ## Project Context
         - common_commands         # Matches: ## Common Commands
@@ -1780,13 +1780,13 @@ Section keys must match (case-insensitive, spaces→underscores):
 
 ### Auto-Update Not Working
 
-**Problem**: AI isn't adding learnings to memory file.
+**Problem**: AI isn't adding learnings to instructions file.
 
 **Reasons why this is expected**:
 
 1. **Auto-update disabled** (default and recommended):
 ```yaml
-memory:
+instructions:
   auto_update: false  # Manual updates only
 ```
 
@@ -1794,20 +1794,20 @@ memory:
 
 **To enable auto-update** (experimental):
 ```yaml
-memory:
+instructions:
   enabled: true
   auto_update: true  # AI can append to Recent Learnings section
 ```
 
-### Large Memory File Performance
+### Large Instructions File Performance
 
 **Problem**: AI requests are slow or expensive.
 
-**Solution**: Optimize memory size:
+**Solution**: Optimize instructions file size:
 
 1. **Enable only needed sections**:
 ```yaml
-memory:
+instructions:
   sections:
     - project_context      # Essential
     - common_commands      # Essential

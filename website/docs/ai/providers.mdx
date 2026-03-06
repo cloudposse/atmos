@@ -72,7 +72,7 @@ Choose the right provider based on your requirements:
 
 ### Token Caching (Prompt Caching)
 
-Token caching (also called "prompt caching") dramatically reduces costs by reusing frequently-sent content like system prompts and project memory. Instead of paying full price for the same tokens every message, cached tokens cost 90% less (Anthropic), 50% less (OpenAI/Azure), or are free (Gemini).
+Token caching (also called "prompt caching") dramatically reduces costs by reusing frequently-sent content like system prompts and project instructions. Instead of paying full price for the same tokens every message, cached tokens cost 90% less (Anthropic), 50% less (OpenAI/Azure), or are free (Gemini).
 
 **Cost Savings:**
 - **No caching**: Pay full price for system prompts and ATMOS.md content every message
@@ -95,7 +95,7 @@ Token caching (also called "prompt caching") dramatically reduces costs by reusi
 
 #### Anthropic Configuration
 
-Anthropic requires explicit cache markers to indicate which content should be cached. By default, Atmos caches both the system prompt and your ATMOS.md project memory:
+Anthropic requires explicit cache markers to indicate which content should be cached. By default, Atmos caches both the system prompt and your ATMOS.md project instructions:
 
 <File title="atmos.yaml">
 ```yaml
@@ -153,7 +153,7 @@ settings:
 ```
 </File>
 
-To cache only system prompt (not project memory):
+To cache only system prompt (not project instructions):
 
 <File title="atmos.yaml">
 ```yaml
@@ -170,7 +170,7 @@ settings:
 
 **When to Disable:**
 - Very short conversations (1-2 messages) where cache overhead exceeds savings
-- Rapidly changing system prompts or project memory
+- Rapidly changing system prompts or project instructions
 - Cost monitoring during development
 
 #### Other Providers
@@ -185,7 +185,7 @@ For OpenAI specifically, caching activates automatically when:
 
 :::tip Maximize Cache Savings
 For best results with Anthropic:
-- Enable both system prompt and project memory caching
+- Enable both system prompt and project instructions caching
 - Keep ATMOS.md content stable (avoid frequent updates during conversations)
 - Use named sessions for extended conversations on the same topic
 - Cache duration is 5 minutes - stay active to maintain cache

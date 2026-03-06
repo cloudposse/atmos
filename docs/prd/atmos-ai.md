@@ -23,7 +23,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 15+ tools with granular permission system
 - **Permission Cache** - Persistent permission decisions with 80%+ prompt reduction
-- **Skill System** - 21 marketplace skills + built-in skills
+- **Skill System** - 21+ marketplace skills + built-in skills
 - **MCP Integration** - stdio/HTTP transports for external clients
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management

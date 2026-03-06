@@ -12,7 +12,7 @@ We're excited to introduce **Atmos AI**, an intelligent assistant built directly
 
 Unlike general-purpose AI coding assistants, Atmos AI has deep, native understanding of Atmos stacks, components, inheritance patterns, and infrastructure workflows. It's not just an AI that knows about code—it's an AI that truly understands *your infrastructure*.
 
-With support for 7 AI providers (including local/offline Ollama), persistent sessions with full conversation memory, tool execution with granular permissions and persistent permission cache, specialized agents for specific tasks, and seamless IDE integration via MCP—Atmos AI brings the productivity patterns of industry-leading AI systems to infrastructure management.
+With support for 7 AI providers (including local/offline Ollama), persistent sessions with full conversation memory, tool execution with granular permissions and persistent permission cache, specialized skills for specific tasks, and seamless IDE integration via MCP—Atmos AI brings the productivity patterns of industry-leading AI systems to infrastructure management.
 
 <!--truncate-->
 
@@ -160,9 +160,9 @@ atmos ai chat --session vpc-migration
 - Cross-platform session management
 - Visual session picker in TUI (Ctrl+L)
 
-### 4. Specialized AI Agents
+### 4. Specialized AI Skills
 
-Different tasks need different expertise. Atmos AI provides **21 specialized skills** you can install from the marketplace:
+Different tasks need different expertise. Atmos AI provides **21+ specialized skills** you can install from the marketplace:
 
 ```bash
 # Install all official skills with one command
@@ -207,12 +207,12 @@ AWS Bedrock and Azure OpenAI provide:
 - Audit logging and cost allocation
 - IAM/Azure AD integration
 
-### 6. Project Memory (ATMOS.md)
+### 6. Project Instructions (ATMOS.md)
 
-The AI can remember **project-specific context** across all sessions via `ATMOS.md`:
+The AI uses **project-specific context** across all sessions via `ATMOS.md`:
 
 ```markdown
-# Atmos Project Memory
+# Atmos Project Instructions
 
 ## Project Context
 **Organization:** acme-corp
@@ -238,7 +238,7 @@ All network stacks inherit from:
 - prod: 10.2.0.0/16
 ```
 
-This memory file:
+This instructions file:
 - ✅ Shared with AI automatically
 - ✅ Human-readable Markdown
 - ✅ Version-controlled with your repo
@@ -441,7 +441,7 @@ Learn more: [atmos ai exec documentation](/cli/commands/ai/exec)
 
 ### 10. Token Caching for Cost Savings
 
-**NEW:** Atmos AI now supports **prompt caching** (token caching) to dramatically reduce API costs by reusing frequently-sent content like system prompts and project memory.
+**NEW:** Atmos AI now supports **prompt caching** (token caching) to dramatically reduce API costs by reusing frequently-sent content like system prompts and project instructions.
 
 **Cost Savings:**
 - **Anthropic:** 90% discount on cached tokens
@@ -452,7 +452,7 @@ Learn more: [atmos ai exec documentation](/cli/commands/ai/exec)
 
 **Real Example (Anthropic):**
 - System prompt: 2,000 tokens
-- ATMOS.md content: 8,000 tokens
+- ATMOS.md instructions: 8,000 tokens
 - User message: 100 tokens
 
 Without caching:
@@ -675,10 +675,10 @@ Add to your `atmos.yaml`:
             - atmos_list_*
             - file_read
 
-        # Enable project memory
-        memory:
+        # Enable project instructions
+        instructions:
           enabled: true
-          file_path: "ATMOS.md"
+          file: "ATMOS.md"
           create_if_missing: true
     ```
 </File>
@@ -756,16 +756,10 @@ atmos ai sessions list
 atmos ai sessions clean --older-than 30d
 ```
 
-**Project Memory:**
+**Project Instructions:**
 ```bash
-# Initialize ATMOS.md
-atmos ai memory init
-
-# Edit in your $EDITOR
-atmos ai memory edit
-
-# View current memory
-atmos ai memory view
+# Edit ATMOS.md with your preferred editor
+vim ATMOS.md
 ```
 
 **MCP Server (Claude Desktop):**
@@ -1084,7 +1078,7 @@ Learn more: [Context Discovery Documentation](/ai#automatic-context-discovery)
 Install specialized skills from the marketplace following the [Agent Skills open standard](https://agentskills.io):
 
 ```bash
-# Install all 21 official Atmos skills
+# Install all 21+ official Atmos skills
 atmos ai skill install cloudposse/atmos
 
 # List installed skills
@@ -1191,7 +1185,7 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 
 ### Medium-term (3-6 Months)
 - **Multi-Skill Workflows** - Skill delegation and collaboration
-- **Enhanced Memory** - Automatic memory updates from conversations
+- **Enhanced Instructions** - Automatic instructions updates from conversations
 - **IDE Plugins** - Native VSCode/JetBrains integration
 - **Team Collaboration** - Shared sessions across teams
 
@@ -1209,7 +1203,7 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - [Tool System](/ai/tools) - Tool execution and permissions
 - [AI Skills](/ai/skills) - Marketplace-installed skills following the Agent Skills open standard
 - [Sessions](/ai/sessions) - Session management and auto-compact
-- [Project Memory](/ai/memory) - ATMOS.md documentation
+- [Project Instructions](/ai/memory) - ATMOS.md documentation
 - [MCP Server](/ai/mcp-server) - Claude Desktop integration
 - [Claude Code Integration](/ai/claude-code-integration) - IDE integration
 - [Troubleshooting](/ai/troubleshooting) - Common issues and solutions

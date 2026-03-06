@@ -159,7 +159,7 @@ func TestAICommandProvider(t *testing.T) {
 			subcommandNames[subcmd.Name()] = true
 		}
 
-		expectedSubcommands := []string{"skill", "ask", "chat", "help", "memory", "sessions"}
+		expectedSubcommands := []string{"skill", "ask", "chat", "help", "sessions"}
 		for _, expected := range expectedSubcommands {
 			assert.True(t, subcommandNames[expected], "expected subcommand %s not found", expected)
 		}

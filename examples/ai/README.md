@@ -6,7 +6,7 @@ This example demonstrates how to configure and use the Atmos AI Assistant featur
 - **Session management** - Persistent conversation history with auto-compact
 - **Tool execution** - AI-powered infrastructure inspection
 - **Custom skills** - Specialized AI skills for different tasks
-- **Project memory** - Persistent context via ATMOS.md
+- **Project instructions** - Persistent context via ATMOS.md
 
 ## Prerequisites
 
@@ -109,9 +109,9 @@ This example includes a custom "cost-optimizer" skill:
 
 Skills provide specialized behavior and restricted tool access for specific tasks.
 
-### Project Memory (ATMOS.md)
+### Project Instructions (ATMOS.md)
 
-The `ATMOS.md` file provides persistent project context to the AI:
+The `ATMOS.md` file provides persistent project instructions to the AI:
 
 - Stack naming conventions
 - Component patterns
@@ -126,7 +126,7 @@ The AI reads this file automatically to provide context-aware responses.
 examples/ai/
 ├── README.md              # This file
 ├── atmos.yaml             # Atmos configuration with AI settings
-├── ATMOS.md               # Project memory for AI context
+├── ATMOS.md               # Project instructions for AI context
 ├── stacks/
 │   └── deploy/
 │       ├── dev.yaml       # Development stack

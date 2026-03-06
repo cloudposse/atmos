@@ -1202,14 +1202,14 @@ func TestChatCmd_AIEnabled_ConfigValidation(t *testing.T) {
 	})
 }
 
-// TestChatCmd_MemoryConfigPaths tests memory configuration paths.
-func TestChatCmd_MemoryConfig(t *testing.T) {
-	t.Run("memory config fields", func(t *testing.T) {
+// TestChatCmd_InstructionsConfig tests instructions configuration paths.
+func TestChatCmd_InstructionsConfig(t *testing.T) {
+	t.Run("instructions config fields", func(t *testing.T) {
 		atmosConfig := &schema.AtmosConfiguration{
 			BasePath: t.TempDir(),
 			Settings: schema.AtmosSettings{
 				AI: schema.AISettings{
-					Memory: schema.AIMemorySettings{
+					Instructions: schema.AIInstructionsSettings{
 						Enabled:      true,
 						FilePath:     "ATMOS.md",
 						AutoUpdate:   true,
@@ -1219,11 +1219,11 @@ func TestChatCmd_MemoryConfig(t *testing.T) {
 				},
 			},
 		}
-		assert.True(t, atmosConfig.Settings.AI.Memory.Enabled)
-		assert.Equal(t, "ATMOS.md", atmosConfig.Settings.AI.Memory.FilePath)
-		assert.True(t, atmosConfig.Settings.AI.Memory.AutoUpdate)
-		assert.True(t, atmosConfig.Settings.AI.Memory.CreateIfMiss)
-		assert.Equal(t, []string{"context", "commands", "patterns"}, atmosConfig.Settings.AI.Memory.Sections)
+		assert.True(t, atmosConfig.Settings.AI.Instructions.Enabled)
+		assert.Equal(t, "ATMOS.md", atmosConfig.Settings.AI.Instructions.FilePath)
+		assert.True(t, atmosConfig.Settings.AI.Instructions.AutoUpdate)
+		assert.True(t, atmosConfig.Settings.AI.Instructions.CreateIfMiss)
+		assert.Equal(t, []string{"context", "commands", "patterns"}, atmosConfig.Settings.AI.Instructions.Sections)
 	})
 }
 

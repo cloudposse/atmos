@@ -3,50 +3,25 @@ title: atmos ai memory
 sidebar_label: memory
 sidebar_class_name: command
 id: memory
-description: Manage AI project memory for context-aware assistance
+description: Configure AI project instructions for context-aware assistance
 ---
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
-Use this command to manage the AI project memory file (ATMOS.md), which stores project-specific context, patterns, and conventions that help the AI provide more accurate and relevant assistance.
+The `ATMOS.md` file stores project-specific context, patterns, and conventions that help the AI provide more accurate and relevant assistance. Edit the file directly with your preferred text editor.
 </Intro>
 
 <Experimental />
 
 ## Description
 
-The `atmos ai memory` command provides tools to initialize, view, validate, edit, and locate your project memory file. Project memory allows the AI assistant to remember your organization's specific patterns, common commands, stack structures, and infrastructure conventions.
-
-## Usage
-
-```shell
-atmos ai memory [subcommand]
-```
-
-## Subcommands
-
-<dl>
-  <dt>`init`</dt>
-  <dd>Create a new ATMOS.md template file in your project</dd>
-
-  <dt>`show`</dt>
-  <dd>Display the current project memory content</dd>
-
-  <dt>`validate`</dt>
-  <dd>Validate the ATMOS.md file format and structure</dd>
-
-  <dt>`edit`</dt>
-  <dd>Open the ATMOS.md file in your editor ($EDITOR)</dd>
-
-  <dt>`path`</dt>
-  <dd>Show the absolute path to the ATMOS.md file</dd>
-</dl>
+Project instructions allow the AI assistant to use your organization's specific patterns, common commands, stack structures, and infrastructure conventions. The instructions are stored in an `ATMOS.md` file in your project root.
 
 ## Configuration
 
-Enable project memory in your `atmos.yaml`:
+Enable project instructions in your `atmos.yaml`:
 
 ```yaml
 settings:
@@ -54,8 +29,8 @@ settings:
     enabled: true
     provider: "anthropic"
     memory:
-      enabled: true                # Enable project memory
-      file_path: "ATMOS.md"       # Memory file location (default)
+      enabled: true                # Enable project instructions
+      file: "ATMOS.md"            # Instructions file location (default)
       create_if_missing: true      # Auto-create template if needed
       auto_update: false           # Manual updates only (recommended)
       sections:                    # Sections to include in AI context
@@ -69,159 +44,29 @@ settings:
         - recent_learnings
 ```
 
-## Subcommand Details
+## Editing the Instructions File
 
-### atmos ai memory init
+Edit `ATMOS.md` with any text editor:
 
-Create a new ATMOS.md template file with all standard sections.
-
-<Terminal title="atmos ai memory init">
-```console
-$ atmos ai memory init
-
-✅ Created ATMOS.md at: /path/to/project/ATMOS.md
-
-Edit this file to customize your project memory.
-Then enable memory in atmos.yaml:
-  ai:
-    memory:
-      enabled: true
+<Terminal title="shell">
+```bash
+$ code ATMOS.md           # VS Code
+$ vim ATMOS.md            # Vim
+$ nano ATMOS.md           # Nano
 ```
 </Terminal>
 
-**Options:**
+Changes take effect immediately on the next AI request.
 
-<dl>
-  <dt>`--force`</dt>
-  <dd>Overwrite existing ATMOS.md file</dd>
-</dl>
-
-**Example with --force:**
-
-```shell
-atmos ai memory init --force
-```
-
-### atmos ai memory show
-
-Display the current project memory content that will be sent to the AI assistant.
-
-<Terminal title="atmos ai memory show">
-```console
-$ atmos ai memory show
-
-# Project Memory (ATMOS.md)
-
-The following information has been stored about this project:
-
-## Project Context
-
-**Organization:** acme-corp
-**Atmos Version:** 1.89.0
-**Primary Regions:** us-east-1, us-west-2
-**Environments:** dev, staging, prod
-
-**Stack Naming Pattern:**
-\```
-{org}-{tenant}-{environment}-{region}-{stage}
-Example: acme-core-prod-use1-network
-\```
-
-## Common Commands
-
-### Describe and Validate
-\```bash
-# Describe a component
-atmos describe component vpc -s acme-core-prod-use1-network
-
-# List all stacks
-atmos list stacks
-
-# Validate stacks
-atmos validate stacks
-\```
-
-...
-```
-</Terminal>
-
-### atmos ai memory validate
-
-Validate the ATMOS.md file format and report any issues.
-
-<Terminal title="atmos ai memory validate">
-```console
-$ atmos ai memory validate
-
-✅ Memory file is valid
-
-File: /path/to/project/ATMOS.md
-Sections found: 8
-
-Available sections:
-  - Project Context (project_context)
-  - Common Commands (common_commands)
-  - Stack Patterns (stack_patterns)
-  - Frequent Issues & Solutions (frequent_issues)
-  - Infrastructure Patterns (infrastructure_patterns)
-  - Component Catalog Structure (component_catalog)
-  - Team Conventions (team_conventions)
-  - Recent Learnings (recent_learnings)
-```
-</Terminal>
-
-### atmos ai memory edit
-
-Open the ATMOS.md file in your preferred text editor.
-
-<Terminal title="atmos ai memory edit">
-```console
-$ atmos ai memory edit
-
-Opening ATMOS.md in vim...
-
-✅ Memory file saved
-```
-</Terminal>
-
-Uses the editor specified in `$EDITOR` environment variable, or `vim` if not set.
-
-**Setting your editor:**
-
-```shell
-export EDITOR="code"    # VS Code
-export EDITOR="nano"    # Nano
-export EDITOR="emacs"   # Emacs
-```
-
-If the ATMOS.md file doesn't exist, it will be created automatically with the default template.
-
-### atmos ai memory path
-
-Display the absolute path to the ATMOS.md file.
-
-<Terminal title="atmos ai memory path">
-```console
-$ atmos ai memory path
-
-/Users/you/projects/infrastructure/ATMOS.md
-```
-</Terminal>
-
-Useful for:
-- Locating the file quickly
-- Scripting and automation
-- Verifying the configured path
-
-## Memory File Structure
+## Instructions File Structure
 
 The ATMOS.md file is a standard Markdown document with level 2 headers (`##`) defining sections:
 
 ```markdown
-# Atmos Project Memory
+# Atmos Project Instructions
 
-> This file is automatically maintained by Atmos AI to remember project-specific
-> context, patterns, and conventions. Edit freely - AI will preserve manual changes.
+> This file provides project-specific context, patterns, and conventions to the
+> Atmos AI Assistant. Edit freely - AI will preserve manual changes.
 
 ## Project Context
 
@@ -283,54 +128,30 @@ components/
 
 ## Examples
 
-### Initialize and Configure
+### Create and Configure
 
-<Terminal title="Setting up project memory">
+<Terminal title="Setting up project instructions">
 ```console
-$ # Initialize memory file
-$ atmos ai memory init
+$ # Create the instructions file
+$ vim ATMOS.md
 
-$ # Edit to customize for your project
-$ atmos ai memory edit
-
-$ # Validate the format
-$ atmos ai memory validate
-
-$ # View what will be sent to AI
-$ atmos ai memory show
+$ # Add to version control
+$ git add ATMOS.md
+$ git commit -m "Add project instructions for AI assistant"
 ```
 </Terminal>
-
-### View Memory Path
-
-```shell
-# Find memory file location
-atmos ai memory path
-
-# Open in your favorite editor
-code $(atmos ai memory path)
-
-# Add to version control
-git add $(atmos ai memory path)
-git commit -m "Add project memory for AI assistant"
-```
 
 ### Validation Workflow
 
 ```shell
-# After editing, validate format
-atmos ai memory validate
-
-# If valid, commit changes
-if atmos ai memory validate; then
-  git add ATMOS.md
-  git commit -m "Update project memory"
-fi
+# After editing, commit changes
+git add ATMOS.md
+git commit -m "Update project instructions"
 ```
 
 ## Benefits
 
-**Context Retention**: AI remembers your project-specific patterns:
+**Context Retention**: AI uses your project-specific patterns:
 - Organization naming conventions
 - Common stack configurations
 - Frequently used commands
@@ -348,7 +169,7 @@ fi
 
 ## Best Practices
 
-1. **Keep it Current**: Update memory as your project evolves
+1. **Keep it Current**: Update instructions as your project evolves
 2. **Be Concise**: Focus on frequently used patterns and commands
 3. **Use Examples**: Include real command examples from your project
 4. **Version Control**: Commit ATMOS.md to Git
@@ -357,32 +178,21 @@ fi
 
 ## Troubleshooting
 
-### Memory not being used
+### Instructions not being used
 
-1. Check that memory is enabled:
+1. Check that instructions are enabled:
 ```shell
 grep -A 5 "memory:" atmos.yaml
 ```
 
 2. Verify file exists:
 ```shell
-atmos ai memory path
-ls -la $(atmos ai memory path)
-```
-
-3. Validate file format:
-```shell
-atmos ai memory validate
+ls -la ATMOS.md
 ```
 
 ### File not found
 
-Create the file:
-```shell
-atmos ai memory init
-```
-
-Or enable auto-creation in `atmos.yaml`:
+Create the file manually or enable auto-creation in `atmos.yaml`:
 ```yaml
 ai:
   memory:
@@ -398,7 +208,7 @@ Check that:
 
 ## Related Commands
 
-- [`atmos ai chat`](/cli/commands/ai/chat) - Chat with memory-aware AI
+- [`atmos ai chat`](/cli/commands/ai/chat) - Chat with instructions-aware AI
 - [`atmos ai ask`](/cli/commands/ai/ask) - Ask questions with project context
 - [`atmos ai help`](/cli/commands/ai/ai-help) - Get AI help on topics
 

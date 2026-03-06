@@ -130,19 +130,19 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			}
 		}
 
-		// Initialize project memory if enabled.
+		// Initialize project instructions if enabled.
 		ctx := context.Background()
 		var memoryMgr *memory.Manager
-		if atmosConfig.Settings.AI.Memory.Enabled {
-			log.Debug("Initializing project memory")
+		if atmosConfig.Settings.AI.Instructions.Enabled {
+			log.Debug("Initializing project instructions")
 
-			// Create memory config.
+			// Create instructions config.
 			memConfig := &memory.Config{
-				Enabled:      atmosConfig.Settings.AI.Memory.Enabled,
-				FilePath:     atmosConfig.Settings.AI.Memory.FilePath,
-				AutoUpdate:   atmosConfig.Settings.AI.Memory.AutoUpdate,
-				CreateIfMiss: atmosConfig.Settings.AI.Memory.CreateIfMiss,
-				Sections:     atmosConfig.Settings.AI.Memory.Sections,
+				Enabled:      atmosConfig.Settings.AI.Instructions.Enabled,
+				FilePath:     atmosConfig.Settings.AI.Instructions.FilePath,
+				AutoUpdate:   atmosConfig.Settings.AI.Instructions.AutoUpdate,
+				CreateIfMiss: atmosConfig.Settings.AI.Instructions.CreateIfMiss,
+				Sections:     atmosConfig.Settings.AI.Instructions.Sections,
 			}
 
 			// Create memory manager.

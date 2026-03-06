@@ -16,7 +16,7 @@ type AISettings struct {
 	MaxHistoryTokens   int                          `yaml:"max_history_tokens,omitempty" json:"max_history_tokens,omitempty" mapstructure:"max_history_tokens"`       // Maximum tokens in conversation history (0 = unlimited). If both max_history_messages and max_history_tokens are set, whichever limit is hit first is applied
 	Sessions           AISessionSettings            `yaml:"sessions,omitempty" json:"sessions,omitempty" mapstructure:"sessions"`
 	Tools              AIToolSettings               `yaml:"tools,omitempty" json:"tools,omitempty" mapstructure:"tools"`
-	Memory             AIMemorySettings             `yaml:"memory,omitempty" json:"memory,omitempty" mapstructure:"memory"`
+	Instructions       AIInstructionsSettings       `yaml:"instructions,omitempty" json:"instructions,omitempty" mapstructure:"instructions"`
 	WebSearch          AIWebSearchSettings          `yaml:"web_search,omitempty" json:"web_search,omitempty" mapstructure:"web_search"`
 	Context            AIContextSettings            `yaml:"context,omitempty" json:"context,omitempty" mapstructure:"context"`
 	UseLSP             bool                         `yaml:"use_lsp,omitempty" json:"use_lsp,omitempty" mapstructure:"use_lsp"` // Enable LSP integration for diagnostics
@@ -73,8 +73,8 @@ type AIToolSettings struct {
 	YOLOMode            bool     `yaml:"yolo_mode,omitempty" json:"yolo_mode,omitempty" mapstructure:"yolo_mode"`
 }
 
-// AIMemorySettings contains project memory configuration.
-type AIMemorySettings struct {
+// AIInstructionsSettings contains project instructions configuration.
+type AIInstructionsSettings struct {
 	Enabled      bool     `yaml:"enabled,omitempty" json:"enabled,omitempty" mapstructure:"enabled"`
 	FilePath     string   `yaml:"file,omitempty" json:"file,omitempty" mapstructure:"file"` // Path to ATMOS.md
 	AutoUpdate   bool     `yaml:"auto_update,omitempty" json:"auto_update,omitempty" mapstructure:"auto_update"`
@@ -119,3 +119,7 @@ type AISkillConfig struct {
 // AIAgentConfig is deprecated. Use AISkillConfig instead.
 // Kept for backward compatibility during migration period.
 type AIAgentConfig = AISkillConfig
+
+// AIMemorySettings is deprecated. Use AIInstructionsSettings instead.
+// Kept for backward compatibility during migration period.
+type AIMemorySettings = AIInstructionsSettings

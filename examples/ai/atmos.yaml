@@ -157,7 +157,7 @@ settings:
 
     # Project instructions - persistent context across sessions via ATMOS.md
     # Docs: https://atmos.tools/ai/memory
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       auto_update: false
