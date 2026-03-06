@@ -144,6 +144,9 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler — Done
 11. Automatic download on `before.terraform.apply` via `downloadPlanfile()` handler — Done
 12. CLI component/stack addressing (`<component> -s <stack>` pattern, SHA resolution, `--all` flag) — Done (see [CLI Addressing](../phases/planfile-cli-component-stack-addressing.md))
+13. Download resolves component path via `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
+14. SHA256 integrity verification on download in `BundledStore.Download()` — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
+15. Shared `WritePlanfileResults()` helper (`planfile/write.go`) used by CLI and CI hook — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
 
 ---
 
@@ -215,7 +218,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | `ci.checks.enabled` config (disabled by default) | | Done | |
 | | Check run ID correlation via `CheckRunStore` interface | | Done | |
 | | `context_prefix` wired from config | | Not Started (hardcoded) | |
-| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~95% |
+| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~97% |
 | | `planfile.Store` interface + adapter (multi-file, `[]FileEntry`) | | Done | |
 | | S3 store (`artifact/s3/`, implements `artifact.Store`) | | Done | |
 | | GitHub Artifacts store (`artifact/github/`, implements `artifact.Store`) | | Done | |
@@ -228,6 +231,9 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | Unified artifact store registry (`artifact.Register()`) | | Done | |
 | | Automatic upload on `after.terraform.plan` | | Done | |
 | | Automatic download on `before.terraform.apply` | | Done | |
+| | Download resolves component path via `ProcessStacks()` | | Done | |
+| | SHA256 integrity verification on download | | Done | |
+| | Shared `WritePlanfileResults()` helper | | Done | |
 | | Azure Blob store | | Deferred | |
 | | GCS store | | Deferred | |
 | **FR-6** | Plan Verification | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Not Started** | 0% |
@@ -270,7 +276,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
 | Providers: Generic | 3/3 | 0 | 0 |
 | Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
-| Terraform Plugin: Planfile Storage (FR-5) | 13/16 | 0 | 2 (Azure, GCS) |
+| Terraform Plugin: Planfile Storage (FR-5) | 16/19 | 0 | 2 (Azure, GCS) |
 | Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
 | Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
 | Command Parity (FR-7) | 3/3 | 0 | 0 |
@@ -282,7 +288,8 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Phases: Unify Artifact Stores | 8/8 | 0 | 0 |
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
 | Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
-| **Total** | **118/126** | **6** | **2** |
+| Phases: Planfile Download Path Resolution & Integrity | 6/6 | 0 | 0 |
+| **Total** | **127/135** | **6** | **2** |
 
 ## Implementation Phases (Incremental)
 
@@ -363,6 +370,17 @@ These are incremental improvements shipped as focused PRDs.
 6. `deploy.go` stdout/stderr capture with ANSI stripping — Done
 7. `deploy.go` error defer fires hooks on `RunE` failure — Done
 
+### Planfile Download: Component Path Resolution & Integrity Check — SHIPPED
+
+> PRD: [planfile-download-component-path-resolution.md](../phases/planfile-download-component-path-resolution.md)
+
+1. SHA256 integrity verification in `BundledStore.Download()` (reuses `ErrArtifactIntegrityFailed`) — Done
+2. CLI download resolves component path via `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` — Done
+3. `--output` flag override via `cmd.Flags().Changed("output")` — Done
+4. Shared `WritePlanfileResults()` helper in `pkg/ci/plugins/terraform/planfile/write.go` — Done
+5. CI hook handler `downloadPlanfile()` refactored to use `WritePlanfileResults()` — Done
+6. Tests: SHA256 verification (3 cases), WritePlanfileResults (4 cases) — Done
+
 ---
 
 ## Files Created
@@ -413,6 +431,8 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/ci/plugins/terraform/planfile/interface.go` | planfile.Store interface, Metadata, KeyPattern, GenerateKey() | Done |
 | `pkg/ci/plugins/terraform/planfile/interface_test.go` | Interface tests | Done |
 | `pkg/ci/plugins/terraform/planfile/registry.go` | Store registry | Done |
+| `pkg/ci/plugins/terraform/planfile/write.go` | Shared `WritePlanfileResults()` helper for writing downloaded files to disk | Done |
+| `pkg/ci/plugins/terraform/planfile/write_test.go` | Tests for `WritePlanfileResults()` (4 test cases) | Done |
 | `pkg/ci/plugins/terraform/planfile/adapter/store.go` | Adapter: planfile.Store → artifact.Store | Done |
 | `pkg/ci/plugins/terraform/planfile/adapter/factory.go` | StoreFactory for registry integration | Done |
 | `pkg/ci/plugins/terraform/planfile/adapter/store_test.go` | Adapter tests (95.6% coverage) | Done |
@@ -475,6 +495,10 @@ These are incremental improvements shipped as focused PRDs.
 | `pkg/terraform/output/format.go` | Export `flattenMap` → `FlattenMap` for use by CI terraform output export | Done |
 | `pkg/ci/plugins/terraform/handlers.go` | Add `getTerraformOutputs()`, extend `writeOutputs()` with terraform output export (bypasses whitelist), add `getComponentOutputsFunc` for testability | Done |
 | `pkg/ci/plugins/terraform/plugin.go` | Add `success` variable for apply in `getOutputVariables()` | Done |
+| `pkg/ci/artifact/bundled_store.go` | Added SHA256 integrity verification in `Download()` — reads full stream, computes checksum before extracting | Done |
+| `pkg/ci/artifact/bundled_store_test.go` | Added 3 SHA256 verification tests (match, mismatch, empty) | Done |
+| `cmd/terraform/planfile/download.go` | Added `resolveDownloadPlanfilePath()` with `ProcessStacks()`, replaced `downloadToFile()` with `WritePlanfileResults()` | Done |
+| `pkg/ci/plugins/terraform/handlers.go` | Replaced inline file-writing in `downloadPlanfile()` with `planfile.WritePlanfileResults()` | Done |
 | `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
 | `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates | Not Started |
 
@@ -661,6 +685,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 8.0 | 2026-03-06 | Planfile Download Path Resolution & Integrity Check SHIPPED. `BundledStore.Download()` now verifies SHA256 checksums using existing `ErrArtifactIntegrityFailed` (no new sentinel error needed). CLI `planfile download` resolves component path via `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` instead of writing to CWD. `--output` flag override detected via `cmd.Flags().Changed("output")`. Shared `WritePlanfileResults()` helper created in `planfile/write.go` — used by both CLI and CI hook handler. Old `downloadToFile()` removed. Handler's inline file-writing loop replaced. FR-5 updated from ~95% to ~97% (16/19 items). Summary: 127/135 done. |
 | 7.0 | 2026-03-06 | FR-3 CI Output Variables COMPLETE. Terraform output export after apply: `getTerraformOutputs()` fetches outputs via `tfoutput.GetComponentOutputs()`, `FlattenMap()` exported from `pkg/terraform/output/format.go`, flattened outputs written with `output_` prefix. Added `success` variable for apply commands. Key design decision: terraform `output_*` variables bypass the `ci.output.variables` whitelist — they are always included. The whitelist only filters native CI variables (`has_changes`, `stack`, etc.). FR-3 status updated from Partial (~80%) to Done (100%). Terraform Output Export status updated from Not Started (0%) to Done (100%). Summary table updated: 118/126 done. |
 | 6.0 | 2026-03-06 | FR-7 Command Parity COMPLETE. `apply.go` now has full CI wiring: PreRunE (`before.terraform.apply`), stdout/stderr capture, error defer, PostRunE with captured output. `deploy.go` gained `--ci` flag with identical full CI wiring. FR-7 status updated from Partial (~60%) to Done (100%). FR-5 planfile download note removed (apply PreRunE now wired). Summary table updated: 103/116 done (was 103/120 — consolidated FR-7 line items from 7 to 3). |
 | 5.0 | 2026-03-06 | Added Implementation Phases section tracking 5 shipped incremental PRDs: Planfile Storage Validation (SHA resolution), Metadata Embed Artifact, Bundle with Lock File, Unify Artifact Stores, CLI Component/Stack Addressing. Updated FR-5 planfile storage status from ~90% to ~95% with 13/16 items (from 8/11). Updated Files Created to reflect artifact store unification: S3/GitHub moved to `artifact/`, planfile local/registry deleted, tar helpers added, resolve.go added. Updated summary table from 62/82 to 103/120 with phase counts. |

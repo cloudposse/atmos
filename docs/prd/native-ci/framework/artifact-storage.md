@@ -53,7 +53,7 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 
 **Size limits**: No size constraints defined at the moment, neither per artifact nor per backend.
 
-**Integrity**: Use SHA-256 for integrity checking.
+**Integrity**: Use SHA-256 for integrity checking. **IMPLEMENTED**: `BundledStore.Upload()` computes SHA256 of the tar archive and stores it in metadata. `BundledStore.Download()` verifies the checksum before extracting — returns `ErrArtifactIntegrityFailed` on mismatch. When metadata has no SHA256 (backward compat), verification is skipped.
 
 **Concurrency**: Last-write-wins. If two CI runs upload artifacts for the same component+stack simultaneously, the last one overrides the other.
 

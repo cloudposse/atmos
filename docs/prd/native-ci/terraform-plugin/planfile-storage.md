@@ -77,7 +77,9 @@ When `--planfile` is omitted, the path is derived from the component and stack.
 atmos terraform planfile download vpc -s plat-ue2-dev
 atmos terraform planfile download vpc -s plat-ue2-dev --output ./local-plan.tfplan
 ```
-Flags: `--store`, `--output` / `-o` (defaults to `plan.tfplan`)
+Flags: `--store`, `--output` / `-o`
+
+By default (no `--output`), the planfile is written to the resolved component directory using `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` — the same path resolution used by upload. When `--output` is explicitly set, the specified path is used directly (skips `ProcessStacks()`). SHA256 integrity is verified automatically via `BundledStore.Download()` when metadata contains a checksum.
 
 **delete** (`delete [component]`) — Deletes planfiles with confirmation:
 ```bash

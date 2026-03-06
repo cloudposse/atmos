@@ -1,6 +1,10 @@
-# Planfile Download: Component Path Resolution & Integrity Check
+# Planfile Download: Component Path Resolution & Integrity Check — SHIPPED
 
 > Related: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Artifact Storage](../framework/artifact-storage.md) | [Hooks Integration](../framework/hooks-integration.md)
+
+## Status: SHIPPED
+
+All steps implemented: SHA256 verification in `BundledStore.Download()`, CLI download resolves component path via `ProcessStacks()`, shared `WritePlanfileResults()` helper used by both CLI and CI hook handler.
 
 ## Problem Statement
 
@@ -96,9 +100,9 @@ func (s *BundledStore) Download(ctx context.Context, name string) ([]FileResult,
 └─────────────────────────────────────────────────────┘
 ```
 
-### 1. BundledStore.Download verifies SHA256
+### 1. BundledStore.Download verifies SHA256 — DONE
 
-Before extracting the tar archive, `BundledStore.Download` reads the full stream, computes SHA256, and compares against `metadata.SHA256`. If they differ, return `ErrArtifactChecksumMismatch`.
+Before extracting the tar archive, `BundledStore.Download` reads the full stream into `[]byte`, computes SHA256, and compares against `metadata.SHA256`. If they differ, returns `ErrArtifactIntegrityFailed` (already existed in `errors/errors.go` — no new sentinel error needed; the PRD originally proposed `ErrArtifactChecksumMismatch` but we reused the existing error).
 
 ```go
 func (s *BundledStore) Download(ctx context.Context, name string) ([]FileResult, *Metadata, error) {
@@ -114,7 +118,7 @@ func (s *BundledStore) Download(ctx context.Context, name string) ([]FileResult,
         actual := hex.EncodeToString(h[:])
         if actual != metadata.SHA256 {
             return nil, nil, fmt.Errorf("%w: expected %s, got %s",
-                ErrArtifactChecksumMismatch, metadata.SHA256, actual)
+                errUtils.ErrArtifactIntegrityFailed, metadata.SHA256, actual)
         }
     }
 
@@ -124,43 +128,47 @@ func (s *BundledStore) Download(ctx context.Context, name string) ([]FileResult,
 }
 ```
 
-### 2. CLI command resolves component path via ProcessStacks
+### 2. CLI command resolves component path via ProcessStacks — DONE
 
-`runDownload()` calls `ProcessStacks()` (same as `TerraformPlanDiff`) to resolve:
+`runDownload()` calls `resolveDownloadPlanfilePath()` which uses `exec.ProcessStacks()` + `exec.ConstructTerraformComponentPlanfilePath()` — the same pattern as `resolveUploadPlanfilePath()` in `upload.go`. This resolves:
 - `componentPath` = `TerraformDirAbsolutePath/ComponentFolderPrefix/FinalComponent`
 - Planfile name from stack config (or deterministic default)
 - Workdir override if source vendoring is configured
 
-Then maps `[]FileResult` entries to the resolved paths:
-- `plan.tfplan` → `<componentPath>/<planfileName>`
-- `.terraform.lock.hcl` → `<componentPath>/.terraform.lock.hcl`
+**Implementation decision:** The `--output` flag is checked via `cmd.Flags().Changed("output")`. When explicitly set by the user, `ProcessStacks()` is skipped and the flag value is used directly. When not explicitly set (default `plan.tfplan`), the component path is resolved via `ProcessStacks()`.
 
-### 3. CI hook handler uses the same resolution logic
+The old `downloadToFile()` function was removed — replaced by `resolveDownloadPlanfilePath()` + `planfile.WritePlanfileResults()`.
 
-`downloadPlanfile()` in `handlers.go` uses the same component path resolution. The file-writing logic is shared (extracted to a helper) so both CLI and CI hook write files identically.
+### 3. CI hook handler uses shared helper — DONE
 
-### 4. Shared helper for writing FileResults to component dir
+`downloadPlanfile()` in `handlers.go` replaced its inline file-writing loop with a call to `planfile.WritePlanfileResults()`. The path resolution via `resolveArtifactPath()` (which already calls `ProcessStacks` + `ConstructTerraformComponentPlanfilePath`) was kept as-is.
 
-Extract a reusable function that both callers use:
+### 4. Shared helper for writing FileResults to component dir — DONE
+
+Created `pkg/ci/plugins/terraform/planfile/write.go`:
 
 ```go
 // WritePlanfileResults writes downloaded FileResult entries to the component directory.
 // planfilePath is the full path for the plan file (e.g., /project/components/terraform/vpc/vpc-prod.tfplan).
 // Files not matching known planfile entries are skipped.
+// Parent directories are created as needed via os.MkdirAll.
 func WritePlanfileResults(results []FileResult, planfilePath string) error
 ```
 
-## Files to Modify
+Tests in `write_test.go` cover: plan+lock writing, unknown filename skipping, parent directory creation, empty results.
 
-| File | Changes |
-|------|---------|
-| `pkg/ci/artifact/bundled_store.go` | Add SHA256 verification in `Download()` before extracting tar |
-| `errors/errors.go` | Add `ErrArtifactChecksumMismatch` sentinel error |
-| `cmd/terraform/planfile/download.go` | Add `ProcessStacks()` to resolve component dir; replace `downloadToFile()` with shared helper |
-| `pkg/ci/plugins/terraform/handlers.go` | Replace inline file-writing in `downloadPlanfile()` with shared helper |
-| `pkg/ci/plugins/terraform/planfile/write.go` | **Create** — shared `WritePlanfileResults()` helper |
-| `pkg/ci/artifact/bundled_store_test.go` | Add SHA256 verification tests (match, mismatch, missing) |
-| `pkg/ci/plugins/terraform/planfile/write_test.go` | **Create** — tests for `WritePlanfileResults()` |
+## Files Modified
+
+| File | Changes | Status |
+|------|---------|--------|
+| `pkg/ci/artifact/bundled_store.go` | Added SHA256 verification in `Download()` — reads full stream, computes checksum, compares before extracting | Done |
+| `cmd/terraform/planfile/download.go` | Added `resolveDownloadPlanfilePath()` with `ProcessStacks()`, replaced `downloadToFile()` with shared helper, added `exec` import | Done |
+| `pkg/ci/plugins/terraform/handlers.go` | Replaced inline file-writing in `downloadPlanfile()` with `planfile.WritePlanfileResults()`, removed unused `io` import | Done |
+| `pkg/ci/plugins/terraform/planfile/write.go` | **Created** — shared `WritePlanfileResults()` helper with `MkdirAll` support | Done |
+| `pkg/ci/artifact/bundled_store_test.go` | Added 3 SHA256 tests: match succeeds, mismatch returns `ErrArtifactIntegrityFailed`, empty SHA256 skips check | Done |
+| `pkg/ci/plugins/terraform/planfile/write_test.go` | **Created** — 4 tests for `WritePlanfileResults()` | Done |
+
+**Note:** No new sentinel error was needed — reused existing `ErrArtifactIntegrityFailed` from `errors/errors.go` instead of adding the originally proposed `ErrArtifactChecksumMismatch`.
 
 ## Edge Cases
 
