@@ -46,6 +46,8 @@ and `metadata` component's configuration section.
 
 The concept of inheritance in Atmos is implemented through deep merging. Deep merging involves taking two maps or objects and combining them in a specific order, where the values in the latter map override those in the former. This approach allows us to achieve a template-free way of defining configurations in a logical, predictable, and consistent manner.
 
+In the overall [variable merge order](/learn/merge-order), base component vars (from `metadata.inherits`) sit between global-level vars and component-level vars — the current component's values always override inherited values.
+
 ## What Gets Inherited
 
 When a component inherits from a base component, the following sections are deep-merged:

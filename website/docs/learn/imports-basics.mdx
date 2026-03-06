@@ -65,6 +65,12 @@ When Atmos processes a stack file, it:
 
 The result is a single, merged configuration that behaves like one big YAML file.
 
+:::tip After Imports: Scope Levels Matter
+Import resolution is only the first stage. After all files merge into one tree, Atmos applies a second merge
+at the **component level** where scope matters: component-level `vars` override global-level `vars`, regardless
+of which file they came from. See [Variable Merge Order](/learn/merge-order) for the complete picture.
+:::
+
 ## Import Order Matters
 
 Files are processed **sequentially**. Later imports override earlier ones.

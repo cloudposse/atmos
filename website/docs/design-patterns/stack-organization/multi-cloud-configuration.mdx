@@ -52,25 +52,26 @@ The following examples show how to structure stacks for each cloud, using that c
 
 ### Directory Structure
 
-AWS organizes resources as **Organizations → Organizational Units → Accounts → Regions**. The directory layout mirrors this hierarchy, with folders named after AWS concepts.
+AWS organizes resources as **Organizations → Organizational Units → Accounts → Regions**. The directory layout mirrors this hierarchy. Only the first folder (`orgs/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
 
-Organizing by account matters because each AWS account is a hard isolation boundary — it has its own IAM policies, billing, service quotas, and blast radius. When you see `accounts/dev/` and `accounts/prod/` on disk, you immediately know these are deploying to separate accounts with separate credentials and separate state. This prevents accidental cross-account deployments and makes it clear which account owns which resources.
+Each AWS account is a hard isolation boundary with its own IAM policies, billing, service quotas, and blast radius. When you see `dev/` and `prod/` nested under an OU, you immediately know these are separate accounts with separate credentials and separate state.
 
 ```console
    ├── stacks
    │   ├── catalog
    │   │   └── vpc
    │   │       └── defaults.yaml
-   │   └── deploy
-   │       ├── _defaults.yaml
-   │       └── accounts
-   │           ├── dev
-   │           │   ├── _defaults.yaml
-   │           │   └── us-east-1.yaml
-   │           └── prod
+   │   └── orgs                              #  Organization
+   │       └── acme                          #    "acme" Organization
+   │           ├── _defaults.yaml
+   │           └── plat                      #      "plat" OU
    │               ├── _defaults.yaml
-   │               └── us-east-1.yaml
-   │
+   │               ├── dev                   #        "dev" Account
+   │               │   ├── _defaults.yaml
+   │               │   └── us-east-1.yaml    #          us-east-1 Region
+   │               └── prod                  #        "prod" Account
+   │                   ├── _defaults.yaml
+   │                   └── us-east-1.yaml    #          us-east-1 Region
    └── components
        └── terraform
            └── vpc
@@ -87,7 +88,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "deploy/**/*"
+    - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}-{{.vars.environment}}"
@@ -96,17 +97,27 @@ stacks:
 
 ### Configure Defaults
 
-<File title="stacks/deploy/_defaults.yaml">
+<File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 vars:
   namespace: acme
 ```
 </File>
 
-<File title="stacks/deploy/accounts/dev/_defaults.yaml">
+<File title="stacks/orgs/acme/plat/_defaults.yaml">
 ```yaml
 import:
-  - deploy/_defaults
+  - orgs/acme/_defaults
+
+vars:
+  tenant: plat
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/plat/_defaults
 
 vars:
   stage: dev
@@ -116,10 +127,10 @@ vars:
 
 ### Configure Stack
 
-<File title="stacks/deploy/accounts/dev/us-east-1.yaml">
+<File title="stacks/orgs/acme/plat/dev/us-east-1.yaml">
 ```yaml
 import:
-  - deploy/accounts/dev/_defaults
+  - orgs/acme/plat/dev/_defaults
   - catalog/vpc/defaults
 
 vars:
@@ -151,25 +162,24 @@ For deploying across multiple regions, see the [Multi-Region Configuration](/des
 
 ### Directory Structure
 
-Azure organizes resources as **Management Groups → Subscriptions → Resource Groups → Locations**. The directory layout mirrors this hierarchy, with folders named after Azure concepts.
+Azure organizes resources as **Management Groups → Subscriptions → Resource Groups → Locations**. The directory layout mirrors this hierarchy. Only the first folder (`management-groups/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
 
-Organizing by subscription matters because subscriptions are Azure's primary boundary for billing, access control, and resource limits. Each subscription has its own RBAC policies and cost tracking. By structuring directories around subscriptions, you make it immediately obvious which subscription a deployment targets, reducing the risk of provisioning resources in the wrong billing or security context. Management groups can be used as a higher-level grouping when you need to organize multiple subscriptions by business unit or compliance boundary.
+Each Azure subscription is the primary boundary for billing, access control, and resource limits, with its own RBAC policies and cost tracking. When you see `dev/` and `prod/` nested under a management group, you immediately know these are separate subscriptions targeting different billing and security contexts.
 
 ```console
    ├── stacks
    │   ├── catalog
    │   │   └── vnet
    │   │       └── defaults.yaml
-   │   └── deploy
-   │       ├── _defaults.yaml
-   │       └── subscriptions
-   │           ├── dev
+   │   └── management-groups                 #  Management Group
+   │       └── acme                          #    "acme" Management Group
+   │           ├── _defaults.yaml
+   │           ├── dev                       #      "dev" Subscription
    │           │   ├── _defaults.yaml
-   │           │   └── eastus.yaml
-   │           └── prod
+   │           │   └── eastus.yaml           #        eastus Location
+   │           └── prod                      #      "prod" Subscription
    │               ├── _defaults.yaml
-   │               └── eastus.yaml
-   │
+   │               └── eastus.yaml           #        eastus Location
    └── components
        └── terraform
            └── vnet
@@ -186,7 +196,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "deploy/**/*"
+    - "management-groups/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}-{{.vars.environment}}"
@@ -195,17 +205,17 @@ stacks:
 
 ### Configure Defaults
 
-<File title="stacks/deploy/_defaults.yaml">
+<File title="stacks/management-groups/acme/_defaults.yaml">
 ```yaml
 vars:
   namespace: acme
 ```
 </File>
 
-<File title="stacks/deploy/subscriptions/dev/_defaults.yaml">
+<File title="stacks/management-groups/acme/dev/_defaults.yaml">
 ```yaml
 import:
-  - deploy/_defaults
+  - management-groups/acme/_defaults
 
 vars:
   stage: dev
@@ -215,10 +225,10 @@ vars:
 
 ### Configure Stack
 
-<File title="stacks/deploy/subscriptions/dev/eastus.yaml">
+<File title="stacks/management-groups/acme/dev/eastus.yaml">
 ```yaml
 import:
-  - deploy/subscriptions/dev/_defaults
+  - management-groups/acme/dev/_defaults
   - catalog/vnet/defaults
 
 vars:
@@ -252,25 +262,26 @@ atmos terraform apply vnet -s dev-eastus
 
 ### Directory Structure
 
-GCP organizes resources as **Organizations → Folders → Projects → Regions**. The directory layout mirrors this hierarchy, with folders named after GCP concepts.
+GCP organizes resources as **Organizations → Folders → Projects → Regions**. The directory layout mirrors this hierarchy. Only the first folder (`orgs/`) is named after the resource type — everything below it is a name, and its position in the tree tells you what kind of resource it is.
 
-Organizing by project matters because projects are GCP's isolation boundary — each project has its own IAM bindings, billing account, API enablement, and quotas. When your directory structure reflects projects, you can see at a glance which project owns which resources, and each project's configuration is self-contained. Folders provide an optional grouping layer above projects for organizing by team or environment when managing many projects.
+Each GCP project is an isolation boundary with its own IAM bindings, billing account, API enablement, and quotas. When you see `dev/` and `prod/` nested under a folder, you immediately know these are separate projects with independent configuration and state.
 
 ```console
    ├── stacks
    │   ├── catalog
    │   │   └── network
    │   │       └── defaults.yaml
-   │   └── deploy
-   │       ├── _defaults.yaml
-   │       └── projects
-   │           ├── dev
-   │           │   ├── _defaults.yaml
-   │           │   └── us-central1.yaml
-   │           └── prod
+   │   └── orgs                              #  Organization
+   │       └── acme                          #    "acme" Organization
+   │           ├── _defaults.yaml
+   │           └── plat                      #      "plat" Folder
    │               ├── _defaults.yaml
-   │               └── us-central1.yaml
-   │
+   │               ├── dev                   #        "dev" Project
+   │               │   ├── _defaults.yaml
+   │               │   └── us-central1.yaml  #          us-central1 Region
+   │               └── prod                  #        "prod" Project
+   │                   ├── _defaults.yaml
+   │                   └── us-central1.yaml  #          us-central1 Region
    └── components
        └── terraform
            └── network
@@ -287,7 +298,7 @@ components:
 stacks:
   base_path: "stacks"
   included_paths:
-    - "deploy/**/*"
+    - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
   name_template: "{{.vars.stage}}-{{.vars.environment}}"
@@ -296,17 +307,27 @@ stacks:
 
 ### Configure Defaults
 
-<File title="stacks/deploy/_defaults.yaml">
+<File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 vars:
   namespace: acme
 ```
 </File>
 
-<File title="stacks/deploy/projects/dev/_defaults.yaml">
+<File title="stacks/orgs/acme/plat/_defaults.yaml">
 ```yaml
 import:
-  - deploy/_defaults
+  - orgs/acme/_defaults
+
+vars:
+  tenant: plat
+```
+</File>
+
+<File title="stacks/orgs/acme/plat/dev/_defaults.yaml">
+```yaml
+import:
+  - orgs/acme/plat/_defaults
 
 vars:
   stage: dev
@@ -316,10 +337,10 @@ vars:
 
 ### Configure Stack
 
-<File title="stacks/deploy/projects/dev/us-central1.yaml">
+<File title="stacks/orgs/acme/plat/dev/us-central1.yaml">
 ```yaml
 import:
-  - deploy/projects/dev/_defaults
+  - orgs/acme/plat/dev/_defaults
   - catalog/network/defaults
 
 vars:
@@ -376,20 +397,17 @@ The most common approach is a dedicated infrastructure repository for each cloud
    infra-aws/           # Dedicated AWS infrastructure
    ├── components/
    └── stacks/
-       └── deploy/
-           └── accounts/
+       └── orgs/
 
    infra-azure/         # Dedicated Azure infrastructure
    ├── components/
    └── stacks/
-       └── deploy/
-           └── subscriptions/
+       └── management-groups/
 
    infra-gcp/           # Dedicated GCP infrastructure
    ├── components/
    └── stacks/
-       └── deploy/
-           └── projects/
+       └── orgs/
 ```
 
 ### Single Repository for All Clouds
@@ -398,16 +416,15 @@ When a single team manages infrastructure across multiple clouds, or when cross-
 
 ```console
    stacks
-   └── deploy
-       ├── aws
-       │   └── accounts
-       │       └── ...
-       ├── azure
-       │   └── subscriptions
-       │       └── ...
-       └── gcp
-           └── projects
-               └── ...
+   ├── aws
+   │   └── orgs
+   │       └── ...
+   ├── azure
+   │   └── management-groups
+   │       └── ...
+   └── gcp
+       └── orgs
+           └── ...
 ```
 
 ## Application Repositories

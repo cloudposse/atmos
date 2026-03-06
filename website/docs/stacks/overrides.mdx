@@ -10,9 +10,22 @@ import Intro from '@site/src/components/Intro'
 import File from '@site/src/components/File'
 
 <Intro>
-Atmos supports the ability to override the behavior of [imports](/stacks/imports) when the order of
-deep-merging interferes with what you want to express. Use the `overrides` section in Atmos stack manifests.
+The `overrides` section provides **file-scoped variable overrides**. Unlike regular `vars` which apply to all components in the entire top-level stack after import resolution, `overrides` apply only to components defined in the current manifest file and its imports.
 </Intro>
+
+## Why Overrides Exist
+
+When multiple manifest files are imported into the same top-level stack (e.g., one per team), regular `vars` at the global or component-type level leak across all manifests after deep merge. Team A's global `vars` would affect Team B's components.
+
+The `overrides` section solves this by staying scoped to the file boundary. Values defined in `overrides` are applied only to components within the current manifest and its imports — they never leak into components defined in other manifests.
+
+Overrides also have the **highest merge priority** in the [variable merge order](/learn/merge-order), making them useful when you need a value to win regardless of where else it's defined.
+
+:::tip When You Don't Need Overrides
+If each top-level stack imports a single blueprint (no competing manifests), you don't need `overrides`. Plain `vars` at the same scope level is sufficient — the importing file's values override the imported file's values. See the [Blueprint Configuration](/design-patterns/stack-organization/blueprint-configuration) pattern.
+:::
+
+## What Can Be Overridden
 
 You can override the following sections in the component(s) configuration:
 
