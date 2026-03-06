@@ -16,9 +16,9 @@ type mockFileInfo struct {
 	isDir bool
 }
 
-func (m *mockFileInfo) Name() string      { return m.name }
-func (m *mockFileInfo) Size() int64       { return 0 }
-func (m *mockFileInfo) Mode() os.FileMode { return 0 }
+func (m *mockFileInfo) Name() string       { return m.name }
+func (m *mockFileInfo) Size() int64        { return 0 }
+func (m *mockFileInfo) Mode() os.FileMode  { return 0 }
 func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() any           { return nil }
@@ -261,11 +261,11 @@ func TestShouldExcludeFile(t *testing.T) {
 
 func TestShouldIncludeFile(t *testing.T) {
 	tests := []struct {
-		name   string
+		name     string
 		patterns []string
-		path   string
-		skip   bool
-		hasErr bool
+		path     string
+		skip     bool
+		hasErr   bool
 	}{
 		{name: "match - not skipped", patterns: []string{"*.tf"}, path: "main.tf", skip: false},
 		{name: "no match - skipped", patterns: []string{"*.tf"}, path: "README.md", skip: true},
