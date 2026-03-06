@@ -1,32 +1,20 @@
 package ci
 
 import (
-	"embed"
 	"testing"
 
 	plugin "github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
 )
-
-// createMockPlugin creates a MockPlugin with the given type and bindings.
-func createMockPlugin(ctrl *gomock.Controller, componentType string, bindings []plugin.HookBinding) *MockPlugin {
-	mock := NewMockPlugin(ctrl)
-	mock.EXPECT().GetType().Return(componentType).AnyTimes()
-	mock.EXPECT().GetHookBindings().Return(bindings).AnyTimes()
-	mock.EXPECT().GetDefaultTemplates().Return(embed.FS{}).AnyTimes()
-	return mock
-}
 
 func TestRegisterPlugin(t *testing.T) {
 	// Clear registry before test.
 	ClearPlugins()
 
 	t.Run("successful registration", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		plugin := createMockPlugin(ctrl, "test-type", nil)
-		err := RegisterPlugin(plugin)
+		sp := &stubPlugin{componentType: "test-type"}
+		err := RegisterPlugin(sp)
 		require.NoError(t, err)
 
 		// Verify registration.
@@ -42,35 +30,32 @@ func TestRegisterPlugin(t *testing.T) {
 
 	t.Run("empty type", func(t *testing.T) {
 		ClearPlugins()
-		ctrl := gomock.NewController(t)
-		plugin := createMockPlugin(ctrl, "", nil)
-		err := RegisterPlugin(plugin)
+		sp := &stubPlugin{componentType: ""}
+		err := RegisterPlugin(sp)
 		require.Error(t, err)
 	})
 
 	t.Run("duplicate registration", func(t *testing.T) {
 		ClearPlugins()
-		ctrl := gomock.NewController(t)
-		plugin := createMockPlugin(ctrl, "duplicate-type", nil)
-		err := RegisterPlugin(plugin)
+		sp := &stubPlugin{componentType: "duplicate-type"}
+		err := RegisterPlugin(sp)
 		require.NoError(t, err)
 
 		// Second registration should fail.
-		err = RegisterPlugin(plugin)
+		err = RegisterPlugin(sp)
 		require.Error(t, err)
 	})
 }
 
 func TestGetPluginForEvent(t *testing.T) {
 	ClearPlugins()
-	ctrl := gomock.NewController(t)
 
 	bindings := []plugin.HookBinding{
-		{Event: "after.test-terraform.plan", Actions: []plugin.HookAction{plugin.ActionSummary}},
-		{Event: "after.test-terraform.apply", Actions: []plugin.HookAction{plugin.ActionSummary}},
+		{Event: "after.test-terraform.plan", Handler: func(_ *plugin.HookContext) error { return nil }},
+		{Event: "after.test-terraform.apply", Handler: func(_ *plugin.HookContext) error { return nil }},
 	}
-	plugin := createMockPlugin(ctrl, "test-terraform", bindings)
-	err := RegisterPlugin(plugin)
+	sp := &stubPlugin{componentType: "test-terraform", bindings: bindings}
+	err := RegisterPlugin(sp)
 	require.NoError(t, err)
 
 	t.Run("event found", func(t *testing.T) {
@@ -87,13 +72,12 @@ func TestGetPluginForEvent(t *testing.T) {
 
 func TestListPlugins(t *testing.T) {
 	ClearPlugins()
-	ctrl := gomock.NewController(t)
 
 	// Register multiple plugins.
 	pluginNames := []string{"alpha", "beta", "gamma"}
 	for _, name := range pluginNames {
-		plugin := createMockPlugin(ctrl, name, nil)
-		err := RegisterPlugin(plugin)
+		sp := &stubPlugin{componentType: name}
+		err := RegisterPlugin(sp)
 		require.NoError(t, err)
 	}
 
@@ -104,31 +88,18 @@ func TestListPlugins(t *testing.T) {
 
 func TestHookBindingsGetBindingForEvent(t *testing.T) {
 	bindings := plugin.HookBindings{
-		{Event: "after.terraform.plan", Actions: []plugin.HookAction{plugin.ActionSummary}, Template: "plan"},
-		{Event: "after.terraform.apply", Actions: []plugin.HookAction{plugin.ActionSummary}, Template: "apply"},
+		{Event: "after.terraform.plan", Handler: func(_ *plugin.HookContext) error { return nil }},
+		{Event: "after.terraform.apply", Handler: func(_ *plugin.HookContext) error { return nil }},
 	}
 
 	t.Run("found", func(t *testing.T) {
 		b := bindings.GetBindingForEvent("after.terraform.plan")
 		require.NotNil(t, b)
-		assert.Equal(t, "plan", b.Template)
+		assert.Equal(t, "after.terraform.plan", b.Event)
 	})
 
 	t.Run("not found", func(t *testing.T) {
 		b := bindings.GetBindingForEvent("before.terraform.init")
 		assert.Nil(t, b)
 	})
-}
-
-func TestHookBindingHasAction(t *testing.T) {
-	binding := plugin.HookBinding{
-		Event:   "after.terraform.plan",
-		Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload},
-	}
-
-	assert.True(t, binding.HasAction(plugin.ActionSummary))
-	assert.True(t, binding.HasAction(plugin.ActionOutput))
-	assert.True(t, binding.HasAction(plugin.ActionUpload))
-	assert.False(t, binding.HasAction(plugin.ActionDownload))
-	assert.False(t, binding.HasAction(plugin.ActionCheck))
 }

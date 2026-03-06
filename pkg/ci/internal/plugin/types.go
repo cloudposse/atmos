@@ -2,94 +2,91 @@
 package plugin
 
 import (
-	"embed"
-
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/ci/templates"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// HookAction represents what CI action to perform.
-type HookAction string
+//go:generate mockgen -typed -destination=../../../mock_plugin_test.go -package=ci github.com/cloudposse/atmos/pkg/ci/internal/plugin Plugin
 
-const (
-	// ActionSummary writes to job summary ($GITHUB_STEP_SUMMARY).
-	ActionSummary HookAction = "summary"
+// HookHandler is the callback signature for plugin event handlers.
+// Plugins implement handlers that own all action logic for their events.
+type HookHandler func(ctx *HookContext) error
 
-	// ActionOutput writes to CI outputs ($GITHUB_OUTPUT).
-	ActionOutput HookAction = "output"
+// HookContext provides everything a plugin callback needs to execute CI actions.
+type HookContext struct {
+	// Event is the full hook event (e.g., "after.terraform.plan").
+	Event string
 
-	// ActionUpload uploads an artifact (e.g., planfile).
-	ActionUpload HookAction = "upload"
+	// Command is the extracted command (e.g., "plan", "apply").
+	Command string
 
-	// ActionDownload downloads an artifact.
-	ActionDownload HookAction = "download"
+	// EventPrefix is "before" or "after".
+	EventPrefix string
 
-	// ActionCheck validates or checks (e.g., drift detection).
-	ActionCheck HookAction = "check"
-)
+	// Config is the Atmos configuration.
+	Config *schema.AtmosConfiguration
+
+	// Info contains component and stack information.
+	Info *schema.ConfigAndStacksInfo
+
+	// Output is the raw command output.
+	Output string
+
+	// CommandError is the error from the command execution, if any.
+	CommandError error
+
+	// Provider is the detected CI platform provider.
+	Provider provider.Provider
+
+	// CICtx is the CI platform context (repo, SHA, PR, etc.).
+	CICtx *provider.Context
+
+	// TemplateLoader loads and renders CI summary templates.
+	TemplateLoader *templates.Loader
+
+	// CreatePlanfileStore is a lazy factory for creating planfile stores.
+	// Not all events need a store, so it's created on demand.
+	// Returns an any that should be type-asserted to planfile.Store by the handler.
+	CreatePlanfileStore func() (any, error)
+}
 
 // HookBinding declares what happens at a specific hook event.
 type HookBinding struct {
 	// Event is the hook event pattern (e.g., "after.terraform.plan").
 	Event string
 
-	// Actions lists the CI actions to perform at this event.
-	Actions []HookAction
-
-	// Template is the template name for summary action (e.g., "plan" -> templates/plan.md).
-	// Empty if no template is needed.
-	Template string
+	// Handler is the callback that owns all action logic for this event.
+	Handler HookHandler
 }
 
 // Plugin is implemented by component types that support CI integration.
-// Covers templates, outputs, and artifacts for pipeline automation.
+// Plugins own all action logic via Handler callbacks in their HookBindings.
 // Unlike Provider (which represents CI platforms like GitHub/GitLab), this interface
 // represents component types (terraform, helmfile) and their CI behavior.
 type Plugin interface {
 	// GetType returns the component type (e.g., "terraform", "helmfile").
 	GetType() string
 
-	// GetHookBindings returns all hook bindings for this provider.
-	// Declares which events this provider handles and what actions occur at each.
+	// GetHookBindings returns all hook bindings for this plugin.
+	// Each binding declares an event and a Handler callback that owns all action logic.
 	GetHookBindings() []HookBinding
-
-	// GetDefaultTemplates returns the embedded filesystem containing default templates.
-	// Templates are stored as {command}.md (e.g., templates/plan.md, templates/apply.md).
-	GetDefaultTemplates() embed.FS
-
-	// BuildTemplateContext creates a template context from execution results.
-	// The context is used to render the summary template.
-	// Returns an extended context type (e.g., *TerraformTemplateContext) that embeds *TemplateContext.
-	BuildTemplateContext(
-		info *schema.ConfigAndStacksInfo,
-		ciCtx *provider.Context,
-		output string,
-		command string,
-	) (any, error)
-
-	// ParseOutput parses command output to extract structured data.
-	// Returns metadata about the execution (changes, errors, etc.).
-	ParseOutput(output string, command string) (*OutputResult, error)
-
-	// GetOutputVariables returns CI output variables for a command.
-	// These are written to $GITHUB_OUTPUT or equivalent.
-	GetOutputVariables(result *OutputResult, command string) map[string]string
-
-	// GetArtifactKey generates the artifact storage key for a command.
-	// Used for uploading/downloading planfiles and other artifacts.
-	GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string
 }
 
-// ComponentConfigurationResolver is an optional interface that Plugins can implement
-// to resolve artifact paths (e.g., planfile paths) when not explicitly provided.
-// The executor checks for this interface before upload/download actions and uses it
-// to derive the path from component and stack information.
-type ComponentConfigurationResolver interface {
-	// ResolveComponentPlanfilePath derives the planfile path from component/stack information.
-	// It also populates resolved fields on info needed for metadata (e.g., ContextPrefix).
-	// Returns the resolved path, or empty string if resolution is not possible.
-	ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error)
+// HookBindings is a slice of HookBinding with helper methods.
+type HookBindings []HookBinding
+
+// GetBindingForEvent returns the hook binding for a specific event, or nil if not found.
+func (bindings HookBindings) GetBindingForEvent(event string) *HookBinding {
+	defer perf.Track(nil, "plugin.HookBindings.GetBindingForEvent")()
+
+	for i := range bindings {
+		if bindings[i].Event == event {
+			return &bindings[i]
+		}
+	}
+	return nil
 }
 
 // OutputResult contains parsed command output.
@@ -224,31 +221,4 @@ type TemplateContext struct {
 
 	// Custom contains custom variables from configuration.
 	Custom map[string]any
-}
-
-// GetBindingForEvent returns the hook binding for a specific event, or nil if not found.
-func (bindings HookBindings) GetBindingForEvent(event string) *HookBinding {
-	defer perf.Track(nil, "plugin.HookBindings.GetBindingForEvent")()
-
-	for i := range bindings {
-		if bindings[i].Event == event {
-			return &bindings[i]
-		}
-	}
-	return nil
-}
-
-// HookBindings is a slice of HookBinding with helper methods.
-type HookBindings []HookBinding
-
-// HasAction returns true if the binding has the specified action.
-func (b *HookBinding) HasAction(action HookAction) bool {
-	defer perf.Track(nil, "plugin.HookBinding.HasAction")()
-
-	for _, a := range b.Actions {
-		if a == action {
-			return true
-		}
-	}
-	return false
 }

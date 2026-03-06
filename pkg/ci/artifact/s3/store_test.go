@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
 func TestStore_Name(t *testing.T) {
@@ -89,11 +89,11 @@ func TestNewStore_MissingBucket(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewStore(planfile.StoreOptions{
+			_, err := NewStore(artifact.StoreOptions{
 				Options: tt.options,
 			})
 			assert.Error(t, err)
-			assert.ErrorIs(t, err, errUtils.ErrPlanfileStoreNotFound)
+			assert.ErrorIs(t, err, errUtils.ErrArtifactStoreNotFound)
 		})
 	}
 }
@@ -183,14 +183,6 @@ func (e *wrappedError) Unwrap() error {
 	return e.inner
 }
 
-// Note: Testing actual S3 operations (Upload, Download, Delete, List, Exists, GetMetadata)
-// requires either:
-// 1. An interface abstraction for the S3 client (recommended for unit tests)
-// 2. Integration tests with LocalStack or a real S3 bucket
-//
-// The following tests document the expected behavior and can be enabled
-// when running against a real S3 backend or LocalStack.
-
 func TestStore_MetadataSuffix(t *testing.T) {
 	// Verify the metadata suffix constant is correct.
 	assert.Equal(t, ".metadata.json", metadataSuffix)
@@ -201,69 +193,40 @@ func TestStore_StoreName(t *testing.T) {
 	assert.Equal(t, "s3", storeName)
 }
 
-// Integration tests would go here with build tag: //go:build integration
+func TestStore_QueryToPrefix(t *testing.T) {
+	store := &Store{}
 
-/*
-Example integration test structure (requires LocalStack or real S3):
-
-func TestIntegration_FullLifecycle(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping integration test in short mode")
-	}
-
-	// Setup: Create store with test bucket
-	store, err := NewStore(planfile.StoreOptions{
-		Options: map[string]any{
-			"bucket": os.Getenv("TEST_S3_BUCKET"),
-			"region": os.Getenv("AWS_REGION"),
-			"prefix": "test-planfiles",
+	tests := []struct {
+		name     string
+		query    artifact.Query
+		expected string
+	}{
+		{
+			name:     "all query",
+			query:    artifact.Query{All: true},
+			expected: "",
 		},
-	})
-	require.NoError(t, err)
-
-	ctx := context.Background()
-	key := fmt.Sprintf("test/%s/lifecycle.tfplan", uuid.New().String())
-
-	// Test Upload
-	metadata := &planfile.Metadata{
-		Stack:      "test-stack",
-		Component:  "test-component",
-		SHA:        "abc123",
-		HasChanges: true,
+		{
+			name:     "stack only",
+			query:    artifact.Query{Stacks: []string{"dev"}},
+			expected: "dev",
+		},
+		{
+			name:     "stack and component",
+			query:    artifact.Query{Stacks: []string{"dev"}, Components: []string{"vpc"}},
+			expected: "dev/vpc",
+		},
+		{
+			name:     "empty query",
+			query:    artifact.Query{},
+			expected: "",
+		},
 	}
-	err = store.Upload(ctx, key, strings.NewReader("plan data"), metadata)
-	assert.NoError(t, err)
 
-	// Test Exists
-	exists, err := store.Exists(ctx, key)
-	assert.NoError(t, err)
-	assert.True(t, exists)
-
-	// Test GetMetadata
-	meta, err := store.GetMetadata(ctx, key)
-	assert.NoError(t, err)
-	assert.Equal(t, "test-stack", meta.Stack)
-
-	// Test Download
-	reader, downloadMeta, err := store.Download(ctx, key)
-	assert.NoError(t, err)
-	defer reader.Close()
-	content, _ := io.ReadAll(reader)
-	assert.Equal(t, "plan data", string(content))
-	assert.Equal(t, "test-stack", downloadMeta.Stack)
-
-	// Test List
-	files, err := store.List(ctx, "test/")
-	assert.NoError(t, err)
-	assert.Greater(t, len(files), 0)
-
-	// Test Delete
-	err = store.Delete(ctx, key)
-	assert.NoError(t, err)
-
-	// Verify deleted
-	exists, err = store.Exists(ctx, key)
-	assert.NoError(t, err)
-	assert.False(t, exists)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := store.queryToPrefix(tt.query)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
-*/

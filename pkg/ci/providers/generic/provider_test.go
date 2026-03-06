@@ -126,6 +126,34 @@ func TestOutputWriter(t *testing.T) {
 	})
 }
 
+func TestContext_GitSHAFallback(t *testing.T) {
+	t.Run("falls back to git HEAD SHA when no env vars set", func(t *testing.T) {
+		// Ensure no CI SHA env vars are set.
+		t.Setenv("ATMOS_CI_SHA", "")
+		t.Setenv("GIT_COMMIT", "")
+		t.Setenv("CI_COMMIT_SHA", "")
+		t.Setenv("COMMIT_SHA", "")
+
+		p := NewProvider()
+		ctx, err := p.Context()
+		require.NoError(t, err)
+
+		// We're running inside a git repo, so SHA should be non-empty.
+		assert.NotEmpty(t, ctx.SHA, "SHA should be populated from git HEAD when no CI env vars are set")
+		assert.Len(t, ctx.SHA, 40, "SHA should be a full 40-character git hash")
+	})
+
+	t.Run("env var takes precedence over git fallback", func(t *testing.T) {
+		t.Setenv("ATMOS_CI_SHA", "env-sha-123")
+
+		p := NewProvider()
+		ctx, err := p.Context()
+		require.NoError(t, err)
+
+		assert.Equal(t, "env-sha-123", ctx.SHA, "env var should take precedence over git fallback")
+	})
+}
+
 func TestGetFirstEnv(t *testing.T) {
 	t.Run("returns first set variable", func(t *testing.T) {
 		t.Setenv("TEST_VAR_1", "")

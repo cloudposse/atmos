@@ -12,6 +12,7 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
+	"github.com/cloudposse/atmos/pkg/git"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
@@ -72,11 +73,14 @@ func (p *Provider) Detect() bool {
 func (p *Provider) Context() (*provider.Context, error) {
 	defer perf.Track(nil, "generic.Provider.Context")()
 
+	gitRepo := git.NewDefaultGitRepo()
+
 	// Try to populate context from common CI environment variables.
+	// Fall back to git for SHA and Branch when env vars are absent.
 	ctx := &provider.Context{
 		Provider:   ProviderName,
-		SHA:        getFirstEnv("ATMOS_CI_SHA", "GIT_COMMIT", "CI_COMMIT_SHA", "COMMIT_SHA"),
-		Branch:     getFirstEnv("ATMOS_CI_BRANCH", "GIT_BRANCH", "CI_COMMIT_REF_NAME", "BRANCH_NAME"),
+		SHA:        getFirstEnvOrGit("ATMOS_CI_SHA", "GIT_COMMIT", "CI_COMMIT_SHA", "COMMIT_SHA", func() string { return gitSHA(gitRepo) }),
+		Branch:     getFirstEnvOrGit("ATMOS_CI_BRANCH", "GIT_BRANCH", "CI_COMMIT_REF_NAME", "BRANCH_NAME", gitBranchFallback),
 		Repository: getFirstEnv("ATMOS_CI_REPOSITORY", "CI_PROJECT_PATH"),
 		Actor:      getFirstEnv("ATMOS_CI_ACTOR", "CI_COMMIT_AUTHOR", "USER"),
 	}
@@ -174,4 +178,41 @@ func getFirstEnv(keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// getFirstEnvOrGit returns the value of the first set env var, falling back to a git function.
+func getFirstEnvOrGit(key1, key2, key3, key4 string, gitFallback func() string) string {
+	if v := getFirstEnv(key1, key2, key3, key4); v != "" {
+		return v
+	}
+	return gitFallback()
+}
+
+// gitSHA returns the current HEAD commit SHA, or empty string on failure.
+func gitSHA(repo git.GitRepoInterface) string {
+	sha, err := repo.GetCurrentCommitSHA()
+	if err != nil {
+		log.Debug("Failed to get git HEAD SHA for CI context", "error", err)
+		return ""
+	}
+	return sha
+}
+
+// gitBranchFallback returns the current git branch name, or empty string on failure.
+// This is best-effort — detached HEAD returns empty.
+func gitBranchFallback() string {
+	repo, err := git.GetLocalRepo()
+	if err != nil {
+		log.Debug("Failed to get git branch for CI context", "error", err)
+		return ""
+	}
+	ref, err := repo.Head()
+	if err != nil {
+		log.Debug("Failed to get HEAD for branch resolution", "error", err)
+		return ""
+	}
+	if !ref.Name().IsBranch() {
+		return "" // Detached HEAD.
+	}
+	return ref.Name().Short()
 }

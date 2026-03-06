@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	errUtils "github.com/cloudposse/atmos/errors"
-	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
 )
 
 func TestStore_Name(t *testing.T) {
@@ -219,31 +220,61 @@ func TestHasPrefix(t *testing.T) {
 }
 
 func TestStore_artifactName(t *testing.T) {
-	store := &Store{}
+	t.Run("with prefix", func(t *testing.T) {
+		store := &Store{prefix: "planfile"}
 
-	tests := []struct {
-		name     string
-		key      string
-		expected string
-	}{
-		{
-			name:     "simple key",
-			key:      "test.tfplan",
-			expected: "planfile-test.tfplan",
-		},
-		{
-			name:     "key with path",
-			key:      "stack/component/sha.tfplan",
-			expected: "planfile-stack--component--sha.tfplan",
-		},
-	}
+		tests := []struct {
+			name     string
+			key      string
+			expected string
+		}{
+			{
+				name:     "simple key",
+				key:      "test.tfplan",
+				expected: "planfile-test.tfplan",
+			},
+			{
+				name:     "key with path",
+				key:      "stack/component/sha.tfplan",
+				expected: "planfile-stack--component--sha.tfplan",
+			},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := store.artifactName(tt.key)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := store.artifactName(tt.key)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
+
+	t.Run("without prefix", func(t *testing.T) {
+		store := &Store{}
+
+		tests := []struct {
+			name     string
+			key      string
+			expected string
+		}{
+			{
+				name:     "simple key",
+				key:      "test.tfplan",
+				expected: "test.tfplan",
+			},
+			{
+				name:     "key with path",
+				key:      "stack/component/sha.tfplan",
+				expected: "stack--component--sha.tfplan",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := store.artifactName(tt.key)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
 }
 
 func TestGetRetentionDays(t *testing.T) {
@@ -497,7 +528,7 @@ func TestNewStore(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "")
 		t.Setenv("GH_TOKEN", "")
 
-		_, err := NewStore(planfile.StoreOptions{
+		_, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",
@@ -510,17 +541,17 @@ func TestNewStore(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		t.Setenv("GITHUB_REPOSITORY", "")
 
-		_, err := NewStore(planfile.StoreOptions{
+		_, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{},
 		})
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileStoreNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactStoreNotFound)
 	})
 
 	t.Run("valid configuration", func(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-token")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner":          "testowner",
 				"repo":           "testrepo",
@@ -544,7 +575,7 @@ func TestNewStore(t *testing.T) {
 		t.Setenv("GITHUB_TOKEN", "test-token")
 		t.Setenv("GITHUB_REPOSITORY", "envowner/envrepo")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{},
 		})
 		require.NoError(t, err)
@@ -557,80 +588,80 @@ func TestNewStore(t *testing.T) {
 	})
 }
 
-func TestExtractPlanFromZip(t *testing.T) {
-	t.Run("valid zip with plan and metadata", func(t *testing.T) {
+func TestExtractFromZip(t *testing.T) {
+	t.Run("valid zip with archive and metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			planFilename: []byte("plan content"),
-			metadataFilename: marshalJSON(t, &planfile.Metadata{
-				Stack:      "test-stack",
-				Component:  "test-component",
-				SHA:        "abc123",
-				HasChanges: true,
-			}),
+			archiveFilename: []byte("tar stream content"),
+			metadataFilename: func() []byte {
+				m := &artifact.Metadata{}
+				m.Stack = "test-stack"
+				m.Component = "test-component"
+				m.SHA = "abc123"
+				return marshalJSON(t, m)
+			}(),
 		})
 
-		reader, metadata, err := extractPlanFromZip(zipData)
+		reader, metadata, err := extractFromZip(zipData)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, "plan content", string(content))
+		assert.Equal(t, "tar stream content", string(content))
 
 		require.NotNil(t, metadata)
 		assert.Equal(t, "test-stack", metadata.Stack)
 		assert.Equal(t, "test-component", metadata.Component)
 		assert.Equal(t, "abc123", metadata.SHA)
-		assert.True(t, metadata.HasChanges)
 	})
 
 	t.Run("valid zip without metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			planFilename: []byte("plan content"),
+			archiveFilename: []byte("tar stream content"),
 		})
 
-		reader, metadata, err := extractPlanFromZip(zipData)
+		reader, metadata, err := extractFromZip(zipData)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, "plan content", string(content))
+		assert.Equal(t, "tar stream content", string(content))
 		assert.Nil(t, metadata)
 	})
 
-	t.Run("zip without plan file", func(t *testing.T) {
+	t.Run("zip without archive.tar", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
 			metadataFilename: []byte("{}"),
 		})
 
-		_, _, err := extractPlanFromZip(zipData)
+		_, _, err := extractFromZip(zipData)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileDownloadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactDownloadFailed)
 	})
 
 	t.Run("invalid zip data", func(t *testing.T) {
-		_, _, err := extractPlanFromZip([]byte("not a zip"))
+		_, _, err := extractFromZip([]byte("not a zip"))
 		assert.Error(t, err)
 	})
 
 	t.Run("zip with invalid metadata JSON", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			planFilename:     []byte("plan content"),
+			archiveFilename:  []byte("tar stream content"),
 			metadataFilename: []byte("not valid json"),
 		})
 
-		reader, metadata, err := extractPlanFromZip(zipData)
+		reader, metadata, err := extractFromZip(zipData)
 		require.NoError(t, err)
 		require.NotNil(t, reader)
 		defer reader.Close()
 
-		// Plan should still be readable.
+		// Archive should still be readable.
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, "plan content", string(content))
+		assert.Equal(t, "tar stream content", string(content))
 
 		// Metadata should be nil due to JSON parse error.
 		assert.Nil(t, metadata)
@@ -654,10 +685,12 @@ func TestReadZipFile(t *testing.T) {
 func TestReadMetadataFile(t *testing.T) {
 	t.Run("valid metadata", func(t *testing.T) {
 		zipData := createTestZip(t, map[string][]byte{
-			metadataFilename: marshalJSON(t, &planfile.Metadata{
-				Stack:     "test",
-				Component: "comp",
-			}),
+			metadataFilename: func() []byte {
+				m := &artifact.Metadata{}
+				m.Stack = "test"
+				m.Component = "comp"
+				return marshalJSON(t, m)
+			}(),
 		})
 
 		zipReader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
@@ -713,13 +746,12 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		data := bytes.NewReader([]byte("plan data"))
-		metadata := &planfile.Metadata{
-			Stack:     "test",
-			Component: "comp",
-		}
+		data := strings.NewReader("plan data")
+		metadata := &artifact.Metadata{}
+		metadata.Stack = "test"
+		metadata.Component = "comp"
 
-		err := store.Upload(ctx, "test/key.tfplan", data, metadata)
+		err := store.Upload(ctx, "test/key.tfplan", data, int64(data.Len()), metadata)
 		assert.Error(t, err)
 		assert.ErrorIs(t, err, errUtils.ErrNotImplemented)
 	})
@@ -759,21 +791,19 @@ func TestStore_Upload(t *testing.T) {
 		store := &Store{
 			owner:         "testowner",
 			repo:          "testrepo",
+			prefix:        "planfile",
 			retentionDays: 14,
 			uploader:      mock,
 		}
 
 		ctx := context.Background()
 		planContent := []byte("terraform plan binary content")
-		data := bytes.NewReader(planContent)
-		metadata := &planfile.Metadata{
-			Stack:      "dev",
-			Component:  "vpc",
-			SHA:        "abc123",
-			HasChanges: true,
-		}
+		metadata := &artifact.Metadata{}
+		metadata.Stack = "dev"
+		metadata.Component = "vpc"
+		metadata.SHA = "abc123"
 
-		err := store.Upload(ctx, "dev/vpc/abc123.tfplan", data, metadata)
+		err := store.Upload(ctx, "dev/vpc/abc123.tfplan", bytes.NewReader(planContent), int64(len(planContent)), metadata)
 		require.NoError(t, err)
 
 		// Verify CreateArtifact request.
@@ -784,18 +814,20 @@ func TestStore_Upload(t *testing.T) {
 		assert.Equal(t, 4, capturedCreateReq.Version)
 		assert.Equal(t, "14d", capturedCreateReq.ExpiresAfter)
 
-		// Verify uploaded data is a valid zip containing plan and metadata.
+		// Verify uploaded data is a valid zip containing archive.tar and metadata.
 		require.NotEmpty(t, capturedUploadData)
-		reader, meta, err := extractPlanFromZip(capturedUploadData)
+		reader, meta, err := extractFromZip(capturedUploadData)
 		require.NoError(t, err)
+		require.NotNil(t, reader)
 		defer reader.Close()
-		extractedPlan, err := io.ReadAll(reader)
+
+		planBytes, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, planContent, extractedPlan)
+		// The archive should contain the exact bytes passed to Upload.
+		assert.Equal(t, planContent, planBytes)
 		require.NotNil(t, meta)
 		assert.Equal(t, "dev", meta.Stack)
 		assert.Equal(t, "vpc", meta.Component)
-		assert.True(t, meta.HasChanges)
 
 		// Verify FinalizeArtifact request.
 		require.NotNil(t, capturedFinalizeReq)
@@ -836,16 +868,18 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		require.NoError(t, err)
 
-		// Verify the zip only contains plan, no metadata.
-		reader, meta, err := extractPlanFromZip(capturedUploadData)
+		// Verify the zip contains the archive data and no metadata sidecar.
+		reader, meta, err := extractFromZip(capturedUploadData)
 		require.NoError(t, err)
+		require.NotNil(t, reader)
 		defer reader.Close()
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
 		assert.Equal(t, "plan", string(content))
+		// When nil metadata is passed, the store does not generate metadata.
 		assert.Nil(t, meta)
 	})
 
@@ -870,9 +904,9 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "service unavailable")
 	})
 
@@ -897,9 +931,9 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "empty upload URL")
 	})
 
@@ -926,9 +960,9 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "blob storage error")
 	})
 
@@ -957,9 +991,9 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 		assert.Contains(t, err.Error(), "finalize failed")
 	})
 
@@ -981,9 +1015,9 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileUploadFailed)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactUploadFailed)
 	})
 
 	t.Run("zero retention days omits expiration", func(t *testing.T) {
@@ -1012,7 +1046,7 @@ func TestStore_Upload(t *testing.T) {
 		}
 
 		ctx := context.Background()
-		err := store.Upload(ctx, "test/key.tfplan", bytes.NewReader([]byte("plan")), nil)
+		err := store.Upload(ctx, "test/key.tfplan", strings.NewReader("plan"), 4, nil)
 		require.NoError(t, err)
 		assert.Empty(t, capturedCreateReq.ExpiresAfter)
 	})
@@ -1030,15 +1064,15 @@ func TestStore_Download(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
 		_, _, err := store.Download(ctx, "nonexistent/key.tfplan")
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 	})
 }
 
@@ -1054,9 +1088,9 @@ func TestStore_Delete(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1077,13 +1111,13 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "")
+		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
 		assert.Empty(t, files)
 	})
@@ -1123,20 +1157,20 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "")
+		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
-		// Should only include planfile-* artifacts.
+		// Should only include planfile-* artifacts (prefix filtering).
 		assert.Len(t, files, 2)
 
 		// Should be sorted by last modified (newest first).
-		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Key)
-		assert.Equal(t, "stack2/component2/sha2.tfplan", files[1].Key)
+		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, "stack2/component2/sha2.tfplan", files[1].Name)
 	})
 
 	t.Run("with pagination", func(t *testing.T) {
@@ -1184,20 +1218,20 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "")
+		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
 		assert.Len(t, files, 2)
 		assert.Equal(t, 2, callCount, "should have made 2 API calls for pagination")
 
 		// Should be sorted by last modified (newest first).
-		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Key)
-		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Key)
+		assert.Equal(t, "stack1/comp1/sha1.tfplan", files[0].Name)
+		assert.Equal(t, "stack2/comp2/sha2.tfplan", files[1].Name)
 	})
 
 	t.Run("with prefix filter", func(t *testing.T) {
@@ -1229,16 +1263,16 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
-		files, err := store.List(ctx, "stack1")
+		files, err := store.List(ctx, artifact.Query{Stacks: []string{"stack1"}})
 		require.NoError(t, err)
 		assert.Len(t, files, 1)
-		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Key)
+		assert.Equal(t, "stack1/component1/sha1.tfplan", files[0].Name)
 	})
 }
 
@@ -1263,9 +1297,9 @@ func TestStore_Exists(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1284,9 +1318,9 @@ func TestStore_Exists(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1321,9 +1355,9 @@ func TestStore_GetMetadata(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1343,15 +1377,15 @@ func TestStore_GetMetadata(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
 		_, err := store.GetMetadata(ctx, "nonexistent/key.tfplan")
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrPlanfileNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactNotFound)
 	})
 }
 
@@ -1502,26 +1536,26 @@ func TestGetBackendIDsFromToken(t *testing.T) {
 }
 
 func TestCreateArtifactZip(t *testing.T) {
-	t.Run("with plan and metadata", func(t *testing.T) {
-		planData := []byte("terraform plan output")
-		metadata := &planfile.Metadata{
-			Stack:     "prod",
-			Component: "vpc",
-			SHA:       "abc123",
-		}
+	t.Run("with data and metadata", func(t *testing.T) {
+		dataContent := []byte("plan file data")
+		metadata := &artifact.Metadata{}
+		metadata.Stack = "prod"
+		metadata.Component = "vpc"
+		metadata.SHA = "abc123"
 
-		zipData, err := createArtifactZip(planData, metadata)
+		zipData, err := createArtifactZip(bytes.NewReader(dataContent), metadata)
 		require.NoError(t, err)
 		require.NotEmpty(t, zipData)
 
 		// Verify the zip contents.
-		reader, meta, err := extractPlanFromZip(zipData)
+		reader, meta, err := extractFromZip(zipData)
 		require.NoError(t, err)
+		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, planData, content)
+		assert.Equal(t, dataContent, content)
 
 		require.NotNil(t, meta)
 		assert.Equal(t, "prod", meta.Stack)
@@ -1530,27 +1564,29 @@ func TestCreateArtifactZip(t *testing.T) {
 	})
 
 	t.Run("without metadata", func(t *testing.T) {
-		planData := []byte("plan content")
+		dataContent := []byte("plan file content")
 
-		zipData, err := createArtifactZip(planData, nil)
+		zipData, err := createArtifactZip(bytes.NewReader(dataContent), nil)
 		require.NoError(t, err)
 
-		reader, meta, err := extractPlanFromZip(zipData)
+		reader, meta, err := extractFromZip(zipData)
 		require.NoError(t, err)
+		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
 		require.NoError(t, err)
-		assert.Equal(t, planData, content)
+		assert.Equal(t, dataContent, content)
 		assert.Nil(t, meta)
 	})
 
-	t.Run("empty plan data", func(t *testing.T) {
-		zipData, err := createArtifactZip([]byte{}, nil)
+	t.Run("empty data", func(t *testing.T) {
+		zipData, err := createArtifactZip(bytes.NewReader([]byte{}), nil)
 		require.NoError(t, err)
 
-		reader, _, err := extractPlanFromZip(zipData)
+		reader, _, err := extractFromZip(zipData)
 		require.NoError(t, err)
+		require.NotNil(t, reader)
 		defer reader.Close()
 
 		content, err := io.ReadAll(reader)
@@ -1727,7 +1763,7 @@ func TestNewStore_WithRuntimeEnv(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", runtimeToken)
 		t.Setenv("ACTIONS_RESULTS_URL", "https://results.example.com")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",
@@ -1744,7 +1780,7 @@ func TestNewStore_WithRuntimeEnv(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", "")
 		t.Setenv("ACTIONS_RESULTS_URL", "")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",
@@ -1761,7 +1797,7 @@ func TestNewStore_WithRuntimeEnv(t *testing.T) {
 		t.Setenv("ACTIONS_RUNTIME_TOKEN", "some-token")
 		t.Setenv("ACTIONS_RESULTS_URL", "")
 
-		store, err := NewStore(planfile.StoreOptions{
+		store, err := NewStore(artifact.StoreOptions{
 			Options: map[string]any{
 				"owner": "testowner",
 				"repo":  "testrepo",

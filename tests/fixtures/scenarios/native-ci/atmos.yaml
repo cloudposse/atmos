@@ -10,11 +10,11 @@ components:
 
     # Planfile storage backends (registry pattern)
     planfiles:
-      # Default store to use (references named store below)
-      default: "local"
-
-      # Key pattern for planfile naming (Go template)
-      key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
+      # Stores are tried in priority order; if unavailable, fall through to next
+      priority:
+        - "github"
+        - "s3"
+        - "local"
 
       # Named stores
       stores:
@@ -24,6 +24,7 @@ components:
             bucket: "my-terraform-planfiles"
             prefix: "atmos/"
             region: "us-east-1"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         github:
           type: github-artifacts
@@ -31,23 +32,27 @@ components:
             retention_days: 7
             owner: cloudposse
             repo: github-action-atmos-terraform-plan
+            # GitHub uses the artifact name from the implementation layer directly
 
         azure:
           type: azure-blob
           options:
             account: "mystorageaccount"
             container: "planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         gcs:
           type: gcs
           options:
             bucket: "my-gcs-bucket"
             prefix: "planfiles/"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
         local:
           type: local
           options:
             path: ".atmos/planfiles"
+            key_pattern: "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan"
 
 stacks:
   base_path: "stacks"

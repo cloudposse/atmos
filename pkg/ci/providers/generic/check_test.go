@@ -56,7 +56,6 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("success status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			CheckRunID: 1,
 			Name:       "atmos/plan: plat-ue2-dev/vpc",
 			Status:     provider.CheckRunStateSuccess,
 			Conclusion: "success",
@@ -66,7 +65,7 @@ func TestUpdateCheckRun(t *testing.T) {
 
 		checkRun, err := p.UpdateCheckRun(ctx, opts)
 		require.NoError(t, err)
-		assert.Equal(t, int64(1), checkRun.ID)
+		assert.NotZero(t, checkRun.ID)
 		assert.Equal(t, opts.Name, checkRun.Name)
 		assert.Equal(t, opts.Status, checkRun.Status)
 		assert.Equal(t, opts.Conclusion, checkRun.Conclusion)
@@ -76,7 +75,6 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("failure status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			CheckRunID: 2,
 			Name:       "atmos/plan: plat-ue2-dev/vpc",
 			Status:     provider.CheckRunStateFailure,
 			Conclusion: "failure",
@@ -89,7 +87,6 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("error status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			CheckRunID: 3,
 			Name:       "atmos/plan: plat-ue2-dev/vpc",
 			Status:     provider.CheckRunStateError,
 		}
@@ -101,7 +98,6 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("cancelled status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			CheckRunID: 4,
 			Name:       "atmos/plan: plat-ue2-dev/vpc",
 			Status:     provider.CheckRunStateCancelled,
 		}
@@ -113,7 +109,6 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("in progress status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			CheckRunID: 5,
 			Name:       "atmos/plan: plat-ue2-dev/vpc",
 			Status:     provider.CheckRunStateInProgress,
 		}

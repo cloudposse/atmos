@@ -97,10 +97,10 @@ type UpdateCheckRunOptions struct {
 	// Repo is the repository name.
 	Repo string
 
-	// CheckRunID is the ID of the check run to update.
-	CheckRunID int64
+	// SHA is the commit SHA (used for fallback creation when no prior CreateCheckRun).
+	SHA string
 
-	// Name is the check run name (required for GitHub API updates).
+	// Name is the check run name (used as correlation key).
 	Name string
 
 	// Status is the new status.
