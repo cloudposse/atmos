@@ -29,12 +29,12 @@ The LSP Server and LSP Client validate **completely different things**:
 
 | What Gets Validated          | Atmos LSP Server    | External LSP Servers (via Client) |
 |------------------------------|---------------------|-----------------------------------|
-| **Atmos structure**          | ✅ Import arrays     | ❌                                 |
-| **Atmos structure**          | ✅ Component maps    | ❌                                 |
-| **Atmos structure**          | ✅ Stack inheritance | ❌                                 |
-| **Generic YAML syntax**      | ❌                   | ✅ YAML schemas                    |
-| **Terraform syntax**         | ❌                   | ✅ HCL parsing                     |
-| **Typos/unknown properties** | ❌                   | ✅ Schema validation               |
+| **Atmos structure**          | Yes - Import arrays     | No                                 |
+| **Atmos structure**          | Yes - Component maps    | No                                 |
+| **Atmos structure**          | Yes - Stack inheritance | No                                 |
+| **Generic YAML syntax**      | No                   | Yes - YAML schemas                    |
+| **Terraform syntax**         | No                   | Yes - HCL parsing                     |
+| **Typos/unknown properties** | No                   | Yes - Schema validation               |
 
 **Example:**
 
@@ -76,11 +76,11 @@ The Atmos LSP Server is a Language Server Protocol implementation that provides 
 
 The LSP server validates YAML syntax and Atmos-specific structure in real-time:
 
-- ✅ YAML syntax errors (invalid indentation, incorrect types)
-- ✅ Atmos structure validation (import arrays, component maps)
-- ✅ Component name validation
-- ✅ Variable structure validation
-- ✅ Precise error locations with line numbers
+- YAML syntax errors (invalid indentation, incorrect types)
+- Atmos structure validation (import arrays, component maps)
+- Component name validation
+- Variable structure validation
+- Precise error locations with line numbers
 
 ### Basic Autocomplete
 
@@ -730,22 +730,22 @@ args = ["lsp", "start", "--transport", "stdio"]
 
 | Editor | Setup | Autocomplete | Diagnostics | Hover | Go to Definition | Recommended |
 |--------|-------|--------------|-------------|-------|------------------|-------------|
-| **VS Code** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐⭐ |
-| **Neovim** | Moderate | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐⭐ |
-| **Vim (vim-lsp)** | Moderate | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐ |
-| **Vim (coc.nvim)** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐⭐ |
-| **Emacs (lsp-mode)** | Moderate | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐⭐ |
-| **Emacs (eglot)** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐ |
-| **Sublime Text** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐ |
-| **IntelliJ IDEA** | Moderate | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐ |
-| **Cursor** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐⭐ |
-| **Zed** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐ |
-| **Helix** | Easy | ✅ | ✅ | ✅ | 🚧 | ⭐⭐⭐⭐ |
+| **VS Code** | Easy | Yes | Yes | Yes | Planned | Excellent |
+| **Neovim** | Moderate | Yes | Yes | Yes | Planned | Excellent |
+| **Vim (vim-lsp)** | Moderate | Yes | Yes | Yes | Planned | Great |
+| **Vim (coc.nvim)** | Easy | Yes | Yes | Yes | Planned | Excellent |
+| **Emacs (lsp-mode)** | Moderate | Yes | Yes | Yes | Planned | Excellent |
+| **Emacs (eglot)** | Easy | Yes | Yes | Yes | Planned | Great |
+| **Sublime Text** | Easy | Yes | Yes | Yes | Planned | Great |
+| **IntelliJ IDEA** | Moderate | Yes | Yes | Yes | Planned | Good |
+| **Cursor** | Easy | Yes | Yes | Yes | Planned | Excellent |
+| **Zed** | Easy | Yes | Yes | Yes | Planned | Great |
+| **Helix** | Easy | Yes | Yes | Yes | Planned | Great |
 
 **Legend:**
-- ✅ Fully supported
-- 🚧 Planned (stub implemented, will be enhanced in future versions)
-- ⭐ Recommendation level (5 = highly recommended)
+- Yes: Fully supported
+- Planned: Stub implemented, will be enhanced in future versions
+- Recommended column: Excellent (highly recommended), Great (recommended), Good (acceptable)
 
 ## Transport Options Explained
 
@@ -764,14 +764,14 @@ atmos lsp start --transport stdio
 ```
 
 **Pros:**
-- ✅ Simple setup
-- ✅ Secure (local only)
-- ✅ Automatic process management
-- ✅ No network configuration needed
+- Simple setup
+- Secure (local only)
+- Automatic process management
+- No network configuration needed
 
 **Cons:**
-- ❌ Only works locally
-- ❌ One instance per editor session
+- Only works locally
+- One instance per editor session
 
 ### tcp (TCP Server)
 
@@ -792,14 +792,14 @@ atmos lsp start --transport tcp --address 0.0.0.0:7777
 ```
 
 **Pros:**
-- ✅ Supports remote connections
-- ✅ Multiple editors can connect
-- ✅ Server runs independently
+- Supports remote connections
+- Multiple editors can connect
+- Server runs independently
 
 **Cons:**
-- ❌ Requires manual server management
-- ❌ Need to configure firewall/network
-- ❌ Less secure (network exposed)
+- Requires manual server management
+- Need to configure firewall/network
+- Less secure (network exposed)
 
 ### websocket (WebSocket Server)
 
@@ -817,14 +817,14 @@ atmos lsp start --transport websocket --address localhost:8080
 ```
 
 **Pros:**
-- ✅ Works with web-based editors
-- ✅ Standard WebSocket protocol
-- ✅ Good for cloud IDEs
+- Works with web-based editors
+- Standard WebSocket protocol
+- Good for cloud IDEs
 
 **Cons:**
-- ❌ More complex setup
-- ❌ Requires WebSocket-compatible client
-- ❌ Manual server management
+- More complex setup
+- Requires WebSocket-compatible client
+- Manual server management
 
 ## Troubleshooting
 
@@ -1057,30 +1057,30 @@ atmos lsp start --transport websocket --address localhost:8080
 
 For large Atmos projects with many stack files:
 
-- ✅ LSP server handles incremental validation (only changed files)
-- ✅ Document caching minimizes re-parsing
-- ✅ Background validation doesn't block editor
-- ✅ Consider using TCP transport for team-shared server
+- LSP server handles incremental validation (only changed files)
+- Document caching minimizes re-parsing
+- Background validation doesn't block editor
+- Consider using TCP transport for team-shared server
 
 ## Security Considerations
 
 ### Local Development (stdio)
 
-- ✅ Most secure - no network exposure
-- ✅ Server runs with your user permissions
-- ✅ Process isolation (separate from editor)
-- ✅ Automatic cleanup on editor exit
+- Most secure - no network exposure
+- Server runs with your user permissions
+- Process isolation (separate from editor)
+- Automatic cleanup on editor exit
 
 ### Remote Development (tcp/websocket)
 
 When using TCP or WebSocket transports:
 
-- ⚠️ **Bind to localhost only** for local access:
+- **Bind to localhost only** for local access:
   ```bash
   atmos lsp start --transport tcp --address localhost:7777
   ```
 
-- ⚠️ **Use SSH tunneling** for remote access:
+- **Use SSH tunneling** for remote access:
   ```bash
   # On remote machine
   atmos lsp start --transport tcp --address localhost:7777
@@ -1089,9 +1089,9 @@ When using TCP or WebSocket transports:
   ssh -L 7777:localhost:7777 user@remote-host
   ```
 
-- ⚠️ **Firewall configuration** - Restrict access to trusted IPs
-- ⚠️ **Network segmentation** - Keep LSP server on internal network
-- ⚠️ **TLS encryption** - Consider using reverse proxy with TLS for WebSocket
+- **Firewall configuration** - Restrict access to trusted IPs
+- **Network segmentation** - Keep LSP server on internal network
+- **TLS encryption** - Consider using reverse proxy with TLS for WebSocket
 
 ### Best Practices
 
@@ -1170,12 +1170,12 @@ The LSP Server and LSP Client validate **completely different things**:
 
 | What Gets Validated | Atmos LSP Server | External LSP Servers (via Client) |
 |---------------------|------------------|-----------------------------------|
-| **Atmos structure** | ✅ Import arrays | ❌ |
-| **Atmos structure** | ✅ Component maps | ❌ |
-| **Atmos structure** | ✅ Stack inheritance | ❌ |
-| **Generic YAML syntax** | ❌ | ✅ YAML schemas |
-| **Terraform syntax** | ❌ | ✅ HCL parsing |
-| **Typos/unknown properties** | ❌ | ✅ Schema validation |
+| **Atmos structure** | Yes - Import arrays | No |
+| **Atmos structure** | Yes - Component maps | No |
+| **Atmos structure** | Yes - Stack inheritance | No |
+| **Generic YAML syntax** | No | Yes - YAML schemas |
+| **Terraform syntax** | No | Yes - HCL parsing |
+| **Typos/unknown properties** | No | Yes - Schema validation |
 
 ### Feature Comparison
 
@@ -1221,25 +1221,25 @@ The LSP Server and LSP Client validate **completely different things**:
 
 Future enhancements planned:
 
-- ✅ **v1.0** (Current)
+- **v1.0** (Current)
   - Real-time syntax validation
   - Autocomplete for top-level keywords
   - Hover documentation
   - Error diagnostics
 
-- 🚧 **v1.1** (Planned)
+- **v1.1** (Planned)
   - Go to definition (follow import paths)
   - Find all references
   - Component validation against catalog
   - Schema-based validation
 
-- 🚧 **v1.2** (Future)
+- **v1.2** (Future)
   - Code actions (quick fixes)
   - Rename symbol refactoring
   - Semantic highlighting
   - Call hierarchy
 
-- 🚧 **v1.3** (Future)
+- **v1.3** (Future)
   - Integration with Atmos Pro
   - Remote stack validation
   - Team-shared validation rules

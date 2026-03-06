@@ -78,10 +78,10 @@ components:
 ```
 
 **Validation Triggers:**
-- ✅ Real-time as you type
-- ✅ On document save
-- ✅ On document open
-- ✅ Manual validation request
+- Real-time as you type
+- On document save
+- On document open
+- Manual validation request
 
 **Validation Types:**
 - **YAML Syntax** - Malformed YAML detection
@@ -162,19 +162,19 @@ Works with your favorite editor—same experience everywhere:
 
 | Editor | Status | Setup |
 |--------|--------|-------|
-| **VS Code** | ✅ Tested | LSP client extension |
-| **Neovim** | ✅ Tested | nvim-lspconfig |
-| **Cursor** | ✅ Documented | LSP client (VS Code fork) |
-| **Zed** | ✅ Documented | Built-in LSP config |
-| **Emacs** | ✅ Documented | lsp-mode |
-| **Vim** | ✅ Documented | vim-lsp plugin |
-| **Sublime Text** | ✅ Documented | LSP package |
-| **Helix** | ✅ Documented | languages.toml |
-| **IntelliJ IDEA** | ✅ Documented | LSP4IJ plugin |
-| **Kate** | ✅ Documented | LSP client plugin |
-| **Lapce** | ✅ Documented | Built-in LSP |
-| **Atom** | ✅ Documented | atom-languageclient |
-| **Eclipse** | ✅ Documented | LSP4E |
+| **VS Code** | Yes | LSP client extension |
+| **Neovim** | Yes | nvim-lspconfig |
+| **Cursor** | Yes | LSP client (VS Code fork) |
+| **Zed** | Yes | Built-in LSP config |
+| **Emacs** | Yes | lsp-mode |
+| **Vim** | Yes | vim-lsp plugin |
+| **Sublime Text** | Yes | LSP package |
+| **Helix** | Yes | languages.toml |
+| **IntelliJ IDEA** | Yes | LSP4IJ plugin |
+| **Kate** | Yes | LSP client plugin |
+| **Lapce** | Yes | Built-in LSP |
+| **Atom** | Yes | atom-languageclient |
+| **Eclipse** | Yes | LSP4E |
 
 **Universal Setup Pattern:**
 ```json
@@ -246,10 +246,10 @@ settings:
 ```
 
 **Benefits:**
-- ✅ Single unified validation experience
-- ✅ Automatic file routing by extension
-- ✅ Diagnostic aggregation from multiple servers
-- ✅ Consistent error reporting
+- Single unified validation experience
+- Automatic file routing by extension
+- Diagnostic aggregation from multiple servers
+- Consistent error reporting
 
 ### 7. AI Integration
 
@@ -571,11 +571,11 @@ components:
 ```
 
 **Aggregation Features:**
-- ✅ Collect from all servers
-- ✅ Deduplicate overlapping diagnostics
-- ✅ Sort by severity and location
-- ✅ Filter by severity level
-- ✅ Per-file diagnostic access
+- Collect from all servers
+- Deduplicate overlapping diagnostics
+- Sort by severity and location
+- Filter by severity level
+- Per-file diagnostic access
 
 ### Document Lifecycle
 
@@ -657,7 +657,7 @@ vars:
 
 **Code Actions (Quick Fixes):**
 ```yaml
-vpc_ciddr: 10.0.0.0/16  # 💡 Quick fix: Change to 'vpc_cidr'
+vpc_ciddr: 10.0.0.0/16  # Quick fix: Change to 'vpc_cidr'
 ```
 
 ### Long-term (6+ Months)
@@ -683,22 +683,22 @@ vpc_ciddr: 10.0.0.0/16  # 💡 Quick fix: Change to 'vpc_cidr'
 ## Security & Privacy
 
 **LSP Server:**
-- ✅ Read-only access to opened documents
-- ✅ No file system access beyond provided documents
-- ✅ No network access
-- ✅ Validates user input safely
+- Read-only access to opened documents
+- No file system access beyond provided documents
+- No network access
+- Validates user input safely
 
 **LSP Client:**
-- ✅ Spawns only configured, trusted servers
-- ✅ Local stdio communication only
-- ✅ No network communication
-- ✅ No credential handling
+- Spawns only configured, trusted servers
+- Local stdio communication only
+- No network communication
+- No credential handling
 
 **Privacy:**
-- ✅ All processing 100% local
-- ✅ No telemetry or analytics
-- ✅ No document content sent to cloud
-- ✅ External servers may have own policies (check yaml-ls, terraform-ls docs)
+- All processing 100% local
+- No telemetry or analytics
+- No document content sent to cloud
+- External servers may have own policies (check yaml-ls, terraform-ls docs)
 
 ## Troubleshooting
 
@@ -785,4 +785,4 @@ export ATMOS_LOGS_LEVEL=Debug
 
 ---
 
-Happy configuring! 🚀
+Happy configuring!
