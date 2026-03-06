@@ -767,21 +767,61 @@ If AI requests are slow or expensive, keep your `ATMOS.md` under 10KB. Enable on
 
 When none of the above solves your issue, work through these steps:
 
+**1. Enable debug logging:**
+
 <Terminal title="shell">
     ```bash
-    # 1. Enable debug logging
     atmos ai ask "test" --logs-level=Debug
-
-    # 2. Inspect AI configuration
-    atmos describe config | grep -A 10 "ai"
-
-    # 3. Test network connectivity to your provider (pick one)
-    curl -sI https://api.anthropic.com | head -1       # Anthropic
-    curl -sI https://api.openai.com | head -1          # OpenAI
-    curl -sI https://generativelanguage.googleapis.com | head -1  # Gemini
-    curl -sI https://api.x.ai | head -1               # Grok
     ```
 </Terminal>
+
+**2. Inspect AI configuration:**
+
+<Terminal title="shell">
+    ```bash
+    atmos describe config | grep -A 10 "ai"
+    ```
+</Terminal>
+
+**3. Test network connectivity to your provider:**
+
+<Tabs>
+  <TabItem value="anthropic" label="Anthropic" default>
+    ```bash
+    curl -sI https://api.anthropic.com | head -1
+    ```
+  </TabItem>
+  <TabItem value="openai" label="OpenAI">
+    ```bash
+    curl -sI https://api.openai.com | head -1
+    ```
+  </TabItem>
+  <TabItem value="gemini" label="Gemini">
+    ```bash
+    curl -sI https://generativelanguage.googleapis.com | head -1
+    ```
+  </TabItem>
+  <TabItem value="grok" label="Grok">
+    ```bash
+    curl -sI https://api.x.ai | head -1
+    ```
+  </TabItem>
+  <TabItem value="ollama" label="Ollama">
+    ```bash
+    curl http://localhost:11434/api/version
+    ```
+  </TabItem>
+  <TabItem value="bedrock" label="AWS Bedrock">
+    ```bash
+    aws bedrock list-foundation-models --region us-east-1 --max-results 1
+    ```
+  </TabItem>
+  <TabItem value="azure" label="Azure OpenAI">
+    ```bash
+    az account show
+    ```
+  </TabItem>
+</Tabs>
 
 If debug logging doesn't reveal the issue, try a minimal configuration to rule out config problems:
 
