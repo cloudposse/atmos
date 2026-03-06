@@ -185,6 +185,10 @@ Each Azure subscription is the primary boundary for billing, access control, and
            └── vnet
 ```
 
+Resource groups don't appear in the directory hierarchy because they're resources created by Terraform components, not pre-existing organizational boundaries. Each component defines which resource group it belongs to through its `vars`.
+
+Each location (e.g., `eastus.yaml`) can be a single file for simple deployments, or expanded into a directory when a region has enough components to warrant splitting by workload or resource group.
+
 ### Configure atmos.yaml
 
 <File title="atmos.yaml">
