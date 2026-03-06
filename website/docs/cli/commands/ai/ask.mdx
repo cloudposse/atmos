@@ -62,19 +62,30 @@ settings:
       # Add other providers as needed
 ```
 
-Set the appropriate environment variable for your chosen provider:
+Set the environment variable for your chosen provider. The `ask` command uses the provider specified by `default_provider`. To switch providers interactively, use [`atmos ai chat`](/cli/commands/ai/chat) with `Ctrl+P`.
 
-```shell
-export ANTHROPIC_API_KEY="your-key"        # For Anthropic
-export OPENAI_API_KEY="your-key"           # For OpenAI
-export GEMINI_API_KEY="your-key"           # For Google Gemini
-export XAI_API_KEY="your-key"              # For xAI Grok
-export OLLAMA_API_KEY="your-key"           # For Ollama (optional for local)
-# AWS Bedrock uses AWS SDK default credentials (no separate API key)
-export AZURE_OPENAI_API_KEY="your-key"     # For Azure OpenAI
-```
+<dl>
+  <dt>`ANTHROPIC_API_KEY`</dt>
+  <dd>API key for Anthropic (Claude). Get it from [console.anthropic.com](https://console.anthropic.com/)</dd>
 
-**Note:** The `ask` command uses the provider specified in `default_provider`. To use a different provider, either change the `default_provider` setting or use [`atmos ai chat`](/cli/commands/ai/chat) which allows switching providers with `Ctrl+P`.
+  <dt>`OPENAI_API_KEY`</dt>
+  <dd>API key for OpenAI (GPT). Get it from [platform.openai.com](https://platform.openai.com/)</dd>
+
+  <dt>`GEMINI_API_KEY`</dt>
+  <dd>API key for Google Gemini. Get it from [aistudio.google.com](https://aistudio.google.com/)</dd>
+
+  <dt>`XAI_API_KEY`</dt>
+  <dd>API key for xAI (Grok). Get it from [x.ai/api](https://x.ai/api)</dd>
+
+  <dt>`OLLAMA_API_KEY`</dt>
+  <dd>Optional for Ollama. Local instances don't require an API key.</dd>
+
+  <dt>`AZURE_OPENAI_API_KEY`</dt>
+  <dd>API key for Azure OpenAI. Get it from Azure Portal under your OpenAI resource's "Keys and Endpoint" section.</dd>
+
+  <dt>AWS Bedrock</dt>
+  <dd>Uses standard AWS SDK credential chain (IAM roles, profiles, environment variables). No separate API key needed.</dd>
+</dl>
 
 ### Flags
 
@@ -189,26 +200,6 @@ atmos ai ask "How do I vendor external components?"
 ```
 
 ## Advanced Usage
-
-### Using with Different Providers
-
-```shell
-# Anthropic Claude (advanced reasoning)
-export ANTHROPIC_API_KEY="your-key"
-atmos ai ask "Explain Atmos architecture in detail"
-
-# OpenAI GPT (strong general capabilities)
-export OPENAI_API_KEY="your-key"
-atmos ai ask "How do I optimize my stack structure?"
-
-# Google Gemini (fast, large context)
-export GEMINI_API_KEY="your-key"
-atmos ai ask "Review my entire configuration"
-
-# xAI Grok (real-time knowledge)
-export XAI_API_KEY="your-key"
-atmos ai ask "What are the latest Terraform best practices?"
-```
 
 ### In Scripts and Automation
 

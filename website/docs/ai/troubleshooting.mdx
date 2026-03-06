@@ -8,6 +8,8 @@ description: Troubleshoot common issues with the Atmos AI Assistant
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
 import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
 # AI Assistant Troubleshooting
 
@@ -31,11 +33,12 @@ ai:
 
 <Terminal title="shell">
     ```bash
-    echo $ANTHROPIC_API_KEY    # Anthropic (Claude)
-    echo $OPENAI_API_KEY       # OpenAI (GPT)
-    echo $GEMINI_API_KEY       # Google (Gemini)
-    echo $XAI_API_KEY          # xAI (Grok)
-    echo $AZURE_OPENAI_API_KEY # Azure OpenAI
+    # Check if environment variables are set (without revealing secrets)
+    [ -n "$ANTHROPIC_API_KEY" ] && echo "ANTHROPIC_API_KEY is set" || echo "ANTHROPIC_API_KEY is NOT set"
+    [ -n "$OPENAI_API_KEY" ] && echo "OPENAI_API_KEY is set" || echo "OPENAI_API_KEY is NOT set"
+    [ -n "$GEMINI_API_KEY" ] && echo "GEMINI_API_KEY is set" || echo "GEMINI_API_KEY is NOT set"
+    [ -n "$XAI_API_KEY" ] && echo "XAI_API_KEY is set" || echo "XAI_API_KEY is NOT set"
+    [ -n "$AZURE_OPENAI_API_KEY" ] && echo "AZURE_OPENAI_API_KEY is set" || echo "AZURE_OPENAI_API_KEY is NOT set"
     aws sts get-caller-identity # AWS Bedrock
     curl http://localhost:11434/api/version  # Ollama (local, no key needed)
     ```
@@ -64,36 +67,56 @@ settings:
 
 ### "API key not found in environment variable"
 
-Obtain an API key from your provider and export it:
-
-<Terminal title="shell">
-    ```bash
-    export ANTHROPIC_API_KEY="sk-ant-..."
-    export OPENAI_API_KEY="sk-..."
-    export GEMINI_API_KEY="..."
-    export XAI_API_KEY="xai-..."
-    ```
-</Terminal>
-
-#### Where to Get API Keys
-
-<dl>
-    <dt>`ANTHROPIC_API_KEY`</dt>
-    <dd>[Anthropic Console](https://console.anthropic.com/) -- Navigate to API Keys, click "Create Key". Key starts with `sk-ant-`.</dd>
-
-    <dt>`OPENAI_API_KEY`</dt>
-    <dd>[OpenAI Platform](https://platform.openai.com/) -- Go to API Keys, click "Create new secret key". Copy immediately.</dd>
-
-    <dt>`GEMINI_API_KEY`</dt>
-    <dd>[Google AI Studio](https://aistudio.google.com/) -- Click "Get API key" in top navigation.</dd>
-
-    <dt>`XAI_API_KEY`</dt>
-    <dd>[xAI API](https://x.ai/api) -- Navigate to API Keys, generate a new key.</dd>
-</dl>
+Obtain an API key from your provider and export it. See the table below for where to get each key.
 
 :::info
 API keys are only needed for cloud providers. Ollama runs locally and requires no key. Enterprise providers (Bedrock, Azure OpenAI) use their respective cloud authentication.
 :::
+
+<Tabs>
+  <TabItem value="anthropic" label="Anthropic" default>
+    ```bash
+    export ANTHROPIC_API_KEY="sk-ant-..."
+    ```
+    Get your key from [Anthropic Console](https://console.anthropic.com/) -- navigate to API Keys and click "Create Key". Keys start with `sk-ant-`.
+  </TabItem>
+  <TabItem value="openai" label="OpenAI">
+    ```bash
+    export OPENAI_API_KEY="sk-..."
+    ```
+    Get your key from [OpenAI Platform](https://platform.openai.com/) -- go to API Keys and click "Create new secret key". Copy immediately.
+  </TabItem>
+  <TabItem value="gemini" label="Gemini">
+    ```bash
+    export GEMINI_API_KEY="..."
+    ```
+    Get your key from [Google AI Studio](https://aistudio.google.com/) -- click "Get API key" in top navigation.
+  </TabItem>
+  <TabItem value="xai" label="Grok">
+    ```bash
+    export XAI_API_KEY="xai-..."
+    ```
+    Get your key from [xAI API](https://x.ai/api) -- navigate to API Keys and generate a new key.
+  </TabItem>
+  <TabItem value="azure" label="Azure OpenAI">
+    ```bash
+    export AZURE_OPENAI_API_KEY="..."
+    ```
+    Get your key from Azure Portal -- navigate to your OpenAI resource's "Keys and Endpoint" section.
+  </TabItem>
+  <TabItem value="bedrock" label="AWS Bedrock">
+    Uses standard AWS SDK credential chain (IAM roles, profiles, environment variables). No separate API key needed.
+    ```bash
+    aws sts get-caller-identity  # Verify AWS credentials
+    ```
+  </TabItem>
+  <TabItem value="ollama" label="Ollama">
+    No API key required for local instances. Just make sure the server is running:
+    ```bash
+    curl http://localhost:11434/api/version
+    ```
+  </TabItem>
+</Tabs>
 
 ### "Failed to create AI client"
 
@@ -702,7 +725,7 @@ Make sure instructions are enabled and the file exists:
 
 <Terminal title="shell">
     ```bash
-    grep -A 5 "instructions:" atmos.yaml
+    atmos describe config | grep -A 10 "instructions"
     ls -la ATMOS.md
     ```
 </Terminal>
@@ -752,11 +775,11 @@ When none of the above solves your issue, work through these steps:
     # 2. Inspect AI configuration
     atmos describe config | grep -A 10 "ai"
 
-    # 3. Test network connectivity to your provider
-    curl -I https://api.anthropic.com
-    curl -I https://api.openai.com
-    curl -I https://generativelanguage.googleapis.com
-    curl -I https://api.x.ai
+    # 3. Test network connectivity to your provider (pick one)
+    curl -sI https://api.anthropic.com | head -1       # Anthropic
+    curl -sI https://api.openai.com | head -1          # OpenAI
+    curl -sI https://generativelanguage.googleapis.com | head -1  # Gemini
+    curl -sI https://api.x.ai | head -1               # Grok
     ```
 </Terminal>
 

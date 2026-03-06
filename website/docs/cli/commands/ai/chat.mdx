@@ -186,25 +186,11 @@ AI: You can validate stack configurations using...
 
 ### Using with Different Providers
 
-<Terminal title="atmos ai chat">
-```console
-# Using Anthropic Claude (default)
-export ANTHROPIC_API_KEY="your-key"
-atmos ai chat
+All configured providers are available concurrently. Press `Ctrl+P` during a chat session to switch between them. You can also specify a provider at startup:
 
-# Using OpenAI GPT
-export OPENAI_API_KEY="your-key"
-atmos ai chat
-
-# Using Google Gemini
-export GEMINI_API_KEY="your-key"
-atmos ai chat
-
-# Using xAI Grok
-export XAI_API_KEY="your-key"
-atmos ai chat
+```shell
+atmos ai chat --provider openai
 ```
-</Terminal>
 
 ## Interactive Features
 
@@ -270,34 +256,6 @@ AI responses are automatically rendered with rich markdown formatting for better
 - Tables with proper alignment
 - Code blocks with syntax highlighting
 - Blockquotes and horizontal rules
-
-**Code Block Example:**
-
-When the AI responds with code, it's automatically syntax-highlighted:
-
-````
-AI: Here's a sample Atmos stack configuration:
-
-```yaml
-components:
-  terraform:
-    vpc:
-      vars:
-        cidr_block: "10.0.0.0/16"
-        enable_dns_hostnames: true
-        availability_zones:
-          - us-east-1a
-          - us-east-1b
-```
-````
-
-The code will be displayed with:
-- ✅ Language-specific syntax highlighting (YAML, HCL, Go, Python, etc.)
-- ✅ Proper indentation and formatting
-- ✅ Color-coded keywords and values
-- ✅ Automatic terminal theme detection
-
-**Note:** Only AI assistant messages are rendered with markdown. Your input messages remain as plain text for clarity.
 
 ### Multi-line Messages
 

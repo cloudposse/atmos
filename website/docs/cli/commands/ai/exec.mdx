@@ -260,25 +260,23 @@ done
 
 ### Multi-Turn Automation
 
-Use `--session` to maintain context across multiple calls:
+Use `--session` to maintain conversation context across multiple `exec` calls. The session name is an arbitrary string that groups related calls together -- the AI remembers all previous messages in the same session.
 
 <Terminal title="multi-turn examples">
 ```bash
-SESSION="deploy-$(date +%s)"
-
 # First call - establish context
 atmos ai exec "Plan deployment for staging" \
-  --session "$SESSION" \
+  --session staging-deploy \
   --format json > plan.json
 
-# Second call - AI remembers the plan
+# Second call - AI remembers the plan from the first call
 atmos ai exec "What are the risks?" \
-  --session "$SESSION" \
+  --session staging-deploy \
   --format json > risks.json
 
-# Third call - build on previous context
+# Third call - builds on all previous context in this session
 atmos ai exec "Generate rollback procedure" \
-  --session "$SESSION" \
+  --session staging-deploy \
   --format json > rollback.json
 ```
 </Terminal>
