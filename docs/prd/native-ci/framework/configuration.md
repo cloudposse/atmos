@@ -72,11 +72,14 @@ ci:
   # GitHub: $GITHUB_OUTPUT, GitLab: dotenv artifacts
   output:
     enabled: true
-    # Whitelist of variables to export. When omitted, ALL variables are exported.
+    # Whitelist of native CI variables to export. When omitted, ALL native CI variables are exported.
+    # NOTE: This whitelist only applies to native CI variables (has_changes, stack, etc.).
+    # Terraform outputs (output_*) after successful apply are ALWAYS included regardless of this list.
     # variables:
     #   - has_changes
     #   - has_errors
     #   - exit_code
+    #   - success
     #   - resources_to_create
     #   - resources_to_change
     #   - resources_to_replace

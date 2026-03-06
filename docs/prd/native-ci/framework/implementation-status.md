@@ -65,12 +65,14 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 2. Writes to `$GITHUB_STEP_SUMMARY` via `FileOutputWriter.WriteSummary()` — Done
 3. Default templates: `plan.md`, `apply.md` (`pkg/ci/plugins/terraform/templates/`) — Done
 
-**FR-3: CI Output Variables** — Partial
+**FR-3: CI Output Variables** — Done
 1. Plugin handler `writeOutputs()` calls `getOutputVariables()` + adds common vars — Done
 2. Writes to `$GITHUB_OUTPUT` via `FileOutputWriter.WriteOutput()` — Done
-3. Whitelist filtering via `ci.output.variables` config — Done
+3. Whitelist filtering via `ci.output.variables` config (applies to native CI variables only) — Done
 4. `OutputHelpers` convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) — Done
-5. Terraform output export after apply (`output_*` variables) — **Not Started** (Phase 4)
+5. Terraform output export after apply (`output_*` variables) — Done
+6. `success` variable for apply commands — Done
+7. Terraform outputs bypass whitelist filter (always included) — Done
 
 **FR-4: Status Checks** — Done
 1. Plugin handler `createCheckRun()` creates check runs on "before" events — Done
@@ -168,12 +170,15 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 
 ---
 
-### Terraform Output Export — Not Started
+### Terraform Output Export — COMPLETE
 
-> PRD: [CI Outputs](../providers/github/ci-outputs.md) (Phase 4 section)
+> PRD: [CI Outputs](../providers/github/ci-outputs.md)
 
-1. Export terraform outputs after successful apply (`output_*` variables) — **Not Started**
-2. Flatten nested outputs, uppercase conversion via `pkg/terraform/output/` — **Not Started**
+1. Export terraform outputs after successful apply (`output_*` variables) — Done
+2. Flatten nested outputs via `pkg/terraform/output/FlattenMap()` — Done
+3. `success` variable for apply commands (`true`/`false`) — Done
+4. Terraform outputs bypass `ci.output.variables` whitelist (always included) — Done
+5. Warn-only on fetch failure (does not fail apply) — Done
 
 ---
 
@@ -197,11 +202,13 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | Plugin handler `writeSummary()` with template rendering | | Done | |
 | | `$GITHUB_STEP_SUMMARY` via `FileOutputWriter` | | Done | |
 | | Default `plan.md` and `apply.md` templates | | Done | |
-| **FR-3** | CI Output Variables | [ci-outputs.md](../providers/github/ci-outputs.md) | **Partial** | ~80% |
+| **FR-3** | CI Output Variables | [ci-outputs.md](../providers/github/ci-outputs.md) | **Done** | 100% |
 | | Plugin handler `writeOutputs()` with plugin variables | | Done | |
 | | `$GITHUB_OUTPUT` via `FileOutputWriter` | | Done | |
-| | Whitelist filtering via `ci.output.variables` | | Done | |
-| | Terraform output export after apply (`output_*`) | | Not Started | |
+| | Whitelist filtering via `ci.output.variables` (native CI vars only) | | Done | |
+| | Terraform output export after apply (`output_*`) | | Done | |
+| | `success` variable for apply commands | | Done | |
+| | Terraform outputs bypass whitelist (always included) | | Done | |
 | **FR-4** | Status Checks | [status-checks.md](../providers/github/status-checks.md) | **Done** | 100% |
 | | Plugin handler `createCheckRun()` on "before" events | | Done | |
 | | Plugin handler `updateCheckRun()` on "after" events | | Done | |
@@ -241,9 +248,11 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | PR comment action type in executor | | Not Started | |
 | | Comment upsert behavior (HTML marker) | | Not Started | |
 | | `github/comment.go` — PR comment API | | Not Started | |
-| **—** | Terraform Output Export | [ci-outputs.md](../providers/github/ci-outputs.md) | **Not Started** | 0% |
-| | Export terraform outputs after apply (`output_*`) | | Not Started | |
-| | `pkg/terraform/output/` formatting | | Not Started | |
+| **—** | Terraform Output Export | [ci-outputs.md](../providers/github/ci-outputs.md) | **Done** | 100% |
+| | Export terraform outputs after apply (`output_*`) | | Done | |
+| | `pkg/terraform/output/FlattenMap()` formatting | | Done | |
+| | `success` variable for apply | | Done | |
+| | Terraform outputs bypass whitelist | | Done | |
 | **—** | Documentation | — | **Not Started** | 0% |
 | | Archive old GitHub Actions docs | | Not Started | |
 | | Write new CI integration docs | | Not Started | |
@@ -257,7 +266,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Framework: Core Infrastructure | 11/11 | 0 | 0 |
 | Framework: CI Detection (FR-1) | 4/4 | 0 | 0 |
 | Framework: Artifact Storage | 7/7 | 0 | 0 |
-| Providers: GitHub (FR-2, FR-3, FR-4, FR-9) | 14/14 | 0 | 0 |
+| Providers: GitHub (FR-2, FR-3, FR-4, FR-9) | 17/17 | 0 | 0 |
 | Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
 | Providers: Generic | 3/3 | 0 | 0 |
 | Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
@@ -265,7 +274,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
 | Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
 | Command Parity (FR-7) | 3/3 | 0 | 0 |
-| Terraform Output Export | 0/2 | 2 | 0 |
+| Terraform Output Export | 5/5 | 0 | 0 |
 | Documentation | 0/4 | 4 | 0 |
 | Phases: Planfile Storage Validation | 4/4 | 0 | 0 |
 | Phases: Metadata Embed Artifact | 6/6 | 0 | 0 |
@@ -273,7 +282,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Phases: Unify Artifact Stores | 8/8 | 0 | 0 |
 | Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
 | Phases: Apply Command Parity (FR-7) | 7/7 | 0 | 0 |
-| **Total** | **110/123** | **13** | **2** |
+| **Total** | **118/126** | **6** | **2** |
 
 ## Implementation Phases (Incremental)
 
@@ -463,6 +472,9 @@ These are incremental improvements shipped as focused PRDs.
 | `cmd/describe_affected.go` | Add `--format=matrix` support | Done |
 | `internal/exec/describe_affected.go` | Implement matrix format output (`MatrixOutput`, `MatrixEntry`, `writeMatrixOutput`) | Done |
 | `cmd/terraform/deploy.go` | Full CI wiring: `--ci` flag, `PreRunE` (`before.terraform.apply`), stdout/stderr capture, error defer, `PostRunE` with captured output | Done |
+| `pkg/terraform/output/format.go` | Export `flattenMap` → `FlattenMap` for use by CI terraform output export | Done |
+| `pkg/ci/plugins/terraform/handlers.go` | Add `getTerraformOutputs()`, extend `writeOutputs()` with terraform output export (bypasses whitelist), add `getComponentOutputsFunc` for testability | Done |
+| `pkg/ci/plugins/terraform/plugin.go` | Add `success` variable for apply in `getOutputVariables()` | Done |
 | `cmd/terraform/deploy.go` | Add `--verify-plan` flag | Not Started |
 | `pkg/datafetcher/schema/atmos-manifest/*.json` | JSON schema updates | Not Started |
 
@@ -649,6 +661,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 7.0 | 2026-03-06 | FR-3 CI Output Variables COMPLETE. Terraform output export after apply: `getTerraformOutputs()` fetches outputs via `tfoutput.GetComponentOutputs()`, `FlattenMap()` exported from `pkg/terraform/output/format.go`, flattened outputs written with `output_` prefix. Added `success` variable for apply commands. Key design decision: terraform `output_*` variables bypass the `ci.output.variables` whitelist — they are always included. The whitelist only filters native CI variables (`has_changes`, `stack`, etc.). FR-3 status updated from Partial (~80%) to Done (100%). Terraform Output Export status updated from Not Started (0%) to Done (100%). Summary table updated: 118/126 done. |
 | 6.0 | 2026-03-06 | FR-7 Command Parity COMPLETE. `apply.go` now has full CI wiring: PreRunE (`before.terraform.apply`), stdout/stderr capture, error defer, PostRunE with captured output. `deploy.go` gained `--ci` flag with identical full CI wiring. FR-7 status updated from Partial (~60%) to Done (100%). FR-5 planfile download note removed (apply PreRunE now wired). Summary table updated: 103/116 done (was 103/120 — consolidated FR-7 line items from 7 to 3). |
 | 5.0 | 2026-03-06 | Added Implementation Phases section tracking 5 shipped incremental PRDs: Planfile Storage Validation (SHA resolution), Metadata Embed Artifact, Bundle with Lock File, Unify Artifact Stores, CLI Component/Stack Addressing. Updated FR-5 planfile storage status from ~90% to ~95% with 13/16 items (from 8/11). Updated Files Created to reflect artifact store unification: S3/GitHub moved to `artifact/`, planfile local/registry deleted, tar helpers added, resolve.go added. Updated summary table from 62/82 to 103/120 with phase counts. |
 | 4.0 | 2026-03-06 | Callback-based refactoring COMPLETE. Executor refactored from ~850-line enum-based god-object to ~250-line thin coordinator. Plugin interface slimmed from 7 methods to 2 (GetType, GetHookBindings). Added HookHandler callback type, HookContext dependency bag, CheckRunStore interface. All action logic moved from executor into `plugins/terraform/handlers.go`. Error severity now handler-controlled (upload/download fatal, summary/output/check warn-only). New files: `checkrun_store.go`, `handlers.go`, `handlers_test.go`. Removed: HookAction enum, Actions field, Template field, ComponentConfigurationResolver interface, 5 Plugin methods. Coverage: executor 91%, terraform plugin 81%. |

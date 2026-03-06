@@ -160,7 +160,7 @@ Users currently using the GitHub Actions can migrate incrementally:
 
 ### Q: How do terraform outputs get exported?
 
-**A:** Terraform output export after apply is planned for Phase 4 but not yet implemented. When completed, `terraform apply --ci` will export terraform outputs to `$GITHUB_OUTPUT` with support for flattening nested outputs and uppercase conversion. Currently, apply exports the same variables as plan (`has_changes`, `has_errors`, `exit_code`, `resources_to_*`, `stack`, `component`, `command`, `summary`).
+**A:** After a successful `terraform apply --ci`, all terraform outputs are automatically exported to `$GITHUB_OUTPUT` with an `output_` prefix. Nested outputs are flattened with `_` separator (e.g., `output_config_host` for `config.host`), arrays use numeric indices (e.g., `output_subnet_ids_0`). Terraform outputs bypass the `ci.output.variables` whitelist — they are always included. A `success` variable (`true`/`false`) is also exported for apply commands. If output fetching fails, a warning is logged but the apply is not failed.
 
 ## Scope
 
@@ -190,6 +190,6 @@ Users currently using the GitHub Actions can migrate incrementally:
 - [Lifecycle Hooks](../../pkg/hooks/) - Hook system for terraform events
 - [Plan-Diff](../../internal/exec/terraform_plan_diff.go) - Semantic plan comparison (implemented)
 - [Store Registry](../../pkg/store/registry.go) - Pattern for planfile stores
-- Terraform Output Package (`pkg/terraform/output/`) - Output formatting (planned for Phase 4, tf-output-format branch)
+- Terraform Output Package (`pkg/terraform/output/`) - Output formatting and `FlattenMap()` for CI export
 - [tfcmt](https://github.com/suzuki-shunsuke/tfcmt) - Inspiration for PR comments
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)
