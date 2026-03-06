@@ -172,48 +172,48 @@ type Metadata struct {
 
 ## Plugin Interface (IMPLEMENTED)
 
-The plugin owns its CI behavior. The executor calls plugin methods to parse output, build context, get variables, and generate artifact keys. See [Hooks Integration](./hooks-integration.md) for the full architecture.
+The plugin owns its CI behavior via callback-based dispatch. The executor builds a `HookContext` and invokes the plugin's handler. See [Hooks Integration](./hooks-integration.md) for the full architecture.
 
 ```go
 // pkg/ci/internal/plugin/types.go
 
-// HookAction represents what CI action to perform (enum, not callback).
-type HookAction string
+// HookHandler is the callback signature for plugin event handlers.
+type HookHandler func(ctx *HookContext) error
 
-const (
-    ActionSummary  HookAction = "summary"   // Write to job summary ($GITHUB_STEP_SUMMARY)
-    ActionOutput   HookAction = "output"    // Write to CI outputs ($GITHUB_OUTPUT)
-    ActionUpload   HookAction = "upload"    // Upload artifact (e.g., planfile)
-    ActionDownload HookAction = "download"  // Download artifact
-    ActionCheck    HookAction = "check"     // Create/update check run
-)
+// HookContext provides all dependencies a plugin handler needs.
+type HookContext struct {
+    Event        string
+    Command      string                       // extracted from event (e.g., "plan")
+    EventPrefix  string                       // "before" or "after"
+    Config       *schema.AtmosConfiguration
+    Info         *schema.ConfigAndStacksInfo
+    Output       string
+    CommandError error
+    Provider     provider.Provider
+    CICtx        *provider.Context
+    TemplateLoader *templates.Loader
+    CheckRunStore  CheckRunStore
+    CreatePlanfileStore func() (any, error)   // Lazy factory for planfile store
+}
+
+// CheckRunStore correlates check run IDs across before/after events.
+type CheckRunStore interface {
+    Store(key string, id int64)
+    LoadAndDelete(key string) (int64, bool)
+}
 
 // HookBinding declares what happens at a specific hook event.
 type HookBinding struct {
-    Event    string        // "after.terraform.plan"
-    Actions  []HookAction  // CI actions to perform at this event
-    Template string        // Template name for summary action (e.g., "plan")
+    Event   string       // "after.terraform.plan"
+    Handler HookHandler  // Plugin callback that owns all action logic
 }
 
 // Plugin is implemented by component types that support CI integration.
 type Plugin interface {
     GetType() string
     GetHookBindings() []HookBinding
-    GetDefaultTemplates() embed.FS
-    BuildTemplateContext(info *schema.ConfigAndStacksInfo, ciCtx *provider.Context, output, command string) (any, error)
-    ParseOutput(output string, command string) (*OutputResult, error)
-    GetOutputVariables(result *OutputResult, command string) map[string]string
-    GetArtifactKey(info *schema.ConfigAndStacksInfo, command string) string
-}
-
-// ComponentConfigurationResolver is an optional interface that Plugins can implement
-// to resolve artifact paths (e.g., planfile paths) when not explicitly provided.
-type ComponentConfigurationResolver interface {
-    ResolveComponentPlanfilePath(atmosConfig *schema.AtmosConfiguration, info *schema.ConfigAndStacksInfo) (string, error)
 }
 ```
-
-> **Architecture note**: The current implementation uses an **enum-based action dispatch** pattern — `HookAction` is a string enum and the executor's `executeAction()` switches on it to call the appropriate handler (summary, output, upload, download, check). The [Hooks Integration](./hooks-integration.md) PRD describes a **callback-based** pattern as the target for Phase 3 refactoring, where plugins would own all action logic via function callbacks. Both approaches achieve the same result; the callback pattern moves more logic into plugins for better separation of concerns.
 
 ### Terraform Plugin Hook Bindings (IMPLEMENTED)
 
@@ -222,10 +222,10 @@ type ComponentConfigurationResolver interface {
 
 func (p *Plugin) GetHookBindings() []plugin.HookBinding {
     return []plugin.HookBinding{
-        {Event: "before.terraform.plan",  Actions: []plugin.HookAction{plugin.ActionCheck}},
-        {Event: "after.terraform.plan",   Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck}, Template: "plan"},
-        {Event: "before.terraform.apply", Actions: []plugin.HookAction{plugin.ActionDownload}},
-        {Event: "after.terraform.apply",  Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput}, Template: "apply"},
+        {Event: "before.terraform.plan",  Handler: p.onBeforePlan},
+        {Event: "after.terraform.plan",   Handler: p.onAfterPlan},
+        {Event: "before.terraform.apply", Handler: p.onBeforeApply},
+        {Event: "after.terraform.apply",  Handler: p.onAfterApply},
     }
 }
 ```
@@ -234,18 +234,20 @@ func (p *Plugin) GetHookBindings() []plugin.HookBinding {
 
 ```
 pkg/ci/
-  ├── executor.go              # CI action orchestrator: detect platform, dispatch actions
+  ├── executor.go              # Thin CI coordinator (~250 lines): detect platform, resolve plugin, invoke handler
   ├── executor_test.go
+  ├── checkrun_store.go        # CheckRunStore interface + sync.Map-backed singleton
+  ├── checkrun_store_test.go
   ├── provider.go              # Type alias for internal/provider.Provider
   ├── status.go                # Type aliases for status types
   ├── plugin_registry.go       # Plugin registry: RegisterPlugin(), GetPlugin(), GetPluginForEvent()
   ├── plugin_registry_test.go
   ├── registry_provider.go     # Provider registry: Register(), Detect(), DetectOrError(), IsCI()
   ├── registry_provider_test.go
-  ├── mock_plugin_test.go      # Mock plugin for executor tests
+  ├── mock_plugin_test.go      # Mock plugin for executor tests (2-method interface)
   ├── internal/
   │   ├── plugin/
-  │   │   └── types.go         # Plugin interface, HookAction enum, HookBinding, OutputResult, TemplateContext
+  │   │   └── types.go         # Plugin interface (2 methods), HookHandler, HookContext, CheckRunStore, OutputResult, TemplateContext
   │   └── provider/
   │       ├── types.go         # Provider interface, Context, PRInfo, CheckRun structs
   │       ├── check.go         # CheckRunState constants, Create/Update options
@@ -267,8 +269,10 @@ pkg/ci/
   │       ├── store.go         # Local filesystem backend
   │       └── store_test.go
   ├── plugins/terraform/
-  │   ├── plugin.go            # Terraform CI plugin (hook bindings, parsing, output vars, artifact keys)
+  │   ├── plugin.go            # Terraform CI plugin (GetType, GetHookBindings + private helpers)
   │   ├── plugin_test.go
+  │   ├── handlers.go          # All handler implementations (onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply)
+  │   ├── handlers_test.go
   │   ├── parser.go            # Parse plan/apply output (regex-based)
   │   ├── parser_test.go
   │   ├── context.go           # TerraformTemplateContext

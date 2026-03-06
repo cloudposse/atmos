@@ -30,13 +30,15 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 **Core Infrastructure** — Done
 1. `pkg/ci/` package structure — Done
 2. Provider interface (`pkg/ci/internal/provider/types.go`) — Done
-3. Plugin interface with 7 methods (`pkg/ci/internal/plugin/types.go`) — Done
-4. Executor with enum-based action dispatch (`pkg/ci/executor.go`) — Done
+3. Plugin interface with 2 methods (`pkg/ci/internal/plugin/types.go`) — Done (slimmed from 7 methods via callback refactoring)
+4. Executor with callback-based dispatch (`pkg/ci/executor.go`, ~250 lines) — Done (refactored from ~850-line enum-based god-object)
 5. Provider registry (`pkg/ci/registry_provider.go`) — Done
 6. Plugin registry (`pkg/ci/plugin_registry.go`) — Done
 7. Schema types (`CIConfig`, `PlanfilesConfig`) in `pkg/schema/schema.go` — Done
-8. Config-based action enable/disable (`isActionEnabled()`) — Done
+8. Config-based action enable/disable (plugin-internal `isSummaryEnabled`/`isOutputEnabled`/`isCheckEnabled`) — Done
 9. Template loader with override support (`pkg/ci/templates/loader.go`) — Done
+10. `CheckRunStore` interface + `sync.Map`-backed singleton (`pkg/ci/checkrun_store.go`) — Done
+11. `HookContext` struct + `HookHandler` callback type (`pkg/ci/internal/plugin/types.go`) — Done
 
 ---
 
@@ -59,21 +61,21 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 > PRDs: [GitHub Provider](../providers/github/provider.md) | [Job Summaries](../providers/github/job-summaries.md) | [CI Outputs](../providers/github/ci-outputs.md) | [Status Checks](../providers/github/status-checks.md) | [PR Comments](../providers/github/pr-comments.md)
 
 **FR-2: Job Summary Output** — Done
-1. `executeSummaryAction()` renders template via plugin's `BuildTemplateContext()` — Done
+1. Plugin handler `writeSummary()` renders template via `buildTemplateContext()` — Done
 2. Writes to `$GITHUB_STEP_SUMMARY` via `FileOutputWriter.WriteSummary()` — Done
 3. Default templates: `plan.md`, `apply.md` (`pkg/ci/plugins/terraform/templates/`) — Done
 
 **FR-3: CI Output Variables** — Partial
-1. `executeOutputAction()` calls `plugin.GetOutputVariables()` + adds common vars — Done
+1. Plugin handler `writeOutputs()` calls `getOutputVariables()` + adds common vars — Done
 2. Writes to `$GITHUB_OUTPUT` via `FileOutputWriter.WriteOutput()` — Done
 3. Whitelist filtering via `ci.output.variables` config — Done
 4. `OutputHelpers` convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) — Done
 5. Terraform output export after apply (`output_*` variables) — **Not Started** (Phase 4)
 
 **FR-4: Status Checks** — Done
-1. `executeCheckAction()` creates check runs on "before" events — Done
-2. Updates check runs on "after" events with result summary — Done
-3. Check run ID correlation via `sync.Map` — Done
+1. Plugin handler `createCheckRun()` creates check runs on "before" events — Done
+2. Plugin handler `updateCheckRun()` updates check runs on "after" events with result summary — Done
+3. Check run ID correlation via `CheckRunStore` interface (`sync.Map`-backed singleton) — Done
 4. `ci.checks.enabled` config (disabled by default) — Done
 5. `FormatCheckRunName()` with hardcoded `"atmos/"` prefix — Done (config wiring deferred)
 
@@ -105,23 +107,21 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 
 ---
 
-### Terraform Plugin: Hook Bindings & Executor — COMPLETE (enum-based)
+### Terraform Plugin: Hook Bindings & Executor — COMPLETE (callback-based)
 
 > PRD: [Hooks Integration](./hooks-integration.md)
 
-The executor uses an **enum-based action dispatch** pattern (not the callback-based target described in hooks-integration.md):
+The executor uses a **callback-based dispatch** pattern. Plugins own all action logic via `HookHandler` callbacks. The executor is a thin coordinator (~250 lines) that detects the CI platform, resolves the plugin, and invokes the handler.
 
-1. Terraform plugin implements all 7 Plugin methods — Done
-2. Hook bindings: `before.terraform.plan`, `after.terraform.plan`, `before.terraform.apply`, `after.terraform.apply` — Done
-3. Output parser (`pkg/ci/plugins/terraform/parser.go`) — Done
-4. Template context (`pkg/ci/plugins/terraform/context.go`) — Done
-5. Upload action (`executeUploadAction`) — Done
-6. Download action (`executeDownloadAction`) — Done
-7. Summary action (`executeSummaryAction`) — Done
-8. Output action (`executeOutputAction`) — Done
-9. Check run action (`executeCheckAction`) — Done
-
-> **Future refactoring**: The hooks-integration.md PRD describes a callback-based pattern where plugins own all logic via `HookAction` function callbacks. The current enum-based approach works but the executor is a "god-object" that knows about all action types. Refactoring to callbacks would move action logic into plugins for better separation of concerns.
+1. Plugin interface slimmed to 2 methods: `GetType()`, `GetHookBindings()` — Done
+2. `HookHandler` callback type + `HookContext` dependency bag — Done
+3. `CheckRunStore` interface (replaces `sync.Map` for cross-event check run ID correlation) — Done
+4. Hook bindings with `Handler` callbacks: `before.terraform.plan`, `after.terraform.plan`, `before.terraform.apply`, `after.terraform.apply` — Done
+5. Output parser (`pkg/ci/plugins/terraform/parser.go`) — Done
+6. Template context (`pkg/ci/plugins/terraform/context.go`) — Done
+7. Handler logic in `pkg/ci/plugins/terraform/handlers.go`: summary, output, upload, download, check — Done
+8. Error severity: upload/download fatal, summary/output/check warn-only — Done
+9. Executor coverage 91%, terraform plugin coverage 81% — Done
 
 ---
 
@@ -193,18 +193,19 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | | `--ci` flag with `ATMOS_CI`/`CI` env var bindings | | Done | |
 | | `ci.enabled` config gate | | Done | |
 | **FR-2** | Job Summary Output | [job-summaries.md](../providers/github/job-summaries.md) | **Done** | 100% |
-| | `executeSummaryAction()` with template rendering | | Done | |
+| | Plugin handler `writeSummary()` with template rendering | | Done | |
 | | `$GITHUB_STEP_SUMMARY` via `FileOutputWriter` | | Done | |
 | | Default `plan.md` and `apply.md` templates | | Done | |
 | **FR-3** | CI Output Variables | [ci-outputs.md](../providers/github/ci-outputs.md) | **Partial** | ~80% |
-| | `executeOutputAction()` with plugin variables | | Done | |
+| | Plugin handler `writeOutputs()` with plugin variables | | Done | |
 | | `$GITHUB_OUTPUT` via `FileOutputWriter` | | Done | |
 | | Whitelist filtering via `ci.output.variables` | | Done | |
 | | Terraform output export after apply (`output_*`) | | Not Started | |
 | **FR-4** | Status Checks | [status-checks.md](../providers/github/status-checks.md) | **Done** | 100% |
-| | Create check runs on "before" events | | Done | |
-| | Update check runs on "after" events | | Done | |
+| | Plugin handler `createCheckRun()` on "before" events | | Done | |
+| | Plugin handler `updateCheckRun()` on "after" events | | Done | |
 | | `ci.checks.enabled` config (disabled by default) | | Done | |
+| | Check run ID correlation via `CheckRunStore` interface | | Done | |
 | | `context_prefix` wired from config | | Not Started (hardcoded) | |
 | **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~90% |
 | | `planfile.Store` interface + adapter | | Done | |
@@ -251,37 +252,39 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 
 | Category | Done | Not Started | Deferred |
 |----------|------|-------------|----------|
-| Framework: Core Infrastructure | 9/9 | 0 | 0 |
+| Framework: Core Infrastructure | 11/11 | 0 | 0 |
 | Framework: CI Detection (FR-1) | 4/4 | 0 | 0 |
 | Framework: Artifact Storage | 7/7 | 0 | 0 |
 | Providers: GitHub (FR-2, FR-3, FR-4, FR-9) | 14/14 | 0 | 0 |
 | Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
 | Providers: Generic | 3/3 | 0 | 0 |
-| Terraform Plugin: Hook Bindings | 9/9 | 0 | 0 |
+| Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
 | Terraform Plugin: Planfile Storage (FR-5) | 8/11 | 0 | 2 (Azure, GCS) |
 | Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
 | Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
 | Command Parity (FR-7) | 3/7 | 4 | 0 |
 | Terraform Output Export | 0/2 | 2 | 0 |
 | Documentation | 0/4 | 4 | 0 |
-| **Total** | **60/80** | **17** | **2** |
+| **Total** | **62/82** | **17** | **2** |
 
 ## Files Created
 
 | File | Purpose | Status |
 |------|---------|--------|
 | **pkg/ci/ (core)** | | |
-| `pkg/ci/executor.go` | CI action orchestrator: detect platform, dispatch actions (summary/output/upload/download/check) | Done |
-| `pkg/ci/executor_test.go` | Executor tests | Done |
+| `pkg/ci/executor.go` | Thin CI coordinator (~250 lines): detect platform, resolve plugin, invoke handler callback | Done |
+| `pkg/ci/executor_test.go` | Executor tests (91% coverage) | Done |
+| `pkg/ci/checkrun_store.go` | `CheckRunStore` interface + `sync.Map`-backed singleton for cross-event check run ID correlation | Done |
+| `pkg/ci/checkrun_store_test.go` | CheckRunStore tests | Done |
 | `pkg/ci/provider.go` | Type alias for `internal/provider.Provider` | Done |
 | `pkg/ci/status.go` | Type aliases for status types | Done |
 | `pkg/ci/registry_provider.go` | Provider registry: Register(), Detect(), DetectOrError(), IsCI() | Done |
 | `pkg/ci/registry_provider_test.go` | Provider registry tests | Done |
 | `pkg/ci/plugin_registry.go` | Plugin registry: RegisterPlugin(), GetPlugin(), GetPluginForEvent() | Done |
 | `pkg/ci/plugin_registry_test.go` | Plugin registry tests | Done |
-| `pkg/ci/mock_plugin_test.go` | Mock plugin for executor tests | Done |
+| `pkg/ci/mock_plugin_test.go` | Mock plugin for executor tests (slimmed 2-method interface) | Done |
 | **pkg/ci/internal/plugin/** | Plugin interface and types | |
-| `pkg/ci/internal/plugin/types.go` | Plugin interface (7 methods), HookAction enum, HookBinding, OutputResult, TemplateContext, ComponentConfigurationResolver | Done |
+| `pkg/ci/internal/plugin/types.go` | Plugin interface (2 methods: GetType, GetHookBindings), HookHandler callback type, HookContext struct, CheckRunStore interface, HookBinding with Handler field, OutputResult, TemplateContext | Done |
 | **pkg/ci/internal/provider/** | Provider interface and types | |
 | `pkg/ci/internal/provider/types.go` | Provider interface, Context, PRInfo, CheckRun structs | Done |
 | `pkg/ci/internal/provider/check.go` | CheckRunState constants, CreateCheckRunOptions, UpdateCheckRunOptions | Done |
@@ -298,8 +301,10 @@ The executor uses an **enum-based action dispatch** pattern (not the callback-ba
 | `pkg/ci/artifact/local/store.go` | Local filesystem artifact backend | Done |
 | `pkg/ci/artifact/*_test.go` | Tests for all artifact packages | Done |
 | **pkg/ci/plugins/terraform/** | Terraform CI plugin | |
-| `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (7 Plugin methods, hook bindings, output variables, artifact keys) | Done |
+| `pkg/ci/plugins/terraform/plugin.go` | Terraform CI plugin (2 Plugin methods + private helpers: buildTemplateContext, getOutputVariables, getArtifactKey) | Done |
 | `pkg/ci/plugins/terraform/plugin_test.go` | Plugin tests | Done |
+| `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: onBeforePlan, onAfterPlan, onBeforeApply, onAfterApply + helpers (writeSummary, writeOutputs, uploadPlanfile, downloadPlanfile, createCheckRun, updateCheckRun) | Done |
+| `pkg/ci/plugins/terraform/handlers_test.go` | Handler tests (81% coverage) | Done |
 | `pkg/ci/plugins/terraform/parser.go` | Parse plan/apply output (regex-based) | Done |
 | `pkg/ci/plugins/terraform/parser_test.go` | Parser tests | Done |
 | `pkg/ci/plugins/terraform/context.go` | TerraformTemplateContext | Done |
@@ -413,13 +418,14 @@ ErrGitHubTokenNotFound = errors.New("GitHub token not found")
 
 ### Executor Architecture (`pkg/ci/executor.go`)
 
-The executor uses an **enum-based action dispatch** pattern:
+The executor uses a **callback-based dispatch** pattern (~250 lines):
 
-1. `Execute(opts)` → detects platform → gets plugin + binding → builds context → executes actions
-2. Actions are `HookAction` string enums: `summary`, `output`, `upload`, `download`, `check`
-3. `executeAction()` switches on the enum to call: `executeSummaryAction()`, `executeOutputAction()`, `executeUploadAction()`, `executeDownloadAction()`, `executeCheckAction()`
-4. Each action handler is self-contained in `executor.go`
-5. `isActionEnabled()` checks `ci.summary.enabled`, `ci.output.enabled`, `ci.checks.enabled` from config
+1. `Execute(opts)` → `detectPlatform()` → `getPluginAndBinding()` → `buildHookContext()` → `binding.Handler(hookCtx)`
+2. `HookHandler` is `func(ctx *HookContext) error` — plugins own all action logic
+3. `HookContext` provides all dependencies: `Config`, `Info`, `Output`, `CommandError`, `Provider`, `CICtx`, `TemplateLoader`, `CheckRunStore`, `CreatePlanfileStore`
+4. `CheckRunStore` interface correlates check run IDs across before/after events (backed by `sync.Map` singleton)
+5. `CreatePlanfileStore` is a lazy factory closure — only invoked when a handler needs artifact storage
+6. Error severity is handler-controlled: upload/download return errors (fatal), summary/output/check log warnings (non-fatal)
 
 ### OutputWriter Implementation
 
@@ -548,6 +554,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 4.0 | 2026-03-06 | Callback-based refactoring COMPLETE. Executor refactored from ~850-line enum-based god-object to ~250-line thin coordinator. Plugin interface slimmed from 7 methods to 2 (GetType, GetHookBindings). Added HookHandler callback type, HookContext dependency bag, CheckRunStore interface. All action logic moved from executor into `plugins/terraform/handlers.go`. Error severity now handler-controlled (upload/download fatal, summary/output/check warn-only). New files: `checkrun_store.go`, `handlers.go`, `handlers_test.go`. Removed: HookAction enum, Actions field, Template field, ComponentConfigurationResolver interface, 5 Plugin methods. Coverage: executor 91%, terraform plugin 81%. |
 | 3.0 | 2026-03-05 | Restructured implementation phases to align with PRD organization. Phases now map to PRD workstreams (Framework, Providers, Terraform Plugin) and functional requirements (FR-1 through FR-9). Replaced Phase 1-6 numbering with descriptive section names matching PRD directory structure. Added FR-level status table with PRD cross-references. Added summary table with counts. No status changes — all Done/Not Started markers preserved from v2.2. |
 | 2.2 | 2026-03-05 | Eleventh sync pass: added missing `ErrAWSConfigLoadFailed` to sentinel errors list, fixed error count (31 total, was 22). Documented critical wiring gap: `apply.go` has no `PreRunE` so `before.terraform.apply` (download planfile) never fires — added notes to ci-detection.md and hooks-integration.md. `deploy.go` has no `--ci` flag at all. All code verified unchanged since last sync. |
 | 2.1 | 2026-03-05 | Tenth sync pass: detailed apply.go CI integration status — PostRunE fires CI hooks (Done, but with empty output), PreRunE for before.terraform.apply download (Not Started), output capture (Not Started), error defer (Not Started). Fixed describe-affected-matrix.md: MatrixEntry has 4 fields (component, stack, component_path, component_type), not 2 as previously documented. |

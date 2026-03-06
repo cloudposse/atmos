@@ -6,7 +6,7 @@
 
 CI behaviors are integrated via a **Plugin-Executor** architecture, not individual hook command files.
 
-> **Current vs target architecture**: The current implementation uses an **enum-based action dispatch** pattern — `HookAction` is a string enum (`"summary"`, `"output"`, `"upload"`, `"download"`, `"check"`) and the executor switches on it to call self-contained handler functions. This document describes the **target callback-based** pattern where plugins own all action logic via function callbacks. See [Implementation Status](./implementation-status.md) for current state and refactoring plan.
+> The implementation uses a **callback-based dispatch** pattern. Plugins own all action logic via `HookHandler` callbacks. The executor is a thin coordinator (~250 lines) that detects the CI platform, resolves the plugin, builds a `HookContext`, and invokes the handler. See [Implementation Status](./implementation-status.md) for details.
 
 ### Two Independent Hook Systems
 
@@ -27,48 +27,48 @@ Terraform Command (plan/apply)
         └── hooks.RunCIHooks() → ci.Execute() (with CommandError set)
 ```
 
-### Roles
+### Roles (IMPLEMENTED)
 
-> **Current implementation** uses enum-based dispatch (executor owns action logic). The target callback-based architecture would move action logic into plugins.
+| Component | Role |
+|-----------|------|
+| **Executor** | Thin coordinator (~250 lines): detects platform, resolves plugin + binding, builds `HookContext`, invokes `binding.Handler(hookCtx)`. No action logic. |
+| **Plugin** | Business logic owner: 2-method interface (`GetType`, `GetHookBindings`). Subscribes to events via `HookHandler` callbacks, receives `HookContext` with all dependencies, owns all action logic (summary, output, upload, download, check). Controls error severity. |
+| **Provider** | I/O layer: `OutputWriter().WriteSummary(content)`, `OutputWriter().WriteOutput(key, value)`, `CreateCheckRun(ctx, opts)`, `UpdateCheckRun(ctx, opts)`. Does not render templates or know about terraform. |
 
-| Component | Current Role | Target Role |
-|-----------|-------------|-------------|
-| **Executor** | Action dispatcher: detects platform, gets plugin + binding, builds context, dispatches actions by switching on `HookAction` enum. Self-contained action handlers (`executeSummaryAction`, `executeOutputAction`, etc.) | Thin coordinator: passes `(provider, store, opts)` to plugin callbacks |
-| **Plugin** | Data provider: 7 methods for parsing output, building context, getting variables, generating artifact keys. Does not execute actions directly | Business logic owner: subscribes to events via callbacks, receives `(provider, store, opts)`, owns all action logic |
-| **Provider** | I/O layer: `OutputWriter().WriteSummary(content)`, `OutputWriter().WriteOutput(key, value)`, `CreateCheckRun(ctx, opts)`, `UpdateCheckRun(ctx, opts)`. Does not render templates or know about terraform | Same |
+### Plugin-Owns-Behavior Pattern (IMPLEMENTED)
 
-### Plugin-Owns-Behavior Pattern
-
-The plugin decides what to do on each hook event. The executor resolves the current provider and store, then invokes the plugin's callback:
+The plugin decides what to do on each hook event. The executor builds a `HookContext` with all dependencies and invokes the handler:
 
 ```go
-// HookAction signature: func(provider Provider, store artifact.Store, opts ExecuteOptions) error
-// The plugin wraps artifact.Store with its adapter to get domain-specific methods.
-func (p *TerraformPlugin) OnAfterPlan(provider Provider, store artifact.Store, opts ExecuteOptions) error {
-    // Wrap generic artifact.Store with planfile adapter for domain-specific operations
-    planStore := planfile.NewAdapter(store)
+// pkg/ci/plugins/terraform/handlers.go — actual implementation
+func (p *Plugin) onAfterPlan(ctx *plugin.HookContext) error {
+    result := p.parseOutputWithError(ctx)
 
-    // Plugin owns all logic — ParseOutput, BuildTemplateContext are internal helpers
-    result := p.ParseOutput(opts.Output)
-    ctx := p.BuildTemplateContext(opts.Info, provider.Context(), opts.Output)
-
-    // Plugin renders its own template, provider is just a writer
-    rendered := p.RenderTemplate("plan", ctx)
-    if err := provider.OutputWriter().WriteSummary(rendered); err != nil {
-        log.Warn("Failed to write summary", "error", err)
+    // Summary — warn-only
+    if isSummaryEnabled(ctx.Config) {
+        renderedSummary, err = p.writeSummary(ctx, result)
+        if err != nil {
+            log.Warn("CI summary failed", "error", err)
+        }
     }
 
-    // Plugin decides what outputs to write
-    provider.OutputWriter().WriteOutput("has_changes", strconv.FormatBool(result.HasChanges))
-
-    // Plugin decides to upload — fatal on failure
-    if err := planStore.Upload(key, planfile, metadata); err != nil {
-        return err  // Fails the command
+    // Output — warn-only
+    if isOutputEnabled(ctx.Config) {
+        if err := p.writeOutputs(ctx, result, renderedSummary); err != nil {
+            log.Warn("CI output failed", "error", err)
+        }
     }
 
-    // Status check — warn and continue
-    if _, err := provider.CreateCheckRun(ctx, CreateCheckRunOptions{...}); err != nil {
-        log.Warn("Failed to create check run", "error", err)
+    // Upload — FATAL (downstream apply depends on it)
+    if err := p.uploadPlanfile(ctx); err != nil {
+        return err
+    }
+
+    // Check — warn-only
+    if isCheckEnabled(ctx.Config) {
+        if err := p.updateCheckRun(ctx, result); err != nil {
+            log.Warn("CI check run update failed", "error", err)
+        }
     }
 
     return nil
@@ -80,32 +80,32 @@ The data flow from terraform command to plugin callback:
 ```
 RunCIHooks(event, atmosConfig, info, output, forceCIMode, cmdErr)
   → ci.Execute(ExecuteOptions{...})
-    → executor resolves provider + store
-    → executor calls plugin callback: action(provider, store, opts)
+    → detectPlatform() → getPluginAndBinding() → buildHookContext()
+    → binding.Handler(hookCtx)
 ```
 
-### Error Severity
+### Error Severity (IMPLEMENTED)
 
-> **Current vs target**: In the current enum-based implementation, `executeActions()` in `pkg/ci/executor.go` logs all action failures with `log.Warn` and continues — **no action is fatal**. The target callback-based architecture (Phase 3 refactoring) will move error severity decisions into plugins, where upload/download would be fatal.
+Error severity is handler-controlled. Each plugin handler decides which operations are fatal vs warn-only:
 
-| Action | Current Behavior | Target Behavior | Rationale |
-|--------|-----------------|-----------------|-----------|
-| Upload | Warn, continue | **Fatal** — return error | Apply workflow depends on artifacts |
-| Download | Warn, continue | **Fatal** — return error | Apply can't proceed without planfile |
-| Summary | Warn, continue | Warn, continue | Nice-to-have CI feature |
-| Output | Warn, continue | Warn, continue | Nice-to-have CI feature |
-| Status check | Warn, continue | Warn, continue | Nice-to-have CI feature |
-| PR comment | Warn, continue | Warn, continue | Nice-to-have CI feature |
+| Action | Behavior | Rationale |
+|--------|----------|-----------|
+| Upload | **Fatal** — handler returns error | Apply workflow depends on artifacts |
+| Download | **Fatal** — handler returns error | Apply can't proceed without planfile |
+| Summary | Warn, continue | Nice-to-have CI feature |
+| Output | Warn, continue | Nice-to-have CI feature |
+| Status check | Warn, continue | Nice-to-have CI feature |
+| PR comment | Warn, continue | Nice-to-have CI feature |
 
 ## Lifecycle Events (IMPLEMENTED)
 
-CI behaviors integrate at existing hook points. Actual actions per event from `pkg/ci/plugins/terraform/plugin.go`:
+CI behaviors integrate at existing hook points. Each event maps to a handler callback in `pkg/ci/plugins/terraform/handlers.go`:
 
 ```go
-BeforeTerraformPlan  = "before.terraform.plan"  // ActionCheck: create check run (in_progress)
-AfterTerraformPlan   = "after.terraform.plan"   // ActionSummary + ActionOutput + ActionUpload + ActionCheck (template: "plan")
-BeforeTerraformApply = "before.terraform.apply"  // ActionDownload: download planfile from store
-AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput (template: "apply")
+"before.terraform.plan"  → onBeforePlan()   // createCheckRun (in_progress)
+"after.terraform.plan"   → onAfterPlan()    // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
+"before.terraform.apply" → onBeforeApply()  // downloadPlanfile
+"after.terraform.apply"  → onAfterApply()   // writeSummary + writeOutputs
 ```
 
 > Note: `before.terraform.apply` does NOT have ActionCheck (no "Apply in progress" check run). `after.terraform.apply` does NOT have ActionCheck (no check run update after apply). These can be added later by modifying the plugin's `GetHookBindings()`.
@@ -114,59 +114,50 @@ AfterTerraformApply  = "after.terraform.apply"   // ActionSummary + ActionOutput
 
 ## Terraform Plugin Hook Bindings (IMPLEMENTED)
 
-> **Current implementation**: Hook bindings use enum-based `Actions` (not callbacks). The executor dispatches actions by switching on the `HookAction` enum. See [Interfaces](./interfaces.md) for the actual `HookBinding` struct.
+Hook bindings use `Handler` callbacks. Each handler owns all action logic for its event:
 
 ```go
 // pkg/ci/plugins/terraform/plugin.go — actual implementation
 func (p *Plugin) GetHookBindings() []plugin.HookBinding {
     return []plugin.HookBinding{
-        {Event: "before.terraform.plan",  Actions: []plugin.HookAction{plugin.ActionCheck}},
-        {Event: "after.terraform.plan",   Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput, plugin.ActionUpload, plugin.ActionCheck}, Template: "plan"},
-        {Event: "after.terraform.apply",  Actions: []plugin.HookAction{plugin.ActionSummary, plugin.ActionOutput}, Template: "apply"},
-        {Event: "before.terraform.apply", Actions: []plugin.HookAction{plugin.ActionDownload}},
+        {Event: "before.terraform.plan",  Handler: p.onBeforePlan},
+        {Event: "after.terraform.plan",   Handler: p.onAfterPlan},
+        {Event: "before.terraform.apply", Handler: p.onBeforeApply},
+        {Event: "after.terraform.apply",  Handler: p.onAfterApply},
     }
 }
 ```
 
 ## Per-Plugin Storage (IMPLEMENTED)
 
-Each plugin owns its artifact storage type, registry, and priority list. The executor brokers store resolution per plugin:
+Each plugin owns its artifact storage type, registry, and priority list. Store resolution is provided to plugins via a lazy factory in `HookContext`:
 
-1. The executor's `createPlanfileStore()` resolves the active store using the plugin's config priority list (`planfilesConfig.Default` → environment detection → local fallback)
-2. The resolved store is used directly by the executor's `executeUploadAction()` and `executeDownloadAction()` handlers
-3. The plugin provides the artifact key via `GetArtifactKey(stack, component)`
-
-> **Current vs target**: In the current enum-based architecture, the executor owns store resolution and upload/download logic. In the target callback-based architecture, the resolved store would be passed to the plugin's hook callback as `(provider, store, opts)`.
+1. The executor's `createPlanfileStore()` resolves the active store using the config priority list (`planfilesConfig.Default` → environment detection → local fallback)
+2. It's wrapped as a lazy factory closure in `HookContext.CreatePlanfileStore` — only invoked when a handler needs it
+3. Plugin handlers call `ctx.CreatePlanfileStore()` to get the store, then use `p.getArtifactKey()` for the key
 
 ```go
-// Current implementation: executor resolves store and executes actions directly
-func (e *Executor) createPlanfileStore(ctx context.Context, atmosConfig *schema.AtmosConfiguration) (planfile.Store, error) {
-    // 1. Check explicit default
-    // 2. Try environment-based detection via priority list
-    // 3. Fall back to local store
-}
+// Executor provides lazy factory in HookContext
+CreatePlanfileStore: func() (any, error) {
+    return createPlanfileStore(opts)
+},
 
-func (e *Executor) executeUploadAction(ctx context.Context, ...) error {
-    key := plugin.GetArtifactKey(stack, component)
-    return store.Upload(ctx, key, reader, metadata)
+// Plugin handler uses it when needed
+func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
+    storeAny, err := ctx.CreatePlanfileStore()
+    store := storeAny.(planfile.Store)
+    key := p.getArtifactKey(ctx.Info, ctx.Command)
+    return store.Upload(context.Background(), key, reader, metadata)
 }
 ```
 
-## Integration Points
-
-### Current State (IMPLEMENTED)
+## Integration Points (IMPLEMENTED)
 
 | File | Role |
 |------|------|
-| `pkg/ci/executor.go` | Action dispatcher: `executeActions()` switches on `HookAction` enum to call self-contained action handlers |
-| `pkg/ci/internal/plugin/types.go` | Plugin interface with 7 passive data methods + HookAction string enum + HookBinding struct |
-| `pkg/ci/plugins/terraform/plugin.go` | Terraform plugin implementing all 7 Plugin methods (data provider, no action logic) |
+| `pkg/ci/executor.go` | Thin coordinator (~250 lines): `detectPlatform()` → `getPluginAndBinding()` → `buildHookContext()` → `binding.Handler(hookCtx)` |
+| `pkg/ci/checkrun_store.go` | `CheckRunStore` interface + `sync.Map`-backed singleton for cross-event check run ID correlation |
+| `pkg/ci/internal/plugin/types.go` | Plugin interface (2 methods), `HookHandler` callback type, `HookContext` dependency bag, `CheckRunStore` interface |
+| `pkg/ci/plugins/terraform/plugin.go` | Terraform plugin: `GetType()`, `GetHookBindings()` with handler callbacks + private helpers |
+| `pkg/ci/plugins/terraform/handlers.go` | All handler implementations: `onBeforePlan`, `onAfterPlan`, `onBeforeApply`, `onAfterApply` + sub-handlers |
 | `pkg/hooks/hooks.go` | Calls `RunCIHooks()` which delegates to `ci.Execute()` |
-
-### Future Refactoring (Not Started)
-
-| File | Planned Changes |
-|------|---------|
-| `pkg/ci/executor.go` | Refactor from action dispatcher to thin coordinator; move action logic into plugins |
-| `pkg/ci/internal/plugin/types.go` | Update Plugin interface: remove passive data methods, add callback-based HookAction type |
-| `pkg/ci/plugins/terraform/plugin.go` | Implement hook callbacks (OnAfterPlan, OnBeforeApply, etc.) |
