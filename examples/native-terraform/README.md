@@ -15,13 +15,16 @@ The example shows two migration strategies side by side:
 
 ```
 ├── atmos.yaml                        # Atmos configuration
-├── components/terraform/vpc/         # Mock VPC component (null_resource)
-├── legacy/                           # Existing .tfvars files (pre-migration)
-│   ├── dev.tfvars
-│   └── prod.tfvars
+├── components/terraform/vpc/         # Your Terraform root module
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── outputs.tf
+│   └── envs/                         # Existing .tfvars files
+│       ├── dev.tfvars
+│       └── prod.tfvars
 └── stacks/
     ├── _defaults.yaml                # Shared defaults (imported by both stacks)
-    ├── dev.yaml                      # Uses !include for legacy tfvars
+    ├── dev.yaml                      # Uses !include for existing tfvars
     └── prod.yaml                     # Fully converted to YAML
 ```
 
@@ -35,7 +38,7 @@ The dev stack uses `!include` to import existing `.tfvars` files directly:
 components:
   terraform:
     vpc:
-      vars: !include ../legacy/dev.tfvars
+      vars: !include ../components/terraform/vpc/envs/dev.tfvars
 ```
 
 This is the fastest migration path — your existing variable files keep working.

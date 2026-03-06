@@ -61,17 +61,17 @@ Each AWS account is a hard isolation boundary with its own IAM policies, billing
    │   ├── catalog
    │   │   └── vpc
    │   │       └── defaults.yaml
-   │   └── orgs                              #  Organization
-   │       └── acme                          #    "acme" Organization
+   │   └── orgs                            # Organization
+   │       └── acme                        # "acme" Organization
    │           ├── _defaults.yaml
-   │           └── plat                      #      "plat" OU
+   │           └── plat                    # "plat" OU
    │               ├── _defaults.yaml
-   │               ├── dev                   #        "dev" Account
+   │               ├── dev                 # "dev" Account
    │               │   ├── _defaults.yaml
-   │               │   └── us-east-1.yaml    #          us-east-1 Region
-   │               └── prod                  #        "prod" Account
+   │               │   └── us-east-1.yaml  # us-east-1 Region
+   │               └── prod                # "prod" Account
    │                   ├── _defaults.yaml
-   │                   └── us-east-1.yaml    #          us-east-1 Region
+   │                   └── us-east-1.yaml  # us-east-1 Region
    └── components
        └── terraform
            └── vpc
@@ -171,15 +171,15 @@ Each Azure subscription is the primary boundary for billing, access control, and
    │   ├── catalog
    │   │   └── vnet
    │   │       └── defaults.yaml
-   │   └── management-groups                 #  Management Group
-   │       └── acme                          #    "acme" Management Group
+   │   └── management-groups        # Management Group
+   │       └── acme                 # "acme" Management Group
    │           ├── _defaults.yaml
-   │           ├── dev                       #      "dev" Subscription
+   │           ├── dev              # "dev" Subscription
    │           │   ├── _defaults.yaml
-   │           │   └── eastus.yaml           #        eastus Location
-   │           └── prod                      #      "prod" Subscription
+   │           │   └── eastus.yaml  # eastus Location
+   │           └── prod             # "prod" Subscription
    │               ├── _defaults.yaml
-   │               └── eastus.yaml           #        eastus Location
+   │               └── eastus.yaml  # eastus Location
    └── components
        └── terraform
            └── vnet
@@ -203,7 +203,7 @@ stacks:
     - "management-groups/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_template: "{{.vars.stage}}-{{.vars.environment}}"
+  name_template: "{{.vars.subscription}}-{{.vars.location}}"
 ```
 </File>
 
@@ -212,7 +212,7 @@ stacks:
 <File title="stacks/management-groups/acme/_defaults.yaml">
 ```yaml
 vars:
-  namespace: acme
+  management_group: acme
 ```
 </File>
 
@@ -222,7 +222,7 @@ import:
   - management-groups/acme/_defaults
 
 vars:
-  stage: dev
+  subscription: dev
   subscription_id: "87654321-4321-4321-4321-210987654321"
 ```
 </File>
@@ -237,7 +237,7 @@ import:
 
 vars:
   location: eastus
-  environment: eastus
+  resource_group: acme-dev-eastus
 
 components:
   terraform:
@@ -254,6 +254,10 @@ components:
               - "10.10.2.0/24"
 ```
 </File>
+
+:::tip
+Any vars referenced in `name_template` (like `subscription` and `location`) must be defined as Terraform variables in your components, or Terraform will show a warning about unused variables. If you prefer not to use `name_template`, you can set an explicit [`name`](/stacks/name) in each stack file instead.
+:::
 
 ### Provision
 
@@ -275,17 +279,17 @@ Each GCP project is an isolation boundary with its own IAM bindings, billing acc
    │   ├── catalog
    │   │   └── network
    │   │       └── defaults.yaml
-   │   └── orgs                              #  Organization
-   │       └── acme                          #    "acme" Organization
+   │   └── orgs                                # Organization
+   │       └── acme                            # "acme" Organization
    │           ├── _defaults.yaml
-   │           └── plat                      #      "plat" Folder
+   │           └── plat                        # "plat" Folder
    │               ├── _defaults.yaml
-   │               ├── dev                   #        "dev" Project
+   │               ├── dev                     # "dev" Project
    │               │   ├── _defaults.yaml
-   │               │   └── us-central1.yaml  #          us-central1 Region
-   │               └── prod                  #        "prod" Project
+   │               │   └── us-central1.yaml    # us-central1 Region
+   │               └── prod                    # "prod" Project
    │                   ├── _defaults.yaml
-   │                   └── us-central1.yaml  #          us-central1 Region
+   │                   └── us-central1.yaml    # us-central1 Region
    └── components
        └── terraform
            └── network
@@ -305,7 +309,7 @@ stacks:
     - "orgs/**/*"
   excluded_paths:
     - "**/_defaults.yaml"
-  name_template: "{{.vars.stage}}-{{.vars.environment}}"
+  name_template: "{{.vars.project}}-{{.vars.region}}"
 ```
 </File>
 
@@ -314,7 +318,7 @@ stacks:
 <File title="stacks/orgs/acme/_defaults.yaml">
 ```yaml
 vars:
-  namespace: acme
+  organization: acme
 ```
 </File>
 
@@ -324,7 +328,7 @@ import:
   - orgs/acme/_defaults
 
 vars:
-  tenant: plat
+  folder: plat
 ```
 </File>
 
@@ -334,7 +338,7 @@ import:
   - orgs/acme/plat/_defaults
 
 vars:
-  stage: dev
+  project: dev
   project_id: "acme-dev-123456"
 ```
 </File>
@@ -349,7 +353,6 @@ import:
 
 vars:
   region: us-central1
-  environment: usc1
 
 components:
   terraform:
@@ -366,10 +369,14 @@ components:
 ```
 </File>
 
+:::tip
+Any vars referenced in `name_template` (like `project` and `region`) must be defined as Terraform variables in your components, or Terraform will show a warning about unused variables. If you prefer not to use `name_template`, you can set an explicit [`name`](/stacks/name) in each stack file instead.
+:::
+
 ### Provision
 
 ```shell
-atmos terraform apply network -s dev-usc1
+atmos terraform apply network -s dev-us-central1
 ```
 
   </TabItem>
