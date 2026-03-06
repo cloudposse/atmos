@@ -87,8 +87,8 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("error status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			Name:       "atmos/plan: plat-ue2-dev/vpc",
-			Status:     provider.CheckRunStateError,
+			Name:   "atmos/plan: plat-ue2-dev/vpc",
+			Status: provider.CheckRunStateError,
 		}
 
 		checkRun, err := p.UpdateCheckRun(ctx, opts)
@@ -98,8 +98,8 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("cancelled status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			Name:       "atmos/plan: plat-ue2-dev/vpc",
-			Status:     provider.CheckRunStateCancelled,
+			Name:   "atmos/plan: plat-ue2-dev/vpc",
+			Status: provider.CheckRunStateCancelled,
 		}
 
 		checkRun, err := p.UpdateCheckRun(ctx, opts)
@@ -109,8 +109,8 @@ func TestUpdateCheckRun(t *testing.T) {
 
 	t.Run("in progress status", func(t *testing.T) {
 		opts := &provider.UpdateCheckRunOptions{
-			Name:       "atmos/plan: plat-ue2-dev/vpc",
-			Status:     provider.CheckRunStateInProgress,
+			Name:   "atmos/plan: plat-ue2-dev/vpc",
+			Status: provider.CheckRunStateInProgress,
 		}
 
 		checkRun, err := p.UpdateCheckRun(ctx, opts)

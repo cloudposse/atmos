@@ -131,7 +131,6 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Build query from component, stack, and SHA.
 	query := buildQuery(opts.Component, opts.Stack, resolved.SHA)
 
-
 	// List planfiles.
 	ctx := context.Background()
 	files, err := store.List(ctx, query)

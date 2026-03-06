@@ -52,18 +52,20 @@ func newMockProvider() *mockProvider {
 	}
 }
 
-func (m *mockProvider) Name() string                                 { return "test" }
-func (m *mockProvider) Detect() bool                                 { return true }
-func (m *mockProvider) Context() (*provider.Context, error)          { return &provider.Context{}, nil }
-func (m *mockProvider) OutputWriter() provider.OutputWriter           { return m.writer }
+func (m *mockProvider) Name() string                        { return "test" }
+func (m *mockProvider) Detect() bool                        { return true }
+func (m *mockProvider) Context() (*provider.Context, error) { return &provider.Context{}, nil }
+func (m *mockProvider) OutputWriter() provider.OutputWriter { return m.writer }
 func (m *mockProvider) GetStatus(_ context.Context, _ provider.StatusOptions) (*provider.Status, error) {
 	return &provider.Status{}, nil
 }
+
 func (m *mockProvider) CreateCheckRun(_ context.Context, opts *provider.CreateCheckRunOptions) (*provider.CheckRun, error) {
 	m.checkRunCalls = append(m.checkRunCalls, opts)
 	m.nextID++
 	return &provider.CheckRun{ID: m.nextID, Name: opts.Name, Status: opts.Status}, nil
 }
+
 func (m *mockProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	m.updateRunCalls = append(m.updateRunCalls, opts)
 	m.nextID++
@@ -269,9 +271,9 @@ func TestOnBeforePlan_CheckDisabled(t *testing.T) {
 	mp := newMockProvider()
 
 	ctx := &plugin.HookContext{
-		Config:        &schema.AtmosConfiguration{}, // Checks disabled by default.
-		Provider:      mp,
-		Command:       "plan",
+		Config:   &schema.AtmosConfiguration{}, // Checks disabled by default.
+		Provider: mp,
+		Command:  "plan",
 
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -327,8 +329,8 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(true)},
 			},
 		},
-		Provider:      mp,
-		Command:       "apply",
+		Provider: mp,
+		Command:  "apply",
 
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -358,8 +360,8 @@ func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
 				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
 			},
 		},
-		Provider:      mp,
-		Command:       "apply",
+		Provider: mp,
+		Command:  "apply",
 
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -388,8 +390,8 @@ func TestOnAfterPlan_AllDisabled_NoPlanfile(t *testing.T) {
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
 			},
 		},
-		Provider:      mp,
-		Command:       "plan",
+		Provider: mp,
+		Command:  "plan",
 
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -424,8 +426,8 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(false)},
 			},
 		},
-		Provider:      mp,
-		Command:       "plan",
+		Provider: mp,
+		Command:  "plan",
 
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "prod",

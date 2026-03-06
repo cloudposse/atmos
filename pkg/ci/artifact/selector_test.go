@@ -29,13 +29,14 @@ func (s *testBackend) Name() string { return s.name }
 func (s *testBackend) Upload(_ context.Context, _ string, _ io.Reader, _ int64, _ *Metadata) error {
 	return nil
 }
+
 func (s *testBackend) Download(_ context.Context, _ string) (io.ReadCloser, *Metadata, error) {
 	return nil, nil, nil
 }
-func (s *testBackend) Delete(_ context.Context, _ string) error                     { return nil }
-func (s *testBackend) List(_ context.Context, _ Query) ([]ArtifactInfo, error)      { return nil, nil }
-func (s *testBackend) Exists(_ context.Context, _ string) (bool, error)             { return false, nil }
-func (s *testBackend) GetMetadata(_ context.Context, _ string) (*Metadata, error)   { return nil, nil }
+func (s *testBackend) Delete(_ context.Context, _ string) error                   { return nil }
+func (s *testBackend) List(_ context.Context, _ Query) ([]ArtifactInfo, error)    { return nil, nil }
+func (s *testBackend) Exists(_ context.Context, _ string) (bool, error)           { return false, nil }
+func (s *testBackend) GetMetadata(_ context.Context, _ string) (*Metadata, error) { return nil, nil }
 
 func setupTestRegistry(t *testing.T, storeNames ...string) func() {
 	t.Helper()

@@ -14,16 +14,16 @@ func TestMetadataJSONRoundTrip(t *testing.T) {
 	expires := now.Add(24 * time.Hour)
 
 	original := &Metadata{
-		Stack:            "plat-ue2-dev",
-		Component:        "vpc",
-		SHA:              "abc123def456",
-		BaseSHA:          "000111222333",
-		Branch:           "feature/test",
-		PRNumber:         42,
-		RunID:            "run-123",
-		Repository:       "cloudposse/atmos",
-		CreatedAt:        now,
-		ExpiresAt:        &expires,
+		Stack:        "plat-ue2-dev",
+		Component:    "vpc",
+		SHA:          "abc123def456",
+		BaseSHA:      "000111222333",
+		Branch:       "feature/test",
+		PRNumber:     42,
+		RunID:        "run-123",
+		Repository:   "cloudposse/atmos",
+		CreatedAt:    now,
+		ExpiresAt:    &expires,
 		SHA256:       "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
 		AtmosVersion: "1.100.0",
 		Custom: map[string]string{

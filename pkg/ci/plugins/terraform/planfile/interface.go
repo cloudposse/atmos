@@ -12,10 +12,12 @@ import (
 )
 
 // Type aliases to align planfile types with artifact types.
-type FileEntry = artifact.FileEntry
-type FileResult = artifact.FileResult
-type Query = artifact.Query
-type StoreOptions = artifact.StoreOptions
+type (
+	FileEntry    = artifact.FileEntry
+	FileResult   = artifact.FileResult
+	Query        = artifact.Query
+	StoreOptions = artifact.StoreOptions
+)
 
 const (
 	// PlanFilename is the well-known name for the plan file within a bundle.

@@ -30,13 +30,13 @@ func TestRenderPlanfileList(t *testing.T) {
 			Key:          "stack1/component1/sha1.tfplan",
 			Size:         1024,
 			LastModified: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{},
+			Metadata:     &planfile.Metadata{},
 		},
 		{
 			Key:          "stack2/component2/sha2.tfplan",
 			Size:         2048,
 			LastModified: time.Date(2024, 1, 16, 11, 45, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{},
+			Metadata:     &planfile.Metadata{},
 		},
 	}
 

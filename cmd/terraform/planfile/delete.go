@@ -158,7 +158,7 @@ func runDelete(cmd *cobra.Command, args []string) error {
 func confirmDeletion() bool {
 	defer perf.Track(nil, "planfile.confirmDeletion")()
 
-	ui.Writeln("") //nolint:errcheck // Best-effort UI output.
+	ui.Writeln("")                                                        //nolint:errcheck // Best-effort UI output.
 	ui.Writeln("Are you sure you want to delete these planfiles? [y/N] ") //nolint:errcheck // Best-effort UI output.
 
 	reader := bufio.NewReader(os.Stdin)

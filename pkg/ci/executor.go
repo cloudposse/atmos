@@ -6,8 +6,8 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local" // Register local artifact store.
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3" // Register s3 artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local"  // Register local artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3"     // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
@@ -146,15 +146,15 @@ func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.H
 	loader := templates.NewLoader(opts.AtmosConfig)
 
 	return &plugin.HookContext{
-		Event:        opts.Event,
-		Command:      command,
-		EventPrefix:  eventPrefix,
-		Config:       opts.AtmosConfig,
-		Info:         opts.Info,
-		Output:       opts.Output,
-		CommandError: opts.CommandError,
-		Provider:     platform,
-		CICtx:        ciCtx,
+		Event:          opts.Event,
+		Command:        command,
+		EventPrefix:    eventPrefix,
+		Config:         opts.AtmosConfig,
+		Info:           opts.Info,
+		Output:         opts.Output,
+		CommandError:   opts.CommandError,
+		Provider:       platform,
+		CICtx:          ciCtx,
 		TemplateLoader: loader,
 		CreatePlanfileStore: func() (any, error) {
 			return createPlanfileStore(opts)
