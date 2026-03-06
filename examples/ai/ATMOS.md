@@ -1,4 +1,4 @@
-# Project Memory
+# Project Instructions
 
 This file provides persistent context to the Atmos AI Assistant about this project.
 

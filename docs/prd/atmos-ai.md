@@ -23,7 +23,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **Project Memory** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 15+ tools with granular permission system
 - **Permission Cache** - Persistent permission decisions with 80%+ prompt reduction
-- **Agent System** - 5 built-in specialized agents + marketplace infrastructure
+- **Skill System** - 21 marketplace skills + built-in skills
 - **MCP Integration** - stdio/HTTP transports for external clients
 - **LSP Integration** - YAML/Terraform validation with real-time diagnostics
 - **Enhanced TUI** - Markdown rendering, syntax highlighting, session management
@@ -46,7 +46,7 @@ Atmos AI aims to be the intelligent partner for infrastructure engineers, provid
 2. **Productivity** - Reduce time spent on repetitive tasks and documentation lookup
 3. **Safety** - Prevent accidental destructive operations through permission controls
 4. **Privacy** - Support on-premises and air-gapped deployments
-5. **Extensibility** - Enable community contributions through agent marketplace
+5. **Extensibility** - Enable community contributions through skill marketplace
 6. **Enterprise Ready** - Meet compliance and security requirements for large organizations
 
 ### Competitive Differentiation
@@ -90,7 +90,7 @@ Compared to industry-leading AI systems:
 │  ├──────────────────────────────────────────────────────────┤  │
 │  │ • Multi-Provider Factory                                │  │
 │  │ • Session Manager                                       │  │
-│  │ • Agent Registry                                        │  │
+│  │ • Skill Registry                                        │  │
 │  │ • Tool Executor                                         │  │
 │  │ • Permission System                                     │  │
 │  └─────────────────────────┬────────────────────────────────┘  │
@@ -114,11 +114,9 @@ pkg/ai/
 │   ├── base/              # Shared provider utilities
 │   │   ├── config.go      # Shared Config struct and extraction
 │   │   ├── messages.go    # Message conversion utilities
+│   │   ├── tools.go       # Tool conversion utilities
 │   │   └── openaicompat/  # OpenAI-compatible API utilities
-│   │       ├── tools.go   # Tool conversion (OpenAI format)
-│   │       ├── messages.go # Message conversion
-│   │       ├── response.go # Response parsing
-│   │       └── tokens.go  # Token limit handling
+│   │       └── convert.go # Format conversion (tools, messages, responses)
 │   ├── anthropic/         # Claude via Anthropic API
 │   ├── openai/            # GPT via OpenAI API
 │   ├── gemini/            # Gemini via Google AI
@@ -128,45 +126,67 @@ pkg/ai/
 │   └── azureopenai/       # GPT via Azure OpenAI (OpenAI-compatible)
 ├── registry/              # Provider registration system
 │   └── registry.go        # Client interface and factory registry
-├── agents/                # Agent system
-│   ├── agent.go           # Agent interface
-│   ├── registry.go        # Agent registry
-│   ├── builtin.go         # Built-in agents
-│   ├── prompts/           # Embedded prompts
-│   └── marketplace/       # Agent marketplace
+├── skills/                # Skill system (formerly "agents")
+│   ├── skill.go           # Skill interface
+│   ├── registry.go        # Skill registry
+│   ├── loader.go          # Skill loader
+│   └── marketplace/       # Skill marketplace
 ├── session/               # Session management
 │   ├── manager.go         # Session lifecycle
-│   ├── storage/           # SQLite storage
-│   └── compactor.go       # Auto-compact
-├── memory/                # Project memory
-│   ├── manager.go         # ATMOS.md management
-│   └── parser.go          # Markdown parser
+│   ├── sqlite.go          # SQLite storage
+│   ├── compactor.go       # Auto-compact
+│   ├── checkpoint.go      # Export/import data structures
+│   ├── export.go          # Session export
+│   ├── import.go          # Session import
+│   └── storage.go         # Storage interface
+├── instructions/          # Project instructions (ATMOS.md)
+│   ├── instructions.go    # Instruction loading
+│   ├── parser.go          # Markdown parser
+│   └── types.go           # Type definitions
+├── context/               # Automatic context discovery
+│   └── discovery.go       # File discovery with glob/gitignore
 ├── tools/                 # Tool execution
-│   ├── interface.go       # Tool interface
-│   ├── executor.go        # Tool executor
+│   ├── types.go           # Tool interface
+│   ├── executor.go        # Tool executor (in executor/)
 │   ├── registry.go        # Tool registry
 │   ├── permission/        # Permission system
 │   └── atmos/             # Atmos-specific tools
+├── executor/              # AI execution engine
+│   └── executor.go        # Core AI execution logic
+├── formatter/             # Output formatting
+│   ├── formatter.go       # Format dispatcher
+│   ├── json.go            # JSON output
+│   ├── markdown.go        # Markdown output
+│   └── text.go            # Text output
 ├── tui/                   # Terminal UI
 │   ├── chat.go            # Chat interface
 │   ├── sessions.go        # Session management UI
-│   └── create_session.go  # Session creation
-├── mcp/                   # Model Context Protocol
-│   ├── server.go          # MCP server
-│   ├── stdio_transport.go # stdio transport
-│   └── http_transport.go  # HTTP transport
-├── lsp/                   # Language Server Protocol
-│   ├── client.go          # LSP client
-│   ├── manager.go         # Multi-server management
-│   └── diagnostics.go     # Diagnostic formatting
+│   ├── create_session.go  # Session creation
+│   └── keys.go            # Keyboard shortcuts
+├── types/                 # Shared types
+│   ├── message.go         # Message types
+│   └── response.go        # Response types
+├── client.go              # AI client interface
 └── factory.go             # Provider factory
 
-cmd/
-├── ai_chat.go             # Interactive chat command
-├── ai_ask.go              # Single-shot query command
-├── ai_memory.go           # Memory management commands
-├── ai_sessions.go         # Session management commands
-└── mcp_server.go          # MCP server command
+pkg/mcp/                   # Model Context Protocol (separate from pkg/ai/)
+├── server.go              # MCP server (uses official MCP SDK)
+└── adapter.go             # Converts Atmos tools to MCP format
+
+cmd/ai/                    # CLI commands (note: cmd/ai/, not cmd/)
+├── ai.go                  # Root AI command
+├── chat.go                # Interactive chat command
+├── ask.go                 # Single-shot query command
+├── exec.go                # Non-interactive execution command
+├── sessions.go            # Session management commands
+├── skill.go               # Skill management commands
+├── help.go                # AI help command
+├── init.go                # AI initialization
+└── providers.go           # Provider listing
+
+cmd/mcp/                   # MCP commands (separate from cmd/ai/)
+├── mcp.go                 # Root MCP command
+└── start.go               # MCP server start command
 ```
 
 ### Provider Architecture
@@ -280,7 +300,7 @@ settings:
         preserve_recent: 10
         use_ai_summary: true
         summary_provider: anthropic
-        summary_model: claude-3-5-haiku-20241022
+        summary_model: claude-haiku-4-5-20251001
 ```
 
 #### Auto-Compact Feature
@@ -303,7 +323,7 @@ Intelligent conversation history compaction enables extended multi-day conversat
 - `preserve_recent` - Number of recent messages to always keep (default: 10)
 - `use_ai_summary` - Use AI for summarization vs simple truncation (default: true)
 - `summary_provider` - AI provider for summaries (default: anthropic)
-- `summary_model` - Model for summaries (default: claude-3-5-haiku-20241022)
+- `summary_model` - Model for summaries (default: claude-haiku-4-5-20251001)
 
 **Benefits:**
 - Extended conversations without context loss
@@ -404,28 +424,14 @@ All network stacks inherit from:
 
 #### Configuration
 
-```yaml
-settings:
-  ai:
-    memory:
-      enabled: true
-      file_path: ATMOS.md
-      auto_update: false
-      create_if_missing: true
-      sections:
-        - project_context
-        - common_commands
-        - stack_patterns
-        - frequent_issues
-        - infrastructure_patterns
-```
+ATMOS.md is auto-detected from the project root (next to `atmos.yaml`) with no configuration needed. Simply create an `ATMOS.md` file in your project root and it will be automatically included in AI prompts.
 
 #### Technical Implementation
 
-- **Location**: `pkg/ai/memory/`
-- **Parser**: `pkg/ai/memory/parser.go`
-- **Template**: `templates/atmos_md.tmpl`
-- **CLI Commands**: `atmos ai memory init/view/edit/update`
+- **Location**: `pkg/ai/instructions/`
+- **Parser**: `pkg/ai/instructions/parser.go`
+- **Types**: `pkg/ai/instructions/types.go`
+- **Usage**: Place `ATMOS.md` in project root (next to `atmos.yaml`); edit with any text editor
 
 ---
 
@@ -688,15 +694,15 @@ All tests passing with 100% coverage: `pkg/ai/tools/permission/cache_test.go`
 
 ---
 
-### 4. Agent System
+### 4. Skill System
 
-**Status:** ✅ Production Ready (Built-in Agents); Marketplace Infrastructure Ready (Community Agents Coming Soon)
+**Status:** ✅ Production Ready (Built-in Skills and Skill Marketplace)
 
 #### Overview
 
-Specialized AI agents provide task-specific expertise and focused tool access, improving response quality for specific operations.
+Specialized AI skills provide task-specific expertise and focused tool access, improving response quality for specific operations.
 
-#### Built-in Agents
+#### Built-in Skills
 
 1. **General (Default)**
    - Purpose: General-purpose assistant
@@ -725,9 +731,9 @@ Specialized AI agents provide task-specific expertise and focused tool access, i
 
 #### User Experience
 
-**TUI Agent Selection:**
+**TUI Skill Selection:**
 ```text
-Press Ctrl+A to select agent:
+Press Ctrl+A to select skill:
 
 1. General (default)
 2. Stack Analyzer
@@ -735,56 +741,55 @@ Press Ctrl+A to select agent:
 4. Security Auditor
 5. Config Validator
 
-Select agent (1-5): _
+Select skill (1-5): _
 ```
 
-**CLI Agent Selection:**
+**CLI Skill Selection:**
 ```bash
-atmos ai ask --agent stack-analyzer "Analyze all prod stacks"
+atmos ai ask --skill stack-analyzer "Analyze all prod stacks"
 ```
 
-#### Agent Architecture
+#### Skill Architecture
 
 **File-Based Prompts:**
-- Each agent has a dedicated Markdown file in `pkg/ai/agents/prompts/`
+- Each skill has a dedicated `SKILL.md` file
 - Prompts embedded in binary at compile time using `go:embed`
-- ~6KB per agent, loaded only when active
+- ~6KB per skill, loaded only when active
 - Easy to maintain and version control
 
-**Agent Structure:**
+**Skill Structure:**
 ```go
-type Agent struct {
+type Skill struct {
     Name            string
     DisplayName     string
     Description     string
     SystemPrompt    string      // Loaded from prompt file
     SystemPromptPath string     // Path to embedded prompt
-    AllowedTools    []string    // Tools this agent can use
+    AllowedTools    []string    // Tools this skill can use
     RestrictedTools []string    // Tools requiring extra confirmation
     Category        string
     IsBuiltIn       bool
 }
 ```
 
-#### Agent Marketplace
+#### Skill Marketplace
 
-**Status:** 📋 Planned (Coming Soon)
+**Status:** ✅ Production Ready
 
-**Agent Distribution (Planned):**
-- Agents distributed via GitHub repositories
-- Install with: `atmos ai agent install github.com/user/agent-name`
+**Skill Distribution:**
+- Skills distributed via GitHub repositories
+- Install with: `atmos ai skill install github.com/user/skill-name`
 - Versioned using Git tags (semantic versioning)
-- Stored in `~/.atmos/agents/`
+- Stored in `~/.atmos/skills/`
 
-**Agent Format:**
+**Skill Format:**
 ```text
-agent-repo/
-├── .agent.yaml        # Agent metadata
-├── prompt.md          # System prompt
+skill-repo/
+├── SKILL.md           # Skill definition and prompt
 └── README.md          # Documentation
 ```
 
-**Example `.agent.yaml`:**
+**Example `SKILL.md`:**
 ```yaml
 name: cost-analyzer
 display_name: Cost Analyzer
@@ -796,9 +801,6 @@ category: optimization
 atmos:
   min_version: 1.50.0
 
-prompt:
-  file: prompt.md
-
 tools:
   allowed:
     - describe_stacks
@@ -806,33 +808,32 @@ tools:
   restricted:
     - terraform_apply
 
-repository: https://github.com/username/agent-repo
+repository: https://github.com/username/skill-repo
 ```
 
 **Commands:**
 ```bash
-# Install agent
-atmos ai agent install github.com/user/agent-name
-atmos ai agent install github.com/user/agent-name@v1.2.3
+# Install skill
+atmos ai skill install github.com/user/skill-name
+atmos ai skill install github.com/user/skill-name@v1.2.3
 
-# Manage agents
-atmos ai agent list
-atmos ai agent update <name>
-atmos ai agent uninstall <name>
-atmos ai agent info <name>
+# Manage skills
+atmos ai skill list
+atmos ai skill update <name>
+atmos ai skill uninstall <name>
+atmos ai skill info <name>
 
-# Search agents
-atmos ai agent search "cost"
+# Search skills
+atmos ai skill search "cost"
 ```
 
 #### Technical Implementation
 
-- **Location**: `pkg/ai/agents/`
-- **Registry**: `pkg/ai/agents/registry.go`
-- **Prompts**: `pkg/ai/agents/prompts/` (embedded)
-- **TUI**: `pkg/ai/tui/chat.go` (agent switcher)
-- **Marketplace**: `pkg/ai/agents/marketplace/`
-- **CLI**: `cmd/ai/agent/` (install, list, uninstall commands)
+- **Location**: `pkg/ai/skills/`
+- **Registry**: `pkg/ai/skills/registry.go`
+- **TUI**: `pkg/ai/tui/chat.go` (skill switcher)
+- **Marketplace**: `pkg/ai/skills/marketplace/`
+- **CLI**: `cmd/ai/skill.go` (install, list, uninstall commands)
 
 ---
 
@@ -1051,8 +1052,8 @@ Atmos AI supports 7 AI providers, covering cloud, on-premises, and enterprise us
 
 **Models:**
 - `claude-sonnet-4-5-20250929` (default) - Most capable
-- `claude-3-5-haiku-20241022` - Fast and cost-effective
-- `claude-3-opus-20240229` - Maximum intelligence
+- `claude-haiku-4-5-20251001` - Fast and cost-effective
+- `claude-opus-4-1-20250805` - Maximum intelligence
 
 **Configuration:**
 ```yaml
@@ -1155,8 +1156,8 @@ atmos ai chat
 
 **Models:**
 - `anthropic.claude-sonnet-4-5-20250929-v1:0` (default)
-- `anthropic.claude-3-haiku-20240307-v1:0`
-- `anthropic.claude-3-opus-20240229-v1:0`
+- `anthropic.claude-haiku-4-5-20251001-v1:0`
+- `anthropic.claude-opus-4-1-20250805-v1:0`
 
 **Configuration:**
 ```yaml
@@ -1330,7 +1331,7 @@ settings:
 
 3. **Context Control** - User controls what AI sees
    - Explicit permission for file access
-   - `.atmosignore` for sensitive files
+   - `.gitignore` for sensitive files
    - Configurable context limits
 
 ### Compliance & Enterprise
@@ -1354,7 +1355,7 @@ settings:
 **Audit Trail:**
 - All tool executions logged
 - Session activity tracked
-- Agent selection recorded
+- Skill selection recorded
 - Timestamps and user context
 
 #### Security Best Practices
@@ -1392,7 +1393,7 @@ settings:
 2. Enable audit logging
 3. Configure tool restrictions
 4. Use YOLO mode only in dev environments
-5. Review `.atmosignore` for sensitive files
+5. Review `.gitignore` for sensitive files
 
 ---
 
@@ -1406,12 +1407,12 @@ settings:
 
 - **Session Management** - Visual session list with CRUD operations
 - **Provider Switching** - Switch AI provider mid-conversation (Ctrl+P)
-- **Agent Selection** - Choose specialized agents (Ctrl+A)
+- **Skill Selection** - Choose specialized skills (Ctrl+A)
 - **Markdown Rendering** - Rich formatting with Glamour
 - **Syntax Highlighting** - Code blocks with Chroma
 - **History Navigation** - ↑/↓ arrows for previous messages
-- **Multi-line Input** - Shift+Enter for new lines
-- **Status Line** - Current session, provider, agent displayed
+- **Multi-line Input** - Ctrl+J for new lines (Shift+Enter alternative)
+- **Status Line** - Current session, provider, skill displayed
 
 #### Keyboard Shortcuts
 
@@ -1419,10 +1420,10 @@ settings:
 Ctrl+N      Create new session
 Ctrl+L      Switch session
 Ctrl+P      Switch provider
-Ctrl+A      Switch agent
+Ctrl+A      Switch skill
 Ctrl+C/Q    Quit
 ↑/↓         Navigate history
-Shift+Enter Multi-line input
+Ctrl+J      Multi-line input (Shift+Enter alternative)
 d           Delete session (in session list)
 r           Rename session (in session list)
 f           Filter by provider (in session list)
@@ -1452,7 +1453,7 @@ f           Filter by provider (in session list)
 
 ```text
 ┌─ Atmos AI Chat ────────────────────────────────────────────┐
-│ Session: vpc-migration | Provider: Claude | Agent: General │
+│ Session: vpc-migration | Provider: Claude | Skill: General │
 ├────────────────────────────────────────────────────────────┤
 │                                                            │
 │ You: What's the VPC CIDR for prod?                         │
@@ -1462,7 +1463,7 @@ f           Filter by provider (in session list)
 │ You: ▊                                                     │
 │                                                            │
 ├────────────────────────────────────────────────────────────┤
-│ Ctrl+P: Provider | Ctrl+A: Agent | Ctrl+N: New Session     │
+│ Ctrl+P: Provider | Ctrl+A: Skill | Ctrl+N: New Session     │
 │ Ctrl+C: Quit                                               │
 └────────────────────────────────────────────────────────────┘
 ```
@@ -1481,8 +1482,8 @@ atmos ai chat --session vpc-migration
 # Use specific provider
 atmos ai chat --provider ollama
 
-# Use specific agent
-atmos ai chat --agent stack-analyzer
+# Use specific skill
+atmos ai chat --skill stack-analyzer
 ```
 
 #### Single-Shot Queries
@@ -1494,8 +1495,8 @@ atmos ai ask "What is Atmos?"
 # With specific provider
 atmos ai ask --provider bedrock "List all stacks"
 
-# With specific agent
-atmos ai ask --agent security-auditor "Audit prod VPC security"
+# With specific skill
+atmos ai ask --skill security-auditor "Audit prod VPC security"
 ```
 
 #### Session Management
@@ -1509,22 +1510,6 @@ atmos ai sessions delete vpc-migration
 
 # Clean old sessions
 atmos ai sessions clean --older-than 30d
-```
-
-#### Memory Management
-
-```bash
-# Initialize project memory
-atmos ai memory init
-
-# View current memory
-atmos ai memory view
-
-# Edit memory in $EDITOR
-atmos ai memory edit
-
-# Update specific section
-atmos ai memory update --section project_context
 ```
 
 #### MCP Server
@@ -1596,17 +1581,7 @@ settings:
       retention_days: 30
       max_history_messages: 50
 
-    # Project memory
-    memory:
-      enabled: true
-      file_path: ATMOS.md
-      auto_update: false
-      create_if_missing: true
-      sections:
-        - project_context
-        - common_commands
-        - stack_patterns
-        - frequent_issues
+    # Project instructions (ATMOS.md auto-detected from project root)
 
     # Tool execution
     tools:
@@ -1634,8 +1609,8 @@ settings:
         path: .atmos/ai-audit.log
         retention_days: 90
 
-    # Agents (custom agents can be added)
-    default_agent: general
+    # Skills (custom skills can be added)
+    default_skill: general
 
     # MCP server
     mcp:
@@ -1990,16 +1965,16 @@ atmos ai exec "General question" --no-auto-context
 
 ### Phase 3: Future Enhancements (6+ months)
 
-**Advanced Agent Features:**
-- Agent analytics and metrics
-- Agent dependency resolution
-- Agent composition and workflows
-- Private agent registries
+**Advanced Skill Features:**
+- Skill analytics and metrics
+- Skill dependency resolution
+- Skill composition and workflows
+- Private skill registries
 
 **Enhanced Analytics:**
 - Token usage tracking
 - Cost analysis per session
-- Agent performance metrics
+- Skill performance metrics
 - Tool usage statistics
 
 **Advanced LSP:**
@@ -2008,18 +1983,18 @@ atmos ai exec "General question" --no-auto-context
 - Auto-fix suggestions
 - Integration with IDE plugins
 
-**Multi-Agent Workflows:**
-- Agent delegation
-- Parallel agent execution
-- Agent collaboration
+**Multi-Skill Workflows:**
+- Skill delegation
+- Parallel skill execution
+- Skill collaboration
 - Task decomposition
 
 ### Phase 4: Enterprise Features (12+ months)
 
-**Private Agent Registries:**
-- Company-specific agents
+**Private Skill Registries:**
+- Company-specific skills
 - Access control and permissions
-- Internal agent marketplace
+- Internal skill marketplace
 
 **Team Collaboration:**
 - Shared sessions across team
@@ -2027,7 +2002,7 @@ atmos ai exec "General question" --no-auto-context
 - Collaborative editing
 
 **Advanced Security:**
-- Agent sandboxing
+- Skill sandboxing
 - Runtime permission requests
 - Security scanning
 - GPG signature verification
@@ -2045,7 +2020,7 @@ atmos ai exec "General question" --no-auto-context
 ### Design Principles
 
 1. **Interface-Driven Design** - All major components use interfaces for testability
-2. **Registry Pattern** - Extensible registration for commands, tools, agents, providers
+2. **Registry Pattern** - Extensible registration for commands, tools, skills, providers
 3. **Options Pattern** - Avoid parameter drilling with functional options
 4. **Context Usage** - Context only for cancellation, deadlines, request-scoped values
 5. **Package Organization** - Purpose-built packages, avoid utils bloat
@@ -2081,7 +2056,7 @@ atmos ai exec "General question" --no-auto-context
 - **Active Users** - Monthly active users of AI features
 - **Session Count** - Number of AI sessions created
 - **Tool Executions** - Number of tool invocations
-- **Agent Usage** - Distribution of agent usage
+- **Skill Usage** - Distribution of skill usage
 
 ### Quality Metrics
 
@@ -2115,8 +2090,9 @@ atmos ai exec "General question" --no-auto-context
 - `configuration.mdx` - Complete configuration guide
 - `providers.mdx` - AI provider comparison and setup
 - `tools.mdx` - Tool system and permissions
-- `agents.mdx` - Agent system and marketplace
-- `memory.mdx` - Project memory (ATMOS.md)
+- `skills.mdx` - Skill system and marketplace
+- `skill-marketplace.mdx` - Skill marketplace
+- `instructions.mdx` - Project instructions (ATMOS.md)
 - `sessions.mdx` - Session management
 - `mcp-server.mdx` - MCP integration guide
 - `claude-code-integration.mdx` - IDE integration
@@ -2127,7 +2103,7 @@ atmos ai exec "General question" --no-auto-context
 - `atmos ai chat --help` - Interactive chat help
 - `atmos ai ask --help` - Single-shot query help
 - `atmos ai sessions --help` - Session management help
-- `atmos ai memory --help` - Memory management help
+- `atmos ai exec --help` - Non-interactive execution help
 
 ### Developer Documentation
 
@@ -2142,7 +2118,7 @@ atmos ai exec "General question" --no-auto-context
 **Contributing:**
 - `docs/developing-atmos-commands.md` - Command development
 - `CLAUDE.md` - Development guidelines
-- Agent development guide (future)
+- Skill development guide (future)
 
 ---
 
@@ -2161,7 +2137,7 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 
 ### Glossary
 
-- **Agent** - Specialized AI assistant with focused expertise and tool access
+- **Skill** - Specialized AI assistant with focused expertise and tool access
 - **ATMOS.md** - Project memory file for persistent context
 - **Auto-Compact** - Intelligent conversation history summarization
 - **LSP** - Language Server Protocol for real-time validation

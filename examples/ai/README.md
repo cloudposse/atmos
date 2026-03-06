@@ -73,7 +73,7 @@ atmos ai chat --session vpc-refactor
 atmos ai chat --session vpc-refactor
 
 # List all sessions
-atmos ai sessions
+atmos ai sessions list
 ```
 
 Auto-compact is enabled to intelligently summarize old messages, preserving context while managing history size.
@@ -157,7 +157,7 @@ atmos ai ask "What components are defined in the dev stack?"
 atmos ai chat --session infrastructure-review
 
 # List sessions
-atmos ai sessions
+atmos ai sessions list
 
 # Run workflow
 atmos workflow ai-demo
@@ -193,7 +193,7 @@ atmos workflow ai-demo
 | `Ctrl+L`      | List sessions      |
 | `Ctrl+C`      | Exit chat          |
 | `Enter`       | Send message       |
-| `Shift+Enter` | New line           |
+| `Ctrl+J`      | New line           |
 
 ## Learn More
 
