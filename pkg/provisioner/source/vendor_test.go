@@ -221,9 +221,16 @@ func TestMatchesPatterns(t *testing.T) {
 			expected:    false,
 		},
 		{
-			name:        "nested path match by basename",
+			name:        "single star does not match nested path",
 			relPath:     "modules/vpc/main.tf",
 			patterns:    []string{"*.tf"},
+			patternType: "included_paths",
+			expected:    false,
+		},
+		{
+			name:        "doublestar matches nested path",
+			relPath:     "modules/vpc/main.tf",
+			patterns:    []string{"**/*.tf"},
 			patternType: "included_paths",
 			expected:    true,
 		},
@@ -259,6 +266,41 @@ func TestMatchesPatterns(t *testing.T) {
 			name:        "pattern with directory component",
 			relPath:     "modules/vpc",
 			patterns:    []string{"modules/*"},
+			patternType: "excluded_paths",
+			expected:    true,
+		},
+		{
+			name:        "doublestar pattern matches root-level file",
+			relPath:     "providers.tf",
+			patterns:    []string{"**/providers.tf"},
+			patternType: "excluded_paths",
+			expected:    true,
+		},
+		{
+			name:        "doublestar pattern matches nested file",
+			relPath:     "modules/vpc/providers.tf",
+			patterns:    []string{"**/providers.tf"},
+			patternType: "excluded_paths",
+			expected:    true,
+		},
+		{
+			name:        "doublestar pattern matches deeply nested file",
+			relPath:     "a/b/c/providers.tf",
+			patterns:    []string{"**/providers.tf"},
+			patternType: "excluded_paths",
+			expected:    true,
+		},
+		{
+			name:        "doublestar wildcard matches any extension at any depth",
+			relPath:     "docs/guide.md",
+			patterns:    []string{"**/*.md"},
+			patternType: "excluded_paths",
+			expected:    true,
+		},
+		{
+			name:        "doublestar wildcard matches root-level extension",
+			relPath:     "README.md",
+			patterns:    []string{"**/*.md"},
 			patternType: "excluded_paths",
 			expected:    true,
 		},
@@ -574,6 +616,49 @@ func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
 	skip, err = skipFunc(info, "/tmp/src/main.go", "/tmp/dst/main.go")
 	assert.NoError(t, err)
 	assert.True(t, skip, "main.go should be skipped (not in included)")
+}
+
+// TestCopyToTarget_WithDoublestarExcludedPaths tests that ** patterns work for excluded_paths.
+func TestCopyToTarget_WithDoublestarExcludedPaths(t *testing.T) {
+	// Create source directory with providers.tf at multiple levels.
+	srcDir := t.TempDir()
+	err := os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(srcDir, "providers.tf"), []byte("# root providers"), 0o644)
+	require.NoError(t, err)
+
+	// Create nested directory with providers.tf.
+	modulesDir := filepath.Join(srcDir, "modules", "vpc")
+	err = os.MkdirAll(modulesDir, 0o755)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(modulesDir, "main.tf"), []byte("# vpc module"), 0o644)
+	require.NoError(t, err)
+	err = os.WriteFile(filepath.Join(modulesDir, "providers.tf"), []byte("# vpc providers"), 0o644)
+	require.NoError(t, err)
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+
+	sourceSpec := &schema.VendorComponentSource{
+		Uri:           "github.com/example/repo",
+		ExcludedPaths: []string{"**/providers.tf"},
+	}
+
+	err = copyToTarget(srcDir, targetDir, sourceSpec)
+	require.NoError(t, err)
+
+	// main.tf files should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "root main.tf should be copied")
+
+	_, err = os.Stat(filepath.Join(targetDir, "modules", "vpc", "main.tf"))
+	assert.NoError(t, err, "nested main.tf should be copied")
+
+	// providers.tf should NOT be copied at any level.
+	_, err = os.Stat(filepath.Join(targetDir, "providers.tf"))
+	assert.True(t, os.IsNotExist(err), "root providers.tf should be excluded")
+
+	_, err = os.Stat(filepath.Join(targetDir, "modules", "vpc", "providers.tf"))
+	assert.True(t, os.IsNotExist(err), "nested providers.tf should be excluded")
 }
 
 // TestCopyToTarget_WithCombinedPatterns tests copying with both include and exclude patterns.

@@ -15,6 +15,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
 const (
@@ -191,19 +192,12 @@ func createSkipFunc(srcDir string, sourceSpec *schema.VendorComponentSource) fun
 }
 
 // matchesPatterns checks if relPath matches any of the given patterns.
-// Logs warnings for invalid patterns.
+// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
+// https://en.wikipedia.org/wiki/Glob_(programming)
+// https://github.com/bmatcuk/doublestar#patterns
 func matchesPatterns(relPath string, patterns []string, patternType string) bool {
 	for _, pattern := range patterns {
-		matched, err := filepath.Match(pattern, relPath)
-		if err != nil {
-			ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
-			continue
-		}
-		if matched {
-			return true
-		}
-		// Also check just the filename.
-		matched, err = filepath.Match(pattern, filepath.Base(relPath))
+		matched, err := u.PathMatch(pattern, relPath)
 		if err != nil {
 			ui.Warningf("invalid glob pattern in %s: %q: %v", patternType, pattern, err)
 			continue
