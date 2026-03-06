@@ -861,6 +861,15 @@ var (
 	ErrDockerConfigWrite   = errors.New("failed to write Docker config")
 	ErrDockerConfigRead    = errors.New("failed to read Docker config")
 
+	// EKS integration errors.
+	ErrEKSDescribeCluster   = errors.New("failed to describe EKS cluster")
+	ErrEKSClusterNotFound   = errors.New("EKS cluster not found")
+	ErrEKSIntegrationFailed = errors.New("EKS integration failed")
+	ErrEKSTokenGeneration   = errors.New("failed to generate EKS token")
+	ErrKubeconfigPath       = errors.New("failed to determine kubeconfig path")
+	ErrKubeconfigWrite      = errors.New("failed to write kubeconfig")
+	ErrKubeconfigMerge      = errors.New("failed to merge kubeconfig")
+
 	// Identity authentication errors.
 	ErrIdentityAuthFailed      = errors.New("failed to authenticate identity")
 	ErrIdentityCredentialsNone = errors.New("credentials not available for identity")

@@ -44,7 +44,7 @@ func (m *manager) triggerIntegrations(ctx context.Context, identityName string, 
 // findIntegrationsForIdentity returns integration names that reference the given identity.
 // If autoProvisionOnly is true, only returns integrations with auto_provision enabled (defaults to true).
 func (m *manager) findIntegrationsForIdentity(identityName string, autoProvisionOnly bool) []string {
-	if m.config.Integrations == nil {
+	if m.config == nil || m.config.Integrations == nil {
 		return nil
 	}
 
