@@ -162,34 +162,16 @@ atmos ai chat --session vpc-migration
 
 ### 4. Specialized AI Agents
 
-Different tasks need different expertise. Atmos AI provides **5 built-in specialized agents**:
+Different tasks need different expertise. Atmos AI provides **21 specialized skills** you can install from the marketplace:
 
-**1. General (Default)** - Everyday infrastructure questions
-- All-purpose assistant
-- Full tool access
-- Best for learning and exploration
+```bash
+# Install all official skills with one command
+atmos ai skill install cloudposse/atmos
+```
 
-**2. Stack Analyzer** - Architecture analysis
-- Analyzes stack configurations and dependencies
-- Tools: `describe_*`, `list_*`, `read_stack_file`
-- Use case: Architecture reviews, dependency analysis
+Skills include **atmos-terraform**, **atmos-stacks**, **atmos-validation**, **atmos-components**, **atmos-config**, and many more — each with tailored prompts and tool access for its domain.
 
-**3. Component Refactor** - Code improvements
-- Refactors Terraform/Helmfile components
-- Tools: `read_*`, `write_*`, `search_files`
-- Use case: Modernization, code improvements
-
-**4. Security Auditor** - Security reviews
-- Security analysis of infrastructure
-- Tools: `describe_*`, `read_*`, `validate_*`
-- Use case: Security audits, compliance checks
-
-**5. Config Validator** - Configuration troubleshooting
-- Validates Atmos configurations
-- Tools: `validate_*`, `read_stack_file`, `validate_file_lsp`
-- Use case: Debugging config issues
-
-**Switch agents with Ctrl+A** during conversations!
+**Switch skills with Ctrl+A** during conversations!
 
 ### 5. Multi-Provider Support
 
@@ -568,11 +550,12 @@ AI: Welcome! Let me analyze your Atmos configuration...
 ### 2. Security Audit
 
 ```bash
-atmos ai chat --skill security-auditor
+atmos ai chat
+# Press Ctrl+A → select "atmos-validation"
 
 You: Audit our production VPC security
 
-AI: [Switches to Security Auditor skill]
+AI: [Switches to atmos-validation skill]
     [Analyzes prod VPC configuration]
 
     Security Analysis for prod-use1-network:
@@ -599,11 +582,12 @@ AI: [Switches to Security Auditor skill]
 ### 3. Configuration Debugging
 
 ```bash
-atmos ai chat --skill config-validator
+atmos ai chat
+# Press Ctrl+A → select "atmos-config"
 
 You: My stack validation is failing with "undefined variable"
 
-AI: [Switches to Config Validator]
+AI: [Switches to atmos-config]
     Let me validate your configuration...
     [Validates via LSP]
 
@@ -738,7 +722,8 @@ atmos ai chat --session infrastructure-review
 atmos ai chat --provider ollama
 
 # Specific skill
-atmos ai chat --skill security-auditor
+atmos ai chat
+# Press Ctrl+A → select "atmos-validation"
 ```
 
 **Quick Questions:**
@@ -1094,24 +1079,26 @@ Atmos AI can automatically discover and include relevant project files in conver
 
 Learn more: [Context Discovery Documentation](/ai#automatic-context-discovery)
 
-### Skill Marketplace (Coming Soon)
+### Skill Marketplace
 
-Install community-created specialized skills following the [Agent Skills open standard](https://agentskills.io):
+Install specialized skills from the marketplace following the [Agent Skills open standard](https://agentskills.io):
 
 ```bash
-# Install custom skill
-atmos ai skill install github.com/cloudposse/skill-cost-analyzer
+# Install all 21 official Atmos skills
+atmos ai skill install cloudposse/atmos
 
-# Use it
-atmos ai chat --skill cost-analyzer
-> "Analyze infrastructure costs across all environments"
+# List installed skills
+atmos ai skill list
+
+# Use in TUI - press Ctrl+A to switch skills
+atmos ai chat
 ```
 
-**Coming features:**
-- Version management
-- Skill dependencies
-- Private skill registries
-- Skill composition
+**Features:**
+- Multi-skill packages (one install command for all skills)
+- Version pinning (`cloudposse/atmos@v1.200.0`)
+- Force reinstall (`--force`) and skip confirmation (`--yes`)
+- Reference file loading for rich skill prompts
 
 ## Security & Privacy
 
@@ -1197,7 +1184,7 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - ✅ **Automatic Context Discovery** - Intelligent file discovery with .gitignore support and caching
 
 ### Short-term (Next 3 Months)
-- **Skill Marketplace** - Install community skills from the Agent Skills registry
+- ✅ **Skill Marketplace** - Install community skills from the Agent Skills registry *(shipped!)*
 - **Enhanced LSP** - More language servers (HCL, JSON Schema)
 - **Advanced Analytics** - Token usage tracking, cost analysis
 - **Auto-Fix Suggestions** - AI-powered configuration fixes
@@ -1220,7 +1207,7 @@ We're continuously improving Atmos AI. Recent completions and upcoming features:
 - [Configuration Guide](/ai/configuration) - Complete configuration reference
 - [AI Providers](/ai/providers) - All 7 providers with setup instructions
 - [Tool System](/ai/tools) - Tool execution and permissions
-- [AI Skills](/ai/skills) - Built-in skills following the Agent Skills open standard
+- [AI Skills](/ai/skills) - Marketplace-installed skills following the Agent Skills open standard
 - [Sessions](/ai/sessions) - Session management and auto-compact
 - [Project Memory](/ai/memory) - ATMOS.md documentation
 - [MCP Server](/ai/mcp-server) - Claude Desktop integration

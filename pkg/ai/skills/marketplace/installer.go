@@ -49,6 +49,8 @@ func NewInstaller(atmosVersion string) (*Installer, error) {
 }
 
 // Install installs a skill from a source URL.
+// It supports both single-skill repos (with SKILL.md at root) and multi-skill packages
+// (with skills/*/SKILL.md pattern).
 func (i *Installer) Install(ctx context.Context, source string, opts InstallOptions) error {
 	defer perf.Track(nil, "marketplace.Installer.Install")()
 
@@ -58,7 +60,7 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 		return fmt.Errorf("invalid source: %w", err)
 	}
 
-	// 2. Check if already installed.
+	// 2. Check if already installed (for single-skill only; multi-skill checked per skill).
 	if !opts.Force {
 		if _, err := i.localRegistry.Get(sourceInfo.Name); err == nil {
 			return fmt.Errorf("%w: use --force to reinstall", ErrSkillAlreadyInstalled)
@@ -66,33 +68,57 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 	}
 
 	// 3. Download to temporary directory.
-	fmt.Printf("Downloading skill from %s...\n", sourceInfo.URL)
+	fmt.Printf("Downloading skills from %s...\n", sourceInfo.URL)
 	tempDir, err := i.downloader.Download(ctx, sourceInfo)
 	if err != nil {
 		return fmt.Errorf("failed to download skill: %w", err)
 	}
 	defer os.RemoveAll(tempDir) // Cleanup on error.
 
-	// 4. Parse and validate metadata from SKILL.md.
+	// 4. Check if this is a single-skill repo or a multi-skill package.
+	skillMDPath := filepath.Join(tempDir, "SKILL.md")
+	if _, err := os.Stat(skillMDPath); err == nil {
+		// Single-skill repo: SKILL.md at root.
+		return i.installSingleSkill(tempDir, sourceInfo, opts)
+	}
+
+	// Check for multi-skill package: skills/*/SKILL.md pattern.
+	pattern := filepath.Join(tempDir, "agent-skills", "skills", "*", "SKILL.md")
+	matches, err := filepath.Glob(pattern)
+	if err != nil || len(matches) == 0 {
+		// Also try skills/*/SKILL.md as alternative layout.
+		pattern = filepath.Join(tempDir, "skills", "*", "SKILL.md")
+		matches, err = filepath.Glob(pattern)
+	}
+	if err != nil || len(matches) == 0 {
+		return fmt.Errorf("invalid skill metadata: no SKILL.md found at root or in skills/*/SKILL.md pattern")
+	}
+
+	return i.installMultiSkillPackage(matches, sourceInfo, opts)
+}
+
+// installSingleSkill installs a single skill from a downloaded repository.
+func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, opts InstallOptions) error {
+	// Parse and validate metadata from SKILL.md.
 	skillMDPath := filepath.Join(tempDir, "SKILL.md")
 	metadata, err := ParseSkillMetadata(skillMDPath)
 	if err != nil {
 		return fmt.Errorf("invalid skill metadata: %w", err)
 	}
 
-	// 5. Validate skill.
+	// Validate skill.
 	if err := i.validator.Validate(tempDir, metadata); err != nil {
 		return fmt.Errorf("skill validation failed: %w", err)
 	}
 
-	// 6. Security check (interactive prompt).
+	// Security check (interactive prompt).
 	if !opts.SkipConfirm {
 		if err := i.confirmInstallation(metadata); err != nil {
 			return err // User cancelled.
 		}
 	}
 
-	// 7. Determine installation path.
+	// Determine installation path.
 	installPath := i.getInstallPath(sourceInfo)
 
 	// If force reinstall, remove existing installation.
@@ -102,7 +128,7 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 		}
 	}
 
-	// 8. Install skill (move to final location).
+	// Install skill (move to final location).
 	if err := os.MkdirAll(filepath.Dir(installPath), 0o755); err != nil {
 		return fmt.Errorf("failed to create install directory: %w", err)
 	}
@@ -111,7 +137,7 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 		return fmt.Errorf("failed to install skill: %w", err)
 	}
 
-	// 9. Register skill.
+	// Register skill.
 	installedSkill := &InstalledSkill{
 		Name:        metadata.Name,
 		DisplayName: metadata.GetDisplayName(),
@@ -133,11 +159,148 @@ func (i *Installer) Install(ctx context.Context, source string, opts InstallOpti
 		return fmt.Errorf("failed to register skill: %w", err)
 	}
 
-	// 10. Success.
+	// Success.
 	fmt.Printf("\n✓ Skill %q installed successfully\n", metadata.GetDisplayName())
 	fmt.Printf("  Version: %s\n", metadata.GetVersion())
 	fmt.Printf("  Location: %s\n", redactHomePath(installPath))
 	fmt.Printf("\nUsage: Switch to this skill in the TUI with Ctrl+A\n")
+
+	return nil
+}
+
+// installMultiSkillPackage installs multiple skills discovered in a package.
+func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *SourceInfo, opts InstallOptions) error {
+	// Discover all skills and their metadata.
+	type discoveredSkill struct {
+		dir      string
+		metadata *SkillMetadata
+	}
+
+	var discovered []discoveredSkill
+	var skillNames []string
+
+	for _, skillMDPath := range skillMDPaths {
+		skillDir := filepath.Dir(skillMDPath)
+		metadata, err := ParseSkillMetadata(skillMDPath)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Skipping invalid skill at %s: %v", skillMDPath, err))
+			continue
+		}
+
+		discovered = append(discovered, discoveredSkill{dir: skillDir, metadata: metadata})
+		skillNames = append(skillNames, metadata.Name)
+	}
+
+	if len(discovered) == 0 {
+		return fmt.Errorf("no valid skills found in package")
+	}
+
+	// Show discovery summary.
+	fmt.Printf("Discovered %d skills in package:\n", len(discovered))
+	fmt.Printf("  %s\n", strings.Join(skillNames, ", "))
+
+	// Confirmation prompt for multi-skill install.
+	if !opts.SkipConfirm {
+		fmt.Printf("\nInstall all %d skills? [y/N] ", len(discovered))
+		var response string
+		_, _ = fmt.Scanln(&response)
+		if strings.ToLower(strings.TrimSpace(response)) != "y" {
+			return fmt.Errorf("installation cancelled by user")
+		}
+	}
+
+	fmt.Println()
+
+	// Install each skill.
+	installed := 0
+	for _, skill := range discovered {
+		skillName := skill.metadata.Name
+
+		// Determine installation path per skill.
+		skillsDir, _ := GetSkillsDir()
+		installPath := filepath.Join(skillsDir, sourceInfo.Owner, sourceInfo.Repo, skillName)
+
+		// If force reinstall, remove existing.
+		if opts.Force {
+			if err := os.RemoveAll(installPath); err != nil {
+				log.Warn(fmt.Sprintf("Failed to remove existing installation for %s: %v", skillName, err))
+			}
+			_ = i.localRegistry.Remove(skillName)
+		} else {
+			// Skip if already installed.
+			if _, err := i.localRegistry.Get(skillName); err == nil {
+				fmt.Printf("  Skipping %s (already installed, use --force to reinstall)\n", skillName)
+				continue
+			}
+		}
+
+		// Copy skill directory to install path.
+		if err := os.MkdirAll(installPath, 0o755); err != nil {
+			log.Warn(fmt.Sprintf("Failed to create directory for %s: %v", skillName, err))
+			continue
+		}
+
+		if err := copyDir(skill.dir, installPath); err != nil {
+			log.Warn(fmt.Sprintf("Failed to install skill %s: %v", skillName, err))
+			continue
+		}
+
+		// Register skill.
+		installedSkill := &InstalledSkill{
+			Name:        skillName,
+			DisplayName: skill.metadata.GetDisplayName(),
+			Source:      sourceInfo.FullPath,
+			Version:     skill.metadata.GetVersion(),
+			InstalledAt: time.Now(),
+			UpdatedAt:   time.Now(),
+			Path:        installPath,
+			IsBuiltIn:   false,
+			Enabled:     true,
+		}
+
+		if err := i.localRegistry.Add(installedSkill); err != nil {
+			log.Warn(fmt.Sprintf("Failed to register skill %s: %v", skillName, err))
+			continue
+		}
+
+		fmt.Printf("  Installing %s... done\n", skillName)
+		installed++
+	}
+
+	fmt.Printf("\n%d skills installed successfully.\n", installed)
+	fmt.Printf("\nUsage: Switch skills in the TUI with Ctrl+A\n")
+
+	return nil
+}
+
+// copyDir copies the contents of a source directory to a destination directory.
+func copyDir(src, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := os.MkdirAll(dstPath, 0o755); err != nil {
+				return err
+			}
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(dstPath, data, 0o600); err != nil {
+				return err
+			}
+		}
+	}
 
 	return nil
 }
@@ -206,8 +369,8 @@ func (i *Installer) LoadInstalledSkills(registry *skills.Registry) error {
 			continue
 		}
 
-		// Read prompt content (body after frontmatter).
-		promptContent, err := readSkillPrompt(skillMDPath)
+		// Read prompt content with references.
+		promptContent, err := readSkillPromptWithReferences(installed.Path, metadata)
 		if err != nil {
 			log.Warn(fmt.Sprintf("Failed to read prompt for skill %q: %v", installed.Name, err))
 			continue
@@ -233,6 +396,30 @@ func (i *Installer) LoadInstalledSkills(registry *skills.Registry) error {
 	}
 
 	return nil
+}
+
+// readSkillPromptWithReferences reads the skill prompt body and appends any referenced files.
+func readSkillPromptWithReferences(skillDir string, metadata *SkillMetadata) (string, error) {
+	skillMDPath := filepath.Join(skillDir, "SKILL.md")
+	body, err := readSkillPrompt(skillMDPath)
+	if err != nil {
+		return "", err
+	}
+
+	// Append reference files if any.
+	for _, ref := range metadata.References {
+		refPath := filepath.Join(skillDir, ref)
+		refContent, err := os.ReadFile(refPath)
+		if err != nil {
+			log.Warn(fmt.Sprintf("Failed to read reference file %q: %v", ref, err))
+			continue
+		}
+
+		refName := filepath.Base(ref)
+		body += "\n\n---\n\n## Reference: " + refName + "\n\n" + strings.TrimSpace(string(refContent))
+	}
+
+	return body, nil
 }
 
 // readSkillPrompt reads the markdown body from a SKILL.md file (after frontmatter).

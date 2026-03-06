@@ -20,11 +20,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/memory"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
+	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	aiTypes "github.com/cloudposse/atmos/pkg/ai/types"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui/theme"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 const (
@@ -167,30 +169,37 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		maxHistoryTokens = atmosConfig.Settings.AI.MaxHistoryTokens
 	}
 
-	// Load skill registry and set default skill.
-	skillRegistry, err := skills.LoadSkills(atmosConfig)
+	// Load skill registry with marketplace-installed skills.
+	var loader skills.SkillLoader
+	installer, installerErr := marketplace.NewInstaller(version.Version)
+	if installerErr == nil {
+		loader = installer
+	}
+
+	skillRegistry, err := skills.LoadSkills(atmosConfig, loader)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load skills: %w", err)
 	}
 
+	// Determine the current skill.
+	var currentSkill *skills.Skill
 	defaultSkillName := skills.GetDefaultSkill(atmosConfig)
-	currentSkill, err := skillRegistry.Get(defaultSkillName)
-	if err != nil {
-		// Fall back to general skill if default not found.
-		log.Debug(fmt.Sprintf("Default skill %q not found, falling back to general: %v", defaultSkillName, err))
-		currentSkill, _ = skillRegistry.Get(skills.GeneralSkill)
+	if defaultSkillName != "" {
+		currentSkill, _ = skillRegistry.Get(defaultSkillName)
 	}
 
-	// Load the initial skill's system prompt from file (if configured).
-	if currentSkill != nil {
-		systemPrompt, promptErr := currentSkill.LoadSystemPrompt()
-		if promptErr != nil {
-			log.Debug(fmt.Sprintf("Failed to load system prompt for initial skill %q: %v, using default", currentSkill.Name, promptErr))
-			// Keep the existing SystemPrompt as fallback.
-		} else {
-			// Update skill with loaded prompt.
-			currentSkill.SystemPrompt = systemPrompt
+	// If no default found, pick the first available skill from the registry.
+	if currentSkill == nil {
+		allSkills := skillRegistry.List()
+		if len(allSkills) > 0 {
+			currentSkill = allSkills[0]
 		}
+	}
+
+	// If registry is completely empty, use the fallback skill.
+	if currentSkill == nil {
+		currentSkill = skills.NewFallbackSkill()
+		_ = skillRegistry.Register(currentSkill)
 	}
 
 	model := &ChatModel{

@@ -162,23 +162,25 @@ settings:
     max_context_lines: 500                # Maximum lines per file (default: 500)
     max_history_messages: 20              # Maximum conversation messages to keep (default: 0 = unlimited)
     max_history_tokens: 8000              # Maximum tokens in conversation history (default: 0 = unlimited)
-    default_skill: "general"              # Default AI skill (default: "general")
+    default_skill: "general"              # Default AI skill fallback (default: "general")
 ```
 </File>
 
 ## AI Skills Configuration
 
-Atmos AI includes specialized skills for different tasks. You can use built-in skills or create custom ones.
+Atmos AI includes specialized skills for different tasks. You can install skills from the marketplace or create custom ones.
 
-### Built-in Skills
+### Installing Skills from the Marketplace
 
-Atmos ships with 5 built-in skills:
+Install official Atmos AI skills from the [Skill Marketplace](/ai/skill-marketplace):
 
-- **general** (default) - General-purpose assistant for all operations
-- **stack-analyzer** - Specialized in analyzing stack configurations and dependencies
-- **component-refactor** - Expert in refactoring Terraform/Helmfile components
-- **security-auditor** - Focused on security review and vulnerability detection
-- **config-validator** - Validates YAML configurations and schema compliance
+```bash
+# Install all 21 official Atmos agent skills
+atmos ai skill install cloudposse/atmos
+
+# Install with a specific version
+atmos ai skill install cloudposse/atmos@v1.200.0
+```
 
 Switch between skills during a chat session by pressing **Ctrl+A**.
 
@@ -192,7 +194,7 @@ settings:
   ai:
     enabled: true
     default_provider: "anthropic"
-    default_skill: "stack-analyzer"     # Use stack analyzer by default
+    default_skill: "atmos-stacks"       # Use atmos-stacks by default
 
     # Define custom skills
     skills:

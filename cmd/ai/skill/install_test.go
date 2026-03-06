@@ -17,7 +17,7 @@ import (
 
 func TestInstallCmd_BasicProperties(t *testing.T) {
 	assert.Equal(t, "install <source>", installCmd.Use)
-	assert.Equal(t, "Install a skill from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
 	assert.NotEmpty(t, installCmd.Long)
 	assert.NotNil(t, installCmd.RunE)
 }
@@ -41,12 +41,12 @@ func TestInstallCmd_Flags(t *testing.T) {
 
 func TestInstallCmd_LongDescription(t *testing.T) {
 	// Verify long description contains important information.
-	assert.Contains(t, installCmd.Long, "Install a community-contributed skill")
+	assert.Contains(t, installCmd.Long, "Install AI skills from a GitHub repository")
 	assert.Contains(t, installCmd.Long, "~/.atmos/skills/")
 	assert.Contains(t, installCmd.Long, "agentskills.io")
 	assert.Contains(t, installCmd.Long, "SKILL.md")
-	assert.Contains(t, installCmd.Long, "github.com/user/repo")
-	assert.Contains(t, installCmd.Long, "@v1.2.3")
+	assert.Contains(t, installCmd.Long, "user/repo")
+	assert.Contains(t, installCmd.Long, "@v1.200.0")
 }
 
 func TestInstallCmd_ArgsValidation(t *testing.T) {
@@ -74,7 +74,7 @@ func TestInstallCmd_ArgsValidation(t *testing.T) {
 
 func TestInstallCmd_Examples(t *testing.T) {
 	// Verify the long description contains examples.
-	assert.Contains(t, installCmd.Long, "atmos ai skill install github.com/cloudposse/atmos-skill-terraform")
+	assert.Contains(t, installCmd.Long, "atmos ai skill install cloudposse/atmos")
 	assert.Contains(t, installCmd.Long, "--force")
 	assert.Contains(t, installCmd.Long, "--yes")
 }
@@ -88,9 +88,9 @@ func TestInstallCmd_SecuritySection(t *testing.T) {
 
 func TestInstallCmd_SourceFormats(t *testing.T) {
 	// Verify all documented source formats are mentioned.
+	assert.Contains(t, installCmd.Long, "user/repo")
+	assert.Contains(t, installCmd.Long, "user/repo@v1.2.3")
 	assert.Contains(t, installCmd.Long, "github.com/user/repo")
-	assert.Contains(t, installCmd.Long, "github.com/user/repo@v1.2.3")
-	assert.Contains(t, installCmd.Long, "github.com/user/repo@branch")
 	assert.Contains(t, installCmd.Long, "https://github.com/user/repo.git")
 }
 
@@ -443,7 +443,7 @@ func TestInstallCmd_OutputDuringInstall(t *testing.T) {
 	output := buf.String()
 
 	// Should print "Downloading skill from..." message.
-	assert.Contains(t, output, "Downloading skill from")
+	assert.Contains(t, output, "Downloading skills from")
 }
 
 func TestInstallCmd_RunENotNil(t *testing.T) {
@@ -455,7 +455,7 @@ func TestInstallCmd_UseFieldCorrect(t *testing.T) {
 }
 
 func TestInstallCmd_ShortDescription(t *testing.T) {
-	assert.Equal(t, "Install a skill from a GitHub repository", installCmd.Short)
+	assert.Equal(t, "Install skills from a GitHub repository", installCmd.Short)
 }
 
 func TestInstallCmd_LongDescriptionContainsExamples(t *testing.T) {
@@ -593,7 +593,7 @@ func TestInstallCmd_RunE_ContextUsage(t *testing.T) {
 
 		assert.Error(t, err)
 		// Verify output shows downloading started.
-		assert.Contains(t, buf.String(), "Downloading skill from")
+		assert.Contains(t, buf.String(), "Downloading skills from")
 	})
 }
 
@@ -686,7 +686,7 @@ func TestInstallCmd_RunE_InstallOptionsPassthrough(t *testing.T) {
 
 	// Verify download message was printed.
 	output := buf.String()
-	assert.Contains(t, output, "Downloading skill from")
+	assert.Contains(t, output, "Downloading skills from")
 }
 
 // TestInstallCmd_RunE_SuccessfulInstall tests the full successful install path.

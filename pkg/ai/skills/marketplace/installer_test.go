@@ -980,3 +980,586 @@ More content.
 	assert.Contains(t, result, "# Content")
 	assert.Contains(t, result, "Some text with --- in it.")
 }
+
+// createMultiSkillPackageDir creates a temp directory with multiple skills in skills/*/SKILL.md layout.
+func createMultiSkillPackageDir(t *testing.T, skillCount int) string {
+	t.Helper()
+
+	tempDir := t.TempDir()
+
+	for i := 1; i <= skillCount; i++ {
+		skillName := fmt.Sprintf("test-skill-%d", i)
+		skillDir := filepath.Join(tempDir, "agent-skills", "skills", skillName)
+		err := os.MkdirAll(skillDir, 0o755)
+		require.NoError(t, err)
+
+		content := fmt.Sprintf(`---
+name: %s
+description: Test skill %d for multi-package testing
+metadata:
+  display_name: Test Skill %d
+  version: 1.0.0
+  author: Test Author
+---
+
+# Test Skill %d
+
+This is test skill %d prompt content.
+`, skillName, i, i, i, i)
+
+		err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+		require.NoError(t, err)
+	}
+
+	return tempDir
+}
+
+func TestInstall_MultiSkillPackage(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	// Create a multi-skill package with 3 skills.
+	packageDir := createMultiSkillPackageDir(t, 3)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	// Replace downloader with mock.
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			// Return a copy of the package dir.
+			copyDir := filepath.Join(t.TempDir(), "pkg-copy")
+			err := os.MkdirAll(copyDir, 0o755)
+			require.NoError(t, err)
+			err = copyDirRecursive(packageDir, copyDir)
+			require.NoError(t, err)
+			return copyDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/cloudposse/atmos", opts)
+
+	assert.NoError(t, err)
+
+	// Verify all 3 skills were registered.
+	installedSkills := installer.List()
+	found := 0
+	for _, s := range installedSkills {
+		if strings.HasPrefix(s.Name, "test-skill-") {
+			found++
+		}
+	}
+	assert.Equal(t, 3, found, "Should have installed 3 skills")
+}
+
+func TestInstall_MultiSkillPackage_ForceReinstall(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	packageDir := createMultiSkillPackageDir(t, 2)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	// Pre-install one skill.
+	existingSkill := &InstalledSkill{
+		Name:    "test-skill-1",
+		Version: "0.5.0",
+		Path:    filepath.Join(tempDir, ".atmos", "skills", "cloudposse", "atmos", "test-skill-1"),
+	}
+	err = installer.localRegistry.Add(existingSkill)
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyDir := filepath.Join(t.TempDir(), "pkg-copy")
+			err := os.MkdirAll(copyDir, 0o755)
+			require.NoError(t, err)
+			err = copyDirRecursive(packageDir, copyDir)
+			require.NoError(t, err)
+			return copyDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, Force: true}
+
+	err = installer.Install(ctx, "github.com/cloudposse/atmos", opts)
+	assert.NoError(t, err)
+
+	// Both skills should be installed.
+	installedSkills := installer.List()
+	found := 0
+	for _, s := range installedSkills {
+		if strings.HasPrefix(s.Name, "test-skill-") {
+			found++
+		}
+	}
+	assert.Equal(t, 2, found, "Should have installed 2 skills after force reinstall")
+}
+
+func TestInstall_NoSkillMDFound(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	// Create empty directory (no SKILL.md at root or in skills/).
+	emptyDir := t.TempDir()
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return emptyDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/empty-repo", opts)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no SKILL.md found")
+}
+
+func TestReadSkillPromptWithReferences(t *testing.T) {
+	// Create skill directory with SKILL.md and reference files.
+	skillDir := t.TempDir()
+
+	skillMD := `---
+name: test-with-refs
+description: Test skill with references
+references:
+  - docs/patterns.md
+  - docs/examples.md
+---
+
+# Test Skill
+
+Main prompt content.
+`
+	err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	// Create reference files.
+	docsDir := filepath.Join(skillDir, "docs")
+	err = os.MkdirAll(docsDir, 0o755)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(docsDir, "patterns.md"), []byte("# Patterns\n\nCommon patterns content."), 0o644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(docsDir, "examples.md"), []byte("# Examples\n\nExample content here."), 0o644)
+	require.NoError(t, err)
+
+	metadata := &SkillMetadata{
+		Name:        "test-with-refs",
+		Description: "Test skill with references",
+		References:  []string{"docs/patterns.md", "docs/examples.md"},
+	}
+
+	result, err := readSkillPromptWithReferences(skillDir, metadata)
+
+	assert.NoError(t, err)
+	assert.Contains(t, result, "Main prompt content.")
+	assert.Contains(t, result, "## Reference: patterns.md")
+	assert.Contains(t, result, "Common patterns content.")
+	assert.Contains(t, result, "## Reference: examples.md")
+	assert.Contains(t, result, "Example content here.")
+}
+
+func TestReadSkillPromptWithReferences_NoReferences(t *testing.T) {
+	skillDir := t.TempDir()
+
+	skillMD := `---
+name: test-no-refs
+description: Test skill without references
+---
+
+# Test Skill
+
+Just the main prompt.
+`
+	err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	metadata := &SkillMetadata{
+		Name:        "test-no-refs",
+		Description: "Test skill without references",
+	}
+
+	result, err := readSkillPromptWithReferences(skillDir, metadata)
+
+	assert.NoError(t, err)
+	assert.Contains(t, result, "Just the main prompt.")
+	assert.NotContains(t, result, "## Reference:")
+}
+
+func TestReadSkillPromptWithReferences_MissingReferenceFile(t *testing.T) {
+	skillDir := t.TempDir()
+
+	skillMD := `---
+name: test-missing-ref
+description: Test skill with missing reference
+---
+
+# Test Skill
+
+Main prompt.
+`
+	err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	metadata := &SkillMetadata{
+		Name:        "test-missing-ref",
+		Description: "Test skill with missing reference",
+		References:  []string{"nonexistent.md"},
+	}
+
+	// Should not error; missing references are warned and skipped.
+	result, err := readSkillPromptWithReferences(skillDir, metadata)
+
+	assert.NoError(t, err)
+	assert.Contains(t, result, "Main prompt.")
+	assert.NotContains(t, result, "## Reference:")
+}
+
+func TestLoadInstalledSkills_WithReferences(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	// Create skill directory with SKILL.md and reference file.
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "ref-test-skill")
+	docsPath := filepath.Join(skillPath, "docs")
+	err = os.MkdirAll(docsPath, 0o755)
+	require.NoError(t, err)
+
+	skillMD := `---
+name: ref-test-skill
+description: Test skill with references
+metadata:
+  display_name: Ref Test Skill
+  category: general
+references:
+  - docs/extra.md
+---
+
+# Ref Test Skill
+
+Main skill prompt.
+`
+	err = os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte(skillMD), 0o644)
+	require.NoError(t, err)
+
+	err = os.WriteFile(filepath.Join(docsPath, "extra.md"), []byte("Extra reference content."), 0o644)
+	require.NoError(t, err)
+
+	skill := &InstalledSkill{
+		Name:    "ref-test-skill",
+		Path:    skillPath,
+		Enabled: true,
+	}
+	err = installer.localRegistry.Add(skill)
+	require.NoError(t, err)
+
+	registry := skills.NewRegistry()
+
+	err = installer.LoadInstalledSkills(registry)
+
+	assert.NoError(t, err)
+	assert.Equal(t, 1, registry.Count())
+
+	loadedSkill, err := registry.Get("ref-test-skill")
+	require.NoError(t, err)
+	assert.Contains(t, loadedSkill.SystemPrompt, "Main skill prompt.")
+	assert.Contains(t, loadedSkill.SystemPrompt, "## Reference: extra.md")
+	assert.Contains(t, loadedSkill.SystemPrompt, "Extra reference content.")
+}
+
+func TestCopyDir(t *testing.T) {
+	t.Run("copies files and subdirectories", func(t *testing.T) {
+		src := t.TempDir()
+		dst := t.TempDir()
+
+		// Create source structure.
+		err := os.WriteFile(filepath.Join(src, "file.txt"), []byte("content"), 0o644)
+		require.NoError(t, err)
+
+		subDir := filepath.Join(src, "subdir")
+		err = os.MkdirAll(subDir, 0o755)
+		require.NoError(t, err)
+
+		err = os.WriteFile(filepath.Join(subDir, "nested.txt"), []byte("nested content"), 0o644)
+		require.NoError(t, err)
+
+		// Copy.
+		err = copyDir(src, dst)
+		assert.NoError(t, err)
+
+		// Verify.
+		data, err := os.ReadFile(filepath.Join(dst, "file.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "content", string(data))
+
+		data, err = os.ReadFile(filepath.Join(dst, "subdir", "nested.txt"))
+		require.NoError(t, err)
+		assert.Equal(t, "nested content", string(data))
+	})
+
+	t.Run("errors on nonexistent source", func(t *testing.T) {
+		dst := t.TempDir()
+		err := copyDir(filepath.Join(t.TempDir(), "nonexistent"), dst)
+		assert.Error(t, err)
+	})
+}
+
+func TestInstall_MultiSkillPackage_SkipsAlreadyInstalled(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	packageDir := createMultiSkillPackageDir(t, 2)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	// Pre-install one skill (without --force).
+	existingSkill := &InstalledSkill{
+		Name:    "test-skill-1",
+		Version: "0.5.0",
+		Path:    filepath.Join(tempDir, ".atmos", "skills", "test", "atmos", "test-skill-1"),
+	}
+	err = installer.localRegistry.Add(existingSkill)
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyDir := filepath.Join(t.TempDir(), "pkg-copy")
+			err := os.MkdirAll(copyDir, 0o755)
+			require.NoError(t, err)
+			err = copyDirRecursive(packageDir, copyDir)
+			require.NoError(t, err)
+			return copyDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true, Force: false}
+
+	err = installer.Install(ctx, "github.com/test/atmos", opts)
+	assert.NoError(t, err)
+
+	// Only test-skill-2 should be newly installed (test-skill-1 was skipped).
+	skill2, err := installer.localRegistry.Get("test-skill-2")
+	require.NoError(t, err)
+	assert.Equal(t, "test-skill-2", skill2.Name)
+}
+
+func TestInstall_MultiSkillPackage_AllInvalid(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	// Create a package with only invalid skills.
+	packageDir := t.TempDir()
+	skillDir := filepath.Join(packageDir, "agent-skills", "skills", "bad-skill")
+	err := os.MkdirAll(skillDir, 0o755)
+	require.NoError(t, err)
+
+	// Write invalid SKILL.md (missing required fields).
+	err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("---\ninvalid: yaml: [\n---\n"), 0o644)
+	require.NoError(t, err)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyDir := filepath.Join(t.TempDir(), "pkg-copy")
+			err := os.MkdirAll(copyDir, 0o755)
+			require.NoError(t, err)
+			err = copyDirRecursive(packageDir, copyDir)
+			require.NoError(t, err)
+			return copyDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/bad-pkg", opts)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "no valid skills found")
+}
+
+func TestInstall_SingleSkillWithRootSKILLMD(t *testing.T) {
+	// Verify single-skill path is taken when SKILL.md exists at root.
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	skillDir := createTestSkillDir(t)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			return skillDir, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/single-skill", opts)
+	assert.NoError(t, err)
+
+	skill, err := installer.Get("test-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "test-skill", skill.Name)
+}
+
+func TestInstall_MultiSkillPackage_SkillsSubdir(t *testing.T) {
+	// Test the skills/*/SKILL.md fallback pattern (not agent-skills/skills/).
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	packageDir := t.TempDir()
+	skillDir := filepath.Join(packageDir, "skills", "my-skill")
+	err := os.MkdirAll(skillDir, 0o755)
+	require.NoError(t, err)
+
+	content := `---
+name: my-skill
+description: A skill in the skills/ subdir
+metadata:
+  display_name: My Skill
+  version: 1.0.0
+---
+
+# My Skill
+
+Prompt content.
+`
+	err = os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+	require.NoError(t, err)
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	installer.downloader = &mockDownloader{
+		downloadFunc: func(_ context.Context, _ *SourceInfo) (string, error) {
+			copyTo := filepath.Join(t.TempDir(), "pkg-copy")
+			err := os.MkdirAll(copyTo, 0o755)
+			require.NoError(t, err)
+			err = copyDirRecursive(packageDir, copyTo)
+			require.NoError(t, err)
+			return copyTo, nil
+		},
+	}
+
+	ctx := context.Background()
+	opts := InstallOptions{SkipConfirm: true}
+
+	err = installer.Install(ctx, "github.com/test/skills-subdir-pkg", opts)
+	assert.NoError(t, err)
+
+	skill, err := installer.localRegistry.Get("my-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "My Skill", skill.DisplayName)
+}
+
+// copyDirRecursive copies a directory tree for testing.
+func copyDirRecursive(src, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+
+		if entry.IsDir() {
+			if err := os.MkdirAll(dstPath, 0o755); err != nil {
+				return err
+			}
+			if err := copyDirRecursive(srcPath, dstPath); err != nil {
+				return err
+			}
+		} else {
+			data, err := os.ReadFile(srcPath)
+			if err != nil {
+				return err
+			}
+			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func TestCopyDir_InvalidSource(t *testing.T) {
+	err := copyDir(filepath.Join(t.TempDir(), "nonexistent"), t.TempDir())
+	assert.Error(t, err)
+}
+
+func TestLoadInstalledSkills_DuplicateSkillWarning(t *testing.T) {
+	tempDir := t.TempDir()
+	t.Setenv("HOME", tempDir)
+	homedir.Reset()
+
+	installer, err := NewInstaller("1.0.0")
+	require.NoError(t, err)
+
+	skillPath := filepath.Join(tempDir, ".atmos", "skills", "dup-test")
+	err = os.MkdirAll(skillPath, 0o755)
+	require.NoError(t, err)
+
+	content := `---
+name: dup-test
+description: Duplicate test
+metadata:
+  display_name: Dup Test
+---
+
+# Dup Test
+`
+	err = os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte(content), 0o644)
+	require.NoError(t, err)
+
+	err = installer.localRegistry.Add(&InstalledSkill{
+		Name:    "dup-test",
+		Path:    skillPath,
+		Enabled: true,
+	})
+	require.NoError(t, err)
+
+	// Pre-register in the skills.Registry so the second register fails.
+	registry := skills.NewRegistry()
+	err = registry.Register(&skills.Skill{Name: "dup-test", DisplayName: "Already There"})
+	require.NoError(t, err)
+
+	// Should not error overall; the duplicate is warned and skipped.
+	err = installer.LoadInstalledSkills(registry)
+	assert.NoError(t, err)
+	assert.Equal(t, 1, registry.Count())
+}
+
+func TestRedactHomePath_FallbackOnError(t *testing.T) {
+	result := redactHomePath("/some/random/path")
+	assert.Equal(t, "/some/random/path", result)
+}

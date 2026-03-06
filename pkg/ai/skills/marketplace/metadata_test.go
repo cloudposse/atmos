@@ -189,38 +189,11 @@ name: test-skill
 	assert.Contains(t, validationErr.Message, "description is required")
 }
 
-// TestParseSkillMetadata_InvalidCategory tests validation error for invalid category.
-func TestParseSkillMetadata_InvalidCategory(t *testing.T) {
-	content := `---
-name: test-skill
-description: Test skill
-metadata:
-  category: invalid-category
----
+// TestParseSkillMetadata_AnyCategory tests that any category is accepted (no validation whitelist).
+func TestParseSkillMetadata_AnyCategory(t *testing.T) {
+	categories := []string{"general", "analysis", "refactor", "security", "validation", "optimization", "custom-category", "terraform"}
 
-# Test
-`
-
-	tmpDir := t.TempDir()
-	skillFile := filepath.Join(tmpDir, "SKILL.md")
-	err := os.WriteFile(skillFile, []byte(content), 0o644)
-	require.NoError(t, err)
-
-	metadata, err := ParseSkillMetadata(skillFile)
-	assert.Error(t, err)
-	assert.Nil(t, metadata)
-
-	var validationErr *ValidationError
-	assert.True(t, errors.As(err, &validationErr))
-	assert.Equal(t, "metadata.category", validationErr.Field)
-	assert.Contains(t, validationErr.Message, "invalid category")
-}
-
-// TestParseSkillMetadata_ValidCategories tests all valid categories.
-func TestParseSkillMetadata_ValidCategories(t *testing.T) {
-	validCategories := []string{"general", "analysis", "refactor", "security", "validation", "optimization"}
-
-	for _, category := range validCategories {
+	for _, category := range categories {
 		t.Run(category, func(t *testing.T) {
 			content := `---
 name: test-skill
@@ -243,6 +216,30 @@ metadata:
 			assert.Equal(t, category, metadata.Metadata.Category)
 		})
 	}
+}
+
+// TestParseSkillMetadata_ReferencesField tests that references are parsed from frontmatter.
+func TestParseSkillMetadata_ReferencesField(t *testing.T) {
+	content := `---
+name: test-skill
+description: Test skill with references
+references:
+  - docs/patterns.md
+  - docs/examples.md
+---
+
+# Test
+`
+
+	tmpDir := t.TempDir()
+	skillFile := filepath.Join(tmpDir, "SKILL.md")
+	err := os.WriteFile(skillFile, []byte(content), 0o644)
+	require.NoError(t, err)
+
+	metadata, err := ParseSkillMetadata(skillFile)
+	require.NoError(t, err)
+	assert.NotNil(t, metadata)
+	assert.Equal(t, []string{"docs/patterns.md", "docs/examples.md"}, metadata.References)
 }
 
 // TestExtractFrontmatter_ValidFrontmatter tests extracting valid frontmatter.

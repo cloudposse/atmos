@@ -609,35 +609,35 @@ You: I want to review our infrastructure
 AI (general): I can help you review your infrastructure. What would you
     like to focus on first?
 
-# Press Ctrl+A to switch to security-auditor skill
+# Press Ctrl+A to switch to atmos-validation skill
 Ctrl+A
-# Select "security-auditor"
+# Select "atmos-validation"
 
-AI (system): Switched to skill: Security Auditor (Specialized in security reviews,
-              compliance checks, and vulnerability assessments)
+AI (system): Switched to skill: atmos-validation (Specialized in OPA/Rego policies,
+              JSON Schema, and configuration validation)
 
-You: Now audit our VPC configuration for security issues
+You: Now audit our VPC configuration for policy compliance
 
-AI (security-auditor): I'll perform a comprehensive security audit of your VPC.
-    Let me check for common security issues:
+AI (atmos-validation): I'll perform a comprehensive validation of your VPC configuration.
+    Let me check for common issues:
     1. Security group rules analysis
     2. Network ACL configuration
-    3. VPC flow logs status
-    4. Public subnet exposure
+    3. Policy compliance checks
+    4. Schema validation
     ...
 
 # Day 2: Resume session
 atmos ai chat --session infrastructure-review
 
-AI (security-auditor): Welcome back! We were performing a security audit of your
-    # ✅ Automatically restored to security-auditor skill
+AI (atmos-validation): Welcome back! We were performing a validation of your
+    # ✅ Automatically restored to atmos-validation skill
     VPC configuration. Would you like to continue where we left off?
 
 You: yes, let's review the findings from yesterday
 
-AI (security-auditor): Based on yesterday's audit, I found several issues:
+AI (atmos-validation): Based on yesterday's validation, I found several issues:
     # ✅ Skill context preserved across sessions
-    [Provides detailed security findings from previous conversation]
+    [Provides detailed validation findings from previous conversation]
 ```
 </Terminal>
 
@@ -645,7 +645,7 @@ AI (security-auditor): Based on yesterday's audit, I found several issues:
 
 - **Specialized Context Preserved**: Each session maintains its skill specialization
 - **No Manual Switching**: Automatically resumes with the right skill for the conversation
-- **Task-Focused Sessions**: Keep security reviews with security-auditor, component work with component-refactor, etc.
+- **Task-Focused Sessions**: Keep validation reviews with atmos-validation, component work with atmos-components, etc.
 - **Seamless Experience**: Skill context flows naturally across session resumptions
 
 #### Multiple Sessions with Different Skills
@@ -654,11 +654,11 @@ You can have multiple sessions, each using different specialized skills:
 
 ```
 sessions:
-  vpc-security-review      [security-auditor]   # Security-focused skill
-  component-refactor       [component-refactor] # Refactoring specialist
-  stack-analysis          [stack-analyzer]      # Stack investigation
-  config-validation       [config-validator]    # Configuration expert
-  general-questions       [general]             # General purpose skill
+  vpc-security-review      [atmos-validation]   # Validation specialist
+  component-refactor       [atmos-components]   # Component architecture
+  stack-analysis          [atmos-stacks]        # Stack investigation
+  terraform-planning      [atmos-terraform]     # Terraform orchestration
+  general-questions       [atmos-config]        # Configuration expert
 ```
 
 Each session maintains its own skill assignment, allowing you to organize conversations by both topic and the type of AI assistance needed.

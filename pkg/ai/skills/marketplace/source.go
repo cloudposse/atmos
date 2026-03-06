@@ -21,6 +21,8 @@ type SourceInfo struct {
 // ParseSource parses various source formats into SourceInfo.
 //
 // Supported formats:
+//   - user/repo (GitHub assumed)
+//   - user/repo@v1.2.3
 //   - github.com/user/repo
 //   - github.com/user/repo@v1.2.3
 //   - https://github.com/user/repo.git
@@ -36,6 +38,11 @@ func ParseSource(source string) (*SourceInfo, error) {
 			ref = source[idx+1:]
 			source = source[:idx]
 		}
+	}
+
+	// Format 0: Bare owner/repo shorthand (GitHub assumed).
+	if isOwnerRepoShorthand(source) {
+		return parseGitHubShorthand("github.com/"+source, ref)
 	}
 
 	// Format 1: GitHub shorthand (github.com/user/repo).
@@ -54,6 +61,16 @@ func ParseSource(source string) (*SourceInfo, error) {
 	}
 
 	return nil, fmt.Errorf("%w: unsupported source format: %s", ErrInvalidSource, source)
+}
+
+// isOwnerRepoShorthand returns true for bare "owner/repo" format
+// (no dots, no colons, no slashes beyond the single separator).
+func isOwnerRepoShorthand(source string) bool {
+	if strings.Contains(source, ".") || strings.Contains(source, ":") || strings.Contains(source, "//") {
+		return false
+	}
+	parts := strings.Split(source, "/")
+	return len(parts) == 2 && parts[0] != "" && parts[1] != ""
 }
 
 // parseGitHubShorthand parses github.com/user/repo format.

@@ -1715,7 +1715,7 @@ Here's what I found:
 
 ---
 
-#### Stack Analyzer Skill
+#### atmos-stacks Skill
 
 **Allowed Tools:**
 - ✅ `atmos_describe_component` - Examine component details
@@ -1729,7 +1729,7 @@ Here's what I found:
 
 **Use Cases:**
 - Analyzing stack configurations and dependencies
-- Understanding inheritance patterns
+- Understanding inheritance and import patterns
 - Reviewing architecture design
 - Identifying configuration issues
 
@@ -1737,12 +1737,12 @@ Here's what I found:
 
 <Terminal title="atmos ai chat">
 ```bash
-# Switch to Stack Analyzer skill
-Ctrl+A → Select "Stack Analyzer"
+# Switch to atmos-stacks skill
+Ctrl+A → Select "atmos-stacks"
 
 You: Analyze the prod-use1 stack dependencies
 
-AI (stack-analyzer): I'll analyze the dependency chain for prod-use1.
+AI (atmos-stacks): I'll analyze the dependency chain for prod-use1.
 
 🔧 Tool: atmos_describe_component (vpc, prod-use1)
 ✅ Executing...
@@ -1766,18 +1766,17 @@ If you modify the VPC, it will affect 2 downstream components.
 # If you try to edit a file:
 You: Edit the vpc configuration
 
-AI (stack-analyzer): I'm a read-only analysis skill and cannot edit files.
-To make changes, please switch to the Component Refactor skill (Ctrl+A)
-or use the General skill.
+AI (atmos-stacks): I'm a read-only analysis skill and cannot edit files.
+To make changes, please switch to the atmos-components skill (Ctrl+A).
 ```
 </Terminal>
 
 **Why This Restriction?**
-Stack Analyzer is optimized for understanding and analyzing configurations, not modifying them. This prevents accidental changes during investigation and ensures the skill stays focused on its analytical role.
+The atmos-stacks skill is optimized for understanding and analyzing configurations, not modifying them. This prevents accidental changes during investigation and ensures the skill stays focused on its analytical role.
 
 ---
 
-#### Component Refactor Skill
+#### atmos-components Skill
 
 **Allowed Tools:**
 - ✅ `list_component_files` - Discover component structure
@@ -1794,21 +1793,21 @@ Stack Analyzer is optimized for understanding and analyzing configurations, not 
 - ⚠️ `execute_bash` - Always prompts before running commands
 
 **Use Cases:**
-- Refactoring Terraform/Helmfile components
+- Designing Terraform root modules and abstract components
 - Improving code structure and organization
 - Applying infrastructure-as-code best practices
-- Modernizing deprecated patterns
+- Managing component catalogs and versioning
 
 **Example:**
 
 <Terminal title="atmos ai chat">
 ```bash
-# Switch to Component Refactor skill
-Ctrl+A → Select "Component Refactor"
+# Switch to atmos-components skill
+Ctrl+A → Select "atmos-components"
 
 You: Refactor the VPC component to use modern naming conventions
 
-AI (component-refactor): I'll analyze and refactor the VPC component.
+AI (atmos-components): I'll analyze and refactor the VPC component.
 
 🔧 Tool: list_component_files (terraform, vpc)
 ✅ Executing...
@@ -1838,47 +1837,46 @@ File updated successfully. I've improved the variable naming consistency.
 # If you try to describe a stack:
 You: What stacks use this VPC?
 
-AI (component-refactor): I don't have access to stack analysis tools.
-For stack queries, please switch to the Stack Analyzer skill (Ctrl+A)
-or use the General skill.
+AI (atmos-components): I don't have access to stack analysis tools.
+For stack queries, please switch to the atmos-stacks skill (Ctrl+A).
 ```
 </Terminal>
 
 **Why These Restrictions?**
-Component Refactor focuses exclusively on code quality and structure. It requires confirmation before making changes or running commands to ensure you review all modifications. It doesn't need stack analysis tools because its job is improving code, not analyzing infrastructure topology.
+The atmos-components skill focuses exclusively on code quality and structure. It requires confirmation before making changes or running commands to ensure you review all modifications. It doesn't need stack analysis tools because its job is improving code, not analyzing infrastructure topology.
 
 ---
 
-#### Security Auditor Skill
+#### atmos-terraform Skill
 
 **Allowed Tools:**
-- ✅ `atmos_describe_component` - Examine component security
+- ✅ `atmos_describe_component` - Examine component details
 - ✅ `atmos_list_stacks` - Inventory all stacks
 - ✅ `read_stack_file` - Review stack configurations
 - ✅ `read_component_file` - Check component code
 - ✅ `atmos_validate_stacks` - Validate configurations
 - ✅ `read_file` - Read any file
-- ✅ `search_files` - Find security patterns
-- ❌ **Cannot edit files** - Audit only, no modifications
-- ❌ **Cannot execute commands** - Security review only
+- ✅ `search_files` - Find patterns across files
+- ✅ `execute_bash` ⚠️ - Run Terraform commands (requires confirmation)
+- ❌ **Cannot edit files** - Plan/review only
 
 **Use Cases:**
-- Security audits of infrastructure configurations
-- Identifying IAM policy issues
-- Checking network security (CIDR blocks, security groups)
-- Validating encryption and secrets management
-- Detecting exposed credentials
+- Terraform plan/apply/deploy orchestration
+- Workspace management and backend configuration
+- Reviewing Terraform state and plans
+- Debugging Terraform errors
+- Authentication and provider configuration
 
 **Example:**
 
 <Terminal title="atmos ai chat">
 ```bash
-# Switch to Security Auditor skill
-Ctrl+A → Select "Security Auditor"
+# Switch to atmos-terraform skill
+Ctrl+A → Select "atmos-terraform"
 
 You: Audit the VPC security configuration for prod
 
-AI (security-auditor): I'll perform a comprehensive security audit.
+AI (atmos-terraform): I'll review the VPC configuration.
 
 🔧 Tool: atmos_describe_component (vpc, prod-use1)
 ✅ Executing...
@@ -1921,20 +1919,19 @@ Recommendations:
 # If you try to fix the issues:
 You: Fix these security issues
 
-AI (security-auditor): I'm an audit-only skill and cannot modify configurations.
-To implement these fixes, please switch to the Component Refactor skill (Ctrl+A)
-or use the General skill.
+AI (atmos-validation): I'm a validation-only skill and cannot modify configurations.
+To implement these fixes, please switch to the atmos-components skill (Ctrl+A).
 
 I can provide you with the specific changes needed if you'd like.
 ```
 </Terminal>
 
 **Why This Restriction?**
-Security Auditor is a read-only skill focused on finding and reporting security issues. It cannot make changes because security fixes require careful review and testing. This separation ensures audit findings remain objective and that all fixes go through proper review processes.
+The atmos-validation skill is focused on finding and reporting issues. It cannot make changes because fixes require careful review and testing. This separation ensures validation findings remain objective and that all fixes go through proper review processes.
 
 ---
 
-#### Config Validator Skill
+#### atmos-validation Skill
 
 **Allowed Tools:**
 - ✅ `atmos_validate_stacks` - Comprehensive validation
@@ -1948,8 +1945,8 @@ Security Auditor is a read-only skill focused on finding and reporting security 
 
 **Use Cases:**
 - Validating YAML syntax and structure
-- Checking schema compliance
-- Verifying variable references
+- Checking OPA/Rego policy compliance
+- Verifying JSON Schema conformance
 - Detecting circular dependencies
 - Ensuring required fields are present
 
@@ -1957,12 +1954,12 @@ Security Auditor is a read-only skill focused on finding and reporting security 
 
 <Terminal title="atmos ai chat">
 ```bash
-# Switch to Config Validator skill
-Ctrl+A → Select "Config Validator"
+# Switch to atmos-validation skill
+Ctrl+A → Select "atmos-validation"
 
 You: Validate all stack configurations
 
-AI (config-validator): I'll run comprehensive validation on all stacks.
+AI (atmos-validation): I'll run comprehensive validation on all stacks.
 
 🔧 Tool: atmos_validate_stacks
 ✅ Executing...
@@ -2007,14 +2004,14 @@ All validation issues must be resolved before deployment.
 # If you try to make edits:
 You: Fix the validation errors
 
-AI (config-validator): I can identify and explain errors but cannot edit files.
-To fix these issues, please switch to the General skill (Ctrl+A)
+AI (atmos-validation): I can identify and explain errors but cannot edit files.
+To fix these issues, please switch to the atmos-components skill (Ctrl+A)
 or manually edit the files based on my recommendations.
 ```
 </Terminal>
 
 **Why This Restriction?**
-Config Validator focuses exclusively on finding configuration errors and schema violations. It's designed to be a "linter" skill that reports issues but doesn't modify files, ensuring validation results remain authoritative and objective.
+The atmos-validation skill focuses exclusively on finding configuration errors, policy violations, and schema issues. It's designed to be a "linter" skill that reports issues but doesn't modify files, ensuring validation results remain authoritative and objective.
 
 ---
 
@@ -2078,16 +2075,16 @@ settings:
 #### Workflow: Security Review → Fixes
 
 ```bash
-# Step 1: Audit with Security Auditor (read-only)
-Ctrl+A → "Security Auditor"
-You: Audit the VPC security configuration
+# Step 1: Review with atmos-terraform (read-only analysis)
+Ctrl+A → "atmos-terraform"
+You: Review the VPC security configuration
 
-AI: [Performs audit, identifies issues]
+AI: [Performs review, identifies issues]
     🔴 Found 3 critical security issues
     [Details of each issue with line numbers]
 
-# Step 2: Fix with Component Refactor (write access)
-Ctrl+A → "Component Refactor"
+# Step 2: Fix with atmos-components (write access)
+Ctrl+A → "atmos-components"
 You: Fix the security issues we just found
 
 AI: I'll implement the security fixes:
@@ -2096,8 +2093,8 @@ AI: I'll implement the security fixes:
     ✅ Tightened egress rules
     ✅ Enabled VPC flow logs
 
-# Step 3: Validate with Config Validator
-Ctrl+A → "Config Validator"
+# Step 3: Validate with atmos-validation
+Ctrl+A → "atmos-validation"
 You: Validate the changes
 
 AI: [Runs validation]
@@ -2108,16 +2105,16 @@ AI: [Runs validation]
 #### Workflow: Architecture Analysis → Refactoring
 
 ```bash
-# Step 1: Analyze with Stack Analyzer
-Ctrl+A → "Stack Analyzer"
+# Step 1: Analyze with atmos-stacks
+Ctrl+A → "atmos-stacks"
 You: Analyze our VPC architecture across all environments
 
 AI: [Performs deep analysis]
     Found inconsistent subnet configurations between environments
     [Shows detailed comparison]
 
-# Step 2: Refactor with Component Refactor
-Ctrl+A → "Component Refactor"
+# Step 2: Refactor with atmos-components
+Ctrl+A → "atmos-components"
 You: Standardize the subnet configurations
 
 AI: [Makes changes with confirmation]

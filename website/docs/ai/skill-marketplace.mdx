@@ -17,8 +17,8 @@ import Experimental from '@site/src/components/Experimental'
 The Atmos Skill Marketplace is **not related to Anthropic's Claude marketplace**. This is Atmos's own system for installing and sharing specialized AI skills from GitHub repositories. These skills work within the Atmos ecosystem to provide domain-specific expertise for infrastructure management. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
 :::
 
-:::caution Coming Soon
-The Skill Marketplace infrastructure is implemented and ready to use. However, community-contributed skills are still in development. You can create and share your own skills today, but the official catalog of community skills is coming soon.
+:::info Marketplace Available
+The Skill Marketplace is implemented with 21 official skills available for installation. You can also create and share your own skills. Community-contributed skills continue to grow.
 :::
 
 The Atmos AI Skill Marketplace enables you to install, share, and use community-created AI skills from GitHub repositories. Extend Atmos with specialized skills created by the community or publish your own custom skills for others to use.
@@ -50,20 +50,23 @@ Install skills using various GitHub URL formats:
 
 <Terminal title="terminal">
 ```bash
-# GitHub shorthand (recommended)
-atmos ai skill install github.com/cloudposse/atmos-skill-terraform
+# Install all 21 official Atmos agent skills (recommended)
+atmos ai skill install cloudposse/atmos
 
 # With specific version tag
-atmos ai skill install github.com/cloudposse/atmos-skill-terraform@v1.2.3
+atmos ai skill install cloudposse/atmos@v1.200.0
 
 # With branch name
-atmos ai skill install github.com/cloudposse/atmos-skill-terraform@main
+atmos ai skill install cloudposse/atmos@main
+
+# Full GitHub path also works
+atmos ai skill install github.com/cloudposse/atmos
 
 # Full HTTPS URL
-atmos ai skill install https://github.com/cloudposse/atmos-skill-terraform.git
+atmos ai skill install https://github.com/cloudposse/atmos.git
 
 # SSH URL
-atmos ai skill install git@github.com:cloudposse/atmos-skill-terraform.git
+atmos ai skill install git@github.com:cloudposse/atmos.git
 ```
 </Terminal>
 
@@ -86,7 +89,7 @@ Reinstall a skill that's already installed:
 
 <Terminal title="terminal">
 ```bash
-atmos ai skill install github.com/cloudposse/atmos-skill-terraform --force
+atmos ai skill install cloudposse/atmos --force
 ```
 </Terminal>
 
@@ -96,41 +99,33 @@ Install without interactive confirmation prompt:
 
 <Terminal title="terminal">
 ```bash
-atmos ai skill install github.com/cloudposse/atmos-skill-terraform --skip-confirm
+atmos ai skill install cloudposse/atmos --yes
 ```
 </Terminal>
 
 :::warning Security Consideration
-Only use `--skip-confirm` with skills from trusted sources. Always review skill metadata before installing, especially the `tools.allowed` section.
+Only use `--yes` with skills from trusted sources. Always review skill metadata before installing, especially the `tools.allowed` section.
 :::
 
 ### Example Installation Session
 
 <Terminal title="terminal">
 ```bash
-$ atmos ai skill install github.com/cloudposse/atmos-skill-terraform
+$ atmos ai skill install cloudposse/atmos
 
-Downloading skill from https://github.com/cloudposse/atmos-skill-terraform.git...
+Downloading skills from https://github.com/cloudposse/atmos.git...
+Discovered 21 skills in package:
+  atmos-ansible, atmos-auth, atmos-components, atmos-config, ...
 
-Skill: Terraform Expert
-Author: Cloud Posse
-Version: 1.0.0
-Repository: https://github.com/cloudposse/atmos-skill-terraform
+Install all 21 skills? [y/N] y
 
-Tool Access:
-  Allowed: atmos_describe_component, read_component_file, search_files, execute_bash
+Installing atmos-ansible... done
+Installing atmos-auth... done
+Installing atmos-components... done
+...
+21 skills installed successfully.
 
-Warning: This skill requests access to destructive operations.
-   Review the skill source before using:
-   https://github.com/cloudposse/atmos-skill-terraform
-
-Do you want to install this skill? [y/N] y
-
-Skill "Terraform Expert" installed successfully
-  Version: 1.0.0
-  Location: /Users/you/.atmos/skills/github.com/cloudposse/atmos-skill-terraform
-
-Usage: Switch to this skill in the TUI with Ctrl+A
+Usage: Switch skills in the TUI with Ctrl+A
 ```
 </Terminal>
 
@@ -154,12 +149,12 @@ Installed Community Skills:
 +----------------------+-------------------------+---------+-----------------------------------------+-------------+
 | NAME                 | DISPLAY NAME            | VERSION | SOURCE                                  | STATUS      |
 +----------------------+-------------------------+---------+-----------------------------------------+-------------+
-| atmos-skill-cost     | Cost Optimizer          | 2.1.0   | github.com/cloudposse/atmos-skill-cost  | Enabled     |
-| atmos-skill-terraform| Terraform Expert        | 1.0.0   | github.com/cloudposse/atmos-skill-...   | Enabled     |
-| custom-compliance    | Compliance Auditor      | 1.5.2   | github.com/myorg/compliance-skill       | Disabled    |
+| atmos-terraform      | Terraform Expert        | 1.0.0   | github.com/cloudposse/atmos             | Enabled     |
+| atmos-components     | Component Architect     | 1.0.0   | github.com/cloudposse/atmos             | Enabled     |
+| atmos-stacks         | Atmos Stacks            | 1.0.0   | github.com/cloudposse/atmos             | Enabled     |
 +----------------------+-------------------------+---------+-----------------------------------------+-------------+
 
-Total: 3 skills (2 enabled, 1 disabled)
+Total: 3 skills (3 enabled)
 ```
 
 ### Uninstall a Skill
@@ -169,10 +164,10 @@ Remove an installed skill:
 <Terminal title="terminal">
 ```bash
 # Interactive confirmation
-atmos ai skill uninstall atmos-skill-terraform
+atmos ai skill uninstall atmos-terraform
 
 # Force uninstall (no confirmation)
-atmos ai skill uninstall atmos-skill-terraform --force
+atmos ai skill uninstall atmos-terraform --force
 ```
 </Terminal>
 
@@ -187,10 +182,10 @@ This removes:
 <Terminal title="terminal">
 ```bash
 # Disable skill (keeps files, removes from TUI)
-atmos ai skill disable atmos-skill-terraform
+atmos ai skill disable atmos-terraform
 
 # Re-enable skill
-atmos ai skill enable atmos-skill-terraform
+atmos ai skill enable atmos-terraform
 ```
 </Terminal>
 
@@ -252,7 +247,7 @@ tools:
 # Capabilities (optional)
 capabilities:
   - terraform-development
-  - component-refactoring
+  - component-architecture
   - best-practices
 
 # Dependencies (optional)
@@ -267,7 +262,7 @@ env:
     description: Terraform version to use for validation
 
 # Links
-repository: https://github.com/cloudposse/atmos-skill-terraform
+repository: https://github.com/yourorg/atmos-skill-terraform
 documentation: https://docs.example.com/terraform-skill
 ---
 
@@ -458,11 +453,8 @@ Before publishing, test your skill:
 
 <Terminal title="terminal">
 ```bash
-# Install from local directory (for testing)
-atmos ai skill install file:///path/to/your-skill
-
-# Or install from your GitHub repo
-atmos ai skill install github.com/yourorg/atmos-skill-terraform
+# Install from your GitHub repo
+atmos ai skill install yourorg/atmos-skill-terraform
 
 # Test in TUI
 atmos ai chat
@@ -599,33 +591,29 @@ This creates a two-tier safety system:
 - Add security warnings in README
 - Keep prompts focused and transparent
 
-## Marketplace Skill vs Built-in Skill vs Custom Skill
+## Marketplace Skills vs Custom Skills
 
-Atmos has three types of skills:
+Atmos has two types of skills:
 
-| Feature | Built-in Skills | Marketplace Skills | Custom Skills |
-|---------|----------------|-------------------|---------------|
-| **Location** | Compiled into Atmos binary | `~/.atmos/skills/` | `atmos.yaml` config |
-| **Installation** | Pre-installed | `atmos ai skill install` | Add to config file |
-| **Updates** | Atmos releases | Git pull/reinstall | Edit config |
-| **Sharing** | Everyone has them | Share via GitHub | Team only (via config repo) |
-| **Examples** | General, Stack Analyzer | Community contributions | Company-specific |
-| **Format** | `pkg/ai/skills/builtin/*/SKILL.md` | Repository's `SKILL.md` | Inline in `atmos.yaml` |
-| **Version Control** | Atmos version | Git tags/branches | Config file changes |
+| Feature | Marketplace Skills | Custom Skills |
+|---------|-------------------|---------------|
+| **Location** | `~/.atmos/skills/` | `atmos.yaml` config |
+| **Installation** | `atmos ai skill install` | Add to config file |
+| **Updates** | Git pull/reinstall | Edit config |
+| **Sharing** | Share via GitHub | Team only (via config repo) |
+| **Examples** | atmos-terraform, atmos-stacks, atmos-security | Company-specific |
+| **Format** | Repository's `SKILL.md` | Inline in `atmos.yaml` |
+| **Version Control** | Git tags/branches | Config file changes |
 
 ### When to Use Each
 
-**Use Built-in Skills:**
-- Standard Atmos workflows
-- Proven, tested skills
-- No installation needed
-- Examples: Stack Analyzer, Security Auditor
-
 **Use Marketplace Skills:**
+- Standard Atmos workflows
+- Proven, tested official skills
 - Specialized community tools
 - Reusable across teams/organizations
 - Version-controlled skills
-- Examples: Cost optimizer, compliance checker, cloud provider specialists
+- Examples: atmos-terraform, atmos-stacks, atmos-security, atmos-config, atmos-components
 
 **Use Custom Skills:**
 - Company-specific workflows
@@ -659,7 +647,7 @@ tools:
   restricted:
     - execute_bash
 
-repository: https://github.com/cloudposse/atmos-skill-state-migrator
+repository: https://github.com/yourorg/atmos-skill-state-migrator
 ---
 
 # Skill: Terraform State Migrator
@@ -719,13 +707,13 @@ You are a cost optimization expert...
 ```
 </File>
 
-### Multi-Cloud Security Auditor
+### Multi-Cloud Security Validator
 
 <File title="SKILL.md">
 ```markdown
 ---
 name: multicloud-security
-display_name: "Multi-Cloud Security Auditor"
+display_name: "Multi-Cloud Security Validator"
 version: 1.5.0
 author: Security Team
 description: Security auditing for AWS, Azure, and GCP infrastructure
@@ -756,7 +744,7 @@ dependencies:
 repository: https://github.com/example/atmos-skill-multicloud-security
 ---
 
-# Skill: Multi-Cloud Security Auditor
+# Skill: Multi-Cloud Security Validator
 
 ## Role
 You are a multi-cloud security expert...
@@ -869,14 +857,14 @@ cp ~/.atmos/skills/registry.json ~/.atmos/skills/registry.json.backup
 rm ~/.atmos/skills/registry.json
 
 # Reinstall skills
-atmos ai skill install github.com/user/skill1
-atmos ai skill install github.com/user/skill2
+atmos ai skill install user/skill1
+atmos ai skill install user/skill2
 ```
 </Terminal>
 
 ## Related Documentation
 
-- [AI Skills](/ai/skills) - Built-in skills and skill system overview
+- [AI Skills](/ai/skills) - Skill system overview and configuration
 - [AI Configuration](/ai/configuration) - Configure AI providers
 - [AI Chat Command](/cli/commands/ai/chat) - Interactive AI chat interface
 - [Tool Execution](/ai/tools) - How AI skills use tools
@@ -911,9 +899,9 @@ Follow these conventions for community skills:
 **Skill name in SKILL.md:**
 - No prefix needed
 - Use kebab-case
-- Examples: `terraform-expert`, `cost-optimizer`, `security-auditor`
+- Examples: `terraform-expert`, `cost-optimizer`, `policy-validator`
 
 **Display name:**
 - Human-readable
 - Title Case
-- Examples: "Terraform Expert", "Cost Optimizer", "Security Auditor"
+- Examples: "Terraform Expert", "Cost Optimizer", "Policy Validator"

@@ -1,9 +1,6 @@
 package skills
 
 import (
-	"fmt"
-
-	"github.com/cloudposse/atmos/pkg/ai/skills/builtin"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -20,13 +17,7 @@ type Skill struct {
 	Description string
 
 	// SystemPrompt contains specialized instructions for the AI.
-	// This is either set directly or loaded from SystemPromptPath.
 	SystemPrompt string
-
-	// SystemPromptPath is the path to the SKILL.md file in the embedded filesystem.
-	// If set, the prompt will be loaded from this file when LoadSystemPrompt() is called.
-	// For built-in skills, use the directory format (e.g., "general/SKILL.md").
-	SystemPromptPath string
 
 	// AllowedTools lists tool names this skill can use.
 	// Empty list means all tools are allowed.
@@ -40,6 +31,18 @@ type Skill struct {
 
 	// IsBuiltIn indicates if this is a built-in skill.
 	IsBuiltIn bool
+}
+
+// NewFallbackSkill returns a minimal fallback skill for when no skills are installed.
+func NewFallbackSkill() *Skill {
+	return &Skill{
+		Name:         "general",
+		DisplayName:  "General",
+		Description:  "General-purpose assistant for Atmos operations",
+		SystemPrompt: "You are Atmos AI, an assistant for cloud infrastructure orchestration using Atmos CLI. You help with Terraform, Helmfile, stack configurations, and infrastructure management. Install specialized skills with 'atmos ai skill install' for deeper domain expertise.",
+		Category:     "general",
+		IsBuiltIn:    false,
+	}
 }
 
 // FromConfig creates a Skill from configuration.
@@ -83,20 +86,7 @@ func (s *Skill) IsToolRestricted(toolName string) bool {
 	return false
 }
 
-// LoadSystemPrompt loads the skill's system prompt from the embedded filesystem.
-// If SystemPromptPath is empty, it returns the existing SystemPrompt value.
-// This allows skills to use either hardcoded prompts or file-based prompts.
+// LoadSystemPrompt returns the skill's system prompt.
 func (s *Skill) LoadSystemPrompt() (string, error) {
-	// If no path specified, use hardcoded prompt (backward compatibility).
-	if s.SystemPromptPath == "" {
-		return s.SystemPrompt, nil
-	}
-
-	// Load prompt from embedded filesystem (parses SKILL.md frontmatter).
-	content, err := builtin.Read(s.SystemPromptPath)
-	if err != nil {
-		return "", fmt.Errorf("failed to load system prompt for skill %q: %w", s.Name, err)
-	}
-
-	return content, nil
+	return s.SystemPrompt, nil
 }

@@ -32,6 +32,9 @@ type SkillMetadata struct {
 
 	// Atmos-specific extension: Restricted tools (not in standard).
 	RestrictedTools []string `yaml:"restricted-tools,omitempty"`
+
+	// References lists paths to additional files to include in the system prompt.
+	References []string `yaml:"references,omitempty"`
 }
 
 // CompatibilityConfig defines version requirements.
@@ -46,6 +49,7 @@ type ExtendedMetadata struct {
 	Author      string `yaml:"author,omitempty"`
 	Category    string `yaml:"category,omitempty"`
 	Repository  string `yaml:"repository,omitempty"`
+	Copyright   string `yaml:"copyright,omitempty"`
 }
 
 // ParseSkillMetadata reads and parses a SKILL.md file's frontmatter.
@@ -124,24 +128,6 @@ func validateSkillMetadata(m *SkillMetadata) error {
 	}
 	if m.Description == "" {
 		return &ValidationError{Field: "description", Message: "description is required"}
-	}
-
-	// Optional: Validate category if provided.
-	if m.Metadata != nil && m.Metadata.Category != "" {
-		validCategories := map[string]bool{
-			"general":      true,
-			"analysis":     true,
-			"refactor":     true,
-			"security":     true,
-			"validation":   true,
-			"optimization": true,
-		}
-		if !validCategories[m.Metadata.Category] {
-			return &ValidationError{
-				Field:   "metadata.category",
-				Message: fmt.Sprintf("invalid category %q (must be one of: general, analysis, refactor, security, validation, optimization)", m.Metadata.Category),
-			}
-		}
 	}
 
 	return nil

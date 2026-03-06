@@ -1,30 +1,31 @@
 package skills
 
 import (
-	"fmt"
-
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
-// LoadSkills loads all skills (built-in and custom) from configuration.
-func LoadSkills(atmosConfig *schema.AtmosConfiguration) (*Registry, error) {
+// SkillLoader is the interface for loading marketplace-installed skills into a registry.
+// This allows the loader to be decoupled from the marketplace package.
+type SkillLoader interface {
+	LoadInstalledSkills(registry *Registry) error
+}
+
+// LoadSkills loads all skills (marketplace-installed and custom) from configuration.
+// If a marketplaceLoader is provided, it loads marketplace-installed skills first.
+func LoadSkills(atmosConfig *schema.AtmosConfiguration, marketplaceLoader ...SkillLoader) (*Registry, error) {
 	registry := NewRegistry()
 
-	// Register all built-in skills.
-	builtinSkills := GetBuiltInSkills()
-	for _, skill := range builtinSkills {
-		if err := registry.Register(skill); err != nil {
-			return nil, fmt.Errorf("failed to register built-in skill %s: %w", skill.Name, err)
-		}
+	// 1. Load marketplace-installed skills.
+	if len(marketplaceLoader) > 0 && marketplaceLoader[0] != nil {
+		_ = marketplaceLoader[0].LoadInstalledSkills(registry)
 	}
 
-	// Load custom skills from configuration if available.
+	// 2. Load custom skills from configuration if available.
 	if atmosConfig != nil && len(atmosConfig.Settings.AI.Skills) > 0 {
 		for name, config := range atmosConfig.Settings.AI.Skills {
 			skill := FromConfig(name, config)
 			if err := registry.Register(skill); err != nil {
 				// Log warning but continue - don't fail if custom skill is invalid.
-				// This allows the system to still work with built-in skills.
 				continue
 			}
 		}
@@ -34,10 +35,10 @@ func LoadSkills(atmosConfig *schema.AtmosConfiguration) (*Registry, error) {
 }
 
 // GetDefaultSkill returns the name of the default skill from configuration.
-// Returns "general" if not specified.
+// Returns empty string if not specified (caller should handle fallback).
 func GetDefaultSkill(atmosConfig *schema.AtmosConfiguration) string {
 	if atmosConfig != nil && atmosConfig.Settings.AI.DefaultSkill != "" {
 		return atmosConfig.Settings.AI.DefaultSkill
 	}
-	return GeneralSkill
+	return ""
 }

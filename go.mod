@@ -118,13 +118,13 @@ require (
 	golang.org/x/term v0.40.0
 	golang.org/x/text v0.34.0
 	google.golang.org/api v0.269.0
-	google.golang.org/genai v1.46.0
+	google.golang.org/genai v1.49.0
 	google.golang.org/grpc v1.79.1
 	gopkg.in/ini.v1 v1.67.1
 	gopkg.in/op/go-logging.v1 v1.0.0-20160211212156-b2cb9fa56473
 	gopkg.in/yaml.v2 v2.4.0
 	gopkg.in/yaml.v3 v3.0.1
-	modernc.org/sqlite v1.45.0
+	modernc.org/sqlite v1.46.1
 	mvdan.cc/sh/v3 v3.12.0
 )
 

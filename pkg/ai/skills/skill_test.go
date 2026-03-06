@@ -1,14 +1,11 @@
 package skills
 
 import (
-	"errors"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/cloudposse/atmos/pkg/ai/skills/builtin"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
@@ -17,7 +14,6 @@ func TestFromConfig(t *testing.T) {
 		name           string
 		skillName      string
 		config         *schema.AISkillConfig
-		expectedSkill  *Skill
 		checkAssertion func(*testing.T, *Skill)
 	}{
 		{
@@ -383,112 +379,26 @@ func TestSkill_LoadSystemPrompt(t *testing.T) {
 	tests := []struct {
 		name         string
 		skill        *Skill
-		expectError  bool
-		errorCheck   func(*testing.T, error)
 		contentCheck func(*testing.T, string)
 	}{
 		{
-			name: "load prompt from embedded file (general skill)",
+			name: "returns hardcoded prompt",
 			skill: &Skill{
-				Name:             "general",
-				SystemPromptPath: "general/SKILL.md",
+				Name:         "hardcoded",
+				SystemPrompt: "This is a hardcoded system prompt.",
 			},
-			expectError: false,
-			contentCheck: func(t *testing.T, content string) {
-				assert.NotEmpty(t, content)
-				assert.Contains(t, content, "Skill: General")
-				assert.Contains(t, content, "Role")
-				// Should not contain frontmatter.
-				assert.NotContains(t, content, "---")
-				assert.NotContains(t, content, "name: general")
-			},
-		},
-		{
-			name: "use hardcoded prompt when path is empty",
-			skill: &Skill{
-				Name:             "hardcoded",
-				SystemPrompt:     "This is a hardcoded system prompt.",
-				SystemPromptPath: "",
-			},
-			expectError: false,
 			contentCheck: func(t *testing.T, content string) {
 				assert.Equal(t, "This is a hardcoded system prompt.", content)
 			},
 		},
 		{
-			name: "empty prompt when both path and prompt are empty",
+			name: "returns empty when prompt is empty",
 			skill: &Skill{
-				Name:             "empty",
-				SystemPrompt:     "",
-				SystemPromptPath: "",
+				Name:         "empty",
+				SystemPrompt: "",
 			},
-			expectError: false,
 			contentCheck: func(t *testing.T, content string) {
 				assert.Empty(t, content)
-			},
-		},
-		{
-			name: "error when file does not exist",
-			skill: &Skill{
-				Name:             "nonexistent",
-				SystemPromptPath: "nonexistent/SKILL.md",
-			},
-			expectError: true,
-			errorCheck: func(t *testing.T, err error) {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), "failed to load system prompt")
-				assert.Contains(t, err.Error(), "nonexistent")
-			},
-		},
-		{
-			name: "error when path is invalid",
-			skill: &Skill{
-				Name:             "invalid",
-				SystemPromptPath: "../../../etc/passwd",
-			},
-			expectError: true,
-			errorCheck: func(t *testing.T, err error) {
-				assert.Error(t, err)
-			},
-		},
-		{
-			name: "load stack-analyzer skill",
-			skill: &Skill{
-				Name:             "stack-analyzer",
-				SystemPromptPath: "stack-analyzer/SKILL.md",
-			},
-			expectError: false,
-			contentCheck: func(t *testing.T, content string) {
-				assert.NotEmpty(t, content)
-				// Should not contain frontmatter.
-				assert.NotContains(t, content, "---")
-			},
-		},
-		{
-			name: "load security-auditor skill",
-			skill: &Skill{
-				Name:             "security-auditor",
-				SystemPromptPath: "security-auditor/SKILL.md",
-			},
-			expectError: false,
-			contentCheck: func(t *testing.T, content string) {
-				assert.NotEmpty(t, content)
-				// Should not contain frontmatter.
-				assert.NotContains(t, content, "---")
-			},
-		},
-		{
-			name: "prefer file path over hardcoded prompt",
-			skill: &Skill{
-				Name:             "prefer-file",
-				SystemPrompt:     "This should be ignored",
-				SystemPromptPath: "general/SKILL.md",
-			},
-			expectError: false,
-			contentCheck: func(t *testing.T, content string) {
-				assert.NotEmpty(t, content)
-				assert.Contains(t, content, "Skill: General")
-				assert.NotContains(t, content, "This should be ignored")
 			},
 		},
 	}
@@ -496,58 +406,48 @@ func TestSkill_LoadSystemPrompt(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			content, err := tt.skill.LoadSystemPrompt()
-
-			if tt.expectError {
-				require.Error(t, err)
-				if tt.errorCheck != nil {
-					tt.errorCheck(t, err)
-				}
-			} else {
-				require.NoError(t, err)
-				if tt.contentCheck != nil {
-					tt.contentCheck(t, content)
-				}
+			require.NoError(t, err)
+			if tt.contentCheck != nil {
+				tt.contentCheck(t, content)
 			}
 		})
 	}
 }
 
-func TestSkill_LoadSystemPrompt_ErrorWrapping(t *testing.T) {
-	skill := &Skill{
-		Name:             "test-skill",
-		SystemPromptPath: "nonexistent/SKILL.md",
-	}
+func TestNewFallbackSkill(t *testing.T) {
+	skill := NewFallbackSkill()
 
-	_, err := skill.LoadSystemPrompt()
-	require.Error(t, err)
+	assert.Equal(t, "general", skill.Name)
+	assert.Equal(t, "General", skill.DisplayName)
+	assert.NotEmpty(t, skill.Description)
+	assert.NotEmpty(t, skill.SystemPrompt)
+	assert.Contains(t, skill.SystemPrompt, "Atmos AI")
+	assert.Contains(t, skill.SystemPrompt, "atmos ai skill install")
+	assert.Equal(t, "general", skill.Category)
+	assert.False(t, skill.IsBuiltIn)
 
-	// Verify error wrapping.
-	assert.Contains(t, err.Error(), "test-skill")
-	assert.Contains(t, err.Error(), "failed to load system prompt")
-
-	// Verify error can be unwrapped.
-	assert.NotNil(t, errors.Unwrap(err))
+	// Fallback skill should allow all tools.
+	assert.True(t, skill.IsToolAllowed("any-tool"))
+	assert.False(t, skill.IsToolRestricted("any-tool"))
 }
 
 func TestSkill_AllFields(t *testing.T) {
 	// Test that all Skill struct fields can be set and retrieved.
 	skill := &Skill{
-		Name:             "complete-skill",
-		DisplayName:      "Complete Skill",
-		Description:      "A skill with all fields set",
-		SystemPrompt:     "System prompt content",
-		SystemPromptPath: "path/to/skill.md",
-		AllowedTools:     []string{"tool1", "tool2"},
-		RestrictedTools:  []string{"tool3", "tool4"},
-		Category:         "testing",
-		IsBuiltIn:        true,
+		Name:            "complete-skill",
+		DisplayName:     "Complete Skill",
+		Description:     "A skill with all fields set",
+		SystemPrompt:    "System prompt content",
+		AllowedTools:    []string{"tool1", "tool2"},
+		RestrictedTools: []string{"tool3", "tool4"},
+		Category:        "testing",
+		IsBuiltIn:       true,
 	}
 
 	assert.Equal(t, "complete-skill", skill.Name)
 	assert.Equal(t, "Complete Skill", skill.DisplayName)
 	assert.Equal(t, "A skill with all fields set", skill.Description)
 	assert.Equal(t, "System prompt content", skill.SystemPrompt)
-	assert.Equal(t, "path/to/skill.md", skill.SystemPromptPath)
 	assert.Equal(t, []string{"tool1", "tool2"}, skill.AllowedTools)
 	assert.Equal(t, []string{"tool3", "tool4"}, skill.RestrictedTools)
 	assert.Equal(t, "testing", skill.Category)
@@ -562,7 +462,6 @@ func TestSkill_EmptySkill(t *testing.T) {
 	assert.Empty(t, skill.DisplayName)
 	assert.Empty(t, skill.Description)
 	assert.Empty(t, skill.SystemPrompt)
-	assert.Empty(t, skill.SystemPromptPath)
 	assert.Nil(t, skill.AllowedTools)
 	assert.Nil(t, skill.RestrictedTools)
 	assert.Empty(t, skill.Category)
@@ -614,65 +513,6 @@ func TestSkill_BuiltInStatus(t *testing.T) {
 	assert.True(t, builtInSkill.IsBuiltIn)
 }
 
-// TestBuiltinSkillsExist verifies that the expected built-in skills are actually embedded.
-func TestBuiltinSkillsExist(t *testing.T) {
-	expectedSkills := []string{
-		"general/SKILL.md",
-		"stack-analyzer/SKILL.md",
-		"security-auditor/SKILL.md",
-		"component-refactor/SKILL.md",
-		"config-validator/SKILL.md",
-	}
-
-	for _, skillPath := range expectedSkills {
-		t.Run(skillPath, func(t *testing.T) {
-			content, err := builtin.Read(skillPath)
-			require.NoError(t, err, "Built-in skill should exist: %s", skillPath)
-			assert.NotEmpty(t, content, "Built-in skill should have content: %s", skillPath)
-		})
-	}
-}
-
-// TestBuiltinSkillList verifies that we can list all built-in skills.
-func TestBuiltinSkillList(t *testing.T) {
-	skills, err := builtin.List()
-	require.NoError(t, err)
-	assert.NotEmpty(t, skills, "Should have at least one built-in skill")
-
-	// All returned paths should be valid.
-	for _, skillPath := range skills {
-		assert.Contains(t, skillPath, "/SKILL.md", "Skill path should contain /SKILL.md: %s", skillPath)
-	}
-}
-
-func TestSkill_LoadSystemPrompt_WithBuiltinList(t *testing.T) {
-	// Get list of all built-in skills.
-	skills, err := builtin.List()
-	require.NoError(t, err)
-	require.NotEmpty(t, skills, "Should have built-in skills")
-
-	// Test loading each built-in skill.
-	for _, skillPath := range skills {
-		t.Run(skillPath, func(t *testing.T) {
-			skill := &Skill{
-				Name:             skillPath,
-				SystemPromptPath: skillPath,
-			}
-
-			content, err := skill.LoadSystemPrompt()
-			require.NoError(t, err)
-			assert.NotEmpty(t, content)
-
-			// Verify YAML frontmatter delimiter was stripped.
-			// Content should not start with "---" which is the frontmatter delimiter.
-			lines := strings.Split(content, "\n")
-			if len(lines) > 0 {
-				assert.NotEqual(t, "---", strings.TrimSpace(lines[0]), "Content should not start with frontmatter delimiter")
-			}
-		})
-	}
-}
-
 func TestFromConfig_PreservesAllFields(t *testing.T) {
 	// Verify that FromConfig doesn't lose any data from the config.
 	config := &schema.AISkillConfig{
@@ -695,5 +535,4 @@ func TestFromConfig_PreservesAllFields(t *testing.T) {
 	assert.Equal(t, config.RestrictedTools, skill.RestrictedTools)
 	assert.Equal(t, config.Category, skill.Category)
 	assert.False(t, skill.IsBuiltIn)
-	assert.Empty(t, skill.SystemPromptPath)
 }

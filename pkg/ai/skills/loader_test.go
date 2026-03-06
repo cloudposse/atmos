@@ -9,29 +9,37 @@ import (
 	"github.com/cloudposse/atmos/pkg/schema"
 )
 
+// mockSkillLoader implements SkillLoader for testing.
+type mockSkillLoader struct {
+	skills []*Skill
+	err    error
+}
+
+func (m *mockSkillLoader) LoadInstalledSkills(registry *Registry) error {
+	if m.err != nil {
+		return m.err
+	}
+	for _, skill := range m.skills {
+		_ = registry.Register(skill)
+	}
+	return nil
+}
+
 func TestLoadSkills_WithNilConfig(t *testing.T) {
-	// Arrange - nil config should still load built-in skills.
+	// Arrange - nil config with no marketplace loader.
 	var atmosConfig *schema.AtmosConfiguration = nil
 
 	// Act.
 	registry, err := LoadSkills(atmosConfig)
 
-	// Assert.
+	// Assert - should return empty registry.
 	require.NoError(t, err)
 	require.NotNil(t, registry)
-
-	// Should have all built-in skills registered.
-	builtinSkills := GetBuiltInSkills()
-	assert.Equal(t, len(builtinSkills), registry.Count())
-
-	// Verify specific built-in skills are present.
-	for _, skill := range builtinSkills {
-		assert.True(t, registry.Has(skill.Name), "Built-in skill %s should be registered", skill.Name)
-	}
+	assert.Equal(t, 0, registry.Count())
 }
 
 func TestLoadSkills_WithEmptyConfig(t *testing.T) {
-	// Arrange - config with no custom skills.
+	// Arrange - config with no custom skills, no marketplace loader.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
@@ -46,10 +54,29 @@ func TestLoadSkills_WithEmptyConfig(t *testing.T) {
 	// Assert.
 	require.NoError(t, err)
 	require.NotNil(t, registry)
+	assert.Equal(t, 0, registry.Count())
+}
 
-	// Should have all built-in skills registered.
-	builtinSkills := GetBuiltInSkills()
-	assert.Equal(t, len(builtinSkills), registry.Count())
+func TestLoadSkills_WithMarketplaceSkills(t *testing.T) {
+	// Arrange - marketplace loader with skills.
+	loader := &mockSkillLoader{
+		skills: []*Skill{
+			{Name: "atmos-terraform", DisplayName: "Terraform", Description: "Terraform skill"},
+			{Name: "atmos-config", DisplayName: "Config", Description: "Config skill"},
+		},
+	}
+
+	atmosConfig := &schema.AtmosConfiguration{}
+
+	// Act.
+	registry, err := LoadSkills(atmosConfig, loader)
+
+	// Assert.
+	require.NoError(t, err)
+	require.NotNil(t, registry)
+	assert.Equal(t, 2, registry.Count())
+	assert.True(t, registry.Has("atmos-terraform"))
+	assert.True(t, registry.Has("atmos-config"))
 }
 
 func TestLoadSkills_WithCustomSkills(t *testing.T) {
@@ -84,11 +111,7 @@ func TestLoadSkills_WithCustomSkills(t *testing.T) {
 	// Assert.
 	require.NoError(t, err)
 	require.NotNil(t, registry)
-
-	// Should have built-in skills + custom skills.
-	builtinSkills := GetBuiltInSkills()
-	expectedCount := len(builtinSkills) + 2 // 2 custom skills.
-	assert.Equal(t, expectedCount, registry.Count())
+	assert.Equal(t, 2, registry.Count())
 
 	// Verify custom skills are registered.
 	customSkill1, err := registry.Get("custom-analyzer")
@@ -109,7 +132,6 @@ func TestLoadSkills_WithCustomSkills(t *testing.T) {
 
 func TestLoadSkills_WithInvalidCustomSkill_ShouldContinue(t *testing.T) {
 	// Arrange - config with invalid custom skills (empty name).
-	// This tests that the loader continues loading even if a custom skill is invalid.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
@@ -137,10 +159,8 @@ func TestLoadSkills_WithInvalidCustomSkill_ShouldContinue(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, registry)
 
-	// Should have built-in skills + 1 valid custom skill (invalid one was skipped).
-	builtinSkills := GetBuiltInSkills()
-	expectedCount := len(builtinSkills) + 1 // Only the valid custom skill.
-	assert.Equal(t, expectedCount, registry.Count())
+	// Should have only the valid custom skill (invalid one was skipped).
+	assert.Equal(t, 1, registry.Count())
 
 	// Verify valid custom skill is registered.
 	validSkill, err := registry.Get("valid-skill")
@@ -151,22 +171,21 @@ func TestLoadSkills_WithInvalidCustomSkill_ShouldContinue(t *testing.T) {
 	assert.False(t, registry.Has(""))
 }
 
-func TestLoadSkills_WithDuplicateCustomSkill_ShouldContinue(t *testing.T) {
-	// Arrange - config with custom skill that conflicts with built-in skill name.
+func TestLoadSkills_MarketplaceAndCustom(t *testing.T) {
+	// Arrange - marketplace skills and custom skills together.
+	loader := &mockSkillLoader{
+		skills: []*Skill{
+			{Name: "marketplace-skill", DisplayName: "Marketplace", Description: "From marketplace"},
+		},
+	}
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
 				Skills: map[string]*schema.AISkillConfig{
-					GeneralSkill: { // Duplicate of built-in skill.
-						DisplayName:  "Duplicate General",
-						Description:  "This conflicts with built-in general skill",
-						SystemPrompt: "This should be skipped",
-					},
-					"unique-skill": {
-						DisplayName:  "Unique Skill",
-						Description:  "This should be registered",
-						SystemPrompt: "This should work",
-						Category:     "test",
+					"custom-skill": {
+						DisplayName: "Custom",
+						Description: "From config",
 					},
 				},
 			},
@@ -174,76 +193,54 @@ func TestLoadSkills_WithDuplicateCustomSkill_ShouldContinue(t *testing.T) {
 	}
 
 	// Act.
-	registry, err := LoadSkills(atmosConfig)
+	registry, err := LoadSkills(atmosConfig, loader)
 
 	// Assert.
 	require.NoError(t, err)
-	require.NotNil(t, registry)
-
-	// Should have built-in skills + 1 unique custom skill (duplicate was skipped).
-	builtinSkills := GetBuiltInSkills()
-	expectedCount := len(builtinSkills) + 1 // Only the unique custom skill.
-	assert.Equal(t, expectedCount, registry.Count())
-
-	// Verify unique custom skill is registered.
-	uniqueSkill, err := registry.Get("unique-skill")
-	require.NoError(t, err)
-	assert.Equal(t, "Unique Skill", uniqueSkill.DisplayName)
-
-	// Verify built-in general skill is still the original (not overwritten).
-	generalSkill, err := registry.Get(GeneralSkill)
-	require.NoError(t, err)
-	assert.Equal(t, "General", generalSkill.DisplayName) // Built-in display name.
-	assert.True(t, generalSkill.IsBuiltIn)
+	assert.Equal(t, 2, registry.Count())
+	assert.True(t, registry.Has("marketplace-skill"))
+	assert.True(t, registry.Has("custom-skill"))
 }
 
-func TestLoadSkills_AllBuiltInSkillsRegistered(t *testing.T) {
-	// Arrange.
+func TestLoadSkills_DuplicateCustomSkillSkipped(t *testing.T) {
+	// Arrange - marketplace skill and custom skill with same name.
+	loader := &mockSkillLoader{
+		skills: []*Skill{
+			{Name: "my-skill", DisplayName: "Marketplace Version", Description: "From marketplace"},
+		},
+	}
+
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
-			AI: schema.AISettings{},
+			AI: schema.AISettings{
+				Skills: map[string]*schema.AISkillConfig{
+					"my-skill": { // Duplicate of marketplace skill.
+						DisplayName: "Custom Version",
+						Description: "This conflicts with marketplace skill",
+					},
+				},
+			},
 		},
 	}
 
 	// Act.
-	registry, err := LoadSkills(atmosConfig)
+	registry, err := LoadSkills(atmosConfig, loader)
 
-	// Assert.
+	// Assert - marketplace version wins (registered first).
 	require.NoError(t, err)
-	require.NotNil(t, registry)
-
-	// Verify all expected built-in skills are registered.
-	expectedBuiltInSkills := []string{
-		GeneralSkill,
-		StackAnalyzerSkill,
-		ComponentRefactorSkill,
-		SecurityAuditorSkill,
-		ConfigValidatorSkill,
-	}
-
-	for _, skillName := range expectedBuiltInSkills {
-		skill, err := registry.Get(skillName)
-		require.NoError(t, err, "Built-in skill %s should be registered", skillName)
-		assert.True(t, skill.IsBuiltIn, "Skill %s should be marked as built-in", skillName)
-		assert.NotEmpty(t, skill.DisplayName, "Skill %s should have a display name", skillName)
-		assert.NotEmpty(t, skill.Description, "Skill %s should have a description", skillName)
-		assert.NotEmpty(t, skill.SystemPromptPath, "Skill %s should have a system prompt path", skillName)
-	}
+	assert.Equal(t, 1, registry.Count())
+	skill, err := registry.Get("my-skill")
+	require.NoError(t, err)
+	assert.Equal(t, "Marketplace Version", skill.DisplayName)
 }
 
 func TestGetDefaultSkill_WithNilConfig(t *testing.T) {
-	// Arrange.
 	var atmosConfig *schema.AtmosConfiguration = nil
-
-	// Act.
 	defaultSkill := GetDefaultSkill(atmosConfig)
-
-	// Assert.
-	assert.Equal(t, GeneralSkill, defaultSkill)
+	assert.Equal(t, "", defaultSkill)
 }
 
 func TestGetDefaultSkill_WithEmptyDefaultSkill(t *testing.T) {
-	// Arrange - config with empty default skill.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
@@ -251,33 +248,23 @@ func TestGetDefaultSkill_WithEmptyDefaultSkill(t *testing.T) {
 			},
 		},
 	}
-
-	// Act.
 	defaultSkill := GetDefaultSkill(atmosConfig)
-
-	// Assert.
-	assert.Equal(t, GeneralSkill, defaultSkill)
+	assert.Equal(t, "", defaultSkill)
 }
 
 func TestGetDefaultSkill_WithCustomDefaultSkill(t *testing.T) {
-	// Arrange - config with custom default skill.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
-				DefaultSkill: StackAnalyzerSkill,
+				DefaultSkill: "atmos-terraform",
 			},
 		},
 	}
-
-	// Act.
 	defaultSkill := GetDefaultSkill(atmosConfig)
-
-	// Assert.
-	assert.Equal(t, StackAnalyzerSkill, defaultSkill)
+	assert.Equal(t, "atmos-terraform", defaultSkill)
 }
 
 func TestGetDefaultSkill_WithUserDefinedDefaultSkill(t *testing.T) {
-	// Arrange - config with user-defined custom skill as default.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
@@ -285,11 +272,7 @@ func TestGetDefaultSkill_WithUserDefinedDefaultSkill(t *testing.T) {
 			},
 		},
 	}
-
-	// Act.
 	defaultSkill := GetDefaultSkill(atmosConfig)
-
-	// Assert.
 	assert.Equal(t, "my-custom-skill", defaultSkill)
 }
 
@@ -333,13 +316,9 @@ func TestLoadSkills_RegistryIntegrity(t *testing.T) {
 
 	// Verify list operations.
 	allSkills := registry.List()
-	assert.NotEmpty(t, allSkills)
+	assert.Equal(t, 3, len(allSkills))
 
-	builtinSkills := registry.ListBuiltIn()
 	customSkills := registry.ListCustom()
-	assert.Equal(t, len(builtinSkills)+len(customSkills), len(allSkills))
-
-	// Verify custom skills are correctly identified.
 	assert.Equal(t, 3, len(customSkills))
 	for _, skill := range customSkills {
 		assert.False(t, skill.IsBuiltIn)
@@ -347,8 +326,6 @@ func TestLoadSkills_RegistryIntegrity(t *testing.T) {
 }
 
 func TestLoadSkills_NilSkillConfig(t *testing.T) {
-	// Arrange - config with nil skill config (edge case).
-	// This tests that FromConfig handles nil gracefully.
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{
@@ -362,15 +339,22 @@ func TestLoadSkills_NilSkillConfig(t *testing.T) {
 		},
 	}
 
-	// Act.
 	registry, err := LoadSkills(atmosConfig)
 
-	// Assert.
 	require.NoError(t, err)
 	require.NotNil(t, registry)
 
-	// Verify valid skill is registered.
 	skill, err := registry.Get("valid-skill")
 	require.NoError(t, err)
 	assert.Equal(t, "Valid Skill", skill.DisplayName)
+}
+
+func TestLoadSkills_NilLoader(t *testing.T) {
+	// Passing nil loader explicitly.
+	atmosConfig := &schema.AtmosConfiguration{}
+	registry, err := LoadSkills(atmosConfig, nil)
+
+	require.NoError(t, err)
+	require.NotNil(t, registry)
+	assert.Equal(t, 0, registry.Count())
 }

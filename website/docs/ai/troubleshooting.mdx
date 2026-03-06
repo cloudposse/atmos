@@ -1209,7 +1209,7 @@ settings:
 
 When you select a skill with Ctrl+A and press Enter, you should see:
 ```
-System: Switched to skill: Stack Analyzer (Analyze stack configurations and dependencies)
+System: Switched to skill: atmos-stacks (Stack configuration, imports, inheritance, deep merging)
 ```
 
 If you don't see this message, the skill didn't activate.
@@ -1221,11 +1221,11 @@ If you don't see this message, the skill didn't activate.
 settings:
   ai:
     skills:
-      stack-analyzer:
-        display_name: "Stack Analyzer"
+      atmos-stacks:
+        display_name: "Atmos Stacks"
         description: "Analyzes stack configurations"
         system_prompt: |
-          You are a specialized Atmos Stack Analyzer.
+          You are a specialized Atmos stacks analyst.
 
           FOCUS AREAS:
           - Stack configuration analysis
@@ -1243,7 +1243,7 @@ After switching skills, ask a domain-specific question:
 
 <Terminal title="atmos ai chat">
 ```bash
-# Switch to Stack Analyzer (Ctrl+A)
+# Switch to atmos-stacks (Ctrl+A)
 You: "Analyze the inheritance chain for prod-use1-eks"
 
 # The skill should follow its systematic approach
@@ -1405,9 +1405,9 @@ AI: "I don't have access to the edit_file tool"
 settings:
   ai:
     skills:
-      security-auditor:
-        display_name: "Security Auditor"
-        description: "Security review"
+      atmos-validation:
+        display_name: "Atmos Validation"
+        description: "Policy validation"
         system_prompt: "..."
         allowed_tools:
           - atmos_describe_component
@@ -1424,7 +1424,7 @@ settings:
 settings:
   ai:
     skills:
-      security-auditor:
+      atmos-validation:
         allowed_tools:
           - atmos_describe_component
           - read_stack_file
@@ -1438,9 +1438,9 @@ settings:
 Press Ctrl+A and switch to the **General** skill, which has access to all tools.
 
 **Design consideration**: Some skills intentionally have restricted tool access for safety. For example:
-- **Security Auditor**: Read-only (cannot modify files)
-- **Config Validator**: Validation tools only (cannot execute commands)
-- **Component Refactor**: Has `edit_file`, but it's in `restricted_tools` (requires confirmation)
+- **atmos-validation**: Read-only (cannot modify files)
+- **atmos-stacks**: Analysis tools only (cannot execute commands)
+- **atmos-components**: Has `edit_file`, but it's in `restricted_tools` (requires confirmation)
 
 ### Default Skill Not Applying
 
@@ -1452,19 +1452,19 @@ Press Ctrl+A and switch to the **General** skill, which has access to all tools.
 ```yaml
 settings:
   ai:
-    default_skill: "stack-analyzer"    # ✅ Skill name (not display name)
+    default_skill: "atmos-stacks"      # ✅ Skill name (not display name)
 
     skills:
-      stack-analyzer:                  # ✅ Must match exactly
-        display_name: "Stack Analyzer"
+      atmos-stacks:                    # ✅ Must match exactly
+        display_name: "Atmos Stacks"
         description: "..."
         system_prompt: "..."
 ```
 </File>
 
 **Common mistakes**:
-- Using `display_name` instead of skill key: `default_skill: "Stack Analyzer"` ❌
-- Typo in skill name: `default_skill: "stack_analyzer"` ❌ (should be `stack-analyzer`)
+- Using `display_name` instead of skill key: `default_skill: "Atmos Stacks"` ❌
+- Typo in skill name: `default_skill: "atmos_stacks"` ❌ (should be `atmos-stacks`)
 - Skill not defined in `skills` section
 
 **Verify**:
@@ -1475,7 +1475,7 @@ settings:
 atmos ai chat
 
 # The initial greeting should indicate the active skill
-# Look for: "Switched to skill: Stack Analyzer" or similar
+# Look for: "Switched to skill: atmos-stacks" or similar
 ```
 </Terminal>
 
