@@ -584,6 +584,16 @@
             },
             "templates": {
               "$ref": "#/definitions/templates"
+            },
+            "yaml": {
+              "type": "object",
+              "description": "YAML parsing settings",
+              "properties": {
+                "key_delimiter": {
+                  "type": "string",
+                  "description": "Delimiter for expanding dotted keys into nested maps (e.g., '.' or '::'). Empty or omitted disables expansion."
+                }
+              }
             }
           },
           "required": []

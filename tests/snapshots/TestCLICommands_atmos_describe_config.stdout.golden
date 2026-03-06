@@ -118,6 +118,9 @@
         "enabled": false
       }
     },
+    "yaml": {
+      "key_delimiter": ""
+    },
     "experimental": "warn",
     "docs": {
       "max_width": 0,

@@ -347,9 +347,20 @@ type SyntaxHighlighting struct {
 	Wrap        bool   `yaml:"wrap" json:"wrap" mapstructure:"wrap"`
 }
 
+// AtmosYAMLSettings controls YAML parsing behavior for stack files.
+type AtmosYAMLSettings struct {
+	// KeyDelimiter enables nested key expansion in stack YAML files.
+	// When set (e.g., "."), unquoted keys containing the delimiter are expanded
+	// into nested map structures (e.g., "a.b: v" becomes "a: {b: v}").
+	// Quoted keys are preserved as literal keys.
+	// Empty string (default) disables expansion, preserving current behavior.
+	KeyDelimiter string `yaml:"key_delimiter" json:"key_delimiter" mapstructure:"key_delimiter"`
+}
+
 type AtmosSettings struct {
-	ListMergeStrategy string   `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
-	Terminal          Terminal `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	ListMergeStrategy string            `yaml:"list_merge_strategy" json:"list_merge_strategy" mapstructure:"list_merge_strategy"`
+	Terminal          Terminal          `yaml:"terminal,omitempty" json:"terminal,omitempty" mapstructure:"terminal"`
+	YAML              AtmosYAMLSettings `yaml:"yaml,omitempty" json:"yaml,omitempty" mapstructure:"yaml"`
 	// Experimental controls how experimental features are handled.
 	// Values: "silence" (no output), "disable" (disabled), "warn" (default), "error" (exit).
 	Experimental string `yaml:"experimental" json:"experimental" mapstructure:"experimental"`

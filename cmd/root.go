@@ -556,6 +556,10 @@ var RootCmd = &cobra.Command{
 			}
 		}
 
+		// Check for experimental settings (non-command features gated by config values).
+		// This extends the experimental check above to cover settings like key_delimiter.
+		checkExperimentalSettings(&tmpConfig)
+
 		// Configure lipgloss color profile based on terminal capabilities.
 		// This ensures tables and styled output degrade gracefully when piped or in non-TTY environments.
 		term := terminal.New()
@@ -896,6 +900,56 @@ func findExperimentalParent(cmd *cobra.Command) string {
 	}
 
 	return ""
+}
+
+// checkExperimentalSettings checks if any experimental settings are enabled in the config
+// and applies the same experimental mode handling (silence/warn/error/disable) as commands.
+// This extends the experimental system to cover non-command features gated by config values.
+func checkExperimentalSettings(atmosConfig *schema.AtmosConfiguration) {
+	if atmosConfig == nil {
+		return
+	}
+
+	// Collect experimental settings that are enabled.
+	var features []string
+	if atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		features = append(features, "settings.yaml.key_delimiter")
+	}
+
+	if len(features) == 0 {
+		return
+	}
+
+	experimentalMode := atmosConfig.Settings.Experimental
+	if experimentalMode == "" {
+		experimentalMode = "warn"
+	}
+
+	for _, feature := range features {
+		switch experimentalMode {
+		case "silence":
+			// Do nothing.
+		case "disable":
+			errUtils.CheckErrorPrintAndExit(
+				errUtils.Build(errUtils.ErrExperimentalDisabled).
+					WithContext("setting", feature).
+					WithHint("Enable with settings.experimental: warn").
+					Err(),
+				"", "",
+			)
+		case "warn":
+			ui.Experimental(feature)
+		case "error":
+			ui.Experimental(feature)
+			errUtils.CheckErrorPrintAndExit(
+				errUtils.Build(errUtils.ErrExperimentalRequiresIn).
+					WithContext("setting", feature).
+					WithHint("Enable with settings.experimental: warn").
+					Err(),
+				"", "",
+			)
+		}
+	}
 }
 
 // flagStyles holds the lipgloss styles for flag rendering.

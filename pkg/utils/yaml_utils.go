@@ -16,6 +16,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/yaml/expand"
 )
 
 const (
@@ -275,6 +276,12 @@ func parseAndCacheYAML(atmosConfig *schema.AtmosConfiguration, input string, fil
 	var positions PositionMap
 	if atmosConfig != nil && atmosConfig.TrackProvenance {
 		positions = ExtractYAMLPositions(&parsedNode, true)
+	}
+
+	// Expand delimited keys (e.g., "a.b: v" -> "a: {b: v}") if configured.
+	// This runs before custom tag processing so expanded keys are available for tag resolution.
+	if atmosConfig != nil && atmosConfig.Settings.YAML.KeyDelimiter != "" {
+		expand.KeyDelimiters(&parsedNode, atmosConfig.Settings.YAML.KeyDelimiter)
 	}
 
 	// Process custom tags.
