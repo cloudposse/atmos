@@ -147,7 +147,7 @@ tests:
     expect:
       exit_code: 0
       stderr:
-        - "CI action failed"
+        - "CI hook"
       file_contains:
         "github-output.txt":
           - "has_changes=false"
