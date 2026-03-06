@@ -63,7 +63,7 @@ func (p *Provider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckR
 	}
 
 	return &provider.CheckRun{
-		ID:         opts.CheckRunID,
+		ID:         p.nextCheckRunID.Add(1),
 		Name:       opts.Name,
 		Status:     opts.Status,
 		Conclusion: opts.Conclusion,

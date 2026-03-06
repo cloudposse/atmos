@@ -257,13 +257,31 @@ func TestProvider_CreateCheckRun(t *testing.T) {
 }
 
 func TestProvider_UpdateCheckRun(t *testing.T) {
-	t.Run("update to completed success", func(t *testing.T) {
-		var capturedRequest map[string]any
+	t.Run("create then update lifecycle", func(t *testing.T) {
+		// Test the full lifecycle: CreateCheckRun stores ID internally,
+		// then UpdateCheckRun resolves it by name.
 		mux := http.NewServeMux()
+
+		// CreateCheckRun endpoint.
+		mux.HandleFunc("/repos/owner/repo/check-runs", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			response := map[string]any{
+				"id":         12345,
+				"name":       "terraform-plan",
+				"status":     "in_progress",
+				"started_at": time.Now().Format(time.RFC3339),
+			}
+			json.NewEncoder(w).Encode(response)
+		})
+
+		// UpdateCheckRun endpoint — expects ID 12345 from internal map.
 		mux.HandleFunc("/repos/owner/repo/check-runs/12345", func(w http.ResponseWriter, r *http.Request) {
-			if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
-				t.Errorf("failed to decode request: %v", err)
-				http.Error(w, err.Error(), http.StatusBadRequest)
+			if r.Method != http.MethodPatch {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -290,72 +308,51 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
+
+		// Step 1: Create check run — ID is stored internally.
+		created, err := p.CreateCheckRun(ctx, &provider.CreateCheckRunOptions{
+			Owner:  "owner",
+			Repo:   "repo",
+			SHA:    "abc123",
+			Name:   "terraform-plan",
+			Status: provider.CheckRunStateInProgress,
+		})
+		require.NoError(t, err)
+		assert.Equal(t, int64(12345), created.ID)
+
+		// Step 2: Update check run — ID is resolved by name.
 		now := time.Now()
-		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
+		updated, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
 			Owner:       "owner",
 			Repo:        "repo",
-			CheckRunID:  12345,
-			Title:       "terraform-plan",
+			Name:        "terraform-plan",
 			Status:      provider.CheckRunStateSuccess,
 			CompletedAt: &now,
 		})
 		require.NoError(t, err)
-		require.NotNil(t, checkRun)
-		assert.Equal(t, "success", checkRun.Conclusion)
+		require.NotNil(t, updated)
+		assert.Equal(t, int64(12345), updated.ID)
+		assert.Equal(t, "success", updated.Conclusion)
 	})
 
-	t.Run("update to completed failure", func(t *testing.T) {
+	t.Run("update without prior create falls back to create", func(t *testing.T) {
+		// When UpdateCheckRun is called without a prior CreateCheckRun,
+		// it should fall back to creating a new completed check run.
 		mux := http.NewServeMux()
-		mux.HandleFunc("/repos/owner/repo/check-runs/12345", func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			response := map[string]any{
-				"id":         12345,
-				"name":       "terraform-plan",
-				"status":     "completed",
-				"conclusion": "failure",
-			}
-			json.NewEncoder(w).Encode(response)
-		})
 
-		server := httptest.NewServer(mux)
-		defer server.Close()
-
-		serverURL, err := url.Parse(server.URL + "/")
-		require.NoError(t, err)
-		ghClient := github.NewClient(nil)
-		ghClient.BaseURL = serverURL
-
-		client := &Client{client: ghClient}
-		p := NewProviderWithClient(client)
-
-		ctx := context.Background()
-		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
-			Owner:      "owner",
-			Repo:       "repo",
-			CheckRunID: 12345,
-			Title:      "terraform-plan",
-			Status:     provider.CheckRunStateFailure,
-			Summary:    "Plan failed with errors",
-		})
-		require.NoError(t, err)
-		require.NotNil(t, checkRun)
-		assert.Equal(t, "failure", checkRun.Conclusion)
-	})
-
-	t.Run("update to in progress", func(t *testing.T) {
-		var capturedRequest map[string]any
-		mux := http.NewServeMux()
-		mux.HandleFunc("/repos/owner/repo/check-runs/12345", func(w http.ResponseWriter, r *http.Request) {
-			if err := json.NewDecoder(r.Body).Decode(&capturedRequest); err != nil {
-				t.Errorf("failed to decode request: %v", err)
-				http.Error(w, err.Error(), http.StatusBadRequest)
+		var createCalled bool
+		mux.HandleFunc("/repos/owner/repo/check-runs", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 				return
 			}
+			createCalled = true
 			w.Header().Set("Content-Type", "application/json")
 			response := map[string]any{
-				"id":     12345,
-				"name":   "terraform-plan",
-				"status": "in_progress",
+				"id":         99999,
+				"name":       "terraform-plan",
+				"status":     "completed",
+				"conclusion": "success",
 			}
 			json.NewEncoder(w).Encode(response)
 		})
@@ -372,15 +369,20 @@ func TestProvider_UpdateCheckRun(t *testing.T) {
 		p := NewProviderWithClient(client)
 
 		ctx := context.Background()
+
+		// Update without prior create — should fall back to create.
 		checkRun, err := p.UpdateCheckRun(ctx, &provider.UpdateCheckRunOptions{
-			Owner:      "owner",
-			Repo:       "repo",
-			CheckRunID: 12345,
-			Title:      "terraform-plan",
-			Status:     provider.CheckRunStateInProgress,
+			Owner:   "owner",
+			Repo:    "repo",
+			SHA:     "abc123",
+			Name:    "terraform-plan",
+			Status:  provider.CheckRunStateSuccess,
+			Title:   "Plan succeeded",
+			Summary: "No changes",
 		})
 		require.NoError(t, err)
 		require.NotNil(t, checkRun)
-		assert.Equal(t, "in_progress", capturedRequest["status"])
+		assert.True(t, createCalled, "should have called CreateCheckRun as fallback")
+		assert.Equal(t, int64(99999), checkRun.ID)
 	})
 }

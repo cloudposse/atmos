@@ -30,17 +30,13 @@ func TestRenderPlanfileList(t *testing.T) {
 			Key:          "stack1/component1/sha1.tfplan",
 			Size:         1024,
 			LastModified: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				MD5: "d41d8cd98f00b204e9800998ecf8427e",
-			},
+			Metadata: &planfile.Metadata{},
 		},
 		{
 			Key:          "stack2/component2/sha2.tfplan",
 			Size:         2048,
 			LastModified: time.Date(2024, 1, 16, 11, 45, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				MD5: "098f6bcd4621d373cade4e832627b4f6",
-			},
+			Metadata: &planfile.Metadata{},
 		},
 	}
 
@@ -88,25 +84,25 @@ func TestRenderPlanfileListEmpty(t *testing.T) {
 func TestRenderPlanfileListWithMetadata(t *testing.T) {
 	initTestIO(t)
 
-	t.Run("with metadata includes sha and md5", func(t *testing.T) {
+	t.Run("with metadata includes sha", func(t *testing.T) {
+		m := &planfile.Metadata{}
+		m.Stack = "test-stack"
+		m.Component = "test-component"
+		m.SHA = "abc123"
+
 		files := []planfile.PlanfileInfo{
 			{
 				Key:          "key1.tfplan",
 				Size:         1024,
 				LastModified: time.Now(),
-				Metadata: &planfile.Metadata{
-					Stack:     "test-stack",
-					Component: "test-component",
-					SHA:       "abc123",
-					MD5:       "abc123md5",
-				},
+				Metadata:     m,
 			},
 		}
 		err := renderPlanfileList(files, "json", "", "")
 		assert.NoError(t, err)
 	})
 
-	t.Run("without metadata sha and md5 are empty", func(t *testing.T) {
+	t.Run("without metadata sha is empty", func(t *testing.T) {
 		files := []planfile.PlanfileInfo{
 			{
 				Key:          "key1.tfplan",
@@ -122,17 +118,17 @@ func TestRenderPlanfileListWithMetadata(t *testing.T) {
 func TestRenderPlanfileListWithOwnerRepo(t *testing.T) {
 	initTestIO(t)
 
+	m := &planfile.Metadata{}
+	m.Stack = "stack1"
+	m.Component = "component1"
+	m.SHA = "sha1"
+
 	files := []planfile.PlanfileInfo{
 		{
 			Key:          "stack1/component1/sha1.tfplan",
 			Size:         1024,
 			LastModified: time.Date(2024, 1, 15, 10, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				Stack:     "stack1",
-				Component: "component1",
-				SHA:       "sha1",
-				MD5:       "d41d8cd98f00b204e9800998ecf8427e",
-			},
+			Metadata:     m,
 		},
 	}
 
@@ -157,40 +153,6 @@ func TestRenderPlanfileListWithOwnerRepo(t *testing.T) {
 	})
 }
 
-func TestRenderPlanfileListMD5Column(t *testing.T) {
-	initTestIO(t)
-
-	t.Run("md5 present in output from metadata", func(t *testing.T) {
-		files := []planfile.PlanfileInfo{
-			{
-				Key:          "test/key.tfplan",
-				Size:         512,
-				LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-				Metadata: &planfile.Metadata{
-					Stack:     "test-stack",
-					Component: "test-component",
-					SHA:       "abc123def456",
-					MD5:       "d41d8cd98f00b204e9800998ecf8427e",
-				},
-			},
-		}
-		err := renderPlanfileList(files, "table", "", "")
-		assert.NoError(t, err)
-	})
-
-	t.Run("md5 empty when no metadata", func(t *testing.T) {
-		files := []planfile.PlanfileInfo{
-			{
-				Key:          "test/key.tfplan",
-				Size:         512,
-				LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-			},
-		}
-		err := renderPlanfileList(files, "table", "", "")
-		assert.NoError(t, err)
-	})
-}
-
 // Note: Testing runList requires extensive mocking of:
 // - Atmos config loading
 // - Store creation
@@ -203,20 +165,21 @@ func TestOutputFormats(t *testing.T) {
 	initTestIO(t)
 
 	// Verify all output format options work without panicking.
+	m := &planfile.Metadata{
+		HasChanges: true,
+		Additions:  5,
+		Changes:    3,
+	}
+	m.Stack = "test-stack"
+	m.Component = "test-component"
+	m.SHA = "abc123def456"
+
 	files := []planfile.PlanfileInfo{
 		{
 			Key:          "test/key.tfplan",
 			Size:         512,
 			LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				Stack:      "test-stack",
-				Component:  "test-component",
-				SHA:        "abc123def456",
-				MD5:        "abcdef1234567890",
-				HasChanges: true,
-				Additions:  5,
-				Changes:    3,
-			},
+			Metadata:     m,
 		},
 	}
 
@@ -233,17 +196,17 @@ func TestOutputFormats(t *testing.T) {
 func TestOutputFormatsWithOwnerRepo(t *testing.T) {
 	initTestIO(t)
 
+	m := &planfile.Metadata{}
+	m.Stack = "test-stack"
+	m.Component = "test-component"
+	m.SHA = "abc123def456"
+
 	files := []planfile.PlanfileInfo{
 		{
 			Key:          "test/key.tfplan",
 			Size:         512,
 			LastModified: time.Date(2024, 6, 15, 14, 30, 0, 0, time.UTC),
-			Metadata: &planfile.Metadata{
-				Stack:     "test-stack",
-				Component: "test-component",
-				SHA:       "abc123def456",
-				MD5:       "abcdef1234567890",
-			},
+			Metadata:     m,
 		},
 	}
 

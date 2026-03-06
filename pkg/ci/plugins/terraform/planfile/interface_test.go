@@ -8,9 +8,84 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+func TestMetadataValidate(t *testing.T) {
+	tests := []struct {
+		name        string
+		metadata    *Metadata
+		expectError bool
+	}{
+		{
+			name: "valid metadata",
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = "dev"
+				m.Component = "vpc"
+				m.SHA = "abc123"
+				return m
+			}(),
+			expectError: false,
+		},
+		{
+			name: "empty stack",
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = ""
+				m.Component = "vpc"
+				m.SHA = "abc123"
+				return m
+			}(),
+			expectError: true,
+		},
+		{
+			name: "empty component",
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = "dev"
+				m.Component = ""
+				m.SHA = "abc123"
+				return m
+			}(),
+			expectError: true,
+		},
+		{
+			name: "empty SHA",
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = "dev"
+				m.Component = "vpc"
+				m.SHA = ""
+				return m
+			}(),
+			expectError: true,
+		},
+		{
+			name: "all empty",
+			metadata: func() *Metadata {
+				m := &Metadata{}
+				m.Stack = ""
+				m.Component = ""
+				m.SHA = ""
+				return m
+			}(),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.metadata.Validate()
+			if tt.expectError {
+				assert.ErrorIs(t, err, errUtils.ErrPlanfileMetadataInvalid)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestDefaultKeyPattern(t *testing.T) {
 	pattern := DefaultKeyPattern()
-	assert.Equal(t, "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan", pattern.Pattern)
+	assert.Equal(t, "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan.tar", pattern.Pattern)
 }
 
 func TestKeyPatternGenerateKey(t *testing.T) {

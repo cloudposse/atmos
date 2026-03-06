@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Native CI Integration - Artifact Storage
 
 ## Executive Summary
@@ -361,3 +362,8 @@ No existing data to migrate. No backwards-compatibility or deprecation concerns.
 - [Store Registry Pattern](../../pkg/store/registry.go)
 - [CI Provider Detection](../../pkg/telemetry/ci.go)
 - [GitHub Artifacts API v4](https://docs.github.com/en/actions/using-workflows/storing-workflow-data-as-artifacts)
+=======
+# Moved
+
+This PRD has been split into focused documents. See [docs/prd/native-ci/README.md](./native-ci/README.md).
+>>>>>>> a724e72df97a0f29cb8fc52766b95fac14b19cce

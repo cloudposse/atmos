@@ -57,7 +57,7 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateChec
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunCreateFailed, err)
 	}
 
-	return &provider.CheckRun{
+	result := &provider.CheckRun{
 		ID:         checkRun.GetID(),
 		Name:       checkRun.GetName(),
 		Status:     mapGitHubStatusToCheckRunState(checkRun.GetStatus()),
@@ -66,11 +66,28 @@ func (p *Provider) createCheckRun(ctx context.Context, opts *provider.CreateChec
 		Summary:    getCheckRunOutputSummary(checkRun),
 		DetailsURL: checkRun.GetDetailsURL(),
 		StartedAt:  checkRun.GetStartedAt().Time,
-	}, nil
+	}
+
+	// Store name → ID for later UpdateCheckRun correlation.
+	p.checkRunIDs.Store(opts.Name, result.ID)
+
+	return result, nil
 }
 
 // updateCheckRun updates an existing check run.
+// It resolves the check run ID from the internal name→ID map.
+// If no prior CreateCheckRun was called for this name, it falls back to
+// creating a new completed check run using opts.SHA.
 func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	// Look up the check run ID from the internal map (stored by CreateCheckRun).
+	val, ok := p.checkRunIDs.LoadAndDelete(opts.Name)
+	if !ok {
+		// No prior CreateCheckRun — fall back to creating a completed check run.
+		return p.createCompletedCheckRun(ctx, opts)
+	}
+
+	checkRunID, _ := val.(int64)
+
 	ghOpts := github.UpdateCheckRunOptions{
 		Name: opts.Name, // Name is required for updates.
 	}
@@ -98,7 +115,7 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateChec
 		ghOpts.CompletedAt = &github.Timestamp{Time: *opts.CompletedAt}
 	}
 
-	checkRun, _, err := p.client.GitHub().Checks.UpdateCheckRun(ctx, opts.Owner, opts.Repo, opts.CheckRunID, ghOpts)
+	checkRun, _, err := p.client.GitHub().Checks.UpdateCheckRun(ctx, opts.Owner, opts.Repo, checkRunID, ghOpts)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %w", errUtils.ErrCICheckRunUpdateFailed, err)
 	}
@@ -119,6 +136,22 @@ func (p *Provider) updateCheckRun(ctx context.Context, opts *provider.UpdateChec
 		StartedAt:   checkRun.GetStartedAt().Time,
 		CompletedAt: completedAt,
 	}, nil
+}
+
+// createCompletedCheckRun creates a new completed check run as a fallback
+// when UpdateCheckRun is called without a prior CreateCheckRun.
+func (p *Provider) createCompletedCheckRun(ctx context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
+	createOpts := &provider.CreateCheckRunOptions{
+		Owner:   opts.Owner,
+		Repo:    opts.Repo,
+		SHA:     opts.SHA,
+		Name:    opts.Name,
+		Status:  opts.Status,
+		Title:   opts.Title,
+		Summary: opts.Summary,
+	}
+
+	return p.createCheckRun(ctx, createOpts)
 }
 
 // mapGitHubStatusToCheckRunState maps GitHub API status to provider.CheckRunState.

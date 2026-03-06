@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -12,17 +13,19 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/internal/exec"
+	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local"  // Register local artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3"     // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
-
-	// Import planfile store implementations to register them.
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/github"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/local"
-	_ "github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/s3"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
+	"github.com/cloudposse/atmos/pkg/ci/providers/generic"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/ui"
+	"github.com/cloudposse/atmos/pkg/version"
 )
 
 // uploadParser handles flag parsing with Viper precedence for the upload command.
@@ -32,22 +35,22 @@ var uploadParser *flags.StandardParser
 type UploadOptions struct {
 	BaseOptions
 	PlanfilePath string
-	Key          string
-	Stack        string
+	LockfilePath string
 	Component    string
 	SHA          string
 }
 
 var uploadCmd = &cobra.Command{
-	Use:   "upload [options]",
+	Use:   "upload <component>",
 	Short: "Upload a Terraform plan file to storage",
 	Long: `Upload a Terraform plan file to the configured storage backend.
 
+The component is specified as a positional argument and the stack via -s/--stack.
 The storage backend is configured in atmos.yaml under terraform.planfiles.
 Supported backends: local, s3, github-artifacts.
 
-When --planfile is omitted, the planfile path is derived from --component and --stack.`,
-	Args: cobra.NoArgs,
+When --planfile is omitted, the planfile path is derived from component and stack.`,
+	Args: cobra.ExactArgs(1),
 	RunE: runUpload,
 }
 
@@ -56,16 +59,12 @@ func init() {
 	uploadParser = flags.NewStandardParser(
 		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
 		flags.WithStringFlag("planfile", "", "", "Path to the planfile to upload (default: derived from component/stack)"),
-		flags.WithStringFlag("key", "", "", "Storage key (default: generated from stack/component/SHA)"),
-		flags.WithStringFlag("stack", "", "", "Stack name for metadata"),
-		flags.WithStringFlag("component", "", "", "Component name for metadata"),
 		flags.WithStringFlag("sha", "", "", "Git SHA for metadata (default: current HEAD)"),
+		flags.WithStringFlag("lockfile", "", "", "Path to .terraform.lock.hcl (default: auto-detected from planfile path)"),
 		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
 		flags.WithEnvVars("planfile", "ATMOS_PLANFILE_PATH"),
-		flags.WithEnvVars("key", "ATMOS_PLANFILE_KEY"),
-		flags.WithEnvVars("stack", "ATMOS_PLANFILE_STACK"),
-		flags.WithEnvVars("component", "ATMOS_PLANFILE_COMPONENT"),
 		flags.WithEnvVars("sha", "ATMOS_PLANFILE_SHA"),
+		flags.WithEnvVars("lockfile", "ATMOS_PLANFILE_LOCKFILE"),
 	)
 
 	// Register flags with the command.
@@ -81,18 +80,17 @@ func init() {
 }
 
 // parseUploadOptions parses command flags into UploadOptions.
-func parseUploadOptions(cmd *cobra.Command, v *viper.Viper) *UploadOptions {
+func parseUploadOptions(cmd *cobra.Command, v *viper.Viper, args []string) *UploadOptions {
 	return &UploadOptions{
 		BaseOptions:  parseBaseOptions(cmd, v),
 		PlanfilePath: v.GetString("planfile"),
-		Key:          v.GetString("key"),
-		Stack:        v.GetString("stack"),
-		Component:    v.GetString("component"),
+		LockfilePath: v.GetString("lockfile"),
+		Component:    args[0],
 		SHA:          v.GetString("sha"),
 	}
 }
 
-func runUpload(cmd *cobra.Command, _ []string) error {
+func runUpload(cmd *cobra.Command, args []string) error {
 	defer perf.Track(nil, "planfile.runUpload")()
 
 	// Bind flags to Viper for proper precedence.
@@ -101,8 +99,18 @@ func runUpload(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
+	// Bind persistent parent flags too.
+	if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
 	// Parse options.
-	opts := parseUploadOptions(cmd, v)
+	opts := parseUploadOptions(cmd, v, args)
+
+	// Validate that stack is provided.
+	if opts.Stack == "" {
+		return fmt.Errorf("%w: --stack/-s is required for upload", errUtils.ErrPlanfileStoreInvalidArgs)
+	}
 
 	// Initialize configuration with global flags.
 	atmosConfig, err := initAtmosConfig(opts)
@@ -123,22 +131,46 @@ func runUpload(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Open the planfile.
-	f, err := os.Open(planfilePath)
+	planFile, err := os.Open(planfilePath)
 	if err != nil {
 		return fmt.Errorf("%w: failed to open planfile %s: %w", errUtils.ErrPlanfileUploadFailed, planfilePath, err)
 	}
-	defer f.Close()
+	defer planFile.Close()
+
+	// Build file entries for upload.
+	files := []planfile.FileEntry{
+		{Name: planfile.PlanFilename, Data: planFile, Size: -1},
+	}
+
+	// Resolve lock file path.
+	lockfilePath := resolveLockfilePath(opts.LockfilePath, planfilePath)
+	if lockfilePath != "" {
+		if lf, err := os.Open(lockfilePath); err == nil {
+			defer lf.Close()
+			files = append(files, planfile.FileEntry{Name: planfile.LockFilename, Data: lf, Size: -1})
+		}
+	}
+
+	// Resolve SHA: explicit flag > context resolution.
+	sha := opts.SHA
+	if sha == "" {
+		resolved, err := resolveContext(false)
+		if err != nil {
+			return err
+		}
+		sha = resolved.SHA
+	}
 
 	// Build metadata and generate key.
-	metadata := buildUploadMetadata(opts)
-	key, err := resolveUploadKey(opts)
+	metadata := buildUploadMetadata(opts, sha)
+	key, err := resolveKey(opts.Component, opts.Stack, sha)
 	if err != nil {
 		return err
 	}
 
-	// Upload.
+	// Upload the files.
 	ctx := context.Background()
-	if err := store.Upload(ctx, key, f, metadata); err != nil {
+	if err := store.Upload(ctx, key, files, metadata); err != nil {
 		return err
 	}
 
@@ -160,42 +192,48 @@ func initAtmosConfig(opts *UploadOptions) (schema.AtmosConfiguration, error) {
 
 // createStore creates a planfile store from configuration.
 func createStore(atmosConfig *schema.AtmosConfiguration, storeName string) (planfile.Store, error) {
-	storeOpts, err := getStoreOptions(atmosConfig, storeName)
+	artOpts, err := getStoreOptions(atmosConfig, storeName)
 	if err != nil {
 		return nil, err
 	}
-	return planfile.NewStore(storeOpts)
+	backend, err := artifact.NewStore(artOpts)
+	if err != nil {
+		return nil, err
+	}
+	return adapter.NewStore(backend), nil
 }
 
 // buildUploadMetadata creates metadata for the planfile upload.
-func buildUploadMetadata(opts *UploadOptions) *planfile.Metadata {
-	return &planfile.Metadata{
-		Stack:     opts.Stack,
-		Component: opts.Component,
-		SHA:       opts.SHA,
-		CreatedAt: time.Now(),
-	}
-}
+// Populates CI context fields (Branch, RunID, Repository, etc.) from
+// environment variables via the generic CI provider.
+func buildUploadMetadata(opts *UploadOptions, sha string) *planfile.Metadata {
+	defer perf.Track(nil, "planfile.buildUploadMetadata")()
 
-// resolveUploadKey returns the upload key, generating one if not provided.
-func resolveUploadKey(opts *UploadOptions) (string, error) {
-	if opts.Key != "" {
-		return opts.Key, nil
+	metadata := &planfile.Metadata{}
+	metadata.Stack = opts.Stack
+	metadata.Component = opts.Component
+	metadata.SHA = sha
+	metadata.CreatedAt = time.Now()
+	metadata.AtmosVersion = version.Version
+
+	// Populate CI context fields from environment.
+	ciProvider := generic.NewProvider()
+	ciCtx, err := ciProvider.Context()
+	if err == nil && ciCtx != nil {
+		// Use CI context SHA if not explicitly provided.
+		if metadata.SHA == "" {
+			metadata.SHA = ciCtx.SHA
+		}
+		metadata.Branch = ciCtx.Branch
+		metadata.RunID = ciCtx.RunID
+		metadata.Repository = ciCtx.Repository
 	}
-	keyPattern := planfile.DefaultKeyPattern()
-	key, err := keyPattern.GenerateKey(&planfile.KeyContext{
-		Stack:     opts.Stack,
-		Component: opts.Component,
-		SHA:       opts.SHA,
-	})
-	if err != nil {
-		return "", fmt.Errorf("failed to generate planfile key: %w", err)
-	}
-	return key, nil
+
+	return metadata
 }
 
 // resolveUploadPlanfilePath resolves the planfile path from the --planfile flag or derives it
-// from --component and --stack using the Atmos stack configuration.
+// from component and stack using the Atmos stack configuration.
 func resolveUploadPlanfilePath(opts *UploadOptions, atmosConfig *schema.AtmosConfiguration) (string, error) {
 	defer perf.Track(atmosConfig, "planfile.resolveUploadPlanfilePath")()
 
@@ -206,7 +244,7 @@ func resolveUploadPlanfilePath(opts *UploadOptions, atmosConfig *schema.AtmosCon
 
 	// Derive planfile path from component and stack.
 	if opts.Component == "" || opts.Stack == "" {
-		return "", fmt.Errorf("%w: --planfile is required when --component and --stack are not both provided", errUtils.ErrPlanfileUploadFailed)
+		return "", fmt.Errorf("%w: --planfile is required when component and stack are not both provided", errUtils.ErrPlanfileUploadFailed)
 	}
 
 	info := schema.ConfigAndStacksInfo{
@@ -223,6 +261,20 @@ func resolveUploadPlanfilePath(opts *UploadOptions, atmosConfig *schema.AtmosCon
 
 	planfilePath := exec.ConstructTerraformComponentPlanfilePath(atmosConfig, &info)
 	return planfilePath, nil
+}
+
+// resolveLockfilePath returns the lock file path from the explicit flag or auto-detected
+// from the planfile's directory.
+func resolveLockfilePath(explicit, planfilePath string) string {
+	if explicit != "" {
+		return explicit
+	}
+	// Auto-detect: look for .terraform.lock.hcl in the same directory as the planfile.
+	candidate := filepath.Join(filepath.Dir(planfilePath), planfile.LockFilename)
+	if _, err := os.Stat(candidate); err == nil {
+		return candidate
+	}
+	return ""
 }
 
 // getStoreOptions builds StoreOptions from atmos configuration.
@@ -287,8 +339,10 @@ func detectGitHubFromEnv() *planfile.StoreOptions {
 		return nil
 	}
 	return &planfile.StoreOptions{
-		Type:    "github-artifacts",
-		Options: map[string]any{},
+		Type: "github-artifacts",
+		Options: map[string]any{
+			"prefix": "planfile",
+		},
 	}
 }
 

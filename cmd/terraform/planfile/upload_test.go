@@ -1,87 +1,49 @@
 package planfile
 
 import (
-	"errors"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
+	"github.com/cloudposse/atmos/pkg/schema"
 )
 
 func TestBuildUploadMetadata(t *testing.T) {
 	t.Run("with all fields set", func(t *testing.T) {
 		opts := &UploadOptions{
-			Stack:     "test-stack",
 			Component: "test-component",
-			SHA:       "abc123",
 		}
+		opts.Stack = "test-stack"
 
-		metadata := buildUploadMetadata(opts)
+		metadata := buildUploadMetadata(opts, "abc123")
 		require.NotNil(t, metadata)
 		assert.Equal(t, "test-stack", metadata.Stack)
 		assert.Equal(t, "test-component", metadata.Component)
+		// Explicit SHA takes precedence over auto-detected SHA.
 		assert.Equal(t, "abc123", metadata.SHA)
 		assert.False(t, metadata.CreatedAt.IsZero())
 		// CreatedAt should be recent.
 		assert.WithinDuration(t, time.Now(), metadata.CreatedAt, 5*time.Second)
+		// AtmosVersion is always populated.
+		assert.NotEmpty(t, metadata.AtmosVersion)
 	})
 
-	t.Run("with empty fields", func(t *testing.T) {
+	t.Run("with empty fields auto-detects CI context", func(t *testing.T) {
 		opts := &UploadOptions{
-			Stack:     "",
 			Component: "",
-			SHA:       "",
 		}
+		opts.Stack = ""
 
-		metadata := buildUploadMetadata(opts)
+		metadata := buildUploadMetadata(opts, "")
 		require.NotNil(t, metadata)
 		assert.Empty(t, metadata.Stack)
 		assert.Empty(t, metadata.Component)
-		assert.Empty(t, metadata.SHA)
-	})
-}
-
-func TestResolveUploadKey(t *testing.T) {
-	t.Run("explicit key provided", func(t *testing.T) {
-		opts := &UploadOptions{
-			Key:       "custom/key.tfplan",
-			Stack:     "ignored",
-			Component: "ignored",
-			SHA:       "ignored",
-		}
-
-		key, err := resolveUploadKey(opts)
-		require.NoError(t, err)
-		assert.Equal(t, "custom/key.tfplan", key)
-	})
-
-	t.Run("generated key from metadata", func(t *testing.T) {
-		opts := &UploadOptions{
-			Key:       "",
-			Stack:     "my-stack",
-			Component: "my-component",
-			SHA:       "def456",
-		}
-
-		key, err := resolveUploadKey(opts)
-		require.NoError(t, err)
-		assert.Equal(t, "my-stack/my-component/def456.tfplan", key)
-	})
-
-	t.Run("missing required fields for generated key", func(t *testing.T) {
-		opts := &UploadOptions{
-			Key:       "",
-			Stack:     "",
-			Component: "component",
-			SHA:       "sha123",
-		}
-
-		_, err := resolveUploadKey(opts)
-		assert.True(t, errors.Is(err, errUtils.ErrPlanfileKeyInvalid))
+		// SHA is auto-detected from git when not provided via flag.
+		// Branch and AtmosVersion are also populated from CI context.
+		assert.NotEmpty(t, metadata.AtmosVersion)
 	})
 }
 
@@ -89,9 +51,9 @@ func TestResolveUploadPlanfilePath(t *testing.T) {
 	t.Run("explicit planfile path", func(t *testing.T) {
 		opts := &UploadOptions{
 			PlanfilePath: "/tmp/my-plan.tfplan",
-			Stack:        "dev",
 			Component:    "vpc",
 		}
+		opts.Stack = "dev"
 
 		path, err := resolveUploadPlanfilePath(opts, nil)
 		require.NoError(t, err)
@@ -101,39 +63,36 @@ func TestResolveUploadPlanfilePath(t *testing.T) {
 	t.Run("missing planfile and component", func(t *testing.T) {
 		opts := &UploadOptions{
 			PlanfilePath: "",
-			Stack:        "dev",
 			Component:    "",
 		}
+		opts.Stack = "dev"
 
 		_, err := resolveUploadPlanfilePath(opts, nil)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
 		assert.Contains(t, err.Error(), "--planfile is required")
 	})
 
 	t.Run("missing planfile and stack", func(t *testing.T) {
 		opts := &UploadOptions{
 			PlanfilePath: "",
-			Stack:        "",
 			Component:    "vpc",
 		}
+		opts.Stack = ""
 
 		_, err := resolveUploadPlanfilePath(opts, nil)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
 		assert.Contains(t, err.Error(), "--planfile is required")
 	})
 
 	t.Run("missing planfile stack and component", func(t *testing.T) {
 		opts := &UploadOptions{
 			PlanfilePath: "",
-			Stack:        "",
 			Component:    "",
 		}
+		opts.Stack = ""
 
 		_, err := resolveUploadPlanfilePath(opts, nil)
 		require.Error(t, err)
-		assert.True(t, errors.Is(err, errUtils.ErrPlanfileUploadFailed))
 	})
 }
 
@@ -143,7 +102,7 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		opts, err := getStoreOptions(nil, "s3")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "s3")
 		require.NoError(t, err)
 		assert.Equal(t, "s3", opts.Type)
 	})
@@ -152,7 +111,7 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "")
 		t.Setenv("GITHUB_ACTIONS", "")
 
-		opts, err := getStoreOptions(nil, "local")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local")
 		require.NoError(t, err)
 		assert.Equal(t, "local", opts.Type)
 	})
@@ -203,7 +162,7 @@ func TestGetStoreOptions(t *testing.T) {
 		t.Setenv("ATMOS_PLANFILE_BUCKET", "my-bucket")
 		t.Setenv("GITHUB_ACTIONS", "true")
 
-		opts, err := getStoreOptions(nil, "local")
+		opts, err := getStoreOptions(&schema.AtmosConfiguration{}, "local")
 		require.NoError(t, err)
 		assert.Equal(t, "local", opts.Type)
 	})

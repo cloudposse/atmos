@@ -117,6 +117,15 @@ func runHooksWithOutput(event h.HookEvent, cmd_ *cobra.Command, args []string, o
 		forceCIMode = viper.GetBool("ci")
 	}
 
+	// Read --verify-plan flag early (same pattern as --ci above).
+	// PreRunE runs before RunE, so info.VerifyPlan is not yet set by applyOptionsToInfo().
+	// The CI hook handler needs it to decide whether to download with stored prefix.
+	verifyPlan, _ := cmd_.Flags().GetBool("verify-plan")
+	if !verifyPlan {
+		verifyPlan = viper.GetBool("verify-plan")
+	}
+	info.VerifyPlan = verifyPlan
+
 	// Run CI hooks based on component provider bindings.
 	// This is separate from user-defined hooks and runs automatically when CI is enabled.
 	if err := h.RunCIHooks(event, &atmosConfig, &info, output, forceCIMode, nil); err != nil {
@@ -284,6 +293,7 @@ func applyOptionsToInfo(info *schema.ConfigAndStacksInfo, opts *TerraformRunOpti
 	if opts.DeployRunInit {
 		info.DeployRunInit = "true"
 	}
+	info.VerifyPlan = opts.VerifyPlan
 }
 
 // terraformRunWithOptions is the shared execution logic for terraform subcommands.
@@ -340,6 +350,22 @@ func terraformRunWithOptions(parentCmd, actualCmd *cobra.Command, args []string,
 		errUtils.CheckErrorPrintAndExit(err, "", "")
 		return nil
 	}
+
+	// Verify stored planfile matches current state before applying.
+	if subCommand == "apply" && info.VerifyPlan {
+		storedPlan := info.StoredPlanFile // Set by CI download hook.
+		if storedPlan == "" && info.UseTerraformPlan {
+			storedPlan = info.PlanFile // Manual --from-plan usage.
+		}
+		if storedPlan != "" {
+			if verifyErr := e.VerifyPlanfile(&info, storedPlan); verifyErr != nil {
+				return verifyErr
+			}
+			// Verification passed — apply will use the fresh plan generated during verification.
+			// info.PlanFile and info.UseTerraformPlan are set by VerifyPlanfile.
+		}
+	}
+
 	return executeSingleComponent(&info, shellOpts...)
 }
 

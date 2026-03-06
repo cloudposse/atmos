@@ -23,16 +23,18 @@ var listParser *flags.StandardParser
 // ListOptions contains parsed flags for the list command.
 type ListOptions struct {
 	BaseOptions
-	Format string
-	Prefix string
+	Format    string
+	Component string
+	All       bool
 }
 
 var listCmd = &cobra.Command{
-	Use:   "list [prefix]",
+	Use:   "list [component]",
 	Short: "List Terraform plan files in storage",
 	Long: `List Terraform plan files from the configured storage backend.
 
-Optionally filter by prefix (e.g., stack name or component).`,
+Optionally filter by component (positional arg) and/or stack (-s flag).
+By default, only planfiles for the current SHA are shown. Use --all to show all SHAs.`,
 	Args: cobra.MaximumNArgs(1),
 	RunE: runList,
 }
@@ -42,6 +44,7 @@ func init() {
 	listParser = flags.NewStandardParser(
 		flags.WithStringFlag("store", "", "", "Storage backend to use (default from config)"),
 		flags.WithStringFlag("format", "", "table", "Output format: table, json, yaml, csv, tsv"),
+		flags.WithBoolFlag("all", "", false, "Show planfiles for all SHAs (bypass SHA filter)"),
 		flags.WithEnvVars("store", "ATMOS_PLANFILE_STORE"),
 		flags.WithEnvVars("format", "ATMOS_PLANFILE_FORMAT"),
 	)
@@ -60,15 +63,16 @@ func init() {
 
 // parseListOptions parses command flags into ListOptions.
 func parseListOptions(cmd *cobra.Command, v *viper.Viper, args []string) *ListOptions {
-	prefix := ""
+	component := ""
 	if len(args) > 0 {
-		prefix = args[0]
+		component = args[0]
 	}
 
 	return &ListOptions{
 		BaseOptions: parseBaseOptions(cmd, v),
 		Format:      v.GetString("format"),
-		Prefix:      prefix,
+		Component:   component,
+		All:         v.GetBool("all"),
 	}
 }
 
@@ -78,6 +82,11 @@ func runList(cmd *cobra.Command, args []string) error {
 	// Bind flags to Viper for proper precedence.
 	v := viper.GetViper()
 	if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
+	}
+
+	// Bind persistent parent flags too.
+	if err := planfileParser.BindFlagsToViper(cmd, v); err != nil {
 		return err
 	}
 
@@ -108,14 +117,24 @@ func runList(cmd *cobra.Command, args []string) error {
 	owner, repo := extractOwnerRepo(storeOpts)
 
 	// Create the store.
-	store, err := planfile.NewStore(storeOpts)
+	store, err := createStore(&atmosConfig, opts.Store)
 	if err != nil {
 		return err
 	}
 
+	// Resolve SHA context.
+	resolved, err := resolveContext(opts.All)
+	if err != nil {
+		return err
+	}
+
+	// Build query from component, stack, and SHA.
+	query := buildQuery(opts.Component, opts.Stack, resolved.SHA)
+
+
 	// List planfiles.
 	ctx := context.Background()
-	files, err := store.List(ctx, opts.Prefix)
+	files, err := store.List(ctx, query)
 	if err != nil {
 		return err
 	}
@@ -144,7 +163,6 @@ func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat, owner, repo
 	data := make([]map[string]any, len(files))
 	for i, f := range files {
 		item := map[string]any{
-			"key":           f.Key,
 			"size":          f.Size,
 			"last_modified": f.LastModified.Format("2006-01-02 15:04"),
 		}
@@ -152,12 +170,10 @@ func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat, owner, repo
 			item["stack"] = f.Metadata.Stack
 			item["component"] = f.Metadata.Component
 			item["sha"] = f.Metadata.SHA
-			item["md5"] = f.Metadata.MD5
 		} else {
 			item["stack"] = ""
 			item["component"] = ""
 			item["sha"] = ""
-			item["md5"] = ""
 		}
 		if owner != "" || repo != "" {
 			item["owner"] = owner
@@ -178,8 +194,6 @@ func renderWithRenderer(data []map[string]any, outputFormat, owner, repo string)
 		{Name: "SHA", Value: "{{ .sha }}"},
 		{Name: "SIZE", Value: "{{ .size }}"},
 		{Name: "MODIFIED", Value: "{{ .last_modified }}"},
-		{Name: "KEY", Value: "{{ .key }}"},
-		{Name: "MD5", Value: "{{ .md5 }}"},
 	}
 
 	// Add OWNER and REPO columns when they are available from context.
