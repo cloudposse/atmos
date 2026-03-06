@@ -325,9 +325,9 @@ func TestEKSIntegration_Cleanup_NonexistentFile(t *testing.T) {
 		name:     "test",
 		identity: "dev-admin",
 		cluster: &schema.EKSCluster{
-			Name:  "dev-cluster",
+			Name:   "dev-cluster",
 			Region: "us-east-2",
-			Alias: "dev-eks",
+			Alias:  "dev-eks",
 			Kubeconfig: &schema.KubeconfigSettings{
 				Path: t.TempDir() + "/nonexistent/kubeconfig",
 			},

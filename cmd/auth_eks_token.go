@@ -54,8 +54,8 @@ Examples:
 
 // execCredential represents the Kubernetes ExecCredential response.
 type execCredential struct {
-	APIVersion string             `json:"apiVersion"`
-	Kind       string             `json:"kind"`
+	APIVersion string               `json:"apiVersion"`
+	Kind       string               `json:"kind"`
 	Status     execCredentialStatus `json:"status"`
 }
 
