@@ -2201,8 +2201,20 @@ func TestChatModel_CycleFilter(t *testing.T) {
 		assert.Equal(t, "ollama", m.sessionFilter)
 	})
 
-	t.Run("cycles from ollama back to all", func(t *testing.T) {
+	t.Run("cycles from ollama to bedrock", func(t *testing.T) {
 		m.sessionFilter = "ollama"
+		m.cycleFilter()
+		assert.Equal(t, "bedrock", m.sessionFilter)
+	})
+
+	t.Run("cycles from bedrock to azureopenai", func(t *testing.T) {
+		m.sessionFilter = "bedrock"
+		m.cycleFilter()
+		assert.Equal(t, "azureopenai", m.sessionFilter)
+	})
+
+	t.Run("cycles from azureopenai back to all", func(t *testing.T) {
+		m.sessionFilter = "azureopenai"
 		m.cycleFilter()
 		assert.Equal(t, "all", m.sessionFilter)
 	})
