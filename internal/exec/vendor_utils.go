@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/bmatcuk/doublestar/v4"
-	cp "github.com/otiai10/copy"
 	"github.com/pkg/errors"
 	"github.com/samber/lo"
 	"go.yaml.in/yaml/v3"
@@ -18,6 +17,7 @@ import (
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 	u "github.com/cloudposse/atmos/pkg/utils"
+	"github.com/cloudposse/atmos/pkg/vendor"
 )
 
 // Dedicated logger for stderr to keep stdout clean of detailed messaging, e.g. for files vendoring.
@@ -531,72 +531,10 @@ func shouldSkipSource(s *schema.AtmosVendorSource, component string, tags []stri
 	return (component != "" && s.Component != component) || (len(tags) > 0 && len(lo.Intersect(tags, s.Tags)) == 0)
 }
 
-// normalizeVendorURI Normalizes vendor source URIs to handle all patterns consistently.
-// It uses go-getter syntax where the double-slash (//) is a delimiter between the repository URL
-// and the subdirectory path within that repository. The dot (.) indicates the current
-// directory (root of the repository).
-//
-// This function handles multiple normalization cases:
-// 1. Converts triple-slash (///) to double-slash-dot (//.) for root directory
-// 2. Adds //. to Git URLs without subdirectory delimiter
-// 3. Preserves existing valid patterns unchanged
-//
-// Examples:
-//   - "github.com/repo.git///?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
-//   - "github.com/repo.git?ref=v1.0.0" -> "github.com/repo.git//.?ref=v1.0.0"
-//   - "github.com/repo.git///some/path?ref=v1.0.0" -> "github.com/repo.git//some/path?ref=v1.0.0"
-//   - "github.com/repo.git//some/path?ref=v1.0.0" -> unchanged
-//
-//nolint:godot // Private function, follows standard Go documentation style.
+// normalizeVendorURI normalizes vendor source URIs to handle all patterns consistently.
+// Delegates to pkg/vendor for the shared implementation.
 func normalizeVendorURI(uri string) string {
-	// Skip normalization for special URI types
-	if isFileURI(uri) || isOCIURI(uri) || isS3URI(uri) || isLocalPath(uri) || isNonGitHTTPURI(uri) {
-		return uri
-	}
-
-	// Handle triple-slash pattern first
-	if containsTripleSlash(uri) {
-		uri = normalizeTripleSlash(uri)
-	}
-
-	// Add //. to Git URLs without subdirectory
-	if needsDoubleSlashDot(uri) {
-		uri = appendDoubleSlashDot(uri)
-		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
-	}
-
-	return uri
-}
-
-// normalizeTripleSlash converts triple-slash patterns to appropriate double-slash patterns.
-// Uses go-getter's SourceDirSubdir for robust parsing across all Git platforms.
-func normalizeTripleSlash(uri string) string {
-	// Use go-getter to parse the URI and extract subdirectory
-	// Note: source will include query parameters from the original URI
-	source, subdir := parseSubdirFromTripleSlash(uri)
-
-	// Separate query parameters from source if present
-	var queryParams string
-	if queryPos := strings.Index(source, "?"); queryPos != -1 {
-		queryParams = source[queryPos:]
-		source = source[:queryPos]
-	}
-
-	// Determine the normalized form based on subdirectory
-	var normalized string
-	if subdir == "" {
-		// Root of repository case: convert /// to //.
-		normalized = source + "//." + queryParams
-		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
-			"original", uri, "normalized", normalized)
-	} else {
-		// Path specified after triple slash: convert /// to //
-		normalized = source + "//" + subdir + queryParams
-		log.Debug("Normalized triple-slash to double-slash with path",
-			"original", uri, "normalized", normalized)
-	}
-
-	return normalized
+	return vendor.NormalizeURI(uri)
 }
 
 func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, bool, error) {
@@ -636,117 +574,28 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 }
 
 func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
-	copyOptions := cp.Options{
-		Skip:          generateSkipFunction(tempDir, s),
-		PreserveTimes: false,
-		PreserveOwner: false,
-		OnSymlink:     func(src string) cp.SymlinkAction { return cp.Deep },
-		// OnDirExists handles existing directories at the destination.
-		// We skip .git directories from source, but if the destination already has a .git directory
-		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
-		// on git packfiles which often have restrictive permissions.
-		OnDirExists: func(src, dest string) cp.DirExistsAction {
-			if filepath.Base(dest) == ".git" {
-				return cp.Untouchable
-			}
-			return cp.Merge
-		},
-	}
-
-	// Adjust the target path if it's a local file with no extension
-	if sourceIsLocalFile && filepath.Ext(targetPath) == "" {
-		// Sanitize the URI for safe filenames, especially on Windows
-		sanitizedBase := SanitizeFileName(uri)
-		targetPath = filepath.Join(targetPath, sanitizedBase)
-	}
-
-	return cp.Copy(tempDir, targetPath, copyOptions)
+	return vendor.CopyToTarget(tempDir, targetPath, vendor.CopyOptions{
+		IncludedPaths: s.IncludedPaths,
+		ExcludedPaths: s.ExcludedPaths,
+		SourceIsLocal: sourceIsLocalFile,
+		URI:           uri,
+	})
 }
 
-// GenerateSkipFunction creates a function that determines whether to skip files during copying.
-// Based on the vendor source configuration. It uses the provided patterns in ExcludedPaths.
-// And IncludedPaths to filter files during the copy operation.
-//
-// Parameters:
-//   - atmosConfig: The CLI configuration for logging.
-//   - tempDir: The temporary directory containing the files to copy.
-//   - s: The vendor source configuration containing exclusion/inclusion patterns.
-//
-// Returns a function that determines if a file should be skipped during copying.
+// generateSkipFunction creates a function that determines whether to skip files during copying.
+// Delegates to pkg/vendor for the shared implementation.
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {
-	return func(srcInfo os.FileInfo, src, dest string) (bool, error) {
-		// Skip .git directories.
-		if filepath.Base(src) == ".git" {
-			return true, nil
-		}
-
-		// Normalize paths.
-		tempDir = filepath.ToSlash(tempDir)
-		src = filepath.ToSlash(src)
-		trimmedSrc := u.TrimBasePathFromPath(tempDir+"/", src)
-
-		// Check excludes first - if file matches any excluded pattern, skip it immediately.
-		if len(s.ExcludedPaths) > 0 {
-			excluded, err := shouldExcludeFile(src, s.ExcludedPaths, trimmedSrc)
-			if err != nil || excluded {
-				return excluded, err
-			}
-		}
-
-		// Then check includes - if specified, file must match to be included.
-		// Only include the files that match the 'included_paths' patterns (if any pattern is specified).
-		if len(s.IncludedPaths) > 0 {
-			return shouldIncludeFile(src, s.IncludedPaths, trimmedSrc)
-		}
-
-		// If 'included_paths' is not provided, include all files that were not excluded.
-		StderrLogger.Debug("Including", "path", u.TrimBasePathFromPath(tempDir+"/", src))
-		return false, nil
-	}
+	return vendor.CreateSkipFunc(tempDir, s.IncludedPaths, s.ExcludedPaths)
 }
 
-// Exclude the files that match the 'excluded_paths' patterns.
-// It supports POSIX-style Globs for file names/paths (double-star `**` is supported).
-// https://en.wikipedia.org/wiki/Glob_(programming).
-// https://github.com/bmatcuk/doublestar#pattern.
+// shouldExcludeFile checks if the file matches any of the excluded patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func shouldExcludeFile(src string, excludedPaths []string, trimmedSrc string) (bool, error) {
-	for _, excludePath := range excludedPaths {
-		// Match against trimmedSrc (relative path) instead of src (absolute path).
-		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
-		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
-		if err != nil {
-			return true, err
-		} else if excludeMatch {
-			// If the file matches ANY of the 'excluded_paths' patterns, exclude the file.
-			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
-			return true, nil
-		}
-	}
-	return false, nil
+	return vendor.ShouldExcludeFile(excludedPaths, trimmedSrc)
 }
 
-// Helper function to check if a file should be included.
+// shouldIncludeFile checks if the file matches any of the included patterns.
+// Delegates to pkg/vendor for the shared implementation.
 func shouldIncludeFile(src string, includedPaths []string, trimmedSrc string) (bool, error) {
-	anyMatches := false
-	for _, includePath := range includedPaths {
-		// Match against trimmedSrc (relative path) instead of src (absolute path).
-		// This allows patterns to match correctly without needing to account for temp directory paths.
-		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
-		if err != nil {
-			return true, err
-		} else if includeMatch {
-			// If the file matches ANY of the 'included_paths' patterns, include the file.
-			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
-
-			anyMatches = true
-			break
-		}
-	}
-
-	if anyMatches {
-		return false, nil
-	} else {
-		log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
-		return true, nil
-	}
+	return vendor.ShouldIncludeFile(includedPaths, trimmedSrc)
 }
