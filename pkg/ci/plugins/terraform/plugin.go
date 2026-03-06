@@ -9,7 +9,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
-	log "github.com/cloudposse/atmos/pkg/logger"
+	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/schema"
 
@@ -127,29 +127,30 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, _ string) map[s
 	return vars
 }
 
-// getArtifactKey generates the artifact storage key for a command.
-func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, _ string) string {
+// getArtifactKey generates the artifact storage key for a command using the KeyPattern.
+// Returns an error if required fields (Stack, Component, SHA) are empty.
+func (p *Plugin) getArtifactKey(info *schema.ConfigAndStacksInfo, ciCtx *provider.Context) (string, error) {
 	defer perf.Track(nil, "terraform.Plugin.getArtifactKey")()
 
-	// Validate required fields.
-	if info == nil {
-		log.Warn("getArtifactKey called with nil info, using placeholder key")
-		return "unknown/unknown.tfplan"
+	pattern := planfile.DefaultKeyPattern()
+	// TODO: override from config if set via components.terraform.planfiles.key_pattern.
+
+	keyCtx := &planfile.KeyContext{}
+	if info != nil {
+		keyCtx.Stack = info.Stack
+		keyCtx.Component = info.ComponentFromArg
+		keyCtx.ComponentPath = info.ComponentFolderPrefix
+	}
+	if ciCtx != nil {
+		keyCtx.SHA = ciCtx.SHA
+		keyCtx.Branch = ciCtx.Branch
+		if ciCtx.PullRequest != nil {
+			keyCtx.PRNumber = ciCtx.PullRequest.Number
+		}
+		keyCtx.RunID = ciCtx.RunID
 	}
 
-	stack := info.Stack
-	component := info.ComponentFromArg
-	if stack == "" {
-		log.Warn("getArtifactKey called with empty Stack", "component", component)
-		stack = "unknown"
-	}
-	if component == "" {
-		log.Warn("getArtifactKey called with empty ComponentFromArg", "stack", stack)
-		component = "unknown"
-	}
-
-	// Default pattern: stack/component.tfplan
-	return fmt.Sprintf("%s/%s.tfplan", stack, component)
+	return pattern.GenerateKey(keyCtx)
 }
 
 // planOutputMarkers are searched in order to find where the meaningful plan output starts.

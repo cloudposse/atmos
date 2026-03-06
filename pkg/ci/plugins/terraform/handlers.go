@@ -239,10 +239,10 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 		return nil
 	}
 
-	key := p.getArtifactKey(ctx.Info, ctx.Command)
-	if key == "" {
-		log.Debug("Could not generate artifact key, skipping upload")
-		return nil
+	key, err := p.getArtifactKey(ctx.Info, ctx.CICtx)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
+			WithExplanation("Failed to generate artifact key for planfile upload").Err()
 	}
 
 	storeAny, err := ctx.CreatePlanfileStore()
@@ -265,6 +265,11 @@ func (p *Plugin) uploadPlanfile(ctx *plugin.HookContext) error {
 	defer f.Close()
 
 	metadata := p.buildPlanfileMetadata(ctx)
+	if err := metadata.Validate(); err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
+			WithExplanation("Planfile metadata validation failed").Err()
+	}
+
 	if err := store.Upload(context.Background(), key, f, metadata); err != nil {
 		return errUtils.Build(errUtils.ErrPlanfileUploadFailed).WithCause(err).
 			WithExplanation("Failed to upload planfile to store").
@@ -288,10 +293,10 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 		return nil
 	}
 
-	key := p.getArtifactKey(ctx.Info, ctx.Command)
-	if key == "" {
-		log.Debug("Could not generate artifact key, skipping download")
-		return nil
+	key, err := p.getArtifactKey(ctx.Info, ctx.CICtx)
+	if err != nil {
+		return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
+			WithExplanation("Failed to generate artifact key for planfile download").Err()
 	}
 
 	storeAny, err := ctx.CreatePlanfileStore()

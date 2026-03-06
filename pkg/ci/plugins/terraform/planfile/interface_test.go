@@ -8,6 +8,71 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+func TestMetadataValidate(t *testing.T) {
+	tests := []struct {
+		name        string
+		metadata    *Metadata
+		expectError bool
+	}{
+		{
+			name: "valid metadata",
+			metadata: &Metadata{
+				Stack:     "dev",
+				Component: "vpc",
+				SHA:       "abc123",
+			},
+			expectError: false,
+		},
+		{
+			name: "empty stack",
+			metadata: &Metadata{
+				Stack:     "",
+				Component: "vpc",
+				SHA:       "abc123",
+			},
+			expectError: true,
+		},
+		{
+			name: "empty component",
+			metadata: &Metadata{
+				Stack:     "dev",
+				Component: "",
+				SHA:       "abc123",
+			},
+			expectError: true,
+		},
+		{
+			name: "empty SHA",
+			metadata: &Metadata{
+				Stack:     "dev",
+				Component: "vpc",
+				SHA:       "",
+			},
+			expectError: true,
+		},
+		{
+			name: "all empty",
+			metadata: &Metadata{
+				Stack:     "",
+				Component: "",
+				SHA:       "",
+			},
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.metadata.Validate()
+			if tt.expectError {
+				assert.ErrorIs(t, err, errUtils.ErrPlanfileMetadataInvalid)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestDefaultKeyPattern(t *testing.T) {
 	pattern := DefaultKeyPattern()
 	assert.Equal(t, "{{ .Stack }}/{{ .Component }}/{{ .SHA }}.tfplan", pattern.Pattern)

@@ -144,7 +144,6 @@ func renderPlanfileList(files []planfile.PlanfileInfo, outputFormat, owner, repo
 	data := make([]map[string]any, len(files))
 	for i, f := range files {
 		item := map[string]any{
-			"key":           f.Key,
 			"size":          f.Size,
 			"last_modified": f.LastModified.Format("2006-01-02 15:04"),
 		}
@@ -178,7 +177,6 @@ func renderWithRenderer(data []map[string]any, outputFormat, owner, repo string)
 		{Name: "SHA", Value: "{{ .sha }}"},
 		{Name: "SIZE", Value: "{{ .size }}"},
 		{Name: "MODIFIED", Value: "{{ .last_modified }}"},
-		{Name: "KEY", Value: "{{ .key }}"},
 		{Name: "MD5", Value: "{{ .md5 }}"},
 	}
 

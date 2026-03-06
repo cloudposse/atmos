@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -192,45 +193,60 @@ func TestPlugin_GetOutputVariables(t *testing.T) {
 func TestPlugin_GetArtifactKey(t *testing.T) {
 	p := &Plugin{}
 
-	t.Run("valid stack and component", func(t *testing.T) {
+	t.Run("valid stack component and SHA", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
 			ComponentFromArg: "vpc",
 			Stack:            "dev-us-east-1",
 		}
-		key := p.getArtifactKey(info, "plan")
-		assert.Equal(t, "dev-us-east-1/vpc.tfplan", key)
+		ciCtx := &provider.Context{SHA: "abc123"}
+		key, err := p.getArtifactKey(info, ciCtx)
+		require.NoError(t, err)
+		assert.Equal(t, "dev-us-east-1/vpc/abc123.tfplan", key)
 	})
 
-	t.Run("nil info returns placeholder", func(t *testing.T) {
-		key := p.getArtifactKey(nil, "plan")
-		assert.Equal(t, "unknown/unknown.tfplan", key)
+	t.Run("nil info returns error", func(t *testing.T) {
+		ciCtx := &provider.Context{SHA: "abc123"}
+		_, err := p.getArtifactKey(nil, ciCtx)
+		assert.Error(t, err)
 	})
 
-	t.Run("empty stack uses placeholder", func(t *testing.T) {
+	t.Run("empty stack returns error", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
 			ComponentFromArg: "vpc",
 			Stack:            "",
 		}
-		key := p.getArtifactKey(info, "plan")
-		assert.Equal(t, "unknown/vpc.tfplan", key)
+		ciCtx := &provider.Context{SHA: "abc123"}
+		_, err := p.getArtifactKey(info, ciCtx)
+		assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
 	})
 
-	t.Run("empty component uses placeholder", func(t *testing.T) {
+	t.Run("empty component returns error", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
 			ComponentFromArg: "",
 			Stack:            "dev-us-east-1",
 		}
-		key := p.getArtifactKey(info, "plan")
-		assert.Equal(t, "dev-us-east-1/unknown.tfplan", key)
+		ciCtx := &provider.Context{SHA: "abc123"}
+		_, err := p.getArtifactKey(info, ciCtx)
+		assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
 	})
 
-	t.Run("both empty uses placeholders", func(t *testing.T) {
+	t.Run("empty SHA returns error", func(t *testing.T) {
 		info := &schema.ConfigAndStacksInfo{
-			ComponentFromArg: "",
-			Stack:            "",
+			ComponentFromArg: "vpc",
+			Stack:            "dev-us-east-1",
 		}
-		key := p.getArtifactKey(info, "plan")
-		assert.Equal(t, "unknown/unknown.tfplan", key)
+		ciCtx := &provider.Context{SHA: ""}
+		_, err := p.getArtifactKey(info, ciCtx)
+		assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
+	})
+
+	t.Run("nil CI context returns error", func(t *testing.T) {
+		info := &schema.ConfigAndStacksInfo{
+			ComponentFromArg: "vpc",
+			Stack:            "dev-us-east-1",
+		}
+		_, err := p.getArtifactKey(info, nil)
+		assert.ErrorIs(t, err, errUtils.ErrPlanfileKeyInvalid)
 	})
 }
 

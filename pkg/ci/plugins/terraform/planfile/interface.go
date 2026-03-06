@@ -99,6 +99,15 @@ type Metadata struct {
 	Custom map[string]string `json:"custom,omitempty"`
 }
 
+// Validate checks that required metadata fields are present.
+// Returns ErrPlanfileMetadataInvalid if Stack, Component, or SHA is empty.
+func (m *Metadata) Validate() error {
+	if m.Stack == "" || m.Component == "" || m.SHA == "" {
+		return errUtils.ErrPlanfileMetadataInvalid
+	}
+	return nil
+}
+
 // PlanfileInfo contains basic information about a stored planfile.
 type PlanfileInfo struct {
 	// Key is the storage key/path.
