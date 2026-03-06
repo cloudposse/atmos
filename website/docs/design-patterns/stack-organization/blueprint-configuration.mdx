@@ -210,7 +210,7 @@ In the blueprint pattern, each deployment stack imports a single blueprint. Ther
 
 ## The Scope Trap
 
-If your blueprint defines defaults at the **component** level instead of the global level, you must override at the component level too. See [Variable Merge Order](/learn/merge-order) for why this matters.
+If your blueprint defines defaults at the **component** level instead of the global level, you must override at the component level too.
 
 <File title="Blueprint with component-level defaults">
 ```yaml
@@ -256,6 +256,5 @@ components:
 
 ## References
 
-- [Variable Merge Order](/learn/merge-order) — How Atmos resolves variable precedence
 - [Stack Imports](/stacks/imports) — Import syntax and resolution
 - [Overrides](/stacks/overrides) — File-scoped variable application

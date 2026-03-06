@@ -19,7 +19,7 @@ When multiple manifest files are imported into the same top-level stack (e.g., o
 
 The `overrides` section solves this by staying scoped to the file boundary. Values defined in `overrides` are applied only to components within the current manifest and its imports — they never leak into components defined in other manifests.
 
-Overrides also have the **highest merge priority** in the [variable merge order](/learn/merge-order), making them useful when you need a value to win regardless of where else it's defined.
+Overrides also have the **highest merge priority**, making them useful when you need a value to win regardless of where else it's defined.
 
 :::tip When You Don't Need Overrides
 If each top-level stack imports a single blueprint (no competing manifests), you don't need `overrides`. Plain `vars` at the same scope level is sufficient — the importing file's values override the imported file's values. See the [Blueprint Configuration](/design-patterns/stack-organization/blueprint-configuration) pattern.

@@ -65,10 +65,8 @@ When Atmos processes a stack file, it:
 
 The result is a single, merged configuration that behaves like one big YAML file.
 
-:::tip After Imports: Scope Levels Matter
-Import resolution is only the first stage. After all files merge into one tree, Atmos applies a second merge
-at the **component level** where scope matters: component-level `vars` override global-level `vars`, regardless
-of which file they came from. See [Variable Merge Order](/learn/merge-order) for the complete picture.
+:::tip
+Your values always override imported values at the same level. But if an imported file sets a var at the **component** level, setting it at the **global** level won't override it — you need to match the level.
 :::
 
 ## Import Order Matters
@@ -297,6 +295,49 @@ We'll cover inheritance in the next section. For now, focus on imports for file-
 - **Use for DRY configuration** - define once, import everywhere
 - **Organize in `_defaults/`** for clarity (optional convention)
 </KeyTakeaways>
+
+## Scope Levels Beat Import Order
+
+Import order controls which file wins **at the same level**. But component-level `vars` always beat global-level `vars`, no matter which file they came from.
+
+<File title="stacks/catalog/platform.yaml">
+```yaml
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "10.0.0.0/16"   # Component level
+```
+</File>
+
+<File title="stacks/deploy/prod-us.yaml">
+```yaml
+import:
+  - catalog/platform
+
+vars:
+  cidr_block: "172.16.0.0/16"       # Global level — loses!
+```
+</File>
+
+The fix: override at the same level.
+
+<File title="stacks/deploy/prod-us.yaml (fixed)">
+```yaml
+import:
+  - catalog/platform
+
+components:
+  terraform:
+    vpc:
+      vars:
+        cidr_block: "172.16.0.0/16"  # Same level — wins
+```
+</File>
+
+:::tip Debugging
+Use `atmos describe component vpc -s prod-us-east-1` to see final merged values, or add `--provenance` to see exactly which file each value came from.
+:::
 
 ## What's Next
 
