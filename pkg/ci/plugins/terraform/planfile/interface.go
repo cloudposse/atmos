@@ -23,6 +23,11 @@ const (
 
 	// LockFilename is the well-known name for the lock file within a bundle.
 	LockFilename = ".terraform.lock.hcl"
+
+	// StoredPlanPrefix is the prefix used for stored planfiles during plan verification.
+	// When --verify-plan is set in CI mode, the downloaded planfile gets this prefix
+	// so terraform can generate a fresh plan at the canonical path for comparison.
+	StoredPlanPrefix = "stored."
 )
 
 // Store defines the interface for planfile storage backends.

@@ -376,12 +376,27 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 		}
 	}()
 
-	// Write downloaded files to disk using the shared helper.
-	if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
-		return err
+	// When plan verification is enabled, download the stored planfile with a prefix
+	// so terraform can generate a fresh plan at the canonical path for comparison.
+	if ctx.Info.VerifyPlan {
+		dir := filepath.Dir(planfilePath)
+		storedPlanPath := filepath.Join(dir, planfile.StoredPlanPrefix+planfile.PlanFilename)
+
+		if err := planfile.WritePlanfileResultsForVerification(results, storedPlanPath, planfilePath); err != nil {
+			return err
+		}
+
+		// Store the stored plan path on info for the verification step in RunE.
+		ctx.Info.StoredPlanFile = storedPlanPath
+		logArtifactOperation("Downloaded (stored for verification)", key, store.Name(), storedPlanPath, ctx.Info)
+	} else {
+		// Write downloaded files to disk using the shared helper.
+		if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
+			return err
+		}
+		logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)
 	}
 
-	logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)
 	return nil
 }
 
