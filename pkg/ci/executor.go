@@ -154,7 +154,6 @@ func buildHookContext(opts ExecuteOptions, platform provider.Provider) *plugin.H
 		Provider:     platform,
 		CICtx:        ciCtx,
 		TemplateLoader: loader,
-		CheckRunStore:  defaultCheckRunStore,
 		CreatePlanfileStore: func() (any, error) {
 			return createPlanfileStore(opts)
 		},

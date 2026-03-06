@@ -356,34 +356,21 @@ func (p *Plugin) createCheckRun(ctx *plugin.HookContext) error {
 			Err()
 	}
 
-	// Store check run ID for the corresponding "after" event.
-	key := buildCheckRunKey(ctx.Info, ctx.Command)
-	ctx.CheckRunStore.Store(key, checkRun.ID)
-
 	log.Debug("Created check run", "name", name, "id", checkRun.ID)
 	return nil
 }
 
 // updateCheckRun updates an existing check run with the final result.
+// The provider handles ID correlation internally (or falls back to creating
+// a new completed check run if no prior CreateCheckRun was called).
 func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputResult) error {
 	defer perf.Track(ctx.Config, "terraform.Plugin.updateCheckRun")()
 
 	name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
-	key := buildCheckRunKey(ctx.Info, ctx.Command)
-
-	// Look up stored check run ID from the "before" event.
-	checkRunID, ok := ctx.CheckRunStore.LoadAndDelete(key)
-	if !ok {
-		// No stored ID — create a new completed check run instead.
-		log.Debug("No check run ID found for update, creating new completed check run", "name", name)
-		return p.createCompletedCheckRun(ctx, result, name)
-	}
-
 	status, conclusion := resolveCheckResult(ctx)
 	now := time.Now()
 
 	opts := &provider.UpdateCheckRunOptions{
-		CheckRunID:  checkRunID,
 		Name:        name,
 		Status:      status,
 		Conclusion:  conclusion,
@@ -395,6 +382,7 @@ func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputRe
 	if ctx.CICtx != nil {
 		opts.Owner = ctx.CICtx.RepoOwner
 		opts.Repo = ctx.CICtx.RepoName
+		opts.SHA = ctx.CICtx.SHA
 	}
 
 	_, err := ctx.Provider.UpdateCheckRun(context.Background(), opts)
@@ -402,43 +390,10 @@ func (p *Plugin) updateCheckRun(ctx *plugin.HookContext, result *plugin.OutputRe
 		return errUtils.Build(errUtils.ErrCICheckRunUpdateFailed).
 			WithCause(err).
 			WithContext("name", name).
-			WithContext("check_run_id", fmt.Sprintf("%d", checkRunID)).
 			Err()
 	}
 
-	log.Debug("Updated check run", "name", name, "id", checkRunID, "status", status)
-	return nil
-}
-
-// createCompletedCheckRun creates a new check run with the final result status.
-// Used when no "before" event was processed (e.g., checks were enabled mid-run).
-func (p *Plugin) createCompletedCheckRun(ctx *plugin.HookContext, result *plugin.OutputResult, name string) error {
-	defer perf.Track(ctx.Config, "terraform.Plugin.createCompletedCheckRun")()
-
-	status, _ := resolveCheckResult(ctx)
-
-	opts := &provider.CreateCheckRunOptions{
-		Name:    name,
-		Status:  status,
-		Title:   buildCheckTitle(ctx.Command, result),
-		Summary: buildCheckSummary(result),
-	}
-
-	if ctx.CICtx != nil {
-		opts.Owner = ctx.CICtx.RepoOwner
-		opts.Repo = ctx.CICtx.RepoName
-		opts.SHA = ctx.CICtx.SHA
-	}
-
-	_, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
-	if err != nil {
-		return errUtils.Build(errUtils.ErrCICheckRunCreateFailed).
-			WithCause(err).
-			WithContext("name", name).
-			Err()
-	}
-
-	log.Debug("Created completed check run", "name", name, "status", status)
+	log.Debug("Updated check run", "name", name, "status", status)
 	return nil
 }
 
@@ -592,11 +547,6 @@ func buildCheckSummary(result *plugin.OutputResult) string {
 	}
 
 	return ""
-}
-
-// buildCheckRunKey creates a unique key for storing check run IDs between before/after events.
-func buildCheckRunKey(info *schema.ConfigAndStacksInfo, command string) string {
-	return info.Stack + "/" + info.ComponentFromArg + "/" + command
 }
 
 // logArtifactOperation logs details about a planfile upload/download operation.

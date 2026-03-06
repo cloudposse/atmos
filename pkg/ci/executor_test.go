@@ -40,8 +40,9 @@ func (c *capturingProvider) CreateCheckRun(_ context.Context, opts *provider.Cre
 
 func (c *capturingProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	c.updateCheckRunCalls = append(c.updateCheckRunCalls, opts)
+	c.nextID++
 	return &provider.CheckRun{
-		ID:     opts.CheckRunID,
+		ID:     c.nextID,
 		Name:   opts.Name,
 		Status: opts.Status,
 	}, nil
@@ -91,12 +92,8 @@ func TestExecute_BeforeTerraformPlan_TriggersCheckCreate(t *testing.T) {
 						opts.Repo = ctx.CICtx.RepoName
 						opts.SHA = ctx.CICtx.SHA
 					}
-					checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
-					if err != nil {
-						return err
-					}
-					ctx.CheckRunStore.Store(ctx.Info.Stack+"/"+ctx.Info.ComponentFromArg+"/"+ctx.Command, checkRun.ID)
-					return nil
+					_, err := ctx.Provider.CreateCheckRun(context.Background(), opts)
+					return err
 				},
 			},
 		},
@@ -145,28 +142,18 @@ func TestExecute_BeforeAfterPlan_CheckLifecycle(t *testing.T) {
 				Event: "before.terraform.plan",
 				Handler: func(ctx *plugin.HookContext) error {
 					name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
-					checkRun, err := ctx.Provider.CreateCheckRun(context.Background(), &provider.CreateCheckRunOptions{
+					_, err := ctx.Provider.CreateCheckRun(context.Background(), &provider.CreateCheckRunOptions{
 						Name:   name,
 						Status: provider.CheckRunStateInProgress,
 					})
-					if err != nil {
-						return err
-					}
-					ctx.CheckRunStore.Store(ctx.Info.Stack+"/"+ctx.Info.ComponentFromArg+"/"+ctx.Command, checkRun.ID)
-					return nil
+					return err
 				},
 			},
 			{
 				Event: "after.terraform.plan",
 				Handler: func(ctx *plugin.HookContext) error {
 					name := provider.FormatCheckRunName(ctx.Command, ctx.Info.Stack, ctx.Info.ComponentFromArg)
-					key := ctx.Info.Stack + "/" + ctx.Info.ComponentFromArg + "/" + ctx.Command
-					checkRunID, ok := ctx.CheckRunStore.LoadAndDelete(key)
-					if !ok {
-						return fmt.Errorf("no check run ID found")
-					}
 					_, err := ctx.Provider.UpdateCheckRun(context.Background(), &provider.UpdateCheckRunOptions{
-						CheckRunID: checkRunID,
 						Name:       name,
 						Status:     provider.CheckRunStateSuccess,
 						Conclusion: "success",
@@ -213,7 +200,6 @@ func TestExecute_BeforeAfterPlan_CheckLifecycle(t *testing.T) {
 
 	// Verify UpdateCheckRun was called (not a second CreateCheckRun).
 	require.Len(t, cp.updateCheckRunCalls, 1, "UpdateCheckRun should have been called once after after event")
-	assert.Equal(t, int64(1), cp.updateCheckRunCalls[0].CheckRunID, "UpdateCheckRun should use the ID from CreateCheckRun")
 	assert.Equal(t, provider.CheckRunStateSuccess, cp.updateCheckRunCalls[0].Status)
 	assert.Equal(t, "success", cp.updateCheckRunCalls[0].Conclusion)
 	assert.Equal(t, "Plan: 1 to add, 0 to change, 0 to destroy.", cp.updateCheckRunCalls[0].Title)
@@ -315,7 +301,8 @@ func (c *fullCapturingProvider) CreateCheckRun(_ context.Context, opts *provider
 
 func (c *fullCapturingProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	c.updateCheckRunCalls = append(c.updateCheckRunCalls, opts)
-	return &provider.CheckRun{ID: opts.CheckRunID, Name: opts.Name, Status: opts.Status}, nil
+	c.nextID++
+	return &provider.CheckRun{ID: c.nextID, Name: opts.Name, Status: opts.Status}, nil
 }
 
 func (c *fullCapturingProvider) OutputWriter() provider.OutputWriter {
@@ -960,7 +947,6 @@ func TestBuildHookContext(t *testing.T) {
 	assert.Equal(t, opts.CommandError, ctx.CommandError)
 	assert.Equal(t, mp, ctx.Provider)
 	assert.NotNil(t, ctx.TemplateLoader)
-	assert.NotNil(t, ctx.CheckRunStore)
 	assert.NotNil(t, ctx.CreatePlanfileStore)
 }
 

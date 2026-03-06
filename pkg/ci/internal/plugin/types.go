@@ -46,22 +46,10 @@ type HookContext struct {
 	// TemplateLoader loads and renders CI summary templates.
 	TemplateLoader *templates.Loader
 
-	// CheckRunStore stores check run IDs for before/after event correlation.
-	CheckRunStore CheckRunStore
-
 	// CreatePlanfileStore is a lazy factory for creating planfile stores.
 	// Not all events need a store, so it's created on demand.
 	// Returns an any that should be type-asserted to planfile.Store by the handler.
 	CreatePlanfileStore func() (any, error)
-}
-
-// CheckRunStore stores check run IDs for correlating before/after hook events.
-type CheckRunStore interface {
-	// Store saves a check run ID with the given key.
-	Store(key string, id int64)
-
-	// LoadAndDelete retrieves and removes a check run ID.
-	LoadAndDelete(key string) (int64, bool)
 }
 
 // HookBinding declares what happens at a specific hook event.

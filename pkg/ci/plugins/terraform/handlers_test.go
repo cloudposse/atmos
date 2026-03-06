@@ -38,27 +38,6 @@ func (w *mockOutputWriter) WriteOutput(key, value string) error {
 	return nil
 }
 
-// mockCheckRunStore implements plugin.CheckRunStore for testing.
-type mockCheckRunStore struct {
-	data map[string]int64
-}
-
-func newMockCheckRunStore() *mockCheckRunStore {
-	return &mockCheckRunStore{data: make(map[string]int64)}
-}
-
-func (s *mockCheckRunStore) Store(key string, id int64) {
-	s.data[key] = id
-}
-
-func (s *mockCheckRunStore) LoadAndDelete(key string) (int64, bool) {
-	id, ok := s.data[key]
-	if ok {
-		delete(s.data, key)
-	}
-	return id, ok
-}
-
 // mockProvider implements provider.Provider for testing.
 type mockProvider struct {
 	writer         *mockOutputWriter
@@ -87,7 +66,8 @@ func (m *mockProvider) CreateCheckRun(_ context.Context, opts *provider.CreateCh
 }
 func (m *mockProvider) UpdateCheckRun(_ context.Context, opts *provider.UpdateCheckRunOptions) (*provider.CheckRun, error) {
 	m.updateRunCalls = append(m.updateRunCalls, opts)
-	return &provider.CheckRun{ID: opts.CheckRunID, Name: opts.Name, Status: opts.Status}, nil
+	m.nextID++
+	return &provider.CheckRun{ID: m.nextID, Name: opts.Name, Status: opts.Status}, nil
 }
 
 func TestIsSummaryEnabled(t *testing.T) {
@@ -258,14 +238,6 @@ func TestBuildCheckSummary(t *testing.T) {
 	})
 }
 
-func TestBuildCheckRunKey(t *testing.T) {
-	info := &schema.ConfigAndStacksInfo{
-		Stack:            "dev-us-east-1",
-		ComponentFromArg: "vpc",
-	}
-	assert.Equal(t, "dev-us-east-1/vpc/plan", buildCheckRunKey(info, "plan"))
-}
-
 func TestParseOutputWithError(t *testing.T) {
 	p := &Plugin{}
 
@@ -300,7 +272,7 @@ func TestOnBeforePlan_CheckDisabled(t *testing.T) {
 		Config:        &schema.AtmosConfiguration{}, // Checks disabled by default.
 		Provider:      mp,
 		Command:       "plan",
-		CheckRunStore: newMockCheckRunStore(),
+
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
 			ComponentFromArg: "vpc",
@@ -317,15 +289,13 @@ func TestOnBeforePlan_CheckDisabled(t *testing.T) {
 func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
-	store := newMockCheckRunStore()
 
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
 			CI: schema.CIConfig{Checks: schema.CIChecksConfig{Enabled: boolPtr(true)}},
 		},
-		Provider:      mp,
-		Command:       "plan",
-		CheckRunStore: store,
+		Provider: mp,
+		Command:  "plan",
 		CICtx: &provider.Context{
 			RepoOwner: "owner",
 			RepoName:  "repo",
@@ -343,11 +313,7 @@ func TestOnBeforePlan_CheckEnabled(t *testing.T) {
 	// Check run should be created.
 	require.Len(t, mp.checkRunCalls, 1)
 	assert.Equal(t, provider.CheckRunStateInProgress, mp.checkRunCalls[0].Status)
-
-	// ID should be stored.
-	id, ok := store.LoadAndDelete("dev/vpc/plan")
-	assert.True(t, ok)
-	assert.Equal(t, int64(1), id)
+	assert.Equal(t, "atmos/plan: dev/vpc", mp.checkRunCalls[0].Name)
 }
 
 func TestOnAfterApply_WritesOutputs(t *testing.T) {
@@ -363,7 +329,7 @@ func TestOnAfterApply_WritesOutputs(t *testing.T) {
 		},
 		Provider:      mp,
 		Command:       "apply",
-		CheckRunStore: newMockCheckRunStore(),
+
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
 			ComponentFromArg: "vpc",
@@ -394,7 +360,7 @@ func TestOnAfterApply_BothSummaryAndOutputDisabled(t *testing.T) {
 		},
 		Provider:      mp,
 		Command:       "apply",
-		CheckRunStore: newMockCheckRunStore(),
+
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
 			ComponentFromArg: "vpc",
@@ -424,7 +390,7 @@ func TestOnAfterPlan_AllDisabled_NoPlanfile(t *testing.T) {
 		},
 		Provider:      mp,
 		Command:       "plan",
-		CheckRunStore: newMockCheckRunStore(),
+
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
 			ComponentFromArg: "vpc",
@@ -460,7 +426,7 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 		},
 		Provider:      mp,
 		Command:       "plan",
-		CheckRunStore: newMockCheckRunStore(),
+
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "prod",
 			ComponentFromArg: "rds",
@@ -485,10 +451,6 @@ func TestOnAfterPlan_OutputEnabled_WritesVariables(t *testing.T) {
 func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
-	store := newMockCheckRunStore()
-
-	// Pre-store a check run ID (simulating onBeforePlan having created one).
-	store.Store("dev/vpc/plan", 42)
 
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
@@ -498,12 +460,12 @@ func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
 			},
 		},
-		Provider:      mp,
-		Command:       "plan",
-		CheckRunStore: store,
+		Provider: mp,
+		Command:  "plan",
 		CICtx: &provider.Context{
 			RepoOwner: "owner",
 			RepoName:  "repo",
+			SHA:       "abc123",
 		},
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
@@ -518,61 +480,17 @@ func TestOnAfterPlan_CheckEnabled_UpdatesCheckRun(t *testing.T) {
 
 	// Check run should have been updated.
 	require.Len(t, mp.updateRunCalls, 1)
-	assert.Equal(t, int64(42), mp.updateRunCalls[0].CheckRunID)
 	assert.Equal(t, provider.CheckRunStateSuccess, mp.updateRunCalls[0].Status)
 	assert.Equal(t, "success", mp.updateRunCalls[0].Conclusion)
 	assert.Equal(t, "owner", mp.updateRunCalls[0].Owner)
 	assert.Equal(t, "repo", mp.updateRunCalls[0].Repo)
-}
-
-func TestOnAfterPlan_CheckEnabled_NoStoredID_CreatesCompleted(t *testing.T) {
-	p := &Plugin{}
-	mp := newMockProvider()
-	store := newMockCheckRunStore()
-
-	// Do NOT pre-store any check run ID.
-
-	ctx := &plugin.HookContext{
-		Config: &schema.AtmosConfiguration{
-			CI: schema.CIConfig{
-				Summary: schema.CISummaryConfig{Enabled: boolPtr(false)},
-				Output:  schema.CIOutputConfig{Enabled: boolPtr(false)},
-				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
-			},
-		},
-		Provider:      mp,
-		Command:       "plan",
-		CheckRunStore: store,
-		CICtx: &provider.Context{
-			RepoOwner: "owner",
-			RepoName:  "repo",
-			SHA:       "abc123",
-		},
-		Info: &schema.ConfigAndStacksInfo{
-			Stack:            "dev",
-			ComponentFromArg: "vpc",
-			PlanFile:         "",
-		},
-		Output: "No changes.",
-	}
-
-	err := p.onAfterPlan(ctx)
-	require.NoError(t, err)
-
-	// Should create a new completed check run (not update).
-	require.Len(t, mp.checkRunCalls, 1)
-	assert.Equal(t, provider.CheckRunStateSuccess, mp.checkRunCalls[0].Status)
-	assert.Equal(t, "owner", mp.checkRunCalls[0].Owner)
-	assert.Equal(t, "repo", mp.checkRunCalls[0].Repo)
-	assert.Equal(t, "abc123", mp.checkRunCalls[0].SHA)
-	assert.Empty(t, mp.updateRunCalls)
+	assert.Equal(t, "abc123", mp.updateRunCalls[0].SHA)
+	assert.Equal(t, "atmos/plan: dev/vpc", mp.updateRunCalls[0].Name)
 }
 
 func TestOnAfterPlan_WithCommandError_FailureCheckRun(t *testing.T) {
 	p := &Plugin{}
 	mp := newMockProvider()
-	store := newMockCheckRunStore()
-	store.Store("dev/vpc/plan", 99)
 
 	ctx := &plugin.HookContext{
 		Config: &schema.AtmosConfiguration{
@@ -582,10 +500,9 @@ func TestOnAfterPlan_WithCommandError_FailureCheckRun(t *testing.T) {
 				Checks:  schema.CIChecksConfig{Enabled: boolPtr(true)},
 			},
 		},
-		Provider:      mp,
-		Command:       "plan",
-		CommandError:  fmt.Errorf("terraform plan failed"),
-		CheckRunStore: store,
+		Provider:     mp,
+		Command:      "plan",
+		CommandError: fmt.Errorf("terraform plan failed"),
 		Info: &schema.ConfigAndStacksInfo{
 			Stack:            "dev",
 			ComponentFromArg: "vpc",
@@ -599,7 +516,6 @@ func TestOnAfterPlan_WithCommandError_FailureCheckRun(t *testing.T) {
 
 	// Check run should be updated with failure.
 	require.Len(t, mp.updateRunCalls, 1)
-	assert.Equal(t, int64(99), mp.updateRunCalls[0].CheckRunID)
 	assert.Equal(t, provider.CheckRunStateFailure, mp.updateRunCalls[0].Status)
 	assert.Equal(t, "failure", mp.updateRunCalls[0].Conclusion)
 }

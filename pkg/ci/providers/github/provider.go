@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/cloudposse/atmos/pkg/ci"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
@@ -19,7 +20,8 @@ const (
 
 // Provider implements provider.Provider for GitHub Actions.
 type Provider struct {
-	client *Client
+	client      *Client
+	checkRunIDs sync.Map // name → int64 ID, for correlating CreateCheckRun/UpdateCheckRun.
 }
 
 // NewProvider creates a new GitHub Actions provider.
