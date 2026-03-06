@@ -78,7 +78,7 @@ settings:
         cache:
           enabled: true
           cache_system_prompt: true
-          cache_project_memory: true
+          cache_project_instructions: true
 
       # OpenAI GPT - Strong general capabilities
       # Docs: https://atmos.tools/ai/providers#openai

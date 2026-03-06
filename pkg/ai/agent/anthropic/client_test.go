@@ -463,9 +463,9 @@ func TestExtractCacheConfig(t *testing.T) {
 				},
 			},
 			expectedCache: &cacheConfig{
-				enabled:            true,
-				cacheSystemPrompt:  true,
-				cacheProjectMemory: true,
+				enabled:                  true,
+				cacheSystemPrompt:        true,
+				cacheProjectInstructions: true,
 			},
 		},
 		{
@@ -486,9 +486,9 @@ func TestExtractCacheConfig(t *testing.T) {
 				},
 			},
 			expectedCache: &cacheConfig{
-				enabled:            false,
-				cacheSystemPrompt:  false,
-				cacheProjectMemory: false,
+				enabled:                  false,
+				cacheSystemPrompt:        false,
+				cacheProjectInstructions: false,
 			},
 		},
 		{
@@ -501,9 +501,9 @@ func TestExtractCacheConfig(t *testing.T) {
 							"anthropic": {
 								Model: "claude-sonnet-4-5-20250929",
 								Cache: &schema.AICacheSettings{
-									Enabled:            true,
-									CacheSystemPrompt:  true,
-									CacheProjectMemory: false, // Only cache system prompt.
+									Enabled:                  true,
+									CacheSystemPrompt:        true,
+									CacheProjectInstructions: false, // Only cache system prompt.
 								},
 							},
 						},
@@ -511,9 +511,9 @@ func TestExtractCacheConfig(t *testing.T) {
 				},
 			},
 			expectedCache: &cacheConfig{
-				enabled:            true,
-				cacheSystemPrompt:  true,
-				cacheProjectMemory: false,
+				enabled:                  true,
+				cacheSystemPrompt:        true,
+				cacheProjectInstructions: false,
 			},
 		},
 		{
@@ -527,9 +527,9 @@ func TestExtractCacheConfig(t *testing.T) {
 				},
 			},
 			expectedCache: &cacheConfig{
-				enabled:            true,
-				cacheSystemPrompt:  true,
-				cacheProjectMemory: true,
+				enabled:                  true,
+				cacheSystemPrompt:        true,
+				cacheProjectInstructions: true,
 			},
 		},
 		{
@@ -547,9 +547,9 @@ func TestExtractCacheConfig(t *testing.T) {
 				},
 			},
 			expectedCache: &cacheConfig{
-				enabled:            true,
-				cacheSystemPrompt:  true,
-				cacheProjectMemory: true,
+				enabled:                  true,
+				cacheSystemPrompt:        true,
+				cacheProjectInstructions: true,
 			},
 		},
 		{
@@ -562,9 +562,9 @@ func TestExtractCacheConfig(t *testing.T) {
 							"anthropic": {
 								Model: "claude-sonnet-4-5-20250929",
 								Cache: &schema.AICacheSettings{
-									Enabled:            true,
-									CacheSystemPrompt:  false,
-									CacheProjectMemory: false,
+									Enabled:                  true,
+									CacheSystemPrompt:        false,
+									CacheProjectInstructions: false,
 								},
 							},
 						},
@@ -572,9 +572,9 @@ func TestExtractCacheConfig(t *testing.T) {
 				},
 			},
 			expectedCache: &cacheConfig{
-				enabled:            true,
-				cacheSystemPrompt:  true, // Defaults to true when both are false.
-				cacheProjectMemory: true, // Defaults to true when both are false.
+				enabled:                  true,
+				cacheSystemPrompt:        true, // Defaults to true when both are false.
+				cacheProjectInstructions: true, // Defaults to true when both are false.
 			},
 		},
 	}
@@ -903,14 +903,14 @@ func TestAnthropicModels(t *testing.T) {
 func TestCacheConfig_Fields(t *testing.T) {
 	// Test cacheConfig struct fields.
 	cache := &cacheConfig{
-		enabled:            true,
-		cacheSystemPrompt:  true,
-		cacheProjectMemory: false,
+		enabled:                  true,
+		cacheSystemPrompt:        true,
+		cacheProjectInstructions: false,
 	}
 
 	assert.True(t, cache.enabled)
 	assert.True(t, cache.cacheSystemPrompt)
-	assert.False(t, cache.cacheProjectMemory)
+	assert.False(t, cache.cacheProjectInstructions)
 }
 
 func TestExtractCacheConfig_EmptyProviders(t *testing.T) {
@@ -928,7 +928,7 @@ func TestExtractCacheConfig_EmptyProviders(t *testing.T) {
 	// Default behavior when no provider config.
 	assert.True(t, cache.enabled)
 	assert.True(t, cache.cacheSystemPrompt)
-	assert.True(t, cache.cacheProjectMemory)
+	assert.True(t, cache.cacheProjectInstructions)
 }
 
 func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
@@ -939,9 +939,9 @@ func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
 						Cache: &schema.AICacheSettings{
-							Enabled:            true,
-							CacheSystemPrompt:  true,
-							CacheProjectMemory: false,
+							Enabled:                  true,
+							CacheSystemPrompt:        true,
+							CacheProjectInstructions: false,
 						},
 					},
 				},
@@ -953,7 +953,7 @@ func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
 
 	assert.True(t, cache.enabled)
 	assert.True(t, cache.cacheSystemPrompt)
-	assert.False(t, cache.cacheProjectMemory)
+	assert.False(t, cache.cacheProjectInstructions)
 }
 
 func TestExtractCacheConfig_OnlyProjectMemory(t *testing.T) {
@@ -964,9 +964,9 @@ func TestExtractCacheConfig_OnlyProjectMemory(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
 						Cache: &schema.AICacheSettings{
-							Enabled:            true,
-							CacheSystemPrompt:  false,
-							CacheProjectMemory: true,
+							Enabled:                  true,
+							CacheSystemPrompt:        false,
+							CacheProjectInstructions: true,
 						},
 					},
 				},
@@ -978,7 +978,7 @@ func TestExtractCacheConfig_OnlyProjectMemory(t *testing.T) {
 
 	assert.True(t, cache.enabled)
 	assert.False(t, cache.cacheSystemPrompt)
-	assert.True(t, cache.cacheProjectMemory)
+	assert.True(t, cache.cacheProjectInstructions)
 }
 
 func TestBuildSystemPrompt_MultipleScenarios(t *testing.T) {
@@ -1517,9 +1517,9 @@ func TestParseAnthropicResponse_InitializesToolCalls(t *testing.T) {
 // TestSimpleClient_NilClient tests behavior when internal client is nil.
 func TestSimpleClient_StructFields(t *testing.T) {
 	cache := &cacheConfig{
-		enabled:            true,
-		cacheSystemPrompt:  true,
-		cacheProjectMemory: false,
+		enabled:                  true,
+		cacheSystemPrompt:        true,
+		cacheProjectInstructions: false,
 	}
 
 	config := &base.Config{
@@ -1543,7 +1543,7 @@ func TestSimpleClient_StructFields(t *testing.T) {
 	// Test cache config is stored.
 	assert.True(t, client.cache.enabled)
 	assert.True(t, client.cache.cacheSystemPrompt)
-	assert.False(t, client.cache.cacheProjectMemory)
+	assert.False(t, client.cache.cacheProjectInstructions)
 }
 
 // TestConvertMessagesToAnthropicFormat_LongConversation tests conversion of a long conversation.
@@ -1643,7 +1643,7 @@ func TestExtractCacheConfig_NilCache(t *testing.T) {
 	// Default behavior when cache is nil.
 	assert.True(t, cache.enabled)
 	assert.True(t, cache.cacheSystemPrompt)
-	assert.True(t, cache.cacheProjectMemory)
+	assert.True(t, cache.cacheProjectInstructions)
 }
 
 // TestBuildSystemPrompt_AllCombinations tests all combinations of cache settings.
@@ -1846,7 +1846,7 @@ func TestExtractCacheConfig_NilProviderInMap(t *testing.T) {
 	// Should use defaults when provider config is nil.
 	assert.True(t, cache.enabled)
 	assert.True(t, cache.cacheSystemPrompt)
-	assert.True(t, cache.cacheProjectMemory)
+	assert.True(t, cache.cacheProjectInstructions)
 }
 
 // TestUsageCalculations verifies token usage calculations.
@@ -2045,9 +2045,9 @@ func TestCacheConfig_BothFalseDefaultsToTrue(t *testing.T) {
 				Providers: map[string]*schema.AIProviderConfig{
 					"anthropic": {
 						Cache: &schema.AICacheSettings{
-							Enabled:            true,
-							CacheSystemPrompt:  false,
-							CacheProjectMemory: false,
+							Enabled:                  true,
+							CacheSystemPrompt:        false,
+							CacheProjectInstructions: false,
 						},
 					},
 				},
@@ -2060,7 +2060,7 @@ func TestCacheConfig_BothFalseDefaultsToTrue(t *testing.T) {
 	// According to the code, when both are false, they default to true.
 	assert.True(t, cache.enabled)
 	assert.True(t, cache.cacheSystemPrompt)
-	assert.True(t, cache.cacheProjectMemory)
+	assert.True(t, cache.cacheProjectInstructions)
 }
 
 // TestBuildSystemPrompt_WithSpecialCharacters tests system prompts with special characters.
@@ -2167,54 +2167,54 @@ func TestExtractConfig_EdgeCases(t *testing.T) {
 // TestSimpleClient_CacheConfigCombinations tests all cache configuration combinations.
 func TestSimpleClient_CacheConfigCombinations(t *testing.T) {
 	tests := []struct {
-		name                string
-		enabled             bool
-		cacheSystemPrompt   bool
-		cacheProjectMemory  bool
-		promptSystemEnabled bool
-		promptMemoryEnabled bool
-		expectSystemCached  bool
-		expectMemoryCached  bool
+		name                     string
+		enabled                  bool
+		cacheSystemPrompt        bool
+		cacheProjectInstructions bool
+		promptSystemEnabled      bool
+		promptMemoryEnabled      bool
+		expectSystemCached       bool
+		expectMemoryCached       bool
 	}{
 		{
-			name:                "All enabled",
-			enabled:             true,
-			cacheSystemPrompt:   true,
-			cacheProjectMemory:  true,
-			promptSystemEnabled: true,
-			promptMemoryEnabled: true,
-			expectSystemCached:  true,
-			expectMemoryCached:  true,
+			name:                     "All enabled",
+			enabled:                  true,
+			cacheSystemPrompt:        true,
+			cacheProjectInstructions: true,
+			promptSystemEnabled:      true,
+			promptMemoryEnabled:      true,
+			expectSystemCached:       true,
+			expectMemoryCached:       true,
 		},
 		{
-			name:                "Global disabled",
-			enabled:             false,
-			cacheSystemPrompt:   true,
-			cacheProjectMemory:  true,
-			promptSystemEnabled: true,
-			promptMemoryEnabled: true,
-			expectSystemCached:  false,
-			expectMemoryCached:  false,
+			name:                     "Global disabled",
+			enabled:                  false,
+			cacheSystemPrompt:        true,
+			cacheProjectInstructions: true,
+			promptSystemEnabled:      true,
+			promptMemoryEnabled:      true,
+			expectSystemCached:       false,
+			expectMemoryCached:       false,
 		},
 		{
-			name:                "System only",
-			enabled:             true,
-			cacheSystemPrompt:   true,
-			cacheProjectMemory:  false,
-			promptSystemEnabled: true,
-			promptMemoryEnabled: false,
-			expectSystemCached:  true,
-			expectMemoryCached:  false,
+			name:                     "System only",
+			enabled:                  true,
+			cacheSystemPrompt:        true,
+			cacheProjectInstructions: false,
+			promptSystemEnabled:      true,
+			promptMemoryEnabled:      false,
+			expectSystemCached:       true,
+			expectMemoryCached:       false,
 		},
 		{
-			name:                "Memory only",
-			enabled:             true,
-			cacheSystemPrompt:   false,
-			cacheProjectMemory:  true,
-			promptSystemEnabled: false,
-			promptMemoryEnabled: true,
-			expectSystemCached:  false,
-			expectMemoryCached:  true,
+			name:                     "Memory only",
+			enabled:                  true,
+			cacheSystemPrompt:        false,
+			cacheProjectInstructions: true,
+			promptSystemEnabled:      false,
+			promptMemoryEnabled:      true,
+			expectSystemCached:       false,
+			expectMemoryCached:       true,
 		},
 	}
 
@@ -2223,9 +2223,9 @@ func TestSimpleClient_CacheConfigCombinations(t *testing.T) {
 			client := &SimpleClient{
 				config: &base.Config{Enabled: true},
 				cache: &cacheConfig{
-					enabled:            tt.enabled,
-					cacheSystemPrompt:  tt.cacheSystemPrompt,
-					cacheProjectMemory: tt.cacheProjectMemory,
+					enabled:                  tt.enabled,
+					cacheSystemPrompt:        tt.cacheSystemPrompt,
+					cacheProjectInstructions: tt.cacheProjectInstructions,
 				},
 			}
 

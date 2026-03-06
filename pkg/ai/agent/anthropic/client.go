@@ -35,9 +35,9 @@ type SimpleClient struct {
 
 // cacheConfig holds Anthropic-specific cache settings.
 type cacheConfig struct {
-	enabled            bool
-	cacheSystemPrompt  bool
-	cacheProjectMemory bool
+	enabled                  bool
+	cacheSystemPrompt        bool
+	cacheProjectInstructions bool
 }
 
 // NewSimpleClient creates a new simple AI client from Atmos configuration.
@@ -83,9 +83,9 @@ func NewSimpleClient(atmosConfig *schema.AtmosConfiguration) (*SimpleClient, err
 func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
 	// Default: caching enabled.
 	cache := &cacheConfig{
-		enabled:            true,
-		cacheSystemPrompt:  true,
-		cacheProjectMemory: true,
+		enabled:                  true,
+		cacheSystemPrompt:        true,
+		cacheProjectInstructions: true,
 	}
 
 	// Get provider-specific configuration from Providers map.
@@ -100,16 +100,16 @@ func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
 					// Explicitly disabled.
 					cache.enabled = false
 					cache.cacheSystemPrompt = false
-					cache.cacheProjectMemory = false
+					cache.cacheProjectInstructions = false
 				} else {
 					// Explicitly enabled - use fine-grained settings.
 					cache.cacheSystemPrompt = providerConfig.Cache.CacheSystemPrompt
-					cache.cacheProjectMemory = providerConfig.Cache.CacheProjectMemory
+					cache.cacheProjectInstructions = providerConfig.Cache.CacheProjectInstructions
 
 					// If no fine-grained settings provided, default both to true.
-					if !cache.cacheSystemPrompt && !cache.cacheProjectMemory {
+					if !cache.cacheSystemPrompt && !cache.cacheProjectInstructions {
 						cache.cacheSystemPrompt = true
-						cache.cacheProjectMemory = true
+						cache.cacheProjectInstructions = true
 					}
 				}
 			}
@@ -409,7 +409,7 @@ func (c *SimpleClient) SendMessageWithSystemPromptAndTools(
 
 	// Add ATMOS.md content (cached if enabled).
 	if atmosMemory != "" {
-		systemPrompts = append(systemPrompts, c.buildSystemPrompt(atmosMemory, c.cache.cacheProjectMemory))
+		systemPrompts = append(systemPrompts, c.buildSystemPrompt(atmosMemory, c.cache.cacheProjectInstructions))
 	}
 
 	// Build request params.
