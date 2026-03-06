@@ -9,6 +9,7 @@ import (
 
 	"github.com/hashicorp/go-getter"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 )
 
@@ -42,6 +43,7 @@ func NormalizeURI(uri string) string {
 	// Add //. to Git URLs without subdirectory.
 	if NeedsDoubleSlashDot(uri) {
 		uri = AppendDoubleSlashDot(uri)
+		log.Debug("Added //. to Git URL without subdirectory", "normalized", uri)
 	}
 
 	return uri
@@ -64,10 +66,16 @@ func normalizeTripleSlash(uri string) string {
 	// Determine the normalized form based on subdirectory.
 	if subdir == "" {
 		// Root of repository case: convert /// to //.
-		return source + doubleSlashDot + queryParams
+		normalized := source + doubleSlashDot + queryParams
+		log.Debug("Normalized triple-slash to double-slash-dot for repository root",
+			"original", uri, "normalized", normalized)
+		return normalized
 	}
 	// Path specified after triple slash: convert /// to //.
-	return source + doubleSlash + subdir + queryParams
+	normalized := source + doubleSlash + subdir + queryParams
+	log.Debug("Normalized triple-slash to double-slash with path",
+		"original", uri, "normalized", normalized)
+	return normalized
 }
 
 // IsFileURI checks if the URI is a file:// scheme.

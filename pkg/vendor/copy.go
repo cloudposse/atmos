@@ -6,6 +6,7 @@ import (
 
 	cp "github.com/otiai10/copy"
 
+	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
@@ -96,6 +97,7 @@ func CreateSkipFunc(srcDir string, includedPaths, excludedPaths []string) func(o
 		}
 
 		// If 'included_paths' is not provided, include all files that were not excluded.
+		log.Debug("Including", "path", trimmedSrc)
 		return false, nil
 	}
 }
@@ -112,6 +114,7 @@ func ShouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) 
 			// due to an invalid pattern. The error propagates and aborts the copy.
 			return false, err
 		} else if excludeMatch {
+			log.Debug("Excluding file since it match any pattern from 'excluded_paths'", "excluded_paths", excludePath, "source", trimmedSrc)
 			return true, nil
 		}
 	}
@@ -127,9 +130,11 @@ func ShouldIncludeFile(includedPaths []string, trimmedSrc string) (bool, error) 
 		if err != nil {
 			return true, err
 		} else if includeMatch {
+			log.Debug("Including path since it matches the '%s' pattern from 'included_paths'", "included_paths", includePath, "path", trimmedSrc)
 			return false, nil
 		}
 	}
 	// File doesn't match any included pattern, skip it.
+	log.Debug("Excluding path since it does not match any pattern from 'included_paths'", "path", trimmedSrc)
 	return true, nil
 }
