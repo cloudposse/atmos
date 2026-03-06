@@ -307,7 +307,9 @@ Update the factory (in executor or wherever `CreatePlanfileStore` is defined):
 4. Wrap with `adapter.NewStore(backend)` to get `planfile.Store`.
 5. Return `planfile.Store`.
 
-No conditional routing — all stores go through the artifact registry.
+The adapter is **directly instantiated** — it is not registered in any registry. `CreatePlanfileStore()` always creates an `artifact.Store` from the artifact registry, then explicitly wraps it with the adapter. No conditional routing, no adapter registry.
+
+Delete the adapter's `NewStoreFactory()` function and related factory registration code — they are no longer needed.
 
 ### Step 10: Update handlers
 
@@ -338,6 +340,7 @@ Update `cmd/terraform/planfile/list.go`:
 
 Update `cmd/terraform/planfile/show.go`:
 - Same import changes.
+- `show` receives `[]FileResult` from download. Find the plan entry by `PlanFilename` and display it. Ignore lock file — show displays plan content only (same behavior as today).
 
 ### Step 12: Add artifact-level error sentinels
 
