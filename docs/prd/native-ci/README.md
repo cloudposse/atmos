@@ -40,6 +40,17 @@ This directory contains focused Product Requirement Documents for the Atmos Nati
 | [plan-verification.md](./terraform-plugin/plan-verification.md) | `--verify-plan` flag, plan-diff semantic comparison |
 | [describe-affected-matrix.md](./terraform-plugin/describe-affected-matrix.md) | `--format=matrix` for GitHub Actions matrix strategy |
 
+### [Phases](./phases/) — Incremental Implementation PRDs
+
+| Document | Status | Description |
+|----------|--------|-------------|
+| [planfile-storage-validation.md](./phases/planfile-storage-validation.md) | **SHIPPED** | Git SHA fallback, KeyPattern integration, metadata validation |
+| [planfile-metadata-embed-artifact.md](./phases/planfile-metadata-embed-artifact.md) | **SHIPPED** | `planfile.Metadata` embeds `artifact.Metadata`, simplified adapter |
+| [planfile-bundle-with-lockfile.md](./phases/planfile-bundle-with-lockfile.md) | **SHIPPED** | Plan + lock file tar bundle, multi-file store interface |
+| [unify-artifact-stores.md](./phases/unify-artifact-stores.md) | **SHIPPED** | Unified artifact store registry, deleted planfile local/registry |
+| [planfile-cli-component-stack-addressing.md](./phases/planfile-cli-component-stack-addressing.md) | **SHIPPED** | CLI `<component> -s <stack>` pattern, SHA resolution, `--all` flag |
+| [move-checkrun-store-to-provider.md](./phases/move-checkrun-store-to-provider.md) | Proposed | Move check run ID correlation from plugin to provider layer |
+
 ## Original Documents
 
 These PRDs were split from two monolithic documents:

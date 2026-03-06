@@ -1,6 +1,10 @@
-# Planfile Artifact Should Bundle Plan + Lock File as Tar Archive
+# Planfile Artifact Should Bundle Plan + Lock File as Tar Archive — SHIPPED
 
 > Related: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Interfaces](../framework/interfaces.md) | [Planfile Metadata Embed Artifact](planfile-metadata-embed-artifact.md)
+
+## Status: SHIPPED
+
+All steps implemented: shared tar helpers in `artifact/tar.go`, `planfile.Store` aligned to multi-file interface, well-known filename constants, CLI `--lockfile` flag, default key pattern updated to `.tfplan.tar`.
 
 ## Problem Statement
 

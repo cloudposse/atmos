@@ -1,6 +1,10 @@
-# Planfile Storage Validation & Git SHA Resolution
+# Planfile Storage Validation & Git SHA Resolution — SHIPPED
 
 > Related: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Interfaces](../framework/interfaces.md) | [Hooks Integration](../framework/hooks-integration.md) | [Generic Provider](../providers/generic.md)
+
+## Status: SHIPPED
+
+All steps implemented: generic provider git SHA fallback, `getArtifactKey()` refactored to use `KeyPattern`, metadata validation added.
 
 ## Problem Statement
 

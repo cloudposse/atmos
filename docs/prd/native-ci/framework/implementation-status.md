@@ -132,15 +132,16 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 **FR-5: Planfile Storage** — Done (Azure/GCS deferred)
 1. `planfile.Store` interface (`pkg/ci/plugins/terraform/planfile/interface.go`) — Done
 2. Planfile adapter wrapping `artifact.Store` (`planfile/adapter/`) — Done
-3. Planfile store registry (`planfile/registry.go`) — Done
-4. S3 store — no DynamoDB (`planfile/s3/`) — Done
-5. GitHub Artifacts store (`planfile/github/`) — Done
-6. Local filesystem store (`planfile/local/`) — Done
+3. ~~Planfile store registry (`planfile/registry.go`)~~ — Done → **Deleted** (unified into `artifact/registry.go`, see [Unify Artifact Stores](../phases/unify-artifact-stores.md))
+4. S3 store (`pkg/ci/artifact/s3/`) — Done (moved from `planfile/s3/`)
+5. GitHub Artifacts store (`pkg/ci/artifact/github/`) — Done (moved from `planfile/github/`)
+6. ~~Local filesystem store (`planfile/local/`)~~ — Done → **Deleted** (served by `artifact/local/` via adapter, see [Unify Artifact Stores](../phases/unify-artifact-stores.md))
 7. Azure Blob store — **Deferred**
 8. GCS store — **Deferred**
 9. `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
 10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler — Done
 11. Automatic download on `before.terraform.apply` via `downloadPlanfile()` handler — Done (binding exists, but apply.go `PreRunE` not wired — see FR-7)
+12. CLI component/stack addressing (`<component> -s <stack>` pattern, SHA resolution, `--all` flag) — Done (see [CLI Addressing](../phases/planfile-cli-component-stack-addressing.md))
 
 ---
 
@@ -207,12 +208,17 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | `ci.checks.enabled` config (disabled by default) | | Done | |
 | | Check run ID correlation via `CheckRunStore` interface | | Done | |
 | | `context_prefix` wired from config | | Not Started (hardcoded) | |
-| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~90% |
-| | `planfile.Store` interface + adapter | | Done | |
-| | S3 store (no DynamoDB) | | Done | |
-| | GitHub Artifacts store | | Done | |
-| | Local filesystem store | | Done | |
+| **FR-5** | Planfile Storage | [planfile-storage.md](../terraform-plugin/planfile-storage.md) | **Done** | ~95% |
+| | `planfile.Store` interface + adapter (multi-file, `[]FileEntry`) | | Done | |
+| | S3 store (`artifact/s3/`, implements `artifact.Store`) | | Done | |
+| | GitHub Artifacts store (`artifact/github/`, implements `artifact.Store`) | | Done | |
+| | Local filesystem store (`artifact/local/`, via adapter) | | Done | |
 | | `atmos terraform planfile` CLI commands (5 subcommands) | | Done | |
+| | CLI component/stack addressing (`<component> -s <stack>`) | | Done | |
+| | SHA auto-resolution (env vars → git HEAD) | | Done | |
+| | Planfile metadata embeds `artifact.Metadata` | | Done | |
+| | Plan + lock file bundled as tar archive | | Done | |
+| | Unified artifact store registry (`artifact.Register()`) | | Done | |
 | | Automatic upload on `after.terraform.plan` | | Done | |
 | | Automatic download on `before.terraform.apply` | | Done (binding only — apply.go PreRunE not wired) | |
 | | Azure Blob store | | Deferred | |
@@ -259,13 +265,87 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | Providers: GitHub — PR Comments | 0/3 | 3 | 0 |
 | Providers: Generic | 3/3 | 0 | 0 |
 | Terraform Plugin: Hook Bindings (callback-based) | 9/9 | 0 | 0 |
-| Terraform Plugin: Planfile Storage (FR-5) | 8/11 | 0 | 2 (Azure, GCS) |
+| Terraform Plugin: Planfile Storage (FR-5) | 13/16 | 0 | 2 (Azure, GCS) |
 | Terraform Plugin: Plan Verification (FR-6) | 0/4 | 4 | 0 |
 | Terraform Plugin: Describe Affected Matrix (FR-8) | 3/3 | 0 | 0 |
 | Command Parity (FR-7) | 3/7 | 4 | 0 |
 | Terraform Output Export | 0/2 | 2 | 0 |
 | Documentation | 0/4 | 4 | 0 |
-| **Total** | **62/82** | **17** | **2** |
+| Phases: Planfile Storage Validation | 4/4 | 0 | 0 |
+| Phases: Metadata Embed Artifact | 6/6 | 0 | 0 |
+| Phases: Bundle with Lock File | 8/8 | 0 | 0 |
+| Phases: Unify Artifact Stores | 8/8 | 0 | 0 |
+| Phases: CLI Component/Stack Addressing | 10/10 | 0 | 0 |
+| **Total** | **103/120** | **17** | **2** |
+
+## Implementation Phases (Incremental)
+
+> PRDs: [phases/](../phases/)
+
+These are incremental improvements shipped as focused PRDs.
+
+### Planfile Storage Validation & Git SHA Resolution — SHIPPED
+
+> PRD: [planfile-storage-validation.md](../phases/planfile-storage-validation.md)
+
+1. Generic provider git SHA fallback (`getFirstEnvOrGit()` in `provider.go`) — Done
+2. `getArtifactKey()` refactored to use `KeyPattern.GenerateKey()` — Done
+3. Planfile metadata validation (`Metadata.Validate()`) — Done
+4. Tests for SHA resolution, key generation, metadata validation — Done
+
+### Planfile Metadata Embed Artifact — SHIPPED
+
+> PRD: [planfile-metadata-embed-artifact.md](../phases/planfile-metadata-embed-artifact.md)
+
+1. `artifact.Metadata.Validate()` method — Done
+2. `planfile.Metadata` embeds `artifact.Metadata` — Done
+3. Adapter simplified for embedded struct — Done
+4. All metadata construction sites updated — Done
+5. Store implementations handle embedded struct (JSON backward-compatible) — Done
+6. Tests updated for embedding — Done
+
+### Planfile Bundle with Lock File — SHIPPED
+
+> PRD: [planfile-bundle-with-lockfile.md](../phases/planfile-bundle-with-lockfile.md)
+
+1. Shared tar helpers in `pkg/ci/artifact/tar.go` (`CreateTarArchive`, `ExtractTarArchive`) — Done
+2. `planfile.Store` interface aligned to multi-file (`[]FileEntry`/`[]FileResult`) — Done
+3. Well-known filename constants (`PlanFilename`, `LockFilename`) — Done
+4. Upload handles plan + lock file bundling — Done
+5. Download extracts plan + lock file — Done
+6. Default key pattern updated to `.tfplan.tar` — Done
+7. CLI upload `--lockfile` flag with auto-detection — Done
+8. Tests for bundle round-trip — Done
+
+### Unify Artifact Stores — SHIPPED
+
+> PRD: [unify-artifact-stores.md](../phases/unify-artifact-stores.md)
+
+1. `planfile/local/` deleted — served by `artifact/local/` via adapter — Done
+2. `planfile/registry.go` deleted — single registry via `artifact.Register()` — Done
+3. S3 store moved to `pkg/ci/artifact/s3/` implementing `artifact.Store` — Done
+4. GitHub store moved to `pkg/ci/artifact/github/` implementing `artifact.Store` — Done
+5. Adapter simplified to metadata-only conversion wrapper — Done
+6. `CreatePlanfileStore()` factory uses `artifact.NewStore()` — Done
+7. CLI imports updated to artifact store registrations — Done
+8. Backend/BundledStore layered architecture in `pkg/ci/artifact/` — Done
+
+### Planfile CLI: Component/Stack Addressing — SHIPPED
+
+> PRD: [planfile-cli-component-stack-addressing.md](../phases/planfile-cli-component-stack-addressing.md)
+
+1. SHA resolution helper (`resolveContext()`) with env var + git HEAD fallback — Done
+2. Key generation helper (`resolveKey()`) using `DefaultKeyPattern().GenerateKey()` — Done
+3. Query building helper (`buildQuery()`) for filtered listing — Done
+4. Persistent `--stack`/`-s` flag on `PlanfileCmd` — Done
+5. `list` updated: component positional arg, `--all` flag, SHA-filtered query — Done
+6. `upload` updated: `<component>` positional arg, removed `--component`/`--stack`/`--key` flags — Done
+7. `download` updated: `<component>` positional arg, `--output`/`-o` flag — Done
+8. `show` updated: `<component>` positional arg, key from `resolveKey()` — Done
+9. `delete` updated: optional component, `--all`/`--force` flags, list-then-delete with confirmation — Done
+10. Tests for resolve helpers and updated command patterns — Done
+
+---
 
 ## Files Created
 
@@ -318,12 +398,16 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | `pkg/ci/plugins/terraform/planfile/adapter/store.go` | Adapter: planfile.Store → artifact.Store | Done |
 | `pkg/ci/plugins/terraform/planfile/adapter/factory.go` | StoreFactory for registry integration | Done |
 | `pkg/ci/plugins/terraform/planfile/adapter/store_test.go` | Adapter tests (95.6% coverage) | Done |
-| `pkg/ci/plugins/terraform/planfile/s3/store.go` | S3 implementation | Done |
-| `pkg/ci/plugins/terraform/planfile/s3/store_test.go` | S3 store tests | Done |
-| `pkg/ci/plugins/terraform/planfile/github/store.go` | GitHub Artifacts implementation | Done |
-| `pkg/ci/plugins/terraform/planfile/github/store_test.go` | GitHub store tests | Done |
-| `pkg/ci/plugins/terraform/planfile/local/store.go` | Local filesystem store | Done |
-| `pkg/ci/plugins/terraform/planfile/local/store_test.go` | Local store tests (81.3% coverage) | Done |
+| `pkg/ci/artifact/s3/store.go` | S3 artifact backend (moved from `planfile/s3/`) | Done |
+| `pkg/ci/artifact/s3/store_test.go` | S3 store tests | Done |
+| `pkg/ci/artifact/github/store.go` | GitHub Artifacts backend (moved from `planfile/github/`) | Done |
+| `pkg/ci/artifact/github/store_test.go` | GitHub store tests | Done |
+| `pkg/ci/artifact/tar.go` | Shared tar archive helpers (`CreateTarArchive`, `ExtractTarArchive`) | Done |
+| `pkg/ci/artifact/tar_test.go` | Tar helper tests | Done |
+| `pkg/ci/artifact/backend.go` | Low-level Backend interface | Done |
+| `pkg/ci/artifact/bundled_store.go` | Wraps Backend to handle file bundling/unbundling | Done |
+| ~~`pkg/ci/plugins/terraform/planfile/local/store.go`~~ | ~~Local filesystem store~~ | **Deleted** (served by `artifact/local/`) |
+| ~~`pkg/ci/plugins/terraform/planfile/registry.go`~~ | ~~Store registry~~ | **Deleted** (unified into `artifact/registry.go`) |
 | `pkg/ci/plugins/terraform/planfile/azure/store.go` | Azure Blob implementation | Deferred |
 | `pkg/ci/plugins/terraform/planfile/gcs/store.go` | GCS implementation | Deferred |
 | **pkg/ci/providers/github/** | GitHub Actions provider | |
@@ -343,12 +427,14 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | `pkg/ci/templates/loader.go` | Template loading with override support (config > base_path > embedded) | Done |
 | `pkg/ci/templates/loader_test.go` | Loader tests | Done |
 | **cmd/terraform/planfile/** | Planfile subcommand group | |
-| `cmd/terraform/planfile/planfile.go` | Planfile command group | Done |
-| `cmd/terraform/planfile/upload.go` | `atmos terraform planfile upload` | Done |
-| `cmd/terraform/planfile/download.go` | `atmos terraform planfile download` | Done |
-| `cmd/terraform/planfile/list.go` | `atmos terraform planfile list` | Done |
-| `cmd/terraform/planfile/delete.go` | `atmos terraform planfile delete` | Done |
-| `cmd/terraform/planfile/show.go` | `atmos terraform planfile show` | Done |
+| `cmd/terraform/planfile/planfile.go` | Planfile command group with persistent `--stack`/`-s` flag | Done |
+| `cmd/terraform/planfile/resolve.go` | SHA resolution, key generation, query building helpers | Done |
+| `cmd/terraform/planfile/resolve_test.go` | Tests for resolve helpers | Done |
+| `cmd/terraform/planfile/upload.go` | `atmos terraform planfile upload <component>` | Done |
+| `cmd/terraform/planfile/download.go` | `atmos terraform planfile download <component>` | Done |
+| `cmd/terraform/planfile/list.go` | `atmos terraform planfile list [component]` | Done |
+| `cmd/terraform/planfile/delete.go` | `atmos terraform planfile delete [component]` with confirmation | Done |
+| `cmd/terraform/planfile/show.go` | `atmos terraform planfile show <component>` | Done |
 | **cmd/ci/** | CI command group | |
 | `cmd/ci/ci.go` | CI command group + CICommandProvider (experimental) | Done |
 | `cmd/ci/status.go` | `atmos ci status` | Done |
@@ -554,6 +640,7 @@ Coverage target: 80%.
 
 | Version | Date | Changes |
 |---------|------|---------|
+| 5.0 | 2026-03-06 | Added Implementation Phases section tracking 5 shipped incremental PRDs: Planfile Storage Validation (SHA resolution), Metadata Embed Artifact, Bundle with Lock File, Unify Artifact Stores, CLI Component/Stack Addressing. Updated FR-5 planfile storage status from ~90% to ~95% with 13/16 items (from 8/11). Updated Files Created to reflect artifact store unification: S3/GitHub moved to `artifact/`, planfile local/registry deleted, tar helpers added, resolve.go added. Updated summary table from 62/82 to 103/120 with phase counts. |
 | 4.0 | 2026-03-06 | Callback-based refactoring COMPLETE. Executor refactored from ~850-line enum-based god-object to ~250-line thin coordinator. Plugin interface slimmed from 7 methods to 2 (GetType, GetHookBindings). Added HookHandler callback type, HookContext dependency bag, CheckRunStore interface. All action logic moved from executor into `plugins/terraform/handlers.go`. Error severity now handler-controlled (upload/download fatal, summary/output/check warn-only). New files: `checkrun_store.go`, `handlers.go`, `handlers_test.go`. Removed: HookAction enum, Actions field, Template field, ComponentConfigurationResolver interface, 5 Plugin methods. Coverage: executor 91%, terraform plugin 81%. |
 | 3.0 | 2026-03-05 | Restructured implementation phases to align with PRD organization. Phases now map to PRD workstreams (Framework, Providers, Terraform Plugin) and functional requirements (FR-1 through FR-9). Replaced Phase 1-6 numbering with descriptive section names matching PRD directory structure. Added FR-level status table with PRD cross-references. Added summary table with counts. No status changes — all Done/Not Started markers preserved from v2.2. |
 | 2.2 | 2026-03-05 | Eleventh sync pass: added missing `ErrAWSConfigLoadFailed` to sentinel errors list, fixed error count (31 total, was 22). Documented critical wiring gap: `apply.go` has no `PreRunE` so `before.terraform.apply` (download planfile) never fires — added notes to ci-detection.md and hooks-integration.md. `deploy.go` has no `--ci` flag at all. All code verified unchanged since last sync. |

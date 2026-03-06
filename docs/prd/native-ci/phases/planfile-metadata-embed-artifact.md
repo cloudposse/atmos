@@ -1,6 +1,10 @@
-# Planfile Metadata Should Embed Artifact Metadata
+# Planfile Metadata Should Embed Artifact Metadata — SHIPPED
 
 > Related: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Interfaces](../framework/interfaces.md) | [Planfile Storage Validation](planfile-storage-validation.md)
+
+## Status: SHIPPED
+
+All steps implemented: `artifact.Metadata.Validate()`, `planfile.Metadata` embeds `artifact.Metadata`, adapter simplified, metadata construction sites updated, JSON backward-compatible.
 
 ## Problem Statement
 

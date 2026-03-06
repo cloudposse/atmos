@@ -1,6 +1,10 @@
-# Unify Planfile Stores into Artifact Store Layer
+# Unify Planfile Stores into Artifact Store Layer — SHIPPED
 
 > Related: [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Interfaces](../framework/interfaces.md) | [Planfile Metadata Embed Artifact](planfile-metadata-embed-artifact.md) | [Planfile Bundle with Lockfile](planfile-bundle-with-lockfile.md)
+
+## Status: SHIPPED
+
+All steps implemented including follow-up PRDs: S3 and GitHub stores moved to `artifact/s3/` and `artifact/github/`. Planfile local store and registry deleted. All backends implement `artifact.Store` via `artifact.Backend` interface. Layered architecture: Backend → BundledStore → adapter → `planfile.Store`.
 
 ## Prerequisites
 
