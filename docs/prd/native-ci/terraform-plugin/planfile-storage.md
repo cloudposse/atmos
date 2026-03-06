@@ -98,9 +98,9 @@ Flags: `--store`, `--format` (json, yaml)
 
 **Upload/download is automatic and event-driven** — no per-command flags needed:
 
-- **Upload**: Automatically triggered by `after.terraform.plan` hook event via `ActionUpload`. The executor resolves the planfile path from `info.PlanFile` (or via `ComponentConfigurationResolver`) and uploads to the configured store.
-- **Download**: Automatically triggered by `before.terraform.apply` hook event via `ActionDownload`. The executor resolves the planfile path and downloads from the configured store.
-- Upload/download are **always enabled** when CI mode is active (`isActionEnabled()` returns true for `ActionUpload`/`ActionDownload`).
+- **Upload**: Automatically triggered by the `after.terraform.plan` hook event. The plugin's `uploadPlanfile()` handler resolves the planfile path from `ctx.Info.PlanFile` and uploads to the configured store via `ctx.CreatePlanfileStore()`.
+- **Download**: Automatically triggered by the `before.terraform.apply` hook event. The plugin's `downloadPlanfile()` handler resolves the planfile path and downloads from the configured store.
+- Upload/download are **always enabled** when CI mode is active (no config gate — they run whenever the handler is invoked).
 
 **Existing plan command flags (IMPLEMENTED):**
 

@@ -6,7 +6,7 @@
 
 **Requirement**: Write rich markdown summaries to CI job summary mechanism.
 
-**Implementation**: The executor's `executeSummaryAction()` renders a template via the plugin's `BuildTemplateContext()` and template loader, then writes to `$GITHUB_STEP_SUMMARY` via `FileOutputWriter.WriteSummary()`. Default templates are in `pkg/ci/plugins/terraform/templates/plan.md` and `apply.md`.
+**Implementation**: The plugin's `writeSummary()` handler renders a template via `buildTemplateContext()` and the template loader, then writes to `$GITHUB_STEP_SUMMARY` via `FileOutputWriter.WriteSummary()`. Default templates are in `pkg/ci/plugins/terraform/templates/plan.md` and `apply.md`.
 
 **Behavior**:
 - Write to `$GITHUB_STEP_SUMMARY` in GitHub Actions

@@ -6,7 +6,7 @@
 
 **Requirement**: Export plan/apply results as CI output variables.
 
-**Implementation**: The executor's `executeOutputAction()` calls `plugin.GetOutputVariables()` to get plugin-specific variables, adds common variables (`stack`, `component`, `command`, `summary`), filters by `ci.output.variables` config whitelist, and writes to `$GITHUB_OUTPUT` via the platform's `OutputWriter.WriteOutput()`. Note: `OutputHelpers` in `pkg/ci/internal/provider/output.go` provides convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) but these are NOT used by the executor — the executor calls `plugin.GetOutputVariables()` directly.
+**Implementation**: The plugin's `writeOutputs()` handler calls `getOutputVariables()` to get plugin-specific variables, adds common variables (`stack`, `component`, `command`, `summary`), filters by `ci.output.variables` config whitelist, and writes to `$GITHUB_OUTPUT` via the platform's `OutputWriter.WriteOutput()`. Note: `OutputHelpers` in `pkg/ci/internal/provider/output.go` provides convenience methods (`WritePlanOutputs`, `WriteApplyOutputs`) but these are NOT used by the plugin handlers — the handlers call `getOutputVariables()` directly.
 
 **Behavior**:
 - Write to `$GITHUB_OUTPUT` in GitHub Actions
@@ -14,7 +14,7 @@
 - Export terraform outputs after successful apply (prefixed with `output_`) — **Phase 4, not yet implemented**
 - Support filtering via `ci.output.variables` configuration
 
-**Variables (plan)** (**IMPLEMENTED** — plugin variables from `pkg/ci/plugins/terraform/plugin.go` `GetOutputVariables()` + common variables added by `pkg/ci/executor.go`):
+**Variables (plan)** (**IMPLEMENTED** — plugin variables from `pkg/ci/plugins/terraform/plugin.go` `getOutputVariables()` + common variables added by `writeOutputs()` handler):
 | Variable | Type | Source | Description |
 |----------|------|--------|-------------|
 | `has_changes` | bool | Plugin | Whether plan has any changes |
@@ -24,12 +24,12 @@
 | `resources_to_change` | int | Plugin | Number of resources to change |
 | `resources_to_replace` | int | Plugin | Number of resources to replace |
 | `resources_to_destroy` | int | Plugin | Number of resources to destroy |
-| `stack` | string | Executor | Stack name |
-| `component` | string | Executor | Component name |
-| `command` | string | Executor | Command name (e.g., "plan") |
-| `summary` | string | Executor | Rendered summary markdown (if summary action ran) |
+| `stack` | string | Handler | Stack name |
+| `component` | string | Handler | Component name |
+| `command` | string | Handler | Command name (e.g., "plan") |
+| `summary` | string | Handler | Rendered summary markdown (if summary was enabled) |
 
-> **Note**: `OutputHelpers.WritePlanOutputs()` in `pkg/ci/internal/provider/output.go` defines a separate set of convenience variable names (`has_additions`, `has_additions_count`, etc.) but is NOT called by the executor. The executor uses `plugin.GetOutputVariables()` directly. `OutputHelpers` exists for potential future use by plugins in the callback-based architecture.
+> **Note**: `OutputHelpers.WritePlanOutputs()` in `pkg/ci/internal/provider/output.go` defines a separate set of convenience variable names (`has_additions`, `has_additions_count`, etc.) but is NOT called by the plugin handlers. The handlers call `getOutputVariables()` directly. `OutputHelpers` exists for potential future use.
 
 **Variables (apply)** (current implementation uses same variables as plan — no apply-specific variables yet):
 | Variable | Type | Source | Description |
@@ -41,17 +41,17 @@
 | `resources_to_change` | int | Plugin | Resources to change |
 | `resources_to_replace` | int | Plugin | Resources to replace |
 | `resources_to_destroy` | int | Plugin | Resources to destroy |
-| `stack` | string | Executor | Stack name |
-| `component` | string | Executor | Component name |
-| `command` | string | Executor | Command name ("apply") |
-| `summary` | string | Executor | Rendered summary markdown |
+| `stack` | string | Handler | Stack name |
+| `component` | string | Handler | Component name |
+| `command` | string | Handler | Command name ("apply") |
+| `summary` | string | Handler | Rendered summary markdown |
 
-> **Note**: The `command` parameter in `GetOutputVariables()` is accepted but not used for branching — both plan and apply return the same variable set. Terraform output export (`output_*` variables, `success` bool) is planned for Phase 4 but not yet implemented.
+> **Note**: The `command` parameter in `getOutputVariables()` is accepted but not used for branching — both plan and apply return the same variable set. Terraform output export (`output_*` variables, `success` bool) is planned for Phase 4 but not yet implemented.
 
 ## After `terraform plan`
 
 ```bash
-# Written to $GITHUB_OUTPUT (via executor → plugin.GetOutputVariables() + executor common vars)
+# Written to $GITHUB_OUTPUT (via plugin handler writeOutputs() → getOutputVariables() + common vars)
 has_changes=true
 has_errors=false
 exit_code=2

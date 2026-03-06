@@ -67,11 +67,11 @@ Artifacts are scoped to a single repo, but repos can share the same storage back
 
 **Per-plugin storage architecture**: There is no global artifact storage available to all plugins. Each CI plugin defines its own artifact type, storage interface, registry, and priority list:
 
-1. The **plugin** registers its stores with the executor during initialization
-2. The **executor** holds per-plugin store registries and resolves the active store using that plugin's config priority list
-3. The resolved store is passed to the plugin's hook callback as `(provider, store, event)`
+1. The **plugin** registers its store backends in its own registry (e.g., `planfile/registry.go`) via `init()` blank imports
+2. The **executor** provides a lazy factory closure (`HookContext.CreatePlanfileStore`) that resolves the active store using the config priority list when the handler first needs it
+3. The plugin's **handler callback** calls `ctx.CreatePlanfileStore()` to get the store on demand
 
-For example, the terraform plugin owns `planfile.Store` (which extends `artifact.Store`), registers S3/local/GitHub backends in its own registry, and receives its resolved store in hook callbacks. A future helmfile plugin would define its own artifact type and registry independently.
+For example, the terraform plugin owns `planfile.Store` (which extends `artifact.Store`), registers S3/local/GitHub backends in its own registry via blank imports, and resolves its store lazily via `HookContext.CreatePlanfileStore` inside handler callbacks. A future helmfile plugin would define its own artifact type and registry independently.
 
 **Key schema**: Artifacts are keyed by `component/stack/sha`. Sufficient for now; we do not know additional contexts yet.
 

@@ -139,8 +139,8 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 7. Azure Blob store — **Deferred**
 8. GCS store — **Deferred**
 9. `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
-10. Automatic upload on `after.terraform.plan` via `ActionUpload` — Done
-11. Automatic download on `before.terraform.apply` via `ActionDownload` — Done (binding exists, but apply.go `PreRunE` not wired — see FR-7)
+10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler — Done
+11. Automatic download on `before.terraform.apply` via `downloadPlanfile()` handler — Done (binding exists, but apply.go `PreRunE` not wired — see FR-7)
 
 ---
 
