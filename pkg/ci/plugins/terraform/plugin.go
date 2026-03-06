@@ -99,7 +99,7 @@ func (p *Plugin) buildTemplateContext(
 }
 
 // getOutputVariables returns CI output variables for a command.
-func (p *Plugin) getOutputVariables(result *plugin.OutputResult, _ string) map[string]string {
+func (p *Plugin) getOutputVariables(result *plugin.OutputResult, command string) map[string]string {
 	defer perf.Track(nil, "terraform.Plugin.getOutputVariables")()
 
 	vars := make(map[string]string)
@@ -113,6 +113,11 @@ func (p *Plugin) getOutputVariables(result *plugin.OutputResult, _ string) map[s
 	vars["has_changes"] = strconv.FormatBool(result.HasChanges)
 	vars["has_errors"] = strconv.FormatBool(result.HasErrors)
 	vars["exit_code"] = strconv.Itoa(result.ExitCode)
+
+	// Add success indicator for apply commands.
+	if command == "apply" {
+		vars["success"] = strconv.FormatBool(!result.HasErrors)
+	}
 
 	// Terraform-specific outputs.
 	if result.Data != nil {
