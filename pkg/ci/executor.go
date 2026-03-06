@@ -5,13 +5,13 @@ import (
 	"strings"
 
 	"github.com/cloudposse/atmos/pkg/ci/artifact"
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
 	_ "github.com/cloudposse/atmos/pkg/ci/artifact/local" // Register local artifact store.
+	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3" // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/internal/plugin"
 	"github.com/cloudposse/atmos/pkg/ci/internal/provider"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile/adapter"
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/github" // Register github artifact store.
-	_ "github.com/cloudposse/atmos/pkg/ci/artifact/s3" // Register s3 artifact store.
 	"github.com/cloudposse/atmos/pkg/ci/templates"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/perf"

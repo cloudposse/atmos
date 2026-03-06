@@ -16,7 +16,6 @@ type FileEntry = artifact.FileEntry
 type FileResult = artifact.FileResult
 type Query = artifact.Query
 type StoreOptions = artifact.StoreOptions
-type StoreFactory = artifact.StoreFactory
 
 const (
 	// PlanFilename is the well-known name for the plan file within a bundle.
