@@ -310,6 +310,10 @@ func (m *ChatModel) getProviderBadge(provider string) (string, string) {
 		return "[Grok]", theme.ColorPink
 	case "ollama":
 		return "[Ollama]", theme.ColorBlue
+	case "bedrock":
+		return "[Bedrock]", theme.ColorOrange
+	case "azureopenai":
+		return "[Azure]", theme.ColorBlue
 	default:
 		return "[AI]", "240"
 	}
@@ -345,6 +349,10 @@ func (m *ChatModel) getFilterDisplayName(filter string) string {
 		return "Grok"
 	case "ollama":
 		return "Ollama"
+	case "bedrock":
+		return "Bedrock"
+	case "azureopenai":
+		return "Azure"
 	default:
 		return filter
 	}
@@ -352,7 +360,7 @@ func (m *ChatModel) getFilterDisplayName(filter string) string {
 
 // cycleFilter cycles to the next provider filter.
 func (m *ChatModel) cycleFilter() {
-	filters := []string{filterAll, "anthropic", "openai", "gemini", "grok", "ollama"}
+	filters := []string{filterAll, "anthropic", "openai", "gemini", "grok", "ollama", "bedrock", "azureopenai"}
 	for i, f := range filters {
 		if f == m.sessionFilter {
 			m.sessionFilter = filters[(i+1)%len(filters)]

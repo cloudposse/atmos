@@ -1069,8 +1069,7 @@ settings:
 
 **Models:**
 - `gpt-4o` (default) - Latest multimodal model
-- `gpt-4-turbo` - Fast GPT-4
-- `gpt-3.5-turbo` - Cost-effective
+- `gpt-4o-mini` - Fast and cost-effective
 
 **Configuration:**
 ```yaml
@@ -1183,8 +1182,7 @@ settings:
 
 **Models:**
 - `gpt-4o` (deployment name)
-- `gpt-4-turbo`
-- `gpt-35-turbo`
+- `gpt-4o-mini`
 
 **Configuration:**
 ```yaml

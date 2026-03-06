@@ -32,7 +32,7 @@ Expected output:
 ```yaml
 ai:
   enabled: true
-  provider: "anthropic"
+  default_provider: "anthropic"
   # ... other settings
 ```
 
@@ -95,7 +95,7 @@ Test if the AI assistant can connect:
 settings:
   ai:
     enabled: true  # Add this line
-    provider: "anthropic"
+    default_provider: "anthropic"
 ```
 
 ### "API key not found in environment variable"
@@ -1876,7 +1876,7 @@ Create a minimal test configuration:
 settings:
   ai:
     enabled: true
-    provider: "anthropic"
+    default_provider: "anthropic"
     # Use all defaults
 ```
 

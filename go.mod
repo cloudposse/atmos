@@ -25,19 +25,19 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/arsham/figurine v1.3.0
 	github.com/atotto/clipboard v0.1.4
-	github.com/aws/aws-sdk-go-v2 v1.41.2
-	github.com/aws/aws-sdk-go-v2/config v1.32.10
-	github.com/aws/aws-sdk-go-v2/credentials v1.19.10
-	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.4
-	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.49.0
+	github.com/aws/aws-sdk-go-v2 v1.41.3
+	github.com/aws/aws-sdk-go-v2/config v1.32.11
+	github.com/aws/aws-sdk-go-v2/credentials v1.19.11
+	github.com/aws/aws-sdk-go-v2/feature/s3/manager v1.22.6
+	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.1
 	github.com/aws/aws-sdk-go-v2/service/ecr v1.55.3
-	github.com/aws/aws-sdk-go-v2/service/organizations v1.50.3
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.2
+	github.com/aws/aws-sdk-go-v2/service/organizations v1.50.4
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.96.4
 	github.com/aws/aws-sdk-go-v2/service/ssm v1.67.8
-	github.com/aws/aws-sdk-go-v2/service/sso v1.30.11
-	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.15
-	github.com/aws/aws-sdk-go-v2/service/sts v1.41.7
-	github.com/aws/smithy-go v1.24.1
+	github.com/aws/aws-sdk-go-v2/service/sso v1.30.12
+	github.com/aws/aws-sdk-go-v2/service/ssooidc v1.35.16
+	github.com/aws/aws-sdk-go-v2/service/sts v1.41.8
+	github.com/aws/smithy-go v1.24.2
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/charmbracelet/bubbles v1.0.0
 	github.com/charmbracelet/bubbletea v1.3.10
@@ -87,7 +87,7 @@ require (
 	github.com/mikefarah/yq/v4 v4.52.4
 	github.com/mitchellh/go-wordwrap v1.0.1
 	github.com/mitchellh/mapstructure v1.5.0
-	github.com/modelcontextprotocol/go-sdk v1.3.0
+	github.com/modelcontextprotocol/go-sdk v1.4.0
 	github.com/muesli/ansi v0.0.0-20230316100256-276c6243b2f6
 	github.com/muesli/reflow v0.3.0
 	github.com/muesli/termenv v0.16.0
@@ -165,18 +165,18 @@ require (
 	github.com/arsham/rainbow v1.2.1 // indirect
 	github.com/avast/retry-go v3.0.0+incompatible // indirect
 	github.com/aws/aws-sdk-go v1.55.8 // indirect
-	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.5 // indirect
-	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.18 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.18 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.18 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.4 // indirect
-	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.5 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.10 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.18 // indirect
-	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.18 // indirect
+	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.6 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/configsources v1.4.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.7.19 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/ini v1.8.5 // indirect
+	github.com/aws/aws-sdk-go-v2/internal/v4a v1.4.20 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/accept-encoding v1.13.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/checksum v1.9.11 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/presigned-url v1.13.19 // indirect
+	github.com/aws/aws-sdk-go-v2/service/internal/s3shared v1.19.19 // indirect
 	github.com/aws/aws-sdk-go-v2/service/secretsmanager v1.41.1 // indirect
-	github.com/aws/aws-sdk-go-v2/service/signin v1.0.6 // indirect
+	github.com/aws/aws-sdk-go-v2/service/signin v1.0.7 // indirect
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/bearsh/hid v1.6.0 // indirect
@@ -367,6 +367,7 @@ require (
 	github.com/sahilm/fuzzy v0.1.1 // indirect
 	github.com/sasha-s/go-deadlock v0.3.5 // indirect
 	github.com/segmentio/asm v1.2.1 // indirect
+	github.com/segmentio/encoding v0.5.3 // indirect
 	github.com/segmentio/ksuid v1.0.4 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/sirupsen/logrus v1.9.4 // indirect
