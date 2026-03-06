@@ -62,6 +62,12 @@ type GCSObjectHandle interface {
 	NewReader(ctx context.Context) (io.ReadCloser, error)
 }
 
+// NewGCSClientFromStorageClient wraps a *storage.Client in the GCSClient interface.
+// This is primarily useful for testing with fake GCS servers.
+func NewGCSClientFromStorageClient(client *storage.Client) GCSClient {
+	return &gcsClientImpl{client: client}
+}
+
 // Concrete implementations for production use.
 type gcsClientImpl struct {
 	client *storage.Client

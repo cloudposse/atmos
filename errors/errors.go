@@ -147,7 +147,22 @@ var (
 	ErrGetObjectFromGCS          = errors.New("failed to get object from GCS")
 	ErrReadGCSObjectBody         = errors.New("failed to read GCS object body")
 	ErrGCSBucketRequired         = errors.New("bucket is required for gcs backend")
+	ErrGCSConfigLoadFailed       = errors.New("failed to create GCS client")
 	ErrInvalidBackendConfig      = errors.New("invalid backend configuration")
+
+	// Planfile storage errors.
+	ErrPlanfileNotFound           = errors.New("planfile not found")
+	ErrPlanfileUploadFailed       = errors.New("failed to upload planfile")
+	ErrPlanfileDownloadFailed     = errors.New("failed to download planfile")
+	ErrPlanfileDeleteFailed       = errors.New("failed to delete planfile")
+	ErrPlanfileListFailed         = errors.New("failed to list planfiles")
+	ErrPlanfileStoreNotFound      = errors.New("planfile store not found")
+	ErrPlanfileKeyInvalid         = errors.New("planfile key generation failed: stack, component, and SHA are required")
+	ErrPlanfileStatFailed         = errors.New("failed to check planfile status")
+	ErrPlanfileMetadataFailed     = errors.New("failed to load planfile metadata")
+	ErrPlanfileStoreInvalidArgs   = errors.New("invalid planfile store arguments")
+	ErrPlanfileDeleteRequireForce = errors.New("deletion requires --force flag")
+	ErrAWSConfigLoadFailed        = errors.New("failed to load AWS configuration")
 
 	// Azure Blob Storage specific errors.
 	ErrGetBlobFromAzure       = errors.New("failed to get blob from Azure Blob Storage")

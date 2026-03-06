@@ -4,6 +4,8 @@
 *.tfstate.*
 **/*.tf.json
 **/planfile
+!pkg/ci/planfile/
+!pkg/ci/planfile/**
 **/*.planfile
 **/*.kubeconfig
 **/terraform.tfvars.json
