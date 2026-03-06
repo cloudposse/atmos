@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"time"
 
 	errUtils "github.com/cloudposse/atmos/errors"
@@ -56,6 +57,7 @@ func (s *BundledStore) Upload(ctx context.Context, name string, files []FileEntr
 }
 
 // Download downloads from the backend and extracts files from the tar archive.
+// If the metadata contains a SHA256 checksum, it verifies the integrity of the downloaded data.
 func (s *BundledStore) Download(ctx context.Context, name string) ([]FileResult, *Metadata, error) {
 	defer perf.Track(nil, "artifact.BundledStore.Download")()
 
@@ -65,8 +67,23 @@ func (s *BundledStore) Download(ctx context.Context, name string) ([]FileResult,
 	}
 	defer reader.Close()
 
+	// Read the full stream into memory for checksum verification.
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
+	}
+
+	// Verify SHA256 checksum if metadata contains one.
+	if metadata != nil && metadata.SHA256 != "" {
+		h := sha256.Sum256(data)
+		actual := hex.EncodeToString(h[:])
+		if actual != metadata.SHA256 {
+			return nil, nil, fmt.Errorf("%w: expected %s, got %s", errUtils.ErrArtifactIntegrityFailed, metadata.SHA256, actual)
+		}
+	}
+
 	// Extract files from tar archive.
-	files, err := ExtractTarArchive(reader)
+	files, err := ExtractTarArchive(bytes.NewReader(data))
 	if err != nil {
 		return nil, nil, fmt.Errorf("%w: %w", errUtils.ErrArtifactDownloadFailed, err)
 	}

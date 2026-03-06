@@ -3,6 +3,8 @@ package artifact
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"io"
 	"strings"
 	"testing"
@@ -11,6 +13,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
+
+	errUtils "github.com/cloudposse/atmos/errors"
 )
 
 func TestBundledStore_Name(t *testing.T) {
@@ -133,6 +137,73 @@ func TestBundledStore_Download(t *testing.T) {
 		}
 		assert.Equal(t, "plan data", fileMap["plan.tfplan"])
 		assert.Equal(t, "lock data", fileMap["lock.hcl"])
+	})
+
+	t.Run("SHA256 match succeeds", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		backend := NewMockBackend(ctrl)
+
+		files := []FileEntry{
+			{Name: "plan.tfplan", Data: strings.NewReader("plan data"), Size: 9},
+		}
+		tarData, err := CreateTarArchive(files)
+		require.NoError(t, err)
+
+		// Compute correct SHA256.
+		h := sha256.Sum256(tarData)
+		sha256Hex := hex.EncodeToString(h[:])
+
+		metadata := &Metadata{Stack: "dev", Component: "vpc"}
+		metadata.SHA256 = sha256Hex
+		backend.EXPECT().Download(gomock.Any(), "sha-match").
+			Return(io.NopCloser(bytes.NewReader(tarData)), metadata, nil)
+
+		store := NewBundledStore(backend)
+		results, _, err := store.Download(context.Background(), "sha-match")
+		require.NoError(t, err)
+		assert.Len(t, results, 1)
+	})
+
+	t.Run("SHA256 mismatch returns integrity error", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		backend := NewMockBackend(ctrl)
+
+		files := []FileEntry{
+			{Name: "plan.tfplan", Data: strings.NewReader("plan data"), Size: 9},
+		}
+		tarData, err := CreateTarArchive(files)
+		require.NoError(t, err)
+
+		metadata := &Metadata{Stack: "dev", Component: "vpc"}
+		metadata.SHA256 = "0000000000000000000000000000000000000000000000000000000000000000"
+		backend.EXPECT().Download(gomock.Any(), "sha-mismatch").
+			Return(io.NopCloser(bytes.NewReader(tarData)), metadata, nil)
+
+		store := NewBundledStore(backend)
+		_, _, err = store.Download(context.Background(), "sha-mismatch")
+		require.Error(t, err)
+		assert.ErrorIs(t, err, errUtils.ErrArtifactIntegrityFailed)
+	})
+
+	t.Run("empty SHA256 skips verification", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		backend := NewMockBackend(ctrl)
+
+		files := []FileEntry{
+			{Name: "plan.tfplan", Data: strings.NewReader("plan data"), Size: 9},
+		}
+		tarData, err := CreateTarArchive(files)
+		require.NoError(t, err)
+
+		// Metadata with empty SHA256 — should skip verification.
+		metadata := &Metadata{Stack: "dev", Component: "vpc"}
+		backend.EXPECT().Download(gomock.Any(), "no-sha").
+			Return(io.NopCloser(bytes.NewReader(tarData)), metadata, nil)
+
+		store := NewBundledStore(backend)
+		results, _, err := store.Download(context.Background(), "no-sha")
+		require.NoError(t, err)
+		assert.Len(t, results, 1)
 	})
 }
 

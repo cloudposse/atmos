@@ -3,7 +3,6 @@ package terraform
 import (
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -377,27 +376,9 @@ func (p *Plugin) downloadPlanfile(ctx *plugin.HookContext) error {
 		}
 	}()
 
-	// Write each file to disk.
-	for _, r := range results {
-		var destPath string
-		switch r.Name {
-		case planfile.PlanFilename:
-			destPath = planfilePath
-		case planfile.LockFilename:
-			destPath = filepath.Join(filepath.Dir(planfilePath), planfile.LockFilename)
-		default:
-			continue
-		}
-
-		fileData, err := io.ReadAll(r.Data)
-		if err != nil {
-			return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
-				WithExplanation("Failed to read file from download").WithContext("file", r.Name).Err()
-		}
-		if err := os.WriteFile(destPath, fileData, 0o644); err != nil {
-			return errUtils.Build(errUtils.ErrPlanfileDownloadFailed).WithCause(err).
-				WithExplanation("Failed to write file to disk").WithContext("path", destPath).Err()
-		}
+	// Write downloaded files to disk using the shared helper.
+	if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
+		return err
 	}
 
 	logArtifactOperation("Downloaded", key, store.Name(), planfilePath, ctx.Info)

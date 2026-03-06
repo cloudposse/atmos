@@ -3,14 +3,12 @@ package planfile
 import (
 	"context"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
+	"github.com/cloudposse/atmos/internal/exec"
 	"github.com/cloudposse/atmos/pkg/ci/plugins/terraform/planfile"
 	cfg "github.com/cloudposse/atmos/pkg/config"
 	"github.com/cloudposse/atmos/pkg/flags"
@@ -105,6 +103,14 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Resolve the planfile output path.
+	// If --output was explicitly set, use that directly.
+	// Otherwise, derive from component/stack via ProcessStacks.
+	planfilePath, err := resolveDownloadPlanfilePath(cmd, opts, &atmosConfig)
+	if err != nil {
+		return err
+	}
+
 	// Create the store.
 	store, err := createStore(&atmosConfig, opts.Store)
 	if err != nil {
@@ -123,22 +129,11 @@ func runDownload(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Download and write to file.
-	metadata, err := downloadToFile(store, key, opts.OutputPath)
-	if err != nil {
-		return err
-	}
-
-	printDownloadSuccess(store.Name(), key, opts.OutputPath, metadata)
-	return nil
-}
-
-// downloadToFile downloads the planfile and writes plan + lock to disk.
-func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Metadata, error) {
+	// Download from store.
 	ctx := context.Background()
 	results, metadata, err := store.Download(ctx, key)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() {
 		for _, r := range results {
@@ -146,28 +141,41 @@ func downloadToFile(store planfile.Store, key, outputPath string) (*planfile.Met
 		}
 	}()
 
-	// Write each file to disk.
-	for _, r := range results {
-		var destPath string
-		switch r.Name {
-		case planfile.PlanFilename:
-			destPath = outputPath
-		case planfile.LockFilename:
-			destPath = filepath.Join(filepath.Dir(outputPath), planfile.LockFilename)
-		default:
-			continue
-		}
-
-		fileData, err := io.ReadAll(r.Data)
-		if err != nil {
-			return nil, fmt.Errorf("%w: failed to read %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, err)
-		}
-		if err := os.WriteFile(destPath, fileData, 0o644); err != nil {
-			return nil, fmt.Errorf("%w: failed to write %s to %s: %w", errUtils.ErrPlanfileDownloadFailed, r.Name, destPath, err)
-		}
+	// Write downloaded files to disk.
+	if err := planfile.WritePlanfileResults(results, planfilePath); err != nil {
+		return err
 	}
 
-	return metadata, nil
+	printDownloadSuccess(store.Name(), key, planfilePath, metadata)
+	return nil
+}
+
+// resolveDownloadPlanfilePath resolves the output planfile path.
+// If --output was explicitly changed by the user, uses that value directly.
+// Otherwise, derives the path from component/stack using ProcessStacks.
+func resolveDownloadPlanfilePath(cmd *cobra.Command, opts *DownloadOptions, atmosConfig *schema.AtmosConfiguration) (string, error) {
+	defer perf.Track(atmosConfig, "planfile.resolveDownloadPlanfilePath")()
+
+	// If --output was explicitly set by the user, use it directly.
+	if cmd.Flags().Changed("output") {
+		return opts.OutputPath, nil
+	}
+
+	// Derive planfile path from component and stack.
+	info := schema.ConfigAndStacksInfo{
+		ComponentFromArg: opts.Component,
+		Stack:            opts.Stack,
+		StackFromArg:     opts.Stack,
+		ComponentType:    "terraform",
+	}
+
+	info, err := exec.ProcessStacks(atmosConfig, info, true, false, false, nil, nil)
+	if err != nil {
+		return "", fmt.Errorf("%w: failed to resolve component path: %w", errUtils.ErrPlanfileDownloadFailed, err)
+	}
+
+	planfilePath := exec.ConstructTerraformComponentPlanfilePath(atmosConfig, &info)
+	return planfilePath, nil
 }
 
 // printDownloadSuccess prints the success message for a download.
