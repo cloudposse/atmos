@@ -220,31 +220,61 @@ func TestHasPrefix(t *testing.T) {
 }
 
 func TestStore_artifactName(t *testing.T) {
-	store := &Store{}
+	t.Run("with prefix", func(t *testing.T) {
+		store := &Store{prefix: "planfile"}
 
-	tests := []struct {
-		name     string
-		key      string
-		expected string
-	}{
-		{
-			name:     "simple key",
-			key:      "test.tfplan",
-			expected: "planfile-test.tfplan",
-		},
-		{
-			name:     "key with path",
-			key:      "stack/component/sha.tfplan",
-			expected: "planfile-stack--component--sha.tfplan",
-		},
-	}
+		tests := []struct {
+			name     string
+			key      string
+			expected string
+		}{
+			{
+				name:     "simple key",
+				key:      "test.tfplan",
+				expected: "planfile-test.tfplan",
+			},
+			{
+				name:     "key with path",
+				key:      "stack/component/sha.tfplan",
+				expected: "planfile-stack--component--sha.tfplan",
+			},
+		}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			result := store.artifactName(tt.key)
-			assert.Equal(t, tt.expected, result)
-		})
-	}
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := store.artifactName(tt.key)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
+
+	t.Run("without prefix", func(t *testing.T) {
+		store := &Store{}
+
+		tests := []struct {
+			name     string
+			key      string
+			expected string
+		}{
+			{
+				name:     "simple key",
+				key:      "test.tfplan",
+				expected: "test.tfplan",
+			},
+			{
+				name:     "key with path",
+				key:      "stack/component/sha.tfplan",
+				expected: "stack--component--sha.tfplan",
+			},
+		}
+
+		for _, tt := range tests {
+			t.Run(tt.name, func(t *testing.T) {
+				result := store.artifactName(tt.key)
+				assert.Equal(t, tt.expected, result)
+			})
+		}
+	})
 }
 
 func TestGetRetentionDays(t *testing.T) {
@@ -761,6 +791,7 @@ func TestStore_Upload(t *testing.T) {
 		store := &Store{
 			owner:         "testowner",
 			repo:          "testrepo",
+			prefix:        "planfile",
 			retentionDays: 14,
 			uploader:      mock,
 		}
@@ -1033,9 +1064,9 @@ func TestStore_Download(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1057,9 +1088,9 @@ func TestStore_Delete(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1080,9 +1111,9 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1126,15 +1157,15 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
 		files, err := store.List(ctx, artifact.Query{All: true})
 		require.NoError(t, err)
-		// Should only include planfile-* artifacts.
+		// Should only include planfile-* artifacts (prefix filtering).
 		assert.Len(t, files, 2)
 
 		// Should be sorted by last modified (newest first).
@@ -1187,9 +1218,9 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1232,9 +1263,9 @@ func TestStore_List(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1266,9 +1297,9 @@ func TestStore_Exists(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1287,9 +1318,9 @@ func TestStore_Exists(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1324,9 +1355,9 @@ func TestStore_GetMetadata(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()
@@ -1346,9 +1377,9 @@ func TestStore_GetMetadata(t *testing.T) {
 		store := &Store{
 			httpClient: server.Client(),
 			baseURL:    server.URL,
-
-			owner: "testowner",
-			repo:  "testrepo",
+			prefix:     "planfile",
+			owner:      "testowner",
+			repo:       "testrepo",
 		}
 
 		ctx := context.Background()

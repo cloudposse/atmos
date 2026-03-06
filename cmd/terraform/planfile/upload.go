@@ -345,8 +345,10 @@ func detectGitHubFromEnv() *planfile.StoreOptions {
 		return nil
 	}
 	return &planfile.StoreOptions{
-		Type:    "github-artifacts",
-		Options: map[string]any{},
+		Type: "github-artifacts",
+		Options: map[string]any{
+			"prefix": "planfile",
+		},
 	}
 }
 

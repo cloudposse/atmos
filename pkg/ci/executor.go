@@ -227,8 +227,10 @@ func detectStoreFromEnv() *artifact.StoreOptions {
 	// Check for GitHub Actions.
 	if os.Getenv("GITHUB_ACTIONS") == "true" {
 		return &artifact.StoreOptions{
-			Type:    "github-artifacts",
-			Options: map[string]any{},
+			Type: "github-artifacts",
+			Options: map[string]any{
+				"prefix": "planfile",
+			},
 		}
 	}
 

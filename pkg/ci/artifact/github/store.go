@@ -34,12 +34,6 @@ const (
 	// Default retention for artifacts.
 	defaultRetentionDays = 7
 
-	// ArtifactNamePrefix is the prefix for planfile artifact names.
-	artifactNamePrefix = "planfile-"
-
-	// ArtifactPrefixLen is the length of the artifact name prefix.
-	artifactPrefixLen = len(artifactNamePrefix)
-
 	// GithubPaginationLimit is the max number of items per page for GitHub API.
 	githubPaginationLimit = 100
 
@@ -124,6 +118,7 @@ type Store struct {
 	uploader      artifactUploader
 	owner         string
 	repo          string
+	prefix        string
 	retentionDays int
 }
 
@@ -142,6 +137,7 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 	}
 
 	retentionDays := getRetentionDays(opts.Options)
+	prefix, _ := opts.Options["prefix"].(string)
 
 	// Create the runtime uploader if running inside GitHub Actions.
 	var uploader artifactUploader
@@ -161,6 +157,7 @@ func NewStore(opts artifact.StoreOptions) (artifact.Backend, error) {
 		uploader:      uploader,
 		owner:         owner,
 		repo:          repo,
+		prefix:        prefix,
 		retentionDays: retentionDays,
 	}, nil
 }
@@ -222,10 +219,14 @@ func (s *Store) Name() string {
 	return storeName
 }
 
-// artifactName returns the artifact name for a given key.
+// artifactName returns the GitHub Actions artifact name for a given key.
+// If a prefix is configured, it is prepended with a dash separator.
 func (s *Store) artifactName(key string) string {
-	// Replace path separators with dashes for artifact naming.
-	return "planfile-" + sanitizeKey(key)
+	sanitized := sanitizeKey(key)
+	if s.prefix != "" {
+		return s.prefix + "-" + sanitized
+	}
+	return sanitized
 }
 
 // Upload uploads a single data stream as a GitHub artifact.
@@ -640,13 +641,13 @@ func (s *Store) List(ctx context.Context, query artifact.Query) ([]artifact.Arti
 
 		for _, a := range resp.Artifacts {
 			name := a.Name
-			// Only include planfile artifacts.
-			if len(name) < artifactPrefixLen || name[:artifactPrefixLen] != artifactNamePrefix {
+
+			// If a prefix is configured, only include matching artifacts and strip it.
+			key := s.stripArtifactPrefix(name)
+			if key == "" {
 				continue
 			}
-
-			// Extract the key from artifact name.
-			key := desanitizeKey(name[artifactPrefixLen:])
+			key = desanitizeKey(key)
 
 			// Check prefix match.
 			if prefix != "" && !hasPrefix(key, prefix) {
@@ -737,6 +738,20 @@ func (s *Store) GetMetadata(ctx context.Context, key string) (*artifact.Metadata
 	}
 
 	return nil, fmt.Errorf("%w: %s", errUtils.ErrArtifactNotFound, key)
+}
+
+// stripArtifactPrefix strips the configured prefix from an artifact name and returns the remainder.
+// If a prefix is configured but the name doesn't match, returns empty string.
+// If no prefix is configured, returns the full name (all artifacts match).
+func (s *Store) stripArtifactPrefix(name string) string {
+	if s.prefix == "" {
+		return name
+	}
+	fullPrefix := s.prefix + "-"
+	if len(name) > len(fullPrefix) && name[:len(fullPrefix)] == fullPrefix {
+		return name[len(fullPrefix):]
+	}
+	return ""
 }
 
 // sanitizeKey converts a storage key to a valid artifact name.
