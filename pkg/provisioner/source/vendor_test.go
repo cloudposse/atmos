@@ -107,6 +107,10 @@ func TestNormalizeURI(t *testing.T) {
 			expected: "",
 		},
 		{
+			// Six slashes: go-getter's SourceDirSubdir splits on first // yielding
+			// source="github.com/cloudposse/terraform-aws-vpc" subdir="///".
+			// NormalizeURI then reassembles as source + "//" + subdir = ".../////" (5 slashes).
+			// This is a pathological edge case; real URIs use at most ///.
 			name:     "multiple triple slashes",
 			uri:      "github.com/cloudposse/terraform-aws-vpc//////",
 			expected: "github.com/cloudposse/terraform-aws-vpc/////",
@@ -328,9 +332,11 @@ func TestPatternMatching(t *testing.T) {
 func TestPatternMatching_InvalidPattern(t *testing.T) {
 	// Invalid pattern with unclosed bracket.
 	invalidPattern := "[invalid"
-	_, err := vendor.ShouldExcludeFile([]string{invalidPattern}, "main.tf")
+	skip, err := vendor.ShouldExcludeFile([]string{invalidPattern}, "main.tf")
 	// Should return an error for invalid patterns.
 	assert.Error(t, err, "Invalid pattern should return an error")
+	// Should not skip (exclude) the file when pattern is invalid.
+	assert.False(t, skip, "Invalid pattern should not cause file to be skipped")
 }
 
 // TestCopyToTarget tests copying files from source to target directory.

@@ -108,7 +108,9 @@ func ShouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) 
 		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
 		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
 		if err != nil {
-			return true, err
+			// Return false (don't exclude) on error so we don't accidentally skip files
+			// due to an invalid pattern. The error propagates and aborts the copy.
+			return false, err
 		} else if excludeMatch {
 			return true, nil
 		}
