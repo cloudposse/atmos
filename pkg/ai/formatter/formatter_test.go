@@ -505,7 +505,6 @@ func TestMarkdownFormatter_OutputFormat(t *testing.T) {
 	}
 }
 
-//nolint:dupl
 func TestMarkdownFormatter_ToolCallsZeroValue(t *testing.T) {
 	// Test that we properly handle the boundary between no tools and some tools.
 	tests := []struct {

@@ -111,3 +111,12 @@ type CompactStatus struct {
 // CompactStatusCallback is called when compaction status changes.
 // This allows UI components to show compaction progress.
 type CompactStatusCallback func(status CompactStatus)
+
+// CreateSessionParams holds parameters for creating a new session.
+type CreateSessionParams struct {
+	Name     string
+	Model    string
+	Provider string
+	Skill    string
+	Metadata map[string]interface{}
+}

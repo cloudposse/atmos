@@ -99,7 +99,12 @@ func (t *GetTemplateContextTool) Execute(ctx context.Context, params map[string]
 		}, nil
 	}
 
-	output := fmt.Sprintf("Template context for component '%s' in stack '%s':\n\n%s\n\n", component, stack, string(contextJSON))
+	return buildTemplateContextResult(component, stack, string(contextJSON), componentConfig), nil
+}
+
+// buildTemplateContextResult formats the template context output as a tools.Result.
+func buildTemplateContextResult(component, stack, contextJSON string, componentConfig map[string]any) *tools.Result {
+	output := fmt.Sprintf("Template context for component '%s' in stack '%s':\n\n%s\n\n", component, stack, contextJSON)
 	output += "Available template functions:\n"
 	output += "- atmos.Component(component, stack) - Get component configuration\n"
 	output += "- atmos.Stack(stack) - Get stack configuration\n"
@@ -119,7 +124,7 @@ func (t *GetTemplateContextTool) Execute(ctx context.Context, params map[string]
 			"stack":     stack,
 			"context":   componentConfig,
 		},
-	}, nil
+	}
 }
 
 // RequiresPermission returns true if this tool needs permission.

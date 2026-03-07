@@ -46,7 +46,7 @@ func (m *Manager) ExportSession(ctx context.Context, sessionID string, outputPat
 	case "markdown", "md":
 		return exportMarkdown(checkpoint, outputPath)
 	default:
-		return fmt.Errorf("unsupported export format: %s (supported: json, yaml, markdown)", format)
+		return fmt.Errorf("%w: %s (supported: json, yaml, markdown)", errUtils.ErrAIUnsupportedExportFormat, format)
 	}
 }
 
@@ -180,7 +180,16 @@ func exportMarkdown(checkpoint *Checkpoint, outputPath string) error {
 	}
 	defer file.Close()
 
-	// Write markdown header.
+	writeMarkdownHeader(file, checkpoint)
+	writeMarkdownStatistics(file, checkpoint.Statistics)
+	writeMarkdownContext(file, checkpoint.Context)
+	writeMarkdownConversation(file, checkpoint.Messages)
+
+	return nil
+}
+
+// writeMarkdownHeader writes the session header section.
+func writeMarkdownHeader(file *os.File, checkpoint *Checkpoint) {
 	fmt.Fprintf(file, "# Atmos AI Session: %s\n\n", checkpoint.Session.Name)
 	fmt.Fprintf(file, "**Exported:** %s\n", checkpoint.ExportedAt.Format(time.RFC3339))
 	if checkpoint.ExportedBy != "" {
@@ -193,53 +202,57 @@ func exportMarkdown(checkpoint *Checkpoint, outputPath string) error {
 	}
 	fmt.Fprintf(file, "**Created:** %s\n", checkpoint.Session.CreatedAt.Format(time.RFC3339))
 	fmt.Fprintf(file, "**Messages:** %d\n\n", checkpoint.Statistics.MessageCount)
+}
 
-	// Write statistics.
+// writeMarkdownStatistics writes the statistics section.
+func writeMarkdownStatistics(file *os.File, stats CheckpointStatistics) {
 	fmt.Fprintf(file, "## Statistics\n\n")
-	fmt.Fprintf(file, "- Total Messages: %d\n", checkpoint.Statistics.MessageCount)
-	fmt.Fprintf(file, "- User Messages: %d\n", checkpoint.Statistics.UserMessages)
-	fmt.Fprintf(file, "- Assistant Messages: %d\n", checkpoint.Statistics.AssistantMessages)
-	if checkpoint.Statistics.TotalTokens > 0 {
-		fmt.Fprintf(file, "- Total Tokens: %d\n", checkpoint.Statistics.TotalTokens)
+	fmt.Fprintf(file, "- Total Messages: %d\n", stats.MessageCount)
+	fmt.Fprintf(file, "- User Messages: %d\n", stats.UserMessages)
+	fmt.Fprintf(file, "- Assistant Messages: %d\n", stats.AssistantMessages)
+	if stats.TotalTokens > 0 {
+		fmt.Fprintf(file, "- Total Tokens: %d\n", stats.TotalTokens)
 	}
-	if checkpoint.Statistics.ToolCalls > 0 {
-		fmt.Fprintf(file, "- Tool Calls: %d\n", checkpoint.Statistics.ToolCalls)
+	if stats.ToolCalls > 0 {
+		fmt.Fprintf(file, "- Tool Calls: %d\n", stats.ToolCalls)
 	}
 	fmt.Fprintf(file, "\n")
+}
 
-	// Write context if present.
-	if checkpoint.Context != nil {
-		fmt.Fprintf(file, "## Context\n\n")
-		if checkpoint.Context.WorkingDirectory != "" {
-			fmt.Fprintf(file, "**Working Directory:** `%s`\n\n", checkpoint.Context.WorkingDirectory)
-		}
-		if checkpoint.Context.ProjectInstructions != "" {
-			fmt.Fprintf(file, "### Project Instructions\n\n```\n%s\n```\n\n", checkpoint.Context.ProjectInstructions)
-		}
-		if len(checkpoint.Context.FilesAccessed) > 0 {
-			fmt.Fprintf(file, "### Files Accessed\n\n")
-			for _, f := range checkpoint.Context.FilesAccessed {
-				fmt.Fprintf(file, "- `%s`\n", f)
-			}
-			fmt.Fprintf(file, "\n")
-		}
+// writeMarkdownContext writes the context section if present.
+func writeMarkdownContext(file *os.File, ctx *CheckpointContext) {
+	if ctx == nil {
+		return
 	}
+	fmt.Fprintf(file, "## Context\n\n")
+	if ctx.WorkingDirectory != "" {
+		fmt.Fprintf(file, "**Working Directory:** `%s`\n\n", ctx.WorkingDirectory)
+	}
+	if ctx.ProjectInstructions != "" {
+		fmt.Fprintf(file, "### Project Instructions\n\n```\n%s\n```\n\n", ctx.ProjectInstructions)
+	}
+	if len(ctx.FilesAccessed) > 0 {
+		fmt.Fprintf(file, "### Files Accessed\n\n")
+		for _, f := range ctx.FilesAccessed {
+			fmt.Fprintf(file, "- `%s`\n", f)
+		}
+		fmt.Fprintf(file, "\n")
+	}
+}
 
-	// Write conversation.
+// writeMarkdownConversation writes the conversation messages section.
+func writeMarkdownConversation(file *os.File, messages []CheckpointMessage) {
 	fmt.Fprintf(file, "## Conversation\n\n")
-	for i, msg := range checkpoint.Messages {
+	for i, msg := range messages {
 		roleLabel := strings.ToUpper(msg.Role)
 		if msg.Archived {
 			roleLabel += " (COMPACTED)"
 		}
-
 		fmt.Fprintf(file, "### Message %d - %s\n", i+1, roleLabel)
 		fmt.Fprintf(file, "*%s*\n\n", msg.CreatedAt.Format(time.RFC3339))
 		fmt.Fprintf(file, "%s\n\n", msg.Content)
 		fmt.Fprintf(file, "---\n\n")
 	}
-
-	return nil
 }
 
 // detectFormatFromPath detects export format from file extension.

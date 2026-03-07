@@ -87,29 +87,12 @@ func (t *DescribeAffectedTool) Execute(ctx context.Context, params map[string]in
 	}
 
 	// Format output.
-	var output string
-	if verbose {
-		// Include full details.
-		affectedJSON, err := json.MarshalIndent(affected, "", "  ")
-		if err != nil {
-			return &tools.Result{
-				Success: false,
-				Error:   fmt.Errorf("failed to format output: %w", err),
-			}, nil
-		}
-		output = fmt.Sprintf("Affected components (compared to %s):\n\n%s", ref, string(affectedJSON))
-	} else {
-		// Summarize affected components.
-		output = fmt.Sprintf("Affected components (compared to %s):\n\n", ref)
-
-		if len(affected) == 0 {
-			output += "No affected components found.\n"
-		} else {
-			output += fmt.Sprintf("Total: %d components\n\n", len(affected))
-			for _, item := range affected {
-				output += fmt.Sprintf("- %s in stack %s\n", item.Component, item.Stack)
-			}
-		}
+	output, err := formatAffectedOutput(affected, ref, verbose)
+	if err != nil {
+		return &tools.Result{ //nolint:nilerr // Tool errors are communicated via Result.Error; the function error return stays nil.
+			Success: false,
+			Error:   err,
+		}, nil
 	}
 
 	return &tools.Result{
@@ -121,6 +104,29 @@ func (t *DescribeAffectedTool) Execute(ctx context.Context, params map[string]in
 			"affected": affected,
 		},
 	}, nil
+}
+
+// formatAffectedOutput formats the affected components output based on verbosity.
+func formatAffectedOutput(affected []schema.Affected, ref string, verbose bool) (string, error) {
+	if verbose {
+		affectedJSON, err := json.MarshalIndent(affected, "", "  ")
+		if err != nil {
+			return "", fmt.Errorf("failed to format output: %w", err)
+		}
+		return fmt.Sprintf("Affected components (compared to %s):\n\n%s", ref, string(affectedJSON)), nil
+	}
+
+	output := fmt.Sprintf("Affected components (compared to %s):\n\n", ref)
+	if len(affected) == 0 {
+		output += "No affected components found.\n"
+		return output, nil
+	}
+
+	output += fmt.Sprintf("Total: %d components\n\n", len(affected))
+	for i := range affected {
+		output += fmt.Sprintf("- %s in stack %s\n", affected[i].Component, affected[i].Stack)
+	}
+	return output, nil
 }
 
 // RequiresPermission returns true if this tool needs permission.

@@ -170,7 +170,7 @@ func TestCompactor_ShouldCompact(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			messages := generateTestMessages(tt.messageCount)
-			config := CompactConfig{
+			config := &CompactConfig{
 				Enabled:          tt.name != "disabled - no compaction",
 				TriggerThreshold: tt.threshold,
 				CompactRatio:     tt.compactRatio,
@@ -187,10 +187,8 @@ func TestCompactor_ShouldCompact(t *testing.T) {
 				assert.Equal(t, tt.expectNumToCompact, len(plan.MessagesToCompact), "Messages to compact count mismatch")
 				assert.Equal(t, tt.messageCount-tt.expectNumToCompact, len(plan.MessagesToKeep), "Messages to keep count mismatch")
 				assert.NotEmpty(t, plan.Reason, "Reason should be provided")
-			} else {
-				if plan != nil {
-					assert.Nil(t, plan, "Plan should be nil when no compaction needed")
-				}
+			} else if plan != nil {
+				assert.Nil(t, plan, "Plan should be nil when no compaction needed")
 			}
 		})
 	}
@@ -209,7 +207,7 @@ func TestCompactor_Compact_SimpleSummary(t *testing.T) {
 		Reason:            "Test compaction",
 	}
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled:      true,
 		UseAISummary: false, // Force simple summary
 	}
@@ -316,7 +314,8 @@ func TestCompactor_BuildSummarizationPrompt(t *testing.T) {
 }
 
 func TestCompactor_DefaultCompactConfig(t *testing.T) {
-	config := DefaultCompactConfig()
+	cfg := DefaultCompactConfig()
+	config := &cfg
 
 	// Verify defaults.
 	assert.False(t, config.Enabled, "Should be disabled by default")
@@ -333,7 +332,7 @@ func TestCompactor_Compact_WithNilPlan(t *testing.T) {
 	storage := &MockStorage{}
 	compactor := NewCompactor(storage, nil)
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled: true,
 	}
 
@@ -351,7 +350,7 @@ func TestCompactor_MessageSelection(t *testing.T) {
 	// Create 50 messages.
 	messages := generateTestMessages(50)
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled:          true,
 		TriggerThreshold: 0.75, // Trigger at 38
 		CompactRatio:     0.4,  // Compact 20 messages (40% of 50)
@@ -389,7 +388,7 @@ func TestCompactor_SummaryStorage(t *testing.T) {
 		Reason:            "Test storage",
 	}
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled:      true,
 		UseAISummary: false,
 	}
@@ -431,7 +430,7 @@ func TestCompactor_AIFallback(t *testing.T) {
 		Reason:            "Test AI fallback",
 	}
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled:      true,
 		UseAISummary: true, // Try AI but should fail
 	}
@@ -451,7 +450,7 @@ func TestCompactor_EmptyMessages(t *testing.T) {
 
 	var messages []*Message
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled:          true,
 		TriggerThreshold: 0.75,
 		CompactRatio:     0.4,
@@ -488,7 +487,7 @@ func TestCompactor_TokenEstimation(t *testing.T) {
 		MessagesToKeep:    []*Message{},
 	}
 
-	config := CompactConfig{
+	config := &CompactConfig{
 		Enabled:      true,
 		UseAISummary: false,
 	}

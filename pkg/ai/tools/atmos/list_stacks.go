@@ -77,7 +77,12 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 		}, err
 	}
 
-	// Extract stack names and their components.
+	// Build result from stack data.
+	return buildListStacksResult(stacks, format), nil
+}
+
+// buildListStacksResult formats the stack listing into a tools.Result.
+func buildListStacksResult(stacks map[string]any, format string) *tools.Result {
 	var output strings.Builder
 	fmt.Fprintf(&output, "Available Stacks (%d):\n\n", len(stacks))
 
@@ -110,7 +115,7 @@ func (t *ListStacksTool) Execute(ctx context.Context, params map[string]interfac
 			"stacks":     stackNames,
 			"components": stackComponents,
 		},
-	}, nil
+	}
 }
 
 // extractComponentNames extracts component names from a stack's data structure.

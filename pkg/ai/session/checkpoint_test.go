@@ -21,7 +21,7 @@ func TestManager_ExportSession(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test session with messages.
-	session, err := manager.CreateSession(ctx, "export-test", "gpt-4", "openai", "", map[string]interface{}{"test": "value"})
+	session, err := manager.CreateSession(ctx, CreateSessionParams{Name: "export-test", Model: "gpt-4", Provider: "openai", Metadata: map[string]interface{}{"test": "value"}})
 	require.NoError(t, err)
 	require.NotNil(t, session)
 
@@ -169,7 +169,7 @@ func TestManager_ExportSessionByName(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a test session.
-	session, err := manager.CreateSession(ctx, "named-export-test", "gpt-4", "openai", "", nil)
+	session, err := manager.CreateSession(ctx, CreateSessionParams{Name: "named-export-test", Model: "gpt-4", Provider: "openai"})
 	require.NoError(t, err)
 
 	// Add a message.
@@ -343,7 +343,7 @@ func TestManager_ImportSession(t *testing.T) {
 			},
 			setup: func(t *testing.T, manager *Manager) {
 				// Create existing session.
-				_, err := manager.CreateSession(ctx, "existing-session", "gpt-3.5", "openai", "", nil)
+				_, err := manager.CreateSession(ctx, CreateSessionParams{Name: "existing-session", Model: "gpt-3.5", Provider: "openai"})
 				require.NoError(t, err)
 			},
 			wantErr: true,
@@ -379,7 +379,7 @@ func TestManager_ImportSession(t *testing.T) {
 			},
 			setup: func(t *testing.T, manager *Manager) {
 				// Create existing session.
-				_, err := manager.CreateSession(ctx, "overwrite-session", "gpt-3.5", "openai", "", nil)
+				_, err := manager.CreateSession(ctx, CreateSessionParams{Name: "overwrite-session", Model: "gpt-3.5", Provider: "openai"})
 				require.NoError(t, err)
 			},
 			wantErr: false,
@@ -723,10 +723,10 @@ func TestManager_ExportImportRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a session with messages and metadata.
-	session, err := manager.CreateSession(ctx, "roundtrip-test", "gpt-4", "openai", "", map[string]interface{}{
+	session, err := manager.CreateSession(ctx, CreateSessionParams{Name: "roundtrip-test", Model: "gpt-4", Provider: "openai", Metadata: map[string]interface{}{
 		"project": "test-project",
 		"version": "1.0",
-	})
+	}})
 	require.NoError(t, err)
 
 	// Add messages.
@@ -821,7 +821,7 @@ func TestManager_ExportSession_ErrorHandling(t *testing.T) {
 			outputPath: filepath.Join(t.TempDir(), "test.txt"),
 			opts:       ExportOptions{Format: "unsupported"},
 			setup: func() string {
-				session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
+				session, err := manager.CreateSession(ctx, CreateSessionParams{Name: "test", Model: "gpt-4", Provider: "openai"})
 				require.NoError(t, err)
 				err = manager.AddMessage(ctx, session.ID, "user", "test")
 				require.NoError(t, err)
@@ -836,7 +836,7 @@ func TestManager_ExportSession_ErrorHandling(t *testing.T) {
 			outputPath: filepath.Join(t.TempDir(), "nonexistent", "subdir", "test.json"),
 			opts:       ExportOptions{Format: "json"},
 			setup: func() string {
-				session, err := manager.CreateSession(ctx, "test", "gpt-4", "openai", "", nil)
+				session, err := manager.CreateSession(ctx, CreateSessionParams{Name: "test", Model: "gpt-4", Provider: "openai"})
 				require.NoError(t, err)
 				err = manager.AddMessage(ctx, session.ID, "user", "test")
 				require.NoError(t, err)
@@ -874,10 +874,10 @@ func TestManager_BuildCheckpoint(t *testing.T) {
 	ctx := context.Background()
 
 	// Create a session with metadata.
-	session, err := manager.CreateSession(ctx, "test-checkpoint", "gpt-4", "openai", "test-skill", map[string]interface{}{
+	session, err := manager.CreateSession(ctx, CreateSessionParams{Name: "test-checkpoint", Model: "gpt-4", Provider: "openai", Skill: "test-skill", Metadata: map[string]interface{}{
 		"key1": "value1",
 		"key2": 42,
-	})
+	}})
 	require.NoError(t, err)
 
 	// Create messages with different roles.

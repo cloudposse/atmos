@@ -71,9 +71,57 @@ func (t *ExecuteBashCommandTool) Parameters() []tools.Parameter {
 	}
 }
 
+// validateCommand checks that the command is not blacklisted or dangerous.
+func validateCommand(args []string, command string) *tools.Result {
+	baseCommand := args[0]
+
+	if blacklistedCommands[baseCommand] {
+		log.Warnf("Blocked blacklisted command: %s", baseCommand)
+		return &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: %s", errUtils.ErrAICommandBlacklisted, baseCommand),
+		}
+	}
+
+	if strings.HasPrefix(baseCommand, "mkfs.") {
+		log.Warnf("Blocked mkfs variant command: %s", baseCommand)
+		return &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: %s", errUtils.ErrAICommandBlacklisted, baseCommand),
+		}
+	}
+
+	if len(args) >= 2 && baseCommand == "rm" {
+		for _, arg := range args[1:] {
+			if strings.Contains(arg, "-rf") || strings.Contains(arg, "-fr") || arg == "-r" || arg == "-f" {
+				log.Warnf("Blocked dangerous rm command: %s", command)
+				return &tools.Result{
+					Success: false,
+					Error:   errUtils.ErrAICommandRmNotAllowed,
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// resolveWorkingDir determines the working directory for command execution.
+func (t *ExecuteBashCommandTool) resolveWorkingDir(params map[string]interface{}) string {
+	workingDir := t.atmosConfig.BasePath
+	wd, ok := params["working_dir"].(string)
+	if !ok || wd == "" {
+		return workingDir
+	}
+
+	if !filepath.IsAbs(wd) {
+		return filepath.Join(t.atmosConfig.BasePath, wd)
+	}
+	return wd
+}
+
 // Execute runs the shell command and returns the output.
 func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
-	// Extract command parameter.
 	command, ok := params["command"].(string)
 	if !ok || command == "" {
 		return &tools.Result{
@@ -82,69 +130,27 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 		}, nil
 	}
 
-	// Split command into args.
 	args := strings.Fields(command)
 	if len(args) == 0 {
 		return &tools.Result{
 			Success: false,
-			Error:   fmt.Errorf("command cannot be empty"),
+			Error:   errUtils.ErrAICommandEmpty,
 		}, nil
 	}
 
-	// Security check: ensure command is not blacklisted.
-	baseCommand := args[0]
-	if blacklistedCommands[baseCommand] {
-		log.Warnf("Blocked blacklisted command: %s", baseCommand)
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("command '%s' is blacklisted for security reasons", baseCommand),
-		}, nil
+	if errResult := validateCommand(args, command); errResult != nil {
+		return errResult, nil
 	}
 
-	// Also check for mkfs variants (mkfs.ext4, mkfs.xfs, etc.).
-	if strings.HasPrefix(baseCommand, "mkfs.") {
-		log.Warnf("Blocked mkfs variant command: %s", baseCommand)
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("command '%s' is blacklisted for security reasons", baseCommand),
-		}, nil
-	}
-
-	// Additional safety check: block rm with dangerous flags.
-	if len(args) >= 2 && baseCommand == "rm" {
-		for _, arg := range args[1:] {
-			if strings.Contains(arg, "-rf") || strings.Contains(arg, "-fr") || arg == "-r" || arg == "-f" {
-				log.Warnf("Blocked dangerous rm command: %s", command)
-				return &tools.Result{
-					Success: false,
-					Error:   fmt.Errorf("rm with recursive or force flags is not allowed"),
-				}, nil
-			}
-		}
-	}
-
-	// Determine working directory.
-	workingDir := t.atmosConfig.BasePath
-	if wd, ok := params["working_dir"].(string); ok && wd != "" {
-		// If relative path, make it relative to base path.
-		if !filepath.IsAbs(wd) {
-			workingDir = filepath.Join(t.atmosConfig.BasePath, wd)
-		} else {
-			workingDir = wd
-		}
-	}
+	workingDir := t.resolveWorkingDir(params)
 
 	log.Debugf("Executing shell command: %s (in %s)", command, workingDir)
 
-	// Create the command.
-	// Use sh -c to properly handle pipes, redirects, and other shell features.
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = workingDir
 
-	// Capture output.
 	output, err := cmd.CombinedOutput()
 
-	// Even if there's an error, return the output for the AI to analyze.
 	exitCode := 0
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()

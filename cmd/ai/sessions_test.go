@@ -1147,7 +1147,7 @@ func TestValidateCheckpointFile(t *testing.T) {
 
 		err = session.ValidateCheckpointFile(invalidRolePath)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid role")
+		assert.Contains(t, err.Error(), "invalid message role")
 	})
 
 	t.Run("returns error for mismatched message count", func(t *testing.T) {
@@ -1909,7 +1909,7 @@ func TestValidateCheckpointFile_MoreScenarios(t *testing.T) {
 
 		err = session.ValidateCheckpointFile(path)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid role")
+		assert.Contains(t, err.Error(), "invalid message role")
 	})
 
 	t.Run("checkpoint with function role", func(t *testing.T) {
@@ -1920,7 +1920,7 @@ func TestValidateCheckpointFile_MoreScenarios(t *testing.T) {
 
 		err = session.ValidateCheckpointFile(path)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "invalid role")
+		assert.Contains(t, err.Error(), "invalid message role")
 	})
 
 	t.Run("checkpoint with large message count", func(t *testing.T) {

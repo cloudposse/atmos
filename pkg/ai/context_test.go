@@ -714,7 +714,7 @@ func TestFormatFileContent_LargeFile(t *testing.T) {
 
 	// Should be truncated.
 	assert.Contains(t, result, "truncated")
-	assert.Contains(t, result, "950 more lines") // 1000 - 50 = 950.
+	assert.Contains(t, result, "950 more lines") // Expected: total lines minus max lines.
 }
 
 func TestFindStackFiles_MixedExtensions(t *testing.T) {

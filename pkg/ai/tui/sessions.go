@@ -72,59 +72,67 @@ func (m *ChatModel) handleSessionListLoaded(msg sessionListLoadedMsg) {
 	}
 }
 
+// restoreSkillFromSession restores the skill associated with a session.
+func (m *ChatModel) restoreSkillFromSession(sess *session.Session) {
+	if sess == nil || sess.Skill == "" || m.skillRegistry == nil {
+		return
+	}
+
+	skill, err := m.skillRegistry.Get(sess.Skill)
+	if err != nil {
+		log.Debugf("Skill %q from session not found, using current skill", sess.Skill)
+		return
+	}
+
+	systemPrompt, promptErr := skill.LoadSystemPrompt()
+	if promptErr != nil {
+		log.Debugf("Failed to load system prompt for skill %q: %v, using default", skill.Name, promptErr)
+	} else {
+		skill.SystemPrompt = systemPrompt
+	}
+
+	m.currentSkill = skill
+}
+
+// convertSessionMessages converts session messages to chat messages.
+func (m *ChatModel) convertSessionMessages(messages []*session.Message, sessionProvider string) {
+	for _, sessionMsg := range messages {
+		provider := ""
+		if sessionMsg.Role == roleAssistant {
+			provider = sessionProvider
+		}
+
+		m.messages = append(m.messages, ChatMessage{
+			Role:     sessionMsg.Role,
+			Content:  sessionMsg.Content,
+			Time:     sessionMsg.CreatedAt,
+			Provider: provider,
+		})
+	}
+}
+
 // handleSessionSwitched processes the session switched message.
 func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 	if msg.err != nil {
 		m.sessionListError = msg.err.Error()
-	} else {
-		m.sess = msg.session
-		m.messages = make([]ChatMessage, 0)
-
-		// Restore skill from session if available.
-		if msg.session != nil && msg.session.Skill != "" && m.skillRegistry != nil {
-			if skill, err := m.skillRegistry.Get(msg.session.Skill); err == nil {
-				// Load skill's system prompt from file (if configured).
-				systemPrompt, promptErr := skill.LoadSystemPrompt()
-				if promptErr != nil {
-					log.Debugf("Failed to load system prompt for skill %q: %v, using default", skill.Name, promptErr)
-					// Keep the existing SystemPrompt as fallback.
-				} else {
-					// Update skill with loaded prompt.
-					skill.SystemPrompt = systemPrompt
-				}
-				m.currentSkill = skill
-			} else {
-				// If skill not found, log and fall back to default.
-				log.Debugf("Skill %q from session not found, using current skill", msg.session.Skill)
-			}
-		}
-
-		// Get the session's provider for historical messages.
-		sessionProvider := ""
-		if msg.session != nil {
-			sessionProvider = msg.session.Provider
-		}
-
-		// Convert session messages to chat messages.
-		for _, sessionMsg := range msg.messages {
-			// Preserve the provider for assistant messages.
-			provider := ""
-			if sessionMsg.Role == roleAssistant {
-				provider = sessionProvider
-			}
-
-			m.messages = append(m.messages, ChatMessage{
-				Role:     sessionMsg.Role,
-				Content:  sessionMsg.Content,
-				Time:     sessionMsg.CreatedAt,
-				Provider: provider,
-			})
-		}
-		m.updateViewportContent()
-		m.currentView = viewModeChat
-		m.textarea.Focus()
-		m.sessionListError = ""
+		return
 	}
+
+	m.sess = msg.session
+	m.messages = make([]ChatMessage, 0)
+
+	m.restoreSkillFromSession(msg.session)
+
+	sessionProvider := ""
+	if msg.session != nil {
+		sessionProvider = msg.session.Provider
+	}
+
+	m.convertSessionMessages(msg.messages, sessionProvider)
+	m.updateViewportContent()
+	m.currentView = viewModeChat
+	m.textarea.Focus()
+	m.sessionListError = ""
 }
 
 // sessionListView renders the session list interface.

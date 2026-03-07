@@ -24,6 +24,21 @@ type Config struct {
 	BaseURL   string
 }
 
+// GetProviderConfig returns the provider-specific configuration from AtmosConfiguration.
+// Returns nil if no provider configuration is found.
+func GetProviderConfig(atmosConfig *schema.AtmosConfiguration, providerName string) *schema.AIProviderConfig {
+	if atmosConfig.Settings.AI.Providers == nil {
+		return nil
+	}
+
+	providerConfig, exists := atmosConfig.Settings.AI.Providers[providerName]
+	if !exists || providerConfig == nil {
+		return nil
+	}
+
+	return providerConfig
+}
+
 // ExtractConfig extracts AI configuration from AtmosConfiguration for a specific provider.
 // It applies the provider-specific defaults and overrides from the configuration.
 func ExtractConfig(atmosConfig *schema.AtmosConfiguration, providerName string, defaults ProviderDefaults) *Config {
@@ -40,26 +55,30 @@ func ExtractConfig(atmosConfig *schema.AtmosConfiguration, providerName string, 
 		config.Enabled = true
 	}
 
-	// Get provider-specific configuration from Providers map.
-	if atmosConfig.Settings.AI.Providers != nil {
-		if providerConfig, exists := atmosConfig.Settings.AI.Providers[providerName]; exists && providerConfig != nil {
-			// Override defaults with provider-specific configuration.
-			if providerConfig.Model != "" {
-				config.Model = providerConfig.Model
-			}
-			if providerConfig.ApiKeyEnv != "" {
-				config.APIKeyEnv = providerConfig.ApiKeyEnv
-			}
-			if providerConfig.MaxTokens > 0 {
-				config.MaxTokens = providerConfig.MaxTokens
-			}
-			if providerConfig.BaseURL != "" {
-				config.BaseURL = providerConfig.BaseURL
-			}
-		}
-	}
+	// Apply provider-specific overrides.
+	applyProviderOverrides(config, GetProviderConfig(atmosConfig, providerName))
 
 	return config
+}
+
+// applyProviderOverrides applies provider-specific configuration overrides to the config.
+func applyProviderOverrides(config *Config, providerConfig *schema.AIProviderConfig) {
+	if providerConfig == nil {
+		return
+	}
+
+	if providerConfig.Model != "" {
+		config.Model = providerConfig.Model
+	}
+	if providerConfig.ApiKeyEnv != "" {
+		config.APIKeyEnv = providerConfig.ApiKeyEnv
+	}
+	if providerConfig.MaxTokens > 0 {
+		config.MaxTokens = providerConfig.MaxTokens
+	}
+	if providerConfig.BaseURL != "" {
+		config.BaseURL = providerConfig.BaseURL
+	}
 }
 
 // GetAPIKey retrieves the API key from environment using the specified env var name.

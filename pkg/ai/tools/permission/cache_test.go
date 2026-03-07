@@ -6,6 +6,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewPermissionCache(t *testing.T) {
@@ -478,4 +481,134 @@ func TestPermissionCache_FilePermissions(t *testing.T) {
 			t.Errorf("Expected file permissions 0600, got %o", mode)
 		}
 	}
+}
+
+// TestPermissionCache_AddDeny_Duplicate verifies that adding an already-present
+// deny entry is a no-op and does not append a duplicate.
+func TestPermissionCache_AddDeny_Duplicate(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewPermissionCache(tmpDir)
+	require.NoError(t, err)
+
+	// Add the same deny entry twice.
+	err = cache.AddDeny("tool1")
+	require.NoError(t, err)
+
+	err = cache.AddDeny("tool1")
+	require.NoError(t, err)
+
+	// Should only appear once in the deny list.
+	denyList := cache.GetDenyList()
+	count := 0
+	for _, item := range denyList {
+		if item == "tool1" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "Expected tool1 to appear exactly once in deny list")
+}
+
+// TestPermissionCache_RemoveAllow_NonExistent verifies that removing a pattern
+// that is not in the allow list is a no-op (no error, no crash).
+func TestPermissionCache_RemoveAllow_NonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewPermissionCache(tmpDir)
+	require.NoError(t, err)
+
+	// Add one tool so save() writes a real file.
+	err = cache.AddAllow("existing_tool")
+	require.NoError(t, err)
+
+	// Remove a tool that was never added.
+	err = cache.RemoveAllow("nonexistent_tool")
+	assert.NoError(t, err)
+
+	// Existing tool should still be present.
+	assert.True(t, cache.IsAllowed("existing_tool"))
+}
+
+// TestPermissionCache_RemoveDeny_NonExistent verifies that removing a pattern
+// that is not in the deny list is a no-op (no error, no crash).
+func TestPermissionCache_RemoveDeny_NonExistent(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewPermissionCache(tmpDir)
+	require.NoError(t, err)
+
+	// Add one tool so save() writes a real file.
+	err = cache.AddDeny("existing_tool")
+	require.NoError(t, err)
+
+	// Remove a tool that was never added.
+	err = cache.RemoveDeny("nonexistent_tool")
+	assert.NoError(t, err)
+
+	// Existing tool should still be present.
+	assert.True(t, cache.IsDenied("existing_tool"))
+}
+
+// TestPermissionCache_Save_WriteError verifies that save() surfaces an error
+// when the cache file path is a directory (making os.WriteFile fail).
+func TestPermissionCache_Save_WriteError(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache, err := NewPermissionCache(tmpDir)
+	require.NoError(t, err)
+
+	// Replace the file path with a directory path so WriteFile fails.
+	dirPath := filepath.Join(tmpDir, ".atmos", "unwritable_dir")
+	err = os.MkdirAll(dirPath, 0o755)
+	require.NoError(t, err)
+
+	cache.filePath = dirPath
+
+	// Now trying to save should fail because filePath is a directory.
+	err = cache.AddAllow("any_tool")
+	assert.Error(t, err, "Expected error when writing to a directory path")
+}
+
+// TestPermissionCache_NewPermissionCache_InvalidBasePath verifies that
+// NewPermissionCache returns an error when it cannot create the cache directory.
+func TestPermissionCache_NewPermissionCache_InvalidBasePath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping file permission test on Windows.")
+	}
+
+	// Create a file (not directory) and try to use it as basePath.
+	tmpDir := t.TempDir()
+	filePath := filepath.Join(tmpDir, "not_a_dir")
+	err := os.WriteFile(filePath, []byte("content"), 0o644)
+	require.NoError(t, err)
+
+	// Try to create cache with the file as base path - MkdirAll of
+	// filePath/.atmos should fail because filePath is a regular file.
+	_, err = NewPermissionCache(filePath)
+	assert.Error(t, err, "Expected error when base path is a file")
+}
+
+// TestPermissionCache_AddDeny_DuplicatePersistence verifies that
+// the "already exists" early return in AddDeny does not write extra entries
+// to disk either.
+func TestPermissionCache_AddDeny_DuplicatePersistence(t *testing.T) {
+	tmpDir := t.TempDir()
+	cache1, err := NewPermissionCache(tmpDir)
+	require.NoError(t, err)
+
+	err = cache1.AddDeny("tool_x")
+	require.NoError(t, err)
+
+	// Add the same entry again; should be idempotent.
+	err = cache1.AddDeny("tool_x")
+	require.NoError(t, err)
+
+	// Reload from disk and verify only one entry.
+	cache2, err := NewPermissionCache(tmpDir)
+	require.NoError(t, err)
+
+	denyList := cache2.GetDenyList()
+	count := 0
+	for _, item := range denyList {
+		if item == "tool_x" {
+			count++
+		}
+	}
+	assert.Equal(t, 1, count, "Expected exactly one deny entry after duplicate add and reload")
 }

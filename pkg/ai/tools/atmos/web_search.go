@@ -12,6 +12,15 @@ import (
 	"github.com/cloudposse/atmos/pkg/web"
 )
 
+const (
+	// Default number of search results to return.
+	defaultMaxResults = 10
+	// Minimum allowed value for max_results.
+	minMaxResults = 1
+	// Maximum allowed value for max_results.
+	maxMaxResults = 50
+)
+
 // WebSearchTool performs web searches to gather information.
 type WebSearchTool struct {
 	atmosConfig *schema.AtmosConfiguration
@@ -52,46 +61,25 @@ func (t *WebSearchTool) Parameters() []tools.Parameter {
 			Description: "Maximum number of search results to return (1-50, default: 10)",
 			Type:        tools.ParamTypeInt,
 			Required:    false,
-			Default:     10,
+			Default:     defaultMaxResults,
 		},
 	}
 }
 
-// Execute runs the tool.
-func (t *WebSearchTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
-	defer perf.Track(t.atmosConfig, "pkg.ai.tools.atmos.WebSearchTool.Execute")()
-
-	// Check if web search is enabled.
-	if t.atmosConfig != nil && !t.atmosConfig.Settings.AI.WebSearch.Enabled {
-		return &tools.Result{
-			Success: false,
-			Error:   errUtils.ErrWebSearchNotEnabled,
-		}, errUtils.ErrWebSearchNotEnabled
-	}
-
-	// Extract query parameter (required).
-	query, ok := params["query"].(string)
-	if !ok || query == "" {
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("%w: query", errUtils.ErrAIToolParameterRequired),
-		}, fmt.Errorf("%w: query", errUtils.ErrAIToolParameterRequired)
-	}
-
-	// Extract max_results parameter (optional).
-	maxResults := 10
+// extractMaxResults extracts and validates the max_results parameter.
+func (t *WebSearchTool) extractMaxResults(params map[string]interface{}) int {
+	maxResults := defaultMaxResults
 	if mr, ok := params["max_results"].(float64); ok {
 		maxResults = int(mr)
 	} else if mr, ok := params["max_results"].(int); ok {
 		maxResults = mr
 	}
 
-	// Validate max_results.
-	if maxResults < 1 {
-		maxResults = 1
+	if maxResults < minMaxResults {
+		maxResults = minMaxResults
 	}
-	if maxResults > 50 {
-		maxResults = 50
+	if maxResults > maxMaxResults {
+		maxResults = maxMaxResults
 	}
 
 	// Override max_results from configuration if set.
@@ -101,7 +89,52 @@ func (t *WebSearchTool) Execute(ctx context.Context, params map[string]interface
 		}
 	}
 
-	// Execute search.
+	return maxResults
+}
+
+// formatSearchResults formats the search response into a human-readable string.
+func formatSearchResults(query string, response *web.SearchResponse) string {
+	var output strings.Builder
+	fmt.Fprintf(&output, "Web search results for '%s' (%d results):\n\n", query, response.Count)
+
+	if response.Count == 0 {
+		output.WriteString("No results found.\n")
+		return output.String()
+	}
+
+	for i, result := range response.Results {
+		fmt.Fprintf(&output, "%d. %s\n", i+1, result.Title)
+		fmt.Fprintf(&output, "   URL: %s\n", result.URL)
+		if result.Description != "" {
+			fmt.Fprintf(&output, "   %s\n", result.Description)
+		}
+		output.WriteString("\n")
+	}
+
+	return output.String()
+}
+
+// Execute runs the tool.
+func (t *WebSearchTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
+	defer perf.Track(t.atmosConfig, "pkg.ai.tools.atmos.WebSearchTool.Execute")()
+
+	if t.atmosConfig != nil && !t.atmosConfig.Settings.AI.WebSearch.Enabled {
+		return &tools.Result{
+			Success: false,
+			Error:   errUtils.ErrWebSearchNotEnabled,
+		}, errUtils.ErrWebSearchNotEnabled
+	}
+
+	query, ok := params["query"].(string)
+	if !ok || query == "" {
+		return &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: query", errUtils.ErrAIToolParameterRequired),
+		}, fmt.Errorf("%w: query", errUtils.ErrAIToolParameterRequired)
+	}
+
+	maxResults := t.extractMaxResults(params)
+
 	response, err := t.engine.Search(ctx, query, maxResults)
 	if err != nil {
 		return &tools.Result{
@@ -111,26 +144,9 @@ func (t *WebSearchTool) Execute(ctx context.Context, params map[string]interface
 		}, err
 	}
 
-	// Format output.
-	var output strings.Builder
-	fmt.Fprintf(&output, "Web search results for '%s' (%d results):\n\n", query, response.Count)
-
-	if response.Count == 0 {
-		output.WriteString("No results found.\n")
-	} else {
-		for i, result := range response.Results {
-			fmt.Fprintf(&output, "%d. %s\n", i+1, result.Title)
-			fmt.Fprintf(&output, "   URL: %s\n", result.URL)
-			if result.Description != "" {
-				fmt.Fprintf(&output, "   %s\n", result.Description)
-			}
-			output.WriteString("\n")
-		}
-	}
-
 	return &tools.Result{
 		Success: true,
-		Output:  output.String(),
+		Output:  formatSearchResults(query, response),
 		Data: map[string]interface{}{
 			"query":   query,
 			"results": response.Results,

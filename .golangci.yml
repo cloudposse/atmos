@@ -309,19 +309,6 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
-      # Exclude AI code from linting (AI operations are inherently slow with API calls, complex UI logic)
-      - linters:
-          - lintroller
-          - cyclop
-          - err113
-          - funlen
-          - gocognit
-          - gocritic
-          - nestif
-          - nolintlint
-          - revive
-          - unused
-        path: pkg/ai/
       # Exclude LSP code from performance tracking (LSP operations are not critical path)
       - linters:
           - lintroller

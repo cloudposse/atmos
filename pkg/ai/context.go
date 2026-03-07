@@ -65,43 +65,49 @@ func formatFileContent(file string, maxLines int) string {
 	return string(content)
 }
 
-// GatherStackContext reads stack configurations and returns them as context for AI.
-func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) {
-	var context strings.Builder
+// gatherDiscoveredContext attempts automatic context discovery and returns the context string.
+// Returns empty string if discovery is not enabled, fails, or finds no files.
+func gatherDiscoveredContext(atmosConfig *schema.AtmosConfiguration) string {
+	if !atmosConfig.Settings.AI.Context.Enabled {
+		return ""
+	}
 
-	// Try automatic context discovery first if enabled.
-	if atmosConfig.Settings.AI.Context.Enabled {
-		log.Debug("Using automatic context discovery")
+	log.Debug("Using automatic context discovery")
 
-		discoverer, err := aiContext.NewDiscoverer(atmosConfig.BasePath, atmosConfig.Settings.AI.Context)
-		if err != nil {
-			log.Warnf("Failed to create context discoverer: %v", err)
-		} else {
-			result, err := discoverer.Discover()
-			if err != nil {
-				log.Warnf("Failed to discover context files: %v", err)
-			} else if len(result.Files) > 0 {
-				// Use discovered files as context.
-				discoveredContext := aiContext.FormatFilesContext(result)
-				if discoveredContext != "" {
-					context.WriteString(discoveredContext)
+	discoverer, err := aiContext.NewDiscoverer(atmosConfig.BasePath, &atmosConfig.Settings.AI.Context)
+	if err != nil {
+		log.Warnf("Failed to create context discoverer: %v", err)
+		return ""
+	}
 
-					// Show file list if configured.
-					if atmosConfig.Settings.AI.Context.ShowFiles {
-						log.Infof("Auto-discovered %d files for context", len(result.Files))
-						for _, file := range result.Files {
-							log.Debugf("  - %s (%d bytes)", file.RelativePath, file.Size)
-						}
-					}
+	result, err := discoverer.Discover()
+	if err != nil {
+		log.Warnf("Failed to discover context files: %v", err)
+		return ""
+	}
 
-					// Return early if we got discovered context.
-					return context.String(), nil
-				}
-			}
+	if len(result.Files) == 0 {
+		return ""
+	}
+
+	discoveredContext := aiContext.FormatFilesContext(result)
+	if discoveredContext == "" {
+		return ""
+	}
+
+	// Show file list if configured.
+	if atmosConfig.Settings.AI.Context.ShowFiles {
+		log.Infof("Auto-discovered %d files for context", len(result.Files))
+		for _, file := range result.Files {
+			log.Debugf("  - %s (%d bytes)", file.RelativePath, file.Size)
 		}
 	}
 
-	// Fallback to original stack file gathering.
+	return discoveredContext
+}
+
+// gatherLegacyStackContext reads stack files and formats them as context for AI.
+func gatherLegacyStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) {
 	log.Debug("Using legacy stack file context gathering")
 
 	// Get stacks path.
@@ -112,6 +118,8 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 	if err != nil {
 		return "", err
 	}
+
+	var context strings.Builder
 
 	// Limit the number of files to prevent overwhelming the AI.
 	// Use configured value or default.
@@ -145,6 +153,17 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 	}
 
 	return context.String(), nil
+}
+
+// GatherStackContext reads stack configurations and returns them as context for AI.
+func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) {
+	// Try automatic context discovery first.
+	if discoveredContext := gatherDiscoveredContext(atmosConfig); discoveredContext != "" {
+		return discoveredContext, nil
+	}
+
+	// Fallback to original stack file gathering.
+	return gatherLegacyStackContext(atmosConfig)
 }
 
 // PromptForConsent asks the user for consent to send context to AI.

@@ -48,14 +48,14 @@ type DiscoveryResult struct {
 // Discoverer handles automatic context file discovery.
 type Discoverer struct {
 	basePath   string
-	config     schema.AIContextSettings
+	config     *schema.AIContextSettings
 	gitignore  *GitignoreFilter
 	cache      *DiscoveryCache
 	cacheMutex sync.RWMutex
 }
 
 // NewDiscoverer creates a new context discoverer.
-func NewDiscoverer(basePath string, config schema.AIContextSettings) (*Discoverer, error) {
+func NewDiscoverer(basePath string, config *schema.AIContextSettings) (*Discoverer, error) {
 	// Set defaults.
 	if config.MaxFiles == 0 {
 		config.MaxFiles = DefaultMaxFiles
@@ -120,15 +120,100 @@ func (d *Discoverer) Discover() (*DiscoveryResult, error) {
 	return result, nil
 }
 
+// limitsReached checks whether the result has hit the file count or size limit,
+// and sets the reason on the result if so. Returns true if a limit was reached.
+func (d *Discoverer) limitsReached(result *DiscoveryResult, maxSize int64) bool {
+	if result.TotalSize >= maxSize {
+		result.Reason = fmt.Sprintf("size limit reached (%dMB)", d.config.MaxSizeMB)
+		return true
+	}
+
+	if len(result.Files) >= d.config.MaxFiles {
+		result.Reason = fmt.Sprintf("file count limit reached (%d files)", d.config.MaxFiles)
+		return true
+	}
+
+	return false
+}
+
+// resolvePattern resolves a glob pattern to absolute path and returns matches.
+func (d *Discoverer) resolvePattern(pattern string) []string {
+	searchPattern := pattern
+	if !filepath.IsAbs(pattern) {
+		searchPattern = filepath.Join(d.basePath, pattern)
+	}
+
+	matches, err := doublestar.FilepathGlob(searchPattern)
+	if err != nil {
+		return nil
+	}
+
+	return matches
+}
+
+// processMatch processes a single file match and adds it to the result if valid.
+// Returns true if the file was added, false if it was skipped.
+func (d *Discoverer) processMatch(match string, maxSize int64, seen map[string]bool, result *DiscoveryResult) {
+	if seen[match] {
+		return
+	}
+
+	info, err := os.Stat(match)
+	if err != nil || info.IsDir() {
+		return
+	}
+
+	relPath, err := filepath.Rel(d.basePath, match)
+	if err != nil {
+		relPath = match
+	}
+
+	if d.shouldSkipFile(relPath) {
+		result.FilesSkipped++
+		return
+	}
+
+	if result.TotalSize+info.Size() > maxSize {
+		result.Reason = fmt.Sprintf("size limit would be exceeded (%dMB)", d.config.MaxSizeMB)
+		result.FilesSkipped++
+		return
+	}
+
+	content, err := os.ReadFile(match)
+	if err != nil {
+		result.FilesSkipped++
+		return
+	}
+
+	result.Files = append(result.Files, &DiscoveredFile{
+		Path:         match,
+		RelativePath: relPath,
+		Size:         info.Size(),
+		ModTime:      info.ModTime(),
+		Content:      content,
+	})
+	result.TotalSize += info.Size()
+	seen[match] = true
+}
+
+// shouldSkipFile checks if a file should be skipped based on exclusion rules and gitignore.
+func (d *Discoverer) shouldSkipFile(relPath string) bool {
+	if d.isExcluded(relPath) {
+		return true
+	}
+
+	if d.gitignore != nil && d.gitignore.IsIgnored(relPath) {
+		return true
+	}
+
+	return false
+}
+
 // discoverFiles performs the actual file discovery.
 //
 //nolint:unparam // error return is kept for future error handling (file system errors, permissions, etc.)
 func (d *Discoverer) discoverFiles() (*DiscoveryResult, error) {
-	if !d.config.Enabled {
-		return &DiscoveryResult{Files: []*DiscoveredFile{}}, nil
-	}
-
-	if len(d.config.AutoInclude) == 0 {
+	if !d.config.Enabled || len(d.config.AutoInclude) == 0 {
 		return &DiscoveryResult{Files: []*DiscoveredFile{}}, nil
 	}
 
@@ -139,103 +224,18 @@ func (d *Discoverer) discoverFiles() (*DiscoveryResult, error) {
 	maxSize := int64(d.config.MaxSizeMB) * MBToBytes
 	seen := make(map[string]bool)
 
-	// Process each auto_include pattern.
 	for _, pattern := range d.config.AutoInclude {
-		if result.TotalSize >= maxSize {
-			result.Reason = fmt.Sprintf("size limit reached (%dMB)", d.config.MaxSizeMB)
+		if d.limitsReached(result, maxSize) {
 			break
 		}
 
-		if len(result.Files) >= d.config.MaxFiles {
-			result.Reason = fmt.Sprintf("file count limit reached (%d files)", d.config.MaxFiles)
-			break
-		}
-
-		// Handle absolute vs relative patterns.
-		searchPattern := pattern
-		if !filepath.IsAbs(pattern) {
-			searchPattern = filepath.Join(d.basePath, pattern)
-		}
-
-		// Find matching files.
-		matches, err := doublestar.FilepathGlob(searchPattern)
-		if err != nil {
-			// Skip invalid patterns.
-			continue
-		}
-
+		matches := d.resolvePattern(pattern)
 		for _, match := range matches {
-			// Check limits.
-			if result.TotalSize >= maxSize {
-				result.Reason = fmt.Sprintf("size limit reached (%dMB)", d.config.MaxSizeMB)
+			if d.limitsReached(result, maxSize) {
 				break
 			}
 
-			if len(result.Files) >= d.config.MaxFiles {
-				result.Reason = fmt.Sprintf("file count limit reached (%d files)", d.config.MaxFiles)
-				break
-			}
-
-			// Skip if already seen.
-			if seen[match] {
-				continue
-			}
-
-			// Get file info.
-			info, err := os.Stat(match)
-			if err != nil {
-				continue
-			}
-
-			// Skip directories.
-			if info.IsDir() {
-				continue
-			}
-
-			// Get relative path.
-			relPath, err := filepath.Rel(d.basePath, match)
-			if err != nil {
-				relPath = match
-			}
-
-			// Check if excluded.
-			if d.isExcluded(relPath) {
-				result.FilesSkipped++
-				continue
-			}
-
-			// Check gitignore.
-			if d.gitignore != nil && d.gitignore.IsIgnored(relPath) {
-				result.FilesSkipped++
-				continue
-			}
-
-			// Check if adding this file would exceed size limit.
-			if result.TotalSize+info.Size() > maxSize {
-				result.Reason = fmt.Sprintf("size limit would be exceeded (%dMB)", d.config.MaxSizeMB)
-				result.FilesSkipped++
-				continue
-			}
-
-			// Read file content.
-			content, err := os.ReadFile(match)
-			if err != nil {
-				result.FilesSkipped++
-				continue
-			}
-
-			// Add to results.
-			file := &DiscoveredFile{
-				Path:         match,
-				RelativePath: relPath,
-				Size:         info.Size(),
-				ModTime:      info.ModTime(),
-				Content:      content,
-			}
-
-			result.Files = append(result.Files, file)
-			result.TotalSize += info.Size()
-			seen[match] = true
+			d.processMatch(match, maxSize, seen, result)
 		}
 	}
 

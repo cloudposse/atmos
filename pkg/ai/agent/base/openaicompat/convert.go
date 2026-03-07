@@ -77,37 +77,14 @@ func ParseOpenAIResponse(response *openai.ChatCompletion) (*types.Response, erro
 	choice := response.Choices[0]
 
 	// Map finish reason to stop reason.
-	switch choice.FinishReason {
-	case "stop":
-		result.StopReason = types.StopReasonEndTurn
-	case "tool_calls":
-		result.StopReason = types.StopReasonToolUse
-	case "length":
-		result.StopReason = types.StopReasonMaxTokens
-	default:
-		result.StopReason = types.StopReasonEndTurn
-	}
+	result.StopReason = mapOpenAIFinishReason(choice.FinishReason)
 
 	// Extract text content.
 	result.Content = choice.Message.Content
 
 	// Extract tool calls if present.
-	if len(choice.Message.ToolCalls) > 0 {
-		for _, toolCall := range choice.Message.ToolCalls {
-			// Parse function arguments.
-			var args map[string]interface{}
-			if toolCall.Function.Arguments != "" {
-				if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
-					return nil, fmt.Errorf("failed to parse tool arguments: %w", err)
-				}
-			}
-
-			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
-				ID:    toolCall.ID,
-				Name:  toolCall.Function.Name,
-				Input: args,
-			})
-		}
+	if err := extractOpenAIToolCalls(&choice.Message, result); err != nil {
+		return nil, err
 	}
 
 	// Extract usage information.
@@ -124,12 +101,51 @@ func ParseOpenAIResponse(response *openai.ChatCompletion) (*types.Response, erro
 	return result, nil
 }
 
+// mapOpenAIFinishReason maps an OpenAI finish reason string to our StopReason type.
+func mapOpenAIFinishReason(reason string) types.StopReason {
+	switch reason {
+	case "stop":
+		return types.StopReasonEndTurn
+	case "tool_calls":
+		return types.StopReasonToolUse
+	case "length":
+		return types.StopReasonMaxTokens
+	default:
+		return types.StopReasonEndTurn
+	}
+}
+
+// extractOpenAIToolCalls extracts tool calls from an OpenAI message and adds them to the result.
+func extractOpenAIToolCalls(message *openai.ChatCompletionMessage, result *types.Response) error {
+	for i := range message.ToolCalls {
+		toolCall := &message.ToolCalls[i]
+		// Parse function arguments.
+		var args map[string]interface{}
+		if toolCall.Function.Arguments != "" {
+			if err := json.Unmarshal([]byte(toolCall.Function.Arguments), &args); err != nil {
+				return fmt.Errorf("failed to parse tool arguments: %w", err)
+			}
+		}
+
+		result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+			ID:    toolCall.ID,
+			Name:  toolCall.Function.Name,
+			Input: args,
+		})
+	}
+
+	return nil
+}
+
+// gpt5PrefixLength is the length of the "gpt-5" model prefix used for model detection.
+const gpt5PrefixLength = 5
+
 // RequiresMaxCompletionTokens returns true if the model requires max_completion_tokens parameter.
 // Some newer OpenAI models use max_completion_tokens instead of max_tokens.
 func RequiresMaxCompletionTokens(model string) bool {
 	// Check for models that use max_completion_tokens.
 	// These include: gpt-5*, o1-preview, o1-mini, chatgpt-4o-latest.
-	if len(model) >= 5 && model[:5] == "gpt-5" {
+	if len(model) >= gpt5PrefixLength && model[:gpt5PrefixLength] == "gpt-5" {
 		return true
 	}
 	if model == "o1-preview" || model == "o1-mini" || model == "chatgpt-4o-latest" {

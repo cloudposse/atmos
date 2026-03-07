@@ -81,7 +81,7 @@ func TestChatModel_HandleToolExecutionFlowWithAccumulator(t *testing.T) {
 
 	executor := tools.NewExecutor(registry, permChecker, 10*time.Second)
 
-	model, err := NewChatModel(client, nil, nil, nil, executor, nil)
+	model, err := NewChatModel(ChatModelParams{Client: client, Executor: executor})
 	require.NoError(t, err)
 
 	// Prepare input for handleToolExecutionFlowWithAccumulator

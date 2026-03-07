@@ -55,10 +55,11 @@ func (m *Manager) SetCompactStatusCallback(callback CompactStatusCallback) {
 }
 
 // CreateSession creates a new session.
-func (m *Manager) CreateSession(ctx context.Context, name, model, provider, skill string, metadata map[string]interface{}) (*Session, error) {
+func (m *Manager) CreateSession(ctx context.Context, params CreateSessionParams) (*Session, error) {
 	// Generate unique ID.
 	id := uuid.New().String()
 
+	name := params.Name
 	// If no name provided, generate timestamp-based name.
 	if name == "" {
 		name = fmt.Sprintf("session-%s", time.Now().Format("20060102-150405"))
@@ -68,12 +69,12 @@ func (m *Manager) CreateSession(ctx context.Context, name, model, provider, skil
 		ID:          id,
 		Name:        name,
 		ProjectPath: m.projectPath,
-		Model:       model,
-		Provider:    provider,
-		Skill:       skill,
+		Model:       params.Model,
+		Provider:    params.Provider,
+		Skill:       params.Skill,
 		CreatedAt:   time.Now(),
 		UpdatedAt:   time.Now(),
-		Metadata:    metadata,
+		Metadata:    params.Metadata,
 	}
 
 	if err := m.storage.CreateSession(ctx, session); err != nil {
@@ -153,11 +154,10 @@ func (m *Manager) GetMessages(ctx context.Context, sessionID string, limit int) 
 
 // GetMessagesWithCompaction retrieves messages for a session with auto-compact support.
 func (m *Manager) GetMessagesWithCompaction(ctx context.Context, sessionID string, limit int) ([]*Message, error) {
-	// Get auto-compact configuration.
 	compactConfig := m.getCompactConfig()
 
 	// Load active (non-archived) messages.
-	activeMessages, err := m.storage.GetActiveMessages(ctx, sessionID, 0) // No limit, we need all for compaction check
+	activeMessages, err := m.storage.GetActiveMessages(ctx, sessionID, 0)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get active messages: %w", err)
 	}
@@ -168,68 +168,66 @@ func (m *Manager) GetMessagesWithCompaction(ctx context.Context, sessionID strin
 		return nil, fmt.Errorf("failed to get summaries: %w", err)
 	}
 
-	// Check if compaction is needed.
-	maxMessages := m.getMaxMessages()
-	if shouldCompact, plan := m.compactor.ShouldCompact(activeMessages, maxMessages, compactConfig); shouldCompact {
-		// Set session ID in plan.
-		plan.SessionID = sessionID
-
-		// Notify UI that compaction is starting.
-		if m.compactCallback != nil {
-			m.compactCallback(CompactStatus{
-				Stage:            "starting",
-				MessageCount:     len(plan.MessagesToCompact),
-				EstimatedSavings: plan.EstimatedSavings,
-			})
-		}
-
-		// Perform compaction.
-		result, err := m.compactor.Compact(ctx, plan, compactConfig)
-		if err != nil {
-			// Notify UI of failure.
-			if m.compactCallback != nil {
-				m.compactCallback(CompactStatus{
-					Stage:        "failed",
-					MessageCount: len(plan.MessagesToCompact),
-					Error:        err,
-				})
-			}
-			// Log error but continue - compaction failure shouldn't break the session.
-			// In production, this would use proper logging.
-			fmt.Printf("Warning: auto-compact failed: %v\n", err)
-		} else {
-			// Notify UI of success.
-			if m.compactCallback != nil {
-				m.compactCallback(CompactStatus{
-					Stage:            "completed",
-					MessageCount:     len(plan.MessagesToCompact),
-					EstimatedSavings: result.TokenCount,
-				})
-			}
-			// Reload active messages and summaries after compaction.
-			if reloaded, err := m.storage.GetActiveMessages(ctx, sessionID, 0); err == nil {
-				activeMessages = reloaded
-			}
-			if reloadedSummaries, err := m.storage.GetSummaries(ctx, sessionID); err == nil {
-				summaries = reloadedSummaries
-			}
-		}
-	}
+	// Run compaction if needed and reload data.
+	activeMessages, summaries = m.runCompactionIfNeeded(ctx, sessionID, activeMessages, summaries, compactConfig)
 
 	// Combine summaries and active messages.
 	combinedMessages := m.combineMessagesAndSummaries(summaries, activeMessages, compactConfig)
 
 	// Apply limit if specified.
 	if limit > 0 && len(combinedMessages) > limit {
-		// Take the most recent messages.
 		combinedMessages = combinedMessages[len(combinedMessages)-limit:]
 	}
 
 	return combinedMessages, nil
 }
 
+// runCompactionIfNeeded checks if compaction is needed and performs it, returning updated messages and summaries.
+func (m *Manager) runCompactionIfNeeded(ctx context.Context, sessionID string, activeMessages []*Message, summaries []*Summary, config *CompactConfig) ([]*Message, []*Summary) {
+	maxMessages := m.getMaxMessages()
+	shouldCompact, plan := m.compactor.ShouldCompact(activeMessages, maxMessages, config)
+	if !shouldCompact {
+		return activeMessages, summaries
+	}
+
+	plan.SessionID = sessionID
+	m.notifyCompactStatus("starting", len(plan.MessagesToCompact), plan.EstimatedSavings, nil)
+
+	result, err := m.compactor.Compact(ctx, plan, config)
+	if err != nil {
+		m.notifyCompactStatus("failed", len(plan.MessagesToCompact), 0, err)
+		fmt.Printf("Warning: auto-compact failed: %v\n", err)
+		return activeMessages, summaries
+	}
+
+	m.notifyCompactStatus("completed", len(plan.MessagesToCompact), result.TokenCount, nil)
+
+	// Reload data after successful compaction.
+	if reloaded, reloadErr := m.storage.GetActiveMessages(ctx, sessionID, 0); reloadErr == nil {
+		activeMessages = reloaded
+	}
+	if reloaded, reloadErr := m.storage.GetSummaries(ctx, sessionID); reloadErr == nil {
+		summaries = reloaded
+	}
+
+	return activeMessages, summaries
+}
+
+// notifyCompactStatus sends a compaction status update if a callback is registered.
+func (m *Manager) notifyCompactStatus(stage string, messageCount, estimatedSavings int, err error) {
+	if m.compactCallback == nil {
+		return
+	}
+	m.compactCallback(CompactStatus{
+		Stage:            stage,
+		MessageCount:     messageCount,
+		EstimatedSavings: estimatedSavings,
+		Error:            err,
+	})
+}
+
 // combineMessagesAndSummaries combines summaries and active messages in chronological order.
-func (m *Manager) combineMessagesAndSummaries(summaries []*Summary, messages []*Message, config CompactConfig) []*Message {
+func (m *Manager) combineMessagesAndSummaries(summaries []*Summary, messages []*Message, config *CompactConfig) []*Message {
 	var combined []*Message
 
 	// Add summaries as special assistant messages.
@@ -265,23 +263,24 @@ func (m *Manager) combineMessagesAndSummaries(summaries []*Summary, messages []*
 }
 
 // getCompactConfig returns the auto-compact configuration.
-func (m *Manager) getCompactConfig() CompactConfig {
+func (m *Manager) getCompactConfig() *CompactConfig {
 	if m.atmosConfig == nil || !m.atmosConfig.Settings.AI.Sessions.AutoCompact.Enabled {
-		return DefaultCompactConfig()
+		cfg := DefaultCompactConfig()
+		return &cfg
 	}
 
 	config := m.atmosConfig.Settings.AI.Sessions.AutoCompact
 
 	// Convert schema config to session config.
-	return CompactConfig{
+	return &CompactConfig{
 		Enabled:            config.Enabled,
-		TriggerThreshold:   getOrDefault(config.TriggerThreshold, 0.75),
-		CompactRatio:       getOrDefault(config.CompactRatio, 0.4),
-		PreserveRecent:     getOrDefaultInt(config.PreserveRecent, 10),
+		TriggerThreshold:   getOrDefault(config.TriggerThreshold, defaultTriggerThreshold),
+		CompactRatio:       getOrDefault(config.CompactRatio, defaultCompactRatio),
+		PreserveRecent:     getOrDefaultInt(config.PreserveRecent, defaultMinMessages),
 		UseAISummary:       getOrDefaultBool(config.UseAISummary, true),
 		SummaryProvider:    config.SummaryProvider,
 		SummaryModel:       config.SummaryModel,
-		SummaryMaxTokens:   getOrDefaultInt(config.SummaryMaxTokens, 2048),
+		SummaryMaxTokens:   getOrDefaultInt(config.SummaryMaxTokens, defaultSummaryMaxTokens),
 		ShowSummaryMarkers: config.ShowSummaryMarkers,
 		CompactOnResume:    config.CompactOnResume,
 	}

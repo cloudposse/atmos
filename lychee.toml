@@ -71,4 +71,6 @@ exclude = [
   # Planned documentation paths (not yet published)
   "file://.*/ai/skills",
   "file://.*/ai/skill-marketplace",
+  # Example/placeholder URLs in usage documentation
+  "github\\.com/user/repo",
 ]

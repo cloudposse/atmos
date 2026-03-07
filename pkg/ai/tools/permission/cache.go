@@ -10,6 +10,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/config/homedir"
 )
 
+const (
+	// Permission mode for cache directories.
+	dirPermissions os.FileMode = 0o755
+	// Permission mode for cache files.
+	filePermissions os.FileMode = 0o600
+)
+
 // PermissionCache stores persistent permission decisions.
 type PermissionCache struct {
 	filePath string
@@ -53,7 +60,7 @@ func NewPermissionCache(basePath string) (*PermissionCache, error) {
 	}
 
 	// Create directory if it doesn't exist.
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+	if err := os.MkdirAll(cacheDir, dirPermissions); err != nil {
 		return nil, fmt.Errorf("failed to create cache directory: %w", err)
 	}
 
@@ -205,7 +212,7 @@ func (c *PermissionCache) save() error {
 		return fmt.Errorf("failed to marshal cache: %w", err)
 	}
 
-	if err := os.WriteFile(c.filePath, data, 0o600); err != nil {
+	if err := os.WriteFile(c.filePath, data, filePermissions); err != nil {
 		return fmt.Errorf("failed to write cache file: %w", err)
 	}
 
@@ -224,8 +231,6 @@ func matchesCachePattern(toolName, pattern string) bool {
 	// Extract tool name from pattern if it has parameters.
 	if idx := findPatternSeparator(pattern); idx != -1 {
 		patternTool := pattern[:idx]
-		// patternParam := pattern[idx+1:] // Future: Could add parameter matching.
-
 		// Check if tool name matches.
 		if toolName != patternTool {
 			return false

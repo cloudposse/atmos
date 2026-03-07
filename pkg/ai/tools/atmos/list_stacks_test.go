@@ -313,6 +313,149 @@ func TestListStacksTool_Execute_AllFormatVariations(t *testing.T) {
 	}
 }
 
+func TestExtractComponentNames(t *testing.T) {
+	t.Run("returns nil for non-map input", func(t *testing.T) {
+		result := extractComponentNames("not a map")
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil when no components key", func(t *testing.T) {
+		stackData := map[string]any{
+			"vars": map[string]any{"env": "dev"},
+		}
+		result := extractComponentNames(stackData)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil when components value is not a map", func(t *testing.T) {
+		stackData := map[string]any{
+			"components": "not a map",
+		}
+		result := extractComponentNames(stackData)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns nil when nil input", func(t *testing.T) {
+		result := extractComponentNames(nil)
+		assert.Nil(t, result)
+	})
+
+	t.Run("returns empty slice when component types map is empty", func(t *testing.T) {
+		stackData := map[string]any{
+			"components": map[string]any{},
+		}
+		result := extractComponentNames(stackData)
+		assert.Empty(t, result)
+	})
+
+	t.Run("skips non-map component type entries", func(t *testing.T) {
+		stackData := map[string]any{
+			"components": map[string]any{
+				"terraform": "not a map",
+			},
+		}
+		result := extractComponentNames(stackData)
+		assert.Empty(t, result)
+	})
+
+	t.Run("extracts component names from terraform type", func(t *testing.T) {
+		stackData := map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{"vars": map[string]any{}},
+					"eks": map[string]any{"vars": map[string]any{}},
+					"rds": map[string]any{"vars": map[string]any{}},
+				},
+			},
+		}
+		result := extractComponentNames(stackData)
+		require.Len(t, result, 3)
+		assert.Equal(t, []string{"eks", "rds", "vpc"}, result) // sorted
+	})
+
+	t.Run("extracts component names from multiple component types", func(t *testing.T) {
+		stackData := map[string]any{
+			"components": map[string]any{
+				"terraform": map[string]any{
+					"vpc": map[string]any{},
+				},
+				"helmfile": map[string]any{
+					"charts": map[string]any{},
+				},
+			},
+		}
+		result := extractComponentNames(stackData)
+		require.Len(t, result, 2)
+		assert.Contains(t, result, "vpc")
+		assert.Contains(t, result, "charts")
+	})
+}
+
+func TestBuildListStacksResult(t *testing.T) {
+	t.Run("empty stacks map", func(t *testing.T) {
+		result := buildListStacksResult(map[string]any{}, "yaml")
+
+		assert.True(t, result.Success)
+		assert.Contains(t, result.Output, "Available Stacks (0)")
+		assert.Equal(t, "yaml", result.Data["format"])
+
+		stacks, ok := result.Data["stacks"].([]string)
+		require.True(t, ok)
+		assert.Empty(t, stacks)
+	})
+
+	t.Run("stack with no components shows none", func(t *testing.T) {
+		stacks := map[string]any{
+			"dev": map[string]any{
+				"vars": map[string]any{"env": "dev"},
+				// no "components" key
+			},
+		}
+		result := buildListStacksResult(stacks, "yaml")
+
+		assert.True(t, result.Success)
+		assert.Contains(t, result.Output, "Stack: dev")
+		assert.Contains(t, result.Output, "Components: (none)")
+	})
+
+	t.Run("stack with components shows names", func(t *testing.T) {
+		stacks := map[string]any{
+			"prod": map[string]any{
+				"components": map[string]any{
+					"terraform": map[string]any{
+						"vpc": map[string]any{},
+						"eks": map[string]any{},
+					},
+				},
+			},
+		}
+		result := buildListStacksResult(stacks, "json")
+
+		assert.True(t, result.Success)
+		assert.Contains(t, result.Output, "Stack: prod")
+		assert.Contains(t, result.Output, "vpc")
+		assert.Contains(t, result.Output, "eks")
+		assert.Equal(t, "json", result.Data["format"])
+	})
+
+	t.Run("multiple stacks are sorted alphabetically", func(t *testing.T) {
+		stacks := map[string]any{
+			"prod": map[string]any{},
+			"dev":  map[string]any{},
+			"stg":  map[string]any{},
+		}
+		result := buildListStacksResult(stacks, "yaml")
+
+		assert.True(t, result.Success)
+		stackNames, ok := result.Data["stacks"].([]string)
+		require.True(t, ok)
+		require.Len(t, stackNames, 3)
+		assert.Equal(t, "dev", stackNames[0])
+		assert.Equal(t, "prod", stackNames[1])
+		assert.Equal(t, "stg", stackNames[2])
+	})
+}
+
 // setupListStacksTestEnv creates a test environment with stack files for list stacks tests.
 func setupListStacksTestEnv(t *testing.T) (*schema.AtmosConfiguration, func()) {
 	t.Helper()

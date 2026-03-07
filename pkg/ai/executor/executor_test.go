@@ -129,13 +129,6 @@ func (m *mockTool) IsRestricted() bool {
 	return false
 }
 
-// mockPermissionChecker is a mock permission checker that always allows execution.
-type mockPermissionChecker struct{}
-
-func (m *mockPermissionChecker) CheckPermission(ctx context.Context, tool interface{}, params map[string]interface{}) (bool, error) {
-	return true, nil
-}
-
 func TestNewExecutor(t *testing.T) {
 	tests := []struct {
 		name         string

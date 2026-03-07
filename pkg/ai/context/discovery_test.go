@@ -93,7 +93,7 @@ func TestDiscoverer_Defaults(t *testing.T) {
 		Enabled: true,
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestDiscoverer_BasicDiscovery(t *testing.T) {
 		MaxSizeMB:   10,
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestDiscoverer_Exclusion(t *testing.T) {
 		MaxSizeMB:   10,
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}
@@ -238,7 +238,7 @@ func TestDiscoverer_MaxFiles(t *testing.T) {
 		MaxSizeMB:   10,
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestDiscoverer_MaxSize(t *testing.T) {
 		MaxSizeMB:   1,
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}
@@ -315,7 +315,7 @@ func TestDiscoverer_Cache(t *testing.T) {
 		CacheTTL:     300,
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}
@@ -360,7 +360,7 @@ func TestDiscoverer_Disabled(t *testing.T) {
 		AutoInclude: []string{"*.go"},
 	}
 
-	discoverer, err := NewDiscoverer(tmpDir, config)
+	discoverer, err := NewDiscoverer(tmpDir, &config)
 	if err != nil {
 		t.Fatalf("Failed to create discoverer: %v", err)
 	}

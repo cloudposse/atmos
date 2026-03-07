@@ -8,17 +8,31 @@ import (
 
 	"github.com/google/uuid"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/schema"
+)
+
+const (
+	// Default ratio of oldest messages to compact (40%).
+	defaultCompactRatio = 0.4
+	// Default threshold ratio to trigger compaction (75% capacity).
+	defaultTriggerThreshold = 0.75
+	// Default minimum number of recent messages to always preserve.
+	defaultMinMessages = 10
+	// Maximum character length for message content in simple summaries.
+	defaultMaxTokensPerMessage = 200
+	// Default maximum number of tokens for AI-generated summaries.
+	defaultSummaryMaxTokens = 2048
 )
 
 // Compactor handles intelligent conversation history compaction.
 type Compactor interface {
 	// ShouldCompact determines if compaction is needed based on current history.
-	ShouldCompact(messages []*Message, maxMessages int, config CompactConfig) (bool, *CompactPlan)
+	ShouldCompact(messages []*Message, maxMessages int, config *CompactConfig) (bool, *CompactPlan)
 
 	// Compact performs the compaction operation.
-	Compact(ctx context.Context, plan *CompactPlan, config CompactConfig) (*CompactResult, error)
+	Compact(ctx context.Context, plan *CompactPlan, config *CompactConfig) (*CompactResult, error)
 }
 
 // DefaultCompactor implements Compactor with AI-powered summarization.
@@ -36,7 +50,7 @@ func NewCompactor(storage Storage, atmosConfig *schema.AtmosConfiguration) Compa
 }
 
 // ShouldCompact determines if compaction is needed.
-func (c *DefaultCompactor) ShouldCompact(messages []*Message, maxMessages int, config CompactConfig) (bool, *CompactPlan) {
+func (c *DefaultCompactor) ShouldCompact(messages []*Message, maxMessages int, config *CompactConfig) (bool, *CompactPlan) {
 	// Auto-compact not enabled.
 	if !config.Enabled {
 		return false, nil
@@ -88,48 +102,19 @@ func (c *DefaultCompactor) ShouldCompact(messages []*Message, maxMessages int, c
 }
 
 // Compact performs the compaction operation with AI-powered summarization.
-func (c *DefaultCompactor) Compact(ctx context.Context, plan *CompactPlan, config CompactConfig) (*CompactResult, error) {
+func (c *DefaultCompactor) Compact(ctx context.Context, plan *CompactPlan, config *CompactConfig) (*CompactResult, error) {
 	if plan == nil {
-		return nil, fmt.Errorf("compact plan is nil")
+		return nil, errUtils.ErrAICompactPlanNil
 	}
 
 	// Generate summary content.
-	var summaryContent string
-	var err error
-
-	if config.UseAISummary && c.atmosConfig != nil {
-		// Try AI-powered summarization.
-		summaryContent, err = c.generateAISummary(ctx, plan.MessagesToCompact, config)
-		if err != nil {
-			// Fallback to simple summary on error.
-			summaryContent = c.generateSimpleSummary(plan.MessagesToCompact)
-		}
-	} else {
-		// Use simple concatenation.
-		summaryContent = c.generateSimpleSummary(plan.MessagesToCompact)
-	}
+	summaryContent := c.generateSummaryContent(ctx, plan.MessagesToCompact, config)
 
 	// Extract message IDs.
-	messageIDs := make([]int64, len(plan.MessagesToCompact))
-	for i, msg := range plan.MessagesToCompact {
-		messageIDs[i] = msg.ID
-	}
+	messageIDs := extractMessageIDs(plan.MessagesToCompact)
 
-	// Determine message range for display.
-	messageRange := fmt.Sprintf("Messages %d-%d",
-		plan.MessagesToCompact[0].ID,
-		plan.MessagesToCompact[len(plan.MessagesToCompact)-1].ID)
-
-	// Create summary record.
-	summary := &Summary{
-		ID:                 uuid.New().String(),
-		SessionID:          plan.SessionID,
-		OriginalMessageIDs: messageIDs,
-		MessageRange:       messageRange,
-		SummaryContent:     summaryContent,
-		TokenCount:         len(summaryContent) / 4, // Rough estimate
-		CompactedAt:        time.Now(),
-	}
+	// Build and store summary record.
+	summary := c.buildSummary(plan, messageIDs, summaryContent)
 
 	// Store summary in database.
 	if err := c.storage.StoreSummary(ctx, summary); err != nil {
@@ -141,7 +126,6 @@ func (c *DefaultCompactor) Compact(ctx context.Context, plan *CompactPlan, confi
 		return nil, fmt.Errorf("failed to archive messages: %w", err)
 	}
 
-	// Return result.
 	return &CompactResult{
 		SummaryID:          summary.ID,
 		OriginalMessageIDs: messageIDs,
@@ -152,10 +136,46 @@ func (c *DefaultCompactor) Compact(ctx context.Context, plan *CompactPlan, confi
 	}, nil
 }
 
+// generateSummaryContent generates a summary using AI or simple concatenation.
+func (c *DefaultCompactor) generateSummaryContent(ctx context.Context, messages []*Message, config *CompactConfig) string {
+	if config.UseAISummary && c.atmosConfig != nil {
+		if content, err := c.generateAISummary(ctx, messages, config); err == nil {
+			return content
+		}
+	}
+	return c.generateSimpleSummary(messages)
+}
+
+// extractMessageIDs extracts IDs from a slice of messages.
+func extractMessageIDs(messages []*Message) []int64 {
+	ids := make([]int64, len(messages))
+	for i, msg := range messages {
+		ids[i] = msg.ID
+	}
+	return ids
+}
+
+// buildSummary creates a Summary record from plan data.
+func (c *DefaultCompactor) buildSummary(plan *CompactPlan, messageIDs []int64, content string) *Summary {
+	messageRange := fmt.Sprintf("Messages %d-%d",
+		plan.MessagesToCompact[0].ID,
+		plan.MessagesToCompact[len(plan.MessagesToCompact)-1].ID)
+
+	return &Summary{
+		ID:                 uuid.New().String(),
+		SessionID:          plan.SessionID,
+		OriginalMessageIDs: messageIDs,
+		MessageRange:       messageRange,
+		SummaryContent:     content,
+		TokenCount:         len(content) / 4, // Rough estimate.
+		CompactedAt:        time.Now(),
+	}
+}
+
 // generateAISummary creates an AI-powered summary of messages.
 //
 //nolint:unparam // config parameter reserved for future summary customization options
-func (c *DefaultCompactor) generateAISummary(ctx context.Context, messages []*Message, config CompactConfig) (string, error) {
+func (c *DefaultCompactor) generateAISummary(ctx context.Context, messages []*Message, config *CompactConfig) (string, error) {
 	// Create AI client.
 	client, err := ai.NewClient(c.atmosConfig)
 	if err != nil {
@@ -231,10 +251,10 @@ func (c *DefaultCompactor) generateSimpleSummary(messages []*Message) string {
 	summary.WriteString("SUMMARY OF EARLIER CONVERSATION:\n\n")
 
 	for _, msg := range messages {
-		// Format: [Role]: First 200 chars of message.
+		// Format: [Role]: First defaultMaxTokensPerMessage chars of message.
 		content := msg.Content
-		if len(content) > 200 {
-			content = content[:200] + "..."
+		if len(content) > defaultMaxTokensPerMessage {
+			content = content[:defaultMaxTokensPerMessage] + "..."
 		}
 
 		fmt.Fprintf(&summary, "[%s]: %s\n\n", msg.Role, content)
@@ -248,13 +268,13 @@ func (c *DefaultCompactor) generateSimpleSummary(messages []*Message) string {
 // DefaultCompactConfig returns the default compaction configuration.
 func DefaultCompactConfig() CompactConfig {
 	return CompactConfig{
-		Enabled:            false, // Opt-in by default
-		TriggerThreshold:   0.75,  // Trigger at 75% capacity
-		CompactRatio:       0.4,   // Compact oldest 40%
-		PreserveRecent:     10,    // Always keep last 10 messages
-		UseAISummary:       true,  // Use AI (when implemented in Phase 2)
-		SummaryMaxTokens:   2048,  // Max 2048 tokens for summary
-		ShowSummaryMarkers: false, // Don't show markers by default
-		CompactOnResume:    false, // Don't compact on resume by default
+		Enabled:            false,                   // Opt-in by default
+		TriggerThreshold:   defaultTriggerThreshold, // Trigger at 75% capacity
+		CompactRatio:       defaultCompactRatio,     // Compact oldest 40%
+		PreserveRecent:     defaultMinMessages,      // Always keep last 10 messages
+		UseAISummary:       true,                    // Use AI (when implemented in Phase 2)
+		SummaryMaxTokens:   defaultSummaryMaxTokens, // Max 2048 tokens for summary
+		ShowSummaryMarkers: false,                   // Don't show markers by default
+		CompactOnResume:    false,                   // Don't compact on resume by default
 	}
 }

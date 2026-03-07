@@ -344,7 +344,6 @@ func TestValidateToolConfig_NoConflicts(t *testing.T) {
 	}
 }
 
-//nolint:dupl
 func TestValidateToolConfig_WithConflicts(t *testing.T) {
 	v := NewValidator("1.0.0")
 

@@ -101,43 +101,74 @@ func (e *Executor) executeSimple(ctx context.Context, prompt string, result *for
 	result.Response = response
 }
 
-// executeWithTools executes a prompt with tool support, handling multiple tool execution rounds.
-func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *formatter.ExecutionResult) {
-	// Get available tools.
-	availableTools := e.toolExecutor.ListTools()
-	if len(availableTools) == 0 {
-		// No tools available, fall back to simple execution.
-		e.executeSimple(ctx, prompt, result)
+// loadAtmosInstructions loads ATMOS.md content for caching if available.
+func (e *Executor) loadAtmosInstructions(ctx context.Context) string {
+	if e.atmosConfig == nil || !e.atmosConfig.Settings.AI.Instructions.Enabled {
+		return ""
+	}
+
+	memConfig := &instructions.Config{
+		Enabled:      e.atmosConfig.Settings.AI.Instructions.Enabled,
+		FilePath:     e.atmosConfig.Settings.AI.Instructions.FilePath,
+		AutoUpdate:   e.atmosConfig.Settings.AI.Instructions.AutoUpdate,
+		CreateIfMiss: e.atmosConfig.Settings.AI.Instructions.CreateIfMiss,
+	}
+	memoryMgr := instructions.NewManager(e.atmosConfig.BasePath, memConfig)
+	if memoryMgr == nil {
+		return ""
+	}
+
+	_, _ = memoryMgr.Load(ctx) // Ignore error - it's OK if instructions don't exist.
+	return memoryMgr.GetContext()
+}
+
+// handleToolCalls executes tool calls and appends results to the message list.
+func (e *Executor) handleToolCalls(
+	ctx context.Context,
+	response *types.Response,
+	messages []types.Message,
+	accumulatedResponse string,
+	result *formatter.ExecutionResult,
+) ([]types.Message, string) {
+	toolResults := e.executeTools(ctx, response.ToolCalls, result)
+	toolResultsText := formatToolResults(toolResults)
+
+	if response.Content != "" {
+		messages = append(messages, types.Message{
+			Role:    types.RoleAssistant,
+			Content: response.Content,
+		})
+		accumulatedResponse += response.Content + "\n\n"
+	}
+
+	messages = append(messages, types.Message{
+		Role:    types.RoleUser,
+		Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your response based on these results.", toolResultsText),
+	})
+
+	return messages, accumulatedResponse
+}
+
+// setFinalResult sets the final response and token usage on the result.
+func setFinalResult(result *formatter.ExecutionResult, accumulatedResponse string, response *types.Response, totalUsage *types.Usage) {
+	result.Response = accumulatedResponse + response.Content
+	result.Metadata.StopReason = response.StopReason
+
+	if totalUsage == nil {
 		return
 	}
 
-	// Initialize conversation with user prompt.
-	messages := []types.Message{
-		{
-			Role:    types.RoleUser,
-			Content: prompt,
-		},
+	result.Tokens = formatter.TokenUsage{
+		Prompt:        totalUsage.InputTokens,
+		Completion:    totalUsage.OutputTokens,
+		Total:         totalUsage.TotalTokens,
+		Cached:        totalUsage.CacheReadTokens,
+		CacheCreation: totalUsage.CacheCreationTokens,
 	}
+}
 
-	// Load ATMOS.md content for caching (if available).
-	var atmosMemory string
-	if e.atmosConfig != nil && e.atmosConfig.Settings.AI.Instructions.Enabled {
-		// Try to load project instructions for caching benefits.
-		memConfig := &instructions.Config{
-			Enabled:      e.atmosConfig.Settings.AI.Instructions.Enabled,
-			FilePath:     e.atmosConfig.Settings.AI.Instructions.FilePath,
-			AutoUpdate:   e.atmosConfig.Settings.AI.Instructions.AutoUpdate,
-			CreateIfMiss: e.atmosConfig.Settings.AI.Instructions.CreateIfMiss,
-		}
-		memoryMgr := instructions.NewManager(e.atmosConfig.BasePath, memConfig)
-		if memoryMgr != nil {
-			_, _ = memoryMgr.Load(ctx) // Ignore error - it's OK if instructions don't exist
-			atmosMemory = memoryMgr.GetContext()
-		}
-	}
-
-	// System prompt guides the AI to use specific tools over generic ones.
-	systemPrompt := `You are an AI assistant for Atmos infrastructure management with access to tools.
+// toolSystemPrompt is the system prompt guiding the AI to prefer specific tools.
+const toolSystemPrompt = `You are an AI assistant for Atmos infrastructure management with access to tools.
 
 Prefer specific tools over generic ones:
 - Use atmos_list_stacks to list stacks (not execute_atmos_command)
@@ -148,75 +179,46 @@ Prefer specific tools over generic ones:
 
 Always use tools when needed rather than describing what you would do.`
 
-	// Tool execution loop (with iteration limit to prevent infinite loops).
+// executeWithTools executes a prompt with tool support, handling multiple tool execution rounds.
+func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *formatter.ExecutionResult) {
+	availableTools := e.toolExecutor.ListTools()
+	if len(availableTools) == 0 {
+		e.executeSimple(ctx, prompt, result)
+		return
+	}
+
+	messages := []types.Message{
+		{Role: types.RoleUser, Content: prompt},
+	}
+
+	atmosMemory := e.loadAtmosInstructions(ctx)
+
 	var accumulatedResponse string
 	var totalUsage *types.Usage
 
 	for iteration := 0; iteration < MaxToolIterations; iteration++ {
-		// Call AI with tools and caching support.
-		// Even without a custom system prompt, passing ATMOS.md enables caching for providers that support it.
-		response, err := e.client.SendMessageWithSystemPromptAndTools(ctx, systemPrompt, atmosMemory, messages, availableTools)
+		response, err := e.client.SendMessageWithSystemPromptAndTools(ctx, toolSystemPrompt, atmosMemory, messages, availableTools)
 		if err != nil {
 			result.Success = false
 			result.Error = &formatter.ErrorInfo{
 				Message: err.Error(),
 				Type:    "ai_error",
-				Details: map[string]interface{}{
-					"iteration": iteration,
-				},
+				Details: map[string]interface{}{"iteration": iteration},
 			}
 			return
 		}
 
-		// Accumulate usage.
 		totalUsage = combineUsage(totalUsage, response.Usage)
 
-		// Check if AI wants to use tools.
 		if response.StopReason == types.StopReasonToolUse && len(response.ToolCalls) > 0 {
-			// Execute requested tools.
-			toolResults := e.executeTools(ctx, response.ToolCalls, result)
-
-			// Format tool results for AI.
-			toolResultsText := formatToolResults(toolResults)
-
-			// Add assistant's response (if any) to messages.
-			if response.Content != "" {
-				messages = append(messages, types.Message{
-					Role:    types.RoleAssistant,
-					Content: response.Content,
-				})
-				accumulatedResponse += response.Content + "\n\n"
-			}
-
-			// Add tool results as user message.
-			messages = append(messages, types.Message{
-				Role:    types.RoleUser,
-				Content: fmt.Sprintf("Tool execution results:\n\n%s\n\nPlease provide your response based on these results.", toolResultsText),
-			})
-
-			// Continue loop to get AI's response to tool results.
+			messages, accumulatedResponse = e.handleToolCalls(ctx, response, messages, accumulatedResponse, result)
 			continue
 		}
 
-		// No more tool use - we have the final response.
-		result.Response = accumulatedResponse + response.Content
-		result.Metadata.StopReason = response.StopReason
-
-		// Set token usage.
-		if totalUsage != nil {
-			result.Tokens = formatter.TokenUsage{
-				Prompt:        totalUsage.InputTokens,
-				Completion:    totalUsage.OutputTokens,
-				Total:         totalUsage.TotalTokens,
-				Cached:        totalUsage.CacheReadTokens,
-				CacheCreation: totalUsage.CacheCreationTokens,
-			}
-		}
-
+		setFinalResult(result, accumulatedResponse, response, totalUsage)
 		return
 	}
 
-	// Exceeded max iterations.
 	result.Success = false
 	result.Error = &formatter.ErrorInfo{
 		Message: fmt.Sprintf("exceeded maximum tool execution iterations (%d)", MaxToolIterations),

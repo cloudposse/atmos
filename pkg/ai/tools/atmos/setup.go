@@ -8,35 +8,7 @@ import (
 
 // RegisterTools registers all Atmos tools to the registry.
 func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration, lspManager client.ManagerInterface) error {
-	// Register component file tools.
-	if err := registry.Register(NewReadComponentFileTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewWriteComponentFileTool(atmosConfig)); err != nil {
-		return err
-	}
-
-	// Register stack file tools.
-	if err := registry.Register(NewReadStackFileTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewWriteStackFileTool(atmosConfig)); err != nil {
-		return err
-	}
-
-	// Register component and stack tools.
-	if err := registry.Register(NewDescribeComponentTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewListStacksTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewDescribeAffectedTool(atmosConfig)); err != nil {
-		return err
-	}
-
-	// Register validation tools.
-	if err := registry.Register(NewValidateStacksTool(atmosConfig)); err != nil {
+	if err := registerCoreTools(registry, atmosConfig); err != nil {
 		return err
 	}
 
@@ -47,36 +19,46 @@ func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfigurat
 		}
 	}
 
-	// Register file operation tools.
-	if err := registry.Register(NewReadFileTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewEditFileTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewSearchFilesTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewListComponentFilesTool(atmosConfig)); err != nil {
-		return err
-	}
+	return registerWriteAndExecutionTools(registry, atmosConfig)
+}
 
-	// Register command execution and template tools.
-	if err := registry.Register(NewExecuteAtmosCommandTool(atmosConfig)); err != nil {
-		return err
+// registerCoreTools registers read-only, introspection, and search tools.
+func registerCoreTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) error {
+	coreTools := []tools.Tool{
+		NewReadComponentFileTool(atmosConfig),
+		NewReadStackFileTool(atmosConfig),
+		NewDescribeComponentTool(atmosConfig),
+		NewListStacksTool(atmosConfig),
+		NewDescribeAffectedTool(atmosConfig),
+		NewValidateStacksTool(atmosConfig),
+		NewReadFileTool(atmosConfig),
+		NewSearchFilesTool(atmosConfig),
+		NewListComponentFilesTool(atmosConfig),
+		NewGetTemplateContextTool(atmosConfig),
 	}
-	if err := registry.Register(NewExecuteBashCommandTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewGetTemplateContextTool(atmosConfig)); err != nil {
-		return err
-	}
+	return registerAll(registry, coreTools)
+}
 
-	// Register web search tool.
-	if err := registry.Register(NewWebSearchTool(atmosConfig)); err != nil {
-		return err
+// registerWriteAndExecutionTools registers write, execution, and web search tools.
+func registerWriteAndExecutionTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) error {
+	writeTools := []tools.Tool{
+		NewWriteComponentFileTool(atmosConfig),
+		NewWriteStackFileTool(atmosConfig),
+		NewEditFileTool(atmosConfig),
+		NewExecuteAtmosCommandTool(atmosConfig),
+		NewExecuteBashCommandTool(atmosConfig),
+		NewWebSearchTool(atmosConfig),
 	}
+	return registerAll(registry, writeTools)
+}
 
+// registerAll registers a slice of tools to the registry.
+func registerAll(registry *tools.Registry, toolList []tools.Tool) error {
+	for _, t := range toolList {
+		if err := registry.Register(t); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -84,41 +66,5 @@ func RegisterTools(registry *tools.Registry, atmosConfig *schema.AtmosConfigurat
 // This excludes subprocess-based tools (execute_atmos_command, execute_bash_command) and write tools
 // that are better suited for interactive chat sessions.
 func RegisterReadOnlyTools(registry *tools.Registry, atmosConfig *schema.AtmosConfiguration) error {
-	// Register read-only file tools.
-	if err := registry.Register(NewReadComponentFileTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewReadStackFileTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewReadFileTool(atmosConfig)); err != nil {
-		return err
-	}
-
-	// Register introspection tools.
-	if err := registry.Register(NewDescribeComponentTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewListStacksTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewDescribeAffectedTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewValidateStacksTool(atmosConfig)); err != nil {
-		return err
-	}
-
-	// Register search and listing tools.
-	if err := registry.Register(NewSearchFilesTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewListComponentFilesTool(atmosConfig)); err != nil {
-		return err
-	}
-	if err := registry.Register(NewGetTemplateContextTool(atmosConfig)); err != nil {
-		return err
-	}
-
-	return nil
+	return registerCoreTools(registry, atmosConfig)
 }

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/lsp/client"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -54,7 +55,7 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		return &tools.Result{
 			Success: false,
 			Output:  "",
-			Error:   fmt.Errorf("LSP is not enabled - configure settings.lsp in atmos.yaml to use this tool"),
+			Error:   fmt.Errorf("%w - configure settings.lsp in atmos.yaml to use this tool", errUtils.ErrAILSPNotEnabled),
 		}, nil
 	}
 
@@ -64,7 +65,7 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		return &tools.Result{
 			Success: false,
 			Output:  "",
-			Error:   fmt.Errorf("file_path parameter is required and must be a string"),
+			Error:   fmt.Errorf("%w: file_path", errUtils.ErrAIToolParameterRequired),
 		}, nil
 	}
 
@@ -79,7 +80,7 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		return &tools.Result{
 			Success: false,
 			Output:  "",
-			Error:   fmt.Errorf("file does not exist: %s", filePath),
+			Error:   fmt.Errorf("%w: %s", errUtils.ErrAIFileDoesNotExist, filePath),
 		}, nil
 	}
 

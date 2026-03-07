@@ -60,25 +60,38 @@ func (t *ReadFileTool) Execute(ctx context.Context, params map[string]interface{
 
 	log.Debugf("Reading file: %s", filePath)
 
-	// Resolve to absolute path.
+	// Resolve and validate the path.
+	cleanPath, result := t.resolveAndValidatePath(filePath)
+	if result != nil {
+		return result, nil
+	}
+
+	// Read and return file content.
+	return readFileContent(cleanPath, filePath)
+}
+
+// resolveAndValidatePath resolves the file path and performs security checks.
+// Returns the clean path on success, or an error result if validation fails.
+func (t *ReadFileTool) resolveAndValidatePath(filePath string) (string, *tools.Result) {
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
 		absolutePath = filepath.Join(t.atmosConfig.BasePath, filePath)
 	}
 
-	// Clean the path to prevent traversal attacks.
 	cleanPath := filepath.Clean(absolutePath)
-
-	// Security check: ensure the path is within the Atmos base path.
 	cleanBase := filepath.Clean(t.atmosConfig.BasePath)
 	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
-		return &tools.Result{
+		return "", &tools.Result{
 			Success: false,
-			Error:   fmt.Errorf("access denied: file must be within Atmos base path"),
-		}, nil
+			Error:   errUtils.ErrAIAccessDeniedBasePath,
+		}
 	}
 
-	// Check if file exists.
+	return cleanPath, nil
+}
+
+// readFileContent reads the file at cleanPath and returns a result.
+func readFileContent(cleanPath, filePath string) (*tools.Result, error) {
 	fileInfo, err := os.Stat(cleanPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -93,7 +106,6 @@ func (t *ReadFileTool) Execute(ctx context.Context, params map[string]interface{
 		}, nil
 	}
 
-	// Ensure it's not a directory.
 	if fileInfo.IsDir() {
 		return &tools.Result{
 			Success: false,
@@ -101,7 +113,6 @@ func (t *ReadFileTool) Execute(ctx context.Context, params map[string]interface{
 		}, nil
 	}
 
-	// Read file content.
 	content, err := os.ReadFile(cleanPath)
 	if err != nil {
 		return &tools.Result{

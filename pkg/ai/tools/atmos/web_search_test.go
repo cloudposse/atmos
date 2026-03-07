@@ -632,7 +632,6 @@ func TestWebSearchTool_Execute_MaxResultsValidation(t *testing.T) {
 	}
 }
 
-//nolint:dupl
 func TestWebSearchTool_Execute_MaxResultsTypes(t *testing.T) {
 	tests := []struct {
 		name           string

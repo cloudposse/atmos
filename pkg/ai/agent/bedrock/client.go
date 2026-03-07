@@ -25,6 +25,12 @@ const (
 	DefaultModel = "anthropic.claude-sonnet-4-5-20250929-v1:0"
 	// DefaultRegion is the default AWS region for Bedrock.
 	DefaultRegion = "us-east-1"
+
+	// Bedrock request body field names.
+	bedrockAnthropicVersion = "bedrock-2023-05-31"
+	fieldAnthropicVersion   = "anthropic_version"
+	fieldMaxTokens          = "max_tokens"
+	fieldMessages           = "messages"
 )
 
 // Client provides an interface to AWS Bedrock for Atmos.
@@ -82,9 +88,9 @@ func (c *Client) SendMessage(ctx context.Context, message string) (string, error
 
 	// Prepare request body for Claude models on Bedrock.
 	requestBody := map[string]interface{}{
-		"anthropic_version": "bedrock-2023-05-31",
-		"max_tokens":        c.config.MaxTokens,
-		"messages": []map[string]string{
+		fieldAnthropicVersion: bedrockAnthropicVersion,
+		fieldMaxTokens:        c.config.MaxTokens,
+		fieldMessages: []map[string]string{
 			{
 				"role":    "user",
 				"content": message,
@@ -149,9 +155,9 @@ func (c *Client) SendMessageWithTools(ctx context.Context, message string, avail
 
 	// Prepare request body for Claude models on Bedrock with tools.
 	requestBody := map[string]interface{}{
-		"anthropic_version": "bedrock-2023-05-31",
-		"max_tokens":        c.config.MaxTokens,
-		"messages": []map[string]string{
+		fieldAnthropicVersion: bedrockAnthropicVersion,
+		fieldMaxTokens:        c.config.MaxTokens,
+		fieldMessages: []map[string]string{
 			{
 				"role":    "user",
 				"content": message,
@@ -196,9 +202,9 @@ func (c *Client) SendMessageWithHistory(ctx context.Context, messages []types.Me
 
 	// Prepare request body for Claude models on Bedrock.
 	requestBody := map[string]interface{}{
-		"anthropic_version": "bedrock-2023-05-31",
-		"max_tokens":        c.config.MaxTokens,
-		"messages":          bedrockMessages,
+		fieldAnthropicVersion: bedrockAnthropicVersion,
+		fieldMaxTokens:        c.config.MaxTokens,
+		fieldMessages:         bedrockMessages,
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -262,10 +268,10 @@ func (c *Client) SendMessageWithToolsAndHistory(ctx context.Context, messages []
 
 	// Prepare request body for Claude models on Bedrock with tools.
 	requestBody := map[string]interface{}{
-		"anthropic_version": "bedrock-2023-05-31",
-		"max_tokens":        c.config.MaxTokens,
-		"messages":          bedrockMessages,
-		"tools":             bedrockTools,
+		fieldAnthropicVersion: bedrockAnthropicVersion,
+		fieldMaxTokens:        c.config.MaxTokens,
+		fieldMessages:         bedrockMessages,
+		"tools":               bedrockTools,
 	}
 
 	bodyBytes, err := json.Marshal(requestBody)
@@ -366,23 +372,28 @@ func convertToolsToBedrockFormat(availableTools []tools.Tool) []map[string]inter
 	return bedrockTools
 }
 
+// bedrockContentBlock represents a single content block in a Bedrock/Anthropic response.
+type bedrockContentBlock struct {
+	Type  string                 `json:"type"`
+	Text  string                 `json:"text,omitempty"`
+	ID    string                 `json:"id,omitempty"`
+	Name  string                 `json:"name,omitempty"`
+	Input map[string]interface{} `json:"input,omitempty"`
+}
+
+// bedrockAPIResponse represents the Bedrock/Anthropic API response format.
+type bedrockAPIResponse struct {
+	Content    []bedrockContentBlock `json:"content"`
+	StopReason string                `json:"stop_reason"`
+	Usage      struct {
+		InputTokens  int64 `json:"input_tokens"`
+		OutputTokens int64 `json:"output_tokens"`
+	} `json:"usage"`
+}
+
 // parseBedrockResponse parses a Bedrock response into our Response format.
 func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
-	// Parse Bedrock/Anthropic response format.
-	var apiResponse struct {
-		Content []struct {
-			Type  string                 `json:"type"`
-			Text  string                 `json:"text,omitempty"`
-			ID    string                 `json:"id,omitempty"`
-			Name  string                 `json:"name,omitempty"`
-			Input map[string]interface{} `json:"input,omitempty"`
-		} `json:"content"`
-		StopReason string `json:"stop_reason"`
-		Usage      struct {
-			InputTokens  int64 `json:"input_tokens"`
-			OutputTokens int64 `json:"output_tokens"`
-		} `json:"usage"`
-	}
+	var apiResponse bedrockAPIResponse
 
 	if err := json.Unmarshal(responseBody, &apiResponse); err != nil {
 		return nil, errUtils.Build(errUtils.ErrAIUnmarshalResponse).
@@ -397,30 +408,11 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 	}
 
 	// Map stop reason.
-	switch apiResponse.StopReason {
-	case "end_turn":
-		result.StopReason = types.StopReasonEndTurn
-	case "tool_use":
-		result.StopReason = types.StopReasonToolUse
-	case "max_tokens":
-		result.StopReason = types.StopReasonMaxTokens
-	default:
-		result.StopReason = types.StopReasonEndTurn
-	}
+	result.StopReason = mapBedrockStopReason(apiResponse.StopReason)
 
 	// Extract content blocks.
-	for _, content := range apiResponse.Content {
-		switch content.Type {
-		case "text":
-			result.Content += content.Text
-		case "tool_use":
-			// Extract tool call.
-			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
-				ID:    content.ID,
-				Name:  content.Name,
-				Input: content.Input,
-			})
-		}
+	for i := range apiResponse.Content {
+		processBedrockContentBlock(&apiResponse.Content[i], result)
 	}
 
 	// Extract usage information.
@@ -435,6 +427,34 @@ func parseBedrockResponse(responseBody []byte) (*types.Response, error) {
 	}
 
 	return result, nil
+}
+
+// mapBedrockStopReason maps a Bedrock stop reason string to our StopReason type.
+func mapBedrockStopReason(reason string) types.StopReason {
+	switch reason {
+	case "end_turn":
+		return types.StopReasonEndTurn
+	case "tool_use":
+		return types.StopReasonToolUse
+	case "max_tokens":
+		return types.StopReasonMaxTokens
+	default:
+		return types.StopReasonEndTurn
+	}
+}
+
+// processBedrockContentBlock processes a single Bedrock content block and adds it to the result.
+func processBedrockContentBlock(block *bedrockContentBlock, result *types.Response) {
+	switch block.Type {
+	case "text":
+		result.Content += block.Text
+	case "tool_use":
+		result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+			ID:    block.ID,
+			Name:  block.Name,
+			Input: block.Input,
+		})
+	}
 }
 
 // GetModel returns the configured model name.

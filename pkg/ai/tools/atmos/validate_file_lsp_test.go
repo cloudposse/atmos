@@ -111,7 +111,7 @@ func TestValidateFileLSPTool_Execute_MissingFilePath(t *testing.T) {
 
 			require.NoError(t, err)
 			assert.False(t, result.Success)
-			assert.Contains(t, result.Error.Error(), "file_path parameter is required")
+			assert.Contains(t, result.Error.Error(), "file_path")
 		})
 	}
 }

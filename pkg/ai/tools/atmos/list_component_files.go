@@ -84,115 +84,84 @@ func (t *ListComponentFilesTool) Execute(ctx context.Context, params map[string]
 
 	log.Debugf("Listing files in component: %s/%s with pattern '%s'", componentType, componentPath, filePattern)
 
-	// Get component base path.
-	basePath, err := t.getComponentBasePath(componentType)
+	cleanPath, errResult := t.resolveComponentPath(componentType, componentPath)
+	if errResult != nil {
+		return errResult, nil
+	}
+
+	// Walk and collect files.
+	walkResult, err := walkComponentFiles(cleanPath, filePattern)
 	if err != nil {
-		//nolint:nilerr // Tool errors are returned in Result.Error, not in err return value.
-		return &tools.Result{
-			Success: false,
-			Error:   err,
-		}, nil
-	}
-
-	// Resolve to absolute path.
-	absoluteBasePath := basePath
-	if !filepath.IsAbs(basePath) {
-		absoluteBasePath = filepath.Join(t.atmosConfig.BasePath, basePath)
-	}
-
-	fullPath := filepath.Join(absoluteBasePath, componentPath)
-	cleanPath := filepath.Clean(fullPath)
-
-	// Security check.
-	cleanBase := filepath.Clean(absoluteBasePath)
-	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
-		return &tools.Result{
-			Success: false,
-			Error:   errUtils.ErrAIFileAccessDeniedComponents,
-		}, nil
-	}
-
-	// Check if path exists.
-	if _, err := os.Stat(cleanPath); err != nil {
-		if os.IsNotExist(err) {
-			return &tools.Result{
-				Success: false,
-				Error:   fmt.Errorf("%w: %s/%s", errUtils.ErrAIFileNotFound, componentType, componentPath),
-			}, nil
-		}
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("failed to access path: %w", err),
-		}, nil
-	}
-
-	// List files.
-	var files []string
-	fileCount := 0
-	dirCount := 0
-
-	err = filepath.Walk(cleanPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // Skip files with errors and continue walking.
-		}
-
-		// Skip the root directory itself.
-		if path == cleanPath {
-			return nil
-		}
-
-		// Get relative path from component path.
-		relPath, _ := filepath.Rel(cleanPath, path)
-
-		if info.IsDir() {
-			dirCount++
-			files = append(files, relPath+"/")
-		} else {
-			// Check file pattern.
-			if filePattern != "*" {
-				matched, _ := filepath.Match(filePattern, filepath.Base(path))
-				if !matched {
-					return nil
-				}
-			}
-			fileCount++
-			files = append(files, relPath)
-		}
-
-		return nil
-	})
-	if err != nil {
-		//nolint:nilerr // Tool errors are returned in Result.Error, not in err return value.
 		return &tools.Result{
 			Success: false,
 			Error:   fmt.Errorf("failed to list files: %w", err),
 		}, nil
 	}
 
-	// Format output.
-	var output string
-	if len(files) == 0 {
-		output = fmt.Sprintf("No files found in %s/%s", componentType, componentPath)
-	} else {
-		header := fmt.Sprintf("Files in %s/%s", componentType, componentPath)
-		if filePattern != "*" {
-			header += fmt.Sprintf(" (pattern: %s)", filePattern)
-		}
-		header += fmt.Sprintf(":\n(%d files, %d directories)\n\n", fileCount, dirCount)
-		output = header + strings.Join(files, "\n")
-	}
-
 	return &tools.Result{
 		Success: true,
-		Output:  output,
+		Output:  walkResult.format(componentType, componentPath, filePattern),
 		Data: map[string]interface{}{
 			"component_type": componentType,
 			"component_path": componentPath,
-			"files":          files,
-			"file_count":     fileCount,
-			"dir_count":      dirCount,
+			"files":          walkResult.files,
+			"file_count":     walkResult.fileCount,
+			"dir_count":      walkResult.dirCount,
 		},
 	}, nil
+}
+
+// componentFileResult holds the results of walking a component directory.
+type componentFileResult struct {
+	files     []string
+	fileCount int
+	dirCount  int
+}
+
+// walkComponentFiles walks the component directory and collects matching files.
+func walkComponentFiles(rootPath, filePattern string) (*componentFileResult, error) {
+	result := &componentFileResult{}
+
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || path == rootPath {
+			return nil //nolint:nilerr // Skip files with errors and continue walking.
+		}
+
+		relPath, _ := filepath.Rel(rootPath, path)
+
+		if info.IsDir() {
+			result.dirCount++
+			result.files = append(result.files, relPath+"/")
+			return nil
+		}
+
+		if filePattern != "*" {
+			matched, _ := filepath.Match(filePattern, filepath.Base(path))
+			if !matched {
+				return nil
+			}
+		}
+		result.fileCount++
+		result.files = append(result.files, relPath)
+
+		return nil
+	})
+
+	return result, err
+}
+
+// formatComponentFileList formats the list of component files for output.
+func (r *componentFileResult) format(componentType, componentPath, filePattern string) string {
+	if len(r.files) == 0 {
+		return fmt.Sprintf("No files found in %s/%s", componentType, componentPath)
+	}
+
+	header := fmt.Sprintf("Files in %s/%s", componentType, componentPath)
+	if filePattern != "*" {
+		header += fmt.Sprintf(" (pattern: %s)", filePattern)
+	}
+	header += fmt.Sprintf(":\n(%d files, %d directories)\n\n", r.fileCount, r.dirCount)
+	return header + strings.Join(r.files, "\n")
 }
 
 // getComponentBasePath returns the base path for a component type.
@@ -207,6 +176,38 @@ func (t *ListComponentFilesTool) getComponentBasePath(componentType string) (str
 	default:
 		return "", fmt.Errorf("%w: %s (must be terraform, helmfile, or packer)", errUtils.ErrAIUnsupportedComponentType, componentType)
 	}
+}
+
+// resolveComponentPath resolves and validates the component path.
+func (t *ListComponentFilesTool) resolveComponentPath(componentType, componentPath string) (string, *tools.Result) {
+	basePath, err := t.getComponentBasePath(componentType)
+	if err != nil {
+		return "", &tools.Result{
+			Success: false,
+			Error:   err,
+		}
+	}
+
+	fullPath := filepath.Join(t.atmosConfig.BasePath, basePath, componentPath)
+	cleanPath := filepath.Clean(fullPath)
+
+	// Verify the path exists.
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		return "", &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: %s/%s", errUtils.ErrAIComponentPathNotFound, componentType, componentPath),
+		}
+	}
+
+	if !info.IsDir() {
+		return "", &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: %s/%s", errUtils.ErrAIComponentPathNotDirectory, componentType, componentPath),
+		}
+	}
+
+	return cleanPath, nil
 }
 
 // RequiresPermission returns true if this tool needs permission.

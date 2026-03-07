@@ -269,39 +269,8 @@ func convertToolsToGeminiFormat(availableTools []tools.Tool) []*genai.Tool {
 	functionDeclarations := make([]*genai.FunctionDeclaration, 0, len(availableTools))
 
 	for _, tool := range availableTools {
-		// Build properties and required fields from parameters.
-		properties := make(map[string]*genai.Schema)
-		required := make([]string, 0)
-
-		for _, param := range tool.Parameters() {
-			// Map our parameter type to Gemini Type.
-			var geminiType genai.Type
-			switch param.Type {
-			case "string":
-				geminiType = genai.TypeString
-			case "number":
-				geminiType = genai.TypeNumber
-			case "integer":
-				geminiType = genai.TypeInteger
-			case "boolean":
-				geminiType = genai.TypeBoolean
-			case "array":
-				geminiType = genai.TypeArray
-			case "object":
-				geminiType = genai.TypeObject
-			default:
-				geminiType = genai.TypeString // Default to string.
-			}
-
-			properties[param.Name] = &genai.Schema{
-				Type:        geminiType,
-				Description: param.Description,
-			}
-
-			if param.Required {
-				required = append(required, param.Name)
-			}
-		}
+		// Build parameters schema from tool parameters.
+		properties, required := convertToolParametersToGeminiSchema(tool.Parameters())
 
 		// Create function declaration.
 		functionDecl := &genai.FunctionDeclaration{
@@ -325,6 +294,45 @@ func convertToolsToGeminiFormat(availableTools []tools.Tool) []*genai.Tool {
 	}
 }
 
+// mapGeminiType maps a parameter type to a Gemini Type.
+func mapGeminiType(paramType tools.ParamType) genai.Type {
+	switch paramType {
+	case "string":
+		return genai.TypeString
+	case "number":
+		return genai.TypeNumber
+	case "integer":
+		return genai.TypeInteger
+	case "boolean":
+		return genai.TypeBoolean
+	case "array":
+		return genai.TypeArray
+	case "object":
+		return genai.TypeObject
+	default:
+		return genai.TypeString // Default to string.
+	}
+}
+
+// convertToolParametersToGeminiSchema converts tool parameters to Gemini schema properties and required fields.
+func convertToolParametersToGeminiSchema(params []tools.Parameter) (map[string]*genai.Schema, []string) {
+	properties := make(map[string]*genai.Schema)
+	required := make([]string, 0)
+
+	for _, param := range params {
+		properties[param.Name] = &genai.Schema{
+			Type:        mapGeminiType(param.Type),
+			Description: param.Description,
+		}
+
+		if param.Required {
+			required = append(required, param.Name)
+		}
+	}
+
+	return properties, required
+}
+
 // parseGeminiResponse parses a Gemini response into our Response format.
 func parseGeminiResponse(response *genai.GenerateContentResponse) (*types.Response, error) {
 	result := &types.Response{
@@ -340,52 +348,72 @@ func parseGeminiResponse(response *genai.GenerateContentResponse) (*types.Respon
 	candidate := response.Candidates[0]
 
 	// Map finish reason to stop reason.
-	switch candidate.FinishReason {
-	case genai.FinishReasonStop:
-		result.StopReason = types.StopReasonEndTurn
-	case genai.FinishReasonMaxTokens:
-		result.StopReason = types.StopReasonMaxTokens
-	case genai.FinishReasonSafety, genai.FinishReasonRecitation, genai.FinishReasonOther:
-		result.StopReason = types.StopReasonEndTurn
-	default:
-		result.StopReason = types.StopReasonEndTurn
-	}
+	result.StopReason = mapGeminiFinishReason(candidate.FinishReason)
 
-	// Extract text content if available.
-	if candidate.Content != nil && len(candidate.Content.Parts) > 0 {
-		// Concatenate all text parts.
-		for _, part := range candidate.Content.Parts {
-			if part.Text != "" {
-				result.Content += part.Text
-			}
-		}
-	}
+	// Extract text content from candidate parts.
+	extractGeminiTextContent(candidate, result)
 
 	// Extract tool calls using the convenience method.
-	functionCalls := response.FunctionCalls()
-	if len(functionCalls) > 0 {
-		result.StopReason = types.StopReasonToolUse
-		for _, funcCall := range functionCalls {
-			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
-				ID:    funcCall.ID,
-				Name:  funcCall.Name,
-				Input: funcCall.Args,
-			})
-		}
-	}
+	extractGeminiFunctionCalls(response.FunctionCalls(), result)
 
 	// Extract usage information.
 	if response.UsageMetadata != nil {
-		result.Usage = &types.Usage{
-			InputTokens:         int64(response.UsageMetadata.PromptTokenCount),
-			OutputTokens:        int64(response.UsageMetadata.CandidatesTokenCount),
-			TotalTokens:         int64(response.UsageMetadata.TotalTokenCount),
-			CacheReadTokens:     int64(response.UsageMetadata.CachedContentTokenCount),
-			CacheCreationTokens: 0, // Gemini doesn't separately report cache creation tokens.
-		}
+		extractGeminiUsage(response.UsageMetadata, result)
 	}
 
 	return result, nil
+}
+
+// mapGeminiFinishReason maps a Gemini finish reason to our StopReason type.
+func mapGeminiFinishReason(reason genai.FinishReason) types.StopReason {
+	switch reason {
+	case genai.FinishReasonStop:
+		return types.StopReasonEndTurn
+	case genai.FinishReasonMaxTokens:
+		return types.StopReasonMaxTokens
+	default:
+		return types.StopReasonEndTurn
+	}
+}
+
+// extractGeminiTextContent extracts text content from a Gemini candidate and adds it to the result.
+func extractGeminiTextContent(candidate *genai.Candidate, result *types.Response) {
+	if candidate.Content == nil || len(candidate.Content.Parts) == 0 {
+		return
+	}
+
+	for _, part := range candidate.Content.Parts {
+		if part.Text != "" {
+			result.Content += part.Text
+		}
+	}
+}
+
+// extractGeminiFunctionCalls extracts function calls and adds them to the result as tool calls.
+func extractGeminiFunctionCalls(functionCalls []*genai.FunctionCall, result *types.Response) {
+	if len(functionCalls) == 0 {
+		return
+	}
+
+	result.StopReason = types.StopReasonToolUse
+	for _, funcCall := range functionCalls {
+		result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+			ID:    funcCall.ID,
+			Name:  funcCall.Name,
+			Input: funcCall.Args,
+		})
+	}
+}
+
+// extractGeminiUsage extracts usage metadata and adds it to the result.
+func extractGeminiUsage(metadata *genai.GenerateContentResponseUsageMetadata, result *types.Response) {
+	result.Usage = &types.Usage{
+		InputTokens:         int64(metadata.PromptTokenCount),
+		OutputTokens:        int64(metadata.CandidatesTokenCount),
+		TotalTokens:         int64(metadata.TotalTokenCount),
+		CacheReadTokens:     int64(metadata.CachedContentTokenCount),
+		CacheCreationTokens: 0, // Gemini doesn't separately report cache creation tokens.
+	}
 }
 
 // GetModel returns the configured model name.

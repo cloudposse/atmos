@@ -73,7 +73,7 @@ func (r *LocalRegistry) Add(skill *InstalledSkill) error {
 
 	// Check for name conflicts.
 	if _, exists := r.Skills[skill.Name]; exists {
-		return fmt.Errorf("%w: %q", ErrSkillAlreadyInstalled, skill.Name)
+		return fmt.Errorf(errFmtWithName, ErrSkillAlreadyInstalled, skill.Name)
 	}
 
 	r.Skills[skill.Name] = skill
@@ -88,7 +88,7 @@ func (r *LocalRegistry) Remove(name string) error {
 	defer r.mu.Unlock()
 
 	if _, exists := r.Skills[name]; !exists {
-		return fmt.Errorf("%w: %q", ErrSkillNotFound, name)
+		return fmt.Errorf(errFmtWithName, ErrSkillNotFound, name)
 	}
 
 	delete(r.Skills, name)
@@ -104,7 +104,7 @@ func (r *LocalRegistry) Get(name string) (*InstalledSkill, error) {
 
 	skill, exists := r.Skills[name]
 	if !exists {
-		return nil, fmt.Errorf("%w: %q", ErrSkillNotFound, name)
+		return nil, fmt.Errorf(errFmtWithName, ErrSkillNotFound, name)
 	}
 
 	return skill, nil
@@ -139,7 +139,7 @@ func (r *LocalRegistry) Update(name string, updater func(*InstalledSkill) error)
 
 	skill, exists := r.Skills[name]
 	if !exists {
-		return fmt.Errorf("%w: %q", ErrSkillNotFound, name)
+		return fmt.Errorf(errFmtWithName, ErrSkillNotFound, name)
 	}
 
 	if err := updater(skill); err != nil {
@@ -167,7 +167,7 @@ func (r *LocalRegistry) load() error {
 // save writes the registry to disk.
 func (r *LocalRegistry) save() error {
 	// Ensure directory exists.
-	if err := os.MkdirAll(filepath.Dir(r.path), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(r.path), dirPermissions); err != nil {
 		return fmt.Errorf("failed to create registry directory: %w", err)
 	}
 
@@ -178,7 +178,7 @@ func (r *LocalRegistry) save() error {
 	}
 
 	// Write to file.
-	if err := os.WriteFile(r.path, data, 0o600); err != nil {
+	if err := os.WriteFile(r.path, data, filePermissions); err != nil {
 		return fmt.Errorf("failed to write registry file: %w", err)
 	}
 

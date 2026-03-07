@@ -109,6 +109,62 @@ func (v *Validator) validateToolConfig(metadata *SkillMetadata) error {
 	return nil
 }
 
+// frontmatterState tracks the state of frontmatter parsing.
+type frontmatterState struct {
+	inFrontmatter   bool
+	frontmatterDone bool
+	hasHeading      bool
+}
+
+// processFrontmatterLine processes a single line during frontmatter parsing.
+// Returns a non-nil error if validation fails.
+func (s *frontmatterState) processFrontmatterLine(line string, lineNum int) error {
+	if strings.TrimSpace(line) == "---" {
+		return s.handleDelimiter(lineNum)
+	}
+
+	if s.inFrontmatter {
+		return nil // Skip frontmatter content.
+	}
+
+	if !s.frontmatterDone || s.hasHeading {
+		return nil
+	}
+
+	return s.validateFirstContentLine(line)
+}
+
+// handleDelimiter processes a --- delimiter line.
+func (s *frontmatterState) handleDelimiter(lineNum int) error {
+	if !s.inFrontmatter && lineNum == 1 {
+		s.inFrontmatter = true
+		return nil
+	}
+	if s.inFrontmatter {
+		s.inFrontmatter = false
+		s.frontmatterDone = true
+	}
+	return nil
+}
+
+// validateFirstContentLine validates the first non-empty line after frontmatter.
+func (s *frontmatterState) validateFirstContentLine(line string) error {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return nil // Skip empty lines.
+	}
+
+	if !strings.HasPrefix(trimmed, "# ") {
+		return &ValidationError{
+			Field:   "prompt",
+			Message: "SKILL.md content should start with a level-1 heading (# Skill: Name) after frontmatter",
+		}
+	}
+
+	s.hasHeading = true
+	return nil
+}
+
 // validatePromptStructure performs basic validation on SKILL.md structure.
 func (v *Validator) validatePromptStructure(skillMDPath string) error {
 	file, err := os.Open(skillMDPath)
@@ -118,41 +174,13 @@ func (v *Validator) validatePromptStructure(skillMDPath string) error {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	state := &frontmatterState{}
 	lineNum := 0
-	inFrontmatter := false
-	frontmatterEnded := false
-	hasHeading := false
 
 	for scanner.Scan() {
-		line := scanner.Text()
 		lineNum++
-
-		// Check for frontmatter delimiter.
-		if strings.TrimSpace(line) == "---" {
-			if !inFrontmatter && lineNum == 1 {
-				inFrontmatter = true
-				continue
-			} else if inFrontmatter {
-				inFrontmatter = false
-				frontmatterEnded = true
-				continue
-			}
-		}
-
-		// After frontmatter, look for heading.
-		if frontmatterEnded && !hasHeading {
-			trimmed := strings.TrimSpace(line)
-			if trimmed == "" {
-				continue // Skip empty lines.
-			}
-			if strings.HasPrefix(trimmed, "# ") {
-				hasHeading = true
-			} else {
-				return &ValidationError{
-					Field:   "prompt",
-					Message: "SKILL.md content should start with a level-1 heading (# Skill: Name) after frontmatter",
-				}
-			}
+		if err := state.processFrontmatterLine(scanner.Text(), lineNum); err != nil {
+			return err
 		}
 	}
 
@@ -160,7 +188,7 @@ func (v *Validator) validatePromptStructure(skillMDPath string) error {
 		return fmt.Errorf("error reading SKILL.md: %w", err)
 	}
 
-	if !frontmatterEnded {
+	if !state.frontmatterDone {
 		return &ValidationError{
 			Field:   "frontmatter",
 			Message: "SKILL.md must have YAML frontmatter (content between --- delimiters)",

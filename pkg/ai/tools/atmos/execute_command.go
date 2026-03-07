@@ -73,7 +73,7 @@ func (t *ExecuteAtmosCommandTool) Execute(ctx context.Context, params map[string
 	if len(args) == 0 {
 		return &tools.Result{
 			Success: false,
-			Error:   fmt.Errorf("command cannot be empty"),
+			Error:   errUtils.ErrAICommandEmpty,
 		}, nil
 	}
 

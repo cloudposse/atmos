@@ -114,7 +114,7 @@ func extractFrontmatter(content string) (string, error) {
 	}
 
 	if len(lines) == 0 {
-		return "", fmt.Errorf("no YAML frontmatter found (file must start with ---)")
+		return "", fmt.Errorf("%w (file must start with ---)", ErrNoYAMLFrontmatter)
 	}
 
 	return strings.Join(lines, "\n"), nil

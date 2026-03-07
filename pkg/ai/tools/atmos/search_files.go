@@ -66,58 +66,75 @@ func (t *SearchFilesTool) Parameters() []tools.Parameter {
 	}
 }
 
-// Execute searches for the pattern and returns matching results.
-func (t *SearchFilesTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
-	// Extract pattern parameter.
+// searchParams holds the extracted and validated search parameters.
+type searchParams struct {
+	pattern       string
+	searchPath    string
+	filePattern   string
+	caseSensitive bool
+}
+
+// extractSearchParams extracts and validates search parameters from the params map.
+func extractSearchParams(params map[string]interface{}) (*searchParams, *tools.Result) {
 	pattern, ok := params["pattern"].(string)
 	if !ok || pattern == "" {
-		return &tools.Result{
+		return nil, &tools.Result{
 			Success: false,
 			Error:   fmt.Errorf("%w: pattern", errUtils.ErrAIToolParameterRequired),
-		}, nil
+		}
 	}
 
-	// Extract optional path parameter.
 	searchPath := "."
 	if p, ok := params["path"].(string); ok && p != "" {
 		searchPath = p
 	}
 
-	// Extract optional file_pattern parameter.
 	filePattern := "*"
 	if fp, ok := params["file_pattern"].(string); ok && fp != "" {
 		filePattern = fp
 	}
 
-	// Extract optional case_sensitive parameter.
 	caseSensitive := false
 	if cs, ok := params["case_sensitive"].(bool); ok {
 		caseSensitive = cs
 	}
 
-	log.Debugf("Searching for pattern '%s' in path '%s' with file pattern '%s'", pattern, searchPath, filePattern)
+	return &searchParams{
+		pattern:       pattern,
+		searchPath:    searchPath,
+		filePattern:   filePattern,
+		caseSensitive: caseSensitive,
+	}, nil
+}
 
-	// Resolve search path.
-	absolutePath := filepath.Join(t.atmosConfig.BasePath, searchPath)
+// Execute searches for the pattern and returns matching results.
+func (t *SearchFilesTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
+	sp, errResult := extractSearchParams(params)
+	if errResult != nil {
+		return errResult, nil
+	}
+
+	log.Debugf("Searching for pattern '%s' in path '%s' with file pattern '%s'", sp.pattern, sp.searchPath, sp.filePattern)
+
+	// Resolve and validate search path.
+	absolutePath := filepath.Join(t.atmosConfig.BasePath, sp.searchPath)
 	cleanPath := filepath.Clean(absolutePath)
-
-	// Security check: ensure search path is within Atmos base path.
 	cleanBase := filepath.Clean(t.atmosConfig.BasePath)
-	// Allow if path is exactly the base path OR starts with base path followed by separator.
+
 	isWithinBase := cleanPath == cleanBase || strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator))
 	if !isWithinBase {
 		return &tools.Result{
 			Success: false,
-			Error:   fmt.Errorf("access denied: search path '%s' must be within Atmos base path '%s'", cleanPath, cleanBase),
+			Error:   fmt.Errorf("%w: '%s' is outside '%s'", errUtils.ErrAIAccessDeniedSearchPath, cleanPath, cleanBase),
 		}, nil
 	}
 
 	// Compile regex pattern.
 	flags := ""
-	if !caseSensitive {
+	if !sp.caseSensitive {
 		flags = "(?i)"
 	}
-	regex, err := regexp.Compile(flags + pattern)
+	regex, err := regexp.Compile(flags + sp.pattern)
 	if err != nil {
 		return &tools.Result{
 			Success: false,
@@ -125,21 +142,51 @@ func (t *SearchFilesTool) Execute(ctx context.Context, params map[string]interfa
 		}, nil
 	}
 
-	// Search for matches.
-	matches := []string{}
+	// Execute the search.
+	matches, matchCount, err := t.searchInFiles(cleanPath, sp.filePattern, regex)
+	if err != nil {
+		return &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("search failed: %w", err),
+		}, nil
+	}
+
+	return buildSearchResult(sp, matches, matchCount), nil
+}
+
+// buildSearchResult formats search results into a tools.Result.
+func buildSearchResult(sp *searchParams, matches []string, matchCount int) *tools.Result {
+	var output string
+	if len(matches) == 0 {
+		output = fmt.Sprintf("No matches found for pattern '%s' in path '%s'", sp.pattern, sp.searchPath)
+	} else {
+		output = fmt.Sprintf("Found %d matches in %d files for pattern '%s':\n%s",
+			matchCount, len(matches), sp.pattern, strings.Join(matches, "\n"))
+	}
+
+	return &tools.Result{
+		Success: true,
+		Output:  output,
+		Data: map[string]interface{}{
+			"pattern":      sp.pattern,
+			"path":         sp.searchPath,
+			"file_pattern": sp.filePattern,
+			"match_count":  matchCount,
+			"file_count":   len(matches),
+		},
+	}
+}
+
+// searchInFiles walks the directory tree and searches for regex matches in files.
+func (t *SearchFilesTool) searchInFiles(rootPath, filePattern string, regex *regexp.Regexp) ([]string, int, error) {
+	var matches []string
 	matchCount := 0
 
-	err = filepath.Walk(cleanPath, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return nil //nolint:nilerr // Skip files with errors and continue walking.
+	err := filepath.Walk(rootPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return nil //nolint:nilerr // Skip files with errors and directories.
 		}
 
-		// Skip directories.
-		if info.IsDir() {
-			return nil
-		}
-
-		// Check file pattern.
 		if filePattern != "*" {
 			matched, _ := filepath.Match(filePattern, filepath.Base(path))
 			if !matched {
@@ -147,61 +194,29 @@ func (t *SearchFilesTool) Execute(ctx context.Context, params map[string]interfa
 			}
 		}
 
-		// Read file content.
 		content, err := os.ReadFile(path)
 		if err != nil {
 			return nil //nolint:nilerr // Skip files we can't read and continue walking.
 		}
 
-		// Search for pattern in file.
 		lines := strings.Split(string(content), "\n")
-		hasMatch := false
-		fileMatches := []string{}
-
+		var fileMatches []string
 		for lineNum, line := range lines {
 			if regex.MatchString(line) {
 				matchCount++
-				hasMatch = true
 				fileMatches = append(fileMatches, fmt.Sprintf("  Line %d: %s", lineNum+1, strings.TrimSpace(line)))
 			}
 		}
 
-		if hasMatch {
-			// Get relative path from base.
+		if len(fileMatches) > 0 {
 			relPath, _ := filepath.Rel(t.atmosConfig.BasePath, path)
 			matches = append(matches, fmt.Sprintf("\n%s:\n%s", relPath, strings.Join(fileMatches, "\n")))
 		}
 
 		return nil
 	})
-	if err != nil {
-		//nolint:nilerr // Tool errors are returned in Result.Error, not in err return value.
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("search failed: %w", err),
-		}, nil
-	}
 
-	// Format output.
-	var output string
-	if len(matches) == 0 {
-		output = fmt.Sprintf("No matches found for pattern '%s' in path '%s'", pattern, searchPath)
-	} else {
-		output = fmt.Sprintf("Found %d matches in %d files for pattern '%s':\n%s",
-			matchCount, len(matches), pattern, strings.Join(matches, "\n"))
-	}
-
-	return &tools.Result{
-		Success: true,
-		Output:  output,
-		Data: map[string]interface{}{
-			"pattern":      pattern,
-			"path":         searchPath,
-			"file_pattern": filePattern,
-			"match_count":  matchCount,
-			"file_count":   len(matches),
-		},
-	}, nil
+	return matches, matchCount, err
 }
 
 // RequiresPermission returns true if this tool needs permission.

@@ -88,35 +88,37 @@ func extractCacheConfig(atmosConfig *schema.AtmosConfiguration) *cacheConfig {
 		cacheProjectInstructions: true,
 	}
 
-	// Get provider-specific configuration from Providers map.
-	if atmosConfig.Settings.AI.Providers != nil {
-		if providerConfig, exists := atmosConfig.Settings.AI.Providers[ProviderName]; exists && providerConfig != nil {
-			// Extract cache settings.
-			// Default behavior: caching enabled (all true).
-			// User can explicitly disable by setting cache.enabled: false in config.
-			if providerConfig.Cache != nil {
-				// User explicitly configured cache settings.
-				if !providerConfig.Cache.Enabled {
-					// Explicitly disabled.
-					cache.enabled = false
-					cache.cacheSystemPrompt = false
-					cache.cacheProjectInstructions = false
-				} else {
-					// Explicitly enabled - use fine-grained settings.
-					cache.cacheSystemPrompt = providerConfig.Cache.CacheSystemPrompt
-					cache.cacheProjectInstructions = providerConfig.Cache.CacheProjectInstructions
-
-					// If no fine-grained settings provided, default both to true.
-					if !cache.cacheSystemPrompt && !cache.cacheProjectInstructions {
-						cache.cacheSystemPrompt = true
-						cache.cacheProjectInstructions = true
-					}
-				}
-			}
-		}
+	// Get provider-specific configuration using shared utility.
+	providerConfig := base.GetProviderConfig(atmosConfig, ProviderName)
+	if providerConfig == nil || providerConfig.Cache == nil {
+		return cache
 	}
 
+	// Apply explicit cache settings.
+	applyCacheSettings(cache, providerConfig.Cache)
+
 	return cache
+}
+
+// applyCacheSettings applies explicit cache settings from the provider configuration.
+func applyCacheSettings(cache *cacheConfig, settings *schema.AICacheSettings) {
+	// User explicitly disabled caching.
+	if !settings.Enabled {
+		cache.enabled = false
+		cache.cacheSystemPrompt = false
+		cache.cacheProjectInstructions = false
+		return
+	}
+
+	// Explicitly enabled - use fine-grained settings.
+	cache.cacheSystemPrompt = settings.CacheSystemPrompt
+	cache.cacheProjectInstructions = settings.CacheProjectInstructions
+
+	// If no fine-grained settings provided, default both to true.
+	if !cache.cacheSystemPrompt && !cache.cacheProjectInstructions {
+		cache.cacheSystemPrompt = true
+		cache.cacheProjectInstructions = true
+	}
 }
 
 // SendMessage sends a message to the AI and returns the response.
@@ -303,42 +305,12 @@ func parseAnthropicResponse(response *anthropic.Message) (*types.Response, error
 	}
 
 	// Map stop reason.
-	switch response.StopReason {
-	case "end_turn":
-		result.StopReason = types.StopReasonEndTurn
-	case "tool_use":
-		result.StopReason = types.StopReasonToolUse
-	case "max_tokens":
-		result.StopReason = types.StopReasonMaxTokens
-	default:
-		result.StopReason = types.StopReasonEndTurn
-	}
+	result.StopReason = mapAnthropicStopReason(response.StopReason)
 
 	// Extract text and tool uses from content blocks.
 	for i := range response.Content {
-		switch response.Content[i].Type {
-		case "text":
-			result.Content += response.Content[i].Text
-		case "tool_use":
-			// Parse tool use.
-			toolUse := response.Content[i]
-			input := make(map[string]interface{})
-			if toolUse.Input != nil {
-				// Convert RawJSON to map.
-				if err := json.Unmarshal(toolUse.Input, &input); err != nil {
-					return nil, errUtils.Build(errUtils.ErrAIParseToolInput).
-						WithCause(err).
-						WithContext("provider", "anthropic").
-						WithContext("tool_id", toolUse.ID).
-						Err()
-				}
-			}
-
-			result.ToolCalls = append(result.ToolCalls, types.ToolCall{
-				ID:    toolUse.ID,
-				Name:  toolUse.Name,
-				Input: input,
-			})
+		if err := processAnthropicContentBlock(&response.Content[i], result); err != nil {
+			return nil, err
 		}
 	}
 
@@ -354,6 +326,48 @@ func parseAnthropicResponse(response *anthropic.Message) (*types.Response, error
 	}
 
 	return result, nil
+}
+
+// mapAnthropicStopReason maps an Anthropic stop reason to our StopReason type.
+func mapAnthropicStopReason(reason anthropic.StopReason) types.StopReason {
+	switch reason {
+	case "end_turn":
+		return types.StopReasonEndTurn
+	case "tool_use":
+		return types.StopReasonToolUse
+	case "max_tokens":
+		return types.StopReasonMaxTokens
+	default:
+		return types.StopReasonEndTurn
+	}
+}
+
+// processAnthropicContentBlock processes a single Anthropic content block and adds it to the result.
+func processAnthropicContentBlock(block *anthropic.ContentBlockUnion, result *types.Response) error {
+	switch block.Type {
+	case "text":
+		result.Content += block.Text
+	case "tool_use":
+		input := make(map[string]interface{})
+		if block.Input != nil {
+			// Convert RawJSON to map.
+			if err := json.Unmarshal(block.Input, &input); err != nil {
+				return errUtils.Build(errUtils.ErrAIParseToolInput).
+					WithCause(err).
+					WithContext("provider", "anthropic").
+					WithContext("tool_id", block.ID).
+					Err()
+			}
+		}
+
+		result.ToolCalls = append(result.ToolCalls, types.ToolCall{
+			ID:    block.ID,
+			Name:  block.Name,
+			Input: input,
+		})
+	}
+
+	return nil
 }
 
 // GetModel returns the configured model name.

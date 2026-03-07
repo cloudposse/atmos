@@ -1481,6 +1481,15 @@ Prompt content.
 	assert.Equal(t, "My Skill", skill.DisplayName)
 }
 
+// copyFileForTest copies a single file from src to dst.
+func copyFileForTest(srcPath, dstPath string) error {
+	data, err := os.ReadFile(srcPath)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dstPath, data, 0o644)
+}
+
 // copyDirRecursive copies a directory tree for testing.
 func copyDirRecursive(src, dst string) error {
 	entries, err := os.ReadDir(src)
@@ -1492,21 +1501,18 @@ func copyDirRecursive(src, dst string) error {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
-		if entry.IsDir() {
-			if err := os.MkdirAll(dstPath, 0o755); err != nil {
+		if !entry.IsDir() {
+			if err := copyFileForTest(srcPath, dstPath); err != nil {
 				return err
 			}
-			if err := copyDirRecursive(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			data, err := os.ReadFile(srcPath)
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(dstPath, data, 0o644); err != nil {
-				return err
-			}
+			continue
+		}
+
+		if err := os.MkdirAll(dstPath, 0o755); err != nil {
+			return err
+		}
+		if err := copyDirRecursive(srcPath, dstPath); err != nil {
+			return err
 		}
 	}
 	return nil

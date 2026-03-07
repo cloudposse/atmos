@@ -26,7 +26,7 @@ type createSessionForm struct {
 	nameInput        textinput.Model
 	selectedProvider int
 	error            string
-	focusedField     int // 0 = name, 1 = provider
+	focusedField     int // 0 = name, 1 = provider.
 }
 
 // newCreateSessionForm creates a new create session form.
@@ -39,8 +39,8 @@ func newCreateSessionForm() createSessionForm {
 
 	return createSessionForm{
 		nameInput:        ti,
-		selectedProvider: 0, // Default to Anthropic
-		focusedField:     0, // Start with name input focused
+		selectedProvider: 0, // Default to Anthropic.
+		focusedField:     0, // Start with name input focused.
 	}
 }
 
@@ -58,66 +58,71 @@ func (m *ChatModel) handleCreateSessionKeys(msg tea.KeyMsg) tea.Cmd {
 	case "ctrl+c":
 		return tea.Quit
 	case "esc":
-		// Cancel and return to session list or chat
-		if m.manager != nil {
-			m.currentView = viewModeSessionList
-			return m.loadSessionList()
-		}
-		m.currentView = viewModeChat
-		m.textarea.Focus()
-		// Return empty command to consume the key event and prevent it from reaching the textarea
-		return func() tea.Msg { return nil }
+		return m.cancelCreateSession()
 	case "tab", "shift+tab":
-		// Toggle focus between name input and provider selection
-		if m.createForm.focusedField == 0 {
-			m.createForm.focusedField = 1
-			m.createForm.nameInput.Blur()
-		} else {
-			m.createForm.focusedField = 0
-			m.createForm.nameInput.Focus()
-		}
-		return func() tea.Msg { return nil }
+		m.toggleCreateFormFocus()
+		return noopCmd()
 	case "up", "k":
-		// If name field is focused, switch to provider field first
-		if m.createForm.focusedField == 0 {
-			m.createForm.focusedField = 1
-			m.createForm.nameInput.Blur()
-		}
-		// Navigate provider selection up with wraparound
-		configuredProviders := m.getConfiguredProvidersForCreate()
-		if m.createForm.selectedProvider > 0 {
-			m.createForm.selectedProvider--
-		} else if len(configuredProviders) > 0 {
-			m.createForm.selectedProvider = len(configuredProviders) - 1
-		}
-		return func() tea.Msg { return nil }
+		m.navigateCreateFormProvider(-1)
+		return noopCmd()
 	case "down", "j":
-		// If name field is focused, switch to provider field first
-		if m.createForm.focusedField == 0 {
-			m.createForm.focusedField = 1
-			m.createForm.nameInput.Blur()
-		}
-		// Navigate provider selection down with wraparound
-		configuredProviders := m.getConfiguredProvidersForCreate()
-		if m.createForm.selectedProvider < len(configuredProviders)-1 {
-			m.createForm.selectedProvider++
-		} else if len(configuredProviders) > 0 {
-			m.createForm.selectedProvider = 0
-		}
-		return func() tea.Msg { return nil }
+		m.navigateCreateFormProvider(1)
+		return noopCmd()
 	case "enter":
-		// Submit form
 		return m.submitCreateSession()
 	}
 
-	// Update name input if focused
+	// Update name input if focused.
 	if m.createForm.focusedField == 0 {
 		var cmd tea.Cmd
 		m.createForm.nameInput, cmd = m.createForm.nameInput.Update(msg)
 		return cmd
 	}
 
-	return func() tea.Msg { return nil }
+	return noopCmd()
+}
+
+// cancelCreateSession returns to the previous view.
+func (m *ChatModel) cancelCreateSession() tea.Cmd {
+	if m.manager != nil {
+		m.currentView = viewModeSessionList
+		return m.loadSessionList()
+	}
+	m.currentView = viewModeChat
+	m.textarea.Focus()
+	return noopCmd()
+}
+
+// toggleCreateFormFocus toggles between name input and provider selection.
+func (m *ChatModel) toggleCreateFormFocus() {
+	if m.createForm.focusedField == 0 {
+		m.createForm.focusedField = 1
+		m.createForm.nameInput.Blur()
+	} else {
+		m.createForm.focusedField = 0
+		m.createForm.nameInput.Focus()
+	}
+}
+
+// navigateCreateFormProvider moves the provider selection in the given direction.
+func (m *ChatModel) navigateCreateFormProvider(direction int) {
+	// If name field is focused, switch to provider field first.
+	if m.createForm.focusedField == 0 {
+		m.createForm.focusedField = 1
+		m.createForm.nameInput.Blur()
+	}
+
+	configuredProviders := m.getConfiguredProvidersForCreate()
+	if len(configuredProviders) == 0 {
+		return
+	}
+
+	m.createForm.selectedProvider += direction
+	if m.createForm.selectedProvider < 0 {
+		m.createForm.selectedProvider = len(configuredProviders) - 1
+	} else if m.createForm.selectedProvider >= len(configuredProviders) {
+		m.createForm.selectedProvider = 0
+	}
 }
 
 // submitCreateSession validates and submits the create session form.
@@ -127,16 +132,16 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 			return sessionCreatedMsg{err: errUtils.ErrAISessionManagerNotAvailable}
 		}
 
-		// Validate name
+		// Validate name.
 		name := strings.TrimSpace(m.createForm.nameInput.Value())
 		if name == "" {
 			return sessionCreatedMsg{err: errUtils.ErrAISessionNameEmpty}
 		}
 
-		// Get selected provider from atmos.yaml configuration
+		// Get selected provider from atmos.yaml configuration.
 		configuredProviders := m.getConfiguredProvidersForCreate()
 		if m.createForm.selectedProvider >= len(configuredProviders) {
-			return sessionCreatedMsg{err: fmt.Errorf("invalid provider selection")}
+			return sessionCreatedMsg{err: errUtils.ErrAIInvalidProviderSelection}
 		}
 		provider := configuredProviders[m.createForm.selectedProvider]
 
@@ -146,17 +151,18 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 			skillName = m.currentSkill.Name
 		}
 
-		// Create session
+		// Create session.
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 
 		sess, err := m.manager.CreateSession(
 			ctx,
-			name,
-			provider.Model, // Use model from atmos.yaml
-			provider.Name,
-			skillName, // Current skill
-			nil,       // metadata
+			session.CreateSessionParams{
+				Name:     name,
+				Model:    provider.Model,
+				Provider: provider.Name,
+				Skill:    skillName,
+			},
 		)
 		if err != nil {
 			return sessionCreatedMsg{err: fmt.Errorf("failed to create session: %w", err)}
@@ -170,17 +176,19 @@ func (m *ChatModel) submitCreateSession() tea.Cmd {
 func (m *ChatModel) handleSessionCreated(msg sessionCreatedMsg) {
 	if msg.err != nil {
 		m.createForm.error = msg.err.Error()
-	} else {
-		// Switch to the newly created session
-		m.sess = msg.session
-		m.messages = make([]ChatMessage, 0)
-		m.updateViewportContent()
-		m.currentView = viewModeChat
-		m.textarea.Focus()
-		m.createForm = newCreateSessionForm() // Reset form
+		return
+	}
 
-		// Add welcome message
-		m.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
+	// Switch to the newly created session.
+	m.sess = msg.session
+	m.messages = make([]ChatMessage, 0)
+	m.updateViewportContent()
+	m.currentView = viewModeChat
+	m.textarea.Focus()
+	m.createForm = newCreateSessionForm()
+
+	// Add welcome message.
+	m.addMessage(roleAssistant, `I'm here to help you with your Atmos infrastructure management. I can:
 
 • Describe components and their configurations
 • List available components and stacks
@@ -196,39 +204,50 @@ Try asking me something like:
 - "How do I validate my stack configuration?"
 
 What would you like to know?`)
-		m.updateViewportContent()
-	}
+	m.updateViewportContent()
 }
 
 // createSessionView renders the create session form.
-//
-//nolint:funlen // TUI rendering functions require detailed styling.
-//revive:disable:function-length
 func (m *ChatModel) createSessionView() string {
 	var content strings.Builder
 
-	// Title
+	m.renderCreateFormTitle(&content)
+	m.renderCreateFormError(&content)
+	m.renderCreateFormNameInput(&content)
+	m.renderCreateFormProviderList(&content)
+	m.renderCreateFormHelp(&content)
+
+	return content.String()
+}
+
+// renderCreateFormTitle renders the form title.
+func (m *ChatModel) renderCreateFormTitle(content *strings.Builder) {
 	titleStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color(theme.ColorCyan)).
 		Bold(true).
 		Padding(1, 2)
-
 	content.WriteString(titleStyle.Render("Create New Session"))
 	content.WriteString(newlineChar + newlineChar)
+}
 
-	// Error message if any
-	if m.createForm.error != "" {
-		errorStyle := lipgloss.NewStyle().
-			Foreground(lipgloss.Color(theme.ColorRed)).
-			Padding(0, 2)
-		content.WriteString(errorStyle.Render(fmt.Sprintf("❌ Error: %s", m.createForm.error)))
-		content.WriteString(newlineChar + newlineChar)
+// renderCreateFormError renders the error message if present.
+func (m *ChatModel) renderCreateFormError(content *strings.Builder) {
+	if m.createForm.error == "" {
+		return
 	}
 
-	// Name input
+	errorStyle := lipgloss.NewStyle().
+		Foreground(lipgloss.Color(theme.ColorRed)).
+		Padding(0, 2)
+	content.WriteString(errorStyle.Render(fmt.Sprintf("\u274c Error: %s", m.createForm.error)))
+	content.WriteString(newlineChar + newlineChar)
+}
+
+// renderCreateFormNameInput renders the name input field.
+func (m *ChatModel) renderCreateFormNameInput(content *strings.Builder) {
 	nameLabel := "Session Name:"
 	if m.createForm.focusedField == 0 {
-		nameLabel = "→ Session Name:"
+		nameLabel = "\u2192 Session Name:"
 	}
 
 	labelStyle := lipgloss.NewStyle().
@@ -239,57 +258,66 @@ func (m *ChatModel) createSessionView() string {
 	content.WriteString(newlineChar)
 	content.WriteString(lipgloss.NewStyle().Padding(0, 4).Render(m.createForm.nameInput.View()))
 	content.WriteString(newlineChar + newlineChar)
+}
 
-	// Provider selection
+// renderCreateFormProviderList renders the provider selection list.
+func (m *ChatModel) renderCreateFormProviderList(content *strings.Builder) {
 	providerLabel := "Provider:"
 	if m.createForm.focusedField == 1 {
-		providerLabel = "→ Provider:"
+		providerLabel = "\u2192 Provider:"
 	}
+
+	labelStyle := lipgloss.NewStyle().
+		Padding(0, 2).
+		Foreground(lipgloss.Color(theme.ColorGreen))
 
 	content.WriteString(labelStyle.Render(providerLabel))
 	content.WriteString(newlineChar)
 
-	// Render provider options from atmos.yaml configuration
 	configuredProviders := m.getConfiguredProvidersForCreate()
 	for i, provider := range configuredProviders {
-		var style lipgloss.Style
-		var prefix string
-
-		if i == m.createForm.selectedProvider {
-			if m.createForm.focusedField == 1 {
-				style = lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorGreen)).
-					Bold(true).
-					Padding(0, 4)
-				prefix = "● "
-			} else {
-				style = lipgloss.NewStyle().
-					Foreground(lipgloss.Color(theme.ColorCyan)).
-					Padding(0, 4)
-				prefix = "● "
-			}
-		} else {
-			style = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Padding(0, 4)
-			prefix = "○ "
-		}
-
-		modelInfo := fmt.Sprintf("%s%s (%s)", prefix, provider.DisplayName, provider.Model)
-		content.WriteString(style.Render(modelInfo))
+		line := m.renderCreateFormProviderOption(i, provider)
+		content.WriteString(line)
 		content.WriteString(newlineChar)
 	}
 
 	content.WriteString(newlineChar)
+}
 
-	// Help text
+// renderCreateFormProviderOption renders a single provider option in the create form.
+func (m *ChatModel) renderCreateFormProviderOption(index int, provider ProviderWithModel) string {
+	var style lipgloss.Style
+	prefix := "\u25cb "
+
+	if index == m.createForm.selectedProvider {
+		prefix = "\u25cf "
+		if m.createForm.focusedField == 1 {
+			style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(theme.ColorGreen)).
+				Bold(true).
+				Padding(0, 4)
+		} else {
+			style = lipgloss.NewStyle().
+				Foreground(lipgloss.Color(theme.ColorCyan)).
+				Padding(0, 4)
+		}
+	} else {
+		style = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("240")).
+			Padding(0, 4)
+	}
+
+	modelInfo := fmt.Sprintf("%s%s (%s)", prefix, provider.DisplayName, provider.Model)
+	return style.Render(modelInfo)
+}
+
+// renderCreateFormHelp renders the help text.
+func (m *ChatModel) renderCreateFormHelp(content *strings.Builder) {
 	helpStyle := lipgloss.NewStyle().
 		Foreground(lipgloss.Color("240")).
 		Italic(true).
 		Padding(0, 2)
 
-	help := "Tab: Switch field | ↑/↓: Select provider | Enter: Create | Esc: Cancel | Ctrl+C: Quit"
+	help := "Tab: Switch field | \u2191/\u2193: Select provider | Enter: Create | Esc: Cancel | Ctrl+C: Quit"
 	content.WriteString(helpStyle.Render(help))
-
-	return content.String()
 }

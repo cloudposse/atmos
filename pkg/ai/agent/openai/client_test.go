@@ -690,7 +690,6 @@ func TestExtractConfig_BaseURLCustomization(t *testing.T) {
 	}
 }
 
-//nolint:dupl // Similar test setup to other provider tests.
 func TestExtractConfig_CompleteOverride(t *testing.T) {
 	// Test overriding all configuration values.
 	atmosConfig := &schema.AtmosConfiguration{

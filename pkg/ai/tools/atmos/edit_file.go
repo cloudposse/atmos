@@ -17,6 +17,9 @@ import (
 type EditOperation string
 
 const (
+	// Standard newline character used for line splitting and joining.
+	newline = "\n"
+
 	// OperationSearchReplace finds and replaces text in the file.
 	OperationSearchReplace EditOperation = "search_replace"
 	// OperationInsertLine inserts a line at a specific position.
@@ -103,111 +106,136 @@ func (t *EditFileTool) Parameters() []tools.Parameter {
 	}
 }
 
-// Execute performs the file editing operation.
-func (t *EditFileTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
-	// Extract file_path parameter.
-	filePath, ok := params["file_path"].(string)
-	if !ok || filePath == "" {
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("%w: file_path", errUtils.ErrAIToolParameterRequired),
-		}, nil
-	}
-
-	// Resolve to absolute path.
+// resolveAndValidateEditPath resolves and validates the file path for editing.
+func (t *EditFileTool) resolveAndValidateEditPath(filePath string) (string, *tools.Result) {
 	absolutePath := filePath
 	if !filepath.IsAbs(filePath) {
 		absolutePath = filepath.Join(t.atmosConfig.BasePath, filePath)
 	}
 
-	// Clean the path to prevent traversal attacks.
 	cleanPath := filepath.Clean(absolutePath)
-
-	// Security check: ensure the path is within the Atmos base path.
 	cleanBase := filepath.Clean(t.atmosConfig.BasePath)
 	if !strings.HasPrefix(cleanPath, cleanBase+string(filepath.Separator)) && cleanPath != cleanBase {
-		return &tools.Result{
+		return "", &tools.Result{
 			Success: false,
-			Error:   fmt.Errorf("access denied: file must be within Atmos base path"),
-		}, nil
+			Error:   errUtils.ErrAIAccessDeniedBasePath,
+		}
 	}
 
-	// Extract operation parameter.
-	operationStr, ok := params["operation"].(string)
-	if !ok || operationStr == "" {
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("%w: operation", errUtils.ErrAIToolParameterRequired),
-		}, nil
-	}
-	operation := EditOperation(operationStr)
+	return cleanPath, nil
+}
 
-	// Check if file exists.
-	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("%w: %s", errUtils.ErrAIFileNotFound, filePath),
-		}, nil
-	}
-
-	// Read file content.
-	content, err := os.ReadFile(cleanPath)
-	if err != nil {
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("failed to read file %s: %w", filePath, err),
-		}, nil
-	}
-
-	// Perform operation.
-	var newContent string
-	var operationDesc string
-
+// executeOperation dispatches to the appropriate edit operation handler.
+func (t *EditFileTool) executeOperation(operation EditOperation, content string, params map[string]interface{}) (string, string, error) {
 	switch operation {
 	case OperationSearchReplace:
-		newContent, operationDesc, err = t.searchReplace(string(content), params)
+		return t.searchReplace(content, params)
 	case OperationInsertLine:
-		newContent, operationDesc, err = t.insertLine(string(content), params)
+		return t.insertLine(content, params)
 	case OperationDeleteLines:
-		newContent, operationDesc, err = t.deleteLines(string(content), params)
+		return t.deleteLines(content, params)
 	case OperationAppend:
-		newContent, operationDesc, err = t.appendContent(string(content), params)
+		return t.appendContent(content, params)
 	default:
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("unknown operation: %s", operation),
-		}, nil
+		return "", "", fmt.Errorf("%w: %s", errUtils.ErrAIUnknownOperation, string(operation))
+	}
+}
+
+// Execute performs the file editing operation.
+func (t *EditFileTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
+	ep, errResult := t.extractEditParams(params)
+	if errResult != nil {
+		return errResult, nil
 	}
 
+	content, errResult := readFileForEdit(ep.cleanPath, ep.filePath)
+	if errResult != nil {
+		return errResult, nil
+	}
+
+	newContent, operationDesc, err := t.executeOperation(ep.operation, string(content), params)
 	if err != nil {
 		//nolint:nilerr // Tool errors are returned in Result.Error, not in err return value.
+		return &tools.Result{Success: false, Error: err}, nil
+	}
+
+	if err := os.WriteFile(ep.cleanPath, []byte(newContent), filePermissions); err != nil {
 		return &tools.Result{
 			Success: false,
-			Error:   err,
+			Error:   fmt.Errorf("failed to write file %s: %w", ep.filePath, err),
 		}, nil
 	}
 
-	// Write modified content back to file.
-	if err := os.WriteFile(cleanPath, []byte(newContent), filePermissions); err != nil {
-		return &tools.Result{
-			Success: false,
-			Error:   fmt.Errorf("failed to write file %s: %w", filePath, err),
-		}, nil
-	}
-
-	log.Debugf("Edited file: %s - %s", filePath, operationDesc)
+	log.Debugf("Edited file: %s - %s", ep.filePath, operationDesc)
 
 	return &tools.Result{
 		Success: true,
-		Output:  fmt.Sprintf("Successfully edited %s: %s", filePath, operationDesc),
+		Output:  fmt.Sprintf("Successfully edited %s: %s", ep.filePath, operationDesc),
 		Data: map[string]interface{}{
-			"file_path":  filePath,
-			"operation":  string(operation),
+			"file_path":  ep.filePath,
+			"operation":  string(ep.operation),
 			"old_size":   len(content),
 			"new_size":   len(newContent),
 			"size_delta": len(newContent) - len(content),
 		},
 	}, nil
+}
+
+// editParams holds validated parameters for an edit operation.
+type editParams struct {
+	filePath  string
+	cleanPath string
+	operation EditOperation
+}
+
+// extractEditParams extracts and validates file_path and operation parameters.
+func (t *EditFileTool) extractEditParams(params map[string]interface{}) (*editParams, *tools.Result) {
+	filePath, ok := params["file_path"].(string)
+	if !ok || filePath == "" {
+		return nil, &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: file_path", errUtils.ErrAIToolParameterRequired),
+		}
+	}
+
+	cleanPath, errResult := t.resolveAndValidateEditPath(filePath)
+	if errResult != nil {
+		return nil, errResult
+	}
+
+	operationStr, ok := params["operation"].(string)
+	if !ok || operationStr == "" {
+		return nil, &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: operation", errUtils.ErrAIToolParameterRequired),
+		}
+	}
+
+	return &editParams{
+		filePath:  filePath,
+		cleanPath: cleanPath,
+		operation: EditOperation(operationStr),
+	}, nil
+}
+
+// readFileForEdit reads a file and returns its content, or an error result.
+func readFileForEdit(cleanPath, filePath string) ([]byte, *tools.Result) {
+	if _, err := os.Stat(cleanPath); os.IsNotExist(err) {
+		return nil, &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("%w: %s", errUtils.ErrAIFileNotFound, filePath),
+		}
+	}
+
+	content, err := os.ReadFile(cleanPath)
+	if err != nil {
+		return nil, &tools.Result{
+			Success: false,
+			Error:   fmt.Errorf("failed to read file %s: %w", filePath, err),
+		}
+	}
+
+	return content, nil
 }
 
 // searchReplace performs a search and replace operation.
@@ -223,7 +251,7 @@ func (t *EditFileTool) searchReplace(content string, params map[string]interface
 	}
 
 	if !strings.Contains(content, search) {
-		return "", "", fmt.Errorf("search text not found in file")
+		return "", "", errUtils.ErrAISearchTextNotFound
 	}
 
 	newContent := strings.ReplaceAll(content, search, replace)
@@ -244,11 +272,11 @@ func (t *EditFileTool) insertLine(content string, params map[string]interface{})
 		return "", "", fmt.Errorf("%w: content", errUtils.ErrAIToolParameterRequired)
 	}
 
-	lines := strings.Split(content, "\n")
+	lines := strings.Split(content, newline)
 	lineIdx := int(lineNum) - 1 // Convert to 0-based index.
 
 	if lineIdx < 0 || lineIdx > len(lines) {
-		return "", "", fmt.Errorf("line number %d out of range (file has %d lines)", int(lineNum), len(lines))
+		return "", "", fmt.Errorf("%w: line %d (file has %d lines)", errUtils.ErrAILineNumberOutOfRange, int(lineNum), len(lines))
 	}
 
 	// Insert the new line.
@@ -257,7 +285,7 @@ func (t *EditFileTool) insertLine(content string, params map[string]interface{})
 	newLines = append(newLines, insertContent)
 	newLines = append(newLines, lines[lineIdx:]...)
 
-	return strings.Join(newLines, "\n"), fmt.Sprintf("inserted line at position %d", int(lineNum)), nil
+	return strings.Join(newLines, newline), fmt.Sprintf("inserted line at position %d", int(lineNum)), nil
 }
 
 // deleteLines deletes a range of lines.
@@ -272,12 +300,12 @@ func (t *EditFileTool) deleteLines(content string, params map[string]interface{}
 		return "", "", fmt.Errorf("%w: end_line", errUtils.ErrAIToolParameterRequired)
 	}
 
-	lines := strings.Split(content, "\n")
+	lines := strings.Split(content, newline)
 	startIdx := int(startLine) - 1 // Convert to 0-based index (inclusive).
 	endIdx := int(endLine) - 1     // Convert to 0-based index (inclusive).
 
 	if startIdx < 0 || endIdx >= len(lines) || startIdx > endIdx {
-		return "", "", fmt.Errorf("invalid line range %d-%d (file has %d lines)", int(startLine), int(endLine), len(lines))
+		return "", "", fmt.Errorf("%w: %d-%d (file has %d lines)", errUtils.ErrAIInvalidLineRange, int(startLine), int(endLine), len(lines))
 	}
 
 	// Delete the lines (endIdx is inclusive, so we keep lines after endIdx+1).
@@ -286,7 +314,7 @@ func (t *EditFileTool) deleteLines(content string, params map[string]interface{}
 	newLines = append(newLines, lines[endIdx+1:]...)
 
 	count := endIdx - startIdx + 1
-	return strings.Join(newLines, "\n"), fmt.Sprintf("deleted %d line(s) from %d to %d", count, int(startLine), int(endLine)), nil
+	return strings.Join(newLines, newline), fmt.Sprintf("deleted %d line(s) from %d to %d", count, int(startLine), int(endLine)), nil
 }
 
 // appendContent appends content to the end of the file.
@@ -297,8 +325,8 @@ func (t *EditFileTool) appendContent(content string, params map[string]interface
 	}
 
 	// Ensure file ends with newline before appending.
-	if !strings.HasSuffix(content, "\n") {
-		content += "\n"
+	if !strings.HasSuffix(content, newline) {
+		content += newline
 	}
 
 	newContent := content + appendContent

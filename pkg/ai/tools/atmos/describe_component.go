@@ -13,6 +13,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 )
 
+const (
+	// Parameter name for the component.
+	paramComponent = "component"
+	// Parameter name for the stack.
+	paramStack = "stack"
+)
+
 // DescribeComponentTool describes an Atmos component in a stack.
 type DescribeComponentTool struct {
 	atmosConfig *schema.AtmosConfiguration
@@ -39,13 +46,13 @@ func (t *DescribeComponentTool) Description() string {
 func (t *DescribeComponentTool) Parameters() []tools.Parameter {
 	return []tools.Parameter{
 		{
-			Name:        "component",
+			Name:        paramComponent,
 			Description: "Component name (e.g., 'vpc', 'rds')",
 			Type:        tools.ParamTypeString,
 			Required:    true,
 		},
 		{
-			Name:        "stack",
+			Name:        paramStack,
 			Description: "Stack name (e.g., 'prod-use1')",
 			Type:        tools.ParamTypeString,
 			Required:    true,
@@ -56,20 +63,20 @@ func (t *DescribeComponentTool) Parameters() []tools.Parameter {
 // Execute runs the tool.
 func (t *DescribeComponentTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
 	// Extract parameters.
-	component, ok := params["component"].(string)
+	component, ok := params[paramComponent].(string)
 	if !ok || component == "" {
 		return &tools.Result{
 			Success: false,
 			Error:   errUtils.ErrAIToolParameterRequired,
-		}, fmt.Errorf("%w: component", errUtils.ErrAIToolParameterRequired)
+		}, fmt.Errorf("%w: %s", errUtils.ErrAIToolParameterRequired, paramComponent)
 	}
 
-	stack, ok := params["stack"].(string)
+	stack, ok := params[paramStack].(string)
 	if !ok || stack == "" {
 		return &tools.Result{
 			Success: false,
 			Error:   errUtils.ErrAIToolParameterRequired,
-		}, fmt.Errorf("%w: stack", errUtils.ErrAIToolParameterRequired)
+		}, fmt.Errorf("%w: %s", errUtils.ErrAIToolParameterRequired, paramStack)
 	}
 
 	// Execute describe component.
@@ -89,6 +96,11 @@ func (t *DescribeComponentTool) Execute(ctx context.Context, params map[string]i
 		}, err
 	}
 
+	return buildDescribeComponentResult(component, stack, output)
+}
+
+// buildDescribeComponentResult formats the describe component output as a tools.Result.
+func buildDescribeComponentResult(component, stack string, output map[string]any) (*tools.Result, error) {
 	// Convert output to YAML for better readability.
 	yamlBytes, err := yaml.Marshal(output)
 	if err != nil {
@@ -112,9 +124,9 @@ func (t *DescribeComponentTool) Execute(ctx context.Context, params map[string]i
 		Success: true,
 		Output:  outputStr,
 		Data: map[string]interface{}{
-			"component": component,
-			"stack":     stack,
-			"config":    output,
+			paramComponent: component,
+			paramStack:     stack,
+			"config":       output,
 		},
 	}, nil
 }
