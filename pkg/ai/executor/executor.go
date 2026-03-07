@@ -7,7 +7,7 @@ import (
 
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
-	"github.com/cloudposse/atmos/pkg/ai/memory"
+	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/types"
 	"github.com/cloudposse/atmos/pkg/schema"
@@ -123,15 +123,15 @@ func (e *Executor) executeWithTools(ctx context.Context, prompt string, result *
 	var atmosMemory string
 	if e.atmosConfig != nil && e.atmosConfig.Settings.AI.Instructions.Enabled {
 		// Try to load project instructions for caching benefits.
-		memConfig := &memory.Config{
+		memConfig := &instructions.Config{
 			Enabled:      e.atmosConfig.Settings.AI.Instructions.Enabled,
 			FilePath:     e.atmosConfig.Settings.AI.Instructions.FilePath,
 			AutoUpdate:   e.atmosConfig.Settings.AI.Instructions.AutoUpdate,
 			CreateIfMiss: e.atmosConfig.Settings.AI.Instructions.CreateIfMiss,
 		}
-		memoryMgr := memory.NewManager(e.atmosConfig.BasePath, memConfig)
+		memoryMgr := instructions.NewManager(e.atmosConfig.BasePath, memConfig)
 		if memoryMgr != nil {
-			_, _ = memoryMgr.Load(ctx) // Ignore error - it's OK if memory doesn't exist
+			_, _ = memoryMgr.Load(ctx) // Ignore error - it's OK if instructions don't exist
 			atmosMemory = memoryMgr.GetContext()
 		}
 	}

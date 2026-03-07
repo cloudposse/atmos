@@ -17,7 +17,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
-	"github.com/cloudposse/atmos/pkg/ai/memory"
+	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/skills"
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
@@ -77,7 +77,7 @@ type ChatModel struct {
 	manager              *session.Manager
 	sess                 *session.Session
 	executor             *tools.Executor
-	memoryMgr            *memory.Manager
+	memoryMgr            *instructions.Manager
 	messages             []ChatMessage
 	viewport             viewport.Model
 	textarea             textarea.Model
@@ -127,7 +127,7 @@ type ChatMessage struct {
 }
 
 // NewChatModel creates a new chat model with the provided AI client.
-func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) (*ChatModel, error) {
+func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *instructions.Manager) (*ChatModel, error) {
 	if client == nil {
 		return nil, errUtils.ErrAIClientNil
 	}
@@ -1283,7 +1283,7 @@ func (m *ChatModel) getAIResponseWithContext(userMessage string, ctx context.Con
 			Content: userMessage,
 		})
 
-		// Apply memory context if available by prepending a system message.
+		// Apply instructions context if available by prepending a system message.
 		if m.memoryMgr != nil {
 			memoryContext := m.memoryMgr.GetContext()
 			if memoryContext != "" {
@@ -1986,7 +1986,7 @@ func detectActionIntent(content string) bool {
 }
 
 // RunChat starts the chat TUI with the provided AI client.
-func RunChat(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *memory.Manager) error {
+func RunChat(client ai.Client, atmosConfig *schema.AtmosConfiguration, manager *session.Manager, sess *session.Session, executor *tools.Executor, memoryMgr *instructions.Manager) error {
 	model, err := NewChatModel(client, atmosConfig, manager, sess, executor, memoryMgr)
 	if err != nil {
 		return fmt.Errorf("failed to create chat model: %w", err)

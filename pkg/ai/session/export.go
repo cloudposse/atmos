@@ -213,8 +213,8 @@ func exportMarkdown(checkpoint *Checkpoint, outputPath string) error {
 		if checkpoint.Context.WorkingDirectory != "" {
 			fmt.Fprintf(file, "**Working Directory:** `%s`\n\n", checkpoint.Context.WorkingDirectory)
 		}
-		if checkpoint.Context.ProjectMemory != "" {
-			fmt.Fprintf(file, "### Project Memory\n\n```\n%s\n```\n\n", checkpoint.Context.ProjectMemory)
+		if checkpoint.Context.ProjectInstructions != "" {
+			fmt.Fprintf(file, "### Project Instructions\n\n```\n%s\n```\n\n", checkpoint.Context.ProjectInstructions)
 		}
 		if len(checkpoint.Context.FilesAccessed) > 0 {
 			fmt.Fprintf(file, "### Files Accessed\n\n")

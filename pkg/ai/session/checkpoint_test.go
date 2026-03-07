@@ -1013,7 +1013,7 @@ func TestExtractContext(t *testing.T) {
 	// Working directory should be set.
 	assert.NotEmpty(t, context.WorkingDirectory)
 	// Other fields should be empty for now (placeholder implementation).
-	assert.Empty(t, context.ProjectMemory)
+	assert.Empty(t, context.ProjectInstructions)
 	assert.Empty(t, context.FilesAccessed)
 }
 
@@ -1230,17 +1230,17 @@ func TestExportMarkdown_Content(t *testing.T) {
 					{Role: "user", Content: "Test", CreatedAt: time.Now()},
 				},
 				Context: &CheckpointContext{
-					WorkingDirectory: "/test/dir",
-					ProjectMemory:    "This is project memory",
-					FilesAccessed:    []string{"file1.go", "file2.go", "file3.go"},
+					WorkingDirectory:    "/test/dir",
+					ProjectInstructions: "This is project instructions",
+					FilesAccessed:       []string{"file1.go", "file2.go", "file3.go"},
 				},
 				Statistics: CheckpointStatistics{MessageCount: 1},
 			},
 			check: func(t *testing.T, content string) {
 				assert.Contains(t, content, "## Context")
 				assert.Contains(t, content, "**Working Directory:** `/test/dir`")
-				assert.Contains(t, content, "### Project Memory")
-				assert.Contains(t, content, "This is project memory")
+				assert.Contains(t, content, "### Project Instructions")
+				assert.Contains(t, content, "This is project instructions")
 				assert.Contains(t, content, "### Files Accessed")
 				assert.Contains(t, content, "- `file1.go`")
 				assert.Contains(t, content, "- `file2.go`")

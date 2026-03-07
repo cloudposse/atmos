@@ -956,7 +956,7 @@ func TestExtractCacheConfig_OnlySystemPrompt(t *testing.T) {
 	assert.False(t, cache.cacheProjectInstructions)
 }
 
-func TestExtractCacheConfig_OnlyProjectMemory(t *testing.T) {
+func TestExtractCacheConfig_OnlyProjectInstructions(t *testing.T) {
 	atmosConfig := &schema.AtmosConfiguration{
 		Settings: schema.AtmosSettings{
 			AI: schema.AISettings{

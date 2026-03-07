@@ -1,4 +1,4 @@
-package memory
+package instructions
 
 import (
 	"context"
@@ -76,7 +76,7 @@ func TestManager_CreateDefault(t *testing.T) {
 	content, err := os.ReadFile(filePath)
 	require.NoError(t, err)
 
-	assert.Contains(t, string(content), "# Atmos Project Memory")
+	assert.Contains(t, string(content), "# Atmos Project Instructions")
 	assert.Contains(t, string(content), "## Project Context")
 	assert.Contains(t, string(content), "## Common Commands")
 }
@@ -90,7 +90,7 @@ func TestManager_Load(t *testing.T) {
 		defer cleanup()
 
 		// Create a test ATMOS.md file.
-		testContent := `# Atmos Project Memory
+		testContent := `# Atmos Project Instructions
 
 ## Project Context
 
@@ -147,7 +147,7 @@ Test commands.
 		memory, err := manager.Load(ctx)
 
 		assert.Error(t, err)
-		assert.ErrorIs(t, err, errUtils.ErrAIProjectMemoryNotFound)
+		assert.ErrorIs(t, err, errUtils.ErrAIProjectInstructionsNotFound)
 		assert.Nil(t, memory)
 	})
 
@@ -194,7 +194,7 @@ atmos validate stacks
 
 		context := manager.GetContext()
 
-		assert.Contains(t, context, "# Project Memory")
+		assert.Contains(t, context, "# Project Instructions")
 		assert.Contains(t, context, "## Project Context")
 		assert.Contains(t, context, "Org: acme-corp")
 		assert.Contains(t, context, "## Common Commands")
@@ -379,7 +379,7 @@ Old content.
 		ctx := context.Background()
 
 		err := manager.UpdateSection(ctx, "project_context", "Content.", false)
-		assert.ErrorIs(t, err, errUtils.ErrAIProjectMemoryNotLoaded)
+		assert.ErrorIs(t, err, errUtils.ErrAIProjectInstructionsNotLoaded)
 	})
 }
 
@@ -445,7 +445,7 @@ func TestManager_Save(t *testing.T) {
 		ctx := context.Background()
 
 		err := manager.Save(ctx)
-		assert.ErrorIs(t, err, errUtils.ErrAIProjectMemoryNotLoaded)
+		assert.ErrorIs(t, err, errUtils.ErrAIProjectInstructionsNotLoaded)
 	})
 }
 
@@ -544,7 +544,7 @@ func TestDefaultConfig(t *testing.T) {
 func TestGetDefaultTemplate(t *testing.T) {
 	template := GetDefaultTemplate()
 
-	assert.Contains(t, template, "# Atmos Project Memory")
+	assert.Contains(t, template, "# Atmos Project Instructions")
 	assert.Contains(t, template, "## Project Context")
 	assert.Contains(t, template, "## Common Commands")
 	assert.Contains(t, template, "## Stack Patterns")

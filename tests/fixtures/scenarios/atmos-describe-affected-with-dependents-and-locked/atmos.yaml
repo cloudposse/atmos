@@ -54,7 +54,7 @@ settings:
     web_search:
       enabled: true
 
-    default_provider: "gemini"  # Default provider for CLI commands
+    default_provider: "anthropic"  # Default provider for CLI commands
 
     # Providers
     providers:

@@ -1,4 +1,4 @@
-package memory
+package instructions
 
 import (
 	"context"
@@ -27,7 +27,7 @@ const (
 )
 
 // defaultTemplate is the default ATMOS.md template content.
-const defaultTemplate = `# Atmos Project Memory
+const defaultTemplate = `# Atmos Project Instructions
 
 > This file is automatically maintained by Atmos AI to remember project-specific
 > context, patterns, and conventions. Edit freely - AI will preserve manual changes.
@@ -129,14 +129,14 @@ components/
 
 `
 
-// Manager manages project memory (ATMOS.md) lifecycle.
+// Manager manages project instructions (ATMOS.md) lifecycle.
 type Manager struct {
 	config   *Config
 	basePath string
-	memory   *ProjectMemory
+	memory   *ProjectInstructions
 }
 
-// NewManager creates a new project memory manager.
+// NewManager creates a new project instructions manager.
 func NewManager(basePath string, config *Config) *Manager {
 	if config == nil {
 		config = DefaultConfig()
@@ -149,7 +149,7 @@ func NewManager(basePath string, config *Config) *Manager {
 }
 
 // Load loads the ATMOS.md file from disk and parses it.
-func (m *Manager) Load(ctx context.Context) (*ProjectMemory, error) {
+func (m *Manager) Load(ctx context.Context) (*ProjectInstructions, error) {
 	if !m.config.Enabled {
 		return nil, nil
 	}
@@ -174,7 +174,7 @@ func (m *Manager) Load(ctx context.Context) (*ProjectMemory, error) {
 		return nil, fmt.Errorf("failed to parse ATMOS.md: %w", err)
 	}
 
-	m.memory = &ProjectMemory{
+	m.memory = &ProjectInstructions{
 		FilePath:     filePath,
 		Content:      string(content),
 		Sections:     sections,
@@ -182,7 +182,7 @@ func (m *Manager) Load(ctx context.Context) (*ProjectMemory, error) {
 		Enabled:      true,
 	}
 
-	log.Debug(fmt.Sprintf("Loaded project memory from %s (%d sections)", filePath, len(sections)))
+	log.Debug(fmt.Sprintf("Loaded project instructions from %s (%d sections)", filePath, len(sections)))
 
 	return m.memory, nil
 }
@@ -200,7 +200,7 @@ func (m *Manager) ensureFileExists(ctx context.Context, filePath string) (os.Fil
 
 	// File doesn't exist - create default if configured.
 	if !m.config.CreateIfMiss {
-		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIProjectMemoryNotFound, filePath)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIProjectInstructionsNotFound, filePath)
 	}
 
 	log.Debug(fmt.Sprintf("ATMOS.md not found, creating template at %s", filePath))
@@ -217,7 +217,7 @@ func (m *Manager) ensureFileExists(ctx context.Context, filePath string) (os.Fil
 	return info, nil
 }
 
-// GetContext returns the project memory content formatted for AI context.
+// GetContext returns the project instructions content formatted for AI context.
 func (m *Manager) GetContext() string {
 	if m.memory == nil || !m.config.Enabled {
 		return ""
@@ -225,7 +225,7 @@ func (m *Manager) GetContext() string {
 
 	var sb strings.Builder
 
-	sb.WriteString("# Project Memory (ATMOS.md)\n\n")
+	sb.WriteString("# Project Instructions (ATMOS.md)\n\n")
 	sb.WriteString("The following information has been stored about this project:\n\n")
 
 	// Include configured sections in order.
@@ -249,7 +249,7 @@ func (m *Manager) UpdateSection(ctx context.Context, sectionKey, content string,
 	}
 
 	if m.memory == nil {
-		return errUtils.ErrAIProjectMemoryNotLoaded
+		return errUtils.ErrAIProjectInstructionsNotLoaded
 	}
 
 	// Update in-memory section.
@@ -279,7 +279,7 @@ func (m *Manager) UpdateSection(ctx context.Context, sectionKey, content string,
 // Save writes the current memory state to disk.
 func (m *Manager) Save(ctx context.Context) error {
 	if m.memory == nil {
-		return errUtils.ErrAIProjectMemoryNotLoaded
+		return errUtils.ErrAIProjectInstructionsNotLoaded
 	}
 
 	// Reconstruct markdown content from sections.
@@ -354,7 +354,7 @@ func (m *Manager) getFilePath() string {
 func (m *Manager) reconstructMarkdown() string {
 	var sb strings.Builder
 
-	sb.WriteString("# Atmos Project Memory\n\n")
+	sb.WriteString("# Atmos Project Instructions\n\n")
 	sb.WriteString("> This file is automatically maintained by Atmos AI to remember project-specific\n")
 	sb.WriteString("> context, patterns, and conventions. Edit freely - AI will preserve manual changes.\n\n")
 

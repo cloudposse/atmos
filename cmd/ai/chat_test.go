@@ -1422,10 +1422,10 @@ func TestChatCmd_RunE_ToolsEnabled(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestChatCmd_RunE_MemoryEnabled tests memory initialization path.
-func TestChatCmd_RunE_MemoryEnabled(t *testing.T) {
+// TestChatCmd_RunE_InstructionsEnabled tests instructions initialization path.
+func TestChatCmd_RunE_InstructionsEnabled(t *testing.T) {
 	extraConfig := `
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       auto_update: false
@@ -1441,7 +1441,7 @@ func TestChatCmd_RunE_MemoryEnabled(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Will fail at AI client creation, but memory initialization path is exercised.
+	// Will fail at AI client creation, but instructions initialization path is exercised.
 	require.Error(t, err)
 }
 
@@ -1455,7 +1455,7 @@ func TestChatCmd_RunE_AllFeaturesEnabled(t *testing.T) {
     tools:
       enabled: true
       yolo_mode: false
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       auto_update: true
@@ -1618,10 +1618,10 @@ func TestChatCmd_RunE_ToolsDisabled(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestChatCmd_RunE_MemoryDisabled tests when memory is explicitly disabled.
-func TestChatCmd_RunE_MemoryDisabled(t *testing.T) {
+// TestChatCmd_RunE_InstructionsDisabled tests when instructions are explicitly disabled.
+func TestChatCmd_RunE_InstructionsDisabled(t *testing.T) {
 	extraConfig := `
-    memory:
+    instructions:
       enabled: false
 `
 	tmpDir := createChatValidAtmosConfig(t, true, extraConfig)
@@ -1634,7 +1634,7 @@ func TestChatCmd_RunE_MemoryDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Will fail at AI client creation, but memory disabled path is exercised.
+	// Will fail at AI client creation, but instructions disabled path is exercised.
 	require.Error(t, err)
 }
 
@@ -1700,12 +1700,12 @@ func TestChatCmd_RunE_ToolsWithRequireConfirmation(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestChatCmd_RunE_MemoryWithCustomFilePath tests memory with custom file path.
-func TestChatCmd_RunE_MemoryWithCustomFilePath(t *testing.T) {
+// TestChatCmd_RunE_InstructionsWithCustomFilePath tests instructions with custom file path.
+func TestChatCmd_RunE_InstructionsWithCustomFilePath(t *testing.T) {
 	extraConfig := `
-    memory:
+    instructions:
       enabled: true
-      file: "custom-memory.md"
+      file: "custom-instructions.md"
       auto_update: true
       create_if_missing: false
 `
@@ -1719,14 +1719,14 @@ func TestChatCmd_RunE_MemoryWithCustomFilePath(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Will fail at AI client creation, but custom memory path is exercised.
+	// Will fail at AI client creation, but custom instructions path is exercised.
 	require.Error(t, err)
 }
 
-// TestChatCmd_RunE_MemoryWithSections tests memory with custom sections.
-func TestChatCmd_RunE_MemoryWithSections(t *testing.T) {
+// TestChatCmd_RunE_InstructionsWithSections tests instructions with custom sections.
+func TestChatCmd_RunE_InstructionsWithSections(t *testing.T) {
 	extraConfig := `
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       sections:
@@ -1745,7 +1745,7 @@ func TestChatCmd_RunE_MemoryWithSections(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Will fail at AI client creation, but memory sections path is exercised.
+	// Will fail at AI client creation, but instructions sections path is exercised.
 	require.Error(t, err)
 }
 
@@ -1856,13 +1856,13 @@ func TestChatCmd_RunE_OllamaWithTools(t *testing.T) {
 	assert.Contains(t, err.Error(), "chat session failed")
 }
 
-// TestChatCmd_RunE_OllamaWithMemory tests memory initialization with ollama provider.
-func TestChatCmd_RunE_OllamaWithMemory(t *testing.T) {
+// TestChatCmd_RunE_OllamaWithInstructions tests instructions initialization with ollama provider.
+func TestChatCmd_RunE_OllamaWithInstructions(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
 	}
 	extraConfig := `
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       auto_update: false
@@ -1877,7 +1877,7 @@ func TestChatCmd_RunE_OllamaWithMemory(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Will fail at tui.RunChat, but memory initialization is exercised.
+	// Will fail at tui.RunChat, but instructions initialization is exercised.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
 }
@@ -1895,7 +1895,7 @@ func TestChatCmd_RunE_OllamaAllFeatures(t *testing.T) {
     tools:
       enabled: true
       yolo_mode: true
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       auto_update: true
@@ -1951,15 +1951,15 @@ func TestChatCmd_RunE_OllamaSessionStorageInitError(t *testing.T) {
 	assert.Contains(t, err.Error(), "session storage")
 }
 
-// TestChatCmd_RunE_OllamaMemoryLoadError tests memory loading error handling.
-func TestChatCmd_RunE_OllamaMemoryLoadError(t *testing.T) {
+// TestChatCmd_RunE_OllamaInstructionsLoadError tests instructions loading error handling.
+func TestChatCmd_RunE_OllamaInstructionsLoadError(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
 	}
 	extraConfig := `
-    memory:
+    instructions:
       enabled: true
-      file: "nonexistent-memory.md"
+      file: "nonexistent-instructions.md"
       auto_update: false
       create_if_missing: false
 `
@@ -1972,7 +1972,7 @@ func TestChatCmd_RunE_OllamaMemoryLoadError(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Memory load failure is logged as warning, execution continues.
+	// Instructions load failure is logged as warning, execution continues.
 	// Will fail at tui.RunChat.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
@@ -2058,13 +2058,13 @@ func TestChatCmd_RunE_OllamaWithToolsDisabled(t *testing.T) {
 	assert.Contains(t, err.Error(), "chat session failed")
 }
 
-// TestChatCmd_RunE_OllamaWithMemoryDisabled tests running with memory disabled.
-func TestChatCmd_RunE_OllamaWithMemoryDisabled(t *testing.T) {
+// TestChatCmd_RunE_OllamaWithInstructionsDisabled tests running with instructions disabled.
+func TestChatCmd_RunE_OllamaWithInstructionsDisabled(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
 	}
 	extraConfig := `
-    memory:
+    instructions:
       enabled: false
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
@@ -2076,7 +2076,7 @@ func TestChatCmd_RunE_OllamaWithMemoryDisabled(t *testing.T) {
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Memory disabled path is exercised.
+	// Instructions disabled path is exercised.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
 }
@@ -2172,13 +2172,13 @@ func TestGetPermissionMode_RequireConfirmationFalse(t *testing.T) {
 	assert.Equal(t, permission.ModeAllow, result)
 }
 
-// TestChatCmd_RunE_OllamaWithMemorySuccess tests memory load success path.
-func TestChatCmd_RunE_OllamaWithMemorySuccess(t *testing.T) {
+// TestChatCmd_RunE_OllamaWithInstructionsSuccess tests instructions load success path.
+func TestChatCmd_RunE_OllamaWithInstructionsSuccess(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
 	}
 	extraConfig := `
-    memory:
+    instructions:
       enabled: true
       file: "ATMOS.md"
       auto_update: false
@@ -2186,11 +2186,11 @@ func TestChatCmd_RunE_OllamaWithMemorySuccess(t *testing.T) {
 `
 	tmpDir := createChatOllamaConfig(t, extraConfig)
 
-	// Create the ATMOS.md file so memory loading succeeds.
-	memoryContent := `# Project Memory
-This is a test memory file.
+	// Create the ATMOS.md file so instructions loading succeeds.
+	instructionsContent := `# Project Instructions
+This is a test instructions file.
 `
-	err := os.WriteFile(filepath.Join(tmpDir, "ATMOS.md"), []byte(memoryContent), 0o644)
+	err := os.WriteFile(filepath.Join(tmpDir, "ATMOS.md"), []byte(instructionsContent), 0o644)
 	require.NoError(t, err)
 
 	t.Setenv("ATMOS_CLI_CONFIG_PATH", tmpDir)
@@ -2200,7 +2200,7 @@ This is a test memory file.
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Memory load succeeds, then fails at tui.RunChat.
+	// Instructions load succeeds, then fails at tui.RunChat.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
 }
@@ -2210,13 +2210,13 @@ This is a test memory file.
 // The AddMessage goroutine in TUI calls session.Manager.AddMessage which then
 // tries to access a nil session object at manager.go:136.
 
-// TestChatCmd_RunE_OllamaMemoryLoadSuccess tests the memory load success path.
+// TestChatCmd_RunE_OllamaInstructionsLoadSuccess tests the instructions load success path.
 // This test creates a valid ATMOS.md file that can be loaded successfully.
-func TestChatCmd_RunE_OllamaMemoryLoadSuccess(t *testing.T) {
+func TestChatCmd_RunE_OllamaInstructionsLoadSuccess(t *testing.T) {
 	if os.Getenv("CI") != "" {
 		t.Skip("Skipping TUI test in CI environment - tui.RunChat requires interactive terminal")
 	}
-	// First create the config without memory enabled to get the base directory.
+	// First create the config without instructions enabled to get the base directory.
 	tmpDir := t.TempDir()
 
 	// Create required directories for atmos config.
@@ -2232,10 +2232,10 @@ vars:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(stacksDir, "test.yaml"), []byte(dummyStack), 0o644))
 
-	// Create the ATMOS.md memory file BEFORE creating the config.
-	memoryContent := `# Project Memory
+	// Create the ATMOS.md instructions file BEFORE creating the config.
+	instructionsContent := `# Project Instructions
 
-This is a test memory file for the project.
+This is a test instructions file for the project.
 
 ## Context
 Test project context.
@@ -2244,13 +2244,13 @@ Test project context.
 - test command 1
 - test command 2
 `
-	memoryFilePath := filepath.Join(tmpDir, "ATMOS.md")
-	require.NoError(t, os.WriteFile(memoryFilePath, []byte(memoryContent), 0o644))
+	instructionsFilePath := filepath.Join(tmpDir, "ATMOS.md")
+	require.NoError(t, os.WriteFile(instructionsFilePath, []byte(instructionsContent), 0o644))
 
 	// Use filepath.ToSlash to convert Windows backslashes to forward slashes in YAML.
 	basePath := filepath.ToSlash(tmpDir)
-	// Use absolute path for memory file to avoid path resolution issues in tests.
-	memoryFilePathSlash := filepath.ToSlash(memoryFilePath)
+	// Use absolute path for instructions file to avoid path resolution issues in tests.
+	instructionsFilePathSlash := filepath.ToSlash(instructionsFilePath)
 
 	atmosYaml := `
 base_path: "` + basePath + `"
@@ -2270,9 +2270,9 @@ settings:
       ollama:
         model: "llama3.3:70b"
         max_tokens: 4096
-    memory:
+    instructions:
       enabled: true
-      file: "` + memoryFilePathSlash + `"
+      file: "` + instructionsFilePathSlash + `"
       auto_update: false
       create_if_missing: false
 `
@@ -2285,7 +2285,7 @@ settings:
 	require.NoError(t, err)
 
 	err = chatCmd.RunE(chatCmd, []string{})
-	// Memory load should succeed (exercises line 157), then fail at tui.RunChat.
+	// Instructions load should succeed (exercises line 157), then fail at tui.RunChat.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
 }

@@ -1,4 +1,4 @@
-package memory
+package instructions
 
 import (
 	"testing"
@@ -17,7 +17,7 @@ func TestParseSections(t *testing.T) {
 	}{
 		{
 			name: "parses multiple sections",
-			content: `# Atmos Project Memory
+			content: `# Atmos Project Instructions
 
 > This is a description
 
@@ -100,7 +100,7 @@ Command 2
 		},
 		{
 			name: "ignores level 1 headers",
-			content: `# Atmos Project Memory
+			content: `# Atmos Project Instructions
 
 Some intro text.
 
@@ -239,7 +239,7 @@ func TestMergeContent(t *testing.T) {
 }
 
 func TestExtractSection(t *testing.T) {
-	content := `# Atmos Project Memory
+	content := `# Atmos Project Instructions
 
 ## Project Context
 

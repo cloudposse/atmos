@@ -78,8 +78,8 @@ type CheckpointMessage struct {
 
 // CheckpointContext contains project-specific context.
 type CheckpointContext struct {
-	// ProjectMemory is the ATMOS.md content at export time (optional).
-	ProjectMemory string `json:"project_memory,omitempty" yaml:"project_memory,omitempty"`
+	// ProjectInstructions is the ATMOS.md content at export time (optional).
+	ProjectInstructions string `json:"project_instructions,omitempty" yaml:"project_instructions,omitempty"`
 
 	// FilesAccessed is a list of files accessed during the session (optional).
 	FilesAccessed []string `json:"files_accessed,omitempty" yaml:"files_accessed,omitempty"`
@@ -125,7 +125,7 @@ type ImportOptions struct {
 
 // ExportOptions contains options for exporting a checkpoint.
 type ExportOptions struct {
-	// IncludeContext includes project memory and file access history.
+	// IncludeContext includes project instructions and file access history.
 	IncludeContext bool
 
 	// IncludeMetadata includes session metadata.

@@ -1,11 +1,11 @@
-package memory
+package instructions
 
 import (
 	"time"
 )
 
-// ProjectMemory represents the in-memory state of an ATMOS.md file.
-type ProjectMemory struct {
+// ProjectInstructions represents the in-memory state of an ATMOS.md file.
+type ProjectInstructions struct {
 	FilePath     string
 	Content      string
 	Sections     map[string]*Section
@@ -20,7 +20,7 @@ type Section struct {
 	Order   int
 }
 
-// Config holds configuration for project memory.
+// Config holds configuration for project instructions.
 type Config struct {
 	Enabled      bool
 	FilePath     string   // Path to ATMOS.md (relative to base path)

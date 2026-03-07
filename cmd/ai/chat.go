@@ -10,7 +10,7 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
-	"github.com/cloudposse/atmos/pkg/ai/memory"
+	"github.com/cloudposse/atmos/pkg/ai/instructions"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
@@ -132,12 +132,12 @@ The AI assistant has access to your current Atmos configuration and can help wit
 
 		// Initialize project instructions if enabled.
 		ctx := context.Background()
-		var memoryMgr *memory.Manager
+		var memoryMgr *instructions.Manager
 		if atmosConfig.Settings.AI.Instructions.Enabled {
 			log.Debug("Initializing project instructions")
 
 			// Create instructions config.
-			memConfig := &memory.Config{
+			memConfig := &instructions.Config{
 				Enabled:      atmosConfig.Settings.AI.Instructions.Enabled,
 				FilePath:     atmosConfig.Settings.AI.Instructions.FilePath,
 				AutoUpdate:   atmosConfig.Settings.AI.Instructions.AutoUpdate,
@@ -145,20 +145,20 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				Sections:     atmosConfig.Settings.AI.Instructions.Sections,
 			}
 
-			// Create memory manager.
-			memoryMgr = memory.NewManager(atmosConfig.BasePath, memConfig)
+			// Create instructions manager.
+			memoryMgr = instructions.NewManager(atmosConfig.BasePath, memConfig)
 
-			// Load memory (creates default if missing and CreateIfMiss is true).
+			// Load instructions (creates default if missing and CreateIfMiss is true).
 			_, err := memoryMgr.Load(ctx)
 			if err != nil {
-				log.Warn(fmt.Sprintf("Failed to load project memory: %v", err))
-				memoryMgr = nil // Disable memory on error
+				log.Warn(fmt.Sprintf("Failed to load project instructions: %v", err))
+				memoryMgr = nil // Disable instructions on error
 			} else {
-				log.Debug("Project memory loaded successfully")
+				log.Debug("Project instructions loaded successfully")
 			}
 		}
 
-		// Start chat TUI with session, tools, and memory.
+		// Start chat TUI with session, tools, and instructions.
 		if err := tui.RunChat(client, &atmosConfig, manager, sess, executor, memoryMgr); err != nil {
 			return fmt.Errorf("chat session failed: %w", err)
 		}
