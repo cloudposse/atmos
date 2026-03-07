@@ -4,7 +4,6 @@ package skill
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -50,9 +50,9 @@ func TestUninstallCmd_ArgsValidation(t *testing.T) {
 }
 
 func TestUninstallCmd_Examples(t *testing.T) {
-	// Verify the long description contains examples.
-	assert.Contains(t, uninstallCmd.Long, "atmos ai skill uninstall terraform-optimizer")
-	assert.Contains(t, uninstallCmd.Long, "--force")
+	// Verify the Example field contains usage examples.
+	assert.Contains(t, uninstallCmd.Example, "atmos ai skill uninstall terraform-optimizer")
+	assert.Contains(t, uninstallCmd.Example, "--force")
 }
 
 func TestUninstallCmd_ReferencesListCommand(t *testing.T) {
@@ -305,7 +305,9 @@ func TestUninstallCmd_ShortDescription(t *testing.T) {
 }
 
 func TestUninstallCmd_LongDescriptionContainsExamples(t *testing.T) {
-	assert.Contains(t, uninstallCmd.Long, "Examples:")
+	// Examples are in the Example field, not Long.
+	assert.NotEmpty(t, uninstallCmd.Example, "Example field should contain usage examples")
+	assert.Contains(t, uninstallCmd.Example, "atmos ai skill uninstall")
 }
 
 func TestUninstallCmd_LongDescriptionContainsInstallationPath(t *testing.T) {
@@ -314,8 +316,8 @@ func TestUninstallCmd_LongDescriptionContainsInstallationPath(t *testing.T) {
 }
 
 func TestUninstallCmd_LongDescriptionContainsForceOption(t *testing.T) {
-	// Verify long description mentions the force option.
-	assert.Contains(t, uninstallCmd.Long, "Force uninstall")
+	// Verify the Example field mentions the force option.
+	assert.Contains(t, uninstallCmd.Example, "Force uninstall")
 }
 
 func TestUninstallCmd_LongDescriptionContainsPromptInfo(t *testing.T) {
@@ -947,27 +949,43 @@ func TestUninstallCmd_ForceFlagGetBool(t *testing.T) {
 	assert.True(t, force)
 }
 
-// TestUninstallCmd_ForceFlagGetBoolError tests error handling when GetBool fails for --force flag.
-// This covers the error path at line 41-42 in uninstall.go.
-func TestUninstallCmd_ForceFlagGetBoolError(t *testing.T) {
-	// Create a command with a non-boolean "force" flag to trigger the error path.
-	testCmd := &cobra.Command{
-		Use:  "uninstall",
-		Args: cobra.ExactArgs(1),
-	}
-	// Register "force" as a string flag instead of bool.
-	testCmd.Flags().String("force", "invalid", "Wrong type flag")
+// TestUninstallCmd_StandardParserIntegration tests that the uninstall command uses StandardParser
+// with proper Viper binding for flag precedence (CLI > ENV > defaults).
+func TestUninstallCmd_StandardParserIntegration(t *testing.T) {
+	t.Run("uninstallParser is initialized", func(t *testing.T) {
+		require.NotNil(t, uninstallParser, "uninstallParser should be initialized by init()")
+	})
 
-	// Create a custom RunE that mimics the actual behavior.
-	runErr := func(cmd *cobra.Command, _ []string) error {
-		_, err := cmd.Flags().GetBool("force")
-		if err != nil {
-			return fmt.Errorf("failed to get --force flag: %w", err)
-		}
-		return nil
-	}
+	t.Run("env var binding for force flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORCE", "true")
 
-	err := runErr(testCmd, []string{"test-skill"})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get --force flag")
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := uninstallParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("force"), "force should be true from ATMOS_AI_SKILL_FORCE env var")
+	})
+
+	t.Run("CLI flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORCE", "true")
+
+		oldVal := uninstallCmd.Flags().Lookup("force").Value.String()
+		t.Cleanup(func() {
+			_ = uninstallCmd.Flags().Set("force", oldVal)
+		})
+		_ = uninstallCmd.Flags().Set("force", "false")
+
+		v := viper.GetViper()
+		err := uninstallParser.BindFlagsToViper(uninstallCmd, v)
+		require.NoError(t, err)
+
+		assert.False(t, v.GetBool("force"), "CLI flag should override env var")
+	})
+
+	t.Run("force flag has shorthand f", func(t *testing.T) {
+		flag := uninstallCmd.Flags().Lookup("force")
+		require.NotNil(t, flag)
+		assert.Equal(t, "f", flag.Shorthand)
+	})
 }

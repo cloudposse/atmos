@@ -132,9 +132,11 @@ func (m *Manager) AddMessage(ctx context.Context, sessionID, role, content strin
 	}
 
 	// Update session timestamp.
-	session, _ := m.storage.GetSession(ctx, sessionID)
-	session.UpdatedAt = time.Now()
-	_ = m.storage.UpdateSession(ctx, session)
+	session, err := m.storage.GetSession(ctx, sessionID)
+	if err == nil && session != nil {
+		session.UpdatedAt = time.Now()
+		_ = m.storage.UpdateSession(ctx, session)
+	}
 
 	return nil
 }
@@ -205,8 +207,12 @@ func (m *Manager) GetMessagesWithCompaction(ctx context.Context, sessionID strin
 				})
 			}
 			// Reload active messages and summaries after compaction.
-			activeMessages, _ = m.storage.GetActiveMessages(ctx, sessionID, 0)
-			summaries, _ = m.storage.GetSummaries(ctx, sessionID)
+			if reloaded, err := m.storage.GetActiveMessages(ctx, sessionID, 0); err == nil {
+				activeMessages = reloaded
+			}
+			if reloadedSummaries, err := m.storage.GetSummaries(ctx, sessionID); err == nil {
+				summaries = reloadedSummaries
+			}
 		}
 	}
 

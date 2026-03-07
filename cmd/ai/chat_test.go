@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2318,4 +2319,46 @@ func TestChatCmd_RunE_OllamaToolsInitWarn(t *testing.T) {
 	// Tools initialization succeeds, then fails at tui.RunChat.
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "chat session failed")
+}
+
+// TestChatCommand_StandardParserIntegration tests that the chat command uses StandardParser
+// with proper Viper binding for flag precedence (CLI > ENV > defaults).
+func TestChatCommand_StandardParserIntegration(t *testing.T) {
+	t.Run("chatParser is initialized", func(t *testing.T) {
+		require.NotNil(t, chatParser, "chatParser should be initialized by init()")
+	})
+
+	t.Run("session flag is registered via StandardParser", func(t *testing.T) {
+		flag := chatCmd.Flags().Lookup("session")
+		require.NotNil(t, flag)
+		assert.Equal(t, "string", flag.Value.Type())
+		assert.Equal(t, "", flag.DefValue)
+	})
+
+	t.Run("env var binding for session flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SESSION", "env-session")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := chatParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "env-session", v.GetString("session"), "session should be 'env-session' from ATMOS_AI_SESSION env var")
+	})
+
+	t.Run("CLI flag overrides env var for session", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SESSION", "env-session")
+
+		oldVal := chatCmd.Flags().Lookup("session").Value.String()
+		t.Cleanup(func() {
+			_ = chatCmd.Flags().Set("session", oldVal)
+		})
+		_ = chatCmd.Flags().Set("session", "cli-session")
+
+		v := viper.GetViper()
+		err := chatParser.BindFlagsToViper(chatCmd, v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "cli-session", v.GetString("session"), "CLI flag should override env var")
+	})
 }

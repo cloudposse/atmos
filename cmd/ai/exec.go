@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
@@ -16,9 +17,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/formatter"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// execParser handles flag parsing with Viper precedence for the exec command.
+var execParser *flags.StandardParser
 
 // execCmd represents the ai exec command.
 var execCmd = &cobra.Command{
@@ -66,16 +71,22 @@ Examples:
   fi`,
 	Args: cobra.MaximumNArgs(1), // Accept 0 or 1 argument (0 means stdin)
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get flags.
-		format, _ := cmd.Flags().GetString("format")
-		outputFile, _ := cmd.Flags().GetString("output")
-		noTools, _ := cmd.Flags().GetBool("no-tools")
-		includeContext, _ := cmd.Flags().GetBool("context")
-		providerName, _ := cmd.Flags().GetString("provider")
-		sessionID, _ := cmd.Flags().GetString("session")
-		includePatterns, _ := cmd.Flags().GetStringSlice("include")
-		excludePatterns, _ := cmd.Flags().GetStringSlice("exclude")
-		noAutoContext, _ := cmd.Flags().GetBool("no-auto-context")
+		// Bind parsed flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := execParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Get flags from Viper (supports CLI > ENV > config > defaults).
+		format := v.GetString("format")
+		outputFile := v.GetString("output")
+		noTools := v.GetBool("no-tools")
+		includeContext := v.GetBool("context")
+		providerName := v.GetString("provider")
+		sessionID := v.GetString("session")
+		includePatterns := v.GetStringSlice("include")
+		excludePatterns := v.GetStringSlice("exclude")
+		noAutoContext := v.GetBool("no-auto-context")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -254,18 +265,35 @@ func (e *execError) Error() string {
 }
 
 func init() {
-	// Register flags.
-	execCmd.Flags().StringP("format", "f", "text", "Output format: text, json, markdown")
-	execCmd.Flags().StringP("output", "o", "", "Output file (default: stdout)")
-	execCmd.Flags().Bool("no-tools", false, "Disable tool execution")
-	execCmd.Flags().Bool("context", false, "Include stack context in prompt")
-	execCmd.Flags().StringP("provider", "p", "", "Override AI provider (anthropic, openai, gemini, etc.)")
-	execCmd.Flags().StringP("session", "s", "", "Session ID for conversation context")
+	// Create parser with exec-specific flags using functional options.
+	execParser = flags.NewStandardParser(
+		flags.WithStringFlag("format", "f", "text", "Output format: text, json, markdown"),
+		flags.WithStringFlag("output", "o", "", "Output file (default: stdout)"),
+		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
+		flags.WithBoolFlag("context", "", false, "Include stack context in prompt"),
+		flags.WithStringFlag("provider", "p", "", "Override AI provider (anthropic, openai, gemini, etc.)"),
+		flags.WithStringFlag("session", "s", "", "Session ID for conversation context"),
+		flags.WithStringSliceFlag("include", "", nil, "Add glob patterns to include in context (can be repeated)"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Add glob patterns to exclude from context (can be repeated)"),
+		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
+		flags.WithEnvVars("format", "ATMOS_AI_FORMAT"),
+		flags.WithEnvVars("output", "ATMOS_AI_OUTPUT"),
+		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
+		flags.WithEnvVars("context", "ATMOS_AI_CONTEXT"),
+		flags.WithEnvVars("provider", "ATMOS_AI_PROVIDER"),
+		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),
+		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
+		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
+		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
+	)
 
-	// Context discovery flags.
-	execCmd.Flags().StringSlice("include", nil, "Add glob patterns to include in context (can be repeated)")
-	execCmd.Flags().StringSlice("exclude", nil, "Add glob patterns to exclude from context (can be repeated)")
-	execCmd.Flags().Bool("no-auto-context", false, "Disable automatic context discovery")
+	// Register flags on the command.
+	execParser.RegisterFlags(execCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := execParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	// Add to ai command.
 	aiCmd.AddCommand(execCmd)

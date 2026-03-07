@@ -1,43 +1,49 @@
 package skill
 
 import (
+	_ "embed"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	ai "github.com/cloudposse/atmos/cmd/ai"
 
 	"github.com/cloudposse/atmos/pkg/ai/skills/marketplace"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/perf"
 	"github.com/cloudposse/atmos/pkg/version"
 )
 
+// listParser handles flag parsing with Viper precedence for the list command.
+var listParser *flags.StandardParser
+
+//go:embed markdown/atmos_ai_skill_list.md
+var listLongMarkdown string
+
+//go:embed markdown/atmos_ai_skill_list_usage.md
+var listUsageMarkdown string
+
 // listCmd represents the 'atmos ai skill list' command.
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List installed skills",
-	Long: `List all community-contributed skills installed on this system.
-
-Shows skill name, version, source, and installation status.
-Skills are stored in ~/.atmos/skills/ and tracked in registry.json.
-
-Examples:
-  # List all installed skills
-  atmos ai skill list
-
-  # List with detailed output
-  atmos ai skill list --detailed`,
-	Args: cobra.NoArgs,
+	Use:     "list",
+	Short:   "List installed skills",
+	Long:    listLongMarkdown,
+	Example: listUsageMarkdown,
+	Args:    cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		defer perf.Track(nil, "cmd.aiSkillListCmd")()
 
-		// Get flags.
-		detailed, err := cmd.Flags().GetBool("detailed")
-		if err != nil {
-			return fmt.Errorf("failed to get --detailed flag: %w", err)
+		// Bind parsed flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := listParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
 		}
+
+		// Get flags from Viper (supports CLI > ENV > config > defaults).
+		detailed := v.GetBool("detailed")
 
 		// Create installer (which manages registry).
 		installer, err := marketplace.NewInstaller(version.Version)
@@ -74,8 +80,19 @@ Examples:
 }
 
 func init() {
-	// Add flags.
-	listCmd.Flags().BoolP("detailed", "d", false, "Show detailed information for each skill")
+	// Create parser with list-specific flags using functional options.
+	listParser = flags.NewStandardParser(
+		flags.WithBoolFlag("detailed", "d", false, "Show detailed information for each skill"),
+		flags.WithEnvVars("detailed", "ATMOS_AI_SKILL_DETAILED"),
+	)
+
+	// Register flags on the command.
+	listParser.RegisterFlags(listCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := listParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	// Add 'list' subcommand to 'skill' command.
 	ai.SkillCmd.AddCommand(listCmd)

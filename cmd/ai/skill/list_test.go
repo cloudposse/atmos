@@ -3,14 +3,13 @@ package skill
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -556,9 +555,9 @@ func TestListCmd_ArgsValidation(t *testing.T) {
 }
 
 func TestListCmd_Examples(t *testing.T) {
-	// Verify the long description contains usage examples.
-	assert.Contains(t, listCmd.Long, "atmos ai skill list")
-	assert.Contains(t, listCmd.Long, "--detailed")
+	// Verify the Example field contains usage examples.
+	assert.Contains(t, listCmd.Example, "atmos ai skill list")
+	assert.Contains(t, listCmd.Example, "--detailed")
 }
 
 func TestListCmd_FlagShorthand(t *testing.T) {
@@ -698,8 +697,9 @@ func TestListCmd_ShortDescription(t *testing.T) {
 }
 
 func TestListCmd_LongDescriptionContainsExamples(t *testing.T) {
-	// Verify long description has Examples section.
-	assert.Contains(t, listCmd.Long, "Examples:")
+	// Examples are in the Example field, not Long.
+	assert.NotEmpty(t, listCmd.Example, "Example field should contain usage examples")
+	assert.Contains(t, listCmd.Example, "atmos ai skill list")
 }
 
 func TestListCmd_LongDescriptionContainsInstallationPath(t *testing.T) {
@@ -1457,26 +1457,43 @@ func TestListCmd_SkillWithBuiltInStatus(t *testing.T) {
 	assert.Contains(t, output, "Type:         Built-in")
 }
 
-// TestListCmd_DetailedFlagGetBoolError tests error handling when GetBool fails for --detailed flag.
-// This is an edge case where the flag exists but has an invalid type.
-func TestListCmd_DetailedFlagGetBoolError(t *testing.T) {
-	// Create a command with a non-boolean "detailed" flag to trigger the error path.
-	testCmd := &cobra.Command{
-		Use: "list",
-	}
-	// Register "detailed" as a string flag instead of bool.
-	testCmd.Flags().String("detailed", "invalid", "Wrong type flag")
+// TestListCmd_StandardParserIntegration tests that the list command uses StandardParser
+// with proper Viper binding for flag precedence (CLI > ENV > defaults).
+func TestListCmd_StandardParserIntegration(t *testing.T) {
+	t.Run("listParser is initialized", func(t *testing.T) {
+		require.NotNil(t, listParser, "listParser should be initialized by init()")
+	})
 
-	// Create a custom RunE that mimics the actual behavior.
-	runErr := func(cmd *cobra.Command, _ []string) error {
-		_, err := cmd.Flags().GetBool("detailed")
-		if err != nil {
-			return fmt.Errorf("failed to get --detailed flag: %w", err)
-		}
-		return nil
-	}
+	t.Run("env var binding for detailed flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_DETAILED", "true")
 
-	err := runErr(testCmd, []string{})
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to get --detailed flag")
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := listParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("detailed"), "detailed should be true from ATMOS_AI_SKILL_DETAILED env var")
+	})
+
+	t.Run("detailed flag has shorthand d", func(t *testing.T) {
+		flag := listCmd.Flags().Lookup("detailed")
+		require.NotNil(t, flag)
+		assert.Equal(t, "d", flag.Shorthand)
+	})
+
+	t.Run("CLI flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_DETAILED", "true")
+
+		oldVal := listCmd.Flags().Lookup("detailed").Value.String()
+		t.Cleanup(func() {
+			_ = listCmd.Flags().Set("detailed", oldVal)
+		})
+		_ = listCmd.Flags().Set("detailed", "false")
+
+		v := viper.GetViper()
+		err := listParser.BindFlagsToViper(listCmd, v)
+		require.NoError(t, err)
+
+		assert.False(t, v.GetBool("detailed"), "CLI flag should override env var")
+	})
 }

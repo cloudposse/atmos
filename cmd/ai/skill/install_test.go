@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -46,7 +47,7 @@ func TestInstallCmd_LongDescription(t *testing.T) {
 	assert.Contains(t, installCmd.Long, "agentskills.io")
 	assert.Contains(t, installCmd.Long, "SKILL.md")
 	assert.Contains(t, installCmd.Long, "user/repo")
-	assert.Contains(t, installCmd.Long, "@v1.200.0")
+	assert.Contains(t, installCmd.Long, "@v1.2.3")
 }
 
 func TestInstallCmd_ArgsValidation(t *testing.T) {
@@ -73,10 +74,10 @@ func TestInstallCmd_ArgsValidation(t *testing.T) {
 }
 
 func TestInstallCmd_Examples(t *testing.T) {
-	// Verify the long description contains examples.
-	assert.Contains(t, installCmd.Long, "atmos ai skill install cloudposse/atmos")
-	assert.Contains(t, installCmd.Long, "--force")
-	assert.Contains(t, installCmd.Long, "--yes")
+	// Verify the Example field contains usage examples.
+	assert.Contains(t, installCmd.Example, "atmos ai skill install cloudposse/atmos")
+	assert.Contains(t, installCmd.Example, "--force")
+	assert.Contains(t, installCmd.Example, "--yes")
 }
 
 func TestInstallCmd_SecuritySection(t *testing.T) {
@@ -459,7 +460,9 @@ func TestInstallCmd_ShortDescription(t *testing.T) {
 }
 
 func TestInstallCmd_LongDescriptionContainsExamples(t *testing.T) {
-	assert.Contains(t, installCmd.Long, "Examples:")
+	// Examples are in the Example field, not Long.
+	assert.NotEmpty(t, installCmd.Example, "Example field should contain usage examples")
+	assert.Contains(t, installCmd.Example, "atmos ai skill install")
 }
 
 func TestInstallCmd_LongDescriptionContainsSourceFormats(t *testing.T) {
@@ -790,65 +793,63 @@ func TestInstallCmd_RunE_SuccessPathCoverage(t *testing.T) {
 	})
 }
 
-// TestInstallCmd_RunE_MissingFlags tests the error paths when flags are missing.
-// These paths (lines 61, 66) are normally unreachable because flags are registered
-// in init(). To test them, we create a fresh command without flags.
-func TestInstallCmd_RunE_MissingFlags(t *testing.T) {
-	t.Run("missing force flag returns error", func(t *testing.T) {
-		// Create a fresh command without the force flag.
-		cmd := &cobra.Command{
-			Use:  "install <source>",
-			Args: cobra.ExactArgs(1),
-			RunE: installCmd.RunE, // Reuse the same RunE function.
-		}
-		// Only add the yes flag, not force.
-		cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
-
-		// Capture stdout.
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
-
-		err := cmd.RunE(cmd, []string{"github.com/user/repo"})
-
-		w.Close()
-		os.Stdout = oldStdout
-
-		// Drain the pipe.
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-
-		// Should fail when trying to get the missing force flag.
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get --force flag")
+// TestInstallCmd_ViperPrecedence tests that flags support Viper precedence (CLI > ENV > defaults).
+// With the StandardParser pattern, flags are read from Viper which supports env var overrides.
+func TestInstallCmd_ViperPrecedence(t *testing.T) {
+	t.Run("force flag defaults to false via Viper", func(t *testing.T) {
+		// Verify default value is false.
+		flag := installCmd.Flags().Lookup("force")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
 	})
 
-	t.Run("missing yes flag returns error", func(t *testing.T) {
-		// Create a fresh command without the yes flag.
-		cmd := &cobra.Command{
-			Use:  "install <source>",
-			Args: cobra.ExactArgs(1),
-			RunE: installCmd.RunE, // Reuse the same RunE function.
-		}
-		// Only add the force flag, not yes.
-		cmd.Flags().Bool("force", false, "Reinstall if skill is already installed")
+	t.Run("yes flag defaults to false via Viper", func(t *testing.T) {
+		// Verify default value is false.
+		flag := installCmd.Flags().Lookup("yes")
+		require.NotNil(t, flag)
+		assert.Equal(t, "false", flag.DefValue)
+	})
 
-		// Capture stdout.
-		oldStdout := os.Stdout
-		r, w, _ := os.Pipe()
-		os.Stdout = w
+	t.Run("installParser is initialized", func(t *testing.T) {
+		require.NotNil(t, installParser, "installParser should be initialized by init()")
+	})
 
-		err := cmd.RunE(cmd, []string{"github.com/user/repo"})
+	t.Run("env var binding for force flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORCE", "true")
 
-		w.Close()
-		os.Stdout = oldStdout
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
 
-		// Drain the pipe.
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
+		assert.True(t, v.GetBool("force"), "force should be true from ATMOS_AI_SKILL_FORCE env var")
+	})
 
-		// Should fail when trying to get the missing yes flag.
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get --yes flag")
+	t.Run("env var binding for yes flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_YES", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := installParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("yes"), "yes should be true from ATMOS_AI_SKILL_YES env var")
+	})
+
+	t.Run("CLI flag overrides env var", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SKILL_FORCE", "true")
+
+		// Explicitly set CLI flag to false.
+		oldVal := installCmd.Flags().Lookup("force").Value.String()
+		t.Cleanup(func() {
+			_ = installCmd.Flags().Set("force", oldVal)
+		})
+		_ = installCmd.Flags().Set("force", "false")
+
+		v := viper.GetViper()
+		err := installParser.BindFlagsToViper(installCmd, v)
+		require.NoError(t, err)
+
+		assert.False(t, v.GetBool("force"), "CLI flag should override env var")
 	})
 }

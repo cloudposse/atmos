@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -3318,5 +3319,98 @@ func TestGetPrompt_WithMockStdin(t *testing.T) {
 		prompt, err := getPrompt([]string{})
 		require.NoError(t, err)
 		assert.Equal(t, "middle content", prompt)
+	})
+}
+
+// TestExecCommand_StandardParserIntegration tests that the exec command uses StandardParser
+// with proper Viper binding for flag precedence (CLI > ENV > defaults).
+func TestExecCommand_StandardParserIntegration(t *testing.T) {
+	t.Run("execParser is initialized", func(t *testing.T) {
+		require.NotNil(t, execParser, "execParser should be initialized by init()")
+	})
+
+	t.Run("all flags are registered via StandardParser", func(t *testing.T) {
+		expectedFlags := []string{
+			"format", "output", "no-tools", "context",
+			"provider", "session", "include", "exclude", "no-auto-context",
+		}
+		for _, flagName := range expectedFlags {
+			flag := execCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "flag %q should be registered on execCmd", flagName)
+		}
+	})
+
+	t.Run("format flag has correct default", func(t *testing.T) {
+		flag := execCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "text", flag.DefValue)
+	})
+
+	t.Run("format flag has shorthand", func(t *testing.T) {
+		flag := execCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "f", flag.Shorthand)
+	})
+
+	t.Run("output flag has shorthand", func(t *testing.T) {
+		flag := execCmd.Flags().Lookup("output")
+		require.NotNil(t, flag)
+		assert.Equal(t, "o", flag.Shorthand)
+	})
+
+	t.Run("provider flag has shorthand", func(t *testing.T) {
+		flag := execCmd.Flags().Lookup("provider")
+		require.NotNil(t, flag)
+		assert.Equal(t, "p", flag.Shorthand)
+	})
+
+	t.Run("session flag has shorthand", func(t *testing.T) {
+		flag := execCmd.Flags().Lookup("session")
+		require.NotNil(t, flag)
+		assert.Equal(t, "s", flag.Shorthand)
+	})
+
+	t.Run("env var binding for format flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_FORMAT", "json")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := execParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "json", v.GetString("format"), "format should be 'json' from ATMOS_AI_FORMAT env var")
+	})
+
+	t.Run("env var binding for provider flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_PROVIDER", "openai")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := execParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "openai", v.GetString("provider"), "provider should be 'openai' from ATMOS_AI_PROVIDER env var")
+	})
+
+	t.Run("env var binding for session flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SESSION", "my-session")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := execParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "my-session", v.GetString("session"), "session should be 'my-session' from ATMOS_AI_SESSION env var")
+	})
+
+	t.Run("env var binding for context flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_CONTEXT", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := execParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("context"), "context should be true from ATMOS_AI_CONTEXT env var")
 	})
 }

@@ -133,7 +133,10 @@ func TestPermissionCache_RemoveAllow(t *testing.T) {
 	}
 
 	// Verify removal was persisted.
-	cache2, _ := NewPermissionCache(tmpDir)
+	cache2, err := NewPermissionCache(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create permission cache: %v", err)
+	}
 	if cache2.IsAllowed("tool1") {
 		t.Error("Expected tool1 to remain removed after reload")
 	}
@@ -183,7 +186,10 @@ func TestPermissionCache_Clear(t *testing.T) {
 	}
 
 	// Verify clear was persisted.
-	cache2, _ := NewPermissionCache(tmpDir)
+	cache2, err := NewPermissionCache(tmpDir)
+	if err != nil {
+		t.Fatalf("Failed to create permission cache: %v", err)
+	}
 	if len(cache2.GetAllowList()) != 0 || len(cache2.GetDenyList()) != 0 {
 		t.Error("Expected lists to remain cleared after reload")
 	}

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
@@ -16,9 +17,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/ai/tools/permission"
 	"github.com/cloudposse/atmos/pkg/ai/tui"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+// chatParser handles flag parsing with Viper precedence for the chat command.
+var chatParser *flags.StandardParser
 
 // getProviderFromConfig returns the current provider from configuration.
 func getProviderFromConfig(atmosConfig *schema.AtmosConfiguration) string {
@@ -54,6 +59,12 @@ The AI assistant has access to your current Atmos configuration and can help wit
 - Debugging configuration issues
 - Providing implementation guidance`,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		// Bind parsed flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := chatParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
 		atmosConfig, err := cfg.InitCliConfig(configAndStacksInfo, true)
@@ -92,8 +103,8 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			// Create session manager.
 			manager = session.NewManager(storage, atmosConfig.BasePath, atmosConfig.Settings.AI.Sessions.MaxSessions, &atmosConfig)
 
-			// Check for --session flag.
-			sessionName, _ := cmd.Flags().GetString("session")
+			// Get session flag from Viper (supports CLI > ENV > config > defaults).
+			sessionName := v.GetString("session")
 
 			ctx := context.Background()
 			if sessionName != "" {
@@ -168,10 +179,21 @@ The AI assistant has access to your current Atmos configuration and can help wit
 }
 
 func init() {
-	aiCmd.AddCommand(chatCmd)
+	// Create parser with chat-specific flags using functional options.
+	chatParser = flags.NewStandardParser(
+		flags.WithStringFlag("session", "", "", "Resume or create a named session"),
+		flags.WithEnvVars("session", "ATMOS_AI_SESSION"),
+	)
 
-	// Add session flag.
-	chatCmd.Flags().String("session", "", "Resume or create a named session")
+	// Register flags on the command.
+	chatParser.RegisterFlags(chatCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := chatParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+
+	aiCmd.AddCommand(chatCmd)
 }
 
 // getSessionStoragePath returns the path to the session storage file.

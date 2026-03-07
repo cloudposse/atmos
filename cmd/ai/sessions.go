@@ -5,10 +5,12 @@ import (
 	"fmt"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	"github.com/cloudposse/atmos/pkg/list/column"
 	"github.com/cloudposse/atmos/pkg/list/format"
 	"github.com/cloudposse/atmos/pkg/list/renderer"
@@ -19,11 +21,21 @@ import (
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
+var (
+	// Handles flag parsing for the sessions clean command.
+	cleanParser *flags.StandardParser
+	// Handles flag parsing for the sessions export command.
+	exportParser *flags.StandardParser
+	// Handles flag parsing for the sessions import command.
+	importParser *flags.StandardParser
+)
+
 const (
 	hoursPerDay  = 24
 	daysPerWeek  = 7
 	daysPerMonth = 30
 	contextFlag  = "context"
+	outputFlag   = "output"
 )
 
 // aiSessionsCmd represents the ai sessions command.
@@ -126,20 +138,46 @@ func init() {
 	sessionsCmd.AddCommand(sessionsExportCmd)
 	sessionsCmd.AddCommand(sessionsImportCmd)
 
-	// Add flags for clean command.
-	sessionsCleanCmd.Flags().String("older-than", "30d", "Delete sessions older than this duration (e.g., 30d, 7d, 24h)")
+	// Create parser for clean command.
+	cleanParser = flags.NewStandardParser(
+		flags.WithStringFlag("older-than", "", "30d", "Delete sessions older than this duration (e.g., 30d, 7d, 24h)"),
+		flags.WithEnvVars("older-than", "ATMOS_AI_SESSIONS_OLDER_THAN"),
+	)
+	cleanParser.RegisterFlags(sessionsCleanCmd)
+	if err := cleanParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
-	// Add flags for export command.
-	sessionsExportCmd.Flags().StringP("output", "o", "", "Output file path (required)")
-	sessionsExportCmd.Flags().StringP("format", "f", "", "Output format: json, yaml, markdown (auto-detected from file extension if not specified)")
-	sessionsExportCmd.Flags().Bool(contextFlag, false, "Include project context (ATMOS.md, files accessed)")
-	sessionsExportCmd.Flags().Bool("metadata", true, "Include session metadata")
-	_ = sessionsExportCmd.MarkFlagRequired("output")
+	// Create parser for export command.
+	exportParser = flags.NewStandardParser(
+		flags.WithStringFlag(outputFlag, "o", "", "Output file path (required)"),
+		flags.WithStringFlag("format", "f", "", "Output format: json, yaml, markdown (auto-detected from file extension if not specified)"),
+		flags.WithBoolFlag(contextFlag, "", false, "Include project context (ATMOS.md, files accessed)"),
+		flags.WithBoolFlag("metadata", "", true, "Include session metadata"),
+		flags.WithEnvVars(outputFlag, "ATMOS_AI_SESSIONS_OUTPUT"),
+		flags.WithEnvVars("format", "ATMOS_AI_SESSIONS_FORMAT"),
+		flags.WithEnvVars(contextFlag, "ATMOS_AI_SESSIONS_CONTEXT"),
+		flags.WithEnvVars("metadata", "ATMOS_AI_SESSIONS_METADATA"),
+	)
+	exportParser.RegisterFlags(sessionsExportCmd)
+	if err := exportParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
+	_ = sessionsExportCmd.MarkFlagRequired(outputFlag)
 
-	// Add flags for import command.
-	sessionsImportCmd.Flags().StringP("name", "n", "", "Name for the imported session (uses checkpoint name if not specified)")
-	sessionsImportCmd.Flags().Bool("overwrite", false, "Overwrite existing session with the same name")
-	sessionsImportCmd.Flags().Bool(contextFlag, true, "Include project context from checkpoint")
+	// Create parser for import command.
+	importParser = flags.NewStandardParser(
+		flags.WithStringFlag("name", "n", "", "Name for the imported session (uses checkpoint name if not specified)"),
+		flags.WithBoolFlag("overwrite", "", false, "Overwrite existing session with the same name"),
+		flags.WithBoolFlag(contextFlag, "", true, "Include project context from checkpoint"),
+		flags.WithEnvVars("name", "ATMOS_AI_SESSIONS_NAME"),
+		flags.WithEnvVars("overwrite", "ATMOS_AI_SESSIONS_OVERWRITE"),
+		flags.WithEnvVars(contextFlag, "ATMOS_AI_SESSIONS_CONTEXT"),
+	)
+	importParser.RegisterFlags(sessionsImportCmd)
+	if err := importParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 }
 
 // initSessionManager initializes and validates session management.
@@ -249,11 +287,14 @@ func listSessionsCommand(cmd *cobra.Command, args []string) error {
 
 // cleanSessionsCommand cleans old sessions.
 func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
-	// Get older-than flag.
-	olderThanStr, err := cmd.Flags().GetString("older-than")
-	if err != nil {
-		return fmt.Errorf("failed to get older-than flag: %w", err)
+	// Bind parsed flags to Viper for precedence handling.
+	v := viper.GetViper()
+	if err := cleanParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
 	}
+
+	// Get older-than flag from Viper (supports CLI > ENV > config > defaults).
+	olderThanStr := v.GetString("older-than")
 
 	// Parse duration.
 	retentionDays, err := parseDuration(olderThanStr)
@@ -323,26 +364,17 @@ func parseDuration(durationStr string) (int, error) {
 func exportSessionCommand(cmd *cobra.Command, args []string) error {
 	sessionName := args[0]
 
-	// Get flags.
-	outputPath, err := cmd.Flags().GetString("output")
-	if err != nil {
-		return fmt.Errorf("failed to get output flag: %w", err)
+	// Bind parsed flags to Viper for precedence handling.
+	v := viper.GetViper()
+	if err := exportParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
 	}
 
-	format, err := cmd.Flags().GetString("format")
-	if err != nil {
-		return fmt.Errorf("failed to get format flag: %w", err)
-	}
-
-	includeContext, err := cmd.Flags().GetBool(contextFlag)
-	if err != nil {
-		return fmt.Errorf("failed to get context flag: %w", err)
-	}
-
-	includeMetadata, err := cmd.Flags().GetBool("metadata")
-	if err != nil {
-		return fmt.Errorf("failed to get metadata flag: %w", err)
-	}
+	// Get flags from Viper (supports CLI > ENV > config > defaults).
+	outputPath := v.GetString(outputFlag)
+	format := v.GetString("format")
+	includeContext := v.GetBool(contextFlag)
+	includeMetadata := v.GetBool("metadata")
 
 	log.Debug(fmt.Sprintf("Exporting session '%s' to '%s'", sessionName, outputPath))
 
@@ -373,21 +405,16 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 func importSessionCommand(cmd *cobra.Command, args []string) error {
 	checkpointPath := args[0]
 
-	// Get flags.
-	sessionName, err := cmd.Flags().GetString("name")
-	if err != nil {
-		return fmt.Errorf("failed to get name flag: %w", err)
+	// Bind parsed flags to Viper for precedence handling.
+	v := viper.GetViper()
+	if err := importParser.BindFlagsToViper(cmd, v); err != nil {
+		return err
 	}
 
-	overwrite, err := cmd.Flags().GetBool("overwrite")
-	if err != nil {
-		return fmt.Errorf("failed to get overwrite flag: %w", err)
-	}
-
-	includeContext, err := cmd.Flags().GetBool(contextFlag)
-	if err != nil {
-		return fmt.Errorf("failed to get context flag: %w", err)
-	}
+	// Get flags from Viper (supports CLI > ENV > config > defaults).
+	sessionName := v.GetString("name")
+	overwrite := v.GetBool("overwrite")
+	includeContext := v.GetBool(contextFlag)
 
 	log.Debug(fmt.Sprintf("Importing session from '%s'", checkpointPath))
 

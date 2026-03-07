@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -2287,5 +2288,78 @@ settings:
 		// Should fail at SendMessage but context gathering succeeded.
 		// The finalQuestion includes both context and the original question.
 		assert.Contains(t, err.Error(), "AI execution failed")
+	})
+}
+
+// TestAskCommand_StandardParserIntegration tests that the ask command uses StandardParser
+// with proper Viper binding for flag precedence (CLI > ENV > defaults).
+func TestAskCommand_StandardParserIntegration(t *testing.T) {
+	t.Run("askParser is initialized", func(t *testing.T) {
+		require.NotNil(t, askParser, "askParser should be initialized by init()")
+	})
+
+	t.Run("flags are registered via StandardParser", func(t *testing.T) {
+		// Verify all expected flags exist on the command.
+		expectedFlags := []string{"include", "exclude", "no-auto-context", "no-tools"}
+		for _, flagName := range expectedFlags {
+			flag := askCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "flag %q should be registered on askCmd", flagName)
+		}
+	})
+
+	t.Run("env var binding for no-tools flag", func(t *testing.T) {
+		// Set env var and verify Viper picks it up.
+		t.Setenv("ATMOS_AI_NO_TOOLS", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := askParser.BindToViper(v)
+		require.NoError(t, err)
+
+		// Viper should return true from env var since flag was not explicitly set.
+		assert.True(t, v.GetBool("no-tools"), "no-tools should be true from ATMOS_AI_NO_TOOLS env var")
+	})
+
+	t.Run("env var binding for no-auto-context flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_NO_AUTO_CONTEXT", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := askParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("no-auto-context"), "no-auto-context should be true from ATMOS_AI_NO_AUTO_CONTEXT env var")
+	})
+
+	t.Run("CLI flag overrides env var", func(t *testing.T) {
+		// Set env var to true.
+		t.Setenv("ATMOS_AI_NO_TOOLS", "true")
+
+		// Explicitly set CLI flag to false.
+		oldVal := askCmd.Flags().Lookup("no-tools").Value.String()
+		t.Cleanup(func() {
+			_ = askCmd.Flags().Set("no-tools", oldVal)
+		})
+		_ = askCmd.Flags().Set("no-tools", "false")
+
+		v := viper.GetViper()
+		err := askParser.BindFlagsToViper(askCmd, v)
+		require.NoError(t, err)
+
+		// CLI flag should override env var.
+		assert.False(t, v.GetBool("no-tools"), "CLI flag should override env var")
+	})
+
+	t.Run("default values when no env vars or flags set", func(t *testing.T) {
+		// Reset flags.
+		askCmd.Flags().Lookup("no-tools").Value.Set("false")
+		askCmd.Flags().Lookup("no-auto-context").Value.Set("false")
+
+		v := viper.GetViper()
+		err := askParser.BindFlagsToViper(askCmd, v)
+		require.NoError(t, err)
+
+		assert.False(t, v.GetBool("no-tools"), "no-tools should default to false")
+		assert.False(t, v.GetBool("no-auto-context"), "no-auto-context should default to false")
 	})
 }

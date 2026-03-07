@@ -7,16 +7,21 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai"
 	"github.com/cloudposse/atmos/pkg/ai/executor"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/flags"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 	"github.com/cloudposse/atmos/pkg/utils"
 )
+
+// askParser handles flag parsing with Viper precedence for the ask command.
+var askParser *flags.StandardParser
 
 // aiAskCmd represents the ai ask command.
 var askCmd = &cobra.Command{
@@ -35,11 +40,17 @@ Examples:
   atmos ai ask "Describe the vpc component in the dev stack"`,
 	Args: cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		// Get flags.
-		includePatterns, _ := cmd.Flags().GetStringSlice("include")
-		excludePatterns, _ := cmd.Flags().GetStringSlice("exclude")
-		noAutoContext, _ := cmd.Flags().GetBool("no-auto-context")
-		noTools, _ := cmd.Flags().GetBool("no-tools")
+		// Bind parsed flags to Viper for precedence handling.
+		v := viper.GetViper()
+		if err := askParser.BindFlagsToViper(cmd, v); err != nil {
+			return err
+		}
+
+		// Get flags from Viper (supports CLI > ENV > config > defaults).
+		includePatterns := v.GetStringSlice("include")
+		excludePatterns := v.GetStringSlice("exclude")
+		noAutoContext := v.GetBool("no-auto-context")
+		noTools := v.GetBool("no-tools")
 
 		// Initialize configuration.
 		configAndStacksInfo := schema.ConfigAndStacksInfo{}
@@ -132,11 +143,25 @@ Examples:
 }
 
 func init() {
-	// Context discovery flags.
-	askCmd.Flags().StringSlice("include", nil, "Add glob patterns to include in context (can be repeated)")
-	askCmd.Flags().StringSlice("exclude", nil, "Add glob patterns to exclude from context (can be repeated)")
-	askCmd.Flags().Bool("no-auto-context", false, "Disable automatic context discovery")
-	askCmd.Flags().Bool("no-tools", false, "Disable tool execution")
+	// Create parser with ask-specific flags using functional options.
+	askParser = flags.NewStandardParser(
+		flags.WithStringSliceFlag("include", "", nil, "Add glob patterns to include in context (can be repeated)"),
+		flags.WithStringSliceFlag("exclude", "", nil, "Add glob patterns to exclude from context (can be repeated)"),
+		flags.WithBoolFlag("no-auto-context", "", false, "Disable automatic context discovery"),
+		flags.WithBoolFlag("no-tools", "", false, "Disable tool execution"),
+		flags.WithEnvVars("include", "ATMOS_AI_INCLUDE"),
+		flags.WithEnvVars("exclude", "ATMOS_AI_EXCLUDE"),
+		flags.WithEnvVars("no-auto-context", "ATMOS_AI_NO_AUTO_CONTEXT"),
+		flags.WithEnvVars("no-tools", "ATMOS_AI_NO_TOOLS"),
+	)
+
+	// Register flags on the command.
+	askParser.RegisterFlags(askCmd)
+
+	// Bind flags to Viper for environment variable support.
+	if err := askParser.BindToViper(viper.GetViper()); err != nil {
+		panic(err)
+	}
 
 	aiCmd.AddCommand(askCmd)
 }

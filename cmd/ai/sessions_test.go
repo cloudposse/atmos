@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -410,13 +411,15 @@ func TestSessionsCommand_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("cleanSessionsCommand returns error with invalid duration format", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "clean",
-			RunE: cleanSessionsCommand,
-		}
-		testCmd.Flags().String("older-than", "invalid-duration", "Duration")
+		// Use the real command and explicitly set the flag value.
+		// Reset after test.
+		oldVal := sessionsCleanCmd.Flags().Lookup("older-than").Value.String()
+		t.Cleanup(func() {
+			_ = sessionsCleanCmd.Flags().Set("older-than", oldVal)
+		})
+		_ = sessionsCleanCmd.Flags().Set("older-than", "invalid-duration")
 
-		err := cleanSessionsCommand(testCmd, []string{})
+		err := cleanSessionsCommand(sessionsCleanCmd, []string{})
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "invalid duration format")
 	})
@@ -860,125 +863,55 @@ func TestListSessionsCommand_NoConfigError(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCleanSessionsCommand_NoFlagError(t *testing.T) {
-	t.Run("handles missing older-than flag gracefully", func(t *testing.T) {
-		// Create a command without the flag.
-		testCmd := &cobra.Command{
-			Use:  "clean",
-			RunE: cleanSessionsCommand,
-		}
-
-		// This should error because the flag is not registered.
-		err := cleanSessionsCommand(testCmd, []string{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get older-than flag")
+func TestCleanSessionsCommand_ViperDefaults(t *testing.T) {
+	t.Run("uses default older-than value", func(t *testing.T) {
+		// With Viper, missing flags return defaults instead of errors.
+		// The clean command uses "30d" as the default for older-than.
+		flag := sessionsCleanCmd.Flags().Lookup("older-than")
+		require.NotNil(t, flag)
+		assert.Equal(t, "30d", flag.DefValue)
 	})
 }
 
-func TestExportSessionCommand_MissingFlags(t *testing.T) {
-	t.Run("handles missing output flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "export",
-			RunE: exportSessionCommand,
-		}
-		// Only register some flags.
-		testCmd.Flags().StringP("format", "f", "", "Output format")
-		testCmd.Flags().Bool("context", false, "Include context")
-		testCmd.Flags().Bool("metadata", true, "Include metadata")
+func TestExportSessionCommand_ViperDefaults(t *testing.T) {
+	t.Run("export flags are registered on command", func(t *testing.T) {
+		// With Viper, flags return defaults instead of errors when not set.
+		// Verify the flags exist on the command with correct defaults.
+		outputFlag := sessionsExportCmd.Flags().Lookup("output")
+		assert.NotNil(t, outputFlag)
+		assert.Equal(t, "", outputFlag.DefValue)
 
-		// Should error on missing output flag.
-		err := exportSessionCommand(testCmd, []string{"test-session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get output flag")
+		formatFlag := sessionsExportCmd.Flags().Lookup("format")
+		assert.NotNil(t, formatFlag)
+		assert.Equal(t, "", formatFlag.DefValue)
+
+		contextFlag := sessionsExportCmd.Flags().Lookup("context")
+		assert.NotNil(t, contextFlag)
+		assert.Equal(t, "false", contextFlag.DefValue)
+
+		metadataFlag := sessionsExportCmd.Flags().Lookup("metadata")
+		assert.NotNil(t, metadataFlag)
+		assert.Equal(t, "true", metadataFlag.DefValue)
 	})
 
-	t.Run("handles missing format flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "export",
-			RunE: exportSessionCommand,
-		}
-		testCmd.Flags().StringP("output", "o", "", "Output file path")
-		testCmd.Flags().Bool("context", false, "Include context")
-		testCmd.Flags().Bool("metadata", true, "Include metadata")
-
-		// Should error on missing format flag.
-		err := exportSessionCommand(testCmd, []string{"test-session"})
+	t.Run("export command enforces exact args via Cobra", func(t *testing.T) {
+		// Export requires exactly 1 session name argument.
+		assert.NotNil(t, sessionsExportCmd.Args)
+		err := cobra.ExactArgs(1)(sessionsExportCmd, []string{})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get format flag")
-	})
-
-	t.Run("handles missing context flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "export",
-			RunE: exportSessionCommand,
-		}
-		testCmd.Flags().StringP("output", "o", "output.json", "Output file path")
-		testCmd.Flags().StringP("format", "f", "", "Output format")
-		testCmd.Flags().Bool("metadata", true, "Include metadata")
-
-		// Should error on missing context flag.
-		err := exportSessionCommand(testCmd, []string{"test-session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get context flag")
-	})
-
-	t.Run("handles missing metadata flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "export",
-			RunE: exportSessionCommand,
-		}
-		testCmd.Flags().StringP("output", "o", "output.json", "Output file path")
-		testCmd.Flags().StringP("format", "f", "", "Output format")
-		testCmd.Flags().Bool("context", false, "Include context")
-
-		// Should error on missing metadata flag.
-		err := exportSessionCommand(testCmd, []string{"test-session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get metadata flag")
+		err = cobra.ExactArgs(1)(sessionsExportCmd, []string{"session1"})
+		assert.NoError(t, err)
 	})
 }
 
-func TestImportSessionCommand_MissingFlags(t *testing.T) {
-	t.Run("handles missing name flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "import",
-			RunE: importSessionCommand,
-		}
-		testCmd.Flags().Bool("overwrite", false, "Overwrite existing")
-		testCmd.Flags().Bool("context", true, "Include context")
-
-		// Should error on missing name flag.
-		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
+func TestImportSessionCommand_ViperDefaults(t *testing.T) {
+	t.Run("import command enforces exact args via Cobra", func(t *testing.T) {
+		// Import requires exactly 1 file path argument.
+		assert.NotNil(t, sessionsImportCmd.Args)
+		err := cobra.ExactArgs(1)(sessionsImportCmd, []string{})
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get name flag")
-	})
-
-	t.Run("handles missing overwrite flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "import",
-			RunE: importSessionCommand,
-		}
-		testCmd.Flags().StringP("name", "n", "", "Name for imported session")
-		testCmd.Flags().Bool("context", true, "Include context")
-
-		// Should error on missing overwrite flag.
-		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get overwrite flag")
-	})
-
-	t.Run("handles missing context flag", func(t *testing.T) {
-		testCmd := &cobra.Command{
-			Use:  "import",
-			RunE: importSessionCommand,
-		}
-		testCmd.Flags().StringP("name", "n", "", "Name for imported session")
-		testCmd.Flags().Bool("overwrite", false, "Overwrite existing")
-
-		// Should error on missing context flag.
-		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get context flag")
+		err = cobra.ExactArgs(1)(sessionsImportCmd, []string{"file.json"})
+		assert.NoError(t, err)
 	})
 }
 
@@ -2414,93 +2347,54 @@ func TestCheckpointValidation_StatisticsMismatch(t *testing.T) {
 	})
 }
 
-// TestCleanSessionsCommand_FlagErrors tests flag retrieval error paths.
-func TestCleanSessionsCommand_FlagErrors(t *testing.T) {
-	t.Run("clean without older-than flag registered returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "clean"}
-		// Don't register the flag.
-
-		err := cleanSessionsCommand(testCmd, []string{})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get older-than flag")
+// TestCleanSessionsCommand_FlagDefaults tests that clean command uses Viper defaults.
+func TestCleanSessionsCommand_FlagDefaults(t *testing.T) {
+	t.Run("clean uses default older-than from Viper when flag not explicitly set", func(t *testing.T) {
+		// With Viper, flags always have defaults and never return "missing flag" errors.
+		// Verify the registered default is correct.
+		flag := sessionsCleanCmd.Flags().Lookup("older-than")
+		require.NotNil(t, flag)
+		assert.Equal(t, "30d", flag.DefValue)
 	})
 }
 
-// TestExportSessionCommand_FlagErrors tests flag retrieval error paths for export.
-func TestExportSessionCommand_FlagErrors(t *testing.T) {
-	t.Run("export without any flags returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "export"}
-		// Don't register any flags.
+// TestExportSessionCommand_FlagDefaults tests that export command flags have correct Viper defaults.
+func TestExportSessionCommand_FlagDefaults(t *testing.T) {
+	t.Run("export flags have correct defaults via Viper", func(t *testing.T) {
+		// With Viper, flags always have defaults and never return "missing flag" errors.
+		outputFlag := sessionsExportCmd.Flags().Lookup("output")
+		require.NotNil(t, outputFlag)
+		assert.Equal(t, "", outputFlag.DefValue)
 
-		err := exportSessionCommand(testCmd, []string{"session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get output flag")
-	})
+		formatFlag := sessionsExportCmd.Flags().Lookup("format")
+		require.NotNil(t, formatFlag)
+		assert.Equal(t, "", formatFlag.DefValue)
 
-	t.Run("export without format flag returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "export"}
-		testCmd.Flags().StringP("output", "o", "", "Output")
-		// Don't register format flag.
+		contextFlag := sessionsExportCmd.Flags().Lookup("context")
+		require.NotNil(t, contextFlag)
+		assert.Equal(t, "false", contextFlag.DefValue)
 
-		err := exportSessionCommand(testCmd, []string{"session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get format flag")
-	})
-
-	t.Run("export without context flag returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "export"}
-		testCmd.Flags().StringP("output", "o", "", "Output")
-		testCmd.Flags().StringP("format", "f", "", "Format")
-		// Don't register context flag.
-
-		err := exportSessionCommand(testCmd, []string{"session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get context flag")
-	})
-
-	t.Run("export without metadata flag returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "export"}
-		testCmd.Flags().StringP("output", "o", "", "Output")
-		testCmd.Flags().StringP("format", "f", "", "Format")
-		testCmd.Flags().Bool("context", false, "Context")
-		// Don't register metadata flag.
-
-		err := exportSessionCommand(testCmd, []string{"session"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get metadata flag")
+		metadataFlag := sessionsExportCmd.Flags().Lookup("metadata")
+		require.NotNil(t, metadataFlag)
+		assert.Equal(t, "true", metadataFlag.DefValue)
 	})
 }
 
-// TestImportSessionCommand_FlagErrors tests flag retrieval error paths for import.
-func TestImportSessionCommand_FlagErrors(t *testing.T) {
-	t.Run("import without any flags returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "import"}
-		// Don't register any flags.
+// TestImportSessionCommand_FlagDefaults tests that import command flags have correct Viper defaults.
+func TestImportSessionCommand_FlagDefaults(t *testing.T) {
+	t.Run("import flags have correct defaults via Viper", func(t *testing.T) {
+		// With Viper, flags always have defaults and never return "missing flag" errors.
+		nameFlag := sessionsImportCmd.Flags().Lookup("name")
+		require.NotNil(t, nameFlag)
+		assert.Equal(t, "", nameFlag.DefValue)
 
-		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get name flag")
-	})
+		overwriteFlag := sessionsImportCmd.Flags().Lookup("overwrite")
+		require.NotNil(t, overwriteFlag)
+		assert.Equal(t, "false", overwriteFlag.DefValue)
 
-	t.Run("import without overwrite flag returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "import"}
-		testCmd.Flags().StringP("name", "n", "", "Name")
-		// Don't register overwrite flag.
-
-		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get overwrite flag")
-	})
-
-	t.Run("import without context flag returns error", func(t *testing.T) {
-		testCmd := &cobra.Command{Use: "import"}
-		testCmd.Flags().StringP("name", "n", "", "Name")
-		testCmd.Flags().Bool("overwrite", false, "Overwrite")
-		// Don't register context flag.
-
-		err := importSessionCommand(testCmd, []string{"checkpoint.json"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "failed to get context flag")
+		contextFlag := sessionsImportCmd.Flags().Lookup("context")
+		require.NotNil(t, contextFlag)
+		assert.Equal(t, "true", contextFlag.DefValue)
 	})
 }
 
@@ -3939,5 +3833,101 @@ settings:
 		// The test exercises the code path for message count retrieval.
 		err := listSessionsCommand(listCmd, []string{})
 		assert.NoError(t, err)
+	})
+}
+
+// TestSessionsCommand_StandardParserIntegration tests that session subcommands use StandardParser
+// with proper Viper binding for flag precedence (CLI > ENV > defaults).
+func TestSessionsCommand_StandardParserIntegration(t *testing.T) {
+	t.Run("parsers are initialized", func(t *testing.T) {
+		require.NotNil(t, cleanParser, "cleanParser should be initialized by init()")
+		require.NotNil(t, exportParser, "exportParser should be initialized by init()")
+		require.NotNil(t, importParser, "importParser should be initialized by init()")
+	})
+
+	t.Run("clean command has older-than flag", func(t *testing.T) {
+		flag := sessionsCleanCmd.Flags().Lookup("older-than")
+		require.NotNil(t, flag)
+		assert.Equal(t, "30d", flag.DefValue)
+	})
+
+	t.Run("export command has all expected flags", func(t *testing.T) {
+		expectedFlags := []string{"output", "format", "context", "metadata"}
+		for _, flagName := range expectedFlags {
+			flag := sessionsExportCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "flag %q should be registered on sessionsExportCmd", flagName)
+		}
+	})
+
+	t.Run("import command has all expected flags", func(t *testing.T) {
+		expectedFlags := []string{"name", "overwrite", "context"}
+		for _, flagName := range expectedFlags {
+			flag := sessionsImportCmd.Flags().Lookup(flagName)
+			require.NotNil(t, flag, "flag %q should be registered on sessionsImportCmd", flagName)
+		}
+	})
+
+	t.Run("export output flag has shorthand", func(t *testing.T) {
+		flag := sessionsExportCmd.Flags().Lookup("output")
+		require.NotNil(t, flag)
+		assert.Equal(t, "o", flag.Shorthand)
+	})
+
+	t.Run("export format flag has shorthand", func(t *testing.T) {
+		flag := sessionsExportCmd.Flags().Lookup("format")
+		require.NotNil(t, flag)
+		assert.Equal(t, "f", flag.Shorthand)
+	})
+
+	t.Run("import name flag has shorthand", func(t *testing.T) {
+		flag := sessionsImportCmd.Flags().Lookup("name")
+		require.NotNil(t, flag)
+		assert.Equal(t, "n", flag.Shorthand)
+	})
+
+	t.Run("env var binding for older-than flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SESSIONS_OLDER_THAN", "7d")
+
+		// Use a fresh Viper instance to avoid global state pollution from other tests
+		// that may have set the older-than flag as "Changed" on sessionsCleanCmd.
+		v := viper.New()
+		err := cleanParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "7d", v.GetString("older-than"), "older-than should be '7d' from ATMOS_AI_SESSIONS_OLDER_THAN env var")
+	})
+
+	t.Run("env var binding for import overwrite flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SESSIONS_OVERWRITE", "true")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := importParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.True(t, v.GetBool("overwrite"), "overwrite should be true from ATMOS_AI_SESSIONS_OVERWRITE env var")
+	})
+
+	t.Run("env var binding for import name flag", func(t *testing.T) {
+		t.Setenv("ATMOS_AI_SESSIONS_NAME", "my-session")
+
+		// Use a fresh Viper instance to avoid global state pollution.
+		v := viper.New()
+		err := importParser.BindToViper(v)
+		require.NoError(t, err)
+
+		assert.Equal(t, "my-session", v.GetString("name"), "name should be 'my-session' from ATMOS_AI_SESSIONS_NAME env var")
+	})
+
+	t.Run("metadata flag defaults to true", func(t *testing.T) {
+		flag := sessionsExportCmd.Flags().Lookup("metadata")
+		require.NotNil(t, flag)
+		assert.Equal(t, "true", flag.DefValue)
+	})
+
+	t.Run("import context flag defaults to true", func(t *testing.T) {
+		flag := sessionsImportCmd.Flags().Lookup("context")
+		require.NotNil(t, flag)
+		assert.Equal(t, "true", flag.DefValue)
 	})
 }
