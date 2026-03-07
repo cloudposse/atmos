@@ -48,9 +48,40 @@ func (t *ValidateFileLSPTool) Parameters() []tools.Parameter {
 	}
 }
 
+// resolveAndReadFile resolves the file path to absolute, checks existence, and reads content.
+// Returns the absolute path, file content, and an error result if any step fails (nil result on success).
+func (t *ValidateFileLSPTool) resolveAndReadFile(filePath string) (string, []byte, *tools.Result) {
+	// Resolve to absolute path.
+	absPath := filePath
+	if !filepath.IsAbs(filePath) {
+		absPath = filepath.Join(t.atmosConfig.BasePath, filePath)
+	}
+
+	// Check if file exists.
+	if _, err := os.Stat(absPath); os.IsNotExist(err) {
+		return "", nil, &tools.Result{
+			Success: false,
+			Output:  "",
+			Error:   fmt.Errorf("%w: %s", errUtils.ErrAIFileDoesNotExist, filePath),
+		}
+	}
+
+	// Read file content.
+	content, err := os.ReadFile(absPath)
+	if err != nil {
+		return "", nil, &tools.Result{
+			Success: false,
+			Output:  "",
+			Error:   fmt.Errorf("failed to read file %s: %w", filePath, err),
+		}
+	}
+
+	return absPath, content, nil
+}
+
 // Execute validates a file using LSP and returns diagnostics.
 func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]interface{}) (*tools.Result, error) {
-	// Check if LSP is enabled
+	// Check if LSP is enabled.
 	if t.lspManager == nil || !t.lspManager.IsEnabled() {
 		return &tools.Result{
 			Success: false,
@@ -59,7 +90,7 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		}, nil
 	}
 
-	// Extract parameters
+	// Extract parameters.
 	filePath, ok := params["file_path"].(string)
 	if !ok || filePath == "" {
 		return &tools.Result{
@@ -69,32 +100,13 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		}, nil
 	}
 
-	// Resolve to absolute path
-	absPath := filePath
-	if !filepath.IsAbs(filePath) {
-		absPath = filepath.Join(t.atmosConfig.BasePath, filePath)
+	// Resolve path, check existence, and read file.
+	absPath, content, errResult := t.resolveAndReadFile(filePath)
+	if errResult != nil {
+		return errResult, nil
 	}
 
-	// Check if file exists
-	if _, err := os.Stat(absPath); os.IsNotExist(err) {
-		return &tools.Result{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Errorf("%w: %s", errUtils.ErrAIFileDoesNotExist, filePath),
-		}, nil
-	}
-
-	// Read file content
-	content, err := os.ReadFile(absPath)
-	if err != nil {
-		return &tools.Result{
-			Success: false,
-			Output:  "",
-			Error:   fmt.Errorf("failed to read file %s: %w", filePath, err),
-		}, nil
-	}
-
-	// Analyze file with LSP
+	// Analyze file with LSP.
 	diagnostics, err := t.lspManager.AnalyzeFile(absPath, string(content))
 	if err != nil {
 		return &tools.Result{
@@ -104,13 +116,13 @@ func (t *ValidateFileLSPTool) Execute(ctx context.Context, params map[string]int
 		}, nil
 	}
 
-	// Format diagnostics for AI
+	// Format diagnostics for AI.
 	formatter := client.NewDiagnosticFormatter()
 	uri := "file://" + absPath
 
 	output := formatter.FormatForAI(uri, diagnostics)
 
-	// Add context about LSP server used
+	// Add context about LSP server used.
 	_, found := t.lspManager.GetClientForFile(absPath)
 	if found {
 		ext := filepath.Ext(absPath)

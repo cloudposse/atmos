@@ -144,116 +144,54 @@ func TestValidateFileLSPTool_Execute_FileNotFound(t *testing.T) {
 	assert.Contains(t, result.Error.Error(), "file does not exist")
 }
 
-func TestValidateFileLSPTool_Execute_Success_NoLSPServer(t *testing.T) {
-	ctx := context.Background()
-
-	// Create temp directory and file
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "test.yaml")
-	err := os.WriteFile(testFile, []byte("key: value\n"), 0o644)
-	require.NoError(t, err)
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
+func TestValidateFileLSPTool_Execute_NoLSPServer(t *testing.T) {
+	// Table-driven test covering both absolute and relative path inputs.
+	tests := []struct {
+		name    string
+		usePath func(tempDir, testFile string) string
+	}{
+		{"absolute_path", func(_, testFile string) string { return testFile }},
+		{"relative_path", func(_, _ string) string { return "test.yaml" }},
 	}
 
-	// LSP manager with no servers configured
-	lspConfig := &schema.LSPSettings{
-		Enabled: true,
-		Servers: map[string]*schema.LSPServer{},
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+
+			// Create temp directory and file.
+			tempDir := t.TempDir()
+			testFile := filepath.Join(tempDir, "test.yaml")
+			err := os.WriteFile(testFile, []byte("key: value\n"), 0o644)
+			require.NoError(t, err)
+
+			atmosConfig := &schema.AtmosConfiguration{
+				BasePath: tempDir,
+			}
+
+			// LSP manager with no servers configured.
+			lspConfig := &schema.LSPSettings{
+				Enabled: true,
+				Servers: map[string]*schema.LSPServer{},
+			}
+
+			lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
+			require.NoError(t, err)
+			defer lspManager.Close()
+
+			tool := NewValidateFileLSPTool(atmosConfig, lspManager)
+
+			params := map[string]interface{}{
+				"file_path": tt.usePath(tempDir, testFile),
+			}
+
+			result, err := tool.Execute(context.Background(), params)
+
+			require.NoError(t, err)
+			assert.False(t, result.Success)
+			// Should fail because no LSP server configured, but file was found and read.
+			assert.Contains(t, result.Error.Error(), "no LSP server found")
+		})
 	}
-
-	lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
-	require.NoError(t, err)
-	defer lspManager.Close()
-
-	tool := NewValidateFileLSPTool(atmosConfig, lspManager)
-
-	params := map[string]interface{}{
-		"file_path": "test.yaml",
-	}
-
-	result, err := tool.Execute(context.Background(), params)
-
-	require.NoError(t, err)
-	assert.False(t, result.Success)
-	assert.Contains(t, result.Error.Error(), "no LSP server found")
-}
-
-func TestValidateFileLSPTool_Execute_AbsolutePath(t *testing.T) {
-	ctx := context.Background()
-
-	// Create temp directory and file
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "test.yaml")
-	err := os.WriteFile(testFile, []byte("key: value\n"), 0o644)
-	require.NoError(t, err)
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-	}
-
-	// LSP manager with no servers (will fail to find server)
-	lspConfig := &schema.LSPSettings{
-		Enabled: true,
-		Servers: map[string]*schema.LSPServer{},
-	}
-
-	lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
-	require.NoError(t, err)
-	defer lspManager.Close()
-
-	tool := NewValidateFileLSPTool(atmosConfig, lspManager)
-
-	// Test with absolute path
-	params := map[string]interface{}{
-		"file_path": testFile,
-	}
-
-	result, err := tool.Execute(context.Background(), params)
-
-	require.NoError(t, err)
-	assert.False(t, result.Success)
-	// Should fail because no LSP server configured, but file was found and read
-	assert.Contains(t, result.Error.Error(), "no LSP server found")
-}
-
-func TestValidateFileLSPTool_Execute_RelativePath(t *testing.T) {
-	ctx := context.Background()
-
-	// Create temp directory and file
-	tempDir := t.TempDir()
-	testFile := filepath.Join(tempDir, "test.yaml")
-	err := os.WriteFile(testFile, []byte("key: value\n"), 0o644)
-	require.NoError(t, err)
-
-	atmosConfig := &schema.AtmosConfiguration{
-		BasePath: tempDir,
-	}
-
-	// LSP manager with no servers (will fail to find server)
-	lspConfig := &schema.LSPSettings{
-		Enabled: true,
-		Servers: map[string]*schema.LSPServer{},
-	}
-
-	lspManager, err := client.NewManager(ctx, lspConfig, tempDir)
-	require.NoError(t, err)
-	defer lspManager.Close()
-
-	tool := NewValidateFileLSPTool(atmosConfig, lspManager)
-
-	// Test with relative path
-	params := map[string]interface{}{
-		"file_path": "test.yaml",
-	}
-
-	result, err := tool.Execute(context.Background(), params)
-
-	require.NoError(t, err)
-	assert.False(t, result.Success)
-	// Should fail because no LSP server configured, but file was found and read
-	assert.Contains(t, result.Error.Error(), "no LSP server found")
 }
 
 // mockLSPManager implements client.ManagerInterface for testing.

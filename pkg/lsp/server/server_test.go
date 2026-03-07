@@ -79,14 +79,19 @@ func TestServer_Shutdown(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// contextKey is a custom type for context keys to avoid staticcheck SA1029.
+type contextKey string
+
+const testContextKey contextKey = "test-key"
+
 func TestServer_ContextPropagation(t *testing.T) {
 	// Test that context is properly stored.
-	ctx := context.WithValue(context.Background(), "test-key", "test-value")
+	ctx := context.WithValue(context.Background(), testContextKey, "test-value")
 	server, err := NewServer(ctx, nil)
 	require.NoError(t, err)
 
 	assert.Equal(t, ctx, server.ctx)
-	assert.Equal(t, "test-value", server.ctx.Value("test-key"))
+	assert.Equal(t, "test-value", server.ctx.Value(testContextKey))
 }
 
 func TestServer_AtmosConfigDefaults(t *testing.T) {

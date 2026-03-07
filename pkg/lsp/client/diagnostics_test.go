@@ -136,6 +136,50 @@ func TestDiagnosticFormatter_FormatDiagnostics(t *testing.T) {
 	assert.Contains(t, result, "Unused variable")
 }
 
+func TestDiagnosticFormatter_FormatDiagnostics_AllSeverities(t *testing.T) {
+	formatter := NewDiagnosticFormatter()
+
+	diagnostics := []lsp.Diagnostic{
+		{
+			Range:    lsp.Range{Start: lsp.Position{Line: 1, Character: 0}},
+			Severity: lsp.DiagnosticSeverityError,
+			Message:  "An error",
+		},
+		{
+			Range:    lsp.Range{Start: lsp.Position{Line: 2, Character: 0}},
+			Severity: lsp.DiagnosticSeverityWarning,
+			Message:  "A warning",
+		},
+		{
+			Range:    lsp.Range{Start: lsp.Position{Line: 3, Character: 0}},
+			Severity: lsp.DiagnosticSeverityInformation,
+			Message:  "An info",
+		},
+		{
+			Range:    lsp.Range{Start: lsp.Position{Line: 4, Character: 0}},
+			Severity: lsp.DiagnosticSeverityHint,
+			Message:  "A hint",
+		},
+	}
+
+	result := formatter.FormatDiagnostics("file:///test/all.yaml", diagnostics)
+
+	assert.Contains(t, result, "ERRORS:")
+	assert.Contains(t, result, "WARNINGS:")
+	assert.Contains(t, result, "INFORMATION:")
+	assert.Contains(t, result, "HINTS:")
+	assert.Contains(t, result, "An error")
+	assert.Contains(t, result, "A warning")
+	assert.Contains(t, result, "An info")
+	assert.Contains(t, result, "A hint")
+}
+
+func TestDiagnosticFormatter_FormatDiagnostics_Empty(t *testing.T) {
+	formatter := NewDiagnosticFormatter()
+	result := formatter.FormatDiagnostics("file:///test/empty.yaml", []lsp.Diagnostic{})
+	assert.Empty(t, result)
+}
+
 func TestDiagnosticFormatter_FormatCompact(t *testing.T) {
 	formatter := NewDiagnosticFormatter()
 

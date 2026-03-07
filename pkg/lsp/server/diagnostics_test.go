@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/tliron/glsp"
 	protocol "github.com/tliron/glsp/protocol_3_16"
 	"gopkg.in/yaml.v3"
 )
@@ -58,6 +59,11 @@ func TestValidateYAMLSyntax(t *testing.T) {
 		{
 			name:            "YAML comments only",
 			content:         "# Comment 1\n# Comment 2",
+			wantDiagnostics: 0,
+		},
+		{
+			name:            "YAML type error - boolean in integer field",
+			content:         "a: &anchor\n  x: 1\nb: *anchor",
 			wantDiagnostics: 0,
 		},
 	}
@@ -470,6 +476,151 @@ func TestValidateVarsSection(t *testing.T) {
 			handler := &Handler{}
 			diagnostics := handler.validateVarsSection(tt.stackContent)
 			assert.Len(t, diagnostics, tt.wantDiagnostics)
+		})
+	}
+}
+
+func TestValidateDocument(t *testing.T) {
+	tests := []struct {
+		name    string
+		handler *Handler
+		doc     *Document
+	}{
+		{
+			name:    "nil handler does not panic",
+			handler: nil,
+			doc:     &Document{URI: "file:///test.yaml", Text: "key: value"},
+		},
+		{
+			name:    "nil document does not panic",
+			handler: &Handler{documents: NewDocumentManager()},
+			doc:     nil,
+		},
+		{
+			name:    "both nil does not panic",
+			handler: nil,
+			doc:     nil,
+		},
+		{
+			name:    "valid document with nil context",
+			handler: &Handler{documents: NewDocumentManager()},
+			doc:     &Document{URI: "file:///test.yaml", Text: "key: value"},
+		},
+		{
+			name:    "invalid yaml document with nil context",
+			handler: &Handler{documents: NewDocumentManager()},
+			doc:     &Document{URI: "file:///test.yaml", Text: "key:\n\tvalue"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Should not panic for any of these cases.
+			tt.handler.validateDocument(nil, tt.doc)
+		})
+	}
+}
+
+func TestValidateDocumentWithNotify(t *testing.T) {
+	// Test validateDocument with a context that has a Notify function.
+	tests := []struct {
+		name             string
+		docURI           string
+		docText          string
+		wantNotifyCalled bool
+		wantDiagCount    int
+	}{
+		{
+			name:             "valid yaml publishes empty diagnostics",
+			docURI:           "file:///test.yaml",
+			docText:          "key: value",
+			wantNotifyCalled: true,
+			wantDiagCount:    0,
+		},
+		{
+			name:             "invalid yaml publishes diagnostics",
+			docURI:           "file:///test.yaml",
+			docText:          "key:\n\tvalue",
+			wantNotifyCalled: true,
+			wantDiagCount:    1,
+		},
+		{
+			name:             "invalid atmos structure publishes diagnostics",
+			docURI:           "file:///test.yaml",
+			docText:          "import: not-an-array",
+			wantNotifyCalled: true,
+			wantDiagCount:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := &Handler{documents: NewDocumentManager()}
+			doc := &Document{URI: tt.docURI, Text: tt.docText}
+
+			notifyCalled := false
+			var publishedDiags []protocol.Diagnostic
+			glspCtx := &glsp.Context{
+				Notify: func(method string, params any) {
+					notifyCalled = true
+					pubParams, ok := params.(protocol.PublishDiagnosticsParams)
+					assert.True(t, ok)
+					publishedDiags = pubParams.Diagnostics
+				},
+			}
+
+			handler.validateDocument(glspCtx, doc)
+
+			assert.Equal(t, tt.wantNotifyCalled, notifyCalled, "Notify called mismatch")
+			if notifyCalled {
+				assert.Len(t, publishedDiags, tt.wantDiagCount)
+			}
+		})
+	}
+}
+
+func TestValidateTerraformComponentsEmptyName(t *testing.T) {
+	tests := []struct {
+		name            string
+		compMap         map[string]interface{}
+		wantDiagnostics int
+		checkMessage    string
+	}{
+		{
+			name: "terraform component with empty name",
+			compMap: map[string]interface{}{
+				"terraform": map[string]interface{}{
+					"": map[string]interface{}{},
+				},
+			},
+			wantDiagnostics: 1,
+			checkMessage:    "Component name cannot be empty",
+		},
+		{
+			name: "terraform missing from components",
+			compMap: map[string]interface{}{
+				"helmfile": map[string]interface{}{},
+			},
+			wantDiagnostics: 0,
+		},
+		{
+			name: "terraform as array instead of map",
+			compMap: map[string]interface{}{
+				"terraform": []interface{}{"invalid"},
+			},
+			wantDiagnostics: 1,
+			checkMessage:    "'components.terraform' should be a map",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := &Handler{}
+			diagnostics := handler.validateTerraformComponents(tt.compMap)
+			assert.Len(t, diagnostics, tt.wantDiagnostics)
+			if tt.wantDiagnostics > 0 && tt.checkMessage != "" {
+				assert.Contains(t, diagnostics[0].Message, tt.checkMessage)
+			}
 		})
 	}
 }

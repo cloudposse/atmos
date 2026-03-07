@@ -431,6 +431,111 @@ func TestTextDocumentLifecycle(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestTextDocumentDidChangeNonWholeChange(t *testing.T) {
+	// Test that non-whole change types are gracefully skipped.
+	ctx := context.Background()
+	server, err := NewServer(ctx, nil)
+	require.NoError(t, err)
+
+	handler := server.GetHandler()
+	glspContext := &glsp.Context{}
+	uri := protocol.DocumentUri("file:///test.yaml")
+
+	// Open document first.
+	handler.documents.Open(uri, "yaml", 1, "original content")
+
+	// Send a change with a non-whole change type (e.g., a map simulating incremental change).
+	err = handler.TextDocumentDidChange(glspContext, &protocol.DidChangeTextDocumentParams{
+		TextDocument: protocol.VersionedTextDocumentIdentifier{
+			TextDocumentIdentifier: protocol.TextDocumentIdentifier{URI: uri},
+			Version:                2,
+		},
+		ContentChanges: []interface{}{
+			// Use a map instead of TextDocumentContentChangeEventWhole to simulate non-whole change.
+			map[string]interface{}{
+				"text": "partial update",
+				"range": map[string]interface{}{
+					"start": map[string]interface{}{"line": 0, "character": 0},
+					"end":   map[string]interface{}{"line": 0, "character": 5},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	// Document should remain unchanged since non-whole changes are skipped.
+	doc, exists := handler.documents.Get(uri)
+	assert.True(t, exists)
+	assert.Equal(t, "original content", doc.Text)
+	assert.Equal(t, int32(1), doc.Version) // Version should not be updated.
+}
+
+func TestTextDocumentDidCloseWithNotify(t *testing.T) {
+	// Test TextDocumentDidClose when context.Notify is available.
+	ctx := context.Background()
+	server, err := NewServer(ctx, nil)
+	require.NoError(t, err)
+
+	handler := server.GetHandler()
+	uri := protocol.DocumentUri("file:///test.yaml")
+
+	// Open document first.
+	handler.documents.Open(uri, "yaml", 1, "content")
+
+	// Create a glsp.Context with a Notify function to exercise the Notify branch.
+	notifyCalled := false
+	glspContext := &glsp.Context{
+		Notify: func(method string, params any) {
+			notifyCalled = true
+			assert.Equal(t, protocol.ServerTextDocumentPublishDiagnostics, method)
+			pubParams, ok := params.(protocol.PublishDiagnosticsParams)
+			assert.True(t, ok)
+			assert.Equal(t, uri, pubParams.URI)
+			assert.Empty(t, pubParams.Diagnostics, "Diagnostics should be cleared on close")
+		},
+	}
+
+	err = handler.TextDocumentDidClose(glspContext, &protocol.DidCloseTextDocumentParams{
+		TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+	})
+	require.NoError(t, err)
+
+	// Verify the document was removed.
+	_, exists := handler.documents.Get(uri)
+	assert.False(t, exists)
+	assert.True(t, notifyCalled, "Notify should have been called to clear diagnostics")
+}
+
+func TestTextDocumentDidChangeEmptyContentChanges(t *testing.T) {
+	// Test that empty content changes are handled gracefully.
+	ctx := context.Background()
+	server, err := NewServer(ctx, nil)
+	require.NoError(t, err)
+
+	handler := server.GetHandler()
+	glspContext := &glsp.Context{}
+	uri := protocol.DocumentUri("file:///test.yaml")
+
+	// Open document first.
+	handler.documents.Open(uri, "yaml", 1, "original")
+
+	// Send change with empty ContentChanges.
+	err = handler.TextDocumentDidChange(glspContext, &protocol.DidChangeTextDocumentParams{
+		TextDocument: protocol.VersionedTextDocumentIdentifier{
+			TextDocumentIdentifier: protocol.TextDocumentIdentifier{URI: uri},
+			Version:                2,
+		},
+		ContentChanges: []interface{}{},
+	})
+	require.NoError(t, err)
+
+	// Document should remain unchanged.
+	doc, exists := handler.documents.Get(uri)
+	assert.True(t, exists)
+	assert.Equal(t, "original", doc.Text)
+	assert.Equal(t, int32(1), doc.Version)
+}
+
 func TestTextDocumentConcurrentOperations(t *testing.T) {
 	// Test concurrent document operations don't cause race conditions.
 	ctx := context.Background()

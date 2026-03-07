@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/lsp"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
@@ -37,7 +38,7 @@ type Manager struct {
 // NewManager creates a new LSP manager.
 func NewManager(ctx context.Context, config *schema.LSPSettings, rootPath string) (*Manager, error) {
 	if config == nil {
-		return nil, fmt.Errorf("LSP config is nil")
+		return nil, errUtils.ErrLSPConfigNil
 	}
 
 	// Create context with cancel
@@ -123,7 +124,7 @@ func (m *Manager) GetClientForFile(filePath string) (*Client, bool) {
 func (m *Manager) AnalyzeFile(filePath, content string) ([]lsp.Diagnostic, error) {
 	client, found := m.GetClientForFile(filePath)
 	if !found {
-		return nil, fmt.Errorf("no LSP server found for file: %s", filePath)
+		return nil, fmt.Errorf("%w: %s", errUtils.ErrLSPNoServerForFile, filePath)
 	}
 
 	// Determine language ID from file extension

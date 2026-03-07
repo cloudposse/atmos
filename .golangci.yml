@@ -309,28 +309,7 @@ linters:
           - err113
         path: ".*"
         source: 'errors\.Join\(.*errUtils\..*fmt\.Errorf'
-      # Exclude LSP code from performance tracking (LSP operations are not critical path)
-      - linters:
-          - lintroller
-        path: pkg/lsp/
-      # Exclude LSP protocol implementation from linting (performance-critical JSON-RPC communication)
-      - linters:
-          - err113
-          - errorlint
-          - gocritic
-          - gosec
-          - staticcheck
-          - unused
-          - revive
-        path: pkg/lsp/.*
-      # Exclude LSP validation tool from linting
-      - linters:
-          - dupl
-          - err113
-          - funlen
-          - revive
-        path: pkg/ai/tools/atmos/validate_file_lsp.*
-      # Allow viper.BindEnv and viper.BindPFlag in pkg/flags/ and test files
+# Allow viper.BindEnv and viper.BindPFlag in pkg/flags/ and test files
       - linters:
           - forbidigo
         path: ^pkg/flags/

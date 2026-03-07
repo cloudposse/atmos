@@ -60,13 +60,21 @@ func (h *Handler) getCompletionItems(doc *Document, pos protocol.Position) []pro
 	// Detect parent scope by looking at previous lines with less indentation.
 	parentScope := h.getParentScope(lines, int(pos.Line))
 
-	// Provide context-aware completions.
-
 	// Top-level keys - only when at root level (no parent scope).
 	if parentScope == "" && (trimmedLine == "" || !strings.Contains(trimmedLine, ":")) {
 		items = append(items, h.getTopLevelCompletions()...)
 		return items
 	}
+
+	// Provide context-aware completions based on scope.
+	items = append(items, h.getContextCompletions(parentScope, currentLine)...)
+
+	return items
+}
+
+// getContextCompletions returns completions based on the parent scope and current line content.
+func (h *Handler) getContextCompletions(parentScope, currentLine string) []protocol.CompletionItem {
+	var items []protocol.CompletionItem
 
 	// Component types - when under components: scope.
 	if parentScope == "components" || strings.Contains(currentLine, "components:") {

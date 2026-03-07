@@ -31,13 +31,12 @@ func (h *Handler) TextDocumentDidChange(context *glsp.Context, params *protocol.
 	}
 
 	// Get the full text from the first change (full sync mode).
-	var text string
-	if change, ok := params.ContentChanges[0].(protocol.TextDocumentContentChangeEventWhole); ok {
-		text = change.Text
-	} else {
+	change, ok := params.ContentChanges[0].(protocol.TextDocumentContentChangeEventWhole)
+	if !ok {
 		// If not a whole change, skip (shouldn't happen with TextDocumentSyncKindFull).
 		return nil
 	}
+	text := change.Text
 
 	// Update the document.
 	doc := h.documents.Update(

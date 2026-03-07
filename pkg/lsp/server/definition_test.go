@@ -190,11 +190,62 @@ func TestDefinitionHelperMethod(t *testing.T) {
 	assert.Equal(t, doc, retrieved)
 }
 
+func TestTextDocumentDefinitionDocumentNotFound(t *testing.T) {
+	// Verify that requesting definition for a URI not in the document store returns nil.
+	ctx := context.Background()
+	server, err := NewServer(ctx, nil)
+	require.NoError(t, err)
+
+	handler := server.GetHandler()
+	glspContext := &glsp.Context{}
+
+	// Do not add any document to the store.
+	params := &protocol.DefinitionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{
+				URI: "file:///does-not-exist.yaml",
+			},
+			Position: protocol.Position{Line: 0, Character: 0},
+		},
+	}
+
+	result, err := handler.TextDocumentDefinition(glspContext, params)
+	require.NoError(t, err)
+	assert.Nil(t, result, "Definition for non-existent document should return nil")
+}
+
+func TestTextDocumentDefinitionSingleLocation(t *testing.T) {
+	// Test that a single location is returned directly (not as an array).
+	handler := &Handler{
+		documents: NewDocumentManager(),
+	}
+	glspContext := &glsp.Context{}
+
+	uri := "file:///test.yaml"
+	handler.documents.Set(uri, &Document{
+		URI:  uri,
+		Text: "import:\n  - catalog/vpc",
+	})
+
+	// Since getDefinitionLocations is a stub returning empty,
+	// we test the TextDocumentDefinition function returns nil for now.
+	params := &protocol.DefinitionParams{
+		TextDocumentPositionParams: protocol.TextDocumentPositionParams{
+			TextDocument: protocol.TextDocumentIdentifier{URI: uri},
+			Position:     protocol.Position{Line: 1, Character: 5},
+		},
+	}
+
+	result, err := handler.TextDocumentDefinition(glspContext, params)
+	require.NoError(t, err)
+	assert.Nil(t, result, "Stub should return nil when no locations found")
+}
+
 // TODO: When definition feature is implemented, add tests for:
-// - Jump to import file location
-// - Jump to component definition
-// - Jump to variable definition
-// - Multiple definition locations
-// - Invalid/unresolvable references
-// - Cross-file references
-// - Relative vs absolute paths
+// - Jump to import file location.
+// - Jump to component definition.
+// - Jump to variable definition.
+// - Multiple definition locations.
+// - Invalid/unresolvable references.
+// - Cross-file references.
+// - Relative vs absolute paths.

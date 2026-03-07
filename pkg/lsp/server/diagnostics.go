@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -82,11 +83,17 @@ func (h *Handler) validateYAMLSyntax(doc *Document) []protocol.Diagnostic {
 		// Extract line and column information from error.
 		line, col := h.extractErrorPosition(err)
 
+		// Ensure non-negative values before uint32 conversion.
+		//nolint:gosec // Values are bounded by max(0, ...) to prevent negative overflow.
+		safeLine := uint32(max(0, line))
+		//nolint:gosec // Values are bounded by max(0, ...) to prevent negative overflow.
+		safeCol := uint32(max(0, col))
+
 		// YAML syntax error.
 		diag := protocol.Diagnostic{
 			Range: protocol.Range{
-				Start: protocol.Position{Line: uint32(line), Character: uint32(col)},
-				End:   protocol.Position{Line: uint32(line), Character: uint32(col)},
+				Start: protocol.Position{Line: safeLine, Character: safeCol},
+				End:   protocol.Position{Line: safeLine, Character: safeCol},
 			},
 			Severity: severityPtr(protocol.DiagnosticSeverityError),
 			Source:   stringPtr("atmos-lsp"),
@@ -94,7 +101,8 @@ func (h *Handler) validateYAMLSyntax(doc *Document) []protocol.Diagnostic {
 		}
 
 		// Try to extract more specific error message if possible.
-		if yamlErr, ok := err.(*yaml.TypeError); ok {
+		var yamlErr *yaml.TypeError
+		if errors.As(err, &yamlErr) {
 			if len(yamlErr.Errors) > 0 {
 				diag.Message = "YAML syntax error: " + yamlErr.Errors[0]
 			}

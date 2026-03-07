@@ -939,6 +939,10 @@ var (
 	ErrMCPInvalidTransport      = errors.New("invalid transport type")
 	ErrMCPUnsupportedTransport  = errors.New("unsupported transport")
 	ErrLSPInvalidTransport      = errors.New("invalid LSP transport type")
+	ErrLSPConfigNil             = errors.New("LSP config is nil")
+	ErrLSPNoServerForFile       = errors.New("no LSP server found for file")
+	ErrLSPRPCError              = errors.New("RPC error")
+	ErrLSPNoContentLengthHeader = errors.New("no Content-Length header found")
 )
 
 // ExitCodeError is a typed error that preserves subcommand exit codes.

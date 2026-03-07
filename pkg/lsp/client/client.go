@@ -80,7 +80,7 @@ func NewClient(ctx context.Context, name string, config *schema.LSPServer, rootU
 	// Create context with cancel
 	clientCtx, cancel := context.WithCancel(ctx)
 
-	cmd := exec.CommandContext(clientCtx, config.Command, config.Args...)
+	cmd := exec.CommandContext(clientCtx, config.Command, config.Args...) //nolint:gosec // LSP server command is from trusted configuration.
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -283,7 +283,7 @@ func (c *Client) call(method string, params interface{}, result interface{}) err
 		return c.ctx.Err()
 	case response := <-responseChan:
 		if response.Error != nil {
-			return fmt.Errorf("RPC error %d: %s", response.Error.Code, response.Error.Message)
+			return fmt.Errorf("%w %d: %s", errUtils.ErrLSPRPCError, response.Error.Code, response.Error.Message)
 		}
 		if result != nil && response.Result != nil {
 			if err := json.Unmarshal(response.Result, result); err != nil {
@@ -336,21 +336,15 @@ func (c *Client) readStdout() {
 		case <-c.ctx.Done():
 			return
 		default:
-			// Read Content-Length header
+			// Read Content-Length header.
 			contentLength, err := c.readContentLength(reader)
 			if err != nil {
-				if err != io.EOF {
-					// Log error but continue
-				}
 				return
 			}
 
-			// Read message body
+			// Read message body.
 			body := make([]byte, contentLength)
 			if _, err := io.ReadFull(reader, body); err != nil {
-				if err != io.EOF {
-					// Log error but continue
-				}
 				return
 			}
 
@@ -387,7 +381,7 @@ func (c *Client) readContentLength(reader *bufio.Reader) (int, error) {
 
 		line = strings.TrimSpace(line)
 		if line == "" {
-			return 0, fmt.Errorf("no Content-Length header found")
+			return 0, errUtils.ErrLSPNoContentLengthHeader
 		}
 
 		if strings.HasPrefix(line, "Content-Length:") {
@@ -429,8 +423,7 @@ func (c *Client) processMessage(data []byte) {
 
 // handleNotification handles JSON-RPC notifications from the server.
 func (c *Client) handleNotification(notification *jsonRPCNotification) {
-	switch notification.Method {
-	case "textDocument/publishDiagnostics":
+	if notification.Method == "textDocument/publishDiagnostics" {
 		var params lsp.PublishDiagnosticsParams
 		if err := json.Unmarshal(notification.Params, &params); err != nil {
 			return
@@ -470,9 +463,4 @@ func mustMarshalJSON(v interface{}) json.RawMessage {
 		panic(err)
 	}
 	return data
-}
-
-// extractConfig extracts LSP configuration from AtmosConfiguration.
-func extractConfig(atmosConfig *schema.AtmosConfiguration) *schema.LSPSettings {
-	return &atmosConfig.Settings.LSP
 }

@@ -8,10 +8,13 @@ import (
 	"github.com/cloudposse/atmos/pkg/lsp"
 )
 
+// newline is the newline character constant used throughout formatting.
+const newline = "\n"
+
 // DiagnosticFormatter formats LSP diagnostics for display.
 type DiagnosticFormatter struct {
-	ShowRelated bool // Show related information
-	ShowSource  bool // Show diagnostic source
+	ShowRelated bool // Show related information.
+	ShowSource  bool // Show diagnostic source.
 }
 
 // NewDiagnosticFormatter creates a new diagnostic formatter.
@@ -30,85 +33,86 @@ func (f *DiagnosticFormatter) FormatDiagnostics(uri string, diagnostics []lsp.Di
 
 	var sb strings.Builder
 
-	// Group diagnostics by severity
+	// Group diagnostics by severity.
 	errors := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError)
 	warnings := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning)
 	infos := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityInformation)
 	hints := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityHint)
 
-	// Summary
-	sb.WriteString(fmt.Sprintf("File: %s\n", f.formatURI(uri)))
-	sb.WriteString(fmt.Sprintf("Summary: %d error(s), %d warning(s), %d info(s), %d hint(s)\n\n",
-		len(errors), len(warnings), len(infos), len(hints)))
+	// Summary.
+	fmt.Fprintf(&sb, "File: %s%s", f.formatURI(uri), newline)
+	fmt.Fprintf(&sb, "Summary: %d error(s), %d warning(s), %d info(s), %d hint(s)%s%s",
+		len(errors), len(warnings), len(infos), len(hints), newline, newline)
 
-	// Format errors first
+	// Format errors first.
 	if len(errors) > 0 {
-		sb.WriteString("ERRORS:\n")
+		sb.WriteString("ERRORS:" + newline)
 		for i, diag := range errors {
-			sb.WriteString(f.formatDiagnostic(i+1, diag))
-			sb.WriteString("\n")
+			sb.WriteString(f.formatDiagnostic(i+1, &diag))
+			sb.WriteString(newline)
 		}
 	}
 
-	// Then warnings
+	// Then warnings.
 	if len(warnings) > 0 {
-		sb.WriteString("WARNINGS:\n")
+		sb.WriteString("WARNINGS:" + newline)
 		for i, diag := range warnings {
-			sb.WriteString(f.formatDiagnostic(i+1, diag))
-			sb.WriteString("\n")
+			sb.WriteString(f.formatDiagnostic(i+1, &diag))
+			sb.WriteString(newline)
 		}
 	}
 
-	// Information
+	// Information.
 	if len(infos) > 0 {
-		sb.WriteString("INFORMATION:\n")
+		sb.WriteString("INFORMATION:" + newline)
 		for i, diag := range infos {
-			sb.WriteString(f.formatDiagnostic(i+1, diag))
-			sb.WriteString("\n")
+			sb.WriteString(f.formatDiagnostic(i+1, &diag))
+			sb.WriteString(newline)
 		}
 	}
 
-	// Hints
+	// Hints.
 	if len(hints) > 0 {
-		sb.WriteString("HINTS:\n")
+		sb.WriteString("HINTS:" + newline)
 		for i, diag := range hints {
-			sb.WriteString(f.formatDiagnostic(i+1, diag))
-			sb.WriteString("\n")
+			sb.WriteString(f.formatDiagnostic(i+1, &diag))
+			sb.WriteString(newline)
 		}
 	}
 
 	return sb.String()
 }
 
-// FormatDiagnostic formats a single diagnostic.
-func (f *DiagnosticFormatter) formatDiagnostic(index int, diag lsp.Diagnostic) string {
+// formatDiagnostic formats a single diagnostic.
+func (f *DiagnosticFormatter) formatDiagnostic(index int, diag *lsp.Diagnostic) string {
 	var sb strings.Builder
 
-	// Number and location
-	sb.WriteString(fmt.Sprintf("%d. Line %d:%d - ", index,
-		diag.Range.Start.Line+1, // LSP is 0-based, display as 1-based
-		diag.Range.Start.Character+1))
+	// Number and location.
+	fmt.Fprintf(&sb, "%d. Line %d:%d - ", index,
+		diag.Range.Start.Line+1, // LSP is 0-based, display as 1-based.
+		diag.Range.Start.Character+1)
 
-	// Source
+	// Source.
 	if f.ShowSource && diag.Source != "" {
-		sb.WriteString(fmt.Sprintf("[%s] ", diag.Source))
+		fmt.Fprintf(&sb, "[%s] ", diag.Source)
 	}
 
-	// Code
+	// Code.
 	if diag.Code != nil {
-		sb.WriteString(fmt.Sprintf("(Code: %v) ", diag.Code))
+		fmt.Fprintf(&sb, "(Code: %v) ", diag.Code)
 	}
 
-	// Message
+	// Message.
 	sb.WriteString(diag.Message)
 
-	// Related information
+	// Related information.
 	if f.ShowRelated && len(diag.RelatedInformation) > 0 {
-		sb.WriteString("\n   Related:")
+		sb.WriteString(newline + "   Related:")
 		for _, related := range diag.RelatedInformation {
-			sb.WriteString(fmt.Sprintf("\n   - %s: %s",
+			fmt.Fprintf(&sb, "%s   - %s: %s",
+				newline,
 				f.formatLocation(related.Location),
-				related.Message))
+				related.Message)
 		}
 	}
 
@@ -123,14 +127,14 @@ func (f *DiagnosticFormatter) FormatAllDiagnostics(diagnosticsByURI map[string][
 
 	var sb strings.Builder
 
-	// Sort URIs for consistent output
+	// Sort URIs for consistent output.
 	uris := make([]string, 0, len(diagnosticsByURI))
 	for uri := range diagnosticsByURI {
 		uris = append(uris, uri)
 	}
 	sort.Strings(uris)
 
-	// Count totals
+	// Count totals.
 	totalErrors := 0
 	totalWarnings := 0
 	totalInfos := 0
@@ -143,17 +147,17 @@ func (f *DiagnosticFormatter) FormatAllDiagnostics(diagnosticsByURI map[string][
 		totalHints += len(f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityHint))
 	}
 
-	sb.WriteString(fmt.Sprintf("DIAGNOSTICS SUMMARY:\n"))
-	sb.WriteString(fmt.Sprintf("Files with issues: %d\n", len(diagnosticsByURI)))
-	sb.WriteString(fmt.Sprintf("Total: %d error(s), %d warning(s), %d info(s), %d hint(s)\n\n",
-		totalErrors, totalWarnings, totalInfos, totalHints))
+	sb.WriteString("DIAGNOSTICS SUMMARY:" + newline)
+	fmt.Fprintf(&sb, "Files with issues: %d%s", len(diagnosticsByURI), newline)
+	fmt.Fprintf(&sb, "Total: %d error(s), %d warning(s), %d info(s), %d hint(s)%s%s",
+		totalErrors, totalWarnings, totalInfos, totalHints, newline, newline)
 
-	// Format each file
+	// Format each file.
 	for _, uri := range uris {
 		diagnostics := diagnosticsByURI[uri]
 		if len(diagnostics) > 0 {
 			sb.WriteString(f.FormatDiagnostics(uri, diagnostics))
-			sb.WriteString("\n")
+			sb.WriteString(newline)
 		}
 	}
 
@@ -165,18 +169,18 @@ func (f *DiagnosticFormatter) FormatCompact(uri string, diagnostics []lsp.Diagno
 	var sb strings.Builder
 
 	for _, diag := range diagnostics {
-		sb.WriteString(fmt.Sprintf("%s:%d:%d: %s: %s",
+		fmt.Fprintf(&sb, "%s:%d:%d: %s: %s",
 			f.formatURI(uri),
 			diag.Range.Start.Line+1,
 			diag.Range.Start.Character+1,
 			f.severityString(diag.Severity),
-			diag.Message))
+			diag.Message)
 
 		if diag.Source != "" {
-			sb.WriteString(fmt.Sprintf(" [%s]", diag.Source))
+			fmt.Fprintf(&sb, " [%s]", diag.Source)
 		}
 
-		sb.WriteString("\n")
+		sb.WriteString(newline)
 	}
 
 	return sb.String()
@@ -193,24 +197,24 @@ func (f *DiagnosticFormatter) FormatForAI(uri string, diagnostics []lsp.Diagnost
 	errors := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityError)
 	warnings := f.filterBySeverity(diagnostics, lsp.DiagnosticSeverityWarning)
 
-	sb.WriteString(fmt.Sprintf("Found %d issue(s) in %s:\n\n",
-		len(diagnostics), f.formatURI(uri)))
+	fmt.Fprintf(&sb, "Found %d issue(s) in %s:%s%s",
+		len(diagnostics), f.formatURI(uri), newline, newline)
 
-	// Group errors and warnings
+	// Group errors and warnings.
 	if len(errors) > 0 {
-		sb.WriteString(fmt.Sprintf("ERRORS (%d):\n", len(errors)))
+		fmt.Fprintf(&sb, "ERRORS (%d):%s", len(errors), newline)
 		for i, diag := range errors {
-			sb.WriteString(fmt.Sprintf("%d. Line %d: %s\n",
-				i+1, diag.Range.Start.Line+1, diag.Message))
+			fmt.Fprintf(&sb, "%d. Line %d: %s%s",
+				i+1, diag.Range.Start.Line+1, diag.Message, newline)
 		}
-		sb.WriteString("\n")
+		sb.WriteString(newline)
 	}
 
 	if len(warnings) > 0 {
-		sb.WriteString(fmt.Sprintf("WARNINGS (%d):\n", len(warnings)))
+		fmt.Fprintf(&sb, "WARNINGS (%d):%s", len(warnings), newline)
 		for i, diag := range warnings {
-			sb.WriteString(fmt.Sprintf("%d. Line %d: %s\n",
-				i+1, diag.Range.Start.Line+1, diag.Message))
+			fmt.Fprintf(&sb, "%d. Line %d: %s%s",
+				i+1, diag.Range.Start.Line+1, diag.Message, newline)
 		}
 	}
 
