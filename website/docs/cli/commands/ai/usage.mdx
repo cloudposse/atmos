@@ -7,6 +7,8 @@ description: "AI-Powered Assistant for Atmos"
 import Screengrab from '@site/src/components/Screengrab'
 import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
@@ -17,6 +19,13 @@ and [21+ specialized skills](/ai/skills) you can switch between with `Ctrl+A`.
 </Intro>
 
 <Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos ai --help" slug="atmos-ai--help" />
 

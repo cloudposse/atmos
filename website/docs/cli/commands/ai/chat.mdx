@@ -8,6 +8,8 @@ description: Start an interactive AI chat session with the Atmos AI assistant
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
@@ -15,6 +17,13 @@ Use this command to start an interactive chat session with the Atmos AI assistan
 </Intro>
 
 <Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos ai chat --help" slug="atmos-ai-chat--help" />
 

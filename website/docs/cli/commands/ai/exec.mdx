@@ -8,6 +8,8 @@ description: Execute AI prompts non-interactively for automation and CI/CD integ
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
 import Intro from '@site/src/components/Intro'
+import ActionCard from '@site/src/components/ActionCard'
+import PrimaryCTA from '@site/src/components/PrimaryCTA'
 import Experimental from '@site/src/components/Experimental'
 
 <Intro>
@@ -15,6 +17,13 @@ Execute AI prompts non-interactively with structured output formats, designed fo
 </Intro>
 
 <Experimental />
+
+<ActionCard title="Configure AI">
+    Learn how to configure AI providers, skills, tools, and sessions in your atmos.yaml.
+    <div>
+      <PrimaryCTA to="/cli/configuration/ai">Configuration Reference</PrimaryCTA>
+    </div>
+</ActionCard>
 
 <Screengrab title="atmos ai exec --help" slug="atmos-ai-exec--help" />
 
