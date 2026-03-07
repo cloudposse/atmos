@@ -4,6 +4,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strings"
 
 	cp "github.com/otiai10/copy"
 
@@ -34,8 +35,10 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 		Skip:          CreateSkipFunc(srcDir, opts.IncludedPaths, opts.ExcludedPaths),
 		PreserveTimes: false,
 		PreserveOwner: false,
-		// Follow symlinks and copy their targets.
-		OnSymlink: func(src string) cp.SymlinkAction { return cp.Deep },
+		// Follow symlinks only when the target resolves within srcDir.
+		// This prevents symlink traversal attacks where a crafted vendor source
+		// contains symlinks pointing outside the source directory.
+		OnSymlink: createSymlinkHandler(srcDir),
 		// OnDirExists handles existing directories at the destination.
 		// We skip .git directories from source, but if the destination already has a .git directory
 		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
@@ -49,6 +52,42 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 	}
 
 	return cp.Copy(srcDir, dstDir, copyOptions)
+}
+
+// createSymlinkHandler returns an OnSymlink handler that validates symlink targets
+// resolve within srcDir before following them. This prevents traversal attacks where
+// a crafted vendor source contains symlinks pointing outside the source directory
+// (e.g., link -> /etc/passwd).
+func createSymlinkHandler(srcDir string) func(string) cp.SymlinkAction {
+	// Pre-resolve srcDir so we compare real paths consistently.
+	// EvalSymlinks also resolves the absolute path.
+	realSrcDir, srcErr := filepath.EvalSymlinks(srcDir)
+	if srcErr != nil {
+		// If we can't resolve srcDir, fall back to absolute path.
+		realSrcDir, srcErr = filepath.Abs(srcDir)
+	}
+
+	return func(src string) cp.SymlinkAction {
+		if srcErr != nil {
+			log.Debug("Skipping symlink (cannot resolve srcDir)", "path", src, "error", srcErr)
+			return cp.Skip
+		}
+
+		// Resolve the symlink target to its real path.
+		resolved, err := filepath.EvalSymlinks(src)
+		if err != nil {
+			log.Debug("Skipping symlink (cannot resolve target)", "path", src, "error", err)
+			return cp.Skip
+		}
+
+		// Ensure the resolved target is within srcDir boundaries.
+		if !strings.HasPrefix(resolved, realSrcDir+string(filepath.Separator)) && resolved != realSrcDir {
+			log.Debug("Skipping symlink (target outside source directory)", "path", src, "target", resolved, "srcDir", realSrcDir)
+			return cp.Skip
+		}
+
+		return cp.Deep
+	}
 }
 
 // CreateSkipFunc builds a skip function for otiai10/copy that applies include/exclude patterns.

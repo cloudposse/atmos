@@ -148,6 +148,54 @@ func TestCopyToTarget_SkipsGitDirectory(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), ".git directory should be skipped")
 }
 
+func TestCopyToTarget_SymlinkInsideSrcDir(t *testing.T) {
+	srcDir := t.TempDir()
+
+	// Create a real file and a symlink pointing to it (inside srcDir).
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "real.tf"), []byte("# real"), 0o644))
+	require.NoError(t, os.Symlink(filepath.Join(srcDir, "real.tf"), filepath.Join(srcDir, "link.tf")))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := CopyToTarget(srcDir, targetDir, CopyOptions{})
+	require.NoError(t, err)
+
+	// Both should be copied (symlink followed since target is inside srcDir).
+	_, err = os.Stat(filepath.Join(targetDir, "real.tf"))
+	assert.NoError(t, err, "real file should be copied")
+	_, err = os.Stat(filepath.Join(targetDir, "link.tf"))
+	assert.NoError(t, err, "symlink with target inside srcDir should be followed")
+
+	// Verify the symlink target was dereferenced (copied as regular file).
+	content, err := os.ReadFile(filepath.Join(targetDir, "link.tf"))
+	require.NoError(t, err)
+	assert.Equal(t, "# real", string(content))
+}
+
+func TestCopyToTarget_SymlinkOutsideSrcDir(t *testing.T) {
+	srcDir := t.TempDir()
+
+	// Create a file outside srcDir.
+	outsideDir := t.TempDir()
+	outsideFile := filepath.Join(outsideDir, "secret.txt")
+	require.NoError(t, os.WriteFile(outsideFile, []byte("secret data"), 0o644))
+
+	// Create a real file and a symlink pointing outside srcDir.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
+	require.NoError(t, os.Symlink(outsideFile, filepath.Join(srcDir, "escape.txt")))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := CopyToTarget(srcDir, targetDir, CopyOptions{})
+	require.NoError(t, err)
+
+	// Real file should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "real file should be copied")
+
+	// Symlink pointing outside srcDir should be skipped.
+	_, err = os.Stat(filepath.Join(targetDir, "escape.txt"))
+	assert.True(t, os.IsNotExist(err), "symlink pointing outside srcDir should be skipped")
+}
+
 func TestCreateSkipFunc_GitDirectory(t *testing.T) {
 	skipFunc := CreateSkipFunc("/tmp/src", nil, nil)
 	info := &mockFileInfo{name: ".git", isDir: true}
