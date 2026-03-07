@@ -51,35 +51,14 @@ Lists all available AI chat sessions with their details.
 atmos ai sessions list
 ```
 
-**Output includes:**
-- Session name and ID
-- Creation and last update timestamps
-- Number of messages in the session
-- AI model and provider used
-
 **Example:**
-```shell
-atmos ai sessions list
-
-# Output:
-# Found 2 session(s):
-#
-# Name: vpc-migration
-#   ID: abc123...
-#   Created: 2025-10-30 14:30:00
-#   Updated: 2025-10-31 09:15:00
-#   Messages: 42
-#   Model: claude-sonnet-4-5-20250929
-#   Provider: anthropic
-#
-# Name: eks-troubleshooting
-#   ID: def456...
-#   Created: 2025-10-29 11:20:00
-#   Updated: 2025-10-29 16:45:00
-#   Messages: 18
-#   Model: gpt-4o
-#   Provider: openai
 ```
+Name                  Created              Updated              Messages  Model                       Provider
+eks-troubleshooting   2025-10-29 11:20:00  2025-10-29 16:45:00  18        gpt-4o                      openai
+vpc-migration         2025-10-30 14:30:00  2025-10-31 09:15:00  42        claude-sonnet-4-5-20250929   anthropic
+```
+
+Output uses the standard list format. When piped, it outputs a plain newline-separated list of session names.
 
 ### `atmos ai sessions clean`
 

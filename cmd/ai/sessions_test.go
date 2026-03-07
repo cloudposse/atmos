@@ -16,7 +16,21 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
+	"github.com/cloudposse/atmos/pkg/data"
+	iolib "github.com/cloudposse/atmos/pkg/io"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
+
+// initTestIO initializes the I/O and UI contexts for testing.
+func initTestIO(t *testing.T) {
+	t.Helper()
+	ioCtx, err := iolib.NewContext()
+	if err != nil {
+		t.Fatalf("failed to initialize I/O context: %v", err)
+	}
+	ui.InitFormatter(ioCtx)
+	data.InitWriter(ioCtx)
+}
 
 func TestParseDuration(t *testing.T) {
 	tests := []struct {
@@ -3365,6 +3379,7 @@ settings:
 	})
 
 	t.Run("list sessions after import shows sessions", func(t *testing.T) {
+		initTestIO(t)
 		t.Setenv("ATMOS_CLI_CONFIG_PATH", tempDir)
 		t.Setenv("ATMOS_BASE_PATH", tempDir)
 

@@ -9,8 +9,13 @@ import (
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/session"
 	cfg "github.com/cloudposse/atmos/pkg/config"
+	"github.com/cloudposse/atmos/pkg/list/column"
+	"github.com/cloudposse/atmos/pkg/list/format"
+	"github.com/cloudposse/atmos/pkg/list/renderer"
+	listSort "github.com/cloudposse/atmos/pkg/list/sort"
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 	u "github.com/cloudposse/atmos/pkg/utils"
 )
 
@@ -174,7 +179,29 @@ func initSessionManager() (*session.Manager, func(), error) {
 	return manager, cleanup, nil
 }
 
-// listSessionsCommand lists all sessions.
+// sessionsToListData converts sessions to the []map[string]any format used by the list abstraction.
+func sessionsToListData(ctx context.Context, manager *session.Manager, sessions []*session.Session) []map[string]any {
+	data := make([]map[string]any, 0, len(sessions))
+	for _, sess := range sessions {
+		count, countErr := manager.GetMessageCount(ctx, sess.ID)
+		if countErr != nil {
+			log.Warn(fmt.Sprintf("Failed to get message count for session %s: %v", sess.ID, countErr))
+			count = 0
+		}
+		data = append(data, map[string]any{
+			"name":     sess.Name,
+			"created":  sess.CreatedAt.Format("2006-01-02 15:04:05"),
+			"updated":  sess.UpdatedAt.Format("2006-01-02 15:04:05"),
+			"messages": count,
+			"model":    sess.Model,
+			"provider": sess.Provider,
+		})
+	}
+
+	return data
+}
+
+// listSessionsCommand lists all sessions using the standard list abstraction.
 func listSessionsCommand(cmd *cobra.Command, args []string) error {
 	log.Debug("Listing AI sessions")
 
@@ -184,43 +211,40 @@ func listSessionsCommand(cmd *cobra.Command, args []string) error {
 	}
 	defer cleanup()
 
-	// Get all sessions.
 	ctx := context.Background()
 	sessions, err := manager.ListSessions(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to list sessions: %w", err)
 	}
 
-	// Display sessions.
 	if len(sessions) == 0 {
-		u.PrintMessage("No sessions found.")
-		u.PrintMessage("\nStart a new session with: atmos ai chat --session <name>")
+		ui.Info("No sessions found. Start a new session with: atmos ai chat --session <name>")
 		return nil
 	}
 
-	u.PrintMessage(fmt.Sprintf("Found %d session(s):\n", len(sessions)))
+	data := sessionsToListData(ctx, manager, sessions)
 
-	for _, sess := range sessions {
-		u.PrintMessage(fmt.Sprintf("Name: %s", sess.Name))
-		u.PrintMessage(fmt.Sprintf("  ID: %s", sess.ID))
-		u.PrintMessage(fmt.Sprintf("  Created: %s", sess.CreatedAt.Format("2006-01-02 15:04:05")))
-		u.PrintMessage(fmt.Sprintf("  Updated: %s", sess.UpdatedAt.Format("2006-01-02 15:04:05")))
-
-		// Get message count.
-		count, err := manager.GetMessageCount(ctx, sess.ID)
-		if err != nil {
-			log.Warn(fmt.Sprintf("Failed to get message count for session %s: %v", sess.ID, err))
-			count = 0
-		}
-		u.PrintMessage(fmt.Sprintf("  Messages: %d", count))
-		u.PrintMessage(fmt.Sprintf("  Model: %s", sess.Model))
-		u.PrintMessage(fmt.Sprintf("  Provider: %s", sess.Provider))
-		u.PrintMessage("")
+	columns := []column.Config{
+		{Name: "Name", Value: "{{ .name }}"},
+		{Name: "Created", Value: "{{ .created }}"},
+		{Name: "Updated", Value: "{{ .updated }}"},
+		{Name: "Messages", Value: "{{ .messages }}"},
+		{Name: "Model", Value: "{{ .model }}"},
+		{Name: "Provider", Value: "{{ .provider }}"},
 	}
 
-	u.PrintMessage("Resume a session with: atmos ai chat --session <name>")
+	selector, err := column.NewSelector(columns, column.BuildColumnFuncMap())
+	if err != nil {
+		return fmt.Errorf("error creating column selector: %w", err)
+	}
 
-	return nil
+	sorters := []*listSort.Sorter{
+		listSort.NewSorter("Name", listSort.Ascending),
+	}
+
+	r := renderer.New(nil, selector, sorters, format.FormatTable, "")
+
+	return r.Render(data)
 }
 
 // cleanSessionsCommand cleans old sessions.
