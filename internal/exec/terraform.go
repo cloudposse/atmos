@@ -524,12 +524,19 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			log.Debug("Using workdir path", "workdirPath", workdirPath)
 		}
 
+		// When no dependency lock file exists yet, bypass the Atmos-managed plugin cache for
+		// terraform init. This ensures providers are downloaded from the registry and their
+		// h1: checksums are recorded in the lock file. Using the plugin cache on first init
+		// would produce only local zh: checksums and trigger the "Incomplete lock file
+		// information for providers" warning from Terraform.
+		initEnvList := buildInitEnvList(componentPath, info.ComponentEnvList, pluginCacheEnvList)
+
 		err = ExecuteShellCommand(
 			atmosConfig,
 			info.Command,
 			initCommandWithArguments,
 			componentPath,
-			info.ComponentEnvList,
+			initEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
 		)
@@ -837,6 +844,47 @@ func configurePluginCache(atmosConfig *schema.AtmosConfiguration) []string {
 		fmt.Sprintf("TF_PLUGIN_CACHE_DIR=%s", pluginCacheDir),
 		"TF_PLUGIN_CACHE_MAY_BREAK_DEPENDENCY_LOCK_FILE=true",
 	}
+}
+
+// buildInitEnvList returns the environment variable list to use for terraform init.
+// When the dependency lock file does not yet exist in componentPath and Atmos is managing
+// the plugin cache (pluginCacheEnvList is non-empty), the plugin cache env vars are removed
+// from the list. This causes providers to be downloaded directly from the registry on first
+// init, recording h1: checksums in the lock file and avoiding the Terraform warning:
+// "Incomplete lock file information for providers".
+//
+// On subsequent runs the lock file already exists with h1: checksums, so the plugin cache
+// is re-enabled and providers are served from the cache without producing the warning.
+//
+// When pluginCacheEnvList is empty (user manages the plugin cache, or caching is disabled),
+// the original envList is returned unchanged.
+func buildInitEnvList(componentPath string, envList, pluginCacheEnvList []string) []string {
+	if len(pluginCacheEnvList) == 0 {
+		return envList
+	}
+
+	lockFilePath := filepath.Join(componentPath, ".terraform.lock.hcl")
+	if _, err := os.Stat(lockFilePath); err == nil {
+		// Lock file exists – use the normal env list with the plugin cache.
+		return envList
+	}
+
+	// No lock file yet: bypass the Atmos-managed plugin cache so providers are fetched
+	// from the registry and their h1: checksums are written to the new lock file.
+	log.Debug("No dependency lock file found, bypassing plugin cache for terraform init to record h1: checksums")
+
+	pluginCacheVars := make(map[string]struct{}, len(pluginCacheEnvList))
+	for _, v := range pluginCacheEnvList {
+		pluginCacheVars[v] = struct{}{}
+	}
+
+	filtered := make([]string, 0, len(envList))
+	for _, env := range envList {
+		if _, skip := pluginCacheVars[env]; !skip {
+			filtered = append(filtered, env)
+		}
+	}
+	return filtered
 }
 
 // getValidUserPluginCacheDir checks if the user has set a valid TF_PLUGIN_CACHE_DIR.
