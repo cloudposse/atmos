@@ -95,7 +95,7 @@ Locally, `--ci` produces identical output—same formatting, same behavior. Debu
 
 **Behavior**:
 - Planfile upload failure **fails command** (downstream apply depends on it)
-- Planfile download failure **fails command** (apply can't proceed without planfile)
+- Planfile download failure **fails command** (deploy can't proceed without planfile)
 - Summary write failure logs warning, does not fail command
 - Output variable write failure logs warning per variable
 - Status check failure logs warning, does not fail command

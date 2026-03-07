@@ -34,7 +34,7 @@ All three planfile store implementations (local, S3, GitHub) accept `Upload()` c
 
 - **Broken artifact identity**: Planfiles cannot be looked up by commit SHA.
 - **Silent overwrites**: Without SHA in the key, consecutive plans for the same stack/component overwrite each other.
-- **Broken apply lifecycle**: `before.terraform.apply` cannot reliably download the correct planfile for a commit.
+- **Broken deploy lifecycle**: `before.terraform.deploy` cannot reliably download the correct planfile for a commit.
 - **Audit gap**: Stored metadata has empty SHA, making it impossible to trace which commit a plan belongs to.
 
 ## Desired State
@@ -162,9 +162,9 @@ This is a defense-in-depth measure. The primary validation happens at key genera
 
 The SHA represents the commit, not the working tree state. A dirty tree still has a HEAD commit. This is consistent with how GitHub Actions' `GITHUB_SHA` works — it's the commit SHA, not a tree hash.
 
-### What about `downloadPlanfile()` on apply?
+### What about `downloadPlanfile()` on deploy?
 
-The apply command also needs the SHA to construct the download key. Since `ctx.CICtx.SHA` is populated from the provider context (which now includes git fallback), this works automatically. The same SHA that was used to upload during `plan` will be used to download during `apply`, provided the git HEAD hasn't changed between plan and apply.
+The deploy command also needs the SHA to construct the download key. Since `ctx.CICtx.SHA` is populated from the provider context (which now includes git fallback), this works automatically. The same SHA that was used to upload during `plan` will be used to download during `deploy`, provided the git HEAD hasn't changed between plan and deploy.
 
 ### What about existing planfiles stored without SHA in the key?
 

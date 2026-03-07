@@ -8,7 +8,7 @@
 
 **Behavior**:
 - Upload planfile after successful `terraform plan`
-- Download planfile before `terraform apply`
+- Download planfile before `terraform deploy` (deploy is the CI-native apply command)
 - Support multiple storage backends (S3, GitHub Artifacts, Azure Blob, GCS, local)
 - Store metadata sidecar with plan details (no DynamoDB)
 - Key pattern configurable per-store via `components.terraform.planfiles.stores.<name>.options.key_pattern`
@@ -181,7 +181,7 @@ The GitHub Artifacts store starts with **simple SHA-based lookup** — find arti
 - **Merge-commit traversal** — walking PR commit history to find artifacts from pre-merge commits
 - **Squash-merge support** — looking up artifacts by PR number when the original SHA no longer exists
 
-**Cross-workflow access**: The GitHub Artifacts store must support downloading artifacts from other workflow runs (e.g., apply workflow downloading planfiles uploaded by the plan workflow). This is the primary use case.
+**Cross-workflow access**: The GitHub Artifacts store must support downloading artifacts from other workflow runs (e.g., deploy workflow downloading planfiles uploaded by the plan workflow). This is the primary use case.
 
 ## Store Type Validation
 

@@ -176,7 +176,7 @@ Implement a registry pattern (following `pkg/store/`) for artifact storage backe
 
 - **Initial backends**: Local, GitHub Artifacts, and S3. Azure and GCS are deferred to Phase 2+.
 - **CLI subcommands**: All five subcommands are implemented: `upload`, `list`, `download`, `delete`, `show`. Upload is also triggered automatically on plan in CI mode.
-- **Automatic upload/download**: Yes, automatic upload-on-plan and download-on-apply are in scope when running in a CI environment or locally with the `--ci` flag. When auto-download is enabled and no planfile is found, apply **fails with a fatal error** (enforces plan-before-apply discipline in CI).
+- **Automatic upload/download**: Yes, automatic upload-on-plan and download-on-deploy are in scope when running in a CI environment or locally with the `--ci` flag. When auto-download is enabled and no planfile is found, deploy **fails with a fatal error** (enforces plan-before-deploy discipline in CI). Note: `apply` does NOT interact with planfile storage — only `deploy` downloads planfiles.
 - **Garbage collection**: Out of scope.
 
 ### Out of Scope (Phase 2+)

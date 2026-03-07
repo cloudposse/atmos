@@ -91,7 +91,7 @@ Error severity is handler-controlled. Each plugin handler decides which operatio
 | Action | Behavior | Rationale |
 |--------|----------|-----------|
 | Upload | **Fatal** — handler returns error | Apply workflow depends on artifacts |
-| Download | **Fatal** — handler returns error | Apply can't proceed without planfile |
+| Download | **Fatal** — handler returns error | Deploy can't proceed without planfile |
 | Summary | Warn, continue | Nice-to-have CI feature |
 | Output | Warn, continue | Nice-to-have CI feature |
 | Status check | Warn, continue | Nice-to-have CI feature |

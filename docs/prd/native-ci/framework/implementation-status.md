@@ -22,7 +22,7 @@ Phases are organized by PRD workstream and functional requirement (FR). See [Ove
 1. `--ci` flag on `terraform plan` (full wiring: PreRunE, output capture, PostRunE, error defer) — Done
 2. `--ci` flag on `terraform apply` (flag + env var bindings defined) — Done
 3. Apply `PostRunE` fires `after.terraform.apply` CI hooks with captured output — Done
-4. Apply `PreRunE` for `before.terraform.apply` (download planfile) — Done
+4. Apply `PreRunE` for `before.terraform.apply` (CI cosmetics only, no planfile download) — Done
 5. Apply output capture (stdout/stderr like plan.go) — Done
 6. Apply error defer (check run failure update like plan.go) — Done
 7. `deploy.go` `--ci` flag with full CI wiring (PreRunE, output capture, error defer, PostRunE) — Done

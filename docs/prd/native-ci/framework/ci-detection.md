@@ -76,15 +76,22 @@ atmos terraform plan vpc -s plat-ue2-dev --ci
 CI behaviors are triggered via `RunCIHooks()` (defined in `pkg/hooks/hooks.go`, called from `cmd/terraform/utils.go`), which calls `ci.Execute()`. The executor resolves the plugin and invokes the handler callback:
 
 ```go
-"before.terraform.plan"  → onBeforePlan()   // createCheckRun (in_progress)
-"after.terraform.plan"   → onAfterPlan()    // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
-"before.terraform.apply" → onBeforeApply()  // downloadPlanfile
-"after.terraform.apply"  → onAfterApply()   // writeSummary + writeOutputs
+"before.terraform.plan"   → onBeforePlan()    // createCheckRun (in_progress)
+"after.terraform.plan"    → onAfterPlan()     // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
+"before.terraform.apply"  → onBeforeApply()   // (no planfile interaction — apply does not use planfile storage)
+"after.terraform.apply"   → onAfterApply()    // writeSummary + writeOutputs
+"before.terraform.deploy" → onBeforeDeploy()  // downloadPlanfile (with stored.* prefix for verification)
+"after.terraform.deploy"  → onAfterDeploy()   // writeSummary + writeOutputs
 ```
 
 This keeps CI behaviors modular — each plugin defines its own hook bindings with handler callbacks.
 
-> **Wiring status**: All three commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle: `PreRunE` fires `before.terraform.*` hooks, `PostRunE` fires `after.terraform.*` hooks with captured stdout/stderr output, and an error defer updates check runs on failure. All three commands support `--ci` flag with `ATMOS_CI`/`CI` env var bindings.
+**Command responsibility:**
+- **`plan`** uploads planfiles, writes summaries/checks/outputs
+- **`apply`** writes summaries/checks/outputs only — does NOT interact with planfile storage
+- **`deploy`** downloads stored planfiles, verifies, applies — the CI-native apply command
+
+> **Wiring status**: All three commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle: `PreRunE` fires `before.terraform.*` hooks, `PostRunE` fires `after.terraform.*` hooks with captured stdout/stderr output, and an error defer updates check runs on failure. All three commands support `--ci` flag with `ATMOS_CI`/`CI` env var bindings. Deploy fires its own `before/after.terraform.deploy` events (not apply events).
 
 ## Flag Changes
 
