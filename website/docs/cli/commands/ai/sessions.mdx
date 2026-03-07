@@ -194,20 +194,6 @@ Once imported, the session can be resumed with:
 atmos ai chat --session <imported-session-name>
 ```
 
-## Configuration
-
-Sessions must be enabled in your `atmos.yaml` configuration:
-
-```yaml
-settings:
-  ai:
-    enabled: true
-    sessions:
-      enabled: true                      # Enable session management
-      max_sessions: 100                  # Maximum sessions to keep
-      storage_path: ".atmos/ai/sessions" # SQLite database location
-```
-
 ## Use Cases
 
 ### Team Collaboration

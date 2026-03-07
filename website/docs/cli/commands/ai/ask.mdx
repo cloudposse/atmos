@@ -52,55 +52,7 @@ atmos ai ask [question]
   <dd>The question to ask the AI assistant (required). Use quotes for multi-word questions.</dd>
 </dl>
 
-## Configuration
-
-Configure one or more AI providers in your `atmos.yaml`. The `default_provider` is used for the `ask` command:
-
-```yaml
-settings:
-  ai:
-    enabled: true
-    default_provider: "anthropic"  # Provider used for 'atmos ai ask'
-    providers:
-      anthropic:
-        model: "claude-sonnet-4-5-20250929"
-        api_key_env: "ANTHROPIC_API_KEY"
-        max_tokens: 4096
-      openai:
-        model: "gpt-4o"
-        api_key_env: "OPENAI_API_KEY"
-        max_tokens: 4096
-      # Add other providers as needed
-```
-
-Set the environment variable for your chosen provider. The `ask` command uses the provider specified by `default_provider`. To switch providers interactively, use [`atmos ai chat`](/cli/commands/ai/chat) with `Ctrl+P`.
-
-The `ask` command uses the [default skill](/ai/skills) if one is configured. To switch between the [21+ specialized skills](/ai/skills) interactively, use [`atmos ai chat`](/cli/commands/ai/chat) with `Ctrl+A`.
-
-<dl>
-  <dt>`ANTHROPIC_API_KEY`</dt>
-  <dd>API key for Anthropic (Claude). Get it from [console.anthropic.com](https://console.anthropic.com/)</dd>
-
-  <dt>`OPENAI_API_KEY`</dt>
-  <dd>API key for OpenAI (GPT). Get it from [platform.openai.com](https://platform.openai.com/)</dd>
-
-  <dt>`GEMINI_API_KEY`</dt>
-  <dd>API key for Google Gemini. Get it from [aistudio.google.com](https://aistudio.google.com/)</dd>
-
-  <dt>`XAI_API_KEY`</dt>
-  <dd>API key for xAI (Grok). Get it from [x.ai/api](https://x.ai/api)</dd>
-
-  <dt>`OLLAMA_API_KEY`</dt>
-  <dd>Optional for Ollama. Local instances don't require an API key.</dd>
-
-  <dt>`AZURE_OPENAI_API_KEY`</dt>
-  <dd>API key for Azure OpenAI. Get it from Azure Portal under your OpenAI resource's "Keys and Endpoint" section.</dd>
-
-  <dt>AWS Bedrock</dt>
-  <dd>Uses standard AWS SDK credential chain (IAM roles, profiles, environment variables). No separate API key needed.</dd>
-</dl>
-
-### Flags
+## Flags
 
 <dl>
   <dt>`--include <pattern>`</dt>
