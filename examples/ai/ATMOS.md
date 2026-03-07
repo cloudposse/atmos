@@ -4,34 +4,52 @@ This file provides persistent context to the Atmos AI Assistant about this proje
 
 ## Project Overview
 
-This is an example project demonstrating Atmos AI features. It contains:
-- A sample application component (`myapp`)
-- Development and production stacks
-- Multi-provider AI configuration
+This is a multi-region AWS infrastructure project demonstrating Atmos AI features. It contains:
+- VPC networking components across two AWS regions
+- Transit Gateway hub-spoke topology for cross-region connectivity
+- Network and production stacks per region
+
+## Architecture
+
+- **Hub-spoke networking** — us-east-1 hosts the Transit Gateway hub; us-west-2 connects via cross-region peering
+- **Two regions** — us-east-1 (primary) and us-west-2 (secondary)
+- **Two stages** — `network` (shared networking) and `prod` (production workloads)
 
 ## Stack Naming Convention
 
 Stacks follow the pattern: `{environment}-{stage}`
-- `dev-main` - Development environment, main stage
-- `prod-main` - Production environment, main stage
+- `ue1-network` — Network stack in us-east-1
+- `ue1-prod` — Production stack in us-east-1
+- `uw2-network` — Network stack in us-west-2
+- `uw2-prod` — Production stack in us-west-2
 
-## Component Patterns
+## Components
 
-### myapp Component
-The `myapp` component is a sample Terraform module that demonstrates:
-- Environment-specific configuration
-- Variable inheritance from stacks
-- Output values for AI inspection
+### vpc
+Virtual Private Cloud with CIDR allocation, availability zones, and NAT Gateways.
+- Network stacks use `10.1.0.0/16` (ue1) and `10.2.0.0/16` (uw2)
+- Production stacks use `10.10.0.0/16` (ue1) and `10.20.0.0/16` (uw2)
 
-Configuration differences by environment:
-- **dev**: Smaller instance types, single replica, debug enabled
-- **prod**: Production instance types, multiple replicas, optimized settings
+### tgw/hub
+Transit Gateway hub in us-east-1 network stack. Central routing for cross-region and cross-account connectivity.
+
+### tgw/attachment
+Transit Gateway VPC attachment. Connects a VPC to the Transit Gateway. Present in all stacks.
+
+### tgw/cross-region-hub-connector
+Cross-region Transit Gateway peering. Only in uw2-network, connects us-west-2 to the us-east-1 hub.
+
+## Component Dependencies
+
+- `tgw/hub` depends on `vpc` in the same stack
+- `tgw/attachment` depends on `vpc` (same stack) and `tgw/hub` (network stack)
+- `tgw/cross-region-hub-connector` depends on `tgw/hub` in ue1-network
 
 ## Common Operations
 
 ### Describe a component
 ```bash
-atmos describe component myapp -s dev-main
+atmos describe component vpc -s ue1-network
 ```
 
 ### List all stacks
@@ -44,15 +62,7 @@ atmos list stacks
 atmos validate stacks
 ```
 
-## Team Preferences
-
-- Use Terraform for infrastructure components
-- Follow environment-specific sizing (dev = small, prod = production-grade)
-- Enable detailed logging in dev, minimal logging in prod
-- All resources should have environment and stage tags
-
-## Important Notes
-
-- The `myapp` component is a mock component for demonstration
-- No real cloud resources are created by this example
-- AI tools are read-only and safe to use
+### Check affected stacks
+```bash
+atmos describe affected
+```
