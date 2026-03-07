@@ -23,6 +23,15 @@ func (m *mockFileInfo) ModTime() time.Time { return time.Time{} }
 func (m *mockFileInfo) IsDir() bool        { return m.isDir }
 func (m *mockFileInfo) Sys() any           { return nil }
 
+// trySymlink attempts to create a symlink and skips the test if unsupported.
+// On Windows or locked-down environments, creating symlinks may fail with EPERM.
+func trySymlink(t *testing.T, oldname, newname string) {
+	t.Helper()
+	if err := os.Symlink(oldname, newname); err != nil {
+		t.Skipf("skipping symlink test: cannot create symlink (%v)", err)
+	}
+}
+
 func TestCopyToTarget_BasicCopy(t *testing.T) {
 	srcDir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
@@ -153,7 +162,7 @@ func TestCopyToTarget_SymlinkInsideSrcDir(t *testing.T) {
 
 	// Create a real file and a symlink pointing to it (inside srcDir).
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "real.tf"), []byte("# real"), 0o644))
-	require.NoError(t, os.Symlink(filepath.Join(srcDir, "real.tf"), filepath.Join(srcDir, "link.tf")))
+	trySymlink(t, filepath.Join(srcDir, "real.tf"), filepath.Join(srcDir, "link.tf"))
 
 	targetDir := filepath.Join(t.TempDir(), "target")
 	err := CopyToTarget(srcDir, targetDir, CopyOptions{})
@@ -181,7 +190,7 @@ func TestCopyToTarget_SymlinkOutsideSrcDir(t *testing.T) {
 
 	// Create a real file and a symlink pointing outside srcDir.
 	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
-	require.NoError(t, os.Symlink(outsideFile, filepath.Join(srcDir, "escape.txt")))
+	trySymlink(t, outsideFile, filepath.Join(srcDir, "escape.txt"))
 
 	targetDir := filepath.Join(t.TempDir(), "target")
 	err := CopyToTarget(srcDir, targetDir, CopyOptions{})
@@ -196,82 +205,124 @@ func TestCopyToTarget_SymlinkOutsideSrcDir(t *testing.T) {
 	assert.True(t, os.IsNotExist(err), "symlink pointing outside srcDir should be skipped")
 }
 
+func TestCopyToTarget_SymlinkToGitDir(t *testing.T) {
+	srcDir := t.TempDir()
+
+	// Create a .git directory with a HEAD file inside srcDir.
+	gitDir := filepath.Join(srcDir, ".git")
+	require.NoError(t, os.MkdirAll(gitDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main"), 0o644))
+
+	// Create a regular file.
+	require.NoError(t, os.WriteFile(filepath.Join(srcDir, "main.tf"), []byte("# main"), 0o644))
+
+	// Create a symlink pointing into .git/ (e.g., head.txt -> .git/HEAD).
+	// This should be skipped because the resolved target is inside .git/.
+	trySymlink(t, filepath.Join(gitDir, "HEAD"), filepath.Join(srcDir, "head.txt"))
+
+	targetDir := filepath.Join(t.TempDir(), "target")
+	err := CopyToTarget(srcDir, targetDir, CopyOptions{})
+	require.NoError(t, err)
+
+	// main.tf should be copied.
+	_, err = os.Stat(filepath.Join(targetDir, "main.tf"))
+	assert.NoError(t, err, "real file should be copied")
+
+	// Symlink pointing into .git/ should be skipped.
+	_, err = os.Stat(filepath.Join(targetDir, "head.txt"))
+	assert.True(t, os.IsNotExist(err), "symlink pointing into .git/ should be skipped")
+
+	// .git directory itself should also be skipped.
+	_, err = os.Stat(filepath.Join(targetDir, ".git"))
+	assert.True(t, os.IsNotExist(err), ".git directory should be skipped")
+}
+
 func TestCreateSkipFunc_GitDirectory(t *testing.T) {
-	skipFunc := CreateSkipFunc("/tmp/src", nil, nil)
+	srcBase := filepath.Join(string(filepath.Separator), "tmp", "src")
+	dstBase := filepath.Join(string(filepath.Separator), "tmp", "dst")
+	skipFunc := CreateSkipFunc(srcBase, nil, nil)
 	info := &mockFileInfo{name: ".git", isDir: true}
-	skip, err := skipFunc(info, "/tmp/src/.git", "/tmp/dst/.git")
+	skip, err := skipFunc(info, filepath.Join(srcBase, ".git"), filepath.Join(dstBase, ".git"))
 	assert.NoError(t, err)
 	assert.True(t, skip, ".git directory should always be skipped")
 }
 
 func TestCreateSkipFunc_NoPatterns(t *testing.T) {
-	skipFunc := CreateSkipFunc("/tmp/src", nil, nil)
+	srcBase := filepath.Join(string(filepath.Separator), "tmp", "src")
+	dstBase := filepath.Join(string(filepath.Separator), "tmp", "dst")
+	skipFunc := CreateSkipFunc(srcBase, nil, nil)
 	info := &mockFileInfo{name: "main.tf", isDir: false}
-	skip, err := skipFunc(info, "/tmp/src/main.tf", "/tmp/dst/main.tf")
+	skip, err := skipFunc(info, filepath.Join(srcBase, "main.tf"), filepath.Join(dstBase, "main.tf"))
 	assert.NoError(t, err)
 	assert.False(t, skip, "without patterns, no files should be skipped")
 }
 
 func TestCreateSkipFunc_ExcludePattern(t *testing.T) {
-	skipFunc := CreateSkipFunc("/tmp/src", nil, []string{"*.md"})
+	srcBase := filepath.Join(string(filepath.Separator), "tmp", "src")
+	dstBase := filepath.Join(string(filepath.Separator), "tmp", "dst")
+	skipFunc := CreateSkipFunc(srcBase, nil, []string{"*.md"})
 	// .md file should be skipped.
 	info := &mockFileInfo{name: "README.md", isDir: false}
-	skip, err := skipFunc(info, "/tmp/src/README.md", "/tmp/dst/README.md")
+	skip, err := skipFunc(info, filepath.Join(srcBase, "README.md"), filepath.Join(dstBase, "README.md"))
 	assert.NoError(t, err)
 	assert.True(t, skip, ".md file should be skipped by exclude pattern")
 
 	// .tf file should not be skipped.
 	info = &mockFileInfo{name: "main.tf", isDir: false}
-	skip, err = skipFunc(info, "/tmp/src/main.tf", "/tmp/dst/main.tf")
+	skip, err = skipFunc(info, filepath.Join(srcBase, "main.tf"), filepath.Join(dstBase, "main.tf"))
 	assert.NoError(t, err)
 	assert.False(t, skip, ".tf file should not be skipped")
 }
 
 func TestCreateSkipFunc_IncludePattern(t *testing.T) {
-	skipFunc := CreateSkipFunc("/tmp/src", []string{"*.tf"}, nil)
+	srcBase := filepath.Join(string(filepath.Separator), "tmp", "src")
+	dstBase := filepath.Join(string(filepath.Separator), "tmp", "dst")
+	skipFunc := CreateSkipFunc(srcBase, []string{"*.tf"}, nil)
 	// .tf file should not be skipped.
 	info := &mockFileInfo{name: "main.tf", isDir: false}
-	skip, err := skipFunc(info, "/tmp/src/main.tf", "/tmp/dst/main.tf")
+	skip, err := skipFunc(info, filepath.Join(srcBase, "main.tf"), filepath.Join(dstBase, "main.tf"))
 	assert.NoError(t, err)
 	assert.False(t, skip, ".tf file matches include pattern, should not be skipped")
 
 	// .md file should be skipped.
 	info = &mockFileInfo{name: "README.md", isDir: false}
-	skip, err = skipFunc(info, "/tmp/src/README.md", "/tmp/dst/README.md")
+	skip, err = skipFunc(info, filepath.Join(srcBase, "README.md"), filepath.Join(dstBase, "README.md"))
 	assert.NoError(t, err)
 	assert.True(t, skip, ".md file does not match include pattern, should be skipped")
 
 	// Directories should never be skipped when include patterns are set.
 	info = &mockFileInfo{name: "modules", isDir: true}
-	skip, err = skipFunc(info, "/tmp/src/modules", "/tmp/dst/modules")
+	skip, err = skipFunc(info, filepath.Join(srcBase, "modules"), filepath.Join(dstBase, "modules"))
 	assert.NoError(t, err)
 	assert.False(t, skip, "directories should not be skipped when traversing for includes")
 }
 
 func TestCreateSkipFunc_CombinedPatterns(t *testing.T) {
-	skipFunc := CreateSkipFunc("/tmp/src", []string{"*.tf", "*.md"}, []string{"README.md"})
+	srcBase := filepath.Join(string(filepath.Separator), "tmp", "src")
+	dstBase := filepath.Join(string(filepath.Separator), "tmp", "dst")
+	skipFunc := CreateSkipFunc(srcBase, []string{"*.tf", "*.md"}, []string{"README.md"})
 
 	// main.tf: matches include, not in exclude.
 	info := &mockFileInfo{name: "main.tf", isDir: false}
-	skip, err := skipFunc(info, "/tmp/src/main.tf", "/tmp/dst/main.tf")
+	skip, err := skipFunc(info, filepath.Join(srcBase, "main.tf"), filepath.Join(dstBase, "main.tf"))
 	assert.NoError(t, err)
 	assert.False(t, skip)
 
 	// CHANGELOG.md: matches include, not in exclude.
 	info = &mockFileInfo{name: "CHANGELOG.md", isDir: false}
-	skip, err = skipFunc(info, "/tmp/src/CHANGELOG.md", "/tmp/dst/CHANGELOG.md")
+	skip, err = skipFunc(info, filepath.Join(srcBase, "CHANGELOG.md"), filepath.Join(dstBase, "CHANGELOG.md"))
 	assert.NoError(t, err)
 	assert.False(t, skip)
 
 	// README.md: matches both include AND exclude; exclude wins.
 	info = &mockFileInfo{name: "README.md", isDir: false}
-	skip, err = skipFunc(info, "/tmp/src/README.md", "/tmp/dst/README.md")
+	skip, err = skipFunc(info, filepath.Join(srcBase, "README.md"), filepath.Join(dstBase, "README.md"))
 	assert.NoError(t, err)
 	assert.True(t, skip, "excluded pattern should take priority over included")
 
 	// main.go: not in include patterns, should be skipped.
 	info = &mockFileInfo{name: "main.go", isDir: false}
-	skip, err = skipFunc(info, "/tmp/src/main.go", "/tmp/dst/main.go")
+	skip, err = skipFunc(info, filepath.Join(srcBase, "main.go"), filepath.Join(dstBase, "main.go"))
 	assert.NoError(t, err)
 	assert.True(t, skip, "file not matching any include pattern should be skipped")
 }

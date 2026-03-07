@@ -35,10 +35,12 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 		Skip:          CreateSkipFunc(srcDir, opts.IncludedPaths, opts.ExcludedPaths),
 		PreserveTimes: false,
 		PreserveOwner: false,
-		// Follow symlinks only when the target resolves within srcDir.
+		// Follow symlinks only when the target resolves within srcDir and
+		// the resolved target passes the same skip policy as regular files.
 		// This prevents symlink traversal attacks where a crafted vendor source
-		// contains symlinks pointing outside the source directory.
-		OnSymlink: createSymlinkHandler(srcDir),
+		// contains symlinks pointing outside the source directory or into
+		// excluded directories (e.g., .git/).
+		OnSymlink: createSymlinkHandler(srcDir, opts),
 		// OnDirExists handles existing directories at the destination.
 		// We skip .git directories from source, but if the destination already has a .git directory
 		// (from a previous vendor run), we need to leave it untouched to avoid permission errors
@@ -55,10 +57,12 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 }
 
 // createSymlinkHandler returns an OnSymlink handler that validates symlink targets
-// resolve within srcDir before following them. This prevents traversal attacks where
-// a crafted vendor source contains symlinks pointing outside the source directory
-// (e.g., link -> /etc/passwd).
-func createSymlinkHandler(srcDir string) func(string) cp.SymlinkAction {
+// resolve within srcDir before following them, and applies the same skip policy
+// (e.g., .git exclusion, exclude patterns) to the resolved target path.
+// This prevents traversal attacks where a crafted vendor source contains symlinks
+// pointing outside the source directory (e.g., link -> /etc/passwd) or into
+// excluded directories (e.g., head.txt -> .git/HEAD).
+func createSymlinkHandler(srcDir string, opts CopyOptions) func(string) cp.SymlinkAction {
 	// Pre-resolve srcDir so we compare real paths consistently.
 	// EvalSymlinks also resolves the absolute path.
 	realSrcDir, srcErr := filepath.EvalSymlinks(srcDir)
@@ -86,8 +90,49 @@ func createSymlinkHandler(srcDir string) func(string) cp.SymlinkAction {
 			return cp.Skip
 		}
 
+		// Apply the skip policy to the resolved target path.
+		if shouldSkipSymlinkTarget(realSrcDir, resolved, src, opts) {
+			return cp.Skip
+		}
+
 		return cp.Deep
 	}
+}
+
+// shouldSkipSymlinkTarget checks whether the resolved symlink target should be
+// skipped based on the skip policy (.git exclusion, exclude patterns).
+// This catches symlinks that point into excluded directories
+// (e.g., head.txt -> .git/HEAD would bypass basename checks).
+func shouldSkipSymlinkTarget(realSrcDir, resolved, src string, opts CopyOptions) bool {
+	relPath, err := filepath.Rel(realSrcDir, resolved)
+	if err != nil {
+		log.Debug("Skipping symlink (cannot compute relative path)", "path", src, "error", err)
+		return true
+	}
+
+	// Check if any path component is .git.
+	for _, component := range strings.Split(filepath.ToSlash(relPath), "/") {
+		if component == ".git" {
+			log.Debug("Skipping symlink (target resolves into .git directory)", "path", src, "target", resolved)
+			return true
+		}
+	}
+
+	// Check against exclude patterns if configured.
+	if len(opts.ExcludedPaths) > 0 {
+		normalizedRelPath := filepath.ToSlash(relPath)
+		excluded, excludeErr := ShouldExcludeFile(opts.ExcludedPaths, normalizedRelPath)
+		if excludeErr != nil {
+			log.Debug("Skipping symlink (error checking exclude patterns)", "path", src, "error", excludeErr)
+			return true
+		}
+		if excluded {
+			log.Debug("Skipping symlink (target matches exclude pattern)", "path", src, "target", resolved, "relPath", normalizedRelPath)
+			return true
+		}
+	}
+
+	return false
 }
 
 // CreateSkipFunc builds a skip function for otiai10/copy that applies include/exclude patterns.
