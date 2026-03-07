@@ -20,7 +20,7 @@ Atmos AI is an intelligent assistant integrated directly into Atmos CLI, designe
 - **Session Management** - SQLite-backed persistence with full CRUD operations
 - **Conversation Checkpointing** - Export/import sessions for team collaboration and backup
 - **Automatic Context Discovery** - Intelligent file discovery with glob patterns and gitignore filtering
-- **Project Memory** - ATMOS.md for persistent context across sessions
+- **Project Instructions** - ATMOS.md for persistent context across sessions
 - **Tool Execution** - 15+ tools with granular permission system
 - **Permission Cache** - Persistent permission decisions with 80%+ prompt reduction
 - **Skill System** - 21+ marketplace skills + built-in skills
@@ -59,7 +59,7 @@ Compared to industry-leading AI systems:
 | **Stack Context** | N/A | ✅ **Deep stack analysis** |
 | **Session Persistence** | ✅ SQLite-backed | ✅ **SQLite-backed** |
 | **Tool Execution** | ✅ Bash, file operations | ✅ **Atmos-specific + file ops** |
-| **Project Memory** | ✅ Markdown-based | ✅ **ATMOS.md** |
+| **Project Instructions** | ✅ Markdown-based | ✅ **ATMOS.md** |
 | **MCP Support** | ✅ stdio/HTTP | ✅ **stdio/HTTP** |
 | **LSP Integration** | ✅ Multi-language | ✅ **YAML/Terraform** |
 | **On-Premises** | ❌ Cloud-only | ✅ **Ollama support** |
@@ -98,7 +98,7 @@ Compared to industry-leading AI systems:
 │  ┌─────────────────────────▼────────────────────────────────┐  │
 │  │           Storage & Context                              │  │
 │  ├──────────────────────────────────────────────────────────┤  │
-│  │ • SQLite (sessions)    • ATMOS.md (memory)              │  │
+│  │ • SQLite (sessions)    • ATMOS.md (instructions)         │  │
 │  │ • Permission Cache (.atmos/ai.settings.local.json)      │  │
 │  │ • Local Registry       • Cache                          │  │
 │  └──────────────────────────────────────────────────────────┘  │
@@ -365,7 +365,7 @@ CREATE TABLE messages (
 
 ---
 
-### 2. Project Memory (ATMOS.md)
+### 2. Project Instructions (ATMOS.md)
 
 **Status:** ✅ Production Ready
 
@@ -385,7 +385,7 @@ ATMOS.md provides persistent project knowledge that the AI can reference across 
 #### Example ATMOS.md
 
 ```markdown
-# Atmos Project Memory
+# Atmos Project Instructions
 
 ## Project Context
 
@@ -1697,7 +1697,7 @@ settings:
     }
   ],
   "context": {
-    "project_memory": "ATMOS.md content",
+    "project_instructions": "ATMOS.md content",
     "files_accessed": [],
     "working_directory": "/path"
   },
@@ -2138,7 +2138,7 @@ Atmos AI builds upon patterns and ideas from industry-leading AI systems while m
 ### Glossary
 
 - **Skill** - Specialized AI assistant with focused expertise and tool access
-- **ATMOS.md** - Project memory file for persistent context
+- **ATMOS.md** - Project instructions file for persistent context
 - **Auto-Compact** - Intelligent conversation history summarization
 - **LSP** - Language Server Protocol for real-time validation
 - **MCP** - Model Context Protocol for standardized AI-tool communication

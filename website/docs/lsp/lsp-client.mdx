@@ -351,19 +351,10 @@ The Terraform Language Server provides validation and intelligence for Terraform
 
 ## Optional: Using LSP in Your Editor
 
-:::warning Separate from Atmos LSP Client
-This section is about configuring **your code editor** to use external LSP servers (yaml-ls, terraform-ls) for editing Atmos files. This is **separate and independent** from the Atmos LSP client described above.
-
-- **Atmos LSP Client**: Used by Atmos AI for validation (`pkg/lsp/client`)
-- **Editor LSP**: Used by your editor for autocomplete, hover docs, inline errors (optional)
-
-Both can use the same external LSP servers, but they serve different purposes.
-:::
-
-You can optionally configure your code editor to use the same LSP servers that Atmos uses. This provides real-time editing features like autocomplete, hover documentation, and inline error checking while you edit Atmos files.
+You can optionally configure your code editor to use the same external LSP servers (yaml-ls, terraform-ls) that Atmos uses. This provides real-time editing features like autocomplete, hover documentation, and inline error checking while you edit Atmos files.
 
 :::tip Completely Optional
-These editor configurations are **entirely optional**. The Atmos LSP client works independently for AI validation regardless of your editor setup. This section just improves your editing experience.
+These editor configurations are **entirely optional** and separate from the Atmos LSP client described above. The Atmos LSP client works independently for AI validation regardless of your editor setup.
 :::
 
 ### VS Code
