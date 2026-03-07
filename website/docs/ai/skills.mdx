@@ -6,15 +6,20 @@ id: skills
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
-# AI Skills
+<Intro>
+Atmos AI includes a skill system that provides specialized AI assistants for different infrastructure tasks. Each skill has a customized system prompt and tool access tailored to its domain. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
+</Intro>
 
 <Experimental />
 
-Atmos AI includes a skill system that provides specialized AI assistants for different infrastructure tasks. Each skill has a customized system prompt and tool access tailored to its domain. Skills follow the [Agent Skills open standard](https://agentskills.io) governed by the Linux Foundation's Agentic AI Foundation (AAIF).
-
 Skills give you focused expertise, better results through task-specific prompts, and fine-grained control over which tools each assistant can access.
+
+:::tip Configuration Reference
+For a concise reference of all skill settings, see [CLI Configuration > AI > Skills](/cli/configuration/ai/skills).
+:::
 
 ## Installing Skills
 
@@ -342,48 +347,74 @@ skills:
 
 ### Available Tools
 
+#### Atmos Commands
+
 <dl>
-<dt>Atmos Commands</dt>
-<dd>
+  <dt>`atmos_describe_component`</dt>
+  <dd>Get component configuration</dd>
 
-- `atmos_describe_component` - Get component configuration
-- `atmos_describe_affected` - See impact analysis
-- `atmos_describe_stacks` - List and describe all stacks
-- `atmos_describe_config` - Show Atmos configuration
-- `atmos_list_stacks` - List available stacks
-- `atmos_list_components` - List available components
-- `atmos_validate_stacks` - Validate stack configurations
-- `atmos_get_template_context` - Get template variable context
+  <dt>`atmos_describe_affected`</dt>
+  <dd>See impact analysis</dd>
 
-</dd>
+  <dt>`atmos_describe_stacks`</dt>
+  <dd>List and describe all stacks</dd>
 
-<dt>File Operations</dt>
-<dd>
+  <dt>`atmos_describe_config`</dt>
+  <dd>Show Atmos configuration</dd>
 
-- `read_file` - Read any file
-- `edit_file` - Edit file content
-- `write_file` - Create new files
-- `read_stack_file` - Read stack YAML files
-- `read_component_file` - Read component files
-- `list_component_files` - List files in component directory
-- `search_files` - Search for content across files
+  <dt>`atmos_list_stacks`</dt>
+  <dd>List available stacks</dd>
 
-</dd>
+  <dt>`atmos_list_components`</dt>
+  <dd>List available components</dd>
 
-<dt>Execution</dt>
-<dd>
+  <dt>`atmos_validate_stacks`</dt>
+  <dd>Validate stack configurations</dd>
 
-- `execute_bash` - Execute shell commands
-- `execute_atmos_command` - Execute Atmos commands
+  <dt>`atmos_get_template_context`</dt>
+  <dd>Get template variable context</dd>
+</dl>
 
-</dd>
+#### File Operations
 
-<dt>Validation</dt>
-<dd>
+<dl>
+  <dt>`read_file`</dt>
+  <dd>Read any file</dd>
 
-- `validate_file_lsp` - Validate files using LSP (if enabled)
+  <dt>`edit_file`</dt>
+  <dd>Edit file content</dd>
 
-</dd>
+  <dt>`write_file`</dt>
+  <dd>Create new files</dd>
+
+  <dt>`read_stack_file`</dt>
+  <dd>Read stack YAML files</dd>
+
+  <dt>`read_component_file`</dt>
+  <dd>Read component files</dd>
+
+  <dt>`list_component_files`</dt>
+  <dd>List files in component directory</dd>
+
+  <dt>`search_files`</dt>
+  <dd>Search for content across files</dd>
+</dl>
+
+#### Execution
+
+<dl>
+  <dt>`execute_bash`</dt>
+  <dd>Execute shell commands</dd>
+
+  <dt>`execute_atmos_command`</dt>
+  <dd>Execute Atmos commands</dd>
+</dl>
+
+#### Validation
+
+<dl>
+  <dt>`validate_file_lsp`</dt>
+  <dd>Validate files using LSP (if enabled)</dd>
 </dl>
 
 ### Tool Safety

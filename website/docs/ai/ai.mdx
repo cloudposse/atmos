@@ -8,38 +8,63 @@ id: ai
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 import DocCardList from '@theme/DocCardList'
 import Experimental from '@site/src/components/Experimental'
 
-# Atmos AI
+<Intro>
+Atmos integrates AI capabilities directly into infrastructure management, providing intelligent assistance
+for understanding configurations, analyzing stacks, troubleshooting issues, and automating workflows.
+</Intro>
 
 <Experimental />
 
-Atmos integrates AI capabilities directly into infrastructure management, providing intelligent assistance
-for understanding configurations, analyzing stacks, troubleshooting issues, and automating workflows.
-
 ## AI Capabilities
 
-| Capability | Description | Learn More |
-|------------|-------------|------------|
-| **AI Assistant** | Interactive terminal agent for conversations and guided help | [Configuration](/ai/configuration) |
-| **[Tool Execution](/ai/tools)** | AI inspects your infrastructure using read-only Atmos commands | [Tools Reference](/ai/tools) |
-| **[AI Skills](/ai/skills)** | 21+ specialized assistants for infrastructure management | [Skills Guide](/ai/skills) |
-| **[MCP Server](/ai/mcp-server)** | Expose Atmos tools to Claude Desktop and other MCP clients | [MCP Setup](/ai/mcp-server) |
-| **[Claude Code](/ai/claude-code-integration)** | Use Atmos with Claude Code IDE via MCP protocol | [Integration Guide](/ai/claude-code-integration) |
-| **[LSP Client](/lsp/lsp-client)** | AI validation using external language servers | [LSP Client](/lsp/lsp-client) |
+<dl>
+  <dt>**AI Assistant**</dt>
+  <dd>Interactive terminal agent for conversations and guided help. See [Configuration](/ai/configuration).</dd>
+
+  <dt>**[Tool Execution](/ai/tools)**</dt>
+  <dd>AI inspects your infrastructure using read-only Atmos commands. See [Tools Reference](/ai/tools).</dd>
+
+  <dt>**[AI Skills](/ai/skills)**</dt>
+  <dd>21+ specialized assistants for infrastructure management. See [Skills Guide](/ai/skills).</dd>
+
+  <dt>**[MCP Server](/ai/mcp-server)**</dt>
+  <dd>Expose Atmos tools to Claude Desktop and other MCP clients. See [MCP Setup](/ai/mcp-server).</dd>
+
+  <dt>**[Claude Code](/ai/claude-code-integration)**</dt>
+  <dd>Use Atmos with Claude Code IDE via MCP protocol. See [Integration Guide](/ai/claude-code-integration).</dd>
+
+  <dt>**[LSP Client](/lsp/lsp-client)**</dt>
+  <dd>AI validation using external language servers. See [LSP Client](/lsp/lsp-client).</dd>
+</dl>
 
 ## Supported Providers
 
-| Provider | Best For | Privacy |
-|----------|----------|---------|
-| **Anthropic (Claude)** | Advanced reasoning, default choice | Cloud |
-| **OpenAI (GPT)** | Widely available, fast | Cloud |
-| **Google (Gemini)** | Large context window | Cloud |
-| **xAI (Grok)** | Real-time knowledge | Cloud |
-| **Ollama** | Complete privacy, offline use | 100% Local |
-| **AWS Bedrock** | Enterprise security, AWS integration | Your Cloud |
-| **Azure OpenAI** | Enterprise compliance, Azure integration | Your Cloud |
+<dl>
+  <dt>**Anthropic (Claude)**</dt>
+  <dd>Advanced reasoning, default choice. Cloud-hosted.</dd>
+
+  <dt>**OpenAI (GPT)**</dt>
+  <dd>Widely available, fast. Cloud-hosted.</dd>
+
+  <dt>**Google (Gemini)**</dt>
+  <dd>Large context window. Cloud-hosted.</dd>
+
+  <dt>**xAI (Grok)**</dt>
+  <dd>Real-time knowledge. Cloud-hosted.</dd>
+
+  <dt>**Ollama**</dt>
+  <dd>Complete privacy, offline use. 100% local -- no data leaves your machine.</dd>
+
+  <dt>**AWS Bedrock**</dt>
+  <dd>Enterprise security, AWS integration. Data stays in your cloud.</dd>
+
+  <dt>**Azure OpenAI**</dt>
+  <dd>Enterprise compliance, Azure integration. Data stays in your cloud.</dd>
+</dl>
 
 See [AI Providers](/ai/providers) for configuration details.
 
@@ -94,25 +119,47 @@ atmos ai exec "List all available stacks" --format json
 
 **Chat View:**
 
-| Key | Action |
-|-----|--------|
-| **Ctrl+N** | Create new session |
-| **Ctrl+L** | Switch session |
-| **Ctrl+P** | Switch AI provider |
-| **Ctrl+A** | Switch AI skill |
-| **Ctrl+J** | Add newline |
-| **Up/Down** | Navigate message history |
+<dl>
+  <dt>**Ctrl+N**</dt>
+  <dd>Create new session</dd>
+
+  <dt>**Ctrl+L**</dt>
+  <dd>Switch session</dd>
+
+  <dt>**Ctrl+P**</dt>
+  <dd>Switch AI provider</dd>
+
+  <dt>**Ctrl+A**</dt>
+  <dd>Switch AI skill</dd>
+
+  <dt>**Ctrl+J**</dt>
+  <dd>Add newline</dd>
+
+  <dt>**Up/Down**</dt>
+  <dd>Navigate message history</dd>
+</dl>
 
 **Session Picker:**
 
-| Key | Action |
-|-----|--------|
-| **Up/Down** or **j/k** | Navigate sessions |
-| **Enter** | Switch to session |
-| **d** | Delete session |
-| **r** | Rename session |
-| **f** | Filter by provider |
-| **n** | Create new session |
+<dl>
+  <dt>**Up/Down** or **j/k**</dt>
+  <dd>Navigate sessions</dd>
+
+  <dt>**Enter**</dt>
+  <dd>Switch to session</dd>
+
+  <dt>**d**</dt>
+  <dd>Delete session</dd>
+
+  <dt>**r**</dt>
+  <dd>Rename session</dd>
+
+  <dt>**f**</dt>
+  <dd>Filter by provider</dd>
+
+  <dt>**n**</dt>
+  <dd>Create new session</dd>
+</dl>
 
 ### Security and Privacy
 

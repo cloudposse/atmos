@@ -6,15 +6,18 @@ id: mcp-server
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
 
-# MCP Server Integration
-
-<Experimental />
-
+<Intro>
 The Atmos MCP Server exposes Atmos AI tools through the [Model Context Protocol](https://modelcontextprotocol.io) (MCP),
 an open standard that lets any compatible AI client -- Claude Desktop, Claude Code, VS Code, Cursor, and
 [many others](https://modelcontextprotocol.io/clients) -- connect to your infrastructure tools without custom integrations.
+</Intro>
+
+<Experimental />
 
 :::danger Security Warning
 The MCP server has no built-in authentication or encryption.
@@ -161,7 +164,8 @@ Every client uses the same underlying command (`atmos mcp start`); only the conf
 
 ### Desktop Apps and IDEs
 
-#### VS Code with GitHub Copilot
+<Tabs>
+<TabItem value="vscode" label="VS Code" default>
 
 Create `.vscode/mcp.json` in your project:
 
@@ -186,7 +190,8 @@ Alternatively, press `Cmd+Shift+P` / `Ctrl+Shift+P` and search "MCP: Add Server"
 Enable `chat.mcp.discovery.enabled` in VS Code settings to auto-discover MCP servers from your Claude Desktop config.
 :::
 
-#### Cursor
+</TabItem>
+<TabItem value="cursor" label="Cursor">
 
 Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 
@@ -204,7 +209,8 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 ```
 </File>
 
-#### Windsurf
+</TabItem>
+<TabItem value="windsurf" label="Windsurf">
 
 <File title="~/.windsurf/mcp.json">
 ```json
@@ -220,7 +226,8 @@ Add to `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (project):
 ```
 </File>
 
-#### Cline (VS Code Extension)
+</TabItem>
+<TabItem value="cline" label="Cline">
 
 Click the "MCP Servers" icon in Cline's navigation, then "Configure MCP Servers" and add:
 
@@ -239,7 +246,8 @@ Click the "MCP Servers" icon in Cline's navigation, then "Configure MCP Servers"
 ```
 </File>
 
-#### Continue.dev (VS Code Extension)
+</TabItem>
+<TabItem value="continue" label="Continue.dev">
 
 Create `.continue/mcpServers/atmos.yaml` in your workspace:
 
@@ -254,9 +262,13 @@ cwd: /path/to/your/atmos/project
 ```
 </File>
 
+</TabItem>
+</Tabs>
+
 ### CLI Tools
 
-#### Claude Code
+<Tabs>
+<TabItem value="claude-code" label="Claude Code" default>
 
 <Terminal title="claude mcp add">
 ```bash
@@ -291,7 +303,8 @@ Or add a `.mcp.json` file to your project root:
 
 Manage servers with `claude mcp list`, `claude mcp get atmos`, and `claude mcp remove atmos`.
 
-#### Gemini CLI
+</TabItem>
+<TabItem value="gemini" label="Gemini CLI">
 
 <Terminal title="gemini mcp add">
 ```bash
@@ -319,7 +332,8 @@ Or configure manually in `~/.gemini/settings.json`:
 ```
 </File>
 
-#### OpenAI Codex CLI
+</TabItem>
+<TabItem value="codex" label="OpenAI Codex">
 
 <File title="~/.codex/config.json">
 ```json
@@ -334,7 +348,8 @@ Or configure manually in `~/.gemini/settings.json`:
 ```
 </File>
 
-#### Grok CLI
+</TabItem>
+<TabItem value="grok" label="Grok CLI">
 
 <Terminal title="grok mcp">
 ```bash
@@ -344,6 +359,9 @@ Or configure manually in `~/.gemini/settings.json`:
 grok mcp add atmos --transport stdio --command "atmos" --args "mcp,start"
 ```
 </Terminal>
+
+</TabItem>
+</Tabs>
 
 ### Client Comparison
 

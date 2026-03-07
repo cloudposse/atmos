@@ -17,22 +17,26 @@ and behavior for different tasks.
 
 ## Configuration
 
+Set the default skill and optionally define custom skills in `atmos.yaml`. Marketplace skills (installed via `atmos ai skill install`) are available automatically.
+
 <File title="atmos.yaml">
 ```yaml
 settings:
   ai:
-    default_skill: "general"
+    default_skill: "atmos-stacks"    # Use a marketplace skill as default
     skills:
-      cost-optimizer:
-        display_name: "Cost Optimizer"
-        description: "Analyzes infrastructure for cost savings"
-        category: "analysis"
+      # Custom skills are defined here (marketplace skills are loaded automatically)
+      security-reviewer:
+        display_name: "Security Reviewer"
+        description: "Reviews infrastructure for security best practices"
+        category: "security"
         system_prompt: |
-          You are a cost optimization expert for Atmos infrastructure.
-          Focus on identifying overprovisioned resources and rightsizing.
+          You are a security expert for Atmos infrastructure.
+          Focus on access controls, encryption, and network security.
         allowed_tools:
           - atmos_describe_component
           - atmos_list_stacks
+          - atmos_validate_stacks
           - read_stack_file
           - read_component_file
         restricted_tools: []
@@ -88,18 +92,19 @@ Each skill in the `skills` map supports the following settings:
 
 ## Tool Safety Patterns
 
-**Read-only skill** -- omit write and execute tools entirely:
+**Read-only custom skill** -- omit write and execute tools entirely:
 
 <File title="atmos.yaml">
 ```yaml
 skills:
-  stack-analyst:
-    display_name: "Stack Analyst"
-    description: "Read-only stack analysis"
-    system_prompt: "You analyze stack configurations..."
+  config-auditor:
+    display_name: "Config Auditor"
+    description: "Read-only configuration audit"
+    system_prompt: "You audit stack configurations for issues..."
     allowed_tools:
       - atmos_describe_component
       - atmos_list_stacks
+      - atmos_validate_stacks
       - read_file
       - search_files
     # No write/execute tools = read-only
@@ -111,10 +116,10 @@ skills:
 <File title="atmos.yaml">
 ```yaml
 skills:
-  terraform-migrator:
-    display_name: "Terraform Migrator"
-    description: "Migrates components to newer versions"
-    system_prompt: "You are an expert in Terraform migrations..."
+  component-refactorer:
+    display_name: "Component Refactorer"
+    description: "Refactors Terraform components"
+    system_prompt: "You are an expert in Terraform component refactoring..."
     allowed_tools:
       - read_file
       - edit_file
@@ -126,65 +131,79 @@ skills:
 ```
 </File>
 
+## Marketplace Skills
+
+Atmos includes 21 marketplace skills covering all aspects of infrastructure orchestration. Install them with:
+
+```bash
+atmos ai skill install cloudposse/atmos
+```
+
+<dl>
+  <dt>`atmos-terraform`</dt>
+  <dd>Terraform orchestration: plan/apply/deploy, workspace management, backend config, varfile generation, authentication.</dd>
+
+  <dt>`atmos-stacks`</dt>
+  <dd>Stack configuration: imports, inheritance, deep merging, locals, vars, settings, metadata, overrides.</dd>
+
+  <dt>`atmos-components`</dt>
+  <dd>Component architecture: Terraform root modules, abstract components, inheritance, versioning, mixins, catalog patterns.</dd>
+
+  <dt>`atmos-validation`</dt>
+  <dd>Policy validation: OPA/Rego policies, JSON Schema, schema manifests.</dd>
+
+  <dt>`atmos-config`</dt>
+  <dd>Project configuration: atmos.yaml structure, all sections, discovery, merging, base paths, settings.</dd>
+
+  <dt>`atmos-auth`</dt>
+  <dd>Authentication and identity management: providers (SSO/SAML/OIDC/GCP), identities, keyring, identity chaining.</dd>
+
+  <dt>`atmos-templates`</dt>
+  <dd>Go templates: Sprig/Gomplate functions, atmos.Component, atmos.GomplateDatasource, atmos.Store.</dd>
+
+  <dt>`atmos-yaml-functions`</dt>
+  <dd>YAML functions: !terraform.state, !terraform.output, !store, !env, !exec, !include, !template.</dd>
+
+  <dt>`atmos-vendoring`</dt>
+  <dd>Component vendoring: vendor.yaml manifests, pulling from Git/S3/HTTP/OCI/Terraform Registry.</dd>
+
+  <dt>`atmos-workflows`</dt>
+  <dd>Workflow automation: multi-step workflows, Go template support, cross-component orchestration.</dd>
+
+  <dt>`atmos-gitops`</dt>
+  <dd>CI/CD: GitHub Actions, Spacelift, Atlantis, `atmos describe affected` for change detection.</dd>
+
+  <dt>`atmos-design-patterns`</dt>
+  <dd>Design patterns: stack organization, component catalogs, inheritance, configuration composition.</dd>
+</dl>
+
+See [AI Skills](/ai/skills) for the full list and usage details.
+
 ## Custom Skill Examples
 
-### Cost Optimization Skill
+Custom skills complement marketplace skills for organization-specific needs.
+
+### Security Reviewer
 
 <File title="atmos.yaml">
 ```yaml
 settings:
   ai:
     skills:
-      cost-optimizer:
-        display_name: "Cost Optimizer"
-        description: "Analyzes infrastructure for cost savings opportunities"
-        category: "analysis"
-        system_prompt: |
-          You are a cost optimization expert for Atmos infrastructure.
-
-          FOCUS AREAS:
-          - Identify overprovisioned resources
-          - Suggest rightsizing opportunities
-          - Find unused or idle resources
-          - Recommend reserved instances
-
-          Always use tools to gather data before making recommendations.
-        allowed_tools:
-          - atmos_describe_component
-          - atmos_describe_stacks
-          - atmos_list_stacks
-          - read_stack_file
-          - read_component_file
-          - read_file
-          - search_files
-```
-</File>
-
-### Compliance Auditor Skill
-
-<File title="atmos.yaml">
-```yaml
-settings:
-  ai:
-    skills:
-      compliance-auditor:
-        display_name: "Compliance Auditor"
-        description: "Ensures infrastructure meets regulatory requirements"
+      security-reviewer:
+        display_name: "Security Reviewer"
+        description: "Reviews infrastructure for security best practices"
         category: "security"
         system_prompt: |
-          You are a compliance expert for regulated industries (HIPAA, SOC2, PCI-DSS).
+          You are a security expert reviewing Atmos infrastructure.
 
-          COMPLIANCE CHECKS:
-          - Data encryption (at rest and in transit)
-          - Audit logging and monitoring
-          - Access controls and authentication
-          - Data residency requirements
+          FOCUS AREAS:
+          - Network security (security groups, NACLs, VPC design)
+          - Encryption (at rest and in transit)
+          - IAM policies and least-privilege access
+          - Compliance requirements (SOC2, HIPAA)
 
-          REPORTING:
-          - Categorize by compliance framework
-          - Cite specific requirements
-          - Mark findings as Pass/Fail/Partial
-          - Provide remediation with compliance rationale
+          Always use tools to gather actual config before making recommendations.
         allowed_tools:
           - atmos_describe_component
           - atmos_list_stacks
@@ -196,12 +215,38 @@ settings:
 ```
 </File>
 
-## SKILL.md Files
+### Migration Assistant
 
-Marketplace skills use SKILL.md files with YAML frontmatter stored in `~/.atmos/skills/`. Install marketplace skills with:
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    skills:
+      migration-assistant:
+        display_name: "Migration Assistant"
+        description: "Assists with infrastructure migrations and upgrades"
+        category: "refactor"
+        system_prompt: |
+          You are an infrastructure migration expert.
 
-```bash
-atmos ai skill install cloudposse/atmos
+          MIGRATION FOCUS:
+          - Upgrade deprecated Terraform syntax
+          - Update provider version constraints
+          - Modernize component configurations
+          - Ensure backward compatibility
+
+          Make incremental changes and verify at each step.
+        allowed_tools:
+          - read_file
+          - edit_file
+          - list_component_files
+          - read_component_file
+          - search_files
+          - execute_bash
+        restricted_tools:
+          - edit_file       # Require confirmation before editing
+          - execute_bash    # Require confirmation before executing
 ```
+</File>
 
-For marketplace skills, custom skill creation guides, and performance tips, see [AI Skills](/ai/skills).
+For skill usage in the TUI, skill persistence in sessions, SKILL.md file format, and performance tips, see [AI Skills](/ai/skills).

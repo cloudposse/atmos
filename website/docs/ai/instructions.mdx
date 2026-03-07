@@ -5,13 +5,18 @@ description: Persistent project-specific instructions for the Atmos AI Assistant
 ---
 import Terminal from '@site/src/components/Terminal'
 import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
 import Experimental from '@site/src/components/Experimental'
 
-# Project Instructions
+<Intro>
+Atmos AI uses project-specific context, patterns, and conventions from a persistent instructions file (`ATMOS.md`). This allows the AI to provide consistent, context-aware responses without you having to repeatedly explain your project setup.
+</Intro>
 
 <Experimental />
 
-Atmos AI uses project-specific context, patterns, and conventions from a persistent instructions file (`ATMOS.md`). This allows the AI to provide consistent, context-aware responses without you having to repeatedly explain your project setup.
+:::tip Configuration Reference
+For a concise reference of all instruction settings, see [CLI Configuration > AI > Instructions](/cli/configuration/ai/instructions).
+:::
 
 ## What are Project Instructions?
 
@@ -100,7 +105,7 @@ You can also create the file manually with any text editor.
 The `ATMOS.md` file uses markdown with specific section headers:
 
 <File title="ATMOS.md">
-```markdown
+````markdown
 # Atmos Project Instructions
 
 > This file provides project-specific context, patterns, and conventions to the
@@ -114,15 +119,15 @@ The `ATMOS.md` file uses markdown with specific section headers:
 **Environments:** dev, staging, prod
 
 **Stack Naming Pattern:**
-\```
+```
 {org}-{tenant}-{environment}-{region}-{stage}
 Example: acme-core-prod-use1-network
-\```
+```
 
 ## Common Commands
 
 ### Describe and Validate
-\```bash
+```bash
 # Describe a component
 atmos describe component <component> -s <stack>
 
@@ -131,26 +136,26 @@ atmos list stacks
 
 # Validate stacks
 atmos validate stacks
-\```
+```
 
 ### Terraform Operations
-\```bash
+```bash
 # Plan a component
 atmos terraform plan <component> -s <stack>
 
 # Apply a component
 atmos terraform apply <component> -s <stack>
-\```
+```
 
 ## Stack Patterns
 
 ### Stack Structure
-\```yaml
+```yaml
 # Common import pattern
 import:
   - catalog/stacks/baseline
   - catalog/stacks/network
-\```
+```
 
 ### CIDR Blocks
 - dev: 10.0.0.0/16
@@ -175,20 +180,20 @@ import:
 - Cross-region networking configured
 
 ### Component Dependencies
-\```
+```
 vpc → subnets → security-groups → rds → eks
-\```
+```
 
 ## Component Catalog Structure
 
-\```
+```
 components/
   terraform/
     vpc/           # VPC and networking
     rds/           # RDS databases
     eks/           # EKS clusters
     s3/            # S3 buckets
-\```
+```
 
 ## Team Conventions
 
@@ -200,7 +205,7 @@ components/
 ## Recent Learnings
 
 *AI will add notes here as it learns about the project*
-```
+````
 </File>
 
 ## Customizing Instruction Sections

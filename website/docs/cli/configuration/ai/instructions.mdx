@@ -22,19 +22,135 @@ instructions to the AI assistant.
 settings:
   ai:
     instructions:
-      enabled: true
-      file: "ATMOS.md"
+      enabled: true                        # Enable project instructions (default: false)
+      file: "ATMOS.md"                     # Instructions file location (default: ATMOS.md)
+      auto_update: false                   # Let AI update instructions (default: false)
+      create_if_missing: true              # Auto-create template (default: true)
+
+      # Sections to include in AI context
+      sections:
+        - project_context
+        - common_commands
+        - stack_patterns
+        - frequent_issues
+        - infrastructure_patterns
+        - component_catalog_structure
+        - team_conventions
+        - recent_learnings
 ```
 </File>
 
 ## Instruction Settings
 
 <dl>
-  <dt>`enabled`</dt>
-  <dd>Enable or disable project instructions (default: `true`)</dd>
+  <dt>`instructions.enabled`</dt>
+  <dd>Enable project instructions (default: `false`). When enabled, the contents of the instructions file are automatically included with every AI request.</dd>
 
-  <dt>`file`</dt>
-  <dd>Path to the instructions file relative to the project root (default: `ATMOS.md`)</dd>
+  <dt>`instructions.file`</dt>
+  <dd>Path to the instructions file, relative to project root or absolute (default: `ATMOS.md`). The file uses Markdown format with specific section headers.</dd>
+
+  <dt>`instructions.auto_update`</dt>
+  <dd>Allow AI to automatically update instructions with learned insights (default: `false`). When enabled, the AI can append discoveries to the "Recent Learnings" section. Other sections remain read-only.</dd>
+
+  <dt>`instructions.create_if_missing`</dt>
+  <dd>Automatically create a template instructions file if it doesn't exist on first use (default: `true`). The template includes all standard sections with placeholder content.</dd>
+
+  <dt>`instructions.sections`</dt>
+  <dd>List of instruction sections to include in AI context (default: all sections). Order matters -- sections appear in the specified order. Limiting sections reduces token usage.</dd>
 </dl>
 
-For ATMOS.md file structure and best practices, see [Project Instructions](/ai/instructions).
+## Available Sections
+
+<dl>
+  <dt>`project_context`</dt>
+  <dd>Basic project info: organization name, Atmos version, regions, environments, stack naming patterns.</dd>
+
+  <dt>`common_commands`</dt>
+  <dd>Frequently used Atmos commands for your project (describe, validate, plan, apply).</dd>
+
+  <dt>`stack_patterns`</dt>
+  <dd>Stack naming conventions, import patterns, and YAML structure patterns.</dd>
+
+  <dt>`frequent_issues`</dt>
+  <dd>Known issues and their solutions (e.g., stack not found, YAML validation errors).</dd>
+
+  <dt>`infrastructure_patterns`</dt>
+  <dd>Multi-region setups, component dependencies, DR configurations.</dd>
+
+  <dt>`component_catalog_structure`</dt>
+  <dd>Your component directory organization and structure.</dd>
+
+  <dt>`team_conventions`</dt>
+  <dd>Development practices, PR requirements, documentation standards.</dd>
+
+  <dt>`recent_learnings`</dt>
+  <dd>AI-discovered insights about your project (populated when `auto_update: true`).</dd>
+</dl>
+
+## ATMOS.md File Structure
+
+The instructions file uses Markdown with `##` section headers:
+
+<File title="ATMOS.md">
+````markdown
+# Atmos Project Instructions
+
+> This file provides project-specific context to the Atmos AI Assistant.
+
+## Project Context
+
+**Organization:** acme-corp
+**Atmos Version:** 1.89.0
+**Primary Regions:** us-east-1, us-west-2
+**Environments:** dev, staging, prod
+
+## Common Commands
+
+```bash
+atmos describe component <component> -s <stack>
+atmos terraform plan <component> -s <stack>
+```
+
+## Stack Patterns
+
+- dev: 10.0.0.0/16
+- staging: 10.1.0.0/16
+- prod: 10.2.0.0/16
+
+## Team Conventions
+
+- All infrastructure changes require PR review
+- Use `atmos validate` before committing
+
+## Recent Learnings
+
+*AI will add notes here as it learns about the project*
+````
+</File>
+
+## Update Modes
+
+<dl>
+  <dt>**Manual** (recommended)</dt>
+  <dd>Set `auto_update: false`. You edit `ATMOS.md` directly. The AI reads it but never modifies it. Full control over project instructions.</dd>
+
+  <dt>**Auto-update** (experimental)</dt>
+  <dd>Set `auto_update: true`. The AI can append insights to the "Recent Learnings" section as it discovers patterns. Other sections remain read-only.</dd>
+</dl>
+
+## Performance Considerations
+
+Project instructions add tokens to every AI request. Keep the file concise:
+
+<dl>
+  <dt>Small file (1-2 KB)</dt>
+  <dd>Negligible impact on performance and cost.</dd>
+
+  <dt>Medium file (5-10 KB)</dt>
+  <dd>~500-1000 tokens per request.</dd>
+
+  <dt>Large file (20+ KB)</dt>
+  <dd>~2000+ tokens per request. Consider limiting sections to reduce usage.</dd>
+</dl>
+
+For ATMOS.md file structure examples, version control guidance, and privacy considerations, see [Project Instructions](/ai/instructions).
