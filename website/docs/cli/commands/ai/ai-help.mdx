@@ -8,6 +8,7 @@ description: Get AI-powered help on specific Atmos topics
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -366,6 +367,10 @@ Use AI help to:
 
 ## Related Commands
 
-- [`atmos ai ask`](/cli/commands/ai/ask) - Ask specific questions
-- [`atmos ai chat`](/cli/commands/ai/chat) - Interactive chat for extended learning
-- [`atmos help`](/cli/commands/help) - Built-in command help
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask specific questions'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Interactive chat for extended learning'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+]} />

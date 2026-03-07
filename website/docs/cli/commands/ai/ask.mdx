@@ -8,6 +8,7 @@ description: Ask the AI assistant a question directly from the command line
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -255,7 +256,10 @@ The command outputs:
 
 ## Related Commands
 
-- [`atmos ai chat`](/cli/commands/ai/chat) - Start an interactive chat session
-- [`atmos ai help`](/cli/commands/ai/ai-help) - Get detailed help on specific topics
-- [AI Skills](/ai/skills) - Install and use 21+ specialized AI skills
-- [Skill Marketplace](/ai/skill-marketplace) - Browse and install community skills
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start an interactive chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/ai-help', label: 'atmos ai help', description: 'Get detailed help on specific topics'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+]} />

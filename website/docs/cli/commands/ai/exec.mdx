@@ -8,6 +8,7 @@ description: Run Atmos and shell commands via AI prompts non-interactively for a
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -421,8 +422,10 @@ fi
 
 ## Related Commands
 
-- [`atmos ai ask`](/cli/commands/ai/ask) - Quick command-line questions
-- [`atmos ai chat`](/cli/commands/ai/chat) - Interactive chat sessions
-- [`atmos ai help`](/cli/commands/ai/ai-help) - Topic-specific help
-- [AI Skills](/ai/skills) - Install and use 21+ specialized AI skills
-- [Skill Marketplace](/ai/skill-marketplace) - Browse and install community skills
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Quick command-line questions'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Interactive chat sessions'},
+  {type: 'link', href: '/cli/commands/ai/ai-help', label: 'atmos ai help', description: 'Topic-specific help'},
+  {type: 'link', href: '/cli/commands/ai/sessions', label: 'atmos ai sessions', description: 'Manage AI chat sessions'},
+  {type: 'link', href: '/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+]} />

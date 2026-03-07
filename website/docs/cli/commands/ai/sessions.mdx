@@ -8,6 +8,7 @@ description: Manage AI chat sessions including list, clean, export, and import o
 ---
 import Screengrab from '@site/src/components/Screengrab'
 import Terminal from '@site/src/components/Terminal'
+import DocCardList from '@theme/DocCardList'
 import Intro from '@site/src/components/Intro'
 import ActionCard from '@site/src/components/ActionCard'
 import PrimaryCTA from '@site/src/components/PrimaryCTA'
@@ -318,9 +319,13 @@ atmos ai sessions import ~/vpc-setup.json --name vpc-reference
 
 ## Related Commands
 
-- [`atmos ai chat`](/cli/commands/ai/chat) - Start or resume an AI chat session
-- [`atmos ai ask`](/cli/commands/ai/ask) - Ask a one-time question without saving session
-- [Project Instructions](/ai/instructions) - ATMOS.md documentation
+<DocCardList items={[
+  {type: 'link', href: '/cli/commands/ai/ask', label: 'atmos ai ask', description: 'Ask a one-time question without saving session'},
+  {type: 'link', href: '/cli/commands/ai/chat', label: 'atmos ai chat', description: 'Start or resume an AI chat session'},
+  {type: 'link', href: '/cli/commands/ai/exec', label: 'atmos ai exec', description: 'Run Atmos and shell commands via AI prompts'},
+  {type: 'link', href: '/cli/commands/ai/ai-help', label: 'atmos ai help', description: 'Get help on specific Atmos topics'},
+  {type: 'link', href: '/ai/skills', label: 'AI Skills', description: 'Install and use 21+ specialized AI skills'},
+]} />
 
 ## Tips
 
