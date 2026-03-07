@@ -573,15 +573,6 @@ func determineSourceType(uri *string, vendorConfigFilePath string) (bool, bool, 
 	return useOciScheme, useLocalFileSystem, sourceIsLocalFile, nil
 }
 
-func copyToTarget(tempDir, targetPath string, s *schema.AtmosVendorSource, sourceIsLocalFile bool, uri string) error {
-	return vendor.CopyToTarget(tempDir, targetPath, vendor.CopyOptions{
-		IncludedPaths: s.IncludedPaths,
-		ExcludedPaths: s.ExcludedPaths,
-		SourceIsLocal: sourceIsLocalFile,
-		URI:           uri,
-	})
-}
-
 // generateSkipFunction creates a function that determines whether to skip files during copying.
 // Delegates to pkg/vendor for the shared implementation.
 func generateSkipFunction(tempDir string, s *schema.AtmosVendorSource) func(os.FileInfo, string, string) (bool, error) {

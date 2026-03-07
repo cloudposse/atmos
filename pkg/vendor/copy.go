@@ -2,6 +2,7 @@ package vendor
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 
 	cp "github.com/otiai10/copy"
@@ -17,10 +18,6 @@ type CopyOptions struct {
 	IncludedPaths []string
 	// ExcludedPaths are POSIX-style glob patterns for files to exclude (double-star ** supported).
 	ExcludedPaths []string
-	// SourceIsLocal indicates the source is a local file (not a downloaded directory).
-	SourceIsLocal bool
-	// URI is the original source URI, used for local file path adjustment.
-	URI string
 }
 
 // CopyToTarget copies files from srcDir to dstDir with include/exclude pattern filtering.
@@ -49,12 +46,6 @@ func CopyToTarget(srcDir, dstDir string, opts CopyOptions) error {
 			}
 			return cp.Merge
 		},
-	}
-
-	// Adjust the target path if it's a local file with no extension.
-	if opts.SourceIsLocal && filepath.Ext(dstDir) == "" {
-		sanitizedBase := SanitizeFileName(opts.URI)
-		dstDir = filepath.Join(dstDir, sanitizedBase)
 	}
 
 	return cp.Copy(srcDir, dstDir, copyOptions)
@@ -105,7 +96,7 @@ func CreateSkipFunc(srcDir string, includedPaths, excludedPaths []string) func(o
 // ShouldExcludeFile checks if the file matches any of the excluded patterns.
 func ShouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) {
 	for _, excludePath := range excludedPaths {
-		excludePath := filepath.Clean(excludePath)
+		excludePath := path.Clean(filepath.ToSlash(excludePath))
 		// Match against trimmedSrc (relative path) instead of absolute path.
 		// This allows simple patterns like "providers.tf" to match without needing "**/" prefix.
 		excludeMatch, err := u.PathMatch(excludePath, trimmedSrc)
@@ -124,7 +115,7 @@ func ShouldExcludeFile(excludedPaths []string, trimmedSrc string) (bool, error) 
 // ShouldIncludeFile checks if the file matches any of the included patterns.
 func ShouldIncludeFile(includedPaths []string, trimmedSrc string) (bool, error) {
 	for _, includePath := range includedPaths {
-		includePath := filepath.Clean(includePath)
+		includePath := path.Clean(filepath.ToSlash(includePath))
 		// Match against trimmedSrc (relative path) instead of absolute path.
 		includeMatch, err := u.PathMatch(includePath, trimmedSrc)
 		if err != nil {

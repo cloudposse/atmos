@@ -151,6 +151,7 @@ func IsDomainLikeURI(uri string) bool {
 }
 
 // IsNonGitHTTPURI checks if the URI is an HTTP/HTTPS URL that doesn't appear to be a Git repository.
+// It detects archive extensions and known-host file download/raw content URL patterns.
 func IsNonGitHTTPURI(uri string) bool {
 	if !strings.HasPrefix(uri, "http://") && !strings.HasPrefix(uri, "https://") {
 		return false
@@ -159,6 +160,39 @@ func IsNonGitHTTPURI(uri string) bool {
 	archiveExtensions := []string{".tar.gz", ".tgz", ".tar.bz2", ".zip", ".tar", ".gz", ".bz2"}
 	for _, ext := range archiveExtensions {
 		if strings.Contains(lowerURI, ext) {
+			return true
+		}
+	}
+	// Detect known-host file download and raw content URLs.
+	// These are HTTP URLs on known Git hosts that point to downloadable files,
+	// not Git repositories, and should not have //. appended.
+	return isKnownHostFileURL(lowerURI)
+}
+
+// knownHostFilePattern defines a pattern pair for detecting file download URLs on known Git hosts.
+type knownHostFilePattern struct {
+	host string // Host substring to match (empty = match any host).
+	path string // Path substring to match.
+}
+
+// knownHostFilePatterns lists URL patterns that indicate file downloads (not Git repos)
+// on popular Git hosting platforms.
+var knownHostFilePatterns = []knownHostFilePattern{
+	{host: "", path: "/releases/download/"},       // GitHub release assets.
+	{host: "raw.githubusercontent.com", path: ""}, // GitHub raw content via subdomain.
+	{host: "github.com", path: "/raw/"},           // GitHub raw content via path.
+	{host: "gitlab.com", path: "/-/raw/"},         // GitLab raw content.
+	{host: "gitlab.com", path: "/-/archive/"},     // GitLab archive downloads.
+	{host: "bitbucket.org", path: "/downloads/"},  // Bitbucket file downloads.
+}
+
+// isKnownHostFileURL checks if the URL matches known file download or raw content
+// patterns on popular Git hosting platforms.
+func isKnownHostFileURL(lowerURI string) bool {
+	for _, p := range knownHostFilePatterns {
+		hostMatch := p.host == "" || strings.Contains(lowerURI, p.host)
+		pathMatch := p.path == "" || strings.Contains(lowerURI, p.path)
+		if hostMatch && pathMatch {
 			return true
 		}
 	}

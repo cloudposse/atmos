@@ -131,12 +131,10 @@ func ExecuteStackVendorInternal(
 	return ErrStackPullNotSupported
 }
 
-func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec, sourceIsLocalFile bool, uri string) error {
+func copyComponentToDestination(tempDir, componentPath string, vendorComponentSpec *schema.VendorComponentSpec) error {
 	return vendor.CopyToTarget(tempDir, componentPath, vendor.CopyOptions{
 		IncludedPaths: vendorComponentSpec.Source.IncludedPaths,
 		ExcludedPaths: vendorComponentSpec.Source.ExcludedPaths,
-		SourceIsLocal: sourceIsLocalFile,
-		URI:           uri,
 	})
 }
 
@@ -417,7 +415,7 @@ func installComponent(p *pkgComponentVendor, atmosConfig *schema.AtmosConfigurat
 	default:
 		return fmt.Errorf("%w %s for package %s", errUtils.ErrUnknownPackageType, p.pkgType.String(), p.name)
 	}
-	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec, p.sourceIsLocalFile, p.uri); err != nil {
+	if err := copyComponentToDestination(tempDir, p.componentPath, p.vendorComponentSpec); err != nil {
 		return fmt.Errorf("failed to copy package %s error %w", p.name, err)
 	}
 

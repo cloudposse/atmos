@@ -363,6 +363,16 @@ func TestNormalizeURI(t *testing.T) {
 			expected: "https://example.com/archive.tar.gz",
 		},
 		{
+			name:     "GitHub release binary unchanged",
+			uri:      "https://github.com/owner/repo/releases/download/v1/tool-linux-amd64",
+			expected: "https://github.com/owner/repo/releases/download/v1/tool-linux-amd64",
+		},
+		{
+			name:     "GitHub raw content unchanged",
+			uri:      "https://raw.githubusercontent.com/owner/repo/main/file.tf",
+			expected: "https://raw.githubusercontent.com/owner/repo/main/file.tf",
+		},
+		{
 			name:     "empty URI",
 			uri:      "",
 			expected: "",
@@ -396,12 +406,37 @@ func TestIsS3URI(t *testing.T) {
 }
 
 func TestIsNonGitHTTPURI(t *testing.T) {
-	assert.True(t, IsNonGitHTTPURI("https://example.com/archive.tar.gz"))
-	assert.True(t, IsNonGitHTTPURI("https://example.com/archive.zip"))
-	assert.True(t, IsNonGitHTTPURI("http://example.com/file.tgz"))
-	assert.False(t, IsNonGitHTTPURI("https://github.com/owner/repo.git"))
-	assert.False(t, IsNonGitHTTPURI("github.com/owner/repo"))
-	assert.False(t, IsNonGitHTTPURI(""))
+	tests := []struct {
+		name     string
+		uri      string
+		expected bool
+	}{
+		// Archive extension cases.
+		{name: "tar.gz archive", uri: "https://example.com/archive.tar.gz", expected: true},
+		{name: "zip archive", uri: "https://example.com/archive.zip", expected: true},
+		{name: "tgz archive", uri: "http://example.com/file.tgz", expected: true},
+		// Known-host file download patterns.
+		{name: "GitHub release binary", uri: "https://github.com/owner/repo/releases/download/v1.0/tool-linux-amd64", expected: true},
+		{name: "GitHub raw subdomain", uri: "https://raw.githubusercontent.com/owner/repo/main/providers.tf", expected: true},
+		{name: "GitHub raw path", uri: "https://github.com/owner/repo/raw/main/file.tf", expected: true},
+		{name: "GitLab raw", uri: "https://gitlab.com/owner/repo/-/raw/main/file.tf", expected: true},
+		{name: "GitLab archive path", uri: "https://gitlab.com/owner/repo/-/archive/main/repo-main.tar.gz", expected: true},
+		{name: "Bitbucket downloads", uri: "https://bitbucket.org/owner/repo/downloads/binary-v1.0", expected: true},
+		// Should NOT match - regular Git repository URLs.
+		{name: "GitHub repo with .git", uri: "https://github.com/owner/repo.git", expected: false},
+		{name: "GitHub repo no extension", uri: "https://github.com/owner/repo", expected: false},
+		{name: "GitLab repo", uri: "https://gitlab.com/owner/repo", expected: false},
+		{name: "Bitbucket repo", uri: "https://bitbucket.org/owner/repo", expected: false},
+		// Should NOT match - non-HTTP.
+		{name: "bare domain", uri: "github.com/owner/repo", expected: false},
+		{name: "empty string", uri: "", expected: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, IsNonGitHTTPURI(tt.uri), "IsNonGitHTTPURI(%q)", tt.uri)
+		})
+	}
 }
 
 func TestSanitizeFileName(t *testing.T) {
