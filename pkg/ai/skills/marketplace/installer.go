@@ -124,7 +124,7 @@ func (i *Installer) installSingleSkill(tempDir string, sourceInfo *SourceInfo, o
 	// If force reinstall, remove existing installation.
 	if opts.Force {
 		if err := os.RemoveAll(installPath); err != nil {
-			log.Warn(fmt.Sprintf("Failed to remove existing installation: %v", err))
+			log.Warnf("Failed to remove existing installation: %v", err)
 		}
 	}
 
@@ -183,7 +183,7 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		skillDir := filepath.Dir(skillMDPath)
 		metadata, err := ParseSkillMetadata(skillMDPath)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Skipping invalid skill at %s: %v", skillMDPath, err))
+			log.Warnf("Skipping invalid skill at %s: %v", skillMDPath, err)
 			continue
 		}
 
@@ -223,7 +223,7 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		// If force reinstall, remove existing.
 		if opts.Force {
 			if err := os.RemoveAll(installPath); err != nil {
-				log.Warn(fmt.Sprintf("Failed to remove existing installation for %s: %v", skillName, err))
+				log.Warnf("Failed to remove existing installation for %s: %v", skillName, err)
 			}
 			_ = i.localRegistry.Remove(skillName)
 		} else {
@@ -236,12 +236,12 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 
 		// Copy skill directory to install path.
 		if err := os.MkdirAll(installPath, 0o755); err != nil {
-			log.Warn(fmt.Sprintf("Failed to create directory for %s: %v", skillName, err))
+			log.Warnf("Failed to create directory for %s: %v", skillName, err)
 			continue
 		}
 
 		if err := copyDir(skill.dir, installPath); err != nil {
-			log.Warn(fmt.Sprintf("Failed to install skill %s: %v", skillName, err))
+			log.Warnf("Failed to install skill %s: %v", skillName, err)
 			continue
 		}
 
@@ -259,7 +259,7 @@ func (i *Installer) installMultiSkillPackage(skillMDPaths []string, sourceInfo *
 		}
 
 		if err := i.localRegistry.Add(installedSkill); err != nil {
-			log.Warn(fmt.Sprintf("Failed to register skill %s: %v", skillName, err))
+			log.Warnf("Failed to register skill %s: %v", skillName, err)
 			continue
 		}
 
@@ -365,14 +365,14 @@ func (i *Installer) LoadInstalledSkills(registry *skills.Registry) error {
 		skillMDPath := filepath.Join(installed.Path, "SKILL.md")
 		metadata, err := ParseSkillMetadata(skillMDPath)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Failed to load community skill %q: %v", installed.Name, err))
+			log.Warnf("Failed to load community skill %q: %v", installed.Name, err)
 			continue
 		}
 
 		// Read prompt content with references.
 		promptContent, err := readSkillPromptWithReferences(installed.Path, metadata)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Failed to read prompt for skill %q: %v", installed.Name, err))
+			log.Warnf("Failed to read prompt for skill %q: %v", installed.Name, err)
 			continue
 		}
 
@@ -390,7 +390,7 @@ func (i *Installer) LoadInstalledSkills(registry *skills.Registry) error {
 
 		// Register.
 		if err := registry.Register(skill); err != nil {
-			log.Warn(fmt.Sprintf("Failed to register community skill %q: %v", installed.Name, err))
+			log.Warnf("Failed to register community skill %q: %v", installed.Name, err)
 			continue
 		}
 	}
@@ -411,7 +411,7 @@ func readSkillPromptWithReferences(skillDir string, metadata *SkillMetadata) (st
 		refPath := filepath.Join(skillDir, ref)
 		refContent, err := os.ReadFile(refPath)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Failed to read reference file %q: %v", ref, err))
+			log.Warnf("Failed to read reference file %q: %v", ref, err)
 			continue
 		}
 

@@ -157,7 +157,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 		glamour.WithEmoji(),
 	)
 	if err != nil {
-		log.Debug(fmt.Sprintf("Failed to create cached markdown renderer: %v", err))
+		log.Debugf("Failed to create cached markdown renderer: %v", err)
 		// Continue without renderer - will fallback to plain text
 	}
 
@@ -248,7 +248,7 @@ func NewChatModel(client ai.Client, atmosConfig *schema.AtmosConfiguration, mana
 	// Load existing messages from session if available.
 	if manager != nil && sess != nil {
 		if err := model.loadSessionMessages(); err != nil {
-			log.Debug(fmt.Sprintf("Failed to load session messages: %v", err))
+			log.Debugf("Failed to load session messages: %v", err)
 		}
 	}
 
@@ -417,7 +417,7 @@ func (m *ChatModel) handleWindowResize(msg tea.WindowSizeMsg) {
 		glamour.WithEmoji(),
 	)
 	if err != nil {
-		log.Debug(fmt.Sprintf("Failed to recreate markdown renderer on resize: %v", err))
+		log.Debugf("Failed to recreate markdown renderer on resize: %v", err)
 	} else {
 		m.markdownRenderer = renderer
 		m.renderedMessages = make([]string, 0) // Clear cache
@@ -700,7 +700,7 @@ func (m *ChatModel) handleProviderSwitched(msg providerSwitchedMsg) {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := manager.UpdateSession(ctx, sess); err != nil {
-					log.Debug(fmt.Sprintf("Failed to persist provider switch in session: %v", err))
+					log.Debugf("Failed to persist provider switch in session: %v", err)
 				}
 			}()
 		}
@@ -902,7 +902,7 @@ func (m *ChatModel) addMessage(role, content string) {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
 			if err := manager.AddMessage(ctx, sessionID, role, content); err != nil {
-				log.Debug(fmt.Sprintf("Failed to save message to session: %v", err))
+				log.Debugf("Failed to save message to session: %v", err)
 			}
 		}()
 	}
@@ -1005,7 +1005,7 @@ func (m *ChatModel) renderMarkdown(content string) string {
 	rendered, err := m.markdownRenderer.Render(content)
 	if err != nil {
 		// Log the error and content length for debugging.
-		log.Debug(fmt.Sprintf("Failed to render markdown (content length: %d): %v", len(content), err))
+		log.Debugf("Failed to render markdown (content length: %d): %v", len(content), err)
 		// Fallback to plain text if rendering fails.
 		return lipgloss.NewStyle().
 			PaddingLeft(2).
@@ -1417,7 +1417,7 @@ func (m *ChatModel) executeToolCalls(ctx context.Context, toolCalls []aiTypes.To
 	results := make([]*tools.Result, len(toolCalls))
 
 	for i, toolCall := range toolCalls {
-		log.Debug(fmt.Sprintf("Executing tool: %s with params: %v", toolCall.Name, toolCall.Input))
+		log.Debugf("Executing tool: %s with params: %v", toolCall.Name, toolCall.Input)
 
 		// Update UI status if possible.
 		if m.program != nil {

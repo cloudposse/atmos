@@ -72,7 +72,7 @@ func (t *GetTemplateContextTool) Execute(ctx context.Context, params map[string]
 		}, nil
 	}
 
-	log.Debug(fmt.Sprintf("Getting template context for component '%s' in stack '%s'", component, stack))
+	log.Debugf("Getting template context for component '%s' in stack '%s'", component, stack)
 
 	// Get component configuration which contains the template context.
 	componentConfig, err := e.ExecuteDescribeComponent(&e.ExecuteDescribeComponentParams{

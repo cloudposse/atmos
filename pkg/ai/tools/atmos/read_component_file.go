@@ -60,7 +60,7 @@ func (t *ReadComponentFileTool) Execute(ctx context.Context, params map[string]i
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	log.Debug(fmt.Sprintf("Reading component file: %s/%s", componentType, filePath))
+	log.Debugf("Reading component file: %s/%s", componentType, filePath)
 
 	cleanPath, err := t.resolveAndValidateComponentPath(componentType, filePath)
 	if err != nil {

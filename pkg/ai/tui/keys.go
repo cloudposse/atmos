@@ -496,7 +496,7 @@ func (m *ChatModel) handleSkillSelectKeys(msg tea.KeyMsg) tea.Cmd {
 			// Load skill's system prompt from file (if configured).
 			systemPrompt, err := selectedSkill.LoadSystemPrompt()
 			if err != nil {
-				log.Warn(fmt.Sprintf("Failed to load system prompt for skill %q: %v, using default", selectedSkill.Name, err))
+				log.Warnf("Failed to load system prompt for skill %q: %v, using default", selectedSkill.Name, err)
 				// Keep the existing SystemPrompt as fallback.
 			} else {
 				// Update skill with loaded prompt.
@@ -512,7 +512,7 @@ func (m *ChatModel) handleSkillSelectKeys(msg tea.KeyMsg) tea.Cmd {
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				defer cancel()
 				if err := m.manager.UpdateSession(ctx, m.sess); err != nil {
-					log.Debug(fmt.Sprintf("Failed to persist skill to session: %v", err))
+					log.Debugf("Failed to persist skill to session: %v", err)
 				}
 			}
 

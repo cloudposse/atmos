@@ -112,14 +112,14 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				sess, err = manager.GetSessionByName(ctx, sessionName)
 				if err != nil {
 					// Session doesn't exist, create new one.
-					log.Debug(fmt.Sprintf("Session '%s' not found, creating new session", sessionName))
+					log.Debugf("Session '%s' not found, creating new session", sessionName)
 					sess, err = manager.CreateSession(ctx, sessionName, getModelFromConfig(&atmosConfig), getProviderFromConfig(&atmosConfig), "", nil)
 					if err != nil {
 						return fmt.Errorf("failed to create session: %w", err)
 					}
-					log.Debug(fmt.Sprintf("Created new session: %s", sessionName))
+					log.Debugf("Created new session: %s", sessionName)
 				} else {
-					log.Debug(fmt.Sprintf("Resumed session: %s (%d messages)", sess.Name, 0))
+					log.Debugf("Resumed session: %s (%d messages)", sess.Name, 0)
 				}
 			} else {
 				// Create anonymous session with timestamp.
@@ -128,7 +128,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 				if err != nil {
 					return fmt.Errorf("failed to create session: %w", err)
 				}
-				log.Debug(fmt.Sprintf("Created new session: %s", sessionName))
+				log.Debugf("Created new session: %s", sessionName)
 			}
 		}
 
@@ -137,7 +137,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 		if atmosConfig.Settings.AI.Tools.Enabled {
 			_, executor, err = initializeAIToolsAndExecutor(&atmosConfig)
 			if err != nil {
-				log.Warn(fmt.Sprintf("Failed to initialize AI tools: %v", err))
+				log.Warnf("Failed to initialize AI tools: %v", err)
 			}
 		}
 
@@ -162,7 +162,7 @@ The AI assistant has access to your current Atmos configuration and can help wit
 			// Load instructions (creates default if missing and CreateIfMiss is true).
 			_, err := memoryMgr.Load(ctx)
 			if err != nil {
-				log.Warn(fmt.Sprintf("Failed to load project instructions: %v", err))
+				log.Warnf("Failed to load project instructions: %v", err)
 				memoryMgr = nil // Disable instructions on error
 			} else {
 				log.Debug("Project instructions loaded successfully")

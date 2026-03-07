@@ -48,7 +48,7 @@ func (s *Server) registerTools() {
 
 	for _, tool := range toolsList {
 		toolName := tool.Name()
-		log.Debug(fmt.Sprintf("Registering MCP tool: %s", toolName))
+		log.Debugf("Registering MCP tool: %s", toolName)
 
 		// Create a closure to capture the tool name for the handler.
 		toolNameCopy := toolName
@@ -79,12 +79,12 @@ func (s *Server) registerTools() {
 		}, handler)
 	}
 
-	log.Debug(fmt.Sprintf("Registered %d MCP tools", len(toolsList)))
+	log.Debugf("Registered %d MCP tools", len(toolsList))
 }
 
 // handleToolCall executes a tool and returns the result in SDK format.
 func (s *Server) handleToolCall(ctx context.Context, name string, arguments map[string]interface{}) (*mcpsdk.CallToolResult, error) {
-	log.Info(fmt.Sprintf("Executing tool: %s", name))
+	log.Debugf("Executing tool: %s", name)
 
 	// Execute the tool using our adapter.
 	result, err := s.adapter.ExecuteTool(ctx, name, arguments)

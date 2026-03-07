@@ -21,6 +21,7 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/mcp"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 const (
@@ -86,7 +87,7 @@ func init() {
 }
 
 func executeMCPServer(cmd *cobra.Command, args []string) error {
-	defer log.Info("MCP server stopped")
+	defer ui.Info("MCP server stopped")
 
 	// Get and validate transport flags.
 	config, err := getTransportConfig(cmd)
@@ -174,7 +175,7 @@ func setupMCPServer() (*mcp.Server, error) {
 func waitForShutdown(sigChan chan os.Signal, errChan chan error, cancel context.CancelFunc) error {
 	select {
 	case sig := <-sigChan:
-		log.Info(fmt.Sprintf("Received signal: %v", sig))
+		ui.Infof("Received signal: %v", sig)
 		cancel()
 		return nil
 	case err := <-errChan:
@@ -215,20 +216,20 @@ func startHTTPServer(server *mcp.Server, host string, port int, errChan chan err
 	}()
 }
 
-// logServerInfo logs the server startup information.
+// logServerInfo displays the server startup information to the user.
 func logServerInfo(server *mcp.Server, transportType, addr string) {
-	log.Info("Starting Atmos MCP server...")
+	ui.Info("Starting Atmos MCP server...")
 	serverInfo := server.ServerInfo()
-	log.Info(fmt.Sprintf("Server: %s v%s", serverInfo.Name, serverInfo.Version))
-	log.Info(fmt.Sprintf("Protocol: MCP %s", mcpProtocolVersion))
+	ui.Writef("  Server: %s v%s\n", serverInfo.Name, serverInfo.Version)
+	ui.Writef("  Protocol: MCP %s\n", mcpProtocolVersion)
 	if transportType == transportHTTP {
-		log.Info(fmt.Sprintf("Transport: HTTP (listening on %s)", addr))
-		log.Info(fmt.Sprintf("  - SSE endpoint: http://%s/sse", addr))
-		log.Info(fmt.Sprintf("  - Message endpoint: http://%s/message", addr))
+		ui.Writef("  Transport: HTTP (listening on %s)\n", addr)
+		ui.Writef("    - SSE endpoint: http://%s/sse\n", addr)
+		ui.Writef("    - Message endpoint: http://%s/message\n", addr)
 	} else {
-		log.Info("Transport: stdio")
+		ui.Writeln("  Transport: stdio")
 	}
-	log.Info("Waiting for client connection...")
+	ui.Info("Waiting for client connection...")
 }
 
 // initializeAIComponents initializes the AI tool registry and executor.
@@ -248,30 +249,30 @@ func initializeAIComponents(atmosConfig *schema.AtmosConfiguration) (interface{}
 
 	// Register Atmos tools.
 	if err := registry.Register(atmosTools.NewDescribeComponentTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register describe_component tool: %v", err))
+		ui.Warningf("Failed to register describe_component tool: %v", err)
 	}
 	if err := registry.Register(atmosTools.NewListStacksTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register list_stacks tool: %v", err))
+		ui.Warningf("Failed to register list_stacks tool: %v", err)
 	}
 	if err := registry.Register(atmosTools.NewValidateStacksTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register validate_stacks tool: %v", err))
+		ui.Warningf("Failed to register validate_stacks tool: %v", err)
 	}
 
 	// Register file access tools (read/write for components and stacks).
 	if err := registry.Register(atmosTools.NewReadComponentFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register read_component_file tool: %v", err))
+		ui.Warningf("Failed to register read_component_file tool: %v", err)
 	}
 	if err := registry.Register(atmosTools.NewReadStackFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register read_stack_file tool: %v", err))
+		ui.Warningf("Failed to register read_stack_file tool: %v", err)
 	}
 	if err := registry.Register(atmosTools.NewWriteComponentFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register write_component_file tool: %v", err))
+		ui.Warningf("Failed to register write_component_file tool: %v", err)
 	}
 	if err := registry.Register(atmosTools.NewWriteStackFileTool(atmosConfig)); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register write_stack_file tool: %v", err))
+		ui.Warningf("Failed to register write_stack_file tool: %v", err)
 	}
 
-	log.Debug(fmt.Sprintf("Registered %d tools", registry.Count()))
+	log.Debugf("Registered %d tools", registry.Count())
 
 	// Create permission checker with MCP-appropriate settings.
 	// For MCP server, use a non-interactive prompter since stdio is used for protocol.

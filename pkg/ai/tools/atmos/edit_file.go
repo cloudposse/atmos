@@ -195,7 +195,7 @@ func (t *EditFileTool) Execute(ctx context.Context, params map[string]interface{
 		}, nil
 	}
 
-	log.Debug(fmt.Sprintf("Edited file: %s - %s", filePath, operationDesc))
+	log.Debugf("Edited file: %s - %s", filePath, operationDesc)
 
 	return &tools.Result{
 		Success: true,

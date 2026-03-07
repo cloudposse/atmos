@@ -66,7 +66,7 @@ func (t *ExecuteAtmosCommandTool) Execute(ctx context.Context, params map[string
 		}, nil
 	}
 
-	log.Debug(fmt.Sprintf("Executing Atmos command: atmos %s", command))
+	log.Debugf("Executing Atmos command: atmos %s", command)
 
 	// Split command into args.
 	args := strings.Fields(command)

@@ -95,7 +95,7 @@ func (t *SearchFilesTool) Execute(ctx context.Context, params map[string]interfa
 		caseSensitive = cs
 	}
 
-	log.Debug(fmt.Sprintf("Searching for pattern '%s' in path '%s' with file pattern '%s'", pattern, searchPath, filePattern))
+	log.Debugf("Searching for pattern '%s' in path '%s' with file pattern '%s'", pattern, searchPath, filePattern)
 
 	// Resolve search path.
 	absolutePath := filepath.Join(t.atmosConfig.BasePath, searchPath)

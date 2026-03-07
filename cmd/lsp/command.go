@@ -8,9 +8,9 @@ import (
 
 	errUtils "github.com/cloudposse/atmos/errors"
 	cfg "github.com/cloudposse/atmos/pkg/config"
-	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/lsp/server"
 	"github.com/cloudposse/atmos/pkg/schema"
+	"github.com/cloudposse/atmos/pkg/ui"
 )
 
 // LSPServer defines the interface for LSP server operations.
@@ -113,10 +113,10 @@ func executeLSPStart(_ *cobra.Command, transport, address string) error {
 	}
 
 	// Log server start.
-	log.Info("Starting Atmos LSP server...")
-	log.Info(fmt.Sprintf("Transport: %s", transport))
+	ui.Info("Starting Atmos LSP server...")
+	ui.Writef("  Transport: %s\n", transport)
 	if transport != "stdio" {
-		log.Info(fmt.Sprintf("Address: %s", address))
+		ui.Writef("  Address: %s\n", address)
 	}
 
 	// Run server based on transport type.
@@ -125,11 +125,11 @@ func executeLSPStart(_ *cobra.Command, transport, address string) error {
 		return lspServer.RunStdio()
 
 	case "tcp":
-		log.Info(fmt.Sprintf("Listening on TCP %s", address))
+		ui.Infof("Listening on TCP %s", address)
 		return lspServer.RunTCP(address)
 
 	case "websocket", "ws":
-		log.Info(fmt.Sprintf("Listening on WebSocket %s", address))
+		ui.Infof("Listening on WebSocket %s", address)
 		return lspServer.RunWebSocket(address)
 
 	default:

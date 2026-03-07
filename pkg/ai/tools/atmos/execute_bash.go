@@ -94,7 +94,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 	// Security check: ensure command is not blacklisted.
 	baseCommand := args[0]
 	if blacklistedCommands[baseCommand] {
-		log.Warn(fmt.Sprintf("Blocked blacklisted command: %s", baseCommand))
+		log.Warnf("Blocked blacklisted command: %s", baseCommand)
 		return &tools.Result{
 			Success: false,
 			Error:   fmt.Errorf("command '%s' is blacklisted for security reasons", baseCommand),
@@ -103,7 +103,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 
 	// Also check for mkfs variants (mkfs.ext4, mkfs.xfs, etc.).
 	if strings.HasPrefix(baseCommand, "mkfs.") {
-		log.Warn(fmt.Sprintf("Blocked mkfs variant command: %s", baseCommand))
+		log.Warnf("Blocked mkfs variant command: %s", baseCommand)
 		return &tools.Result{
 			Success: false,
 			Error:   fmt.Errorf("command '%s' is blacklisted for security reasons", baseCommand),
@@ -114,7 +114,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 	if len(args) >= 2 && baseCommand == "rm" {
 		for _, arg := range args[1:] {
 			if strings.Contains(arg, "-rf") || strings.Contains(arg, "-fr") || arg == "-r" || arg == "-f" {
-				log.Warn(fmt.Sprintf("Blocked dangerous rm command: %s", command))
+				log.Warnf("Blocked dangerous rm command: %s", command)
 				return &tools.Result{
 					Success: false,
 					Error:   fmt.Errorf("rm with recursive or force flags is not allowed"),
@@ -134,7 +134,7 @@ func (t *ExecuteBashCommandTool) Execute(ctx context.Context, params map[string]
 		}
 	}
 
-	log.Debug(fmt.Sprintf("Executing shell command: %s (in %s)", command, workingDir))
+	log.Debugf("Executing shell command: %s (in %s)", command, workingDir)
 
 	// Create the command.
 	// Use sh -c to properly handle pipes, redirects, and other shell features.

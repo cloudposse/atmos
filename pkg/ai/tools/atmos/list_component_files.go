@@ -82,7 +82,7 @@ func (t *ListComponentFilesTool) Execute(ctx context.Context, params map[string]
 		filePattern = fp
 	}
 
-	log.Debug(fmt.Sprintf("Listing files in component: %s/%s with pattern '%s'", componentType, componentPath, filePattern))
+	log.Debugf("Listing files in component: %s/%s with pattern '%s'", componentType, componentPath, filePattern)
 
 	// Get component base path.
 	basePath, err := t.getComponentBasePath(componentType)

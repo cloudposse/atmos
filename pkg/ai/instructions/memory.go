@@ -182,7 +182,7 @@ func (m *Manager) Load(ctx context.Context) (*ProjectInstructions, error) {
 		Enabled:      true,
 	}
 
-	log.Debug(fmt.Sprintf("Loaded project instructions from %s (%d sections)", filePath, len(sections)))
+	log.Debugf("Loaded project instructions from %s (%d sections)", filePath, len(sections))
 
 	return m.memory, nil
 }
@@ -203,7 +203,7 @@ func (m *Manager) ensureFileExists(ctx context.Context, filePath string) (os.Fil
 		return nil, fmt.Errorf("%w: %s", errUtils.ErrAIProjectInstructionsNotFound, filePath)
 	}
 
-	log.Debug(fmt.Sprintf("ATMOS.md not found, creating template at %s", filePath))
+	log.Debugf("ATMOS.md not found, creating template at %s", filePath)
 	if err := m.CreateDefault(ctx); err != nil {
 		return nil, fmt.Errorf("failed to create default ATMOS.md: %w", err)
 	}
@@ -270,7 +270,7 @@ func (m *Manager) UpdateSection(ctx context.Context, sectionKey, content string,
 		if err := m.Save(ctx); err != nil {
 			return fmt.Errorf("failed to save ATMOS.md: %w", err)
 		}
-		log.Debug(fmt.Sprintf("Updated section '%s' in ATMOS.md", sectionKey))
+		log.Debugf("Updated section '%s' in ATMOS.md", sectionKey)
 	}
 
 	return nil
@@ -315,7 +315,7 @@ func (m *Manager) CreateDefault(ctx context.Context) error {
 		return fmt.Errorf("failed to write default ATMOS.md: %w", err)
 	}
 
-	log.Info(fmt.Sprintf("Created default ATMOS.md at %s", filePath))
+	log.Infof("Created default ATMOS.md at %s", filePath)
 
 	return nil
 }

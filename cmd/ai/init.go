@@ -1,8 +1,6 @@
 package ai
 
 import (
-	"fmt"
-
 	errUtils "github.com/cloudposse/atmos/errors"
 	"github.com/cloudposse/atmos/pkg/ai/tools"
 	atmosTools "github.com/cloudposse/atmos/pkg/ai/tools/atmos"
@@ -26,15 +24,15 @@ func initializeAIToolsAndExecutor(atmosConfig *schema.AtmosConfiguration) (*tool
 	// Register all Atmos tools (components, stacks, validation, etc.).
 	// Pass nil for LSP manager as it's not initialized in the command layer.
 	if err := atmosTools.RegisterTools(registry, atmosConfig, nil); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register Atmos tools: %v", err))
+		log.Warnf("Failed to register Atmos tools: %v", err)
 	}
 
-	log.Debug(fmt.Sprintf("Registered %d tools", registry.Count()))
+	log.Debugf("Registered %d tools", registry.Count())
 
 	// Initialize permission cache for persistent decisions.
 	permCache, err := permission.NewPermissionCache(atmosConfig.BasePath)
 	if err != nil {
-		log.Warn(fmt.Sprintf("Failed to initialize permission cache: %v", err))
+		log.Warnf("Failed to initialize permission cache: %v", err)
 		// Continue without cache - will prompt every time.
 		permCache = nil
 	}
@@ -75,10 +73,10 @@ func initializeAIReadOnlyTools(atmosConfig *schema.AtmosConfiguration) (*tools.R
 	// Create tool registry with only read-only tools.
 	registry := tools.NewRegistry()
 	if err := atmosTools.RegisterReadOnlyTools(registry, atmosConfig); err != nil {
-		log.Warn(fmt.Sprintf("Failed to register read-only Atmos tools: %v", err))
+		log.Warnf("Failed to register read-only Atmos tools: %v", err)
 	}
 
-	log.Debug(fmt.Sprintf("Registered %d read-only tools", registry.Count()))
+	log.Debugf("Registered %d read-only tools", registry.Count())
 
 	// Read-only tools don't require permissions, but create a permissive checker just in case.
 	permConfig := &permission.Config{

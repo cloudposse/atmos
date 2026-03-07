@@ -65,7 +65,7 @@ func (t *WriteStackFileTool) Execute(ctx context.Context, params map[string]inte
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	log.Debug(fmt.Sprintf("Writing stack file: %s", filePath))
+	log.Debugf("Writing stack file: %s", filePath)
 
 	cleanPath, err := t.resolveAndValidateStackWritePath(filePath)
 	if err != nil {

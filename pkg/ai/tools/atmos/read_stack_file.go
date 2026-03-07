@@ -53,7 +53,7 @@ func (t *ReadStackFileTool) Execute(ctx context.Context, params map[string]inter
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	log.Debug(fmt.Sprintf("Reading stack file: %s", filePath))
+	log.Debugf("Reading stack file: %s", filePath)
 
 	cleanPath, err := t.resolveAndValidateStackPath(filePath)
 	if err != nil {

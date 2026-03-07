@@ -65,7 +65,7 @@ func (t *DescribeAffectedTool) Execute(ctx context.Context, params map[string]in
 		verbose = v
 	}
 
-	log.Debug(fmt.Sprintf("Describing affected components (ref: %s, verbose: %v)", ref, verbose))
+	log.Debugf("Describing affected components (ref: %s, verbose: %v)", ref, verbose)
 
 	// Execute describe affected command.
 	affected, _, _, _, err := e.ExecuteDescribeAffectedWithTargetRepoPath(

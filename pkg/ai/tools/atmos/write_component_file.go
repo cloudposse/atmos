@@ -72,7 +72,7 @@ func (t *WriteComponentFileTool) Execute(ctx context.Context, params map[string]
 		return &tools.Result{Success: false, Error: err}, err
 	}
 
-	log.Debug(fmt.Sprintf("Writing component file: %s/%s", componentType, filePath))
+	log.Debugf("Writing component file: %s/%s", componentType, filePath)
 
 	cleanPath, err := t.resolveAndValidateComponentWritePath(componentType, filePath)
 	if err != nil {

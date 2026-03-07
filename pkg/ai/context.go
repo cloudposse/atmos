@@ -75,11 +75,11 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 		discoverer, err := aiContext.NewDiscoverer(atmosConfig.BasePath, atmosConfig.Settings.AI.Context)
 		if err != nil {
-			log.Warn(fmt.Sprintf("Failed to create context discoverer: %v", err))
+			log.Warnf("Failed to create context discoverer: %v", err)
 		} else {
 			result, err := discoverer.Discover()
 			if err != nil {
-				log.Warn(fmt.Sprintf("Failed to discover context files: %v", err))
+				log.Warnf("Failed to discover context files: %v", err)
 			} else if len(result.Files) > 0 {
 				// Use discovered files as context.
 				discoveredContext := aiContext.FormatFilesContext(result)
@@ -88,9 +88,9 @@ func GatherStackContext(atmosConfig *schema.AtmosConfiguration) (string, error) 
 
 					// Show file list if configured.
 					if atmosConfig.Settings.AI.Context.ShowFiles {
-						log.Info(fmt.Sprintf("Auto-discovered %d files for context", len(result.Files)))
+						log.Infof("Auto-discovered %d files for context", len(result.Files))
 						for _, file := range result.Files {
-							log.Debug(fmt.Sprintf("  - %s (%d bytes)", file.RelativePath, file.Size))
+							log.Debugf("  - %s (%d bytes)", file.RelativePath, file.Size)
 						}
 					}
 

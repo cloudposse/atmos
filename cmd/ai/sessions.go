@@ -223,7 +223,7 @@ func sessionsToListData(ctx context.Context, manager *session.Manager, sessions 
 	for _, sess := range sessions {
 		count, countErr := manager.GetMessageCount(ctx, sess.ID)
 		if countErr != nil {
-			log.Warn(fmt.Sprintf("Failed to get message count for session %s: %v", sess.ID, countErr))
+			log.Warnf("Failed to get message count for session %s: %v", sess.ID, countErr)
 			count = 0
 		}
 		data = append(data, map[string]any{
@@ -302,7 +302,7 @@ func cleanSessionsCommand(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("invalid duration format '%s': %w", olderThanStr, err)
 	}
 
-	log.Debug(fmt.Sprintf("Cleaning sessions older than %d days", retentionDays))
+	log.Debugf("Cleaning sessions older than %d days", retentionDays)
 
 	manager, cleanup, err := initSessionManager()
 	if err != nil {
@@ -376,7 +376,7 @@ func exportSessionCommand(cmd *cobra.Command, args []string) error {
 	includeContext := v.GetBool(contextFlag)
 	includeMetadata := v.GetBool("metadata")
 
-	log.Debug(fmt.Sprintf("Exporting session '%s' to '%s'", sessionName, outputPath))
+	log.Debugf("Exporting session '%s' to '%s'", sessionName, outputPath)
 
 	manager, cleanup, err := initSessionManager()
 	if err != nil {
@@ -416,7 +416,7 @@ func importSessionCommand(cmd *cobra.Command, args []string) error {
 	overwrite := v.GetBool("overwrite")
 	includeContext := v.GetBool(contextFlag)
 
-	log.Debug(fmt.Sprintf("Importing session from '%s'", checkpointPath))
+	log.Debugf("Importing session from '%s'", checkpointPath)
 
 	manager, cleanup, err := initSessionManager()
 	if err != nil {

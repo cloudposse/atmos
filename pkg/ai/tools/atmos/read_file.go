@@ -58,7 +58,7 @@ func (t *ReadFileTool) Execute(ctx context.Context, params map[string]interface{
 		}, nil
 	}
 
-	log.Debug(fmt.Sprintf("Reading file: %s", filePath))
+	log.Debugf("Reading file: %s", filePath)
 
 	// Resolve to absolute path.
 	absolutePath := filePath

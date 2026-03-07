@@ -86,7 +86,7 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 				// Load skill's system prompt from file (if configured).
 				systemPrompt, promptErr := skill.LoadSystemPrompt()
 				if promptErr != nil {
-					log.Debug(fmt.Sprintf("Failed to load system prompt for skill %q: %v, using default", skill.Name, promptErr))
+					log.Debugf("Failed to load system prompt for skill %q: %v, using default", skill.Name, promptErr)
 					// Keep the existing SystemPrompt as fallback.
 				} else {
 					// Update skill with loaded prompt.
@@ -95,7 +95,7 @@ func (m *ChatModel) handleSessionSwitched(msg sessionSwitchedMsg) {
 				m.currentSkill = skill
 			} else {
 				// If skill not found, log and fall back to default.
-				log.Debug(fmt.Sprintf("Skill %q from session not found, using current skill", msg.session.Skill))
+				log.Debugf("Skill %q from session not found, using current skill", msg.session.Skill)
 			}
 		}
 
