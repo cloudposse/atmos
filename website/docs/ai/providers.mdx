@@ -444,11 +444,7 @@ export AZURE_OPENAI_API_KEY="..."
 </Terminal>
 
 :::warning Azure-Specific Configuration
-The `model` field must be your **deployment name** from Azure Portal, not the OpenAI model name. Both `base_url` (your resource endpoint) and `api_version` are required. See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for available API versions.
-:::
-
-:::info Max Tokens
-Like OpenAI, Azure's newer deployments (gpt-5, o1-preview) use `max_completion_tokens` internally. Atmos handles this automatically.
+The `model` field must be your **deployment name** from Azure Portal, not the OpenAI model name. Both `base_url` (your resource endpoint) and `api_version` are required. Like OpenAI, Azure's newer deployments (gpt-5, o1-preview) use `max_completion_tokens` internally -- Atmos handles this automatically. See [Azure OpenAI Documentation](https://learn.microsoft.com/en-us/azure/ai-services/openai/) for available API versions.
 :::
 
 ## Multi-Provider Configuration
