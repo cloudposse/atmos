@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"strings"
 	"time"
@@ -20,6 +21,9 @@ import (
 	"github.com/cloudposse/atmos/pkg/utils"
 )
 
+//go:embed markdown/atmos_ai_ask.md
+var askLongMarkdown string
+
 // askParser handles flag parsing with Viper precedence for the ask command.
 var askParser *flags.StandardParser
 
@@ -27,18 +31,8 @@ var askParser *flags.StandardParser
 var askCmd = &cobra.Command{
 	Use:   "ask [question]",
 	Short: "Ask the AI assistant a question",
-	Long: `Ask the AI assistant a specific question and get a response.
-
-This command allows you to ask questions directly from the command line without
-entering an interactive chat session. The AI has access to your Atmos configuration
-and can provide context-aware responses.
-
-Examples:
-  atmos ai ask "What components are available?"
-  atmos ai ask "How do I validate my stack configuration?"
-  atmos ai ask "Explain the difference between components and stacks"
-  atmos ai ask "Describe the vpc component in the dev stack"`,
-	Args: cobra.MinimumNArgs(1),
+	Long:  askLongMarkdown,
+	Args:  cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()

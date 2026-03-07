@@ -1,0 +1,207 @@
+---
+title: AI Skills
+sidebar_label: skills
+sidebar_class_name: command
+description: Configure custom AI skills in the `settings.ai.skills` section of your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `settings.ai.skills` section defines custom AI skills with specialized system prompts, tool permissions,
+and behavior for different tasks.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_skill: "general"
+    skills:
+      cost-optimizer:
+        display_name: "Cost Optimizer"
+        description: "Analyzes infrastructure for cost savings"
+        category: "analysis"
+        system_prompt: |
+          You are a cost optimization expert for Atmos infrastructure.
+          Focus on identifying overprovisioned resources and rightsizing.
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_list_stacks
+          - read_stack_file
+          - read_component_file
+        restricted_tools: []
+```
+</File>
+
+## Skill Schema
+
+Each skill in the `skills` map supports the following settings:
+
+<dl>
+  <dt>`display_name`</dt>
+  <dd>**Required.** Human-readable name shown in the skill selector (Ctrl+A) and session metadata.</dd>
+
+  <dt>`description`</dt>
+  <dd>**Required.** Brief description of what the skill does. Shown in the skill selector below the display name.</dd>
+
+  <dt>`system_prompt`</dt>
+  <dd>**Required.** System prompt that defines the AI's behavior, expertise, and response style for this skill. Use YAML multi-line (`|`) for longer prompts.</dd>
+
+  <dt>`allowed_tools`</dt>
+  <dd>List of tools available when this skill is active (default: `[]`). An empty list means all tools are available. Use specific tool names to restrict access.</dd>
+
+  <dt>`restricted_tools`</dt>
+  <dd>List of tools that require user confirmation before execution, even if they are in `allowed_tools` (default: `[]`).</dd>
+
+  <dt>`category`</dt>
+  <dd>Skill category for organization: `general`, `analysis`, `refactor`, `security`, `validation`, or `optimization`.</dd>
+</dl>
+
+## Global Skill Settings
+
+<dl>
+  <dt>`default_skill`</dt>
+  <dd>Default skill to activate when starting a new chat session (default: `general`). Set at the `settings.ai` level.</dd>
+</dl>
+
+## Available Tools for Skills
+
+<dl>
+  <dt>Atmos Commands</dt>
+  <dd>`atmos_describe_component`, `atmos_describe_affected`, `atmos_describe_stacks`, `atmos_describe_config`, `atmos_list_stacks`, `atmos_list_components`, `atmos_validate_stacks`, `atmos_get_template_context`</dd>
+
+  <dt>File Operations</dt>
+  <dd>`read_file`, `edit_file`, `write_file`, `read_stack_file`, `read_component_file`, `list_component_files`, `search_files`</dd>
+
+  <dt>Execution</dt>
+  <dd>`execute_bash`, `execute_atmos_command`</dd>
+
+  <dt>Validation</dt>
+  <dd>`validate_file_lsp` (if LSP is enabled)</dd>
+</dl>
+
+## Tool Safety Patterns
+
+**Read-only skill** -- omit write and execute tools entirely:
+
+<File title="atmos.yaml">
+```yaml
+skills:
+  stack-analyst:
+    display_name: "Stack Analyst"
+    description: "Read-only stack analysis"
+    system_prompt: "You analyze stack configurations..."
+    allowed_tools:
+      - atmos_describe_component
+      - atmos_list_stacks
+      - read_file
+      - search_files
+    # No write/execute tools = read-only
+```
+</File>
+
+**Write with confirmation** -- allow edits but require approval:
+
+<File title="atmos.yaml">
+```yaml
+skills:
+  terraform-migrator:
+    display_name: "Terraform Migrator"
+    description: "Migrates components to newer versions"
+    system_prompt: "You are an expert in Terraform migrations..."
+    allowed_tools:
+      - read_file
+      - edit_file
+      - list_component_files
+      - execute_bash
+    restricted_tools:
+      - edit_file       # Require confirmation before editing
+      - execute_bash    # Require confirmation before executing
+```
+</File>
+
+## Custom Skill Examples
+
+### Cost Optimization Skill
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    skills:
+      cost-optimizer:
+        display_name: "Cost Optimizer"
+        description: "Analyzes infrastructure for cost savings opportunities"
+        category: "analysis"
+        system_prompt: |
+          You are a cost optimization expert for Atmos infrastructure.
+
+          FOCUS AREAS:
+          - Identify overprovisioned resources
+          - Suggest rightsizing opportunities
+          - Find unused or idle resources
+          - Recommend reserved instances
+
+          Always use tools to gather data before making recommendations.
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_describe_stacks
+          - atmos_list_stacks
+          - read_stack_file
+          - read_component_file
+          - read_file
+          - search_files
+```
+</File>
+
+### Compliance Auditor Skill
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    skills:
+      compliance-auditor:
+        display_name: "Compliance Auditor"
+        description: "Ensures infrastructure meets regulatory requirements"
+        category: "security"
+        system_prompt: |
+          You are a compliance expert for regulated industries (HIPAA, SOC2, PCI-DSS).
+
+          COMPLIANCE CHECKS:
+          - Data encryption (at rest and in transit)
+          - Audit logging and monitoring
+          - Access controls and authentication
+          - Data residency requirements
+
+          REPORTING:
+          - Categorize by compliance framework
+          - Cite specific requirements
+          - Mark findings as Pass/Fail/Partial
+          - Provide remediation with compliance rationale
+        allowed_tools:
+          - atmos_describe_component
+          - atmos_list_stacks
+          - atmos_validate_stacks
+          - read_stack_file
+          - read_component_file
+          - read_file
+          - search_files
+```
+</File>
+
+## SKILL.md Files
+
+Marketplace skills use SKILL.md files with YAML frontmatter stored in `~/.atmos/skills/`. Install marketplace skills with:
+
+```bash
+atmos ai skill install cloudposse/atmos
+```
+
+For marketplace skills, custom skill creation guides, and performance tips, see [AI Skills](/ai/skills).

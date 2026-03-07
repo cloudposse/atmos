@@ -1,0 +1,40 @@
+---
+title: Project Instructions
+sidebar_label: instructions
+sidebar_class_name: command
+description: Configure project-specific AI instructions in the `settings.ai.instructions` section of your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `settings.ai.instructions` section configures the `ATMOS.md` file that provides persistent, project-specific
+instructions to the AI assistant.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    instructions:
+      enabled: true
+      file: "ATMOS.md"
+```
+</File>
+
+## Instruction Settings
+
+<dl>
+  <dt>`enabled`</dt>
+  <dd>Enable or disable project instructions (default: `true`)</dd>
+
+  <dt>`file`</dt>
+  <dd>Path to the instructions file relative to the project root (default: `ATMOS.md`)</dd>
+</dl>
+
+For ATMOS.md file structure and best practices, see [Project Instructions](/ai/instructions).

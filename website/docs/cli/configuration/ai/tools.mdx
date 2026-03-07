@@ -1,0 +1,213 @@
+---
+title: AI Tools
+sidebar_label: tools
+sidebar_class_name: command
+description: Configure AI tool execution and permissions in the `settings.ai.tools` section of your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+
+<Intro>
+The `settings.ai.tools` section controls which Atmos commands the AI assistant can execute and whether user
+confirmation is required.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    tools:
+      enabled: true
+      require_confirmation: true
+      allowed_tools:
+        - atmos_describe_component
+        - atmos_list_stacks
+        - atmos_validate_stacks
+        - atmos_describe_*            # Wildcard patterns supported
+      restricted_tools:
+        - write_component_file
+        - write_stack_file
+        - atmos_terraform_plan
+      blocked_tools:
+        - atmos_terraform_destroy
+        - atmos_terraform_apply
+      yolo_mode: false                # Skip all confirmations (DANGEROUS!)
+```
+</File>
+
+## Tool Settings
+
+<dl>
+  <dt>`tools.enabled`</dt>
+  <dd>Enable or disable AI tool execution (default: `false`). When disabled, the AI can only answer from its training data and conversation context.</dd>
+
+  <dt>`tools.require_confirmation`</dt>
+  <dd>Prompt the user before executing any tool (default: `true`). Set to `false` to allow all tools except `restricted_tools` to execute automatically.</dd>
+
+  <dt>`tools.allowed_tools`</dt>
+  <dd>List of tools that execute without confirmation, even when `require_confirmation: true`. Supports wildcard patterns like `atmos_describe_*` (default: `[]`).</dd>
+
+  <dt>`tools.restricted_tools`</dt>
+  <dd>List of tools that always require user confirmation, even when `require_confirmation: false` (default: `[]`). Use this to protect write and execute operations.</dd>
+
+  <dt>`tools.blocked_tools`</dt>
+  <dd>List of tools completely blocked from execution (default: `[]`). The AI cannot invoke these tools under any circumstances.</dd>
+
+  <dt>`tools.yolo_mode`</dt>
+  <dd>Skip all permission checks and execute tools immediately (default: `false`). Only use in trusted, isolated CI/CD environments. **Never use in production or shared environments.**</dd>
+</dl>
+
+## Available Tools
+
+### Atmos Commands
+
+<dl>
+  <dt>`atmos_describe_component`</dt>
+  <dd>Describe a component's configuration in a stack. Read-only.</dd>
+
+  <dt>`atmos_list_stacks`</dt>
+  <dd>List all available stacks. Read-only.</dd>
+
+  <dt>`atmos_list_components`</dt>
+  <dd>List all available components. Read-only.</dd>
+
+  <dt>`atmos_validate_stacks`</dt>
+  <dd>Validate stack configurations against schemas and policies. Read-only.</dd>
+
+  <dt>`atmos_describe_affected`</dt>
+  <dd>Show components affected by git changes. Read-only.</dd>
+
+  <dt>`atmos_describe_config`</dt>
+  <dd>Show Atmos configuration. Read-only.</dd>
+
+  <dt>`atmos_get_template_context`</dt>
+  <dd>Debug Go template variable context. Read-only.</dd>
+
+  <dt>`execute_atmos_command`</dt>
+  <dd>Execute any Atmos CLI command. Permissions vary by command.</dd>
+</dl>
+
+### File Operations
+
+<dl>
+  <dt>`read_file`</dt>
+  <dd>Read any file from the repository. Read-only.</dd>
+
+  <dt>`read_component_file`</dt>
+  <dd>Read a file from the components directory. Read-only.</dd>
+
+  <dt>`read_stack_file`</dt>
+  <dd>Read a file from the stacks directory. Read-only.</dd>
+
+  <dt>`list_component_files`</dt>
+  <dd>List files in a component directory. Read-only.</dd>
+
+  <dt>`search_files`</dt>
+  <dd>Search for patterns across files. Read-only.</dd>
+
+  <dt>`write_component_file`</dt>
+  <dd>Write or modify a component file. Requires confirmation by default.</dd>
+
+  <dt>`write_stack_file`</dt>
+  <dd>Write or modify a stack file. Requires confirmation by default.</dd>
+</dl>
+
+### Validation and Web
+
+<dl>
+  <dt>`validate_file_lsp`</dt>
+  <dd>Validate files using LSP diagnostics ([requires LSP](/lsp/lsp-client)). Read-only.</dd>
+
+  <dt>`web_search`</dt>
+  <dd>Search the web via DuckDuckGo or Google. Requires confirmation by default.</dd>
+</dl>
+
+All file operations include **path traversal protection** -- files can only be accessed within configured directories.
+
+## Permission Modes
+
+<dl>
+  <dt>**Prompt** (default)</dt>
+  <dd>Set `require_confirmation: true`. Ask before each tool execution. The most secure mode.</dd>
+
+  <dt>**Allow**</dt>
+  <dd>Set `require_confirmation: false`. Auto-execute all tools except those in `restricted_tools`.</dd>
+
+  <dt>**YOLO**</dt>
+  <dd>Set `yolo_mode: true`. Skip all permission checks. Only use in isolated CI/CD environments.</dd>
+</dl>
+
+### Permission Flow
+
+```
+1. YOLO Mode?     → Yes → Execute immediately
+2. Blocked?       → Yes → Deny
+3. Allowed list?  → Yes → Execute without prompt
+4. Restricted?    → Yes → Always prompt
+5. Default        → Prompt if require_confirmation is true
+```
+
+## Wildcard Patterns
+
+Tool lists support glob-style wildcard patterns:
+
+```yaml
+allowed_tools:
+  - atmos_describe_*      # Match all describe commands
+  - atmos_list_*          # Match all list commands
+  - *_validate            # Match anything ending in _validate
+```
+
+## Persistent Permission Cache
+
+"Always allow" and "always deny" choices from interactive prompts are saved to `.atmos/ai.settings.local.json`. This file is user-specific and gitignored by default.
+
+**Priority order:** Blocked tools (config) > Cached denials > Allowed tools (config) > Cached allowances > Restricted tools > Default behavior.
+
+## Web Search Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    web_search:
+      enabled: true
+      max_results: 10
+      engine: "duckduckgo"     # or "google" (requires API key)
+```
+</File>
+
+## Example Configurations
+
+<File title="atmos.yaml">
+```yaml
+# Production: very restrictive
+settings:
+  ai:
+    tools:
+      enabled: true
+      allowed_tools: []              # Prompt for everything
+      blocked_tools:
+        - atmos_terraform_*          # Block all Terraform operations
+        - write_*                    # Block all write operations
+
+# Development: more permissive
+settings:
+  ai:
+    tools:
+      enabled: true
+      allowed_tools:
+        - atmos_describe_*           # Auto-approve read-only
+        - atmos_list_*
+        - atmos_validate_*
+      blocked_tools:
+        - atmos_terraform_destroy    # Still block destroy
+```
+</File>
+
+For tool execution workflow, permission prompts, and skill-specific tool access, see [AI Tools](/ai/tools).

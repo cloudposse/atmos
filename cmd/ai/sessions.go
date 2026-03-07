@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -30,6 +31,21 @@ var (
 	importParser *flags.StandardParser
 )
 
+//go:embed markdown/atmos_ai_sessions.md
+var sessionsLongMarkdown string
+
+//go:embed markdown/atmos_ai_sessions_list.md
+var sessionsListLongMarkdown string
+
+//go:embed markdown/atmos_ai_sessions_clean.md
+var sessionsCleanLongMarkdown string
+
+//go:embed markdown/atmos_ai_sessions_export.md
+var sessionsExportLongMarkdown string
+
+//go:embed markdown/atmos_ai_sessions_import.md
+var sessionsImportLongMarkdown string
+
 const (
 	hoursPerDay  = 24
 	daysPerWeek  = 7
@@ -42,90 +58,42 @@ const (
 var sessionsCmd = &cobra.Command{
 	Use:   "sessions",
 	Short: "Manage AI chat sessions",
-	Long: `Manage persistent AI chat sessions.
-
-Sessions allow you to save and resume conversations with the AI assistant.
-Each session maintains its own message history and context.
-
-Available operations:
-- List all sessions
-- Clean old sessions
-- Resume sessions with 'atmos ai chat --session <name>'`,
-	RunE: listSessionsCommand,
+	Long:  sessionsLongMarkdown,
+	RunE:  listSessionsCommand,
 }
 
 // aiSessionsListCmd lists all sessions.
 var sessionsListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all AI chat sessions",
-	Long: `List all available AI chat sessions.
-
-Shows session details including:
-- Session name
-- Created and last updated timestamps
-- Number of messages
-- AI model and provider used
-
-Example:
-  atmos ai sessions list`,
-	RunE: listSessionsCommand,
+	Long:  sessionsListLongMarkdown,
+	RunE:  listSessionsCommand,
 }
 
 // aiSessionsCleanCmd cleans old sessions.
 var sessionsCleanCmd = &cobra.Command{
 	Use:   "clean",
 	Short: "Clean old AI chat sessions",
-	Long: `Remove old AI chat sessions based on retention policy.
-
-Sessions older than the specified duration will be permanently deleted.
-Use this command to free up space and remove outdated conversations.
-
-Examples:
-  atmos ai sessions clean --older-than 30d   # Delete sessions older than 30 days
-  atmos ai sessions clean --older-than 7d    # Delete sessions older than 7 days
-  atmos ai sessions clean --older-than 24h   # Delete sessions older than 24 hours`,
-	RunE: cleanSessionsCommand,
+	Long:  sessionsCleanLongMarkdown,
+	RunE:  cleanSessionsCommand,
 }
 
 // aiSessionsExportCmd exports a session to a checkpoint file.
 var sessionsExportCmd = &cobra.Command{
 	Use:   "export <session-name>",
 	Short: "Export an AI chat session to a checkpoint file",
-	Long: `Export an AI chat session to a checkpoint file for backup or sharing.
-
-The checkpoint file contains the complete session including:
-- Session metadata (name, model, provider, timestamps)
-- Complete message history
-- Project context (optional)
-- Statistics
-
-Supports multiple formats: JSON (default), YAML, Markdown
-
-Examples:
-  atmos ai sessions export vpc-migration --output session.json
-  atmos ai sessions export my-session --output backup.yaml --context
-  atmos ai sessions export analysis --output report.md --format markdown`,
-	Args: cobra.ExactArgs(1),
-	RunE: exportSessionCommand,
+	Long:  sessionsExportLongMarkdown,
+	Args:  cobra.ExactArgs(1),
+	RunE:  exportSessionCommand,
 }
 
 // aiSessionsImportCmd imports a session from a checkpoint file.
 var sessionsImportCmd = &cobra.Command{
 	Use:   "import <checkpoint-file>",
 	Short: "Import an AI chat session from a checkpoint file",
-	Long: `Import an AI chat session from a checkpoint file.
-
-Restores a session from a checkpoint file created with 'atmos ai sessions export'.
-The imported session can be resumed with 'atmos ai chat --session <name>'.
-
-Supports JSON and YAML checkpoint files.
-
-Examples:
-  atmos ai sessions import session.json
-  atmos ai sessions import backup.yaml --name restored-session
-  atmos ai sessions import session.json --overwrite`,
-	Args: cobra.ExactArgs(1),
-	RunE: importSessionCommand,
+	Long:  sessionsImportLongMarkdown,
+	Args:  cobra.ExactArgs(1),
+	RunE:  importSessionCommand,
 }
 
 func init() {

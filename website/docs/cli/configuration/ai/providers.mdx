@@ -1,0 +1,223 @@
+---
+title: AI Providers
+sidebar_label: providers
+sidebar_class_name: command
+description: Configure AI providers in the `settings.ai.providers` section of your `atmos.yaml`.
+---
+import File from '@site/src/components/File'
+import Intro from '@site/src/components/Intro'
+import Experimental from '@site/src/components/Experimental'
+import Tabs from '@theme/Tabs'
+import TabItem from '@theme/TabItem'
+
+<Intro>
+The `settings.ai.providers` section configures connections to AI model providers like Anthropic, OpenAI, Google Gemini,
+Grok, Ollama, AWS Bedrock, and Azure OpenAI.
+</Intro>
+
+<Experimental />
+
+## Configuration
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    default_provider: "anthropic"
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+```
+</File>
+
+## Provider Settings
+
+Each provider in the `providers` map supports the following settings:
+
+<dl>
+  <dt>`model`</dt>
+  <dd>Model identifier to use for this provider. Defaults vary by provider (see below).</dd>
+
+  <dt>`api_key_env`</dt>
+  <dd>Name of the environment variable containing the API key. Not required for Ollama (local) or Bedrock (uses AWS credentials).</dd>
+
+  <dt>`max_tokens`</dt>
+  <dd>Maximum tokens per response (default: `4096`). OpenAI reasoning models (o1, o1-mini) use `max_completion_tokens` internally -- Atmos handles this automatically.</dd>
+
+  <dt>`base_url`</dt>
+  <dd>Custom API endpoint. Required for Grok (`https://api.x.ai/v1`) and Azure OpenAI (`https://<resource>.openai.azure.com`). For Bedrock, set to the AWS region (e.g., `us-east-1`). Ollama defaults to `http://localhost:11434/v1`.</dd>
+
+  <dt>`timeout_seconds`</dt>
+  <dd>Per-provider request timeout override in seconds. Overrides the global `settings.ai.timeout_seconds` value.</dd>
+
+  <dt>`api_version`</dt>
+  <dd>API version string. **Required** for Azure OpenAI (e.g., `2024-02-15-preview`).</dd>
+</dl>
+
+## Supported Providers
+
+<dl>
+  <dt>**Anthropic (Claude)**</dt>
+  <dd>Default model: `claude-sonnet-4-5-20250929`. Advanced reasoning, recommended default. 200K token context window. Authenticate with `ANTHROPIC_API_KEY`.</dd>
+
+  <dt>**OpenAI (GPT)**</dt>
+  <dd>Default model: `gpt-4o`. Widely available, strong general capabilities. 128K token context window. Authenticate with `OPENAI_API_KEY`.</dd>
+
+  <dt>**Google (Gemini)**</dt>
+  <dd>Default model: `gemini-2.5-flash`. Fast responses, up to 2M token context window. Most economical cloud pricing. Authenticate with `GEMINI_API_KEY`.</dd>
+
+  <dt>**xAI (Grok)**</dt>
+  <dd>Default model: `grok-4-latest`. 2M token context window, built-in real-time search. Requires `base_url: "https://api.x.ai/v1"`. Authenticate with `XAI_API_KEY`.</dd>
+
+  <dt>**Ollama (Local)**</dt>
+  <dd>Default model: `llama3.3:70b`. Runs entirely on your machine -- no API costs, no data leaves your computer. No authentication required for local instances.</dd>
+
+  <dt>**AWS Bedrock**</dt>
+  <dd>Default model: `anthropic.claude-sonnet-4-5-20250929-v1:0`. Enterprise security with IAM-based access, CloudTrail audit logging, and VPC endpoint support. Uses AWS SDK credential chain (IAM roles, profiles, environment variables). Set `base_url` to your AWS region.</dd>
+
+  <dt>**Azure OpenAI**</dt>
+  <dd>Default model: `gpt-4o`. Enterprise compliance with Azure AD integration and private endpoints. The `model` field must be your **deployment name** from Azure Portal. Both `base_url` and `api_version` are required.</dd>
+</dl>
+
+## Provider Examples
+
+<Tabs>
+<TabItem value="cloud" label="Cloud Providers" default>
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+
+      gemini:
+        model: "gemini-2.5-flash"
+        api_key_env: "GEMINI_API_KEY"
+        max_tokens: 8192
+
+      grok:
+        model: "grok-4-latest"
+        api_key_env: "XAI_API_KEY"
+        base_url: "https://api.x.ai/v1"
+        max_tokens: 4096
+```
+</File>
+
+</TabItem>
+<TabItem value="local" label="Local (Ollama)">
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      ollama:
+        model: "llama3.3:70b"
+        # base_url defaults to http://localhost:11434/v1
+        # No api_key_env needed for local instances
+
+      # Remote Ollama server
+      ollama-remote:
+        model: "llama3.3:70b"
+        base_url: "http://<server-ip>:11434/v1"
+```
+</File>
+
+</TabItem>
+<TabItem value="enterprise" label="Enterprise">
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      bedrock:
+        model: "anthropic.claude-sonnet-4-5-20250929-v1:0"
+        max_tokens: 4096
+        base_url: "us-east-1"  # AWS region
+
+      azureopenai:
+        model: "gpt-4o"  # Azure deployment name
+        api_key_env: "AZURE_OPENAI_API_KEY"
+        base_url: "https://<your-resource>.openai.azure.com"
+        api_version: "2024-02-15-preview"
+        max_tokens: 4096
+```
+</File>
+
+</TabItem>
+</Tabs>
+
+## Token Caching
+
+Most providers implement prompt caching automatically. Only Anthropic requires explicit configuration:
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        cache:
+          enabled: true              # Enable prompt caching (default)
+          cache_system_prompt: true  # Cache skill system prompt
+          cache_project_instructions: true # Cache ATMOS.md content
+```
+</File>
+
+<dl>
+  <dt>`cache.enabled`</dt>
+  <dd>Enable or disable prompt caching (default: `true`). Cached tokens cost 90% less for Anthropic.</dd>
+
+  <dt>`cache.cache_system_prompt`</dt>
+  <dd>Cache the skill system prompt across messages (default: `true`).</dd>
+
+  <dt>`cache.cache_project_instructions`</dt>
+  <dd>Cache the ATMOS.md project instructions content (default: `true`).</dd>
+</dl>
+
+## Multi-Provider Configuration
+
+Configure multiple providers and switch between them. Set `default_provider` for CLI commands, and press `Ctrl+P` during a chat session to switch mid-conversation.
+
+<File title="atmos.yaml">
+```yaml
+settings:
+  ai:
+    enabled: true
+    default_provider: "anthropic"
+
+    providers:
+      anthropic:
+        model: "claude-sonnet-4-5-20250929"
+        api_key_env: "ANTHROPIC_API_KEY"
+        max_tokens: 4096
+      openai:
+        model: "gpt-4o"
+        api_key_env: "OPENAI_API_KEY"
+        max_tokens: 4096
+      ollama:
+        model: "llama3.3:70b"
+```
+</File>
+
+Each provider maintains its own completely isolated conversation history. When you switch providers, the new provider only sees messages from its own thread.
+
+For provider-specific setup guides, model comparisons, and security best practices, see [AI Providers](/ai/providers).

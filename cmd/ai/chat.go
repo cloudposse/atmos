@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	_ "embed"
 	"fmt"
 	"path/filepath"
 	"time"
@@ -21,6 +22,9 @@ import (
 	log "github.com/cloudposse/atmos/pkg/logger"
 	"github.com/cloudposse/atmos/pkg/schema"
 )
+
+//go:embed markdown/atmos_ai_chat.md
+var chatLongMarkdown string
 
 // chatParser handles flag parsing with Viper precedence for the chat command.
 var chatParser *flags.StandardParser
@@ -46,18 +50,7 @@ func getModelFromConfig(atmosConfig *schema.AtmosConfiguration) string {
 var chatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Start interactive AI chat session",
-	Long: `Start an interactive chat session with the Atmos AI assistant.
-
-This opens a terminal-based chat interface where you can ask questions about your
-Atmos configuration, get help with infrastructure management, and receive guidance
-on best practices.
-
-The AI assistant has access to your current Atmos configuration and can help with:
-- Explaining Atmos concepts
-- Analyzing your specific components and stacks
-- Suggesting optimizations
-- Debugging configuration issues
-- Providing implementation guidance`,
+	Long:  chatLongMarkdown,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// Bind parsed flags to Viper for precedence handling.
 		v := viper.GetViper()
