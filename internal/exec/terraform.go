@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	stdio "io"
 	"os"
 	osexec "os/exec"
 	"path/filepath"
@@ -519,17 +520,36 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 		}
 
 		// Check if workdir provisioner set a workdir path - if so, use it instead of the component path.
+		usingWorkdir := false
 		if workdirPath, ok := info.ComponentSection[provWorkdir.WorkdirPathKey].(string); ok && workdirPath != "" {
 			componentPath = workdirPath
+			usingWorkdir = true
 			log.Debug("Using workdir path", "workdirPath", workdirPath)
 		}
 
-		// When no dependency lock file exists yet, bypass the Atmos-managed plugin cache for
-		// terraform init. This ensures providers are downloaded from the registry and their
-		// h1: checksums are recorded in the lock file. Using the plugin cache on first init
-		// would produce only local zh: checksums and trigger the "Incomplete lock file
-		// information for providers" warning from Terraform.
-		initEnvList := buildInitEnvList(componentPath, info.ComponentEnvList, pluginCacheEnvList)
+		var initEnvList []string
+		var initOpts []ShellCommandOpt
+
+		if usingWorkdir {
+			// In workdir mode the lock file is intentionally ephemeral -- the workdir is a
+			// fresh, isolated directory that is recreated on every run.  Keep the plugin
+			// cache fully enabled so providers are served from cache, but suppress the
+			// "Incomplete lock file information for providers" warning that Terraform emits
+			// when it installs providers from cache without network-verifiable h1: checksums.
+			// The warning is expected and non-actionable here because the lock file is disposable.
+			initEnvList = info.ComponentEnvList
+			initOpts = []ShellCommandOpt{
+				WithStderrFilter(func(w stdio.Writer) stdio.Writer {
+					return newIncompleteLockWarningFilter(w)
+				}),
+			}
+		} else {
+			// Not in workdir mode: on first init (no lock file yet) disable the
+			// Atmos-managed plugin cache so providers are fetched from the registry and
+			// their h1: checksums are recorded in the new lock file, avoiding the warning.
+			// On subsequent runs the lock file exists and the cache is re-enabled.
+			initEnvList = buildInitEnvList(componentPath, info.ComponentEnvList, pluginCacheEnvList)
+		}
 
 		err = ExecuteShellCommand(
 			atmosConfig,
@@ -539,6 +559,7 @@ func ExecuteTerraform(info schema.ConfigAndStacksInfo) error {
 			initEnvList,
 			info.DryRun,
 			info.RedirectStdErr,
+			initOpts...,
 		)
 		if err != nil {
 			return err
