@@ -52,11 +52,11 @@ settings:
     default_provider: "anthropic"
     providers:
       anthropic:
-        model: "claude-sonnet-4-5-20250929"
+        model: "claude-sonnet-4-6"
       openai:
         model: "gpt-4o"
       ollama:
-        model: "llama3.3:70b"
+        model: "llama4"
 ```
 
 Switch between providers during a chat session by pressing `Ctrl+P`.
@@ -181,7 +181,7 @@ atmos workflow ai-demo
 
 - 100% local processing, no data leaves your machine
 - Requires Ollama installed and running: `ollama serve`
-- Pull a model first: `ollama pull llama3.3:70b`
+- Pull a model first: `ollama pull llama4`
 
 ## Keyboard Shortcuts (in chat)
 

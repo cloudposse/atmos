@@ -99,7 +99,6 @@ settings:
       ollama:
         model: "llama4"
         base_url: "http://localhost:11434/v1"
-        timeout_seconds: 120  # Longer timeout for local models
 
     # Session management - persist conversations across sessions
     # Docs: https://atmos.tools/ai/sessions
@@ -142,21 +141,20 @@ settings:
       # Tools that always require confirmation
       # Docs: https://atmos.tools/ai/tools#restricted-tools
       restricted_tools:
-        - file_edit
-        - atmos_terraform_plan
+        - edit_file
+        - execute_atmos_command
 
       # Tools that are completely blocked
       # Docs: https://atmos.tools/ai/tools#blocked-tools
       blocked_tools:
-        - atmos_terraform_apply
-        - atmos_terraform_destroy
+        - execute_bash_command
 
       # Skip all confirmations (DANGEROUS - only for trusted environments)
       # Docs: https://atmos.tools/ai/tools#yolo-mode--dangerous
       yolo_mode: false
 
     # Project instructions - persistent context across sessions via ATMOS.md
-    # Docs: https://atmos.tools/ai/memory
+    # Docs: https://atmos.tools/ai/instructions
     instructions:
       enabled: true
       file: "ATMOS.md"
