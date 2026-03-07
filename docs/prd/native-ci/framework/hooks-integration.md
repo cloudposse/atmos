@@ -102,15 +102,25 @@ Error severity is handler-controlled. Each plugin handler decides which operatio
 CI behaviors integrate at existing hook points. Each event maps to a handler callback in `pkg/ci/plugins/terraform/handlers.go`:
 
 ```go
-"before.terraform.plan"  → onBeforePlan()   // createCheckRun (in_progress)
-"after.terraform.plan"   → onAfterPlan()    // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
-"before.terraform.apply" → onBeforeApply()  // downloadPlanfile
-"after.terraform.apply"  → onAfterApply()   // writeSummary + writeOutputs
+"before.terraform.plan"   → onBeforePlan()    // createCheckRun (in_progress)
+"after.terraform.plan"    → onAfterPlan()     // writeSummary + writeOutputs + uploadPlanfile + updateCheckRun
+"before.terraform.apply"  → onBeforeApply()   // (no planfile interaction — apply does not use planfile storage)
+"after.terraform.apply"   → onAfterApply()    // writeSummary + writeOutputs
+"before.terraform.deploy" → onBeforeDeploy()  // downloadPlanfile (with stored.* prefix for verification)
+"after.terraform.deploy"  → onAfterDeploy()   // writeSummary + writeOutputs
 ```
 
-> Note: `before.terraform.apply` does NOT call `createCheckRun()` (no "Apply in progress" check run). `after.terraform.apply` does NOT call `updateCheckRun()` (no check run update after apply). These can be added later by modifying the plugin's handler logic.
+### Command Responsibility
 
-> **Wiring status**: All three terraform commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle. `PreRunE` fires `before.terraform.*` hooks (enabling planfile download on apply), `PostRunE` fires `after.terraform.*` hooks with captured stdout/stderr output, and an error defer updates check runs on failure when `RunE` returns an error (Cobra skips `PostRunE` on error).
+| Command | CI Planfile Download | Plan Verification | CI Summaries/Checks/Outputs |
+|---------|---------------------|-------------------|----------------------------|
+| `plan` | N/A | N/A | Yes (upload planfile, write summary, checks, outputs) |
+| `apply` | **No** | **No** | Yes (write summary, checks, outputs only) |
+| `deploy` | **Yes** | **Yes** | Yes (write summary, checks, outputs) |
+
+**Key design decision:** `apply` does NOT interact with planfile storage. It is a thin wrapper around `terraform apply` with CI cosmetics (summaries, checks, outputs). `deploy` is the CI-native command that downloads stored planfiles, verifies them against fresh plans, and applies only if they match.
+
+> **Wiring status**: All three terraform commands (`plan.go`, `apply.go`, `deploy.go`) fully wire the CI lifecycle. `plan.go` fires `before/after.terraform.plan`. `apply.go` fires `before/after.terraform.apply`. `deploy.go` fires `before/after.terraform.deploy`. Each uses `PreRunE` → `RunE` with output capture + error defer → `PostRunE` with captured output.
 
 ## Terraform Plugin Hook Bindings (IMPLEMENTED)
 
@@ -120,10 +130,12 @@ Hook bindings use `Handler` callbacks. Each handler owns all action logic for it
 // pkg/ci/plugins/terraform/plugin.go — actual implementation
 func (p *Plugin) GetHookBindings() []plugin.HookBinding {
     return []plugin.HookBinding{
-        {Event: "before.terraform.plan",  Handler: p.onBeforePlan},
-        {Event: "after.terraform.plan",   Handler: p.onAfterPlan},
-        {Event: "before.terraform.apply", Handler: p.onBeforeApply},
-        {Event: "after.terraform.apply",  Handler: p.onAfterApply},
+        {Event: "before.terraform.plan",   Handler: p.onBeforePlan},
+        {Event: "after.terraform.plan",    Handler: p.onAfterPlan},
+        {Event: "before.terraform.apply",  Handler: p.onBeforeApply},
+        {Event: "after.terraform.apply",   Handler: p.onAfterApply},
+        {Event: "before.terraform.deploy", Handler: p.onBeforeDeploy},
+        {Event: "after.terraform.deploy",  Handler: p.onAfterDeploy},
     }
 }
 ```

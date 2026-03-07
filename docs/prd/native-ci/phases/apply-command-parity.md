@@ -1,10 +1,23 @@
 # Apply Command Parity (FR-7) — SHIPPED
 
-> Related: [CI Detection](../framework/ci-detection.md) | [Hooks Integration](../framework/hooks-integration.md) | [Implementation Status](../framework/implementation-status.md)
+> Related: [CI Detection](../framework/ci-detection.md) | [Hooks Integration](../framework/hooks-integration.md) | [Implementation Status](../framework/implementation-status.md) | [Plan Verification](./plan-verification-ci-integration.md)
 
-## Status: SHIPPED
+## Status: SHIPPED (apply/deploy CI wiring); PENDING (deploy hook event separation)
 
 All items implemented: `apply.go` full CI wiring (PreRunE, output capture, error defer, PostRunE with output), `deploy.go` `--ci` flag with identical full CI wiring.
+
+**Pending:** `deploy.go` needs to fire its own hook events (`before/after.terraform.deploy`) instead of reusing `before/after.terraform.apply`. See [Plan Verification CI Integration](./plan-verification-ci-integration.md).
+
+### Command Responsibility
+
+| Command | CI Planfile Download | Plan Verification | CI Summaries/Checks/Outputs |
+|---------|---------------------|-------------------|----------------------------|
+| `plan` | N/A | N/A | Yes (upload planfile, write summary, checks, outputs) |
+| `apply` | **No** | **No** | Yes (write summary, checks, outputs only) |
+| `deploy` | **Yes** | **Yes** | Yes (write summary, checks, outputs) |
+
+- **`apply`** is a thin wrapper around `terraform apply`. In CI mode, it only writes summaries, checks, and outputs. It does NOT interact with planfile storage.
+- **`deploy`** is the CI-native apply command. In CI mode, it downloads stored planfiles, verifies them against fresh plans, and applies only if they match.
 
 ## Problem Statement
 

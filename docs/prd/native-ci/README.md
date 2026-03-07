@@ -37,7 +37,7 @@ This directory contains focused Product Requirement Documents for the Atmos Nati
 | Document | Description |
 |----------|-------------|
 | [planfile-storage.md](./terraform-plugin/planfile-storage.md) | Planfile adapter, CLI commands, planfile flags |
-| [plan-verification.md](./terraform-plugin/plan-verification.md) | `--verify-plan` flag, plan-diff semantic comparison |
+| [plan-verification.md](./terraform-plugin/plan-verification.md) | Plan verification on `deploy` command, plan-diff semantic comparison |
 | [describe-affected-matrix.md](./terraform-plugin/describe-affected-matrix.md) | `--format=matrix` for GitHub Actions matrix strategy |
 
 ### [Phases](./phases/) — Incremental Implementation PRDs
@@ -50,6 +50,7 @@ This directory contains focused Product Requirement Documents for the Atmos Nati
 | [unify-artifact-stores.md](./phases/unify-artifact-stores.md) | **SHIPPED** | Unified artifact store registry, deleted planfile local/registry |
 | [planfile-cli-component-stack-addressing.md](./phases/planfile-cli-component-stack-addressing.md) | **SHIPPED** | CLI `<component> -s <stack>` pattern, SHA resolution, `--all` flag |
 | [apply-command-parity.md](./phases/apply-command-parity.md) | **SHIPPED** | Apply/deploy full CI wiring (PreRunE, output capture, error defer, `--ci` flag) |
+| [plan-verification-ci-integration.md](./phases/plan-verification-ci-integration.md) | Proposed | Deploy-based stored vs fresh plan comparison (download → plan → compare → apply) |
 | [move-checkrun-store-to-provider.md](./phases/move-checkrun-store-to-provider.md) | Proposed | Move check run ID correlation from plugin to provider layer |
 
 ## Original Documents

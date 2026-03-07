@@ -1,126 +1,231 @@
-# Plan Verification: CI-Integrated Stored vs Fresh Plan Comparison
+# Plan Verification: Deploy-Based Stored vs Fresh Plan Comparison
 
 > Related: [Plan Verification](../terraform-plugin/plan-verification.md) | [Planfile Storage](../terraform-plugin/planfile-storage.md) | [Hooks Integration](../framework/hooks-integration.md) | [Planfile Download Path Resolution](./planfile-download-component-path-resolution.md)
 
 ## Problem Statement
 
-The `--verify-plan` flag on `atmos terraform apply` exists but has no CI integration. In CI mode with `--ci`, the planfile is downloaded automatically via the `before.terraform.apply` hook, but verification (`VerifyPlanfile()`) runs later inside `terraformRunWithOptions()` — after the hook has already completed. This means:
+Plan verification needs CI integration, but it belongs on the `deploy` command — not `apply`. The two commands serve different purposes:
 
-1. **Verification requires `--from-plan` or `--planfile`** — but in CI mode the planfile is downloaded automatically and the user shouldn't need to specify it explicitly.
-2. **The stored planfile is downloaded to the canonical path** (e.g., `components/terraform/vpc/vpc-prod-abc123.tfplan`), but verification needs a *separate* copy at a `stored.` prefix so terraform can generate a fresh plan at the canonical path and compare.
-3. **No dedicated hook event** for verification — it's embedded inline in `terraformRunWithOptions()`.
+- **`atmos terraform apply`** — Runs `terraform apply`. In CI mode, it writes summaries, checks, and outputs. It does NOT interact with planfile storage. It does NOT download or verify planfiles.
+- **`atmos terraform deploy`** — The CI-native apply command. In CI mode, it downloads the stored planfile, generates a fresh plan, compares them, and applies only if they match.
 
-### Current Apply Flow (CI mode)
+### Why `deploy`, not `apply`?
+
+1. **`apply` is a thin wrapper** around `terraform apply`. Adding planfile storage makes it do too much.
+2. **`deploy` is the opinionated CI command** — it already adds `-auto-approve`, skips init by default, and is designed for automation.
+3. **Separation of concerns** — `apply` stays simple and predictable; `deploy` handles the full CI workflow.
+
+## Current State
+
+### Apply Flow (CI mode)
+
+```
+PreRunE:  before.terraform.apply → (no planfile interaction)
+RunE:     terraformRunWithOptions() → terraform apply
+PostRunE: after.terraform.apply → writeSummary(), writeOutputs(), updateCheckRun()
+```
+
+Apply in CI mode only produces cosmetic CI outputs (summaries, checks, outputs). No planfile download, no verification.
+
+### Deploy Flow (CI mode) — Current
 
 ```
 PreRunE:  before.terraform.apply → downloadPlanfile() to canonical path
-RunE:     terraformRunWithOptions()
-            → [if --verify-plan && --from-plan] VerifyPlanfile()
-            → executeSingleComponent() → terraform apply
-PostRunE: after.terraform.apply → writeSummary(), writeOutputs()
-```
-
-### Desired Apply Flow (CI mode with verification)
-
-```
-PreRunE:  before.terraform.apply → downloadPlanfile() to stored.* prefix
-RunE:     terraformRunWithOptions()
-            → [if --verify-plan] terraform plan (generates fresh planfile at canonical path)
-            → [if --verify-plan] compare stored.* vs fresh planfile via plan-diff
-            → [if plans differ] FAIL with drift error
-            → [if plans match] terraform apply (using fresh planfile)
+RunE:     terraformRunWithOptions() → terraform apply (using downloaded planfile)
 PostRunE: after.terraform.apply → writeSummary(), writeOutputs()
 ```
 
 ## Desired State
 
-### 1. Download to `stored.*` prefix when verification is enabled
+### Deploy Flow (CI mode with verification)
 
-When `--verify-plan` is active, the `downloadPlanfile()` handler writes files with a `stored.` prefix:
-- `plan.tfplan` → `<componentDir>/stored.plan.tfplan`
-- `.terraform.lock.hcl` → `<componentDir>/stored..terraform.lock.hcl`
-
-This keeps the canonical planfile path free for the fresh plan that terraform will generate during verification.
-
-**Implementation:** `downloadPlanfile()` in `handlers.go` checks `ctx.Info.VerifyPlan`. When true, it calls `WritePlanfileResults()` with a prefixed planfile path. The `stored.*` prefix is a constant defined in the planfile package.
-
-### 2. Wire `--verify-plan` into `ConfigAndStacksInfo` from CI hook context
-
-The `HookContext.Info` already carries `VerifyPlan bool` from `applyOptionsToInfo()` — but hooks run in `PreRunE`, before `applyOptionsToInfo()`. The fix: set `info.VerifyPlan` from the parsed flag in the hook execution path too.
-
-**Implementation:** In `runHooksWithOutput()` (or the apply `PreRunE`), read `--verify-plan` from viper and set it on `info` before calling `RunCIHooks()`. This way, `downloadPlanfile()` knows whether verification is enabled.
-
-### 3. Refactor `VerifyPlanfile()` to accept the stored planfile path
-
-Current `VerifyPlanfile()` reads `info.PlanFile` as the stored plan. For CI integration, the stored plan is at the `stored.*` path, and the fresh plan should be generated at the canonical path (so apply can use it).
-
-**Refactored signature:**
-```go
-func VerifyPlanfile(info *schema.ConfigAndStacksInfo, storedPlanFile string) error
+```
+PreRunE:  before.terraform.deploy → downloadPlanfile() to stored.* prefix
+RunE:     terraformRunWithOptions()
+            → terraform plan (generates fresh planfile — NO CI hooks, no upload, no checks, no summaries)
+            → compare stored.* vs fresh planfile via plan-diff
+            → [if plans differ] FAIL with drift error
+            → [if plans match] terraform apply (using fresh planfile)
+PostRunE: after.terraform.deploy → writeSummary(), writeOutputs(), updateCheckRun()
 ```
 
-The function:
-1. Validates `storedPlanFile` exists on disk
-2. Gets JSON of stored plan via `getTerraformPlanJSON()`
-3. Generates a fresh plan at the canonical planfile path via `generateNewPlanFile()` — but output goes to the resolved component dir (not a temp dir)
-4. Gets JSON of fresh plan
-5. Compares via `generatePlanDiff()`
-6. Returns `ErrPlanVerificationFailed` with diff if plans differ
-7. Cleans up the `stored.*` file after comparison
+Key aspects:
+1. **Download to `stored.*` prefix** — The stored planfile is downloaded with a `stored.` prefix so the canonical path is free for the fresh plan.
+2. **Internal terraform plan** — The fresh plan runs without any CI side effects. No planfile upload, no status checks, no summaries. The only goal is to produce a planfile for comparison.
+3. **Plan-diff comparison** — Structural comparison of stored vs fresh planfiles using the existing plan-diff infrastructure.
+4. **Apply fresh planfile** — On match, deploy applies the *fresh* planfile (not the stored one). This ensures terraform applies exactly what was just planned.
+5. **Error on mismatch** — If plans differ, deploy fails with a drift error showing the diff.
 
-### 4. Update `terraformRunWithOptions()` to handle CI verification flow
+### Apply Flow (CI mode) — No Change
 
-When `--verify-plan` is set:
-1. If `stored.*` planfile exists in the component dir (set by CI download hook), use it as the stored plan
-2. Generate fresh plan at the canonical path
-3. Compare stored vs fresh
-4. If match → proceed to `terraform apply` with the fresh planfile (set `info.PlanFile` and `info.UseTerraformPlan`)
-5. If mismatch → return error (blocks apply)
-6. Clean up `stored.*` file
+```
+PreRunE:  before.terraform.apply → (no planfile interaction)
+RunE:     terraformRunWithOptions() → terraform apply
+PostRunE: after.terraform.apply → writeSummary(), writeOutputs(), updateCheckRun()
+```
 
-When `--verify-plan` is set without CI mode (manual usage):
-- Requires `--from-plan` or `--planfile` to specify the stored plan (existing behavior preserved)
+Apply does NOT have `--verify-plan`. Apply does NOT download planfiles. Apply only writes CI cosmetics.
 
-### 5. Lock file handling
+## Implementation
 
-The downloaded `.terraform.lock.hcl` (at `stored..terraform.lock.hcl`) is not used for verification — it was downloaded for apply. After verification succeeds, the `stored.` lock file should be renamed/moved to the canonical `.terraform.lock.hcl` path so terraform apply uses the correct lock file.
+### 1. Remove `--verify-plan` from `apply`
 
-Actually, simpler: download the lock file directly to `.terraform.lock.hcl` (no prefix). Only the planfile needs the `stored.*` prefix since that's what verification compares. The lock file is always the same — it describes provider constraints, not plan state.
+**File:** `cmd/terraform/apply.go`
+
+Remove the `--verify-plan` flag registration from the apply command. Verification is deploy-only.
+
+### 2. Add `--verify-plan` to `deploy` (if not already present)
+
+**File:** `cmd/terraform/deploy.go`
+
+Ensure `--verify-plan` flag is on deploy. Default: `true` in CI mode (always verify when deploying in CI).
+
+### 3. Remove planfile download from `before.terraform.apply`
+
+**File:** `pkg/ci/plugins/terraform/handlers.go`
+
+The `onBeforeApply()` handler should NOT call `downloadPlanfile()`. Apply does not interact with planfile storage.
+
+### 4. Add deploy hook events
+
+**File:** `pkg/hooks/event.go`
+
+Add new events:
+```go
+BeforeTerraformDeploy HookEvent = "before.terraform.deploy"
+AfterTerraformDeploy  HookEvent = "after.terraform.deploy"
+```
+
+### 5. Wire deploy to its own hook events
+
+**File:** `cmd/terraform/deploy.go`
+
+Change deploy to fire `before.terraform.deploy` and `after.terraform.deploy` instead of `before.terraform.apply` and `after.terraform.apply`.
+
+### 6. Add deploy hook bindings to terraform plugin
+
+**File:** `pkg/ci/plugins/terraform/plugin.go`
+
+Add bindings:
+```go
+{Event: "before.terraform.deploy", Handler: p.onBeforeDeploy},
+{Event: "after.terraform.deploy",  Handler: p.onAfterDeploy},
+```
+
+### 7. Implement `onBeforeDeploy()` handler
+
+**File:** `pkg/ci/plugins/terraform/handlers.go`
+
+```go
+func (p *Plugin) onBeforeDeploy(ctx *plugin.HookContext) error {
+    // Download planfile to stored.* prefix for verification.
+    return p.downloadPlanfileForVerification(ctx)
+}
+```
+
+Downloads planfile from storage with `stored.` prefix. Sets `ctx.Info.StoredPlanFile` to the stored path.
+
+### 8. Implement `onAfterDeploy()` handler
+
+**File:** `pkg/ci/plugins/terraform/handlers.go`
+
+```go
+func (p *Plugin) onAfterDeploy(ctx *plugin.HookContext) error {
+    result := p.parseOutputWithError(ctx)
+
+    // Summary — warn-only
+    if isSummaryEnabled(ctx.Config) { ... }
+
+    // Output — warn-only
+    if isOutputEnabled(ctx.Config) { ... }
+
+    // Check — warn-only
+    if isCheckEnabled(ctx.Config) { ... }
+
+    return nil
+}
+```
+
+Same as `onAfterApply()` — writes summaries, outputs, checks. No planfile upload (that happens on plan).
+
+### 9. Deploy RunE: verification flow
+
+**File:** `cmd/terraform/deploy.go` or `cmd/terraform/utils.go`
+
+In deploy's `RunE`, when CI mode is active:
+
+1. Check for `stored.*` planfile (downloaded by `onBeforeDeploy`)
+2. Run `terraform plan -out=<canonical-path>` directly — NOT through the CI hook system. This is an internal plan whose only purpose is to generate a fresh planfile for comparison.
+3. Compare stored vs fresh planfile using `VerifyPlanfile()` / plan-diff
+4. If match → set `info.PlanFile` to fresh planfile, proceed to `terraform apply`
+5. If mismatch → return error with diff
+
+### 10. Download to `stored.*` prefix
+
+**File:** `pkg/ci/plugins/terraform/handlers.go`
+
+New helper `downloadPlanfileForVerification()`:
+- Downloads planfile from storage
+- Writes planfile to `<componentDir>/stored.plan.tfplan`
+- Writes lock file to `<componentDir>/.terraform.lock.hcl` (canonical — no prefix needed for lock file)
+- Sets `ctx.Info.StoredPlanFile = storedPlanPath`
+
+### 11. `StoredPlanPrefix` constant
+
+**File:** `pkg/ci/plugins/terraform/planfile/interface.go`
+
+```go
+const StoredPlanPrefix = "stored."
+```
+
+### 12. `StoredPlanFile` field on `ConfigAndStacksInfo`
+
+**File:** `pkg/schema/schema.go`
+
+```go
+StoredPlanFile string `yaml:"stored_plan_file" json:"stored_plan_file" mapstructure:"stored_plan_file"`
+```
+
+Carries the stored plan path from the download hook (PreRunE) to the verification step (RunE).
+
+**Note:** PreRunE and RunE may create independent `info` structs via `ProcessCommandLineArgs()`. The `StoredPlanFile` path must survive this boundary. Options:
+- Pass it via a package-level variable (like `capturedDeployOutput`)
+- Pass it via the cobra command context
+- Detect `stored.*` file on disk in RunE (no state passing needed)
+
+The simplest approach: in RunE, check if `stored.*` planfile exists on disk at the expected path. No cross-phase state passing required.
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `pkg/ci/plugins/terraform/planfile/constants.go` | **Create** — add `StoredPlanPrefix = "stored."` constant |
-| `pkg/ci/plugins/terraform/handlers.go` | Modify `downloadPlanfile()` — when `ctx.Info.VerifyPlan`, use `stored.` prefix for planfile, no prefix for lock file |
-| `pkg/ci/plugins/terraform/planfile/write.go` | Add `WritePlanfileResultsWithStoredPrefix()` or add a `storedPrefix` parameter option |
-| `cmd/terraform/utils.go` | In `runHooksWithOutput()`, read `--verify-plan` from viper and set on `info.VerifyPlan` before `RunCIHooks()` |
-| `cmd/terraform/utils.go` | In `terraformRunWithOptions()`, update verification block: detect `stored.*` planfile, call `VerifyPlanfile()` with it, set `info.PlanFile` to fresh plan on success |
-| `internal/exec/terraform_verify_plan.go` | Refactor `VerifyPlanfile()` to accept `storedPlanFile` parameter. Generate fresh plan in component dir (not temp dir). Clean up stored file after comparison. |
-| `internal/exec/terraform_verify_plan_test.go` | Update tests for new signature |
-| `pkg/hooks/event.go` | No change needed — existing `before.terraform.apply` hook is sufficient |
+| `cmd/terraform/apply.go` | Remove `--verify-plan` flag |
+| `cmd/terraform/deploy.go` | Add `--verify-plan` flag, wire `before/after.terraform.deploy` events, add verification flow to RunE |
+| `pkg/hooks/event.go` | Add `BeforeTerraformDeploy`, `AfterTerraformDeploy` events |
+| `pkg/ci/plugins/terraform/plugin.go` | Add `before/after.terraform.deploy` hook bindings |
+| `pkg/ci/plugins/terraform/handlers.go` | Remove `downloadPlanfile()` from `onBeforeApply()`. Add `onBeforeDeploy()` (download with stored prefix), `onAfterDeploy()` (summaries, outputs, checks). Add `downloadPlanfileForVerification()` helper. |
+| `pkg/ci/plugins/terraform/planfile/interface.go` | Add `StoredPlanPrefix` constant |
+| `pkg/ci/plugins/terraform/planfile/write.go` | Add `WritePlanfileResultsForVerification()` helper |
+| `pkg/schema/schema.go` | Add `StoredPlanFile` field |
+| `internal/exec/terraform_verify_plan.go` | Refactor `VerifyPlanfile()` — accept stored plan path, generate fresh plan in component dir |
 
 ## Edge Cases
 
-### Verification without CI mode
+### Deploy without CI mode
 
-When `--verify-plan` is used manually (no `--ci`, no CI hooks), the current behavior is preserved: `--from-plan` or `--planfile` specifies the stored plan. The `stored.*` prefix is only used when the CI hook downloads the planfile.
+When `deploy` runs without `--ci` (local usage), no planfile download occurs. Deploy behaves as today: runs `terraform apply` with `-auto-approve`.
 
-### No stored planfile found
+### Deploy with CI but no stored planfile
 
-If `--verify-plan` is set but no `stored.*` planfile exists and no `--from-plan`/`--planfile` is specified, the verification step is skipped with a warning. This handles the case where CI download failed silently or was disabled.
+If the CI hook downloads nothing (store empty, plan never ran), deploy falls back to running a fresh plan and applying it directly — same as non-CI deploy. A warning is logged.
 
-### Fresh plan shows no changes
+### Fresh plan shows no changes but stored plan had changes
 
-If the fresh plan has no changes but the stored plan had changes, this is drift — verification fails. The comparison is structural, not "has changes vs no changes".
+This is drift — verification fails. The comparison is structural, not "has changes vs no changes".
 
-### Component with workdir (source vendoring)
+### Internal plan must not trigger CI hooks
 
-`VerifyPlanfile()` already handles workdir via `ProcessStacks()` + `provWorkdir.WorkdirPathKey`. No additional changes needed — the stored plan path and fresh plan path both resolve relative to the workdir.
-
-### Multi-component apply
-
-`--verify-plan` is only supported for single-component execution. Multi-component (`--all`, `--affected`) skips verification (current behavior — the flag check is inside `terraformRunWithOptions()` after the multi-component branch).
+The `terraform plan` inside deploy's verification flow must NOT trigger CI hooks (no upload, no checks, no summaries). This is achieved by running the plan directly through the terraform CLI, not through the atmos plan command/hooks.
 
 ## Verification
 
@@ -128,5 +233,6 @@ If the fresh plan has no changes but the stored plan had changes, this is drift 
 2. `go test ./internal/exec/... -run TestVerifyPlanfile` — updated tests pass
 3. `go test ./pkg/ci/plugins/terraform/... -count=1` — handler tests pass
 4. `go test ./cmd/terraform/... -count=1` — command tests pass
-5. Manual: `atmos terraform apply vpc -s prod --ci --verify-plan` — downloads stored plan, generates fresh plan, compares, applies if matching
-6. Manual: Modify infrastructure between plan and apply — verification detects drift and fails
+5. Manual: `atmos terraform deploy vpc -s prod --ci` — downloads stored plan, generates fresh plan, compares, applies if matching
+6. Manual: Modify infrastructure between plan and deploy — verification detects drift and fails
+7. Manual: `atmos terraform apply vpc -s prod --ci` — does NOT download planfile, does NOT verify, just applies with CI cosmetics

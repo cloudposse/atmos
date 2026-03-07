@@ -142,7 +142,7 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 8. GCS store — **Deferred**
 9. `atmos terraform planfile` commands (upload, download, list, delete, show) — Done
 10. Automatic upload on `after.terraform.plan` via `uploadPlanfile()` handler — Done
-11. Automatic download on `before.terraform.apply` via `downloadPlanfile()` handler — Done
+11. Automatic download on `before.terraform.deploy` via `downloadPlanfile()` handler — **Not Started** (moving from `before.terraform.apply` to `before.terraform.deploy`)
 12. CLI component/stack addressing (`<component> -s <stack>` pattern, SHA resolution, `--all` flag) — Done (see [CLI Addressing](../phases/planfile-cli-component-stack-addressing.md))
 13. Download resolves component path via `ProcessStacks()` + `ConstructTerraformComponentPlanfilePath()` — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
 14. SHA256 integrity verification on download in `BundledStore.Download()` — Done (see [Path Resolution](../phases/planfile-download-component-path-resolution.md))
@@ -152,13 +152,19 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 
 ### Terraform Plugin: Plan Verification — Not Started
 
-> PRD: [Plan Verification](../terraform-plugin/plan-verification.md)
+> PRD: [Plan Verification](../terraform-plugin/plan-verification.md) | [CI Integration](../phases/plan-verification-ci-integration.md)
 
 **FR-6: Plan Verification** — Not Started
-1. `--verify-plan` flag on `terraform apply` — **Not Started**
-2. Download stored planfile to temp path — **Not Started**
-3. Generate fresh plan, compare via plan-diff — **Not Started**
-4. Fail apply if drift detected — **Not Started**
+
+Verification lives on `deploy`, not `apply`. The `apply` command does NOT interact with planfile storage — it only writes CI cosmetics (summaries, checks, outputs). The `deploy` command is the CI-native apply: it downloads stored planfiles, verifies them against fresh plans, and applies only if they match.
+
+1. `before.terraform.deploy` / `after.terraform.deploy` hook events — **Not Started**
+2. `deploy.go` fires deploy-specific hook events (not apply events) — **Not Started**
+3. `onBeforeDeploy()` handler: download planfile with `stored.*` prefix — **Not Started**
+4. `onAfterDeploy()` handler: writeSummary + writeOutputs + updateCheckRun — **Not Started**
+5. Deploy RunE: run `terraform plan` (no CI hooks), compare stored vs fresh via plan-diff — **Not Started**
+6. Fail deploy if drift detected, apply fresh planfile if match — **Not Started**
+7. Remove `--verify-plan` from `apply`, remove planfile download from `onBeforeApply()` — **Not Started**
 
 ---
 
@@ -230,15 +236,16 @@ The executor uses a **callback-based dispatch** pattern. Plugins own all action 
 | | Plan + lock file bundled as tar archive | | Done | |
 | | Unified artifact store registry (`artifact.Register()`) | | Done | |
 | | Automatic upload on `after.terraform.plan` | | Done | |
-| | Automatic download on `before.terraform.apply` | | Done | |
+| | Automatic download on `before.terraform.deploy` (was `before.terraform.apply`, moved to deploy) | | Not Started | |
 | | Download resolves component path via `ProcessStacks()` | | Done | |
 | | SHA256 integrity verification on download | | Done | |
 | | Shared `WritePlanfileResults()` helper | | Done | |
 | | Azure Blob store | | Deferred | |
 | | GCS store | | Deferred | |
-| **FR-6** | Plan Verification | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Not Started** | 0% |
-| | `--verify-plan` flag on `terraform apply` | | Not Started | |
-| | Download stored plan → fresh plan → plan-diff comparison | | Not Started | |
+| **FR-6** | Plan Verification (on `deploy`) | [plan-verification.md](../terraform-plugin/plan-verification.md) | **Not Started** | 0% |
+| | Deploy hook events (`before/after.terraform.deploy`) | | Not Started | |
+| | Download stored plan with `stored.*` prefix → fresh plan (no CI hooks) → plan-diff comparison | | Not Started | |
+| | Remove `--verify-plan` from `apply`, remove planfile download from `onBeforeApply()` | | Not Started | |
 | **FR-7** | Command Parity | [ci-detection.md](./ci-detection.md) | **Done** | 100% |
 | | `plan.go` full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |
 | | `apply.go` `--ci` flag with full CI wiring (PreRunE, capture, PostRunE, error defer) | | Done | |

@@ -125,7 +125,7 @@ When `--all` is set (list/delete), SHA filtering is skipped entirely.
 **Upload/download is automatic and event-driven** — no per-command flags needed:
 
 - **Upload**: Automatically triggered by the `after.terraform.plan` hook event. The plugin's `uploadPlanfile()` handler resolves the planfile path from `ctx.Info.PlanFile` and uploads to the configured store via `ctx.CreatePlanfileStore()`.
-- **Download**: Automatically triggered by the `before.terraform.apply` hook event. The plugin's `downloadPlanfile()` handler resolves the planfile path and downloads from the configured store.
+- **Download**: Automatically triggered by the `before.terraform.deploy` hook event. The plugin's `downloadPlanfile()` handler resolves the planfile path and downloads from the configured store. Note: download happens on `deploy`, NOT `apply`. The `apply` command does not interact with planfile storage.
 - Upload/download are **always enabled** when CI mode is active (no config gate — they run whenever the handler is invoked).
 
 **Existing plan command flags (IMPLEMENTED):**
@@ -139,7 +139,7 @@ When `--all` is set (list/delete), SHA filtering is skipped entirely.
 
 | Flag | Description | Status |
 |------|-------------|--------|
-| `--verify-plan` | Verify plan hasn't changed (uses plan-diff) | Not Started |
+| `--verify-plan` | Verify plan hasn't changed (uses plan-diff). **On `deploy` command only**, not `apply`. | Not Started |
 
 ## Backend Configuration Example
 

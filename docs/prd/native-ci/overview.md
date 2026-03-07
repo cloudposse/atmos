@@ -174,7 +174,7 @@ Users currently using the GitHub Actions can migrate incrementally:
 - **CI outputs** - `$GITHUB_OUTPUT` for both plan and apply
 - **Terraform outputs export** - After successful apply
 - **`--format=matrix`** - For `describe affected` command
-- **`--verify-plan`** - Using existing plan-diff
+- **`--verify-plan` on `deploy`** - Using existing plan-diff (deploy downloads stored plan, generates fresh plan, compares, applies if match)
 - **`atmos ci status`** - Show PR/commit status like `gh pr status`
 
 ### Out of Scope (Phase 2+)
